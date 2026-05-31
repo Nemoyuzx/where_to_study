@@ -4,6 +4,7 @@ dist
 dist-ssr
 *.local
 preview-*.png
+release-artifacts/
 
 src-tauri/target
 src-tauri/gen
