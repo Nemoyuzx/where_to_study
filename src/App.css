@@ -16,10 +16,11 @@
 }
 
 .side-nav {
+  align-content: start;
   background: #ffffff;
   border-right: 1px solid #dfe4df;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto;
   gap: 14px;
   min-height: 100vh;
   padding: 22px 16px;
@@ -55,8 +56,10 @@
 }
 
 .app-nav {
+  align-content: start;
   display: grid;
   gap: 8px;
+  grid-auto-rows: 44px;
 }
 
 .app-nav button,
@@ -69,8 +72,9 @@
   color: #303b35;
   display: flex;
   gap: 8px;
+  height: 44px;
   justify-content: flex-start;
-  min-height: 38px;
+  min-height: 0;
   padding: 0 12px;
   width: 100%;
 }
@@ -667,6 +671,7 @@ button:disabled {
   }
 
   .app-nav button {
+    height: 38px;
     min-height: 36px;
     padding: 0 8px;
   }
