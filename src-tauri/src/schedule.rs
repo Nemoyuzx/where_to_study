@@ -3,15 +3,17 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use calamine::{Data, Reader, Xls};
-use chrono::NaiveDate;
+use chrono::{Datelike, Duration as ChronoDuration, NaiveDate};
 use regex::Regex;
 use reqwest::header::{REFERER, USER_AGENT};
+use serde_json::Value;
 use sha1::{Digest, Sha1};
 
 use crate::auth::resolve_credentials;
+use crate::classrooms::{login_empty_classroom, sjd_headers};
 use crate::config::{
     default_term_id, default_term_start_date, now_in_app_tz, JWGL_HOME_URL, JWGL_LOGIN_URL,
-    JWGL_TIMETABLE_URL, SLOT_TIMES,
+    JWGL_TIMETABLE_URL, SJD_REST_CLASSROOM_PAGE_URL, SJD_STUDENT_CURRICULUM_URL, SLOT_TIMES,
 };
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{Course, ScheduleRequest, ScheduleResponse};
@@ -161,6 +163,240 @@ fn slot_time_range(start_slot: usize, end_slot: usize) -> String {
     format!("{}-{}", SLOT_TIMES[start_slot].0, SLOT_TIMES[end_slot].1)
 }
 
+fn json_string(value: Option<&Value>) -> String {
+    value
+        .and_then(|item| {
+            item.as_str()
+                .map(ToOwned::to_owned)
+                .or_else(|| item.as_i64().map(|number| number.to_string()))
+                .or_else(|| item.as_u64().map(|number| number.to_string()))
+        })
+        .unwrap_or_default()
+}
+
+pub fn parse_sjd_week_numbers(course: &Value) -> Vec<i64> {
+    let details = json_string(course.get("classWeekDetails"));
+    let mut weeks: Vec<i64> = Regex::new(r"\d+")
+        .expect("valid regex")
+        .find_iter(&details)
+        .filter_map(|item| item.as_str().parse::<i64>().ok())
+        .collect();
+    if weeks.is_empty() {
+        weeks = expand_week_numbers(&json_string(course.get("classWeek")));
+    }
+    weeks.sort_unstable();
+    weeks.dedup();
+    weeks
+}
+
+pub fn parse_sjd_slots(course: &Value) -> Option<(usize, usize)> {
+    let class_time = json_string(course.get("classTime"));
+    let class_time_tail: String = class_time.chars().skip(1).collect();
+    let node_regex = Regex::new(r"\d{2}").expect("valid regex");
+    let mut nodes: Vec<usize> = node_regex
+        .find_iter(&class_time_tail)
+        .filter_map(|item| item.as_str().parse::<usize>().ok())
+        .collect();
+
+    if nodes.is_empty() {
+        nodes = Regex::new(r"\d+")
+            .expect("valid regex")
+            .find_iter(&json_string(course.get("weekNoteDetail")))
+            .filter_map(|item| item.as_str().parse::<usize>().ok())
+            .collect();
+    }
+    let start_slot = nodes.iter().min().copied()?.checked_sub(1)?;
+    let end_slot = nodes.iter().max().copied()?.checked_sub(1)?;
+    if start_slot >= SLOT_TIMES.len() || end_slot >= SLOT_TIMES.len() || start_slot > end_slot {
+        return None;
+    }
+    Some((start_slot, end_slot))
+}
+
+fn collect_sjd_course_items<'a>(value: &'a Value, output: &mut Vec<&'a Value>) {
+    match value {
+        Value::Object(map) => {
+            if map.contains_key("courseName") || map.contains_key("jx0408id") {
+                output.push(value);
+                return;
+            }
+            for child in map.values() {
+                collect_sjd_course_items(child, output);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                collect_sjd_course_items(child, output);
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn parse_sjd_courses(
+    payload: &Value,
+    term_id: String,
+    term_start_date: NaiveDate,
+) -> ServiceResult<ScheduleResponse> {
+    let data = payload
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or_else(|| ServiceError::new("移动教务课表返回为空。"))?;
+    let Some(root) = data.first() else {
+        return Err(ServiceError::new("移动教务课表返回为空。"));
+    };
+    let raw_items = root
+        .get("item")
+        .or_else(|| root.get("courses"))
+        .unwrap_or(&Value::Null);
+
+    let mut raw_courses = Vec::new();
+    collect_sjd_course_items(raw_items, &mut raw_courses);
+
+    let mut courses = Vec::new();
+    let mut seen_ids = HashSet::new();
+    for raw_course in raw_courses {
+        let Some((start_slot, end_slot)) = parse_sjd_slots(raw_course) else {
+            continue;
+        };
+        let weekday = json_string(
+            raw_course
+                .get("weekDay")
+                .or_else(|| raw_course.get("classTime")),
+        )
+        .chars()
+        .next()
+        .and_then(|character| character.to_digit(10))
+        .map(i64::from);
+        let Some(weekday) = weekday else {
+            continue;
+        };
+        if !(1..=7).contains(&weekday) {
+            continue;
+        }
+
+        let name = json_string(raw_course.get("courseName")).trim().to_string();
+        let name = if name.is_empty() {
+            "未命名课程".to_string()
+        } else {
+            name
+        };
+        let teacher = json_string(raw_course.get("teacherName"))
+            .trim()
+            .to_string();
+        let building = json_string(raw_course.get("buildingName"))
+            .trim()
+            .to_string();
+        let room = json_string(
+            raw_course
+                .get("classroomName")
+                .or_else(|| raw_course.get("location")),
+        )
+        .trim()
+        .to_string();
+        let location = if !building.is_empty() && !room.is_empty() && !room.contains(&building) {
+            format!("{building}-{room}")
+        } else if !room.is_empty() {
+            room
+        } else {
+            building
+        };
+        let week_text = json_string(
+            raw_course
+                .get("classWeek")
+                .or_else(|| raw_course.get("classWeekDetails")),
+        )
+        .trim()
+        .to_string();
+        let week_numbers = parse_sjd_week_numbers(raw_course);
+        let stable = [
+            json_string(raw_course.get("jx0408id")),
+            name.clone(),
+            teacher.clone(),
+            location.clone(),
+            week_text.clone(),
+            weekday.to_string(),
+            start_slot.to_string(),
+            end_slot.to_string(),
+        ]
+        .join("|");
+        let mut hasher = Sha1::new();
+        hasher.update(stable.as_bytes());
+        let course_id = format!("{:x}", hasher.finalize())[..12].to_string();
+        if !seen_ids.insert(course_id.clone()) {
+            continue;
+        }
+        let start_time = json_string(raw_course.get("startTime"));
+        let end_time = json_string(
+            raw_course
+                .get("endTIme")
+                .or_else(|| raw_course.get("endTime")),
+        );
+        courses.push(Course {
+            id: course_id,
+            name,
+            teacher,
+            room: location,
+            week_text,
+            week_numbers,
+            weekday,
+            start_slot,
+            end_slot,
+            section_text: format!("{}-{}节", start_slot + 1, end_slot + 1),
+            time_range: format!(
+                "{}-{}",
+                if start_time.is_empty() {
+                    SLOT_TIMES[start_slot].0
+                } else {
+                    start_time.as_str()
+                },
+                if end_time.is_empty() {
+                    SLOT_TIMES[end_slot].1
+                } else {
+                    end_time.as_str()
+                }
+            ),
+        });
+    }
+
+    courses.sort_by(|left, right| {
+        (left.weekday, left.start_slot, &left.name).cmp(&(
+            right.weekday,
+            right.start_slot,
+            &right.name,
+        ))
+    });
+    Ok(ScheduleResponse {
+        term_id,
+        term_start_date: term_start_date.to_string(),
+        fetched_at: now_in_app_tz(),
+        courses,
+    })
+}
+
+pub fn infer_term_start_date(payload: &Value) -> Option<NaiveDate> {
+    let root = payload.get("data").and_then(Value::as_array)?.first()?;
+    let week = json_string(root.get("week").or_else(|| {
+        root.get("topInfo")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("week"))
+    }))
+    .parse::<i64>()
+    .ok()?;
+    let dated = root
+        .get("date")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|item| item.get("mxrq").is_some() && json_string(item.get("zc")) != "all")?;
+    let day = NaiveDate::parse_from_str(&json_string(dated.get("mxrq")), "%Y-%m-%d").ok()?;
+    let weekday = json_string(dated.get("xqid"))
+        .parse::<i64>()
+        .unwrap_or_else(|_| i64::from(day.weekday().number_from_monday()));
+    let monday = day - ChronoDuration::days(weekday - 1);
+    Some(monday - ChronoDuration::weeks(week - 1))
+}
+
 fn cell_to_string(cell: Option<&Data>) -> String {
     match cell {
         Some(Data::String(value)) => value.trim().to_string(),
@@ -270,22 +506,96 @@ pub fn parse_timetable_xls(
     })
 }
 
-pub async fn fetch_schedule(payload: &ScheduleRequest) -> ServiceResult<ScheduleResponse> {
-    let user_term_id = payload.term_id.as_deref().unwrap_or_default().trim();
-    let term_id = if user_term_id.is_empty() {
-        default_term_id()
-    } else {
-        user_term_id.to_string()
-    };
-    let term_start_source = payload
-        .term_start_date
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .map(str::trim)
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(default_term_start_date);
-    let term_start_date = NaiveDate::parse_from_str(&term_start_source, "%Y-%m-%d")
-        .map_err(|_| ServiceError::with_status("第一周周一日期格式不正确。", 400))?;
+async fn fetch_sjd_schedule(
+    account: &Option<String>,
+    password: &Option<String>,
+    term_id: String,
+    fallback_term_start_date: NaiveDate,
+) -> ServiceResult<ScheduleResponse> {
+    let (user, secret) = resolve_credentials(account, password)?;
+    let token = login_empty_classroom(&user, &secret).await?;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|error| ServiceError::new(format!("无法初始化网络客户端：{error}")))?;
+
+    let current_response = client
+        .post(SJD_STUDENT_CURRICULUM_URL)
+        .query(&[("week", "")])
+        .headers(sjd_headers(Some(&token), SJD_REST_CLASSROOM_PAGE_URL))
+        .send()
+        .await
+        .map_err(|_| ServiceError::new("无法连接移动教务课表服务，请稍后重试。"))?;
+    let all_response = client
+        .post(SJD_STUDENT_CURRICULUM_URL)
+        .query(&[("week", "all")])
+        .headers(sjd_headers(Some(&token), SJD_REST_CLASSROOM_PAGE_URL))
+        .send()
+        .await
+        .map_err(|_| ServiceError::new("无法连接移动教务课表服务，请稍后重试。"))?;
+
+    for response in [&current_response, &all_response] {
+        if response.status().as_u16() >= 400 {
+            return Err(ServiceError::new(format!(
+                "移动教务课表获取失败，HTTP {}。",
+                response.status().as_u16()
+            )));
+        }
+    }
+
+    let current_payload: Value = current_response
+        .json()
+        .await
+        .map_err(|_| ServiceError::new("移动教务课表返回了无法识别的数据。"))?;
+    let all_payload: Value = all_response
+        .json()
+        .await
+        .map_err(|_| ServiceError::new("移动教务课表返回了无法识别的数据。"))?;
+
+    for payload in [&current_payload, &all_payload] {
+        let success = payload
+            .get("code")
+            .and_then(Value::as_i64)
+            .map(|code| code == 1)
+            .unwrap_or(false)
+            || payload.get("code").and_then(Value::as_str) == Some("1");
+        if !success {
+            let message = payload
+                .get("Msg")
+                .or_else(|| payload.get("msg"))
+                .and_then(Value::as_str)
+                .unwrap_or("移动教务课表获取失败。");
+            return Err(ServiceError::new(message));
+        }
+    }
+
+    let inferred_start =
+        infer_term_start_date(&current_payload).unwrap_or(fallback_term_start_date);
+    let inferred_term_id = json_string(
+        current_payload
+            .get("data")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("semesterId").or_else(|| item.get("xnxq01id"))),
+    );
+    parse_sjd_courses(
+        &all_payload,
+        if inferred_term_id.is_empty() {
+            term_id
+        } else {
+            inferred_term_id
+        },
+        inferred_start,
+    )
+}
+
+async fn fetch_schedule_legacy(
+    payload: &ScheduleRequest,
+    term_id: String,
+    term_start_date: NaiveDate,
+) -> ServiceResult<ScheduleResponse> {
     let (user, secret) = resolve_credentials(&payload.account, &payload.password)?;
     let encoded = encode_login(&user, &secret);
 
@@ -358,6 +668,36 @@ pub async fn fetch_schedule(payload: &ScheduleRequest) -> ServiceResult<Schedule
     parse_timetable_xls(&content, term_id, term_start_date)
 }
 
+pub async fn fetch_schedule(payload: &ScheduleRequest) -> ServiceResult<ScheduleResponse> {
+    let user_term_id = payload.term_id.as_deref().unwrap_or_default().trim();
+    let term_id = if user_term_id.is_empty() {
+        default_term_id()
+    } else {
+        user_term_id.to_string()
+    };
+    let term_start_source = payload
+        .term_start_date
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(str::trim)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(default_term_start_date);
+    let term_start_date = NaiveDate::parse_from_str(&term_start_source, "%Y-%m-%d")
+        .map_err(|_| ServiceError::with_status("第一周周一日期格式不正确。", 400))?;
+
+    match fetch_sjd_schedule(
+        &payload.account,
+        &payload.password,
+        term_id.clone(),
+        term_start_date,
+    )
+    .await
+    {
+        Ok(schedule) => Ok(schedule),
+        Err(_) => fetch_schedule_legacy(payload, term_id, term_start_date).await,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -386,6 +726,64 @@ mod tests {
                 room: "教一楼-101".to_string(),
                 section: "1-2节".to_string(),
             }]
+        );
+    }
+
+    #[test]
+    fn parse_sjd_courses_from_curriculum_payload() {
+        let payload = serde_json::json!({
+            "data": [
+                {
+                    "item": [
+                        [
+                            [
+                                {
+                                    "classWeek": "1-16",
+                                    "classWeekDetails": ",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,",
+                                    "classTime": "1030405",
+                                    "weekDay": "1",
+                                    "courseName": "数据挖掘",
+                                    "teacherName": "徐思雅",
+                                    "buildingName": "教三楼",
+                                    "classroomName": "3-335",
+                                    "startTime": "09:50",
+                                    "endTIme": "12:15",
+                                    "jx0408id": "course-1"
+                                }
+                            ]
+                        ]
+                    ]
+                }
+            ]
+        });
+        let term_start = NaiveDate::from_ymd_opt(2026, 3, 2).unwrap();
+        let result = parse_sjd_courses(&payload, "2025-2026-2".to_string(), term_start).unwrap();
+        let course = &result.courses[0];
+
+        assert_eq!(course.name, "数据挖掘");
+        assert_eq!(course.room, "教三楼-3-335");
+        assert_eq!(course.weekday, 1);
+        assert_eq!(course.start_slot, 2);
+        assert_eq!(course.end_slot, 4);
+        assert_eq!(course.week_numbers, (1..=16).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn infer_term_start_date_from_sjd_current_week() {
+        let payload = serde_json::json!({
+            "data": [
+                {
+                    "week": "14",
+                    "date": [
+                        { "mxrq": "2026-06-01", "xqid": "1", "zc": "14" },
+                        { "mxrq": "2026-06-02", "xqid": "2", "zc": "14" }
+                    ]
+                }
+            ]
+        });
+        assert_eq!(
+            infer_term_start_date(&payload),
+            NaiveDate::from_ymd_opt(2026, 3, 2)
         );
     }
 }

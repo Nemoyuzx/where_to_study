@@ -7,9 +7,14 @@ pub const JWGL_HOME_URL: &str = "https://jwgl.bupt.edu.cn/jsxsd/";
 pub const JWGL_LOGIN_URL: &str = "https://jwgl.bupt.edu.cn/jsxsd/xk/LoginToXk";
 pub const JWGL_TIMETABLE_URL: &str = "https://jwgl.bupt.edu.cn/jsxsd/xskb/xskb_print.do";
 
+pub const SJD_ORIGIN: &str = "http://jwglweixin.bupt.edu.cn";
+pub const SJD_LOGIN_PAGE_URL: &str = "http://jwglweixin.bupt.edu.cn/sjd/#/login";
+pub const SJD_REST_CLASSROOM_PAGE_URL: &str = "http://jwglweixin.bupt.edu.cn/sjd/#/restClassroom";
+pub const SJD_STUDENT_CURRICULUM_URL: &str =
+    "http://jwglweixin.bupt.edu.cn/bjyddx/student/curriculum";
 pub const EMPTY_CLASSROOM_LOGIN_URL: &str = "http://jwglweixin.bupt.edu.cn/bjyddx/login";
-pub const EMPTY_CLASSROOM_QUERY_URL: &str = "http://jwglweixin.bupt.edu.cn/bjyddx/todayClassrooms";
-pub const PUBLIC_EMPTY_CLASSROOM_API: &str = "https://ec.jray.xyz/api/get_data";
+pub const EMPTY_CLASSROOM_IDLE_URL: &str =
+    "http://jwglweixin.bupt.edu.cn/bjyddx/student/getIdleClassroom";
 
 pub const DEFAULT_TERM_ID: &str = "2025-2026-2";
 pub const DEFAULT_TERM_START_DATE: &str = "2026-03-02";
@@ -43,7 +48,7 @@ pub const CAMPUSES: [Campus; 2] = [
         name: "西土城",
     },
     Campus {
-        id: "02",
+        id: "04",
         name: "沙河",
     },
 ];

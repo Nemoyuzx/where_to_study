@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import {
   AlertTriangle,
   Building2,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   Clock3,
+  Home,
   KeyRound,
   Loader2,
   MapPin,
   RefreshCw,
   Search,
+  Settings,
   Sparkles,
 } from 'lucide-react'
 import './App.css'
@@ -32,6 +36,16 @@ const FALLBACK_SLOTS = [
   { index: 13, label: '14', start: '20:10', end: '20:55' },
 ]
 
+const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const DEFAULT_SETTINGS = {
+  account: '',
+  password: '',
+  termId: '2025-2026-2',
+  termStartDate: '2026-03-02',
+  campusId: '01',
+  defaultMinSeats: 0,
+}
+
 function localDateString(date = new Date()) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -39,10 +53,43 @@ function localDateString(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
-function requestBody(credentials, extras = {}) {
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return localDateString(date)
+}
+
+function formatShortDate(dateString) {
+  const date = new Date(`${dateString}T00:00:00`)
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
   return {
-    account: credentials.account.trim() || null,
-    password: credentials.password || null,
+    account: data.account ?? fallback.account ?? '',
+    password: data.password ?? fallback.password ?? '',
+    termId: data.term_id || fallback.termId || DEFAULT_SETTINGS.termId,
+    termStartDate: data.term_start_date || fallback.termStartDate || DEFAULT_SETTINGS.termStartDate,
+    campusId: data.campus_id || fallback.campusId || DEFAULT_SETTINGS.campusId,
+    defaultMinSeats: Number(data.default_min_seats ?? fallback.defaultMinSeats ?? 0) || 0,
+  }
+}
+
+function settingsToPayload(settings) {
+  return {
+    account: settings.account,
+    password: settings.password,
+    term_id: settings.termId,
+    term_start_date: settings.termStartDate,
+    campus_id: settings.campusId,
+    default_min_seats: Number(settings.defaultMinSeats) || 0,
+  }
+}
+
+function requestBody(settings, extras = {}) {
+  return {
+    account: settings.account.trim() || null,
+    password: settings.password || null,
     ...extras,
   }
 }
@@ -105,12 +152,23 @@ function displayBuildingName(name) {
   return String(name || '').replaceAll('未来学习大楼', '主楼')
 }
 
+function buildTeachingWeeks(termStartDate, courses, activeWeekNumber) {
+  if (!termStartDate) return []
+  const maxCourseWeek = Math.max(0, ...courses.flatMap((course) => course.week_numbers || []))
+  const totalWeeks = Math.max(20, maxCourseWeek, activeWeekNumber || 0)
+  return Array.from({ length: totalWeeks }, (_, weekIndex) => {
+    const weekNumber = weekIndex + 1
+    return {
+      weekNumber,
+      days: Array.from({ length: 7 }, (_, dayIndex) => addDays(termStartDate, weekIndex * 7 + dayIndex)),
+    }
+  })
+}
+
 function App() {
+  const [activePage, setActivePage] = useState('planner')
   const [metadata, setMetadata] = useState({ campuses: [], slots: FALLBACK_SLOTS })
-  const [credentials, setCredentials] = useState({ account: '', password: '' })
-  const [termId, setTermId] = useState('2025-2026-2')
-  const [termStartDate, setTermStartDate] = useState('2026-03-02')
-  const [campusId, setCampusId] = useState('01')
+  const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
   const [targetDate, setTargetDate] = useState(localDateString())
   const [schedule, setSchedule] = useState(null)
   const [classrooms, setClassrooms] = useState(null)
@@ -122,25 +180,64 @@ function App() {
   const [showRecommendationHighlight, setShowRecommendationHighlight] = useState(true)
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
+  const [settingsSaved, setSettingsSaved] = useState(false)
 
   useEffect(() => {
     command('get_metadata')
       .then((data) => {
         setMetadata(data)
-        setTermId(data.default_term_id)
-        setTermStartDate(data.default_term_start_date)
-        setCampusId(data.campuses[0]?.id || '01')
+        setSettings((current) => ({
+          ...current,
+          termId: current.termId || data.default_term_id,
+          termStartDate: current.termStartDate || data.default_term_start_date,
+          campusId: current.campusId || data.campuses[0]?.id || '01',
+        }))
       })
       .catch(() => {
         setMetadata({ campuses: [{ id: '01', name: '西土城' }], slots: FALLBACK_SLOTS })
       })
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    command('load_saved_settings')
+      .then((data) => {
+        if (cancelled) return
+        const nextSettings = savedSettingsToState(data)
+        setSettings(nextSettings)
+        setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
+      })
+      .catch((loadError) => {
+        if (!cancelled) setError(loadError.message)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let unlisten = null
+
+    listen('tray:navigate', (event) => {
+      if (['planner', 'calendar', 'settings'].includes(event.payload)) {
+        setActivePage(event.payload)
+      }
+    }).then((dispose) => {
+      unlisten = dispose
+    })
+
+    return () => {
+      if (unlisten) unlisten()
+    }
+  }, [])
+
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
   const weekState = useMemo(
-    () => getWeekState(courses, schedule?.term_start_date || termStartDate, targetDate),
-    [courses, schedule?.term_start_date, targetDate, termStartDate],
+    () => getWeekState(courses, schedule?.term_start_date || settings.termStartDate, targetDate),
+    [courses, schedule?.term_start_date, settings.termStartDate, targetDate],
   )
   const busySlots = useMemo(
     () => (usePersonalSchedule ? weekState.busySlots : []),
@@ -161,9 +258,44 @@ function App() {
       .filter((room) => selectedSlots.length > 0 && selectedSlots.every((slot) => room.available_slots.includes(slot)))
       .sort((a, b) => a.building.localeCompare(b.building, 'zh-Hans-CN') || a.room.localeCompare(b.room, 'zh-Hans-CN'))
   }, [classrooms, minSeats, selectedBuildings, selectedSlots])
+  const selectedRanges = slotsToRanges(selectedSlots, slotMeta)
+  const recommendationItems = useMemo(
+    () => (recommendations ? recommendations.recommendations : []),
+    [recommendations],
+  )
+  const recommendationByRoom = useMemo(
+    () => new Map(recommendationItems.map((item) => [item.classroom.id, item])),
+    [recommendationItems],
+  )
+  const canShowRecommendationHighlight = showRecommendationHighlight && recommendationItems.length > 0
+  const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
+  const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
+  const teachingWeeks = useMemo(
+    () => buildTeachingWeeks(settings.termStartDate, courses, weekState.weekNumber),
+    [courses, settings.termStartDate, weekState.weekNumber],
+  )
 
-  function updateCredential(field, value) {
-    setCredentials((current) => ({ ...current, [field]: value }))
+  function updateSetting(field, value) {
+    setSettingsSaved(false)
+    setSettings((current) => ({ ...current, [field]: value }))
+  }
+
+  async function saveCurrentSettings() {
+    setError('')
+    setSettingsSaved(false)
+
+    try {
+      const data = await command('save_saved_settings', settingsToPayload(settings))
+      const nextSettings = savedSettingsToState(data, settings)
+      setSettings(nextSettings)
+      setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
+      setSelectedBuildings([])
+      setClassrooms(null)
+      setRecommendations(null)
+      setSettingsSaved(true)
+    } catch (saveError) {
+      setError(saveError.message)
+    }
   }
 
   function toggleSlot(slotIndex) {
@@ -184,13 +316,6 @@ function App() {
     ))
   }
 
-  function selectCampus(nextCampusId) {
-    setCampusId(nextCampusId)
-    setSelectedBuildings([])
-    setClassrooms(null)
-    setRecommendations(null)
-  }
-
   function togglePersonalSchedule() {
     const nextValue = !usePersonalSchedule
     setUsePersonalSchedule(nextValue)
@@ -198,6 +323,12 @@ function App() {
     if (nextValue) {
       setSelectedSlots((current) => current.filter((slot) => !weekState.busySlots.includes(slot)))
     }
+  }
+
+  function chooseCalendarDate(dateString) {
+    setTargetDate(dateString)
+    setRecommendations(null)
+    setActivePage('planner')
   }
 
   async function runTask(name, task) {
@@ -214,9 +345,9 @@ function App() {
 
   async function loadSchedule() {
     await runTask('schedule', async () => {
-      const data = await command('fetch_schedule', requestBody(credentials, {
-        term_id: termId,
-        term_start_date: termStartDate,
+      const data = await command('fetch_schedule', requestBody(settings, {
+        term_id: settings.termId,
+        term_start_date: settings.termStartDate,
       }))
       setSchedule(data)
       setUsePersonalSchedule(true)
@@ -229,8 +360,8 @@ function App() {
 
   async function loadClassrooms() {
     await runTask('classrooms', async () => {
-      const data = await command('fetch_classrooms', requestBody(credentials, {
-        campus_id: campusId,
+      const data = await command('fetch_classrooms', requestBody(settings, {
+        campus_id: settings.campusId,
         target_date: targetDate,
       }))
       setClassrooms(data)
@@ -240,11 +371,11 @@ function App() {
 
   async function runRecommendations() {
     await runTask('recommendations', async () => {
-      const data = await command('fetch_recommendations', requestBody(credentials, {
-        campus_id: campusId,
+      const data = await command('fetch_recommendations', requestBody(settings, {
+        campus_id: settings.campusId,
         target_date: targetDate,
-        term_id: termId,
-        term_start_date: termStartDate,
+        term_id: settings.termId,
+        term_start_date: settings.termStartDate,
         selected_slots: selectedSlots,
         buildings: selectedBuildings,
         min_seats: Number(minSeats) || 0,
@@ -252,8 +383,8 @@ function App() {
       }))
       setClassrooms(data.classrooms)
       setSchedule({
-        term_id: termId,
-        term_start_date: termStartDate,
+        term_id: settings.termId,
+        term_start_date: settings.termStartDate,
         fetched_at: data.classrooms.fetched_at,
         courses: data.schedule.courses,
       })
@@ -263,51 +394,386 @@ function App() {
     })
   }
 
-  const selectedRanges = slotsToRanges(selectedSlots, slotMeta)
-  const recommendationItems = useMemo(
-    () => (recommendations ? recommendations.recommendations : []),
-    [recommendations],
-  )
-  const recommendationByRoom = useMemo(
-    () => new Map(recommendationItems.map((item) => [item.classroom.id, item])),
-    [recommendationItems],
-  )
-  const canShowRecommendationHighlight = showRecommendationHighlight && recommendationItems.length > 0
-  const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
-  const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
-
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">BUPT Classroom Planner</p>
-          <h1>空教室与个人课表联动查询</h1>
-        </div>
-        <div className="status-pill">
-          <Clock3 size={16} />
-          <span>{targetDate}</span>
-        </div>
-      </header>
+      <div className="app-frame">
+        <aside className="side-nav">
+          <div className="side-brand">
+            <p className="eyebrow">BUPT</p>
+            <strong>Where To Study</strong>
+          </div>
+          <nav className="app-nav" aria-label="应用导航">
+            <button type="button" className={activePage === 'planner' ? 'active' : ''} onClick={() => setActivePage('planner')}>
+              <Home size={17} />
+              空教室
+            </button>
+            <button type="button" className={activePage === 'calendar' ? 'active' : ''} onClick={() => setActivePage('calendar')}>
+              <CalendarRange size={17} />
+              教学日历
+            </button>
+            <button type="button" className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
+              <Settings size={17} />
+              设置
+            </button>
+          </nav>
+        </aside>
 
-      {error ? (
-        <div className="notice error">
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-        </div>
-      ) : null}
+        <section className="page-content">
+          <header className="topbar">
+            <div>
+              <p className="eyebrow">BUPT Classroom Planner</p>
+              <h1>{activePage === 'calendar' ? '教学日历' : activePage === 'settings' ? '设置' : '空教室与个人课表联动查询'}</h1>
+            </div>
+            <div className="status-pill">
+              <Clock3 size={16} />
+              <span>{targetDate}</span>
+            </div>
+          </header>
 
-      <div className="workspace">
-        <aside className="control-panel">
+          {error ? (
+            <div className="notice error">
+              <AlertTriangle size={18} />
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          {activePage === 'planner' ? (
+        <div className="workspace planner-workspace">
+          <aside className="control-panel">
+            <section className="panel">
+              <div className="panel-title">
+                <CalendarDays size={18} />
+                <h2>查询条件</h2>
+              </div>
+              <label>
+                日期
+                <input
+                  type="date"
+                  value={targetDate}
+                  onChange={(event) => {
+                    setTargetDate(event.target.value)
+                    setRecommendations(null)
+                  }}
+                />
+              </label>
+              <div className="field-group">
+                校区
+                <div className="campus-options">
+                  {(metadata.campuses || []).map((campus) => (
+                    <button
+                      key={campus.id}
+                      type="button"
+                      className={settings.campusId === campus.id ? 'active' : ''}
+                      onClick={() => {
+                        updateSetting('campusId', campus.id)
+                        setSelectedBuildings([])
+                        setClassrooms(null)
+                        setRecommendations(null)
+                      }}
+                    >
+                      <MapPin size={15} />
+                      {campus.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label>
+                最少座位
+                <input
+                  type="number"
+                  min="0"
+                  value={minSeats}
+                  onChange={(event) => {
+                    setMinSeats(Number(event.target.value))
+                    setRecommendations(null)
+                  }}
+                />
+              </label>
+            </section>
+
+            <section className="panel action-panel">
+              <button type="button" onClick={loadSchedule} disabled={!!loading}>
+                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+                获取个人课表
+              </button>
+              <button type="button" onClick={loadClassrooms} disabled={!!loading}>
+                {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
+                查看空教室
+              </button>
+              <button type="button" className="primary" onClick={runRecommendations} disabled={!!loading}>
+                {loading === 'recommendations' ? <Loader2 className="spin" size={17} /> : <Sparkles size={17} />}
+                推荐同一教室
+              </button>
+            </section>
+          </aside>
+
+          <section className="main-grid">
+            <section className="summary-band">
+              <div>
+                <span>当天课程</span>
+                <strong>{weekState.dayCourses.length}</strong>
+              </div>
+              <div>
+                <span>个人空闲节次</span>
+                <strong>{freeSlots.length}</strong>
+              </div>
+              <div>
+                <span>匹配教室</span>
+                <strong>{needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}</strong>
+              </div>
+              <div>
+                <span>{classrooms?.provider === 'jray_public' ? '公共源推荐' : '推荐结果'}</span>
+                <strong>{recommendationItems.length || 0}</strong>
+              </div>
+            </section>
+
+            <section className="panel wide">
+              <div className="panel-heading">
+                <div className="panel-title">
+                  <Clock3 size={18} />
+                  <h2>节次筛选</h2>
+                </div>
+                <div className="mini-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSlots(freeSlots)
+                      setRecommendations(null)
+                    }}
+                  >
+                    选中空闲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSlots([])
+                      setRecommendations(null)
+                    }}
+                  >
+                    清空
+                  </button>
+                </div>
+              </div>
+              <div className="filter-toggles">
+                <button
+                  type="button"
+                  className={usePersonalSchedule ? 'active' : ''}
+                  onClick={togglePersonalSchedule}
+                >
+                  个人课表 {usePersonalSchedule ? '开' : '关'}
+                </button>
+                <button
+                  type="button"
+                  className={canShowRecommendationHighlight ? 'active' : ''}
+                  disabled={!recommendationItems.length}
+                  onClick={() => setShowRecommendationHighlight((current) => !current)}
+                >
+                  推荐高亮 {showRecommendationHighlight ? '开' : '关'}
+                </button>
+              </div>
+              <div className="slot-grid">
+                {slotMeta.map((slot) => {
+                  const busy = busySlots.includes(slot.index)
+                  const selected = selectedSlots.includes(slot.index)
+                  return (
+                    <button
+                      key={slot.index}
+                      type="button"
+                      className={`slot-cell ${busy ? 'busy' : 'free'} ${selected ? 'selected' : ''}`}
+                      onClick={() => !busy && toggleSlot(slot.index)}
+                      disabled={busy}
+                      title={busy ? '个人课表占用' : '个人空闲，可筛选教室'}
+                    >
+                      <span>{slot.label}</span>
+                      <small>{slot.start}-{slot.end}</small>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="muted">
+                第 {weekState.weekNumber || '-'} 周，选中范围：
+                {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : '未选择'}
+              </p>
+            </section>
+
+            <section className="panel">
+              <div className="panel-title">
+                <CalendarDays size={18} />
+                <h2>当天课程</h2>
+              </div>
+              <div className="course-list">
+                {weekState.dayCourses.length ? weekState.dayCourses.map((course) => (
+                  <article key={course.id} className="course-row">
+                    <div>
+                      <strong>{course.name}</strong>
+                      <span>{course.teacher || '教师未标注'}</span>
+                    </div>
+                    <div>
+                      <span>{course.time_range}</span>
+                      <span>{course.room || '地点未标注'}</span>
+                    </div>
+                  </article>
+                )) : (
+                  <div className="empty-state">暂无课程</div>
+                )}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-title">
+                <Building2 size={18} />
+                <h2>教学楼</h2>
+              </div>
+              <div className="building-list">
+                {buildings.length ? buildings.map((building) => (
+                  <button
+                    key={building}
+                    type="button"
+                    className={selectedBuildings.includes(building) ? 'active' : ''}
+                    onClick={() => toggleBuilding(building)}
+                  >
+                    <MapPin size={15} />
+                    {displayBuildingName(building)}
+                  </button>
+                )) : <div className="empty-state">暂无教学楼</div>}
+              </div>
+            </section>
+
+            <section className="panel wide">
+              <div className="panel-title">
+                <CheckCircle2 size={18} />
+                <h2>空教室结果</h2>
+              </div>
+              {classrooms?.provider ? (
+                <p className="muted source-note">
+                  数据源：{classrooms.provider === 'sjd' ? '移动教务实时接口' : classrooms.provider === 'jray_public' ? 'Jraaay 公共实时数据' : '微信教务实时接口'}
+                  {recommendationItems.length ? ' · 已计算推荐' : ''}
+                </p>
+              ) : null}
+              <div className="room-list">
+                {needsBuildingSelection ? (
+                  <div className="empty-state">未选择教学楼</div>
+                ) : needsSlotSelection ? (
+                  <div className="empty-state">未选择节次</div>
+                ) : (
+                  filteredRooms.length ? filteredRooms.slice(0, 80).map((room) => (
+                    (() => {
+                      const recommendation = canShowRecommendationHighlight ? recommendationByRoom.get(room.id) : null
+                      return (
+                        <article key={room.id} className={`room-card ${recommendation ? 'recommended' : ''}`}>
+                          <div>
+                            <strong>{displayBuildingName(room.name)}</strong>
+                            <span>
+                              {recommendation ? '推荐 · ' : ''}
+                              {room.size ? `${room.size} 座` : '座位未知'}
+                              {recommendation ? ` · 评分 ${recommendation.score}` : ''}
+                            </span>
+                          </div>
+                          {recommendation?.longest_range ? (
+                            <p>
+                              最长连续 {recommendation.longest_range.length} 节：
+                              {recommendation.longest_range.start_time}-{recommendation.longest_range.end_time}
+                            </p>
+                          ) : (
+                            <p>{slotsToRanges(room.available_slots.filter((slot) => selectedSlots.includes(slot)), slotMeta).map((range) => range.label).join(' / ')}</p>
+                          )}
+                          {recommendation ? (
+                            <div className="range-tags">
+                              {recommendation.ranges.map((range) => (
+                                <span key={`${room.id}-${range.start_slot}-${range.end_slot}`}>
+                                  {range.start_time}-{range.end_time}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </article>
+                      )
+                    })()
+                  )) : (
+                    <div className="empty-state">暂无匹配空教室</div>
+                  )
+                )}
+              </div>
+            </section>
+          </section>
+        </div>
+          ) : null}
+
+          {activePage === 'calendar' ? (
+        <section className="page-grid">
+          <section className="summary-band">
+            <div>
+              <span>学期</span>
+              <strong className="summary-text">{settings.termId}</strong>
+            </div>
+            <div>
+              <span>第一周周一</span>
+              <strong className="summary-text">{settings.termStartDate}</strong>
+            </div>
+            <div>
+              <span>当前周</span>
+              <strong>{weekState.weekNumber || '-'}</strong>
+            </div>
+            <div>
+              <span>已载入课程</span>
+              <strong>{courses.length}</strong>
+            </div>
+          </section>
+
+          <section className="panel wide">
+            <div className="panel-heading">
+              <div className="panel-title">
+                <CalendarRange size={18} />
+                <h2>教学周历</h2>
+              </div>
+              <button type="button" className="compact-button" onClick={loadSchedule} disabled={!!loading}>
+                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+                获取个人课表
+              </button>
+            </div>
+            <div className="calendar-board">
+              <div className="calendar-head">
+                <span>周次</span>
+                {WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}
+              </div>
+              {teachingWeeks.map((week) => (
+                <div key={week.weekNumber} className={`calendar-row ${week.weekNumber === weekState.weekNumber ? 'current-week' : ''}`}>
+                  <div className="calendar-week">第 {week.weekNumber} 周</div>
+                  {week.days.map((dateString, dayIndex) => {
+                    const dayState = getWeekState(courses, schedule?.term_start_date || settings.termStartDate, dateString)
+                    const isTarget = dateString === targetDate
+                    const isToday = dateString === localDateString()
+                    return (
+                      <button
+                        key={dateString}
+                        type="button"
+                        className={`calendar-day ${isTarget ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                        onClick={() => chooseCalendarDate(dateString)}
+                      >
+                        <span>{formatShortDate(dateString)}</span>
+                        <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : WEEKDAY_LABELS[dayIndex]}</small>
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          </section>
+        </section>
+          ) : null}
+
+          {activePage === 'settings' ? (
+        <section className="settings-layout">
           <section className="panel">
             <div className="panel-title">
               <KeyRound size={18} />
-              <h2>账号</h2>
+              <h2>个人账号</h2>
             </div>
             <label>
               学号
               <input
-                value={credentials.account}
-                onChange={(event) => updateCredential('account', event.target.value)}
+                value={settings.account}
+                onChange={(event) => updateSetting('account', event.target.value)}
                 inputMode="numeric"
                 placeholder="可使用环境变量"
               />
@@ -315,10 +781,10 @@ function App() {
             <label>
               教务密码
               <input
-                value={credentials.password}
-                onChange={(event) => updateCredential('password', event.target.value)}
+                value={settings.password}
+                onChange={(event) => updateSetting('password', event.target.value)}
                 type="password"
-                placeholder="不会写入本地存储"
+                placeholder="保存到本地数据"
               />
             </label>
           </section>
@@ -326,36 +792,32 @@ function App() {
           <section className="panel">
             <div className="panel-title">
               <CalendarDays size={18} />
-              <h2>查询条件</h2>
+              <h2>学期设置</h2>
             </div>
             <label>
               学期
-              <input value={termId} onChange={(event) => setTermId(event.target.value)} />
+              <input value={settings.termId} onChange={(event) => updateSetting('termId', event.target.value)} />
             </label>
             <label>
               第一周周一
-              <input type="date" value={termStartDate} onChange={(event) => setTermStartDate(event.target.value)} />
+              <input type="date" value={settings.termStartDate} onChange={(event) => updateSetting('termStartDate', event.target.value)} />
             </label>
-            <label>
-              日期
-              <input
-                type="date"
-                value={targetDate}
-                onChange={(event) => {
-                  setTargetDate(event.target.value)
-                  setRecommendations(null)
-                }}
-              />
-            </label>
+          </section>
+
+          <section className="panel">
+            <div className="panel-title">
+              <Building2 size={18} />
+              <h2>查询默认值</h2>
+            </div>
             <div className="field-group">
-              校区
+              默认校区
               <div className="campus-options">
                 {(metadata.campuses || []).map((campus) => (
                   <button
                     key={campus.id}
                     type="button"
-                    className={campusId === campus.id ? 'active' : ''}
-                    onClick={() => selectCampus(campus.id)}
+                    className={settings.campusId === campus.id ? 'active' : ''}
+                    onClick={() => updateSetting('campusId', campus.id)}
                   >
                     <MapPin size={15} />
                     {campus.name}
@@ -364,223 +826,25 @@ function App() {
               </div>
             </div>
             <label>
-              最少座位
+              默认最少座位
               <input
                 type="number"
                 min="0"
-                value={minSeats}
-                onChange={(event) => {
-                  setMinSeats(Number(event.target.value))
-                  setRecommendations(null)
-                }}
+                value={settings.defaultMinSeats}
+                onChange={(event) => updateSetting('defaultMinSeats', Number(event.target.value))}
               />
             </label>
           </section>
 
-          <section className="panel action-panel">
-            <button type="button" onClick={loadSchedule} disabled={!!loading}>
-              {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-              获取个人课表
+          <section className="panel settings-actions">
+            <button type="button" className="primary" onClick={saveCurrentSettings}>
+              <CheckCircle2 size={17} />
+              保存设置
             </button>
-            <button type="button" onClick={loadClassrooms} disabled={!!loading}>
-              {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
-              查看空教室
-            </button>
-            <button type="button" className="primary" onClick={runRecommendations} disabled={!!loading}>
-              {loading === 'recommendations' ? <Loader2 className="spin" size={17} /> : <Sparkles size={17} />}
-              推荐同一教室
-            </button>
+            {settingsSaved ? <span>已保存</span> : null}
           </section>
-        </aside>
-
-        <section className="main-grid">
-          <section className="summary-band">
-            <div>
-              <span>当天课程</span>
-              <strong>{weekState.dayCourses.length}</strong>
-            </div>
-            <div>
-              <span>个人空闲节次</span>
-              <strong>{freeSlots.length}</strong>
-            </div>
-            <div>
-              <span>匹配教室</span>
-              <strong>{needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}</strong>
-            </div>
-            <div>
-              <span>{classrooms?.provider === 'jray_public' ? '公共源推荐' : '推荐结果'}</span>
-              <strong>{recommendationItems.length || 0}</strong>
-            </div>
-          </section>
-
-          <section className="panel wide">
-            <div className="panel-heading">
-              <div className="panel-title">
-                <Clock3 size={18} />
-                <h2>节次筛选</h2>
-              </div>
-              <div className="mini-actions">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedSlots(freeSlots)
-                    setRecommendations(null)
-                  }}
-                >
-                  选中空闲
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedSlots([])
-                    setRecommendations(null)
-                  }}
-                >
-                  清空
-                </button>
-              </div>
-            </div>
-            <div className="filter-toggles">
-              <button
-                type="button"
-                className={usePersonalSchedule ? 'active' : ''}
-                onClick={togglePersonalSchedule}
-              >
-                个人课表 {usePersonalSchedule ? '开' : '关'}
-              </button>
-              <button
-                type="button"
-                className={canShowRecommendationHighlight ? 'active' : ''}
-                disabled={!recommendationItems.length}
-                onClick={() => setShowRecommendationHighlight((current) => !current)}
-              >
-                推荐高亮 {showRecommendationHighlight ? '开' : '关'}
-              </button>
-            </div>
-            <div className="slot-grid">
-              {slotMeta.map((slot) => {
-                const busy = busySlots.includes(slot.index)
-                const selected = selectedSlots.includes(slot.index)
-                return (
-                  <button
-                    key={slot.index}
-                    type="button"
-                    className={`slot-cell ${busy ? 'busy' : 'free'} ${selected ? 'selected' : ''}`}
-                    onClick={() => !busy && toggleSlot(slot.index)}
-                    disabled={busy}
-                    title={busy ? '个人课表占用' : '个人空闲，可筛选教室'}
-                  >
-                    <span>{slot.label}</span>
-                    <small>{slot.start}-{slot.end}</small>
-                  </button>
-                )
-              })}
-            </div>
-            <p className="muted">
-              第 {weekState.weekNumber || '-'} 周，选中范围：
-              {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : '未选择'}
-            </p>
-          </section>
-
-          <section className="panel">
-            <div className="panel-title">
-              <CalendarDays size={18} />
-              <h2>当天课程</h2>
-            </div>
-            <div className="course-list">
-              {weekState.dayCourses.length ? weekState.dayCourses.map((course) => (
-                <article key={course.id} className="course-row">
-                  <div>
-                    <strong>{course.name}</strong>
-                    <span>{course.teacher || '教师未标注'}</span>
-                  </div>
-                  <div>
-                    <span>{course.time_range}</span>
-                    <span>{course.room || '地点未标注'}</span>
-                  </div>
-                </article>
-              )) : (
-                <div className="empty-state">暂无课程</div>
-              )}
-            </div>
-          </section>
-
-          <section className="panel">
-            <div className="panel-title">
-              <Building2 size={18} />
-              <h2>教学楼</h2>
-            </div>
-            <div className="building-list">
-              {buildings.length ? buildings.map((building) => (
-                <button
-                  key={building}
-                  type="button"
-                  className={selectedBuildings.includes(building) ? 'active' : ''}
-                  onClick={() => toggleBuilding(building)}
-                >
-                  <MapPin size={15} />
-                  {displayBuildingName(building)}
-                </button>
-              )) : <div className="empty-state">暂无教学楼</div>}
-            </div>
-          </section>
-
-          <section className="panel wide">
-            <div className="panel-title">
-              <CheckCircle2 size={18} />
-              <h2>空教室结果</h2>
-            </div>
-            {classrooms?.provider ? (
-              <p className="muted source-note">
-                数据源：{classrooms.provider === 'jray_public' ? 'Jraaay 公共实时数据' : '微信教务实时接口'}
-                {recommendationItems.length ? ' · 已计算推荐' : ''}
-              </p>
-            ) : null}
-            <div className="room-list">
-              {needsBuildingSelection ? (
-                <div className="empty-state">未选择教学楼</div>
-              ) : needsSlotSelection ? (
-                <div className="empty-state">未选择节次</div>
-              ) : (
-                filteredRooms.length ? filteredRooms.slice(0, 80).map((room) => (
-                  (() => {
-                    const recommendation = canShowRecommendationHighlight ? recommendationByRoom.get(room.id) : null
-                    return (
-                      <article key={room.id} className={`room-card ${recommendation ? 'recommended' : ''}`}>
-                        <div>
-                          <strong>{displayBuildingName(room.name)}</strong>
-                          <span>
-                            {recommendation ? '推荐 · ' : ''}
-                            {room.size ? `${room.size} 座` : '座位未知'}
-                            {recommendation ? ` · 评分 ${recommendation.score}` : ''}
-                          </span>
-                        </div>
-                        {recommendation?.longest_range ? (
-                          <p>
-                            最长连续 {recommendation.longest_range.length} 节：
-                            {recommendation.longest_range.start_time}-{recommendation.longest_range.end_time}
-                          </p>
-                        ) : (
-                          <p>{slotsToRanges(room.available_slots.filter((slot) => selectedSlots.includes(slot)), slotMeta).map((range) => range.label).join(' / ')}</p>
-                        )}
-                        {recommendation ? (
-                          <div className="range-tags">
-                            {recommendation.ranges.map((range) => (
-                              <span key={`${room.id}-${range.start_slot}-${range.end_slot}`}>
-                                {range.start_time}-{range.end_time}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </article>
-                    )
-                  })()
-                )) : (
-                  <div className="empty-state">暂无匹配空教室</div>
-                )
-              )}
-            </div>
-          </section>
+        </section>
+          ) : null}
         </section>
       </div>
     </main>

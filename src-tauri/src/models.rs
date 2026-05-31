@@ -23,6 +23,47 @@ pub struct MetadataResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedSettings {
+    #[serde(default)]
+    pub account: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub term_id: String,
+    #[serde(default)]
+    pub term_start_date: String,
+    #[serde(default)]
+    pub campus_id: String,
+    #[serde(default)]
+    pub default_min_seats: usize,
+}
+
+impl SavedSettings {
+    pub fn with_defaults() -> Self {
+        Self {
+            account: String::new(),
+            password: String::new(),
+            term_id: crate::config::default_term_id(),
+            term_start_date: crate::config::default_term_start_date(),
+            campus_id: crate::config::CAMPUSES[0].id.to_string(),
+            default_min_seats: 0,
+        }
+    }
+
+    pub fn apply_defaults(&mut self) {
+        if self.term_id.trim().is_empty() {
+            self.term_id = crate::config::default_term_id();
+        }
+        if self.term_start_date.trim().is_empty() {
+            self.term_start_date = crate::config::default_term_start_date();
+        }
+        if self.campus_id.trim().is_empty() {
+            self.campus_id = crate::config::CAMPUSES[0].id.to_string();
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleRequest {
     pub account: Option<String>,
     pub password: Option<String>,
@@ -104,7 +145,7 @@ pub struct ClassroomStatus {
 }
 
 fn default_classroom_source() -> String {
-    "jwglweixin".to_string()
+    "sjd".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
