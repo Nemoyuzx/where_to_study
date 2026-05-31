@@ -121,7 +121,8 @@ h2 {
 .mini-actions,
 .range-tags,
 .action-panel button,
-.building-list button {
+.building-list button,
+.campus-options button {
   align-items: center;
   display: flex;
 }
@@ -142,6 +143,15 @@ h2 {
 }
 
 label {
+  color: #53605a;
+  display: grid;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.field-group {
   color: #53605a;
   display: grid;
   font-size: 13px;
@@ -275,14 +285,33 @@ button:disabled {
   gap: 8px;
 }
 
+.filter-toggles {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
 .mini-actions button,
-.building-list button {
+.filter-toggles button,
+.building-list button,
+.campus-options button {
   background: #f1f3ef;
   border: 1px solid #dfe4df;
   border-radius: 6px;
   color: #303b35;
   min-height: 34px;
   padding: 0 10px;
+}
+
+.filter-toggles button.active {
+  background: #e8f4f0;
+  border-color: #2e7d6f;
+  color: #175247;
+}
+
+.filter-toggles button:disabled {
+  color: #8a928d;
 }
 
 .muted {
@@ -341,24 +370,39 @@ button:disabled {
 
 .room-list {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  max-height: 420px;
-  overflow: auto;
-  padding-right: 4px;
 }
 
 .building-list {
   grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
 }
 
-.building-list button {
+.campus-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.building-list button,
+.campus-options button {
   gap: 6px;
   justify-content: center;
 }
 
-.building-list button.active {
+.building-list button.active,
+.campus-options button.active {
   background: #fff1cc;
   border-color: #e2bc62;
   color: #5d3f00;
+}
+
+.room-card.recommended {
+  background: #f2faf6;
+  border-color: #2e7d6f;
+  box-shadow: inset 3px 0 0 #2e7d6f;
+}
+
+.room-card .range-tags {
+  justify-content: flex-start;
 }
 
 .range-tags {
@@ -463,14 +507,16 @@ button:disabled {
     margin-bottom: 0;
   }
 
-  label {
+  label,
+  .field-group {
     font-size: 12px;
     gap: 5px;
     margin-top: 9px;
     min-width: 0;
   }
 
-  .control-panel .panel:nth-of-type(2) label {
+  .control-panel .panel:nth-of-type(2) label,
+  .control-panel .panel:nth-of-type(2) .field-group {
     margin-top: 0;
   }
 
@@ -500,6 +546,11 @@ button:disabled {
 
   .mini-actions {
     width: 100%;
+  }
+
+  .filter-toggles {
+    grid-template-columns: 1fr;
+    margin-bottom: 10px;
   }
 
   .mini-actions button {
@@ -572,15 +623,17 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .building-list button {
+  .campus-options {
+    grid-template-columns: 1fr;
+  }
+
+  .building-list button,
+  .campus-options button {
     min-height: 32px;
   }
 
   .room-list {
     grid-template-columns: 1fr;
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
   }
 
   .range-tags span {

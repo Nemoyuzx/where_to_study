@@ -91,10 +91,12 @@ pub fn recommend(
     selected_slots: Option<Vec<usize>>,
     buildings: Vec<String>,
     min_seats: usize,
+    use_schedule_filter: bool,
 ) -> RecommendationResponse {
     let date_to_check = target_date.unwrap_or_else(today_in_app_tz);
     let state = date_state(courses, date_to_check, term_start_date);
     let mut valid_selected: Vec<usize> = selected_slots
+        .clone()
         .unwrap_or_default()
         .into_iter()
         .filter(|slot| ALL_SLOTS.contains(slot))
@@ -102,16 +104,21 @@ pub fn recommend(
     valid_selected.sort_unstable();
     valid_selected.dedup();
 
-    let free_set: HashSet<usize> = state.free_slots.iter().copied().collect();
-    let target_slots: Vec<usize> = if valid_selected.is_empty() {
+    let schedule_allowed_slots: Vec<usize> = if use_schedule_filter {
         state.free_slots.clone()
     } else {
-        valid_selected
-            .iter()
-            .copied()
-            .filter(|slot| free_set.contains(slot))
-            .collect()
+        ALL_SLOTS.collect()
     };
+    let allowed_set: HashSet<usize> = schedule_allowed_slots.iter().copied().collect();
+    let source_slots = if selected_slots.is_none() {
+        schedule_allowed_slots
+    } else {
+        valid_selected.clone()
+    };
+    let target_slots: Vec<usize> = source_slots
+        .into_iter()
+        .filter(|slot| allowed_set.contains(slot))
+        .collect();
     let target_set: HashSet<usize> = target_slots.iter().copied().collect();
     let building_filter: HashSet<String> = buildings
         .into_iter()
@@ -282,6 +289,7 @@ mod tests {
             None,
             Vec::new(),
             0,
+            true,
         );
         assert_eq!(
             date_state(&courses, term_start, term_start).busy_slots,
@@ -296,5 +304,88 @@ mod tests {
                 .length,
             4
         );
+    }
+
+    #[test]
+    fn recommendation_can_ignore_personal_schedule_filter() {
+        let courses = vec![Course {
+            id: "c1".to_string(),
+            name: "课程".to_string(),
+            teacher: String::new(),
+            room: String::new(),
+            week_text: String::new(),
+            week_numbers: vec![1],
+            weekday: 1,
+            start_slot: 2,
+            end_slot: 3,
+            section_text: String::new(),
+            time_range: String::new(),
+        }];
+        let classrooms = ClassroomsResponse {
+            campus_id: "01".to_string(),
+            campus_name: "西土城".to_string(),
+            target_date: "2026-03-02".to_string(),
+            fetched_at: "2026-03-02T00:00:00+08:00".to_string(),
+            realtime: true,
+            provider: "jwglweixin".to_string(),
+            rooms: vec![ClassroomStatus {
+                id: "A-101".to_string(),
+                building: "A".to_string(),
+                room: "101".to_string(),
+                name: "A-101".to_string(),
+                size: Some(80),
+                r#type: String::new(),
+                available_slots: vec![2, 3],
+                source: "jwglweixin".to_string(),
+            }],
+        };
+        let term_start = NaiveDate::from_ymd_opt(2026, 3, 2).unwrap();
+        let result = recommend(
+            &courses,
+            term_start,
+            classrooms,
+            Some(term_start),
+            Some(vec![2, 3]),
+            Vec::new(),
+            0,
+            false,
+        );
+        assert_eq!(result.selected_slots, vec![2, 3]);
+        assert_eq!(result.recommendations[0].classroom.name, "A-101");
+    }
+
+    #[test]
+    fn recommendation_respects_explicit_empty_selected_slots() {
+        let classrooms = ClassroomsResponse {
+            campus_id: "01".to_string(),
+            campus_name: "西土城".to_string(),
+            target_date: "2026-03-02".to_string(),
+            fetched_at: "2026-03-02T00:00:00+08:00".to_string(),
+            realtime: true,
+            provider: "jwglweixin".to_string(),
+            rooms: vec![ClassroomStatus {
+                id: "A-101".to_string(),
+                building: "A".to_string(),
+                room: "101".to_string(),
+                name: "A-101".to_string(),
+                size: Some(80),
+                r#type: String::new(),
+                available_slots: vec![0, 1],
+                source: "jwglweixin".to_string(),
+            }],
+        };
+        let term_start = NaiveDate::from_ymd_opt(2026, 3, 2).unwrap();
+        let result = recommend(
+            &[],
+            term_start,
+            classrooms,
+            Some(term_start),
+            Some(Vec::new()),
+            Vec::new(),
+            0,
+            true,
+        );
+        assert_eq!(result.selected_slots, Vec::<usize>::new());
+        assert!(result.recommendations.is_empty());
     }
 }

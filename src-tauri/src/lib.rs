@@ -74,6 +74,7 @@ async fn fetch_recommendations(
         payload.selected_slots,
         payload.buildings,
         payload.min_seats,
+        payload.use_schedule_filter,
     ))
 }
 

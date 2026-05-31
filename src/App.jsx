@@ -74,13 +74,11 @@ function getWeekState(courses, termStartDate, targetDate) {
   const dayCourses = courses
     .filter((course) => course.weekday === weekday && course.week_numbers.includes(weekNumber))
     .sort((a, b) => a.start_slot - b.start_slot || a.name.localeCompare(b.name, 'zh-Hans-CN'))
-  const busySlots = [
-    ...new Set(dayCourses.flatMap((course) => {
-      const slots = []
-      for (let slot = course.start_slot; slot <= course.end_slot; slot += 1) slots.push(slot)
-      return slots
-    })),
-  ].sort((a, b) => a - b)
+  const busySlots = [...new Set(dayCourses.flatMap((course) => {
+    const slots = []
+    for (let slot = course.start_slot; slot <= course.end_slot; slot += 1) slots.push(slot)
+    return slots
+  }))].sort((a, b) => a - b)
   return { weekNumber, weekday, busySlots, dayCourses }
 }
 
@@ -103,6 +101,10 @@ function slotsToRanges(slots, slotMeta) {
   return ranges
 }
 
+function displayBuildingName(name) {
+  return String(name || '').replaceAll('未来学习大楼', '主楼')
+}
+
 function App() {
   const [metadata, setMetadata] = useState({ campuses: [], slots: FALLBACK_SLOTS })
   const [credentials, setCredentials] = useState({ account: '', password: '' })
@@ -116,6 +118,8 @@ function App() {
   const [selectedSlots, setSelectedSlots] = useState([])
   const [selectedBuildings, setSelectedBuildings] = useState([])
   const [minSeats, setMinSeats] = useState(0)
+  const [usePersonalSchedule, setUsePersonalSchedule] = useState(true)
+  const [showRecommendationHighlight, setShowRecommendationHighlight] = useState(true)
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
 
@@ -138,29 +142,32 @@ function App() {
     () => getWeekState(courses, schedule?.term_start_date || termStartDate, targetDate),
     [courses, schedule?.term_start_date, targetDate, termStartDate],
   )
+  const busySlots = useMemo(
+    () => (usePersonalSchedule ? weekState.busySlots : []),
+    [usePersonalSchedule, weekState.busySlots],
+  )
   const freeSlots = useMemo(
-    () => slotMeta.map((slot) => slot.index).filter((slot) => !weekState.busySlots.includes(slot)),
-    [slotMeta, weekState.busySlots],
+    () => slotMeta.map((slot) => slot.index).filter((slot) => !busySlots.includes(slot)),
+    [busySlots, slotMeta],
   )
   const buildings = useMemo(() => {
     const names = [...new Set((classrooms?.rooms || []).map((room) => room.building))]
     return names.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
   }, [classrooms])
-  const activeSelectedSlots = selectedSlots.length ? selectedSlots : freeSlots
   const filteredRooms = useMemo(() => {
     return (classrooms?.rooms || [])
       .filter((room) => !selectedBuildings.length || selectedBuildings.includes(room.building))
       .filter((room) => !room.size || room.size >= minSeats)
-      .filter((room) => activeSelectedSlots.every((slot) => room.available_slots.includes(slot)))
+      .filter((room) => selectedSlots.length > 0 && selectedSlots.every((slot) => room.available_slots.includes(slot)))
       .sort((a, b) => a.building.localeCompare(b.building, 'zh-Hans-CN') || a.room.localeCompare(b.room, 'zh-Hans-CN'))
-  }, [activeSelectedSlots, classrooms, minSeats, selectedBuildings])
-  const selectedRanges = slotsToRanges(activeSelectedSlots, slotMeta)
+  }, [classrooms, minSeats, selectedBuildings, selectedSlots])
 
   function updateCredential(field, value) {
     setCredentials((current) => ({ ...current, [field]: value }))
   }
 
   function toggleSlot(slotIndex) {
+    setRecommendations(null)
     setSelectedSlots((current) => (
       current.includes(slotIndex)
         ? current.filter((slot) => slot !== slotIndex)
@@ -169,11 +176,28 @@ function App() {
   }
 
   function toggleBuilding(building) {
+    setRecommendations(null)
     setSelectedBuildings((current) => (
       current.includes(building)
         ? current.filter((item) => item !== building)
         : [...current, building]
     ))
+  }
+
+  function selectCampus(nextCampusId) {
+    setCampusId(nextCampusId)
+    setSelectedBuildings([])
+    setClassrooms(null)
+    setRecommendations(null)
+  }
+
+  function togglePersonalSchedule() {
+    const nextValue = !usePersonalSchedule
+    setUsePersonalSchedule(nextValue)
+    setRecommendations(null)
+    if (nextValue) {
+      setSelectedSlots((current) => current.filter((slot) => !weekState.busySlots.includes(slot)))
+    }
   }
 
   async function runTask(name, task) {
@@ -195,9 +219,11 @@ function App() {
         term_start_date: termStartDate,
       }))
       setSchedule(data)
+      setUsePersonalSchedule(true)
       const nextState = getWeekState(data.courses, data.term_start_date, targetDate)
       const nextFreeSlots = slotMeta.map((slot) => slot.index).filter((slot) => !nextState.busySlots.includes(slot))
       setSelectedSlots(nextFreeSlots)
+      setRecommendations(null)
     })
   }
 
@@ -208,6 +234,7 @@ function App() {
         target_date: targetDate,
       }))
       setClassrooms(data)
+      setRecommendations(null)
     })
   }
 
@@ -221,6 +248,7 @@ function App() {
         selected_slots: selectedSlots,
         buildings: selectedBuildings,
         min_seats: Number(minSeats) || 0,
+        use_schedule_filter: usePersonalSchedule,
       }))
       setClassrooms(data.classrooms)
       setSchedule({
@@ -230,9 +258,23 @@ function App() {
         courses: data.schedule.courses,
       })
       setRecommendations(data)
+      setShowRecommendationHighlight(true)
       setSelectedSlots(data.selected_slots)
     })
   }
+
+  const selectedRanges = slotsToRanges(selectedSlots, slotMeta)
+  const recommendationItems = useMemo(
+    () => (recommendations ? recommendations.recommendations : []),
+    [recommendations],
+  )
+  const recommendationByRoom = useMemo(
+    () => new Map(recommendationItems.map((item) => [item.classroom.id, item])),
+    [recommendationItems],
+  )
+  const canShowRecommendationHighlight = showRecommendationHighlight && recommendationItems.length > 0
+  const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
+  const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
 
   return (
     <main className="app-shell">
@@ -296,23 +338,41 @@ function App() {
             </label>
             <label>
               日期
-              <input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} />
+              <input
+                type="date"
+                value={targetDate}
+                onChange={(event) => {
+                  setTargetDate(event.target.value)
+                  setRecommendations(null)
+                }}
+              />
             </label>
-            <label>
+            <div className="field-group">
               校区
-              <select value={campusId} onChange={(event) => setCampusId(event.target.value)}>
+              <div className="campus-options">
                 {(metadata.campuses || []).map((campus) => (
-                  <option key={campus.id} value={campus.id}>{campus.name}</option>
+                  <button
+                    key={campus.id}
+                    type="button"
+                    className={campusId === campus.id ? 'active' : ''}
+                    onClick={() => selectCampus(campus.id)}
+                  >
+                    <MapPin size={15} />
+                    {campus.name}
+                  </button>
                 ))}
-              </select>
-            </label>
+              </div>
+            </div>
             <label>
               最少座位
               <input
                 type="number"
                 min="0"
                 value={minSeats}
-                onChange={(event) => setMinSeats(Number(event.target.value))}
+                onChange={(event) => {
+                  setMinSeats(Number(event.target.value))
+                  setRecommendations(null)
+                }}
               />
             </label>
           </section>
@@ -345,11 +405,11 @@ function App() {
             </div>
             <div>
               <span>匹配教室</span>
-              <strong>{filteredRooms.length}</strong>
+              <strong>{needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}</strong>
             </div>
             <div>
-              <span>{classrooms?.provider === 'jray_public' ? '公共源推荐' : '连续推荐'}</span>
-              <strong>{recommendations?.recommendations?.length || 0}</strong>
+              <span>{classrooms?.provider === 'jray_public' ? '公共源推荐' : '推荐结果'}</span>
+              <strong>{recommendationItems.length || 0}</strong>
             </div>
           </section>
 
@@ -360,14 +420,47 @@ function App() {
                 <h2>节次筛选</h2>
               </div>
               <div className="mini-actions">
-                <button type="button" onClick={() => setSelectedSlots(freeSlots)}>选中空闲</button>
-                <button type="button" onClick={() => setSelectedSlots([])}>清空</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSlots(freeSlots)
+                    setRecommendations(null)
+                  }}
+                >
+                  选中空闲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSlots([])
+                    setRecommendations(null)
+                  }}
+                >
+                  清空
+                </button>
               </div>
+            </div>
+            <div className="filter-toggles">
+              <button
+                type="button"
+                className={usePersonalSchedule ? 'active' : ''}
+                onClick={togglePersonalSchedule}
+              >
+                个人课表 {usePersonalSchedule ? '开' : '关'}
+              </button>
+              <button
+                type="button"
+                className={canShowRecommendationHighlight ? 'active' : ''}
+                disabled={!recommendationItems.length}
+                onClick={() => setShowRecommendationHighlight((current) => !current)}
+              >
+                推荐高亮 {showRecommendationHighlight ? '开' : '关'}
+              </button>
             </div>
             <div className="slot-grid">
               {slotMeta.map((slot) => {
-                const busy = weekState.busySlots.includes(slot.index)
-                const selected = activeSelectedSlots.includes(slot.index)
+                const busy = busySlots.includes(slot.index)
+                const selected = selectedSlots.includes(slot.index)
                 return (
                   <button
                     key={slot.index}
@@ -375,7 +468,7 @@ function App() {
                     className={`slot-cell ${busy ? 'busy' : 'free'} ${selected ? 'selected' : ''}`}
                     onClick={() => !busy && toggleSlot(slot.index)}
                     disabled={busy}
-                    title={busy ? '个人课表占用' : '个人空闲'}
+                    title={busy ? '个人课表占用' : '个人空闲，可筛选教室'}
                   >
                     <span>{slot.label}</span>
                     <small>{slot.start}-{slot.end}</small>
@@ -426,7 +519,7 @@ function App() {
                   onClick={() => toggleBuilding(building)}
                 >
                   <MapPin size={15} />
-                  {building}
+                  {displayBuildingName(building)}
                 </button>
               )) : <div className="empty-state">暂无教学楼</div>}
             </div>
@@ -440,45 +533,51 @@ function App() {
             {classrooms?.provider ? (
               <p className="muted source-note">
                 数据源：{classrooms.provider === 'jray_public' ? 'Jraaay 公共实时数据' : '微信教务实时接口'}
+                {recommendationItems.length ? ' · 已计算推荐' : ''}
               </p>
             ) : null}
             <div className="room-list">
-              {filteredRooms.length ? filteredRooms.slice(0, 80).map((room) => (
-                <article key={room.id} className="room-card">
-                  <div>
-                    <strong>{room.name}</strong>
-                    <span>{room.size ? `${room.size} 座` : '座位未知'}</span>
-                  </div>
-                  <p>{slotsToRanges(room.available_slots.filter((slot) => activeSelectedSlots.includes(slot)), slotMeta).map((range) => range.label).join(' / ')}</p>
-                </article>
-              )) : (
-                <div className="empty-state">暂无匹配空教室</div>
-              )}
-            </div>
-          </section>
-
-          <section className="panel wide">
-            <div className="panel-title">
-              <Sparkles size={18} />
-              <h2>不用换教室推荐</h2>
-            </div>
-            <div className="recommendation-list">
-              {recommendations?.recommendations?.length ? recommendations.recommendations.slice(0, 24).map((item) => (
-                <article key={item.classroom.id} className="recommendation-row">
-                  <div>
-                    <strong>{item.classroom.name}</strong>
-                    <span>{item.classroom.size ? `${item.classroom.size} 座` : '座位未知'} · 评分 {item.score}</span>
-                  </div>
-                  <div className="range-tags">
-                    {item.ranges.map((range) => (
-                      <span key={`${item.classroom.id}-${range.start_slot}-${range.end_slot}`}>
-                        {range.start_time}-{range.end_time}
-                      </span>
-                    ))}
-                  </div>
-                </article>
-              )) : (
-                <div className="empty-state">暂无推荐</div>
+              {needsBuildingSelection ? (
+                <div className="empty-state">未选择教学楼</div>
+              ) : needsSlotSelection ? (
+                <div className="empty-state">未选择节次</div>
+              ) : (
+                filteredRooms.length ? filteredRooms.slice(0, 80).map((room) => (
+                  (() => {
+                    const recommendation = canShowRecommendationHighlight ? recommendationByRoom.get(room.id) : null
+                    return (
+                      <article key={room.id} className={`room-card ${recommendation ? 'recommended' : ''}`}>
+                        <div>
+                          <strong>{displayBuildingName(room.name)}</strong>
+                          <span>
+                            {recommendation ? '推荐 · ' : ''}
+                            {room.size ? `${room.size} 座` : '座位未知'}
+                            {recommendation ? ` · 评分 ${recommendation.score}` : ''}
+                          </span>
+                        </div>
+                        {recommendation?.longest_range ? (
+                          <p>
+                            最长连续 {recommendation.longest_range.length} 节：
+                            {recommendation.longest_range.start_time}-{recommendation.longest_range.end_time}
+                          </p>
+                        ) : (
+                          <p>{slotsToRanges(room.available_slots.filter((slot) => selectedSlots.includes(slot)), slotMeta).map((range) => range.label).join(' / ')}</p>
+                        )}
+                        {recommendation ? (
+                          <div className="range-tags">
+                            {recommendation.ranges.map((range) => (
+                              <span key={`${room.id}-${range.start_slot}-${range.end_slot}`}>
+                                {range.start_time}-{range.end_time}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </article>
+                    )
+                  })()
+                )) : (
+                  <div className="empty-state">暂无匹配空教室</div>
+                )
               )}
             </div>
           </section>

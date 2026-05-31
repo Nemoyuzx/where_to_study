@@ -51,6 +51,12 @@ pub struct RecommendationRequest {
     pub buildings: Vec<String>,
     #[serde(default)]
     pub min_seats: usize,
+    #[serde(default = "default_use_schedule_filter")]
+    pub use_schedule_filter: bool,
+}
+
+fn default_use_schedule_filter() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
