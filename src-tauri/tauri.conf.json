@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Where To Study",
+  "version": "0.1.0",
+  "identifier": "com.nemoyu.wheretostudy",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Where To Study",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 960,
+        "minHeight": 700,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "app",
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

@@ -1,0 +1,156 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotMetadata {
+    pub index: usize,
+    pub label: String,
+    pub start: String,
+    pub end: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CampusMetadata {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetadataResponse {
+    pub campuses: Vec<CampusMetadata>,
+    pub slots: Vec<SlotMetadata>,
+    pub default_term_id: String,
+    pub default_term_start_date: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleRequest {
+    pub account: Option<String>,
+    pub password: Option<String>,
+    pub term_id: Option<String>,
+    pub term_start_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassroomsRequest {
+    pub account: Option<String>,
+    pub password: Option<String>,
+    pub campus_id: Option<String>,
+    pub target_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationRequest {
+    pub account: Option<String>,
+    pub password: Option<String>,
+    pub term_id: Option<String>,
+    pub term_start_date: Option<String>,
+    pub campus_id: Option<String>,
+    pub target_date: Option<String>,
+    pub selected_slots: Option<Vec<usize>>,
+    #[serde(default)]
+    pub buildings: Vec<String>,
+    #[serde(default)]
+    pub min_seats: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Course {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub teacher: String,
+    #[serde(default)]
+    pub room: String,
+    #[serde(default)]
+    pub week_text: String,
+    #[serde(default)]
+    pub week_numbers: Vec<i64>,
+    pub weekday: i64,
+    pub start_slot: usize,
+    pub end_slot: usize,
+    #[serde(default)]
+    pub section_text: String,
+    #[serde(default)]
+    pub time_range: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduleResponse {
+    pub term_id: String,
+    pub term_start_date: String,
+    pub fetched_at: String,
+    pub courses: Vec<Course>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassroomStatus {
+    pub id: String,
+    pub building: String,
+    pub room: String,
+    pub name: String,
+    pub size: Option<usize>,
+    #[serde(default)]
+    pub r#type: String,
+    #[serde(default)]
+    pub available_slots: Vec<usize>,
+    #[serde(default = "default_classroom_source")]
+    pub source: String,
+}
+
+fn default_classroom_source() -> String {
+    "jwglweixin".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassroomsResponse {
+    pub campus_id: String,
+    pub campus_name: String,
+    pub target_date: String,
+    pub fetched_at: String,
+    #[serde(default = "default_realtime")]
+    pub realtime: bool,
+    #[serde(default = "default_classroom_source")]
+    pub provider: String,
+    pub rooms: Vec<ClassroomStatus>,
+}
+
+fn default_realtime() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DateScheduleState {
+    pub target_date: String,
+    pub week_number: i64,
+    pub weekday: i64,
+    pub busy_slots: Vec<usize>,
+    pub free_slots: Vec<usize>,
+    pub courses: Vec<Course>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StayRange {
+    pub start_slot: usize,
+    pub end_slot: usize,
+    pub length: usize,
+    pub start_time: String,
+    pub end_time: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomRecommendation {
+    pub classroom: ClassroomStatus,
+    pub matched_slots: Vec<usize>,
+    pub ranges: Vec<StayRange>,
+    pub longest_range: Option<StayRange>,
+    pub fits_selected_slots: bool,
+    pub score: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationResponse {
+    pub schedule: DateScheduleState,
+    pub classrooms: ClassroomsResponse,
+    pub selected_slots: Vec<usize>,
+    pub recommendations: Vec<RoomRecommendation>,
+}
