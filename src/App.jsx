@@ -923,6 +923,20 @@ function App() {
                         return <span key={hour} style={{ top: `${top}%` }}>{String(hour).padStart(2, '0')}:00</span>
                       })}
                     </div>
+                    <div className="slot-time-labels">
+                      {slotMeta.map((slot) => {
+                        const start = parseTimeMinutes(slot.start)
+                        const end = parseTimeMinutes(slot.end)
+                        const top = ((start - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                        const height = Math.max(((end - start) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100, 4)
+                        return (
+                          <span key={slot.index} style={{ top: `${top}%`, height: `${height}%` }}>
+                            <strong>第 {slot.label} 节</strong>
+                            <small>{slot.start}-{slot.end}</small>
+                          </span>
+                        )
+                      })}
+                    </div>
                     {visibleCalendarDays.map((dateString) => {
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
                       const visibleStart = CALENDAR_START_HOUR * 60
