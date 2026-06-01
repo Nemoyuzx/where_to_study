@@ -718,14 +718,14 @@ button:disabled {
   border: 1px solid #dfe4df;
   border-radius: 8px;
   display: grid;
-  grid-template-columns: 104px repeat(var(--day-count), minmax(132px, 1fr));
+  grid-template-columns: 58px repeat(var(--day-count), minmax(132px, 1fr));
   grid-template-rows: 70px 760px;
   min-width: 0;
   overflow: auto;
 }
 
 .time-calendar.single-day {
-  grid-template-columns: 104px minmax(520px, 1fr);
+  grid-template-columns: 58px minmax(520px, 1fr);
 }
 
 .time-corner,
@@ -789,28 +789,11 @@ button:disabled {
 
 .time-labels span {
   border-top: 1px solid #e2e7e2;
-  display: grid;
-  gap: 2px;
   left: 0;
-  min-height: 34px;
-  padding: 5px 6px 0;
+  padding: 7px 7px 0 0;
   position: absolute;
   right: 0;
-  text-align: center;
-}
-
-.time-labels strong {
-  color: #53605a;
-  font-size: 12px;
-  font-weight: 760;
-  line-height: 1.1;
-}
-
-.time-labels small {
-  color: #7a8580;
-  font-size: 11px;
-  line-height: 1.1;
-  white-space: nowrap;
+  text-align: right;
 }
 
 .time-day-lane {
@@ -1224,12 +1207,12 @@ button:disabled {
   }
 
   .time-calendar {
-    grid-template-columns: 92px repeat(var(--day-count), minmax(116px, 1fr));
+    grid-template-columns: 50px repeat(var(--day-count), minmax(116px, 1fr));
     grid-template-rows: 66px 640px;
   }
 
   .time-calendar.single-day {
-    grid-template-columns: 92px minmax(320px, 1fr);
+    grid-template-columns: 50px minmax(320px, 1fr);
   }
 
   .month-calendar {
