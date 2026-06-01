@@ -5,6 +5,7 @@ dist-ssr
 *.local
 preview-*.png
 release-artifacts/
+.github/modernize/
 
 src-tauri/target
 src-tauri/gen/schemas
