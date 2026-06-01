@@ -9,7 +9,9 @@ mod schedule;
 mod schedule_store;
 mod settings_store;
 
-use chrono::{Duration as ChronoDuration, NaiveDate};
+use std::time::Duration;
+
+use chrono::{Duration as ChronoDuration, NaiveDate, Timelike};
 #[cfg(not(mobile))]
 use tauri::image::Image;
 #[cfg(not(mobile))]
@@ -161,6 +163,27 @@ fn non_empty_option(value: String) -> Option<String> {
     } else {
         Some(trimmed)
     }
+}
+
+#[cfg(not(mobile))]
+fn classrooms_request_from_settings(settings: SavedSettings) -> ClassroomsRequest {
+    ClassroomsRequest {
+        account: non_empty_option(settings.account),
+        password: non_empty_option(settings.password),
+        campus_id: non_empty_option(settings.campus_id),
+        target_date: Some(config::today_in_app_tz().to_string()),
+    }
+}
+
+#[cfg(not(mobile))]
+async fn fetch_today_classrooms_from_saved_settings(
+    app: tauri::AppHandle,
+) -> Result<ClassroomsResponse, String> {
+    let settings = settings_store::load(&app).map_err(|error| error.message)?;
+    let request = classrooms_request_from_settings(settings);
+    classrooms::fetch_classrooms(&request)
+        .await
+        .map_err(|error| error.message)
 }
 
 #[cfg(not(mobile))]
@@ -455,9 +478,42 @@ fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) 
     }
 }
 
+#[cfg(not(mobile))]
+fn schedule_daily_classroom_refresh(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let mut refreshed_date: Option<NaiveDate> = None;
+
+        loop {
+            let now = chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai);
+            let today = now.date_naive();
+            if now.hour() == 7 && refreshed_date != Some(today) {
+                match tauri::async_runtime::block_on(fetch_today_classrooms_from_saved_settings(
+                    app.clone(),
+                )) {
+                    Ok(classrooms) => {
+                        let _ = app.emit("classrooms:auto-fetched", classrooms);
+                    }
+                    Err(error) => {
+                        let _ = app.emit(
+                            "classrooms:auto-fetch-error",
+                            format!("自动获取当天空教室失败：{error}"),
+                        );
+                    }
+                }
+                refreshed_date = Some(today);
+            }
+
+            std::thread::sleep(Duration::from_secs(60));
+        }
+    });
+}
+
 fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
     #[cfg(not(mobile))]
-    setup_tray(app)?;
+    {
+        setup_tray(app)?;
+        schedule_daily_classroom_refresh(app.app_handle().clone());
+    }
 
     #[cfg(mobile)]
     let _ = app;

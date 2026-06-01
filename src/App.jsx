@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import {
@@ -182,7 +182,9 @@ function App() {
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
+  const autoFetchedClassroomsDate = useRef('')
 
   useEffect(() => {
     command('get_metadata')
@@ -209,9 +211,13 @@ function App() {
         const nextSettings = savedSettingsToState(data)
         setSettings(nextSettings)
         setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
+        setSettingsLoaded(true)
       })
       .catch((loadError) => {
-        if (!cancelled) setError(loadError.message)
+        if (!cancelled) {
+          setError(loadError.message)
+          setSettingsLoaded(true)
+        }
       })
 
     return () => {
@@ -232,6 +238,30 @@ function App() {
 
     return () => {
       if (unlisten) unlisten()
+    }
+  }, [])
+
+  useEffect(() => {
+    let unlistenFetched = null
+    let unlistenError = null
+
+    listen('classrooms:auto-fetched', (event) => {
+      setClassrooms(event.payload)
+      setRecommendations(null)
+    }).then((dispose) => {
+      unlistenFetched = dispose
+    })
+
+    listen('classrooms:auto-fetch-error', (event) => {
+      const message = typeof event.payload === 'string' ? event.payload : '自动获取当天空教室失败。'
+      setError(message)
+    }).then((dispose) => {
+      unlistenError = dispose
+    })
+
+    return () => {
+      if (unlistenFetched) unlistenFetched()
+      if (unlistenError) unlistenError()
     }
   }, [])
 
@@ -283,6 +313,15 @@ function App() {
     () => buildTeachingWeeks(activeTermStartDate, courses, calendarWeekState.weekNumber),
     [courses, activeTermStartDate, calendarWeekState.weekNumber],
   )
+
+  useEffect(() => {
+    if (!settingsLoaded || autoFetchedClassroomsDate.current === todayDate) {
+      return
+    }
+
+    autoFetchedClassroomsDate.current = todayDate
+    loadClassrooms()
+  }, [settingsLoaded, todayDate])
 
   useEffect(() => {
     let cancelled = false
