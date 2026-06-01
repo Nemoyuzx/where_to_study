@@ -480,15 +480,13 @@ button:disabled {
 
 .course-list,
 .building-list,
-.room-list,
-.recommendation-list {
+.room-list {
   display: grid;
   gap: 10px;
 }
 
 .course-row,
-.room-card,
-.recommendation-row {
+.room-card {
   background: #fbfcfa;
   border: 1px solid #e2e7e2;
   border-radius: 7px;
@@ -498,8 +496,7 @@ button:disabled {
 }
 
 .course-row div,
-.room-card div,
-.recommendation-row > div:first-child {
+.room-card div {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -507,8 +504,7 @@ button:disabled {
 }
 
 .course-row strong,
-.room-card strong,
-.recommendation-row strong {
+.room-card strong {
   color: #17201b;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -516,7 +512,6 @@ button:disabled {
 
 .course-row span,
 .room-card span,
-.recommendation-row span,
 .room-card p {
   color: #68736d;
   font-size: 13px;
@@ -547,12 +542,6 @@ button:disabled {
   background: #fff1cc;
   border-color: #e2bc62;
   color: #5d3f00;
-}
-
-.room-card.recommended {
-  background: #f2faf6;
-  border-color: #2e7d6f;
-  box-shadow: inset 3px 0 0 #2e7d6f;
 }
 
 .room-card .range-tags {
@@ -1291,20 +1280,17 @@ button:disabled {
   .muted,
   .course-row span,
   .room-card span,
-  .recommendation-row span,
   .room-card p {
     font-size: 12px;
   }
 
   .course-row,
-  .room-card,
-  .recommendation-row {
+  .room-card {
     padding: 10px;
   }
 
   .course-row div,
-  .room-card div,
-  .recommendation-row > div:first-child {
+  .room-card div {
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;

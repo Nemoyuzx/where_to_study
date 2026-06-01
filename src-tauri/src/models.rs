@@ -80,27 +80,6 @@ pub struct ClassroomsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecommendationRequest {
-    pub account: Option<String>,
-    pub password: Option<String>,
-    pub term_id: Option<String>,
-    pub term_start_date: Option<String>,
-    pub campus_id: Option<String>,
-    pub target_date: Option<String>,
-    pub selected_slots: Option<Vec<usize>>,
-    #[serde(default)]
-    pub buildings: Vec<String>,
-    #[serde(default)]
-    pub min_seats: usize,
-    #[serde(default = "default_use_schedule_filter")]
-    pub use_schedule_filter: bool,
-}
-
-fn default_use_schedule_filter() -> bool {
-    true
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Course {
     pub id: String,
     pub name: String,
@@ -173,31 +152,4 @@ pub struct DateScheduleState {
     pub busy_slots: Vec<usize>,
     pub free_slots: Vec<usize>,
     pub courses: Vec<Course>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StayRange {
-    pub start_slot: usize,
-    pub end_slot: usize,
-    pub length: usize,
-    pub start_time: String,
-    pub end_time: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoomRecommendation {
-    pub classroom: ClassroomStatus,
-    pub matched_slots: Vec<usize>,
-    pub ranges: Vec<StayRange>,
-    pub longest_range: Option<StayRange>,
-    pub fits_selected_slots: bool,
-    pub score: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecommendationResponse {
-    pub schedule: DateScheduleState,
-    pub classrooms: ClassroomsResponse,
-    pub selected_slots: Vec<usize>,
-    pub recommendations: Vec<RoomRecommendation>,
 }

@@ -22,8 +22,8 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
 
 use crate::models::{
-    ClassroomsRequest, ClassroomsResponse, MetadataResponse, RecommendationRequest,
-    RecommendationResponse, SavedSettings, ScheduleRequest, ScheduleResponse,
+    ClassroomsRequest, ClassroomsResponse, MetadataResponse, SavedSettings, ScheduleRequest,
+    ScheduleResponse,
 };
 
 #[tauri::command]
@@ -82,50 +82,6 @@ async fn fetch_classrooms(mut payload: ClassroomsRequest) -> Result<ClassroomsRe
     classrooms::fetch_classrooms(&payload)
         .await
         .map_err(|error| error.message)
-}
-
-#[tauri::command]
-async fn fetch_recommendations(
-    app: tauri::AppHandle,
-    payload: RecommendationRequest,
-) -> Result<RecommendationResponse, String> {
-    let schedule_request = ScheduleRequest {
-        account: payload.account.clone(),
-        password: payload.password.clone(),
-        term_id: payload.term_id.clone(),
-        term_start_date: payload.term_start_date.clone(),
-    };
-    let today_date = config::today_in_app_tz().to_string();
-    let classrooms_request = ClassroomsRequest {
-        account: payload.account.clone(),
-        password: payload.password.clone(),
-        campus_id: payload.campus_id.clone(),
-        target_date: Some(today_date.clone()),
-    };
-
-    let schedule = schedule::fetch_schedule(&schedule_request)
-        .await
-        .map_err(|error| error.message)?;
-    schedule_store::save(&app, &schedule).map_err(|error| error.message)?;
-    let classrooms = classrooms::fetch_classrooms(&classrooms_request)
-        .await
-        .map_err(|error| error.message)?;
-
-    let term_start_date = NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d")
-        .map_err(|_| "第一周周一日期格式不正确。".to_string())?;
-    let target_date = recommender::parse_optional_date(Some(&today_date), "查询日期")
-        .map_err(|error| error.message)?;
-
-    Ok(recommender::recommend(
-        &schedule.courses,
-        term_start_date,
-        classrooms,
-        target_date,
-        payload.selected_slots,
-        payload.buildings,
-        payload.min_seats,
-        payload.use_schedule_filter,
-    ))
 }
 
 #[cfg(not(mobile))]
@@ -542,8 +498,7 @@ pub fn run() {
             load_saved_schedule,
             fetch_schedule,
             import_schedule_to_calendar,
-            fetch_classrooms,
-            fetch_recommendations
+            fetch_classrooms
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
