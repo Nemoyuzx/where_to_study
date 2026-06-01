@@ -514,6 +514,33 @@ function App() {
   }, [calendarDate, calendarView, now, todayDate])
 
   useEffect(() => {
+    if (requestedHolidayYears.current.has(calendarYear)) return
+    requestedHolidayYears.current.add(calendarYear)
+
+    command('fetch_holidays', { year: calendarYear })
+      .then((data) => {
+        setHolidayDataByYear((current) => ({
+          ...current,
+          [data.year]: data,
+        }))
+      })
+      .catch(() => {
+        setHolidayDataByYear((current) => {
+          if (current[calendarYear]) return current
+          return {
+            ...current,
+            [calendarYear]: {
+              year: calendarYear,
+              source: 'fallback',
+              fetched_at: '',
+              items: fallbackHolidayItems(calendarYear),
+            },
+          }
+        })
+      })
+  }, [calendarYear])
+
+  useEffect(() => {
     if (!settingsLoaded || autoFetchedClassroomsDate.current === todayDate) {
       return
     }
@@ -970,7 +997,7 @@ function App() {
                     {visibleCalendarDays.map((dateString) => {
                       const date = dateFromString(dateString)
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
-                      const calendarItems = getChinaCalendarItems(dateString)
+                      const calendarItems = calendarItemsFor(dateString)
                       return (
                         <button
                           key={`head-${dateString}`}
@@ -1066,7 +1093,7 @@ function App() {
                       const date = dateFromString(dateString)
                       const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
-                      const calendarItems = getChinaCalendarItems(dateString)
+                      const calendarItems = calendarItemsFor(dateString)
                       return (
                         <button
                           key={dateString}
@@ -1114,7 +1141,7 @@ function App() {
                             const currentMonth = date.getMonth() === month.monthIndex
                             const courseCount = currentMonth ? state.dayCourses.length : 0
                             const courseLoad = courseCount / maxYearDayCourseCount
-                            const calendarItems = currentMonth ? getChinaCalendarItems(dateString) : []
+                            const calendarItems = currentMonth ? calendarItemsFor(dateString) : []
                             const hasHoliday = hasCalendarItemType(calendarItems, 'holiday')
                             const hasWorkday = hasCalendarItemType(calendarItems, 'workday')
                             return (
@@ -1148,9 +1175,9 @@ function App() {
                     <span>{formatCourseDate(calendarPopover.date)}</span>
                     <strong>{calendarPopoverState.dayCourses.length} 门课</strong>
                     <small>第 {calendarPopoverState.weekNumber || '-'} 周</small>
-                    {getChinaCalendarItems(calendarPopover.date).length ? (
+                    {calendarItemsFor(calendarPopover.date).length ? (
                       <div className="popover-holiday-list">
-                        {getChinaCalendarItems(calendarPopover.date).map((item) => (
+                        {calendarItemsFor(calendarPopover.date).map((item) => (
                           <span key={`${calendarPopover.date}-${item.type}-${item.name}`} className={item.type}>
                             {item.type === 'holiday' ? '休' : '班'} {item.name}
                           </span>
@@ -1180,9 +1207,9 @@ function App() {
                   <span>{formatCourseDate(calendarDate)}</span>
                   <strong>{calendarWeekState.dayCourses.length} 门课</strong>
                   <small>第 {calendarWeekState.weekNumber || '-'} 周</small>
-                  {getChinaCalendarItems(calendarDate).length ? (
+                  {calendarItemsFor(calendarDate).length ? (
                     <div className="inspector-calendar-items">
-                      {getChinaCalendarItems(calendarDate).map((item) => (
+                      {calendarItemsFor(calendarDate).map((item) => (
                         <span key={`${calendarDate}-${item.type}-${item.name}`} className={item.type}>
                           {item.type === 'holiday' ? '休' : '班'} {item.name}
                         </span>

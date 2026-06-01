@@ -52,6 +52,8 @@ npm run tauri:android:build:signed
 src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 ```
 
+Android Studio 调试时，工程现在只保留 `arm64Debug` 和 `universalDebug` 两个主要移动端变体，避免误选 32 位 `armDebug` 并在 64 位真机上触发 ABI 警告。
+
 如果要产出正式签名版 APK，需要再提供 release keystore。仓库已经忽略了 `src-tauri/gen/android/keystore.properties`，可在该文件中填写：
 
 如果本机还没有 keystore，可以直接生成一套本地 release signing 资产：
