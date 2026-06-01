@@ -9,6 +9,8 @@ mod settings_store;
 
 use chrono::NaiveDate;
 #[cfg(not(mobile))]
+use tauri::image::Image;
+#[cfg(not(mobile))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
@@ -402,12 +404,25 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
             _ => {}
         });
 
-    if let Some(icon) = app.default_window_icon().cloned() {
+    if let Ok(icon) = Image::from_bytes(include_bytes!("../icons/tray-icon.png")) {
+        tray = tray.icon(icon).icon_as_template(true);
+    } else if let Some(icon) = app.default_window_icon().cloned() {
         tray = tray.icon(icon).icon_as_template(false);
     }
     tray.build(app)?;
     refresh_tray_courses(app.app_handle().clone());
     Ok(())
+}
+
+#[cfg(not(mobile))]
+fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) {
+    if window.label() != "main" {
+        return;
+    }
+    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        api.prevent_close();
+        let _ = window.hide();
+    }
 }
 
 fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
@@ -426,6 +441,13 @@ pub fn run() {
         .setup(|app| {
             setup_app(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            #[cfg(not(mobile))]
+            keep_main_window_in_tray(window, event);
+
+            #[cfg(mobile)]
+            let _ = (window, event);
         })
         .invoke_handler(tauri::generate_handler![
             get_metadata,
