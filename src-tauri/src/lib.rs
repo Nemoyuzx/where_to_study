@@ -7,7 +7,7 @@ mod recommender;
 mod schedule;
 mod settings_store;
 
-use chrono::NaiveDate;
+use chrono::{Duration as ChronoDuration, NaiveDate};
 #[cfg(not(mobile))]
 use tauri::image::Image;
 #[cfg(not(mobile))]
@@ -114,10 +114,17 @@ enum TrayCourseContent {
     Loading,
     Message(String),
     Courses {
-        date: String,
-        week_number: i64,
-        courses: Vec<String>,
+        today: TrayDayCourses,
+        tomorrow: TrayDayCourses,
     },
+}
+
+#[cfg(not(mobile))]
+struct TrayDayCourses {
+    label: String,
+    date: String,
+    week_number: i64,
+    courses: Vec<String>,
 }
 
 #[cfg(not(mobile))]
@@ -173,56 +180,60 @@ fn format_course_menu_line(course: &crate::models::Course) -> String {
 }
 
 #[cfg(not(mobile))]
-fn tray_course_labels(content: &TrayCourseContent) -> (String, [String; 6]) {
-    match content {
-        TrayCourseContent::Loading => (
-            "今日课程 · 正在更新".to_string(),
-            [
-                "正在读取本地账号并获取课表…".to_string(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ],
+fn append_menu_item<M: Manager<tauri::Wry>>(
+    menu: &Menu<tauri::Wry>,
+    app: &M,
+    id: impl Into<String>,
+    text: impl AsRef<str>,
+    enabled: bool,
+) -> tauri::Result<()> {
+    let item = MenuItem::with_id(app, id.into(), text, enabled, None::<&str>)?;
+    menu.append(&item)
+}
+
+#[cfg(not(mobile))]
+fn append_separator<M: Manager<tauri::Wry>>(menu: &Menu<tauri::Wry>, app: &M) -> tauri::Result<()> {
+    let separator = PredefinedMenuItem::separator(app)?;
+    menu.append(&separator)
+}
+
+#[cfg(not(mobile))]
+fn append_course_section<M: Manager<tauri::Wry>>(
+    menu: &Menu<tauri::Wry>,
+    app: &M,
+    id_prefix: &str,
+    day: &TrayDayCourses,
+) -> tauri::Result<()> {
+    append_menu_item(
+        menu,
+        app,
+        format!("{id_prefix}_title"),
+        format!(
+            "{}课程 · {} · 第 {} 周",
+            day.label, day.date, day.week_number
         ),
-        TrayCourseContent::Message(message) => (
-            "今日课程".to_string(),
-            [
-                truncate_menu_label(message.clone(), 42),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ],
-        ),
-        TrayCourseContent::Courses {
-            date,
-            week_number,
-            courses,
-        } => {
-            let mut labels = [
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ];
-            if courses.is_empty() {
-                labels[0] = "今天暂无课程".to_string();
-            } else {
-                for (index, course) in courses.iter().take(5).enumerate() {
-                    labels[index] = course.clone();
-                }
-                if courses.len() > 5 {
-                    labels[5] = format!("还有 {} 门课程，打开教学日历查看", courses.len() - 5);
-                }
-            }
-            (format!("今日课程 · {date} · 第 {week_number} 周"), labels)
+        true,
+    )?;
+    if day.courses.is_empty() {
+        append_menu_item(
+            menu,
+            app,
+            format!("{id_prefix}_empty"),
+            format!("{}暂无课程", day.label),
+            true,
+        )?;
+    } else {
+        for (index, course) in day.courses.iter().enumerate() {
+            append_menu_item(
+                menu,
+                app,
+                format!("{id_prefix}_course_{index}"),
+                course,
+                true,
+            )?;
         }
     }
+    Ok(())
 }
 
 #[cfg(not(mobile))]
@@ -230,97 +241,72 @@ fn build_tray_menu<M: Manager<tauri::Wry>>(
     app: &M,
     content: TrayCourseContent,
 ) -> tauri::Result<Menu<tauri::Wry>> {
-    let (course_title, course_labels) = tray_course_labels(&content);
-    let title = MenuItem::with_id(app, "tray_title", "Where To Study", false, None::<&str>)?;
-    let course_title = MenuItem::with_id(app, "today_title", course_title, false, None::<&str>)?;
-    let course_1 = MenuItem::with_id(
-        app,
-        "today_course_1",
-        &course_labels[0],
-        false,
-        None::<&str>,
-    )?;
-    let course_2 = MenuItem::with_id(
-        app,
-        "today_course_2",
-        &course_labels[1],
-        false,
-        None::<&str>,
-    )?;
-    let course_3 = MenuItem::with_id(
-        app,
-        "today_course_3",
-        &course_labels[2],
-        false,
-        None::<&str>,
-    )?;
-    let course_4 = MenuItem::with_id(
-        app,
-        "today_course_4",
-        &course_labels[3],
-        false,
-        None::<&str>,
-    )?;
-    let course_5 = MenuItem::with_id(
-        app,
-        "today_course_5",
-        &course_labels[4],
-        false,
-        None::<&str>,
-    )?;
-    let course_6 = MenuItem::with_id(
-        app,
-        "today_course_6",
-        &course_labels[5],
-        false,
-        None::<&str>,
-    )?;
-    let status = MenuItem::with_id(
+    let menu = Menu::new(app)?;
+    append_menu_item(&menu, app, "tray_title", "Where To Study", true)?;
+    append_menu_item(
+        &menu,
         app,
         "tray_status",
         "空教室、教学日历与本地账号设置",
-        false,
-        None::<&str>,
+        true,
     )?;
+    append_separator(&menu, app)?;
+
+    match &content {
+        TrayCourseContent::Loading => {
+            append_menu_item(&menu, app, "loading_title", "课程 · 正在更新", false)?;
+            append_menu_item(
+                &menu,
+                app,
+                "loading_message",
+                "正在读取本地账号并获取课表…",
+                false,
+            )?;
+        }
+        TrayCourseContent::Message(message) => {
+            append_menu_item(&menu, app, "course_message_title", "课程", true)?;
+            append_menu_item(
+                &menu,
+                app,
+                "course_message",
+                truncate_menu_label(message.clone(), 42),
+                true,
+            )?;
+        }
+        TrayCourseContent::Courses { today, tomorrow } => {
+            append_course_section(&menu, app, "today", today)?;
+            append_separator(&menu, app)?;
+            append_course_section(&menu, app, "tomorrow", tomorrow)?;
+        }
+    }
+
+    append_separator(&menu, app)?;
     let open = MenuItem::with_id(app, "open", "打开主窗口", true, None::<&str>)?;
     let planner = MenuItem::with_id(app, "planner", "查看空教室", true, None::<&str>)?;
     let calendar = MenuItem::with_id(app, "calendar", "教学日历", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "设置", true, Some("CmdOrCtrl+,"))?;
-    let refresh = MenuItem::with_id(
-        app,
-        "refresh_today",
-        "刷新今日课程",
-        true,
-        Some("CmdOrCtrl+R"),
-    )?;
+    let refresh = MenuItem::with_id(app, "refresh_today", "刷新课程", true, Some("CmdOrCtrl+R"))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, Some("CmdOrCtrl+Q"))?;
-    let first_separator = PredefinedMenuItem::separator(app)?;
-    let second_separator = PredefinedMenuItem::separator(app)?;
-    let third_separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(
-        app,
-        &[
-            &title,
-            &status,
-            &first_separator,
-            &course_title,
-            &course_1,
-            &course_2,
-            &course_3,
-            &course_4,
-            &course_5,
-            &course_6,
-            &second_separator,
-            &open,
-            &planner,
-            &calendar,
-            &settings,
-            &third_separator,
-            &refresh,
-            &quit,
-        ],
-    )?;
+    menu.append_items(&[&open, &planner, &calendar, &settings])?;
+    append_separator(&menu, app)?;
+    menu.append_items(&[&refresh, &quit])?;
     Ok(menu)
+}
+
+#[cfg(not(mobile))]
+fn build_tray_day_courses(
+    label: &str,
+    courses: &[crate::models::Course],
+    target_date: NaiveDate,
+    term_start_date: NaiveDate,
+) -> TrayDayCourses {
+    let state = recommender::date_state(courses, target_date, term_start_date);
+    TrayDayCourses {
+        label: label.to_string(),
+        date: target_date.to_string(),
+        week_number: state.week_number,
+        courses: state.courses.iter().map(format_course_menu_line).collect(),
+    }
 }
 
 #[cfg(not(mobile))]
@@ -345,12 +331,11 @@ async fn load_today_course_content(app: tauri::AppHandle) -> TrayCourseContent {
             return TrayCourseContent::Message("第一周周一日期格式不正确。".to_string());
         }
     };
-    let today = config::today_in_app_tz();
-    let state = recommender::date_state(&schedule.courses, today, term_start_date);
+    let today_date = config::today_in_app_tz();
+    let tomorrow_date = today_date + ChronoDuration::days(1);
     TrayCourseContent::Courses {
-        date: today.to_string(),
-        week_number: state.week_number,
-        courses: state.courses.iter().map(format_course_menu_line).collect(),
+        today: build_tray_day_courses("今日", &schedule.courses, today_date, term_start_date),
+        tomorrow: build_tray_day_courses("明日", &schedule.courses, tomorrow_date, term_start_date),
     }
 }
 
@@ -381,12 +366,17 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open" => show_main_window(app),
+            "open" | "tray_title" | "tray_status" => show_main_window(app),
             "planner" => {
                 show_main_window(app);
                 let _ = app.emit("tray:navigate", "planner");
             }
-            "calendar" => {
+            id if id == "calendar"
+                || id == "course_message_title"
+                || id == "course_message"
+                || id.starts_with("today_")
+                || id.starts_with("tomorrow_") =>
+            {
                 show_main_window(app);
                 let _ = app.emit("tray:navigate", "calendar");
             }
