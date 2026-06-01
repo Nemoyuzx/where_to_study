@@ -11,7 +11,7 @@ use chrono::NaiveDate;
 #[cfg(not(mobile))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 #[cfg(not(mobile))]
 use tauri::{Emitter, Manager};
 
@@ -108,8 +108,171 @@ fn show_main_window(app: &tauri::AppHandle) {
 }
 
 #[cfg(not(mobile))]
-fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+enum TrayCourseContent {
+    Loading,
+    Message(String),
+    Courses {
+        date: String,
+        week_number: i64,
+        courses: Vec<String>,
+    },
+}
+
+#[cfg(not(mobile))]
+fn non_empty_option(value: String) -> Option<String> {
+    let trimmed = value.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+#[cfg(not(mobile))]
+fn truncate_menu_label(value: String, limit: usize) -> String {
+    let mut output = String::new();
+    for (index, character) in value.chars().enumerate() {
+        if index >= limit {
+            output.push('…');
+            return output;
+        }
+        output.push(character);
+    }
+    output
+}
+
+#[cfg(not(mobile))]
+fn course_time_label(course: &crate::models::Course) -> String {
+    if !course.time_range.trim().is_empty() {
+        return course.time_range.clone();
+    }
+    let start = config::SLOT_TIMES
+        .get(course.start_slot)
+        .map(|slot| slot.0)
+        .unwrap_or("--:--");
+    let end = config::SLOT_TIMES
+        .get(course.end_slot)
+        .map(|slot| slot.1)
+        .unwrap_or("--:--");
+    format!("{start}-{end}")
+}
+
+#[cfg(not(mobile))]
+fn format_course_menu_line(course: &crate::models::Course) -> String {
+    let room = if course.room.trim().is_empty() {
+        "地点未标注".to_string()
+    } else {
+        course.room.clone()
+    };
+    truncate_menu_label(
+        format!("{}  {}  @ {}", course_time_label(course), course.name, room),
+        42,
+    )
+}
+
+#[cfg(not(mobile))]
+fn tray_course_labels(content: &TrayCourseContent) -> (String, [String; 6]) {
+    match content {
+        TrayCourseContent::Loading => (
+            "今日课程 · 正在更新".to_string(),
+            [
+                "正在读取本地账号并获取课表…".to_string(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            ],
+        ),
+        TrayCourseContent::Message(message) => (
+            "今日课程".to_string(),
+            [
+                truncate_menu_label(message.clone(), 42),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            ],
+        ),
+        TrayCourseContent::Courses {
+            date,
+            week_number,
+            courses,
+        } => {
+            let mut labels = [
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            ];
+            if courses.is_empty() {
+                labels[0] = "今天暂无课程".to_string();
+            } else {
+                for (index, course) in courses.iter().take(5).enumerate() {
+                    labels[index] = course.clone();
+                }
+                if courses.len() > 5 {
+                    labels[5] = format!("还有 {} 门课程，打开教学日历查看", courses.len() - 5);
+                }
+            }
+            (format!("今日课程 · {date} · 第 {week_number} 周"), labels)
+        }
+    }
+}
+
+#[cfg(not(mobile))]
+fn build_tray_menu<M: Manager<tauri::Wry>>(
+    app: &M,
+    content: TrayCourseContent,
+) -> tauri::Result<Menu<tauri::Wry>> {
+    let (course_title, course_labels) = tray_course_labels(&content);
     let title = MenuItem::with_id(app, "tray_title", "Where To Study", false, None::<&str>)?;
+    let course_title = MenuItem::with_id(app, "today_title", course_title, false, None::<&str>)?;
+    let course_1 = MenuItem::with_id(
+        app,
+        "today_course_1",
+        &course_labels[0],
+        false,
+        None::<&str>,
+    )?;
+    let course_2 = MenuItem::with_id(
+        app,
+        "today_course_2",
+        &course_labels[1],
+        false,
+        None::<&str>,
+    )?;
+    let course_3 = MenuItem::with_id(
+        app,
+        "today_course_3",
+        &course_labels[2],
+        false,
+        None::<&str>,
+    )?;
+    let course_4 = MenuItem::with_id(
+        app,
+        "today_course_4",
+        &course_labels[3],
+        false,
+        None::<&str>,
+    )?;
+    let course_5 = MenuItem::with_id(
+        app,
+        "today_course_5",
+        &course_labels[4],
+        false,
+        None::<&str>,
+    )?;
+    let course_6 = MenuItem::with_id(
+        app,
+        "today_course_6",
+        &course_labels[5],
+        false,
+        None::<&str>,
+    )?;
     let status = MenuItem::with_id(
         app,
         "tray_status",
@@ -121,30 +284,105 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let planner = MenuItem::with_id(app, "planner", "查看空教室", true, None::<&str>)?;
     let calendar = MenuItem::with_id(app, "calendar", "教学日历", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "设置", true, Some("CmdOrCtrl+,"))?;
-    let refresh = MenuItem::with_id(app, "refresh", "刷新当前页面", true, Some("CmdOrCtrl+R"))?;
+    let refresh = MenuItem::with_id(
+        app,
+        "refresh_today",
+        "刷新今日课程",
+        true,
+        Some("CmdOrCtrl+R"),
+    )?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, Some("CmdOrCtrl+Q"))?;
     let first_separator = PredefinedMenuItem::separator(app)?;
     let second_separator = PredefinedMenuItem::separator(app)?;
+    let third_separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,
         &[
             &title,
             &status,
             &first_separator,
+            &course_title,
+            &course_1,
+            &course_2,
+            &course_3,
+            &course_4,
+            &course_5,
+            &course_6,
+            &second_separator,
             &open,
             &planner,
             &calendar,
             &settings,
-            &second_separator,
+            &third_separator,
             &refresh,
             &quit,
         ],
     )?;
+    Ok(menu)
+}
+
+#[cfg(not(mobile))]
+async fn load_today_course_content(app: tauri::AppHandle) -> TrayCourseContent {
+    let settings = match settings_store::load(&app) {
+        Ok(settings) => settings,
+        Err(error) => return TrayCourseContent::Message(error.message),
+    };
+    let request = ScheduleRequest {
+        account: non_empty_option(settings.account),
+        password: non_empty_option(settings.password),
+        term_id: non_empty_option(settings.term_id),
+        term_start_date: non_empty_option(settings.term_start_date),
+    };
+    let schedule = match schedule::fetch_schedule(&request).await {
+        Ok(schedule) => schedule,
+        Err(error) => return TrayCourseContent::Message(error.message),
+    };
+    let term_start_date = match NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d") {
+        Ok(date) => date,
+        Err(_) => {
+            return TrayCourseContent::Message("第一周周一日期格式不正确。".to_string());
+        }
+    };
+    let today = config::today_in_app_tz();
+    let state = recommender::date_state(&schedule.courses, today, term_start_date);
+    TrayCourseContent::Courses {
+        date: today.to_string(),
+        week_number: state.week_number,
+        courses: state.courses.iter().map(format_course_menu_line).collect(),
+    }
+}
+
+#[cfg(not(mobile))]
+fn set_tray_menu(app: &tauri::AppHandle, content: TrayCourseContent) -> tauri::Result<()> {
+    if let Some(tray) = app.tray_by_id("where-to-study-tray") {
+        let menu = build_tray_menu(app, content)?;
+        tray.set_menu(Some(menu))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(mobile))]
+fn refresh_tray_courses(app: tauri::AppHandle) {
+    let _ = set_tray_menu(&app, TrayCourseContent::Loading);
+    tauri::async_runtime::spawn(async move {
+        let content = load_today_course_content(app.clone()).await;
+        let _ = set_tray_menu(&app, content);
+    });
+}
+
+#[cfg(not(mobile))]
+fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let menu = build_tray_menu(app, TrayCourseContent::Loading)?;
 
     let mut tray = TrayIconBuilder::with_id("where-to-study-tray")
         .tooltip("Where To Study")
         .menu(&menu)
         .show_menu_on_left_click(true)
+        .on_tray_icon_event(|tray, event| {
+            if matches!(event, TrayIconEvent::Click { .. }) {
+                refresh_tray_courses(tray.app_handle().clone());
+            }
+        })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main_window(app),
             "planner" => {
@@ -159,19 +397,16 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 show_main_window(app);
                 let _ = app.emit("tray:navigate", "settings");
             }
-            "refresh" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.eval("window.location.reload()");
-                }
-            }
+            "refresh_today" => refresh_tray_courses(app.clone()),
             "quit" => app.exit(0),
             _ => {}
         });
 
     if let Some(icon) = app.default_window_icon().cloned() {
-        tray = tray.icon(icon).icon_as_template(true);
+        tray = tray.icon(icon).icon_as_template(false);
     }
     tray.build(app)?;
+    refresh_tray_courses(app.app_handle().clone());
     Ok(())
 }
 
