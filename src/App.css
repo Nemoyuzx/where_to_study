@@ -558,18 +558,18 @@ button:disabled {
 }
 
 .mac-calendar-shell {
-  background: #1f242c;
-  border: 1px solid #38414c;
-  border-radius: 10px;
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
-  color: #e8edf3;
+  background: #ffffff;
+  border: 1px solid #dfe4df;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(31, 41, 36, 0.07);
+  color: #17201b;
   overflow: hidden;
 }
 
 .mac-calendar-toolbar {
   align-items: center;
-  background: #1b2027;
-  border-bottom: 1px solid #38414c;
+  background: #ffffff;
+  border-bottom: 1px solid #e8ece8;
   display: flex;
   gap: 18px;
   justify-content: space-between;
@@ -578,14 +578,14 @@ button:disabled {
 }
 
 .mac-calendar-toolbar h2 {
-  color: #f4f6fa;
+  color: #121714;
   font-size: 30px;
   line-height: 1;
 }
 
 .mac-calendar-toolbar p,
 .calendar-export-note {
-  color: #9ca6b2;
+  color: #6b756f;
   font-size: 13px;
   margin-top: 8px;
 }
@@ -600,9 +600,9 @@ button:disabled {
 }
 
 .calendar-view-switch {
-  background: #151920;
-  border: 1px solid #333b46;
-  border-radius: 999px;
+  background: #f1f3ef;
+  border: 1px solid #dfe4df;
+  border-radius: 7px;
   display: grid;
   grid-template-columns: repeat(4, 44px);
   padding: 3px;
@@ -615,8 +615,8 @@ button:disabled {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 999px;
-  color: #cbd3dc;
+  border-radius: 6px;
+  color: #303b35;
   display: inline-flex;
   font-weight: 700;
   height: 32px;
@@ -625,12 +625,14 @@ button:disabled {
 
 .calendar-view-switch button.active,
 .calendar-today-button {
-  background: #343b45;
+  background: #166b5d;
   color: #ffffff;
 }
 
 .calendar-icon-button {
-  background: #2b323c;
+  background: #eef2f6;
+  border-color: #dfe4df;
+  color: #1d3650;
   font-size: 23px;
   width: 32px;
 }
@@ -657,23 +659,23 @@ button:disabled {
 }
 
 .calendar-action-strip input {
-  background: #151920;
-  border-color: #333b46;
-  color: #f4f6fa;
+  background: #fbfcfa;
+  border-color: #cfd8d1;
+  color: #17201b;
   height: 36px;
   max-width: 178px;
 }
 
 .calendar-action-strip button {
-  background: #2b323c;
-  border-color: #3d4652;
+  background: #eef2f6;
+  border-color: #dfe4df;
   border-radius: 7px;
   gap: 7px;
   padding: 0 12px;
 }
 
 .time-calendar {
-  border: 1px solid #343b46;
+  border: 1px solid #dfe4df;
   border-radius: 8px;
   display: grid;
   grid-template-columns: 58px repeat(var(--day-count), minmax(132px, 1fr));
@@ -690,17 +692,17 @@ button:disabled {
 .time-day-head,
 .time-labels,
 .time-day-lane {
-  background: #20252d;
+  background: #fbfcfa;
 }
 
 .time-corner,
 .time-day-head {
-  border-bottom: 1px solid #3a424d;
+  border-bottom: 1px solid #e2e7e2;
 }
 
 .time-day-head {
-  border-left: 1px solid #343b46;
-  color: #d8dee6;
+  border-left: 1px solid #e2e7e2;
+  color: #17201b;
   display: grid;
   gap: 2px;
   justify-items: center;
@@ -709,7 +711,7 @@ button:disabled {
 
 .time-day-head span,
 .time-day-head small {
-  color: #a6afba;
+  color: #68736d;
   font-size: 12px;
 }
 
@@ -721,12 +723,17 @@ button:disabled {
 }
 
 .time-day-head.today strong {
-  background: #ff453a;
+  background: #e2bc62;
+  color: #5d3f00;
+}
+
+.time-day-head.selected strong {
+  background: #166b5d;
   color: #ffffff;
 }
 
 .time-day-head.selected {
-  background: #252b34;
+  background: #f2faf6;
 }
 
 .time-labels,
@@ -736,24 +743,24 @@ button:disabled {
 }
 
 .time-labels {
-  color: #9ba4af;
+  color: #68736d;
   font-size: 12px;
 }
 
 .time-labels span {
-  border-top: 1px solid #3a424d;
+  border-top: 1px solid #e2e7e2;
   padding: 7px 7px 0 0;
   text-align: right;
 }
 
 .time-day-lane {
-  border-left: 1px solid #343b46;
+  border-left: 1px solid #e2e7e2;
   min-width: 0;
   position: relative;
 }
 
 .time-day-lane.selected {
-  background: #232932;
+  background: #f8fbf8;
 }
 
 .time-grid-lines {
@@ -761,7 +768,7 @@ button:disabled {
 }
 
 .time-grid-lines span {
-  border-top: 1px solid #343b46;
+  border-top: 1px solid #e8ece8;
 }
 
 .time-course-layer {
@@ -770,8 +777,8 @@ button:disabled {
 }
 
 .time-course-block {
-  background: #0a9ef2;
-  border-left: 3px solid #48c7ff;
+  background: #1f7b6b;
+  border-left: 3px solid #e2bc62;
   border-radius: 4px;
   color: #ffffff;
   display: grid;
@@ -796,7 +803,7 @@ button:disabled {
 }
 
 .month-calendar {
-  border: 1px solid #343b46;
+  border: 1px solid #dfe4df;
   border-radius: 8px;
   display: grid;
   grid-template-columns: repeat(7, minmax(108px, 1fr));
@@ -804,9 +811,9 @@ button:disabled {
 }
 
 .month-weekday {
-  background: #1b2027;
-  border-bottom: 1px solid #343b46;
-  color: #a6afba;
+  background: #f1f3ef;
+  border-bottom: 1px solid #dfe4df;
+  color: #68736d;
   font-size: 13px;
   font-weight: 700;
   padding: 10px;
@@ -815,10 +822,10 @@ button:disabled {
 
 .month-cell {
   align-content: start;
-  background: #20252d;
-  border-bottom: 1px solid #343b46;
-  border-right: 1px solid #343b46;
-  color: #e8edf3;
+  background: #fbfcfa;
+  border-bottom: 1px solid #e2e7e2;
+  border-right: 1px solid #e2e7e2;
+  color: #17201b;
   display: grid;
   gap: 8px;
   min-height: 118px;
@@ -827,7 +834,7 @@ button:disabled {
 }
 
 .month-cell > span {
-  color: #d8dee6;
+  color: #17201b;
   font-size: 17px;
   font-weight: 760;
   justify-self: end;
@@ -836,7 +843,7 @@ button:disabled {
 .month-cell.today > span,
 .month-cell.selected > span {
   align-items: center;
-  background: #ff453a;
+  background: #166b5d;
   border-radius: 999px;
   color: #ffffff;
   display: inline-flex;
@@ -848,9 +855,10 @@ button:disabled {
 
 .month-cell small,
 .month-cell em {
-  background: #0a9ef2;
+  background: #e8f4f0;
+  border: 1px solid #c7ded6;
   border-radius: 4px;
-  color: #ffffff;
+  color: #1c5d51;
   display: block;
   font-size: 12px;
   font-style: normal;
@@ -862,7 +870,7 @@ button:disabled {
 }
 
 .muted-day {
-  color: #68717d;
+  color: #8a928d;
   opacity: 0.7;
 }
 
@@ -874,7 +882,7 @@ button:disabled {
 }
 
 .year-month h3 {
-  color: #ff453a;
+  color: #166b5d;
   font-size: 19px;
   margin: 0 0 14px;
 }
@@ -886,7 +894,7 @@ button:disabled {
 }
 
 .mini-month-head span {
-  color: #a6afba;
+  color: #68736d;
   font-size: 12px;
   font-weight: 700;
   text-align: center;
@@ -895,26 +903,26 @@ button:disabled {
 .mini-month-grid button {
   background: transparent;
   border-radius: 4px;
-  color: #e8edf3;
+  color: #17201b;
   font-size: 12px;
   font-weight: 700;
   height: 28px;
 }
 
 .mini-month-grid button.has-course {
-  background: rgba(10, 158, 242, 0.18);
-  color: #8bd6ff;
+  background: #e8f4f0;
+  color: #1c5d51;
 }
 
 .mini-month-grid button.today,
 .mini-month-grid button.selected {
-  background: #ff453a;
+  background: #166b5d;
   color: #ffffff;
 }
 
 .calendar-inspector {
-  background: #1b2027;
-  border-left: 1px solid #38414c;
+  background: #f8f9f6;
+  border-left: 1px solid #dfe4df;
   display: grid;
   gap: 12px;
   align-content: start;
@@ -923,8 +931,8 @@ button:disabled {
 
 .inspector-card,
 .inspector-list article {
-  background: #252b34;
-  border: 1px solid #303844;
+  background: #ffffff;
+  border: 1px solid #e2e7e2;
   border-radius: 8px;
   display: grid;
   gap: 7px;
@@ -932,24 +940,25 @@ button:disabled {
 }
 
 .inspector-card.primary {
-  background: #2b323c;
+  background: #e8f4f0;
+  border-color: #c7ded6;
 }
 
 .inspector-card strong,
 .inspector-list strong {
-  color: #f5f7fb;
+  color: #17201b;
 }
 
 .inspector-card span,
 .inspector-card small,
 .inspector-list span,
 .inspector-list small {
-  color: #aeb7c2;
+  color: #68736d;
   font-size: 13px;
 }
 
 .muted-card {
-  color: #9ca6b2;
+  color: #6b756f;
 }
 
 .inspector-list {
@@ -988,7 +997,7 @@ button:disabled {
 
   .calendar-inspector {
     border-left: 0;
-    border-top: 1px solid #38414c;
+    border-top: 1px solid #dfe4df;
   }
 
   .year-calendar {
