@@ -148,6 +148,8 @@ fn default_classroom_source() -> String {
     "sjd".to_string()
 }
 
+pub const CLASSROOMS_CACHE_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClassroomsResponse {
     pub campus_id: String,
@@ -159,6 +161,20 @@ pub struct ClassroomsResponse {
     #[serde(default = "default_classroom_source")]
     pub provider: String,
     pub rooms: Vec<ClassroomStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClassroomsCacheResponse {
+    #[serde(default)]
+    pub cache_version: u32,
+    pub target_date: String,
+    pub fetched_at: String,
+    #[serde(default = "default_realtime")]
+    pub realtime: bool,
+    #[serde(default = "default_classroom_source")]
+    pub provider: String,
+    #[serde(default)]
+    pub campuses: Vec<ClassroomsResponse>,
 }
 
 fn default_realtime() -> bool {

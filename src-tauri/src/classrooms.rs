@@ -8,11 +8,14 @@ use serde_json::Value;
 
 use crate::auth::resolve_credentials;
 use crate::config::{
-    campus_name, normalize_campus_id, now_in_app_tz, today_in_app_tz, EMPTY_CLASSROOM_LOGIN_URL,
+    campus_name, now_in_app_tz, today_in_app_tz, CAMPUSES, EMPTY_CLASSROOM_LOGIN_URL,
     EMPTY_CLASSROOM_TODAY_URL, SJD_LOGIN_PAGE_URL, SJD_ORIGIN, SJD_REST_CLASSROOM_PAGE_URL,
 };
 use crate::error::{ServiceError, ServiceResult};
-use crate::models::{ClassroomStatus, ClassroomsRequest, ClassroomsResponse};
+use crate::models::{
+    ClassroomStatus, ClassroomsCacheResponse, ClassroomsRequest, ClassroomsResponse,
+    CLASSROOMS_CACHE_VERSION,
+};
 
 #[derive(Debug, Clone)]
 struct RoomAccumulator {
@@ -179,19 +182,122 @@ fn normalize_building_name(name: &str) -> String {
         .unwrap_or(&normalized_separator)
         .trim();
 
-    match clean {
+    let compact = clean.replace(' ', "").replace('　', "");
+
+    match compact.as_str() {
         "1" | "教一楼" => "教1".to_string(),
         "2" | "教二楼" => "教2".to_string(),
         "3" | "教三楼" => "教3".to_string(),
         "4" | "教四楼" => "教4".to_string(),
         "未来学习大楼" => "主楼".to_string(),
-        value if value.is_empty() => "未知教学楼".to_string(),
-        value => value.to_string(),
+        "N"
+        | "N楼"
+        | "N座"
+        | "北楼"
+        | "综合教学楼N"
+        | "综合教学楼N楼"
+        | "综合教学楼N座"
+        | "综合楼N"
+        | "综合楼N楼"
+        | "综合N" => "综合教学楼N".to_string(),
+        "S"
+        | "S楼"
+        | "S座"
+        | "南楼"
+        | "综合教学楼S"
+        | "综合教学楼S楼"
+        | "综合教学楼S座"
+        | "综合楼S"
+        | "综合楼S楼"
+        | "综合S" => "综合教学楼S".to_string(),
+        "教学实验综合楼N"
+        | "教学实验综合楼N楼"
+        | "教学实验综合楼N座"
+        | "教学实验综合楼北"
+        | "教学实验综合楼北楼"
+        | "教学实验综合楼-N"
+        | "教学实验综合楼-N楼"
+        | "教学实验综合楼(综教)N"
+        | "教学实验综合楼（综教）N"
+        | "教学实验综合楼N(综教)"
+        | "教学实验综合楼N（综教）"
+        | "综教N"
+        | "综教N楼"
+        | "综教N座"
+        | "综教北"
+        | "综教北楼"
+        | "综教-N"
+        | "综教-N楼" => "教学实验综合楼N".to_string(),
+        "教学实验综合楼S"
+        | "教学实验综合楼S楼"
+        | "教学实验综合楼S座"
+        | "教学实验综合楼南"
+        | "教学实验综合楼南楼"
+        | "教学实验综合楼-S"
+        | "教学实验综合楼-S楼"
+        | "教学实验综合楼(综教)S"
+        | "教学实验综合楼（综教）S"
+        | "教学实验综合楼S(综教)"
+        | "教学实验综合楼S（综教）"
+        | "综教S"
+        | "综教S楼"
+        | "综教S座"
+        | "综教南"
+        | "综教南楼"
+        | "综教-S"
+        | "综教-S楼" => "教学实验综合楼S".to_string(),
+        "智慧楼" | "智慧教室楼" | "智慧教室" => "智慧教学楼".to_string(),
+        _ if clean.is_empty() => "未知教学楼".to_string(),
+        _ => clean.to_string(),
     }
 }
 
 fn original_building_name(name: &str) -> bool {
-    matches!(name, "教1" | "教2" | "教3" | "教4" | "主楼")
+    matches!(
+        name,
+        "教1"
+            | "教2"
+            | "教3"
+            | "教4"
+            | "主楼"
+            | "综合教学楼N"
+            | "综合教学楼S"
+            | "教学实验综合楼N"
+            | "教学实验综合楼S"
+            | "智慧教学楼"
+    )
+}
+
+fn infer_teaching_experiment_side(building: String, room_name: String) -> (String, String) {
+    if building != "教学实验综合楼" {
+        return (building, room_name);
+    }
+
+    let clean_room = room_name
+        .trim()
+        .replace('－', "-")
+        .replace('—', "-")
+        .replace('–', "-")
+        .replace(' ', "")
+        .replace('　', "");
+    let Some(side) = clean_room.chars().next() else {
+        return (building, room_name);
+    };
+    let rest = clean_room[side.len_utf8()..].trim_start_matches('-');
+    if rest.is_empty()
+        || !rest
+            .chars()
+            .next()
+            .is_some_and(|value| value.is_ascii_digit())
+    {
+        return (building, room_name);
+    }
+
+    match side {
+        'N' | 'n' | '北' => ("教学实验综合楼N".to_string(), rest.to_string()),
+        'S' | 's' | '南' => ("教学实验综合楼S".to_string(), rest.to_string()),
+        _ => (building, room_name),
+    }
 }
 
 fn extract_room_name(value: &str, building: &str) -> Option<String> {
@@ -251,7 +357,8 @@ fn parse_available_classrooms(items: &[Value], room_map: &mut HashMap<String, Ro
             let Some((building_name, room_name, size)) = parse_classroom(classroom) else {
                 continue;
             };
-            let building = normalize_building_name(&building_name);
+            let (building, room_name) =
+                infer_teaching_experiment_side(normalize_building_name(&building_name), room_name);
             if !original_building_name(&building) {
                 continue;
             }
@@ -319,8 +426,7 @@ async fn fetch_realtime_classrooms(
         .unwrap_or_default())
 }
 
-pub async fn fetch_classrooms(payload: &ClassroomsRequest) -> ServiceResult<ClassroomsResponse> {
-    let normalized_campus_id = normalize_campus_id(payload.campus_id.as_deref());
+fn service_date_from_payload(payload: &ClassroomsRequest) -> ServiceResult<NaiveDate> {
     let service_date = match payload
         .target_date
         .as_deref()
@@ -338,14 +444,16 @@ pub async fn fetch_classrooms(payload: &ClassroomsRequest) -> ServiceResult<Clas
         ));
     }
 
-    let (user, secret) = resolve_credentials(&payload.account, &payload.password)?;
-    let token = login_empty_classroom(&user, &secret).await?;
-    let client = http_client(30)?;
+    Ok(service_date)
+}
 
+fn classrooms_response_from_items(
+    campus_id: &str,
+    service_date: NaiveDate,
+    available_classrooms: &[Value],
+) -> ClassroomsResponse {
     let mut room_map = HashMap::new();
-    let available_classrooms =
-        fetch_realtime_classrooms(&client, &token, &normalized_campus_id).await?;
-    parse_available_classrooms(&available_classrooms, &mut room_map);
+    parse_available_classrooms(available_classrooms, &mut room_map);
 
     let mut rooms: Vec<ClassroomStatus> = room_map
         .into_values()
@@ -369,14 +477,59 @@ pub async fn fetch_classrooms(payload: &ClassroomsRequest) -> ServiceResult<Clas
             .cmp(&(right.building.as_str(), right.room.as_str()))
     });
 
-    Ok(ClassroomsResponse {
-        campus_id: normalized_campus_id.clone(),
-        campus_name: campus_name(&normalized_campus_id),
+    ClassroomsResponse {
+        campus_id: campus_id.to_string(),
+        campus_name: campus_name(campus_id),
         target_date: service_date.to_string(),
         fetched_at: now_in_app_tz(),
         realtime: true,
         provider: "sjd".to_string(),
         rooms,
+    }
+}
+
+async fn fetch_classrooms_for_campus(
+    client: &reqwest::Client,
+    token: &str,
+    campus_id: &str,
+    service_date: NaiveDate,
+) -> ServiceResult<ClassroomsResponse> {
+    let available_classrooms = fetch_realtime_classrooms(client, token, campus_id).await?;
+    Ok(classrooms_response_from_items(
+        campus_id,
+        service_date,
+        &available_classrooms,
+    ))
+}
+
+pub async fn fetch_all_classrooms(
+    payload: &ClassroomsRequest,
+) -> ServiceResult<ClassroomsCacheResponse> {
+    let service_date = service_date_from_payload(payload)?;
+    let (user, secret) = resolve_credentials(&payload.account, &payload.password)?;
+    let token = login_empty_classroom(&user, &secret).await?;
+    let client = http_client(30)?;
+
+    let mut campuses = Vec::with_capacity(CAMPUSES.len());
+    for campus in CAMPUSES {
+        let response = fetch_classrooms_for_campus(&client, &token, campus.id, service_date)
+            .await
+            .map_err(|error| {
+                ServiceError::new(format!(
+                    "{}校区实时教室数据获取失败：{}",
+                    campus.name, error
+                ))
+            })?;
+        campuses.push(response);
+    }
+
+    Ok(ClassroomsCacheResponse {
+        cache_version: CLASSROOMS_CACHE_VERSION,
+        target_date: service_date.to_string(),
+        fetched_at: now_in_app_tz(),
+        realtime: true,
+        provider: "sjd".to_string(),
+        campuses,
     })
 }
 
@@ -482,6 +635,100 @@ mod tests {
         }
         assert!(room_map.get("主楼-217").is_none());
         assert!(room_map.get("主楼-218").is_none());
+    }
+
+    #[test]
+    fn parse_available_classrooms_keeps_shahe_buildings() {
+        let mut room_map = HashMap::new();
+        let items = serde_json::json!([
+            {
+                "NODENAME": "2",
+                "CLASSROOMS": "沙河-N-101(90),沙河-S楼-202(80),智慧教学楼-305-306(60)"
+            },
+            {
+                "NODENAME": "4",
+                "CLASSROOMS": "沙河-智慧教室楼-101(64),沙河-综合教学楼N-120(90),综合教学楼S-211(80)"
+            },
+            {
+                "NODENAME": "6",
+                "CLASSROOMS": "沙河-教学实验综合楼-N101(90),教学实验综合楼-N110(117),沙河-教学实验综合楼-北305(60),沙河-教学实验综合楼-S101(90),教学实验综合楼-S202(208),沙河-教学实验综合楼-南305(60),沙河-教学实验综合楼-999(10)"
+            },
+            {
+                "NODENAME": "8",
+                "CLASSROOMS": "沙河-教学实验综合楼N-101(90),沙河-综教N楼-202(80),教学实验综合楼（综教）N-305-306(60),沙河-教学实验综合楼S-101(90),沙河-综教S楼-202(80),教学实验综合楼（综教）S-305-306(60)"
+            }
+        ]);
+        let items = items.as_array().unwrap();
+
+        parse_available_classrooms(items, &mut room_map);
+
+        assert_eq!(
+            room_map.get("综合教学楼N-101").unwrap().available_slots,
+            vec![1]
+        );
+        assert_eq!(
+            room_map.get("综合教学楼S-202").unwrap().available_slots,
+            vec![1]
+        );
+        assert_eq!(
+            room_map.get("智慧教学楼-305-306").unwrap().available_slots,
+            vec![1]
+        );
+        assert_eq!(
+            room_map.get("智慧教学楼-101").unwrap().available_slots,
+            vec![3]
+        );
+        assert_eq!(
+            room_map.get("综合教学楼N-120").unwrap().available_slots,
+            vec![3]
+        );
+        assert_eq!(
+            room_map.get("综合教学楼S-211").unwrap().available_slots,
+            vec![3]
+        );
+        assert_eq!(
+            room_map.get("教学实验综合楼N-101").unwrap().available_slots,
+            vec![5, 7]
+        );
+        assert_eq!(
+            room_map.get("教学实验综合楼N-110").unwrap().available_slots,
+            vec![5]
+        );
+        assert_eq!(
+            room_map.get("教学实验综合楼N-305").unwrap().available_slots,
+            vec![5]
+        );
+        assert_eq!(
+            room_map.get("教学实验综合楼N-202").unwrap().available_slots,
+            vec![7]
+        );
+        assert_eq!(
+            room_map
+                .get("教学实验综合楼N-305-306")
+                .unwrap()
+                .available_slots,
+            vec![7]
+        );
+        assert_eq!(
+            room_map.get("教学实验综合楼S-101").unwrap().available_slots,
+            vec![5, 7]
+        );
+        assert_eq!(
+            room_map.get("教学实验综合楼S-202").unwrap().available_slots,
+            vec![5, 7]
+        );
+        assert_eq!(
+            room_map.get("教学实验综合楼S-305").unwrap().available_slots,
+            vec![5]
+        );
+        assert_eq!(
+            room_map
+                .get("教学实验综合楼S-305-306")
+                .unwrap()
+                .available_slots,
+            vec![7]
+        );
+        assert!(room_map.get("教学实验综合楼-999").is_none());
     }
 
     #[test]

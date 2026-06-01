@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  X,
 } from 'lucide-react'
 import './App.css'
 
@@ -61,6 +62,10 @@ const NAV_ITEMS = [
   { id: 'calendar', label: '教学日历', Icon: CalendarRange },
   { id: 'settings', label: '设置', Icon: Settings },
 ]
+
+const APP_WIDGET_MODE = typeof window === 'undefined'
+  ? ''
+  : new URLSearchParams(window.location.search).get('widget') || ''
 
 const FALLBACK_HOLIDAY_PERIODS_2026 = [
   { name: '元旦', start: '2026-01-01', end: '2026-01-03' },
@@ -235,6 +240,33 @@ function requestBody(settings, extras = {}) {
   }
 }
 
+function normalizeCampusId(campusId) {
+  const value = String(campusId || DEFAULT_SETTINGS.campusId).trim()
+  if (/^\d+$/.test(value)) return value.padStart(2, '0')
+  return value
+}
+
+function normalizeClassroomsCache(data) {
+  if (!data) return null
+  if (Array.isArray(data.campuses)) return data
+  if (Array.isArray(data.rooms)) {
+    return {
+      cache_version: data.cache_version || 0,
+      target_date: data.target_date || localDateString(),
+      fetched_at: data.fetched_at || '',
+      realtime: data.realtime ?? true,
+      provider: data.provider || 'sjd',
+      campuses: [data],
+    }
+  }
+  return null
+}
+
+function getCampusClassrooms(cache, campusId) {
+  const normalizedCampusId = normalizeCampusId(campusId)
+  return (cache?.campuses || []).find((campus) => normalizeCampusId(campus.campus_id) === normalizedCampusId) || null
+}
+
 function normalizeError(error) {
   if (typeof error === 'string') return error
   if (error?.message) return error.message
@@ -258,7 +290,7 @@ function browserPreviewCommand(name, payload = {}) {
   if (name === 'load_saved_settings' || name === 'save_saved_settings') {
     return settingsToPayload(DEFAULT_SETTINGS)
   }
-  if (name === 'load_saved_schedule') {
+  if (name === 'load_saved_schedule' || name === 'load_saved_classrooms') {
     return null
   }
   if (name === 'fetch_holidays') {
@@ -271,13 +303,31 @@ function browserPreviewCommand(name, payload = {}) {
   }
   if (name === 'fetch_classrooms') {
     return {
-      campus_id: DEFAULT_SETTINGS.campusId,
-      campus_name: '西土城',
+      cache_version: 2,
       target_date: localDateString(),
       fetched_at: new Date().toISOString(),
       realtime: true,
       provider: 'browser-preview',
-      rooms: [],
+      campuses: [
+        {
+          campus_id: '01',
+          campus_name: '西土城',
+          target_date: localDateString(),
+          fetched_at: new Date().toISOString(),
+          realtime: true,
+          provider: 'browser-preview',
+          rooms: [],
+        },
+        {
+          campus_id: '04',
+          campus_name: '沙河',
+          target_date: localDateString(),
+          fetched_at: new Date().toISOString(),
+          realtime: true,
+          provider: 'browser-preview',
+          rooms: [],
+        },
+      ],
     }
   }
   if (name === 'fetch_schedule') {
@@ -290,6 +340,9 @@ function browserPreviewCommand(name, payload = {}) {
   }
   if (name === 'import_schedule_to_calendar') {
     throw new Error('手机浏览器预览不支持导入苹果日历，请在 macOS App 中使用。')
+  }
+  if (name === 'show_desktop_widget' || name === 'hide_desktop_widget') {
+    return true
   }
   return null
 }
@@ -369,14 +422,140 @@ function displayBuildingName(name) {
   return String(name || '').replaceAll('未来学习大楼', '主楼')
 }
 
+function CourseWidget() {
+  const [metadata, setMetadata] = useState({ slots: FALLBACK_SLOTS })
+  const [schedule, setSchedule] = useState(null)
+  const [now, setNow] = useState(() => new Date())
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const todayDate = localDateString(now)
+  const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
+  const courses = schedule?.courses || []
+  const weekState = useMemo(
+    () => getWeekState(courses, schedule?.term_start_date || DEFAULT_SETTINGS.termStartDate, todayDate),
+    [courses, schedule?.term_start_date, todayDate],
+  )
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  const upcomingCourse = weekState.dayCourses.find((course) => courseTimeBounds(course, slotMeta).endMinutes >= nowMinutes) || weekState.dayCourses[0] || null
+
+  async function loadWidgetSchedule() {
+    setLoading(true)
+    setError('')
+    try {
+      const [nextMetadata, savedSchedule] = await Promise.all([
+        command('get_metadata'),
+        command('load_saved_schedule'),
+      ])
+      setMetadata(nextMetadata || { slots: FALLBACK_SLOTS })
+      setSchedule(savedSchedule)
+    } catch (widgetError) {
+      setError(widgetError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadWidgetSchedule()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!hasTauriRuntime()) return undefined
+
+    let unlisten = null
+    listen('schedule:updated', (event) => {
+      if (event.payload) setSchedule(event.payload)
+    }).then((dispose) => {
+      unlisten = dispose
+    })
+
+    return () => {
+      if (unlisten) unlisten()
+    }
+  }, [])
+
+  async function hideWidget() {
+    try {
+      await command('hide_desktop_widget')
+    } catch (hideError) {
+      setError(hideError.message)
+    }
+  }
+
+  return (
+    <main className="course-widget-shell">
+      <section className="course-widget-card">
+        <header className="course-widget-header">
+          <div className="course-widget-drag" data-tauri-drag-region>
+            <span>{formatCourseDate(todayDate)}</span>
+            <strong>{weekState.dayCourses.length ? `${weekState.dayCourses.length} 门课` : '今日无课'}</strong>
+          </div>
+          <div className="course-widget-actions">
+            <button type="button" onClick={loadWidgetSchedule} aria-label="刷新课程" title="刷新课程" disabled={loading}>
+              {loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+            </button>
+            <button type="button" onClick={hideWidget} aria-label="隐藏小组件" title="隐藏小组件">
+              <X size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="course-widget-overview">
+          <span>第 {weekState.weekNumber || '-'} 周</span>
+          <strong>{upcomingCourse ? upcomingCourse.name : schedule ? '没有待上课程' : '课表未载入'}</strong>
+          {upcomingCourse ? (
+            <small>{courseTimeBounds(upcomingCourse, slotMeta).start}-{courseTimeBounds(upcomingCourse, slotMeta).end} · {upcomingCourse.room || '地点未标注'}</small>
+          ) : (
+            <small>{schedule ? '今天可以自由安排' : '打开主应用刷新个人课表后显示'}</small>
+          )}
+        </div>
+
+        {error ? <p className="course-widget-error">{error}</p> : null}
+
+        <div className="course-widget-list">
+          {schedule ? (
+            weekState.dayCourses.length ? weekState.dayCourses.map((course) => {
+              const bounds = courseTimeBounds(course, slotMeta)
+              return (
+                <article key={course.id}>
+                  <time>{bounds.start}</time>
+                  <div>
+                    <strong>{course.name}</strong>
+                    <span>{bounds.start}-{bounds.end} · {course.room || '地点未标注'}</span>
+                  </div>
+                </article>
+              )
+            }) : (
+              <div className="course-widget-empty">今日暂无课程</div>
+            )
+          ) : (
+            <div className="course-widget-empty">暂无本地课表</div>
+          )}
+        </div>
+      </section>
+    </main>
+  )
+}
+
 function App() {
+  if (APP_WIDGET_MODE === 'course') {
+    return <CourseWidget />
+  }
+
   const [activePage, setActivePage] = useState('planner')
   const [metadata, setMetadata] = useState({ campuses: [], slots: FALLBACK_SLOTS })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
   const [calendarDate, setCalendarDate] = useState(localDateString())
   const [calendarView, setCalendarView] = useState('week')
   const [schedule, setSchedule] = useState(null)
-  const [classrooms, setClassrooms] = useState(null)
+  const [classroomsCache, setClassroomsCache] = useState(null)
+  const [classroomsCacheLoaded, setClassroomsCacheLoaded] = useState(false)
   const [selectedSlots, setSelectedSlots] = useState([])
   const [selectedBuildings, setSelectedBuildings] = useState([])
   const [minSeats, setMinSeats] = useState(0)
@@ -464,7 +643,8 @@ function App() {
     let unlistenError = null
 
     listen('classrooms:auto-fetched', (event) => {
-      setClassrooms(event.payload)
+      const nextCache = normalizeClassroomsCache(event.payload)
+      if (nextCache) setClassroomsCache(nextCache)
     }).then((dispose) => {
       unlistenFetched = dispose
     })
@@ -519,6 +699,10 @@ function App() {
   const plannerWeekState = useMemo(
     () => getWeekState(courses, activeTermStartDate, todayDate),
     [courses, activeTermStartDate, todayDate],
+  )
+  const classrooms = useMemo(
+    () => getCampusClassrooms(classroomsCache, settings.campusId),
+    [classroomsCache, settings.campusId],
   )
   const calendarWeekState = useMemo(
     () => getWeekState(courses, activeTermStartDate, calendarDate),
@@ -621,13 +805,38 @@ function App() {
   }, [calendarYear])
 
   useEffect(() => {
-    if (!settingsLoaded || autoFetchedClassroomsDate.current === todayDate) {
+    let cancelled = false
+
+    command('load_saved_classrooms')
+      .then((data) => {
+        if (cancelled) return
+        const nextCache = normalizeClassroomsCache(data)
+        if (nextCache && nextCache.target_date === todayDate) {
+          setClassroomsCache(nextCache)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setClassroomsCacheLoaded(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [todayDate])
+
+  useEffect(() => {
+    if (!settingsLoaded || !classroomsCacheLoaded || autoFetchedClassroomsDate.current === todayDate) {
+      return
+    }
+    if (classroomsCache?.target_date === todayDate) {
+      autoFetchedClassroomsDate.current = todayDate
       return
     }
 
     autoFetchedClassroomsDate.current = todayDate
     loadClassrooms()
-  }, [settingsLoaded, todayDate])
+  }, [classroomsCache, classroomsCacheLoaded, settingsLoaded, todayDate])
 
   useEffect(() => {
     let cancelled = false
@@ -660,7 +869,6 @@ function App() {
       setSettings(nextSettings)
       setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
       setSelectedBuildings([])
-      setClassrooms(null)
       setSettingsSaved(true)
     } catch (saveError) {
       setError(saveError.message)
@@ -748,10 +956,10 @@ function App() {
   async function loadClassrooms() {
     await runTask('classrooms', async () => {
       const data = await command('fetch_classrooms', requestBody(settings, {
-        campus_id: settings.campusId,
         target_date: todayDate,
       }))
-      setClassrooms(data)
+      const nextCache = normalizeClassroomsCache(data)
+      if (nextCache) setClassroomsCache(nextCache)
     })
   }
 
@@ -759,6 +967,12 @@ function App() {
     await runTask('calendar-import', async () => {
       const path = await command('import_schedule_to_calendar')
       setCalendarImportedPath(path)
+    })
+  }
+
+  async function openDesktopWidget() {
+    await runTask('widget', async () => {
+      await command('show_desktop_widget')
     })
   }
 
@@ -853,7 +1067,6 @@ function App() {
                       onClick={() => {
                         updateSetting('campusId', campus.id)
                         setSelectedBuildings([])
-                        setClassrooms(null)
                       }}
                     >
                       <MapPin size={15} />
@@ -878,7 +1091,7 @@ function App() {
               </button>
               <button type="button" onClick={loadClassrooms} disabled={!!loading}>
                 {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
-                查看空教室
+                获取空教室信息
               </button>
             </section>
           </aside>
@@ -1382,6 +1595,10 @@ function App() {
             <button type="button" className="primary" onClick={saveCurrentSettings}>
               <CheckCircle2 size={17} />
               保存设置
+            </button>
+            <button type="button" className="secondary" onClick={openDesktopWidget} disabled={!!loading}>
+              {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <CalendarDays size={17} />}
+              打开课程小组件
             </button>
             {settingsSaved ? <span>已保存</span> : null}
           </section>

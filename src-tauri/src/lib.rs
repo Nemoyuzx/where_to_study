@@ -1,6 +1,7 @@
 mod auth;
 mod calendar_export;
 mod classrooms;
+mod classrooms_store;
 mod config;
 mod error;
 mod holidays;
@@ -10,8 +11,10 @@ mod schedule;
 mod schedule_store;
 mod settings_store;
 
+#[cfg(not(mobile))]
 use std::time::Duration;
 
+#[cfg(not(mobile))]
 use chrono::{Duration as ChronoDuration, NaiveDate, Timelike};
 #[cfg(not(mobile))]
 use tauri::image::Image;
@@ -21,10 +24,12 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 #[cfg(not(mobile))]
 use tauri::{Emitter, Manager};
+#[cfg(all(not(mobile), target_os = "macos"))]
+use tauri_plugin_notification::NotificationExt;
 
 use crate::models::{
-    ClassroomsRequest, ClassroomsResponse, HolidaysRequest, HolidaysResponse, MetadataResponse,
-    SavedSettings, ScheduleRequest, ScheduleResponse,
+    ClassroomsCacheResponse, ClassroomsRequest, HolidaysRequest, HolidaysResponse,
+    MetadataResponse, SavedSettings, ScheduleRequest, ScheduleResponse,
 };
 
 #[tauri::command]
@@ -56,6 +61,11 @@ fn load_saved_schedule(app: tauri::AppHandle) -> Result<Option<ScheduleResponse>
 }
 
 #[tauri::command]
+fn load_saved_classrooms(app: tauri::AppHandle) -> Result<Option<ClassroomsCacheResponse>, String> {
+    classrooms_store::load(&app).map_err(|error| error.message)
+}
+
+#[tauri::command]
 async fn fetch_schedule(
     app: tauri::AppHandle,
     payload: ScheduleRequest,
@@ -64,6 +74,8 @@ async fn fetch_schedule(
         .await
         .map_err(|error| error.message)?;
     schedule_store::save(&app, &schedule).map_err(|error| error.message)?;
+    #[cfg(not(mobile))]
+    let _ = app.emit("schedule:updated", schedule.clone());
     Ok(schedule)
 }
 
@@ -78,11 +90,16 @@ fn import_schedule_to_calendar(app: tauri::AppHandle) -> Result<String, String> 
 }
 
 #[tauri::command]
-async fn fetch_classrooms(mut payload: ClassroomsRequest) -> Result<ClassroomsResponse, String> {
+async fn fetch_classrooms(
+    app: tauri::AppHandle,
+    mut payload: ClassroomsRequest,
+) -> Result<ClassroomsCacheResponse, String> {
     payload.target_date = Some(config::today_in_app_tz().to_string());
-    classrooms::fetch_classrooms(&payload)
+    let classrooms = classrooms::fetch_all_classrooms(&payload)
         .await
-        .map_err(|error| error.message)
+        .map_err(|error| error.message)?;
+    classrooms_store::save(&app, &classrooms).map_err(|error| error.message)?;
+    Ok(classrooms)
 }
 
 #[tauri::command]
@@ -95,6 +112,38 @@ async fn fetch_holidays(
         .map_err(|error| error.message)
 }
 
+#[tauri::command]
+async fn show_desktop_widget(app: tauri::AppHandle) -> Result<bool, String> {
+    #[cfg(not(mobile))]
+    {
+        show_course_widget(&app).map_err(|error| error.to_string())?;
+        Ok(true)
+    }
+
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Err("桌面课程小组件仅支持 macOS、Windows 和 Linux。".to_string())
+    }
+}
+
+#[tauri::command]
+async fn hide_desktop_widget(app: tauri::AppHandle) -> Result<bool, String> {
+    #[cfg(not(mobile))]
+    {
+        if let Some(window) = app.get_webview_window("course-widget") {
+            window.hide().map_err(|error| error.to_string())?;
+        }
+        Ok(true)
+    }
+
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        Err("桌面课程小组件仅支持 macOS、Windows 和 Linux。".to_string())
+    }
+}
+
 #[cfg(not(mobile))]
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -102,6 +151,36 @@ fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+}
+
+#[cfg(not(mobile))]
+fn show_course_widget(app: &tauri::AppHandle) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window("course-widget") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
+    let window = tauri::WebviewWindowBuilder::new(
+        app,
+        "course-widget",
+        tauri::WebviewUrl::App("index.html?widget=course".into()),
+    )
+    .title("今日课程")
+    .inner_size(320.0, 420.0)
+    .min_inner_size(280.0, 320.0)
+    .max_inner_size(420.0, 620.0)
+    .position(24.0, 80.0)
+    .decorations(false)
+    .resizable(false)
+    .always_on_top(true)
+    .visible_on_all_workspaces(true)
+    .focused(false)
+    .shadow(true)
+    .build()?;
+    let _ = window.show();
+    Ok(())
 }
 
 #[cfg(not(mobile))]
@@ -137,7 +216,7 @@ fn classrooms_request_from_settings(settings: SavedSettings) -> ClassroomsReques
     ClassroomsRequest {
         account: non_empty_option(settings.account),
         password: non_empty_option(settings.password),
-        campus_id: non_empty_option(settings.campus_id),
+        campus_id: None,
         target_date: Some(config::today_in_app_tz().to_string()),
     }
 }
@@ -145,12 +224,14 @@ fn classrooms_request_from_settings(settings: SavedSettings) -> ClassroomsReques
 #[cfg(not(mobile))]
 async fn fetch_today_classrooms_from_saved_settings(
     app: tauri::AppHandle,
-) -> Result<ClassroomsResponse, String> {
+) -> Result<ClassroomsCacheResponse, String> {
     let settings = settings_store::load(&app).map_err(|error| error.message)?;
     let request = classrooms_request_from_settings(settings);
-    classrooms::fetch_classrooms(&request)
+    let classrooms = classrooms::fetch_all_classrooms(&request)
         .await
-        .map_err(|error| error.message)
+        .map_err(|error| error.message)?;
+    classrooms_store::save(&app, &classrooms).map_err(|error| error.message)?;
+    Ok(classrooms)
 }
 
 #[cfg(not(mobile))]
@@ -298,12 +379,13 @@ fn build_tray_menu<M: Manager<tauri::Wry>>(
 
     append_separator(&menu, app)?;
     let open = MenuItem::with_id(app, "open", "打开主窗口", true, None::<&str>)?;
+    let widget = MenuItem::with_id(app, "show_widget", "显示课程小组件", true, None::<&str>)?;
     let planner = MenuItem::with_id(app, "planner", "查看空教室", true, None::<&str>)?;
     let calendar = MenuItem::with_id(app, "calendar", "教学日历", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "设置", true, Some("CmdOrCtrl+,"))?;
     let refresh = MenuItem::with_id(app, "refresh_today", "刷新课程", true, Some("CmdOrCtrl+R"))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, Some("CmdOrCtrl+Q"))?;
-    menu.append_items(&[&open, &planner, &calendar, &settings])?;
+    menu.append_items(&[&open, &widget, &planner, &calendar, &settings])?;
     append_separator(&menu, app)?;
     menu.append_items(&[&refresh, &quit])?;
     Ok(menu)
@@ -402,6 +484,9 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" | "tray_title" | "tray_status" => show_main_window(app),
+            "show_widget" => {
+                let _ = show_course_widget(app);
+            }
             "planner" => {
                 show_main_window(app);
                 let _ = app.emit("tray:navigate", "planner");
@@ -475,11 +560,97 @@ fn schedule_daily_classroom_refresh(app: tauri::AppHandle) {
     });
 }
 
+#[cfg(all(not(mobile), target_os = "macos"))]
+fn daily_course_notification_content(app: &tauri::AppHandle, today: NaiveDate) -> (String, String) {
+    let Some(schedule) = (match schedule_store::load(app) {
+        Ok(schedule) => schedule,
+        Err(error) => return ("今日课程提醒".to_string(), error.message),
+    }) else {
+        return (
+            "今日课程提醒".to_string(),
+            "还没有保存课表，打开应用刷新个人课表后会在这里提醒。".to_string(),
+        );
+    };
+    let term_start_date = match NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d") {
+        Ok(date) => date,
+        Err(_) => {
+            return (
+                "今日课程提醒".to_string(),
+                "第一周周一日期格式不正确，请在设置里修正。".to_string(),
+            );
+        }
+    };
+    let state = recommender::date_state(&schedule.courses, today, term_start_date);
+    if state.courses.is_empty() {
+        return (
+            "今日暂无课程".to_string(),
+            format!("{} · 第 {} 周", today, state.week_number),
+        );
+    }
+
+    let mut lines: Vec<String> = state
+        .courses
+        .iter()
+        .take(4)
+        .map(format_course_menu_line)
+        .collect();
+    if state.courses.len() > lines.len() {
+        lines.push(format!(
+            "还有 {} 门课，打开应用查看完整日程。",
+            state.courses.len() - lines.len()
+        ));
+    }
+    (
+        format!("今日有 {} 门课", state.courses.len()),
+        lines.join("\n"),
+    )
+}
+
+#[cfg(all(not(mobile), target_os = "macos"))]
+fn send_daily_course_notification(app: &tauri::AppHandle, today: NaiveDate) -> Result<(), String> {
+    let (title, body) = daily_course_notification_content(app, today);
+    let notification = app.notification();
+    let _ = notification.request_permission();
+    notification
+        .builder()
+        .title(title)
+        .body(body)
+        .group("daily-courses")
+        .auto_cancel()
+        .show()
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(all(not(mobile), target_os = "macos"))]
+fn schedule_daily_course_notification(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let mut notified_date: Option<NaiveDate> = None;
+
+        loop {
+            let now = chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai);
+            let today = now.date_naive();
+            if now.hour() == 7 && now.minute() >= 30 && notified_date != Some(today) {
+                if let Err(error) = send_daily_course_notification(&app, today) {
+                    let _ = app.emit(
+                        "schedule:daily-notification-error",
+                        format!("发送今日课程提醒失败：{error}"),
+                    );
+                }
+                notified_date = Some(today);
+            }
+
+            std::thread::sleep(Duration::from_secs(60));
+        }
+    });
+}
+
 fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
     #[cfg(not(mobile))]
     {
         setup_tray(app)?;
         schedule_daily_classroom_refresh(app.app_handle().clone());
+        #[cfg(target_os = "macos")]
+        schedule_daily_course_notification(app.app_handle().clone());
     }
 
     #[cfg(mobile)]
@@ -490,7 +661,11 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(not(mobile))]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+
+    builder
         .setup(|app| {
             setup_app(app)?;
             Ok(())
@@ -507,10 +682,13 @@ pub fn run() {
             load_saved_settings,
             save_saved_settings,
             load_saved_schedule,
+            load_saved_classrooms,
             fetch_schedule,
             import_schedule_to_calendar,
             fetch_classrooms,
-            fetch_holidays
+            fetch_holidays,
+            show_desktop_widget,
+            hide_desktop_widget
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -20,9 +20,8 @@ pub fn date_state(
         .filter(|course| course.weekday == weekday && course.week_numbers.contains(&week_number))
         .cloned()
         .collect();
-    day_courses.sort_by(|left, right| {
-        (left.start_slot, &left.name).cmp(&(right.start_slot, &right.name))
-    });
+    day_courses
+        .sort_by(|left, right| (left.start_slot, &left.name).cmp(&(right.start_slot, &right.name)));
 
     let mut busy_slots: Vec<usize> = day_courses
         .iter()
