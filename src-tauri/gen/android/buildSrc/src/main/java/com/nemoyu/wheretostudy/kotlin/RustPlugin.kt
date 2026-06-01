@@ -2,8 +2,6 @@ import com.android.build.api.dsl.ApplicationExtension
 import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
-import org.gradle.kotlin.dsl.configure
-import org.gradle.kotlin.dsl.get
 
 const val TASK_GROUP = "rust"
 
@@ -25,25 +23,19 @@ open class RustPlugin : Plugin<Project> {
 
         val targetsList = (findProperty("targetList") as? String)?.split(',') ?: listOf("aarch64", "armv7", "i686", "x86_64")
 
-        extensions.configure<ApplicationExtension> {
-            @Suppress("UnstableApiUsage")
-            flavorDimensions.add("abi")
-            productFlavors {
-                create("universal") {
-                    dimension = "abi"
-                    ndk {
-                        abiFilters += abiList
-                    }
-                }
-                defaultArchList.forEachIndexed { index, arch ->
-                    create(arch) {
-                        dimension = "abi"
-                        ndk {
-                            abiFilters.add(defaultAbiList[index])
-                        }
-                    }
-                }
-            }
+        val android = extensions.getByType(ApplicationExtension::class.java)
+
+        @Suppress("UnstableApiUsage")
+        android.flavorDimensions.add("abi")
+
+        val universalFlavor = android.productFlavors.create("universal")
+        universalFlavor.dimension = "abi"
+        universalFlavor.ndk.abiFilters.addAll(abiList)
+
+        defaultArchList.forEachIndexed { index, arch ->
+            val flavor = android.productFlavors.create(arch)
+            flavor.dimension = "abi"
+            flavor.ndk.abiFilters.add(defaultAbiList[index])
         }
 
         afterEvaluate {
@@ -57,7 +49,7 @@ open class RustPlugin : Plugin<Project> {
                     description = "Build dynamic library in $profile mode for all targets"
                 }
 
-                tasks["mergeUniversal${profileCapitalized}JniLibFolders"].dependsOn(buildTask)
+                tasks.getByName("mergeUniversal${profileCapitalized}JniLibFolders").dependsOn(buildTask)
 
                 for (targetPair in targetsList.withIndex()) {
                     val targetName = targetPair.value
@@ -75,7 +67,7 @@ open class RustPlugin : Plugin<Project> {
                     }
 
                     buildTask.dependsOn(targetBuildTask)
-                    tasks["merge$targetArchCapitalized${profileCapitalized}JniLibFolders"].dependsOn(
+                    tasks.getByName("merge$targetArchCapitalized${profileCapitalized}JniLibFolders").dependsOn(
                         targetBuildTask
                     )
                 }

@@ -1,6 +1,17 @@
-plugins {
-    `kotlin-dsl`
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")
+    }
 }
+
+plugins {
+    id("java-gradle-plugin")
+}
+
+apply(plugin = "org.jetbrains.kotlin.jvm")
 
 gradlePlugin {
     plugins {

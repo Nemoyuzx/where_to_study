@@ -46,6 +46,7 @@ const CALENDAR_VIEWS = [
 ]
 const CALENDAR_START_HOUR = 8
 const CALENDAR_END_HOUR = 22
+const CALENDAR_VISIBLE_MINUTES = (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60
 const DEFAULT_SETTINGS = {
   account: '',
   password: '',
@@ -61,6 +62,25 @@ const NAV_ITEMS = [
   { id: 'settings', label: '设置', Icon: Settings },
 ]
 
+const CHINA_HOLIDAY_PERIODS_2026 = [
+  { name: '元旦', start: '2026-01-01', end: '2026-01-03' },
+  { name: '春节', start: '2026-02-15', end: '2026-02-23' },
+  { name: '清明节', start: '2026-04-04', end: '2026-04-06' },
+  { name: '劳动节', start: '2026-05-01', end: '2026-05-05' },
+  { name: '端午节', start: '2026-06-19', end: '2026-06-21' },
+  { name: '中秋节', start: '2026-09-25', end: '2026-09-27' },
+  { name: '国庆节', start: '2026-10-01', end: '2026-10-07' },
+]
+
+const CHINA_WORKDAY_ADJUSTMENTS_2026 = [
+  { name: '元旦调休', date: '2026-01-04' },
+  { name: '春节调休', date: '2026-02-14' },
+  { name: '春节调休', date: '2026-02-28' },
+  { name: '劳动节调休', date: '2026-05-09' },
+  { name: '国庆节调休', date: '2026-09-20' },
+  { name: '国庆节调休', date: '2026-10-10' },
+]
+
 function localDateString(date = new Date()) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -72,6 +92,45 @@ function addDays(dateString, days) {
   const date = new Date(`${dateString}T00:00:00`)
   date.setDate(date.getDate() + days)
   return localDateString(date)
+}
+
+function dateRange(startDate, endDate) {
+  const days = []
+  let current = startDate
+  while (current <= endDate) {
+    days.push(current)
+    current = addDays(current, 1)
+  }
+  return days
+}
+
+const CHINA_CALENDAR_DAY_MAP = (() => {
+  const map = new Map()
+  const addItem = (dateString, item) => {
+    const nextItems = map.get(dateString) || []
+    nextItems.push(item)
+    map.set(dateString, nextItems)
+  }
+
+  CHINA_HOLIDAY_PERIODS_2026.forEach((holiday) => {
+    dateRange(holiday.start, holiday.end).forEach((dateString) => {
+      addItem(dateString, { name: holiday.name, type: 'holiday' })
+    })
+  })
+
+  CHINA_WORKDAY_ADJUSTMENTS_2026.forEach((workday) => {
+    addItem(workday.date, { name: workday.name, type: 'workday' })
+  })
+
+  return map
+})()
+
+function getChinaCalendarItems(dateString) {
+  return CHINA_CALENDAR_DAY_MAP.get(dateString) || []
+}
+
+function hasCalendarItemType(items, type) {
+  return items.some((item) => item.type === type)
 }
 
 function formatShortDate(dateString) {
@@ -245,12 +304,14 @@ function App() {
   const [minSeats, setMinSeats] = useState(0)
   const [usePersonalSchedule, setUsePersonalSchedule] = useState(true)
   const [calendarPopover, setCalendarPopover] = useState(null)
+  const [now, setNow] = useState(() => new Date())
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
   const autoFetchedClassroomsDate = useRef('')
+  const calendarPopoverRef = useRef(null)
 
   useEffect(() => {
     command('get_metadata')
@@ -330,6 +391,25 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!calendarPopover) return undefined
+
+    const closePopover = (event) => {
+      if (calendarPopoverRef.current?.contains(event.target)) {
+        return
+      }
+      setCalendarPopover(null)
+    }
+
+    window.addEventListener('pointerdown', closePopover)
+    return () => window.removeEventListener('pointerdown', closePopover)
+  }, [calendarPopover])
+
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
   const todayDate = localDateString()
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
@@ -400,6 +480,17 @@ function App() {
       ? getWeekState(courses, activeTermStartDate, calendarPopover.date)
       : null
   ), [activeTermStartDate, calendarPopover, courses])
+  const currentTimeLine = useMemo(() => {
+    if (calendarView !== 'day' || calendarDate !== todayDate) return null
+    const minutes = now.getHours() * 60 + now.getMinutes()
+    const visibleStart = CALENDAR_START_HOUR * 60
+    const visibleEnd = CALENDAR_END_HOUR * 60
+    if (minutes < visibleStart || minutes > visibleEnd) return null
+    return {
+      label: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+      top: ((minutes - visibleStart) / (visibleEnd - visibleStart)) * 100,
+    }
+  }, [calendarDate, calendarView, now, todayDate])
 
   useEffect(() => {
     if (!settingsLoaded || autoFetchedClassroomsDate.current === todayDate) {
@@ -858,6 +949,7 @@ function App() {
                     {visibleCalendarDays.map((dateString) => {
                       const date = dateFromString(dateString)
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
+                      const calendarItems = getChinaCalendarItems(dateString)
                       return (
                         <button
                           key={`head-${dateString}`}
@@ -868,6 +960,15 @@ function App() {
                           <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
                           <strong>{date.getMonth() + 1}/{date.getDate()}</strong>
                           <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}</small>
+                          {calendarItems.length ? (
+                            <div className="calendar-day-tags">
+                              {calendarItems.map((item) => (
+                                <em key={`${dateString}-${item.type}-${item.name}`} className={item.type}>
+                                  {item.type === 'holiday' ? '休' : '班'} {item.name}
+                                </em>
+                              ))}
+                            </div>
+                          ) : null}
                         </button>
                       )
                     })}
@@ -905,6 +1006,11 @@ function App() {
                             })}
                           </div>
                           <div className="time-course-layer">
+                            {currentTimeLine && dateString === todayDate ? (
+                              <div className="current-time-line" style={{ top: `${currentTimeLine.top}%` }}>
+                                <span>{currentTimeLine.label}</span>
+                              </div>
+                            ) : null}
                             {dayState.dayCourses.map((course, index) => {
                               const bounds = courseTimeBounds(course, slotMeta)
                               const start = Math.max(bounds.startMinutes, visibleStart)
@@ -939,15 +1045,22 @@ function App() {
                       const date = dateFromString(dateString)
                       const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
+                      const calendarItems = getChinaCalendarItems(dateString)
                       return (
                         <button
                           key={dateString}
                           type="button"
-                          className={`month-cell ${currentMonth ? '' : 'muted-day'} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                          className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length ? 'has-calendar-item' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
                           onClick={() => chooseCalendarDate(dateString)}
                         >
                           <span>{date.getDate()}</span>
                           <div>
+                            {calendarItems.map((item) => (
+                              <small key={`${dateString}-${item.type}-${item.name}`} className={`calendar-item ${item.type}`}>
+                                <strong>{item.type === 'holiday' ? '休' : '班'}</strong>
+                                <span>{item.name}</span>
+                              </small>
+                            ))}
                             {dayState.dayCourses.slice(0, 3).map((course) => {
                               const bounds = courseTimeBounds(course, slotMeta)
                               return (
@@ -980,15 +1093,21 @@ function App() {
                             const currentMonth = date.getMonth() === month.monthIndex
                             const courseCount = currentMonth ? state.dayCourses.length : 0
                             const courseLoad = courseCount / maxYearDayCourseCount
+                            const calendarItems = currentMonth ? getChinaCalendarItems(dateString) : []
+                            const hasHoliday = hasCalendarItemType(calendarItems, 'holiday')
+                            const hasWorkday = hasCalendarItemType(calendarItems, 'workday')
                             return (
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`${currentMonth ? '' : 'muted-day'} ${courseCount ? `has-course course-load-${Math.min(courseCount, 4)}` : ''} ${currentMonth && dateString === calendarDate ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? `has-course course-load-${Math.min(courseCount, 4)}` : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
                                 style={courseCount ? { '--course-load': courseLoad } : null}
+                                title={calendarItems.map((item) => `${item.type === 'holiday' ? '休' : '班'} ${item.name}`).join(' / ')}
                                 onClick={(event) => openYearDayPopover(event, dateString)}
                               >
-                                {date.getDate()}
+                                <span>{date.getDate()}</span>
+                                {hasHoliday ? <em>休</em> : null}
+                                {hasWorkday ? <em className="workday">班</em> : null}
                               </button>
                             )
                           })}
@@ -999,15 +1118,24 @@ function App() {
                 ) : null}
                 {calendarView === 'year' && calendarPopover && calendarPopoverState ? (
                   <div
+                    ref={calendarPopoverRef}
                     className="year-day-popover"
                     style={{ left: calendarPopover.x, top: calendarPopover.y }}
                     role="dialog"
                     aria-label={`${formatCourseDate(calendarPopover.date)} 日程`}
                   >
-                    <button type="button" className="popover-close" aria-label="关闭日程弹层" onClick={() => setCalendarPopover(null)}>×</button>
                     <span>{formatCourseDate(calendarPopover.date)}</span>
                     <strong>{calendarPopoverState.dayCourses.length} 门课</strong>
                     <small>第 {calendarPopoverState.weekNumber || '-'} 周</small>
+                    {getChinaCalendarItems(calendarPopover.date).length ? (
+                      <div className="popover-holiday-list">
+                        {getChinaCalendarItems(calendarPopover.date).map((item) => (
+                          <span key={`${calendarPopover.date}-${item.type}-${item.name}`} className={item.type}>
+                            {item.type === 'holiday' ? '休' : '班'} {item.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="popover-course-list">
                       {calendarPopoverState.dayCourses.length ? calendarPopoverState.dayCourses.map((course) => {
                         const bounds = courseTimeBounds(course, slotMeta)
@@ -1031,6 +1159,15 @@ function App() {
                   <span>{formatCourseDate(calendarDate)}</span>
                   <strong>{calendarWeekState.dayCourses.length} 门课</strong>
                   <small>第 {calendarWeekState.weekNumber || '-'} 周</small>
+                  {getChinaCalendarItems(calendarDate).length ? (
+                    <div className="inspector-calendar-items">
+                      {getChinaCalendarItems(calendarDate).map((item) => (
+                        <span key={`${calendarDate}-${item.type}-${item.name}`} className={item.type}>
+                          {item.type === 'holiday' ? '休' : '班'} {item.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 {calendarDetailCourse ? (
                   <div className="inspector-card">

@@ -1,10 +1,12 @@
 import java.io.File
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.gradle.api.Action
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecSpec
 
 open class BuildTask : DefaultTask() {
     @Input
@@ -48,21 +50,21 @@ open class BuildTask : DefaultTask() {
         val rootDirRel = rootDirRel ?: throw GradleException("rootDirRel cannot be null")
         val target = target ?: throw GradleException("target cannot be null")
         val release = release ?: throw GradleException("release cannot be null")
-        val args = listOf("run", "--", "tauri", "android", "android-studio-script");
+        val baseArgs = listOf("run", "--", "tauri", "android", "android-studio-script")
 
-        project.exec {
-            workingDir(File(project.projectDir, rootDirRel))
-            executable(executable)
-            args(args)
+        project.exec(Action<ExecSpec> { spec ->
+            spec.workingDir(File(project.projectDir, rootDirRel))
+            spec.executable = executable
+            spec.args(baseArgs)
             if (project.logger.isEnabled(LogLevel.DEBUG)) {
-                args("-vv")
+                spec.args("-vv")
             } else if (project.logger.isEnabled(LogLevel.INFO)) {
-                args("-v")
+                spec.args("-v")
             }
             if (release) {
-                args("--release")
+                spec.args("--release")
             }
-            args(listOf("--target", target))
-        }.assertNormalExitValue()
+            spec.args("--target", target)
+        }).assertNormalExitValue()
     }
 }

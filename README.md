@@ -41,6 +41,13 @@ npm run tauri:android:init
 ```bash
 npm run tauri:android:dev
 npm run tauri:android:build
+npm run tauri:android:build:local
+```
+
+其中 `npm run tauri:android:build:local` 会自动补齐 Android Studio JBR、NDK LLVM toolchain 和 Rust PATH，直接产出 arm64 APK。当前验证通过的输出路径为：
+
+```bash
+src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 ```
 
 需要安装 Android Studio / Android SDK、Android SDK Command-line Tools、NDK 和 rustup 管理的 Android Rust targets。如果命令行缺少 `sdkmanager` 或 NDK，可以先安装 command-line tools，再把 NDK 安装到现有 SDK：
@@ -50,6 +57,8 @@ brew install --cask android-commandlinetools
 yes | sdkmanager --sdk_root="$HOME/Library/Android/sdk" --licenses
 sdkmanager --sdk_root="$HOME/Library/Android/sdk" "ndk;27.2.12479018"
 ```
+
+如果 Android Gradle 仍然报 `127.0.0.1:7890` 代理错误，或在 `plugins.gradle.org` 握手失败，先检查 `~/.gradle/gradle.properties` 里是否还保留了失效的 `systemProp.http[s].proxyHost/proxyPort` 设置。
 
 ## iOS 开发与构建
 
@@ -64,9 +73,33 @@ npm run tauri:ios:init
 ```bash
 npm run tauri:ios:dev
 npm run tauri:ios:build
+npm run tauri:ios:build:unsigned
 ```
 
 需要在 macOS 上安装 Xcode、CocoaPods 和 rustup 管理的 iOS Rust targets；真机或发布构建还需要 Apple 开发者签名配置。可以通过 `APPLE_DEVELOPMENT_TEAM` 环境变量或 `bundle > iOS > developmentTeam` 配置开发团队 ID。
+
+首次在本机做 iOS 构建前，先完成 Xcode 初始化：
+
+```bash
+sudo xcodebuild -runFirstLaunch
+```
+
+`npm run tauri:ios:build:unsigned` 会生成无签名 `xcarchive`，适合本机验证和 CI 归档。首次执行时如果缺少 iOS runtime，Tauri 会提示下载安装。
+
+当前验证通过的输出路径为：
+
+```bash
+src-tauri/gen/apple/build/where_to_study_iOS.xcarchive
+```
+
+## GitHub Actions
+
+仓库内已提供两条手动触发 / `v*` 标签触发的工作流：
+
+- `.github/workflows/build-windows.yml`：在 `windows-latest` 上构建 Windows 桌面安装包。
+- `.github/workflows/build-mobile.yml`：在 GitHub Actions 上构建 Android unsigned APK 和 iOS unsigned `xcarchive`。
+
+如果后续需要签名版 iOS IPA，可以在现有 iOS workflow 基础上追加证书、描述文件和 `APPLE_DEVELOPMENT_TEAM` secrets。
 
 如果不在界面输入学号和教务密码，也可以在启动前配置环境变量：
 
