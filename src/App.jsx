@@ -855,8 +855,8 @@ function App() {
 
           {activePage === 'calendar' ? (
         <section className="calendar-page">
-          <section className="mac-calendar-shell">
-            <div className="mac-calendar-toolbar">
+          <section className="teaching-calendar-shell">
+            <div className="teaching-calendar-toolbar">
               <div className="calendar-title-group">
                 <p className="eyebrow">BUPT Classroom Planner</p>
                 <h2>教学日历</h2>
@@ -883,8 +883,8 @@ function App() {
               </div>
             </div>
 
-            <div className="mac-calendar-layout">
-              <section className="mac-calendar-main">
+            <div className="teaching-calendar-layout">
+              <section className="teaching-calendar-main">
                 <div className="calendar-action-strip">
                   <input
                     type="date"

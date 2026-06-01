@@ -557,7 +557,7 @@ button:disabled {
   min-width: 0;
 }
 
-.mac-calendar-shell {
+.teaching-calendar-shell {
   background: #ffffff;
   border: 1px solid #dfe4df;
   border-radius: 8px;
@@ -566,7 +566,7 @@ button:disabled {
   overflow: hidden;
 }
 
-.mac-calendar-toolbar {
+.teaching-calendar-toolbar {
   align-items: center;
   background: #ffffff;
   border-bottom: 1px solid #e8ece8;
@@ -581,13 +581,13 @@ button:disabled {
   min-width: 240px;
 }
 
-.mac-calendar-toolbar .eyebrow {
+.teaching-calendar-toolbar .eyebrow {
   margin: 0 0 6px;
   padding: 0;
   text-align: left;
 }
 
-.mac-calendar-toolbar h2 {
+.teaching-calendar-toolbar h2 {
   color: #121714;
   font-size: 30px;
   line-height: 1;
@@ -596,7 +596,7 @@ button:disabled {
   text-align: left;
 }
 
-.mac-calendar-toolbar p,
+.teaching-calendar-toolbar p,
 .calendar-export-note {
   color: #6b756f;
   font-size: 13px;
@@ -656,13 +656,13 @@ button:disabled {
   padding: 0 14px;
 }
 
-.mac-calendar-layout {
+.teaching-calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
   min-height: 680px;
 }
 
-.mac-calendar-main {
+.teaching-calendar-main {
   min-width: 0;
   overflow: hidden;
   padding: 14px;
@@ -1006,7 +1006,7 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .mac-calendar-layout {
+  .teaching-calendar-layout {
     grid-template-columns: 1fr;
   }
 
@@ -1146,7 +1146,7 @@ button:disabled {
     width: 100%;
   }
 
-  .mac-calendar-toolbar {
+  .teaching-calendar-toolbar {
     align-items: stretch;
     flex-direction: column;
   }

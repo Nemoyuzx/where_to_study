@@ -179,49 +179,38 @@ fn original_building_name(name: &str) -> bool {
     matches!(name, "教1" | "教2" | "教3" | "教4" | "主楼")
 }
 
-fn normalize_room_name(room: String, building: &str) -> String {
-    let clean = room.trim().to_string();
-    let Some(building_number) = building.strip_prefix('教') else {
-        return clean;
-    };
-    let Some((prefix, room_number)) = clean.split_once('-') else {
-        return clean;
-    };
-    if prefix == building_number {
-        room_number.trim().to_string()
-    } else {
-        clean
+fn extract_three_digit_room(value: &str, building: &str) -> Option<String> {
+    let mut clean = value
+        .trim()
+        .replace('－', "-")
+        .replace('—', "-")
+        .replace('–', "-");
+    if clean.is_empty() {
+        return None;
     }
+
+    if let Some(building_number) = building.strip_prefix('教') {
+        if let Some(rest) = clean.strip_prefix(&format!("{building_number}-")) {
+            clean = rest.trim().to_string();
+        } else if let Some(rest) = clean.strip_prefix(&format!("教{building_number}-")) {
+            clean = rest.trim().to_string();
+        }
+    }
+
+    Regex::new(r"\d{3}")
+        .expect("valid regex")
+        .find(&clean)
+        .map(|item| item.as_str().to_string())
 }
 
 fn format_room_name(classroom: &Value) -> String {
-    let room_number = value_string(
+    value_string(
         classroom
             .get("classroomnumber")
             .or_else(|| classroom.get("classroomNumber")),
     )
     .trim()
-    .to_string();
-    let room_label = value_string(
-        classroom
-            .get("classroomname")
-            .or_else(|| classroom.get("classroomName")),
-    )
-    .trim()
-    .to_string();
-
-    if !room_number.is_empty() && !room_label.contains(&room_number) {
-        return format!("{room_label}{room_number}");
-    }
-    if !room_label.is_empty() {
-        room_label
-    } else if !room_number.is_empty() {
-        room_number
-    } else {
-        value_string(classroom.get("classroomId"))
-            .trim()
-            .to_string()
-    }
+    .to_string()
 }
 
 fn parse_idle_classroom_groups(
@@ -246,7 +235,22 @@ fn parse_idle_classroom_groups(
             .into_iter()
             .flatten()
         {
-            let room = normalize_room_name(format_room_name(classroom), &building);
+            let room_number = format_room_name(classroom);
+            let room_label = value_string(
+                classroom
+                    .get("classroomname")
+                    .or_else(|| classroom.get("classroomName")),
+            );
+            let classroom_id = value_string(classroom.get("classroomId"));
+            let Some(room) = [
+                room_number.as_str(),
+                room_label.as_str(),
+                classroom_id.as_str(),
+            ]
+            .iter()
+            .find_map(|value| extract_three_digit_room(value, &building)) else {
+                continue;
+            };
             let key = format!("{building}-{room}");
             let size = classroom
                 .get("seatnumber")
@@ -424,6 +428,45 @@ mod tests {
         assert_eq!(room.room, "335");
         assert_eq!(room.size, Some(90));
         assert_eq!(room.available_slots, vec![0, 2]);
+    }
+
+    #[test]
+    fn parse_idle_classroom_groups_uses_three_digit_room_number() {
+        let mut room_map = HashMap::new();
+        let groups = serde_json::json!([
+            {
+                "teachingBuildingName": "校本部-教二楼",
+                "classroomList": [
+                    {
+                        "classroomId": "A441",
+                        "classroomname": "A441",
+                        "classroomnumber": "101",
+                        "seatnumber": "60"
+                    },
+                    {
+                        "classroomId": "406",
+                        "classroomname": "406（信通实验室）",
+                        "classroomnumber": "",
+                        "seatnumber": "30"
+                    },
+                    {
+                        "classroomId": "107343",
+                        "classroomname": "107343",
+                        "classroomnumber": "",
+                        "seatnumber": "60"
+                    }
+                ]
+            }
+        ]);
+        let groups = groups.as_array().unwrap();
+
+        parse_idle_classroom_groups(groups, 0, &mut room_map);
+
+        assert!(room_map.get("教2-101").is_some());
+        assert!(room_map.get("教2-406").is_some());
+        assert!(room_map.get("教2-107").is_some());
+        assert!(room_map.get("教2-101A441").is_none());
+        assert!(room_map.get("教2-107343").is_none());
     }
 
     #[test]
