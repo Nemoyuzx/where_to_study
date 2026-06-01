@@ -577,10 +577,23 @@ button:disabled {
   padding: 16px 18px;
 }
 
+.calendar-title-group {
+  min-width: 240px;
+}
+
+.mac-calendar-toolbar .eyebrow {
+  margin: 0 0 6px;
+  padding: 0;
+  text-align: left;
+}
+
 .mac-calendar-toolbar h2 {
   color: #121714;
   font-size: 30px;
   line-height: 1;
+  margin: 0;
+  padding: 0;
+  text-align: left;
 }
 
 .mac-calendar-toolbar p,
@@ -588,6 +601,8 @@ button:disabled {
   color: #6b756f;
   font-size: 13px;
   margin-top: 8px;
+  padding: 0;
+  text-align: left;
 }
 
 .calendar-toolbar-actions,

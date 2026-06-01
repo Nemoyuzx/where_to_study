@@ -574,16 +574,18 @@ function App() {
         </aside>
 
         <section className="page-content">
-          <header className="topbar">
-            <div>
-              <p className="eyebrow">BUPT Classroom Planner</p>
-              <h1>{activePage === 'calendar' ? '教学日历' : activePage === 'settings' ? '设置' : '空教室与个人课表联动查询'}</h1>
-            </div>
-            <div className="status-pill">
-              <Clock3 size={16} />
-              <span>{activePage === 'calendar' ? calendarDate : todayDate}</span>
-            </div>
-          </header>
+          {activePage !== 'calendar' ? (
+            <header className="topbar">
+              <div>
+                <p className="eyebrow">BUPT Classroom Planner</p>
+                <h1>{activePage === 'settings' ? '设置' : '空教室与个人课表联动查询'}</h1>
+              </div>
+              <div className="status-pill">
+                <Clock3 size={16} />
+                <span>{todayDate}</span>
+              </div>
+            </header>
+          ) : null}
 
           {error ? (
             <div className="notice error">
@@ -855,9 +857,12 @@ function App() {
         <section className="calendar-page">
           <section className="mac-calendar-shell">
             <div className="mac-calendar-toolbar">
-              <div>
-                <h2>{formatCalendarTitle(calendarDate, calendarView)}</h2>
-                <p>第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入</p>
+              <div className="calendar-title-group">
+                <p className="eyebrow">BUPT Classroom Planner</p>
+                <h2>教学日历</h2>
+                <p>
+                  {formatCalendarTitle(calendarDate, calendarView)} · 第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入
+                </p>
               </div>
               <div className="calendar-toolbar-actions">
                 <div className="calendar-view-switch" aria-label="日历视图">
