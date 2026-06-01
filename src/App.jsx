@@ -38,6 +38,15 @@ const FALLBACK_SLOTS = [
 ]
 
 const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const CALENDAR_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
+const CALENDAR_VIEWS = [
+  { id: 'day', label: '日' },
+  { id: 'week', label: '周' },
+  { id: 'month', label: '月' },
+  { id: 'year', label: '年' },
+]
+const CALENDAR_START_HOUR = 8
+const CALENDAR_END_HOUR = 22
 const DEFAULT_SETTINGS = {
   account: '',
   password: '',
@@ -63,6 +72,71 @@ function addDays(dateString, days) {
 function formatShortDate(dateString) {
   const date = new Date(`${dateString}T00:00:00`)
   return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function dateFromString(dateString) {
+  return new Date(`${dateString}T00:00:00`)
+}
+
+function shiftDate(dateString, view, direction) {
+  const date = dateFromString(dateString)
+  if (view === 'day') {
+    date.setDate(date.getDate() + direction)
+  } else if (view === 'week') {
+    date.setDate(date.getDate() + direction * 7)
+  } else if (view === 'month') {
+    date.setMonth(date.getMonth() + direction)
+  } else {
+    date.setFullYear(date.getFullYear() + direction)
+  }
+  return localDateString(date)
+}
+
+function startOfWeekSunday(dateString) {
+  const date = dateFromString(dateString)
+  date.setDate(date.getDate() - date.getDay())
+  return localDateString(date)
+}
+
+function buildMonthDays(dateString) {
+  const date = dateFromString(dateString)
+  const first = new Date(date.getFullYear(), date.getMonth(), 1)
+  first.setDate(first.getDate() - first.getDay())
+  return Array.from({ length: 42 }, (_, index) => localDateString(new Date(first.getFullYear(), first.getMonth(), first.getDate() + index)))
+}
+
+function buildMiniMonthDays(year, monthIndex) {
+  const first = new Date(year, monthIndex, 1)
+  first.setDate(first.getDate() - first.getDay())
+  return Array.from({ length: 42 }, (_, index) => localDateString(new Date(first.getFullYear(), first.getMonth(), first.getDate() + index)))
+}
+
+function formatCalendarTitle(dateString, view) {
+  const date = dateFromString(dateString)
+  if (view === 'day') return `${date.getFullYear()}年 ${date.getMonth() + 1}月${date.getDate()}日`
+  if (view === 'year') return `${date.getFullYear()}年`
+  return `${date.getFullYear()}年 ${date.getMonth() + 1}月`
+}
+
+function formatCourseDate(dateString) {
+  const date = dateFromString(dateString)
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${WEEKDAY_LABELS[(date.getDay() || 7) - 1]}`
+}
+
+function parseTimeMinutes(value) {
+  const [hours, minutes] = String(value || '00:00').split(':').map((item) => Number(item))
+  return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0)
+}
+
+function courseTimeBounds(course, slotMeta) {
+  const start = slotMeta[course.start_slot]?.start || '08:00'
+  const end = slotMeta[course.end_slot]?.end || start
+  return {
+    start,
+    end,
+    startMinutes: parseTimeMinutes(start),
+    endMinutes: parseTimeMinutes(end),
+  }
 }
 
 function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
@@ -153,24 +227,12 @@ function displayBuildingName(name) {
   return String(name || '').replaceAll('未来学习大楼', '主楼')
 }
 
-function buildTeachingWeeks(termStartDate, courses, activeWeekNumber) {
-  if (!termStartDate) return []
-  const maxCourseWeek = Math.max(0, ...courses.flatMap((course) => course.week_numbers || []))
-  const totalWeeks = Math.max(20, maxCourseWeek, activeWeekNumber || 0)
-  return Array.from({ length: totalWeeks }, (_, weekIndex) => {
-    const weekNumber = weekIndex + 1
-    return {
-      weekNumber,
-      days: Array.from({ length: 7 }, (_, dayIndex) => addDays(termStartDate, weekIndex * 7 + dayIndex)),
-    }
-  })
-}
-
 function App() {
   const [activePage, setActivePage] = useState('planner')
   const [metadata, setMetadata] = useState({ campuses: [], slots: FALLBACK_SLOTS })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
   const [calendarDate, setCalendarDate] = useState(localDateString())
+  const [calendarView, setCalendarView] = useState('week')
   const [schedule, setSchedule] = useState(null)
   const [classrooms, setClassrooms] = useState(null)
   const [recommendations, setRecommendations] = useState(null)
@@ -309,10 +371,28 @@ function App() {
   const canShowRecommendationHighlight = showRecommendationHighlight && recommendationItems.length > 0
   const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
   const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
-  const teachingWeeks = useMemo(
-    () => buildTeachingWeeks(activeTermStartDate, courses, calendarWeekState.weekNumber),
-    [courses, activeTermStartDate, calendarWeekState.weekNumber],
+  const calendarHours = useMemo(
+    () => Array.from({ length: CALENDAR_END_HOUR - CALENDAR_START_HOUR + 1 }, (_, index) => CALENDAR_START_HOUR + index),
+    [],
   )
+  const visibleCalendarDays = useMemo(() => {
+    if (calendarView === 'day') return [calendarDate]
+    if (calendarView === 'week') {
+      const start = startOfWeekSunday(calendarDate)
+      return Array.from({ length: 7 }, (_, index) => addDays(start, index))
+    }
+    if (calendarView === 'month') return buildMonthDays(calendarDate)
+    return []
+  }, [calendarDate, calendarView])
+  const calendarYearMonths = useMemo(() => {
+    const year = dateFromString(calendarDate).getFullYear()
+    return Array.from({ length: 12 }, (_, monthIndex) => ({
+      monthIndex,
+      label: `${monthIndex + 1}月`,
+      days: buildMiniMonthDays(year, monthIndex),
+    }))
+  }, [calendarDate])
+  const calendarDetailCourse = calendarWeekState.dayCourses[0] || null
 
   useEffect(() => {
     if (!settingsLoaded || autoFetchedClassroomsDate.current === todayDate) {
@@ -391,6 +471,10 @@ function App() {
 
   function chooseCalendarDate(dateString) {
     setCalendarDate(dateString)
+  }
+
+  function moveCalendar(direction) {
+    setCalendarDate((current) => shiftDate(current, calendarView, direction))
   }
 
   async function runTask(name, task) {
@@ -768,102 +852,202 @@ function App() {
           ) : null}
 
           {activePage === 'calendar' ? (
-        <section className="page-grid">
-          <section className="summary-band">
-            <div>
-              <span>学期</span>
-              <strong className="summary-text">{activeTermId}</strong>
+        <section className="calendar-page">
+          <section className="mac-calendar-shell">
+            <div className="mac-calendar-toolbar">
+              <div>
+                <h2>{formatCalendarTitle(calendarDate, calendarView)}</h2>
+                <p>第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入</p>
+              </div>
+              <div className="calendar-toolbar-actions">
+                <div className="calendar-view-switch" aria-label="日历视图">
+                  {CALENDAR_VIEWS.map((view) => (
+                    <button
+                      key={view.id}
+                      type="button"
+                      className={calendarView === view.id ? 'active' : ''}
+                      onClick={() => setCalendarView(view.id)}
+                    >
+                      {view.label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
+                <button type="button" className="calendar-today-button" onClick={() => setCalendarDate(todayDate)}>今天</button>
+                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
+              </div>
             </div>
-            <div>
-              <span>第一周周一</span>
-              <strong className="summary-text">{activeTermStartDate}</strong>
-            </div>
-            <div>
-              <span>当前周</span>
-              <strong>{calendarWeekState.weekNumber || '-'}</strong>
-            </div>
-            <div>
-              <span>已载入课程</span>
-              <strong>{courses.length}</strong>
-            </div>
-          </section>
 
-          <section className="panel wide">
-            <div className="panel-heading">
-              <div className="panel-title">
-                <CalendarRange size={18} />
-                <h2>教学周历</h2>
-              </div>
-              <div className="calendar-actions">
-                <button type="button" className="compact-button" onClick={loadSchedule} disabled={!!loading}>
-                  {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-                  获取/刷新个人课表
-                </button>
-                <button type="button" className="compact-button" onClick={importAppleCalendar} disabled={!!loading || !courses.length}>
-                  {loading === 'calendar-import' ? <Loader2 className="spin" size={17} /> : <CalendarPlus size={17} />}
-                  导入苹果日历
-                </button>
-              </div>
-            </div>
-            <div className="date-course-view">
-              <label>
-                查看日期
-                <input
-                  type="date"
-                  value={calendarDate}
-                  onChange={(event) => chooseCalendarDate(event.target.value)}
-                />
-              </label>
-              <div className="date-course-summary">
-                <span>{calendarDate} · 第 {calendarWeekState.weekNumber || '-'} 周 · {WEEKDAY_LABELS[(calendarWeekState.weekday || 1) - 1] || '-'}</span>
-                <strong>{calendarWeekState.dayCourses.length} 门课</strong>
-              </div>
-            </div>
-            <div className="course-list day-course-list">
-              {calendarWeekState.dayCourses.length ? calendarWeekState.dayCourses.map((course) => (
-                <article key={`${calendarDate}-${course.id}`} className="course-row">
-                  <div>
-                    <strong>{course.name}</strong>
-                    <span>{course.teacher || '教师未标注'}</span>
+            <div className="mac-calendar-layout">
+              <section className="mac-calendar-main">
+                <div className="calendar-action-strip">
+                  <input
+                    type="date"
+                    value={calendarDate}
+                    onChange={(event) => chooseCalendarDate(event.target.value)}
+                  />
+                  <button type="button" onClick={loadSchedule} disabled={!!loading}>
+                    {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+                    获取/刷新个人课表
+                  </button>
+                  <button type="button" onClick={importAppleCalendar} disabled={!!loading || !courses.length}>
+                    {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
+                    导入苹果日历
+                  </button>
+                </div>
+                {calendarImportedPath ? (
+                  <p className="calendar-export-note">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
+                ) : null}
+
+                {calendarView === 'day' || calendarView === 'week' ? (
+                  <div className={`time-calendar ${calendarView === 'day' ? 'single-day' : ''}`} style={{ '--day-count': visibleCalendarDays.length }}>
+                    <div className="time-corner" />
+                    {visibleCalendarDays.map((dateString) => {
+                      const date = dateFromString(dateString)
+                      const dayState = getWeekState(courses, activeTermStartDate, dateString)
+                      return (
+                        <button
+                          key={`head-${dateString}`}
+                          type="button"
+                          className={`time-day-head ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                          onClick={() => chooseCalendarDate(dateString)}
+                        >
+                          <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
+                          <strong>{date.getMonth() + 1}/{date.getDate()}</strong>
+                          <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}</small>
+                        </button>
+                      )
+                    })}
+                    <div className="time-labels">
+                      {calendarHours.map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}:00</span>)}
+                    </div>
+                    {visibleCalendarDays.map((dateString) => {
+                      const dayState = getWeekState(courses, activeTermStartDate, dateString)
+                      const visibleStart = CALENDAR_START_HOUR * 60
+                      const visibleEnd = CALENDAR_END_HOUR * 60
+                      const visibleRange = visibleEnd - visibleStart
+                      return (
+                        <div key={`lane-${dateString}`} className={`time-day-lane ${dateString === calendarDate ? 'selected' : ''}`}>
+                          <div className="time-grid-lines">
+                            {calendarHours.map((hour) => <span key={hour} />)}
+                          </div>
+                          <div className="time-course-layer">
+                            {dayState.dayCourses.map((course, index) => {
+                              const bounds = courseTimeBounds(course, slotMeta)
+                              const start = Math.max(bounds.startMinutes, visibleStart)
+                              const end = Math.min(bounds.endMinutes, visibleEnd)
+                              const top = ((start - visibleStart) / visibleRange) * 100
+                              const height = Math.max(((end - start) / visibleRange) * 100, 6)
+                              return (
+                                <button
+                                  key={`${dateString}-${course.id}-${index}`}
+                                  type="button"
+                                  className="time-course-block"
+                                  style={{ top: `${top}%`, height: `${height}%` }}
+                                  onClick={() => chooseCalendarDate(dateString)}
+                                >
+                                  <strong>{course.name}</strong>
+                                  <span>{bounds.start}-{bounds.end}</span>
+                                  <small>{course.room || '地点未标注'}</small>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                  <div>
-                    <span>{course.time_range}</span>
-                    <span>{course.room || '地点未标注'}</span>
+                ) : null}
+
+                {calendarView === 'month' ? (
+                  <div className="month-calendar">
+                    {CALENDAR_WEEKDAYS.map((label) => <span key={label} className="month-weekday">{label}</span>)}
+                    {visibleCalendarDays.map((dateString) => {
+                      const date = dateFromString(dateString)
+                      const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()
+                      const dayState = getWeekState(courses, activeTermStartDate, dateString)
+                      return (
+                        <button
+                          key={dateString}
+                          type="button"
+                          className={`month-cell ${currentMonth ? '' : 'muted-day'} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                          onClick={() => chooseCalendarDate(dateString)}
+                        >
+                          <span>{date.getDate()}</span>
+                          <div>
+                            {dayState.dayCourses.slice(0, 3).map((course) => (
+                              <small key={`${dateString}-${course.id}`}>{course.name}</small>
+                            ))}
+                            {dayState.dayCourses.length > 3 ? <em>+{dayState.dayCourses.length - 3}</em> : null}
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
-                </article>
-              )) : (
-                <div className="empty-state">所选日期暂无课程</div>
-              )}
-            </div>
-            {calendarImportedPath ? (
-              <p className="muted">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
-            ) : null}
-            <div className="calendar-board">
-              <div className="calendar-head">
-                <span>周次</span>
-                {WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}
-              </div>
-              {teachingWeeks.map((week) => (
-                <div key={week.weekNumber} className={`calendar-row ${week.weekNumber === calendarWeekState.weekNumber ? 'current-week' : ''}`}>
-                  <div className="calendar-week">第 {week.weekNumber} 周</div>
-                  {week.days.map((dateString, dayIndex) => {
-                    const dayState = getWeekState(courses, activeTermStartDate, dateString)
-                    const isTarget = dateString === calendarDate
-                    const isToday = dateString === localDateString()
+                ) : null}
+
+                {calendarView === 'year' ? (
+                  <div className="year-calendar">
+                    {calendarYearMonths.map((month) => (
+                      <section key={month.monthIndex} className="year-month">
+                        <h3>{month.label}</h3>
+                        <div className="mini-month-head">
+                          {CALENDAR_WEEKDAYS.map((label) => <span key={label}>{label}</span>)}
+                        </div>
+                        <div className="mini-month-grid">
+                          {month.days.map((dateString) => {
+                            const date = dateFromString(dateString)
+                            const state = getWeekState(courses, activeTermStartDate, dateString)
+                            return (
+                              <button
+                                key={dateString}
+                                type="button"
+                                className={`${date.getMonth() === month.monthIndex ? '' : 'muted-day'} ${state.dayCourses.length ? 'has-course' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                                onClick={() => {
+                                  setCalendarDate(dateString)
+                                  setCalendarView('day')
+                                }}
+                              >
+                                {date.getDate()}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+
+              <aside className="calendar-inspector">
+                <div className="inspector-card primary">
+                  <span>{formatCourseDate(calendarDate)}</span>
+                  <strong>{calendarWeekState.dayCourses.length} 门课</strong>
+                  <small>第 {calendarWeekState.weekNumber || '-'} 周</small>
+                </div>
+                {calendarDetailCourse ? (
+                  <div className="inspector-card">
+                    <strong>{calendarDetailCourse.name}</strong>
+                    <span>{courseTimeBounds(calendarDetailCourse, slotMeta).start}-{courseTimeBounds(calendarDetailCourse, slotMeta).end}</span>
+                    <span>{calendarDetailCourse.room || '地点未标注'}</span>
+                    <small>{calendarDetailCourse.teacher || '教师未标注'}</small>
+                  </div>
+                ) : (
+                  <div className="inspector-card muted-card">所选日期暂无课程</div>
+                )}
+                <div className="inspector-list">
+                  {calendarWeekState.dayCourses.slice(calendarDetailCourse ? 1 : 0).map((course) => {
+                    const bounds = courseTimeBounds(course, slotMeta)
                     return (
-                      <button
-                        key={dateString}
-                        type="button"
-                        className={`calendar-day ${isTarget ? 'selected' : ''} ${isToday ? 'today' : ''}`}
-                        onClick={() => chooseCalendarDate(dateString)}
-                      >
-                        <span>{formatShortDate(dateString)}</span>
-                        <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : WEEKDAY_LABELS[dayIndex]}</small>
-                      </button>
+                      <article key={`${calendarDate}-${course.id}`}>
+                        <strong>{course.name}</strong>
+                        <span>{bounds.start}-{bounds.end}</span>
+                        <small>{course.room || '地点未标注'}</small>
+                      </article>
                     )
                   })}
                 </div>
-              ))}
+              </aside>
             </div>
           </section>
         </section>
