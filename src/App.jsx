@@ -854,54 +854,53 @@ function App() {
 
           {activePage === 'calendar' ? (
         <section className="calendar-page">
-          <section className="teaching-calendar-shell">
-            <div className="teaching-calendar-toolbar">
-              <div className="calendar-title-group">
-                <p className="eyebrow">BUPT Classroom Planner</p>
-                <h2>教学日历</h2>
-                <p>
-                  {formatCalendarTitle(calendarDate, calendarView)} · 第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入
-                </p>
-              </div>
-              <div className="calendar-toolbar-actions">
-                <div className="calendar-view-switch" aria-label="日历视图">
-                  {CALENDAR_VIEWS.map((view) => (
-                    <button
-                      key={view.id}
-                      type="button"
-                      className={calendarView === view.id ? 'active' : ''}
-                      onClick={() => setCalendarView(view.id)}
-                    >
-                      {view.label}
-                    </button>
-                  ))}
-                </div>
-                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
-                <button type="button" className="calendar-today-button" onClick={() => setCalendarDate(todayDate)}>今天</button>
-                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
-              </div>
+          <div className="teaching-calendar-toolbar">
+            <div className="calendar-title-group">
+              <p className="eyebrow">BUPT Classroom Planner</p>
+              <h2>教学日历</h2>
+              <p>
+                {formatCalendarTitle(calendarDate, calendarView)} · 第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入
+              </p>
             </div>
+            <div className="calendar-toolbar-actions">
+              <div className="calendar-view-switch" aria-label="日历视图">
+                {CALENDAR_VIEWS.map((view) => (
+                  <button
+                    key={view.id}
+                    type="button"
+                    className={calendarView === view.id ? 'active' : ''}
+                    onClick={() => setCalendarView(view.id)}
+                  >
+                    {view.label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
+              <button type="button" className="calendar-today-button" onClick={() => setCalendarDate(todayDate)}>今天</button>
+              <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
+            </div>
+          </div>
 
-            <div className="teaching-calendar-layout">
-              <section className="teaching-calendar-main">
-                <div className="calendar-action-strip">
-                  <input
-                    type="date"
-                    value={calendarDate}
-                    onChange={(event) => chooseCalendarDate(event.target.value)}
-                  />
-                  <button type="button" onClick={loadSchedule} disabled={!!loading}>
-                    {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-                    获取/刷新个人课表
-                  </button>
-                  <button type="button" onClick={importAppleCalendar} disabled={!!loading || !courses.length}>
-                    {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
-                    导入苹果日历
-                  </button>
-                </div>
-                {calendarImportedPath ? (
-                  <p className="calendar-export-note">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
-                ) : null}
+          <div className="teaching-calendar-layout">
+            <section className="teaching-calendar-main">
+              <div className="calendar-action-strip">
+                <input
+                  type="date"
+                  value={calendarDate}
+                  onChange={(event) => chooseCalendarDate(event.target.value)}
+                />
+                <button type="button" onClick={loadSchedule} disabled={!!loading}>
+                  {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+                  获取/刷新个人课表
+                </button>
+                <button type="button" onClick={importAppleCalendar} disabled={!!loading || !courses.length}>
+                  {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
+                  导入苹果日历
+                </button>
+              </div>
+              {calendarImportedPath ? (
+                <p className="calendar-export-note">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
+              ) : null}
 
                 {calendarView === 'day' || calendarView === 'week' ? (
                   <div className={`time-calendar ${calendarView === 'day' ? 'single-day' : ''}`} style={{ '--day-count': visibleCalendarDays.length }}>
@@ -1051,9 +1050,8 @@ function App() {
                     )
                   })}
                 </div>
-              </aside>
-            </div>
-          </section>
+            </aside>
+          </div>
         </section>
           ) : null}
 

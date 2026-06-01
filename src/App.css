@@ -576,24 +576,20 @@ button:disabled {
 }
 
 .calendar-page {
+  display: grid;
+  gap: 14px;
   margin: 0 auto;
-  max-width: 1680px;
+  max-width: 1440px;
   min-width: 0;
-}
-
-.teaching-calendar-shell {
-  background: #ffffff;
-  border: 1px solid #dfe4df;
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(31, 41, 36, 0.07);
-  color: #17201b;
-  overflow: hidden;
 }
 
 .teaching-calendar-toolbar {
   align-items: center;
   background: #ffffff;
-  border-bottom: 1px solid #e8ece8;
+  border: 1px solid #dfe4df;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(31, 41, 36, 0.07);
+  color: #17201b;
   display: flex;
   gap: 18px;
   justify-content: space-between;
@@ -682,13 +678,18 @@ button:disabled {
 
 .teaching-calendar-layout {
   display: grid;
+  gap: 14px;
   grid-template-columns: minmax(0, 1fr) 300px;
   min-height: 680px;
 }
 
 .teaching-calendar-main {
+  background: #ffffff;
+  border: 1px solid #dfe4df;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(31, 41, 36, 0.07);
   min-width: 0;
-  overflow: hidden;
+  overflow: auto;
   padding: 14px;
 }
 
@@ -960,8 +961,10 @@ button:disabled {
 }
 
 .calendar-inspector {
-  background: #f8f9f6;
-  border-left: 1px solid #dfe4df;
+  background: #ffffff;
+  border: 1px solid #dfe4df;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(31, 41, 36, 0.07);
   display: grid;
   gap: 12px;
   align-content: start;
@@ -1032,11 +1035,6 @@ button:disabled {
 
   .teaching-calendar-layout {
     grid-template-columns: 1fr;
-  }
-
-  .calendar-inspector {
-    border-left: 0;
-    border-top: 1px solid #dfe4df;
   }
 
   .year-calendar {
