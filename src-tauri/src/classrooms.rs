@@ -152,6 +152,48 @@ fn value_string(value: Option<&Value>) -> String {
         .unwrap_or_default()
 }
 
+fn normalize_building_name(name: &str) -> String {
+    let normalized_separator = name
+        .trim()
+        .replace('－', "-")
+        .replace('—', "-")
+        .replace('–', "-");
+    let clean = ["校本部-", "西土城-", "沙河-"]
+        .iter()
+        .find_map(|prefix| normalized_separator.strip_prefix(prefix))
+        .unwrap_or(&normalized_separator)
+        .trim();
+
+    match clean {
+        "1" | "教一楼" => "教1".to_string(),
+        "2" | "教二楼" => "教2".to_string(),
+        "3" | "教三楼" => "教3".to_string(),
+        "4" | "教四楼" => "教4".to_string(),
+        "未来学习大楼" => "主楼".to_string(),
+        value if value.is_empty() => "未知教学楼".to_string(),
+        value => value.to_string(),
+    }
+}
+
+fn original_building_name(name: &str) -> bool {
+    matches!(name, "教1" | "教2" | "教3" | "教4" | "主楼")
+}
+
+fn normalize_room_name(room: String, building: &str) -> String {
+    let clean = room.trim().to_string();
+    let Some(building_number) = building.strip_prefix('教') else {
+        return clean;
+    };
+    let Some((prefix, room_number)) = clean.split_once('-') else {
+        return clean;
+    };
+    if prefix == building_number {
+        room_number.trim().to_string()
+    } else {
+        clean
+    }
+}
+
 fn format_room_name(classroom: &Value) -> String {
     let room_number = value_string(
         classroom
@@ -188,16 +230,14 @@ fn parse_idle_classroom_groups(
     room_map: &mut HashMap<String, RoomAccumulator>,
 ) {
     for group in groups {
-        let mut building = value_string(
+        let building = normalize_building_name(&value_string(
             group
                 .get("teachingBuildingName")
                 .or_else(|| group.get("buildingName"))
                 .or_else(|| group.get("teachingbuildingname")),
-        )
-        .trim()
-        .to_string();
-        if building.is_empty() {
-            building = "未知教学楼".to_string();
+        ));
+        if !original_building_name(&building) {
+            continue;
         }
 
         for classroom in group
@@ -206,7 +246,7 @@ fn parse_idle_classroom_groups(
             .into_iter()
             .flatten()
         {
-            let room = format_room_name(classroom);
+            let room = normalize_room_name(format_room_name(classroom), &building);
             let key = format!("{building}-{room}");
             let size = classroom
                 .get("seatnumber")
@@ -379,8 +419,43 @@ mod tests {
         parse_idle_classroom_groups(groups, 0, &mut room_map);
         parse_idle_classroom_groups(groups, 2, &mut room_map);
 
-        let room = room_map.get("校本部-教三楼-335").unwrap();
+        let room = room_map.get("教3-335").unwrap();
+        assert_eq!(room.building, "教3");
+        assert_eq!(room.room, "335");
         assert_eq!(room.size, Some(90));
         assert_eq!(room.available_slots, vec![0, 2]);
+    }
+
+    #[test]
+    fn parse_idle_classroom_groups_keeps_original_buildings_only() {
+        let mut room_map = HashMap::new();
+        let groups = serde_json::json!([
+            {
+                "teachingBuildingName": "校本部-教师自行安排",
+                "classroomList": [
+                    {
+                        "classroomId": "x",
+                        "classroomname": "x",
+                        "classroomnumber": "x"
+                    }
+                ]
+            },
+            {
+                "teachingBuildingName": "未来学习大楼",
+                "classroomList": [
+                    {
+                        "classroomId": "101",
+                        "classroomname": "101",
+                        "classroomnumber": "101"
+                    }
+                ]
+            }
+        ]);
+        let groups = groups.as_array().unwrap();
+
+        parse_idle_classroom_groups(groups, 0, &mut room_map);
+
+        assert!(room_map.get("教师自行安排-x").is_none());
+        assert!(room_map.get("主楼-101").is_some());
     }
 }
