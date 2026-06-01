@@ -8,8 +8,11 @@ mod schedule;
 mod settings_store;
 
 use chrono::NaiveDate;
+#[cfg(not(mobile))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+#[cfg(not(mobile))]
 use tauri::tray::TrayIconBuilder;
+#[cfg(not(mobile))]
 use tauri::{Emitter, Manager};
 
 use crate::models::{
@@ -95,6 +98,7 @@ async fn fetch_recommendations(
     ))
 }
 
+#[cfg(not(mobile))]
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -103,6 +107,7 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(not(mobile))]
 fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let title = MenuItem::with_id(app, "tray_title", "Where To Study", false, None::<&str>)?;
     let status = MenuItem::with_id(
@@ -170,11 +175,21 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
+    #[cfg(not(mobile))]
+    setup_tray(app)?;
+
+    #[cfg(mobile)]
+    let _ = app;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            setup_tray(app)?;
+            setup_app(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

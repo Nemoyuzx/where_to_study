@@ -7,4 +7,4 @@ preview-*.png
 release-artifacts/
 
 src-tauri/target
-src-tauri/gen
+src-tauri/gen/schemas

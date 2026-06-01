@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const host = process.env.TAURI_DEV_HOST
+const platform = process.env.TAURI_ENV_PLATFORM
+const webviewTarget = platform === 'windows' || platform === 'android' ? 'chrome105' : 'safari15'
 
 export default defineConfig({
   plugins: [react()],
@@ -23,7 +25,7 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'TAURI_ENV_*'],
   build: {
-    target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari15',
+    target: webviewTarget,
     minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default desktop capability",
+  "description": "Default app capability",
   "windows": ["main"],
   "permissions": []
 }

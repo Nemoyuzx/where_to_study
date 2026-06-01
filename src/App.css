@@ -1,17 +1,25 @@
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   background:
     linear-gradient(180deg, rgba(249, 250, 247, 0.96), rgba(241, 244, 240, 0.96)),
     #f5f6f3;
   color: #17201b;
   overflow-x: hidden;
-  padding: 0;
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
 }
 
 .app-frame {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   min-height: 100vh;
+  min-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+  );
   min-width: 0;
 }
 
