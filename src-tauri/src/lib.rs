@@ -13,7 +13,7 @@ use tauri::image::Image;
 #[cfg(not(mobile))]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::tray::TrayIconBuilder;
 #[cfg(not(mobile))]
 use tauri::{Emitter, Manager};
 
@@ -380,11 +380,6 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .tooltip("Where To Study")
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .on_tray_icon_event(|tray, event| {
-            if matches!(event, TrayIconEvent::Click { .. }) {
-                refresh_tray_courses(tray.app_handle().clone());
-            }
-        })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main_window(app),
             "planner" => {
