@@ -778,8 +778,8 @@ button:disabled {
 
 .time-labels,
 .time-grid-lines {
-  display: grid;
-  grid-template-rows: repeat(15, 1fr);
+  height: 100%;
+  position: relative;
 }
 
 .time-labels {
@@ -789,8 +789,28 @@ button:disabled {
 
 .time-labels span {
   border-top: 1px solid #e2e7e2;
-  padding: 7px 7px 0 0;
+  display: grid;
+  gap: 2px;
+  left: 0;
+  min-height: 34px;
+  padding: 5px 7px 0 0;
+  position: absolute;
+  right: 0;
   text-align: right;
+}
+
+.time-labels strong {
+  color: #53605a;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.1;
+}
+
+.time-labels small {
+  color: #7a8580;
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .time-day-lane {
@@ -803,12 +823,11 @@ button:disabled {
   background: #f8fbf8;
 }
 
-.time-grid-lines {
-  height: 100%;
-}
-
 .time-grid-lines span {
   border-top: 1px solid #e8ece8;
+  left: 0;
+  position: absolute;
+  right: 0;
 }
 
 .time-course-layer {
@@ -899,13 +918,34 @@ button:disabled {
   border: 1px solid #c7ded6;
   border-radius: 4px;
   color: #1c5d51;
-  display: block;
+  display: grid;
   font-size: 12px;
   font-style: normal;
+  gap: 1px;
+  line-height: 1.2;
   margin-top: 3px;
   overflow: hidden;
   padding: 3px 6px;
   text-overflow: ellipsis;
+}
+
+.month-cell small strong {
+  color: #53605a;
+  font-size: 10px;
+  font-weight: 760;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.month-cell small span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.month-cell em {
+  display: block;
   white-space: nowrap;
 }
 

@@ -371,10 +371,6 @@ function App() {
   const canShowRecommendationHighlight = showRecommendationHighlight && recommendationItems.length > 0
   const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
   const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
-  const calendarHours = useMemo(
-    () => Array.from({ length: CALENDAR_END_HOUR - CALENDAR_START_HOUR + 1 }, (_, index) => CALENDAR_START_HOUR + index),
-    [],
-  )
   const visibleCalendarDays = useMemo(() => {
     if (calendarView === 'day') return [calendarDate]
     if (calendarView === 'week') {
@@ -922,7 +918,16 @@ function App() {
                       )
                     })}
                     <div className="time-labels">
-                      {calendarHours.map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}:00</span>)}
+                      {slotMeta.map((slot) => {
+                        const start = parseTimeMinutes(slot.start)
+                        const top = ((start - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                        return (
+                          <span key={slot.index} style={{ top: `${top}%` }}>
+                            <strong>第 {slot.label} 节</strong>
+                            <small>{slot.start}-{slot.end}</small>
+                          </span>
+                        )
+                      })}
                     </div>
                     {visibleCalendarDays.map((dateString) => {
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
@@ -932,7 +937,12 @@ function App() {
                       return (
                         <div key={`lane-${dateString}`} className={`time-day-lane ${dateString === calendarDate ? 'selected' : ''}`}>
                           <div className="time-grid-lines">
-                            {calendarHours.map((hour) => <span key={hour} />)}
+                            {slotMeta.map((slot) => {
+                              const start = parseTimeMinutes(slot.start)
+                              const top = ((start - visibleStart) / visibleRange) * 100
+                              return <span key={slot.index} style={{ top: `${top}%` }} />
+                            })}
+                            <span style={{ top: '100%' }} />
                           </div>
                           <div className="time-course-layer">
                             {dayState.dayCourses.map((course, index) => {
@@ -978,9 +988,15 @@ function App() {
                         >
                           <span>{date.getDate()}</span>
                           <div>
-                            {dayState.dayCourses.slice(0, 3).map((course) => (
-                              <small key={`${dateString}-${course.id}`}>{course.name}</small>
-                            ))}
+                            {dayState.dayCourses.slice(0, 3).map((course) => {
+                              const bounds = courseTimeBounds(course, slotMeta)
+                              return (
+                                <small key={`${dateString}-${course.id}`}>
+                                  <strong>{bounds.start}-{bounds.end}</strong>
+                                  <span>{course.name}</span>
+                                </small>
+                              )
+                            })}
                             {dayState.dayCourses.length > 3 ? <em>+{dayState.dayCourses.length - 3}</em> : null}
                           </div>
                         </button>
