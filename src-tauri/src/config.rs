@@ -13,8 +13,7 @@ pub const SJD_REST_CLASSROOM_PAGE_URL: &str = "http://jwglweixin.bupt.edu.cn/sjd
 pub const SJD_STUDENT_CURRICULUM_URL: &str =
     "http://jwglweixin.bupt.edu.cn/bjyddx/student/curriculum";
 pub const EMPTY_CLASSROOM_LOGIN_URL: &str = "http://jwglweixin.bupt.edu.cn/bjyddx/login";
-pub const EMPTY_CLASSROOM_IDLE_URL: &str =
-    "http://jwglweixin.bupt.edu.cn/bjyddx/student/getIdleClassroom";
+pub const EMPTY_CLASSROOM_TODAY_URL: &str = "http://jwglweixin.bupt.edu.cn/bjyddx/todayClassrooms";
 
 pub const DEFAULT_TERM_ID: &str = "2025-2026-2";
 pub const DEFAULT_TERM_START_DATE: &str = "2026-03-02";

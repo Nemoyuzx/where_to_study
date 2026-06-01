@@ -8,8 +8,8 @@ use serde_json::Value;
 
 use crate::auth::resolve_credentials;
 use crate::config::{
-    campus_name, normalize_campus_id, now_in_app_tz, today_in_app_tz, EMPTY_CLASSROOM_IDLE_URL,
-    EMPTY_CLASSROOM_LOGIN_URL, SJD_LOGIN_PAGE_URL, SJD_ORIGIN, SJD_REST_CLASSROOM_PAGE_URL,
+    campus_name, normalize_campus_id, now_in_app_tz, today_in_app_tz, EMPTY_CLASSROOM_LOGIN_URL,
+    EMPTY_CLASSROOM_TODAY_URL, SJD_LOGIN_PAGE_URL, SJD_ORIGIN, SJD_REST_CLASSROOM_PAGE_URL,
 };
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{ClassroomStatus, ClassroomsRequest, ClassroomsResponse};
@@ -62,10 +62,25 @@ pub fn parse_classroom(raw: &str) -> Option<(String, String, Option<usize>)> {
     }
 
     clean = clean.replace('－', "-").replace('—', "-").replace('–', "-");
-    let (building, room) = clean
-        .split_once('-')
-        .map(|(building, room)| (building.trim(), room.trim()))
-        .unwrap_or(("未知教学楼", clean.trim()));
+    let parts: Vec<&str> = clean
+        .split('-')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+    let (building, room) = if parts.len() >= 3 && matches!(parts[0], "校本部" | "西土城" | "沙河")
+    {
+        (
+            clean[..clean.find(parts[2]).unwrap_or(clean.len())]
+                .trim_end_matches('-')
+                .trim(),
+            clean[clean.find(parts[2]).unwrap_or(0)..].trim(),
+        )
+    } else {
+        clean
+            .split_once('-')
+            .map(|(building, room)| (building.trim(), room.trim()))
+            .unwrap_or(("未知教学楼", clean.trim()))
+    };
     let building = if building.is_empty() {
         "未知教学楼"
     } else {
@@ -92,7 +107,13 @@ pub async fn login_empty_classroom(account: &str, password: &str) -> ServiceResu
     let response = client
         .post(EMPTY_CLASSROOM_LOGIN_URL)
         .headers(sjd_headers(None, SJD_LOGIN_PAGE_URL))
-        .form(&[("userNo", account), ("pwd", password)])
+        .form(&[
+            ("userNo", account),
+            ("pwd", password),
+            ("encode", "1"),
+            ("captchaData", ""),
+            ("codeVal", ""),
+        ])
         .send()
         .await
         .map_err(|_| {
@@ -203,66 +224,47 @@ fn extract_three_digit_room(value: &str, building: &str) -> Option<String> {
         .map(|item| item.as_str().to_string())
 }
 
-fn format_room_name(classroom: &Value) -> String {
-    value_string(
-        classroom
-            .get("classroomnumber")
-            .or_else(|| classroom.get("classroomNumber")),
-    )
-    .trim()
-    .to_string()
+fn node_name_to_slot(value: &str) -> Option<usize> {
+    let node = Regex::new(r"\d+")
+        .expect("valid regex")
+        .find(value.trim())?
+        .as_str()
+        .parse::<usize>()
+        .ok()?;
+    (1..=14).contains(&node).then_some(node - 1)
 }
 
-fn parse_idle_classroom_groups(
-    groups: &[Value],
-    slot: usize,
-    room_map: &mut HashMap<String, RoomAccumulator>,
-) {
-    for group in groups {
-        let building = normalize_building_name(&value_string(
-            group
-                .get("teachingBuildingName")
-                .or_else(|| group.get("buildingName"))
-                .or_else(|| group.get("teachingbuildingname")),
-        ));
-        if !original_building_name(&building) {
+fn parse_occupied_classrooms(items: &[Value], room_map: &mut HashMap<String, RoomAccumulator>) {
+    for item in items {
+        let Some(slot) = node_name_to_slot(&value_string(
+            item.get("NODENAME")
+                .or_else(|| item.get("nodeName"))
+                .or_else(|| item.get("nodename")),
+        )) else {
             continue;
-        }
+        };
+        let classrooms = value_string(
+            item.get("CLASSROOMS")
+                .or_else(|| item.get("classrooms"))
+                .or_else(|| item.get("Classrooms")),
+        );
 
-        for classroom in group
-            .get("classroomList")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+        for classroom in classrooms
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
         {
-            let room_number = format_room_name(classroom);
-            let room_label = value_string(
-                classroom
-                    .get("classroomname")
-                    .or_else(|| classroom.get("classroomName")),
-            );
-            let classroom_id = value_string(classroom.get("classroomId"));
-            let Some(room) = [
-                room_number.as_str(),
-                room_label.as_str(),
-                classroom_id.as_str(),
-            ]
-            .iter()
-            .find_map(|value| extract_three_digit_room(value, &building)) else {
+            let Some((building_name, room_name, size)) = parse_classroom(classroom) else {
+                continue;
+            };
+            let building = normalize_building_name(&building_name);
+            if !original_building_name(&building) {
+                continue;
+            }
+            let Some(room) = extract_three_digit_room(&room_name, &building) else {
                 continue;
             };
             let key = format!("{building}-{room}");
-            let size = classroom
-                .get("seatnumber")
-                .or_else(|| classroom.get("seatNumber"))
-                .and_then(|value| {
-                    value
-                        .as_u64()
-                        .or_else(|| value.as_str().and_then(|text| text.parse::<u64>().ok()))
-                })
-                .and_then(|value| usize::try_from(value).ok())
-                .filter(|value| *value > 0);
-
             let entry = room_map
                 .entry(key.clone())
                 .or_insert_with(|| RoomAccumulator {
@@ -283,55 +285,44 @@ fn parse_idle_classroom_groups(
     }
 }
 
-async fn fetch_idle_classroom_slot(
+async fn fetch_occupied_classrooms(
     client: &reqwest::Client,
     token: &str,
-    target: NaiveDate,
     campus_id: &str,
-    slot: usize,
-) -> ServiceResult<(usize, Vec<Value>)> {
-    let node = format!("{:02}{:02}", slot + 1, slot + 1);
+) -> ServiceResult<Vec<Value>> {
     let response = client
-        .post(EMPTY_CLASSROOM_IDLE_URL)
-        .query(&[
-            ("date", target.to_string()),
-            ("nodeId", node),
-            ("buildingId", String::new()),
-            ("campusId", campus_id.to_string()),
-        ])
+        .get(EMPTY_CLASSROOM_TODAY_URL)
+        .query(&[("campusId", campus_id.to_string())])
         .headers(sjd_headers(Some(token), SJD_REST_CLASSROOM_PAGE_URL))
         .send()
         .await
-        .map_err(|_| ServiceError::new("空教室数据获取失败，请稍后重试。"))?;
+        .map_err(|_| ServiceError::new("实时教室数据获取失败，请稍后重试。"))?;
 
     if response.status().as_u16() >= 400 {
         return Err(ServiceError::new(format!(
-            "空教室数据获取失败，HTTP {}。",
+            "实时教室数据获取失败，HTTP {}。",
             response.status().as_u16()
         )));
     }
     let payload: Value = response
         .json()
         .await
-        .map_err(|_| ServiceError::new("空教室服务返回了无法识别的数据。"))?;
+        .map_err(|_| ServiceError::new("实时教室服务返回了无法识别的数据。"))?;
     if !code_is_success(&payload) {
         let message = payload
             .get("Msg")
             .or_else(|| payload.get("msg"))
             .and_then(Value::as_str)
             .map(ToOwned::to_owned)
-            .unwrap_or_else(|| format!("第 {} 节空教室数据获取失败。", slot + 1));
+            .unwrap_or_else(|| "实时教室数据获取失败。".to_string());
         return Err(ServiceError::new(message));
     }
 
-    Ok((
-        slot,
-        payload
-            .get("data")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default(),
-    ))
+    Ok(payload
+        .get("data")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default())
 }
 
 pub async fn fetch_classrooms(payload: &ClassroomsRequest) -> ServiceResult<ClassroomsResponse> {
@@ -346,22 +337,31 @@ pub async fn fetch_classrooms(payload: &ClassroomsRequest) -> ServiceResult<Clas
         None => today_in_app_tz(),
     };
 
+    if service_date != today_in_app_tz() {
+        return Err(ServiceError::with_status(
+            "空教室实时接口仅支持当天查询。",
+            400,
+        ));
+    }
+
     let (user, secret) = resolve_credentials(&payload.account, &payload.password)?;
     let token = login_empty_classroom(&user, &secret).await?;
     let client = http_client(30)?;
 
     let mut room_map = HashMap::new();
-    for slot in 0..14 {
-        let (_, groups) =
-            fetch_idle_classroom_slot(&client, &token, service_date, &normalized_campus_id, slot)
-                .await?;
-        parse_idle_classroom_groups(&groups, slot, &mut room_map);
-    }
+    let occupied_classrooms =
+        fetch_occupied_classrooms(&client, &token, &normalized_campus_id).await?;
+    parse_occupied_classrooms(&occupied_classrooms, &mut room_map);
 
     let mut rooms: Vec<ClassroomStatus> = room_map
         .into_values()
         .map(|mut item| {
             item.available_slots.sort_unstable();
+            item.available_slots.dedup();
+            let occupied_slots = item.available_slots;
+            let available_slots = (0..14)
+                .filter(|slot| !occupied_slots.contains(slot))
+                .collect();
             ClassroomStatus {
                 id: item.id,
                 building: item.building,
@@ -369,7 +369,7 @@ pub async fn fetch_classrooms(payload: &ClassroomsRequest) -> ServiceResult<Clas
                 name: item.name,
                 size: item.size,
                 r#type: String::new(),
-                available_slots: item.available_slots,
+                available_slots,
                 source: "sjd".to_string(),
             }
         })
@@ -400,28 +400,28 @@ mod tests {
             parse_classroom("教一楼-101(80)"),
             Some(("教一楼".to_string(), "101".to_string(), Some(80)))
         );
+        assert_eq!(
+            parse_classroom("校本部-教三楼-3-335(90)"),
+            Some(("校本部-教三楼".to_string(), "3-335".to_string(), Some(90)))
+        );
     }
 
     #[test]
-    fn parse_idle_classroom_groups_merges_slots() {
+    fn parse_occupied_classrooms_merges_slots() {
         let mut room_map = HashMap::new();
-        let groups = serde_json::json!([
+        let items = serde_json::json!([
             {
-                "teachingBuildingName": "校本部-教三楼",
-                "classroomList": [
-                    {
-                        "classroomId": "335",
-                        "classroomname": "335",
-                        "classroomnumber": "335",
-                        "seatnumber": "90"
-                    }
-                ]
+                "NODENAME": "1",
+                "CLASSROOMS": "校本部-教三楼-3-335(90)"
+            },
+            {
+                "NODENAME": "3",
+                "CLASSROOMS": "教三楼-3-335(90)"
             }
         ]);
-        let groups = groups.as_array().unwrap();
+        let items = items.as_array().unwrap();
 
-        parse_idle_classroom_groups(groups, 0, &mut room_map);
-        parse_idle_classroom_groups(groups, 2, &mut room_map);
+        parse_occupied_classrooms(items, &mut room_map);
 
         let room = room_map.get("教3-335").unwrap();
         assert_eq!(room.building, "教3");
@@ -431,36 +431,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_idle_classroom_groups_uses_three_digit_room_number() {
+    fn parse_occupied_classrooms_uses_three_digit_room_number() {
         let mut room_map = HashMap::new();
-        let groups = serde_json::json!([
+        let items = serde_json::json!([
             {
-                "teachingBuildingName": "校本部-教二楼",
-                "classroomList": [
-                    {
-                        "classroomId": "A441",
-                        "classroomname": "A441",
-                        "classroomnumber": "101",
-                        "seatnumber": "60"
-                    },
-                    {
-                        "classroomId": "406",
-                        "classroomname": "406（信通实验室）",
-                        "classroomnumber": "",
-                        "seatnumber": "30"
-                    },
-                    {
-                        "classroomId": "107343",
-                        "classroomname": "107343",
-                        "classroomnumber": "",
-                        "seatnumber": "60"
-                    }
-                ]
+                "NODENAME": "1",
+                "CLASSROOMS": "校本部-教二楼-101A441(60),教二楼-406（信通实验室）(30),教二楼-107343(60)"
             }
         ]);
-        let groups = groups.as_array().unwrap();
+        let items = items.as_array().unwrap();
 
-        parse_idle_classroom_groups(groups, 0, &mut room_map);
+        parse_occupied_classrooms(items, &mut room_map);
 
         assert!(room_map.get("教2-101").is_some());
         assert!(room_map.get("教2-406").is_some());
@@ -470,35 +451,26 @@ mod tests {
     }
 
     #[test]
-    fn parse_idle_classroom_groups_keeps_original_buildings_only() {
+    fn parse_occupied_classrooms_keeps_original_buildings_only() {
         let mut room_map = HashMap::new();
-        let groups = serde_json::json!([
+        let items = serde_json::json!([
             {
-                "teachingBuildingName": "校本部-教师自行安排",
-                "classroomList": [
-                    {
-                        "classroomId": "x",
-                        "classroomname": "x",
-                        "classroomnumber": "x"
-                    }
-                ]
-            },
-            {
-                "teachingBuildingName": "未来学习大楼",
-                "classroomList": [
-                    {
-                        "classroomId": "101",
-                        "classroomname": "101",
-                        "classroomnumber": "101"
-                    }
-                ]
+                "NODENAME": "1",
+                "CLASSROOMS": "校本部-教师自行安排-x(0),未来学习大楼-101(80)"
             }
         ]);
-        let groups = groups.as_array().unwrap();
+        let items = items.as_array().unwrap();
 
-        parse_idle_classroom_groups(groups, 0, &mut room_map);
+        parse_occupied_classrooms(items, &mut room_map);
 
         assert!(room_map.get("教师自行安排-x").is_none());
         assert!(room_map.get("主楼-101").is_some());
+    }
+
+    #[test]
+    fn node_name_to_slot_uses_one_based_nodes() {
+        assert_eq!(node_name_to_slot("1"), Some(0));
+        assert_eq!(node_name_to_slot("第14节"), Some(13));
+        assert_eq!(node_name_to_slot("15"), None);
     }
 }
