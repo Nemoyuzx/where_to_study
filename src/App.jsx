@@ -466,6 +466,10 @@ function App() {
     setRecommendations(null)
     if (nextValue) {
       setSelectedSlots((current) => current.filter((slot) => !plannerWeekState.busySlots.includes(slot)))
+    } else {
+      setSelectedSlots((current) => (
+        [...new Set([...current, ...plannerWeekState.busySlots])].sort((a, b) => a - b)
+      ))
     }
   }
 
@@ -749,6 +753,7 @@ function App() {
               </div>
               <div className="slot-grid">
                 {slotMeta.map((slot) => {
+                  const personalCourseSlot = plannerWeekState.busySlots.includes(slot.index)
                   const busy = busySlots.includes(slot.index)
                   const selected = selectedSlots.includes(slot.index)
                   return (
@@ -758,7 +763,7 @@ function App() {
                       className={`slot-cell ${busy ? 'busy' : 'free'} ${selected ? 'selected' : ''}`}
                       onClick={() => !busy && toggleSlot(slot.index)}
                       disabled={busy}
-                      title={busy ? '个人课表占用' : '个人空闲，可筛选教室'}
+                      title={busy ? '个人课表占用' : personalCourseSlot ? '个人课程时间，已纳入筛选' : '个人空闲，可筛选教室'}
                     >
                       <span>{slot.label}</span>
                       <small>{slot.start}-{slot.end}</small>
