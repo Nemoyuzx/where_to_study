@@ -241,7 +241,64 @@ function normalizeError(error) {
   return '请求失败，请稍后重试。'
 }
 
+function hasTauriRuntime() {
+  return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__?.invoke)
+}
+
+function browserPreviewCommand(name, payload = {}) {
+  const year = payload.year || new Date().getFullYear()
+  if (name === 'get_metadata') {
+    return {
+      campuses: [{ id: '01', name: '西土城' }, { id: '04', name: '沙河' }],
+      slots: FALLBACK_SLOTS,
+      default_term_id: DEFAULT_SETTINGS.termId,
+      default_term_start_date: DEFAULT_SETTINGS.termStartDate,
+    }
+  }
+  if (name === 'load_saved_settings' || name === 'save_saved_settings') {
+    return settingsToPayload(DEFAULT_SETTINGS)
+  }
+  if (name === 'load_saved_schedule') {
+    return null
+  }
+  if (name === 'fetch_holidays') {
+    return {
+      year,
+      source: 'browser-preview',
+      fetched_at: new Date().toISOString(),
+      items: fallbackHolidayItems(year),
+    }
+  }
+  if (name === 'fetch_classrooms') {
+    return {
+      campus_id: DEFAULT_SETTINGS.campusId,
+      campus_name: '西土城',
+      target_date: localDateString(),
+      fetched_at: new Date().toISOString(),
+      realtime: true,
+      provider: 'browser-preview',
+      rooms: [],
+    }
+  }
+  if (name === 'fetch_schedule') {
+    return {
+      term_id: DEFAULT_SETTINGS.termId,
+      term_start_date: DEFAULT_SETTINGS.termStartDate,
+      fetched_at: new Date().toISOString(),
+      courses: [],
+    }
+  }
+  if (name === 'import_schedule_to_calendar') {
+    throw new Error('手机浏览器预览不支持导入苹果日历，请在 macOS App 中使用。')
+  }
+  return null
+}
+
 async function command(name, payload) {
+  if (!hasTauriRuntime()) {
+    return browserPreviewCommand(name, payload)
+  }
+
   try {
     if (payload === undefined) return await invoke(name)
     return await invoke(name, { payload })
@@ -364,6 +421,8 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!hasTauriRuntime()) return undefined
+
     let unlisten = null
 
     listen('tray:navigate', (event) => {
@@ -380,6 +439,8 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (!hasTauriRuntime()) return undefined
+
     let unlistenFetched = null
     let unlistenError = null
 
