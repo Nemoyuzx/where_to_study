@@ -523,7 +523,6 @@ function App() {
         target_date: todayDate,
         term_id: settings.termId,
         term_start_date: settings.termStartDate,
-        selected_slots: selectedSlots,
         buildings: selectedBuildings,
         min_seats: Number(minSeats) || 0,
         use_schedule_filter: usePersonalSchedule,
@@ -645,23 +644,6 @@ function App() {
               </label>
             </section>
 
-            <section className="panel action-panel">
-              <button type="button" onClick={loadSchedule} disabled={!!loading}>
-                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-                获取/刷新个人课表
-              </button>
-              <button type="button" onClick={loadClassrooms} disabled={!!loading}>
-                {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
-                查看空教室
-              </button>
-              <button type="button" className="primary" onClick={runRecommendations} disabled={!!loading}>
-                {loading === 'recommendations' ? <Loader2 className="spin" size={17} /> : <Sparkles size={17} />}
-                推荐同一教室
-              </button>
-            </section>
-          </aside>
-
-          <section className="main-grid">
             <section className="summary-band">
               <div>
                 <span>当天课程</span>
@@ -681,6 +663,23 @@ function App() {
               </div>
             </section>
 
+            <section className="panel action-panel">
+              <button type="button" onClick={loadSchedule} disabled={!!loading}>
+                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+                获取/刷新个人课表
+              </button>
+              <button type="button" onClick={loadClassrooms} disabled={!!loading}>
+                {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
+                查看空教室
+              </button>
+              <button type="button" className="primary" onClick={runRecommendations} disabled={!!loading}>
+                {loading === 'recommendations' ? <Loader2 className="spin" size={17} /> : <Sparkles size={17} />}
+                推荐同一教室
+              </button>
+            </section>
+          </aside>
+
+          <section className="main-grid">
             <section className="panel wide">
               <div className="panel-heading">
                 <div className="panel-title">
