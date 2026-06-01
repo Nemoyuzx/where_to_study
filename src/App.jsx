@@ -238,6 +238,7 @@ function App() {
   const [selectedBuildings, setSelectedBuildings] = useState([])
   const [minSeats, setMinSeats] = useState(0)
   const [usePersonalSchedule, setUsePersonalSchedule] = useState(true)
+  const [calendarPopover, setCalendarPopover] = useState(null)
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
@@ -379,7 +380,20 @@ function App() {
       days: buildMiniMonthDays(year, monthIndex),
     }))
   }, [calendarDate])
+  const maxYearDayCourseCount = useMemo(() => {
+    const courseCounts = calendarYearMonths.flatMap((month) => (
+      month.days
+        .filter((dateString) => dateFromString(dateString).getMonth() === month.monthIndex)
+        .map((dateString) => getWeekState(courses, activeTermStartDate, dateString).dayCourses.length)
+    ))
+    return Math.max(1, ...courseCounts)
+  }, [activeTermStartDate, calendarYearMonths, courses])
   const calendarDetailCourse = calendarWeekState.dayCourses[0] || null
+  const calendarPopoverState = useMemo(() => (
+    calendarPopover
+      ? getWeekState(courses, activeTermStartDate, calendarPopover.date)
+      : null
+  ), [activeTermStartDate, calendarPopover, courses])
 
   useEffect(() => {
     if (!settingsLoaded || autoFetchedClassroomsDate.current === todayDate) {
@@ -458,10 +472,25 @@ function App() {
 
   function chooseCalendarDate(dateString) {
     setCalendarDate(dateString)
+    setCalendarPopover(null)
   }
 
   function moveCalendar(direction) {
+    setCalendarPopover(null)
     setCalendarDate((current) => shiftDate(current, calendarView, direction))
+  }
+
+  function openYearDayPopover(event, dateString) {
+    const popoverWidth = 300
+    const popoverHeight = 220
+    const x = Math.min(event.clientX + 12, window.innerWidth - popoverWidth - 12)
+    const y = Math.min(event.clientY + 12, window.innerHeight - popoverHeight - 12)
+    setCalendarDate(dateString)
+    setCalendarPopover({
+      date: dateString,
+      x: Math.max(12, x),
+      y: Math.max(12, y),
+    })
   }
 
   async function runTask(name, task) {
@@ -551,7 +580,10 @@ function App() {
                       key={view.id}
                       type="button"
                       className={calendarView === view.id ? 'active' : ''}
-                      onClick={() => setCalendarView(view.id)}
+                      onClick={() => {
+                        setCalendarPopover(null)
+                        setCalendarView(view.id)
+                      }}
                     >
                       {view.label}
                     </button>
@@ -938,15 +970,16 @@ function App() {
                           {month.days.map((dateString) => {
                             const date = dateFromString(dateString)
                             const state = getWeekState(courses, activeTermStartDate, dateString)
+                            const currentMonth = date.getMonth() === month.monthIndex
+                            const courseCount = currentMonth ? state.dayCourses.length : 0
+                            const courseLoad = courseCount / maxYearDayCourseCount
                             return (
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`${date.getMonth() === month.monthIndex ? '' : 'muted-day'} ${state.dayCourses.length ? 'has-course' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
-                                onClick={() => {
-                                  setCalendarDate(dateString)
-                                  setCalendarView('day')
-                                }}
+                                className={`${currentMonth ? '' : 'muted-day'} ${courseCount ? `has-course course-load-${Math.min(courseCount, 4)}` : ''} ${currentMonth && dateString === calendarDate ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                style={courseCount ? { '--course-load': courseLoad } : null}
+                                onClick={(event) => openYearDayPopover(event, dateString)}
                               >
                                 {date.getDate()}
                               </button>
@@ -955,6 +988,33 @@ function App() {
                         </div>
                       </section>
                     ))}
+                  </div>
+                ) : null}
+                {calendarView === 'year' && calendarPopover && calendarPopoverState ? (
+                  <div
+                    className="year-day-popover"
+                    style={{ left: calendarPopover.x, top: calendarPopover.y }}
+                    role="dialog"
+                    aria-label={`${formatCourseDate(calendarPopover.date)} 日程`}
+                  >
+                    <button type="button" className="popover-close" aria-label="关闭日程弹层" onClick={() => setCalendarPopover(null)}>×</button>
+                    <span>{formatCourseDate(calendarPopover.date)}</span>
+                    <strong>{calendarPopoverState.dayCourses.length} 门课</strong>
+                    <small>第 {calendarPopoverState.weekNumber || '-'} 周</small>
+                    <div className="popover-course-list">
+                      {calendarPopoverState.dayCourses.length ? calendarPopoverState.dayCourses.map((course) => {
+                        const bounds = courseTimeBounds(course, slotMeta)
+                        return (
+                          <article key={`${calendarPopover.date}-${course.id}`}>
+                            <strong>{course.name}</strong>
+                            <span>{bounds.start}-{bounds.end}</span>
+                            <small>{course.room || '地点未标注'}</small>
+                          </article>
+                        )
+                      }) : (
+                        <p>当天没有课程</p>
+                      )}
+                    </div>
                   </div>
                 ) : null}
               </section>
