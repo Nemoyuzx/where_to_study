@@ -1,11 +1,11 @@
 .app-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
   background:
     linear-gradient(180deg, rgba(249, 250, 247, 0.96), rgba(241, 244, 240, 0.96)),
     #f5f6f3;
   color: #17201b;
-  overflow-x: hidden;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   padding:
     env(safe-area-inset-top, 0px)
     env(safe-area-inset-right, 0px)
@@ -16,11 +16,13 @@
 .app-frame {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
+  height: 100%;
   min-height: 100vh;
   min-height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
   );
   min-width: 0;
+  overflow: hidden;
 }
 
 .side-nav {
@@ -30,10 +32,13 @@
   display: grid;
   grid-template-rows: auto auto;
   gap: 14px;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: 22px 16px;
-  position: sticky;
+  position: relative;
   top: 0;
+  z-index: 2;
 }
 
 .side-brand {
@@ -50,7 +55,10 @@
 }
 
 .page-content {
+  height: 100%;
   min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px;
 }
 
@@ -682,22 +690,11 @@ button:disabled {
 
 @media (max-width: 1100px) {
   .app-frame {
-    grid-template-columns: 1fr;
+    grid-template-columns: 180px minmax(0, 1fr);
   }
 
   .side-nav {
-    border-bottom: 1px solid #dfe4df;
-    border-right: 0;
-    min-height: 0;
-    position: static;
-  }
-
-  .app-nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .app-nav button {
-    justify-content: center;
+    padding: 18px 12px;
   }
 
   .workspace,
@@ -718,9 +715,20 @@ button:disabled {
 }
 
 @media (max-width: 720px) {
-  .page-content,
-  .side-nav {
+  .app-frame {
+    grid-template-columns: 112px minmax(0, 1fr);
+  }
+
+  .page-content {
     padding: 10px;
+  }
+
+  .side-nav {
+    padding: 10px 8px;
+  }
+
+  .side-brand strong {
+    font-size: 13px;
   }
 
   .topbar {
@@ -731,9 +739,14 @@ button:disabled {
   }
 
   .app-nav button {
-    height: 38px;
-    min-height: 36px;
-    padding: 0 8px;
+    flex-direction: column;
+    font-size: 12px;
+    gap: 4px;
+    height: 54px;
+    justify-content: center;
+    min-height: 54px;
+    padding: 0 6px;
+    text-align: center;
   }
 
   .eyebrow {
