@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Building2,
   CalendarDays,
+  CalendarPlus,
   CalendarRange,
   CheckCircle2,
   Clock3,
@@ -181,6 +182,7 @@ function App() {
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [calendarImportedPath, setCalendarImportedPath] = useState('')
 
   useEffect(() => {
     command('get_metadata')
@@ -235,9 +237,11 @@ function App() {
 
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
+  const activeTermId = schedule?.term_id || settings.termId
+  const activeTermStartDate = schedule?.term_start_date || settings.termStartDate
   const weekState = useMemo(
-    () => getWeekState(courses, schedule?.term_start_date || settings.termStartDate, targetDate),
-    [courses, schedule?.term_start_date, settings.termStartDate, targetDate],
+    () => getWeekState(courses, activeTermStartDate, targetDate),
+    [courses, activeTermStartDate, targetDate],
   )
   const busySlots = useMemo(
     () => (usePersonalSchedule ? weekState.busySlots : []),
@@ -271,9 +275,25 @@ function App() {
   const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
   const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
   const teachingWeeks = useMemo(
-    () => buildTeachingWeeks(settings.termStartDate, courses, weekState.weekNumber),
-    [courses, settings.termStartDate, weekState.weekNumber],
+    () => buildTeachingWeeks(activeTermStartDate, courses, weekState.weekNumber),
+    [courses, activeTermStartDate, weekState.weekNumber],
   )
+
+  useEffect(() => {
+    let cancelled = false
+
+    command('load_saved_schedule')
+      .then((data) => {
+        if (!cancelled && data) {
+          setSchedule(data)
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function updateSetting(field, value) {
     setSettingsSaved(false)
@@ -328,7 +348,6 @@ function App() {
   function chooseCalendarDate(dateString) {
     setTargetDate(dateString)
     setRecommendations(null)
-    setActivePage('planner')
   }
 
   async function runTask(name, task) {
@@ -350,6 +369,7 @@ function App() {
         term_start_date: settings.termStartDate,
       }))
       setSchedule(data)
+      setCalendarImportedPath('')
       setUsePersonalSchedule(true)
       const nextState = getWeekState(data.courses, data.term_start_date, targetDate)
       const nextFreeSlots = slotMeta.map((slot) => slot.index).filter((slot) => !nextState.busySlots.includes(slot))
@@ -388,9 +408,17 @@ function App() {
         fetched_at: data.classrooms.fetched_at,
         courses: data.schedule.courses,
       })
+      setCalendarImportedPath('')
       setRecommendations(data)
       setShowRecommendationHighlight(true)
       setSelectedSlots(data.selected_slots)
+    })
+  }
+
+  async function importAppleCalendar() {
+    await runTask('calendar-import', async () => {
+      const path = await command('import_schedule_to_calendar')
+      setCalendarImportedPath(path)
     })
   }
 
@@ -704,11 +732,11 @@ function App() {
           <section className="summary-band">
             <div>
               <span>学期</span>
-              <strong className="summary-text">{settings.termId}</strong>
+              <strong className="summary-text">{activeTermId}</strong>
             </div>
             <div>
               <span>第一周周一</span>
-              <strong className="summary-text">{settings.termStartDate}</strong>
+              <strong className="summary-text">{activeTermStartDate}</strong>
             </div>
             <div>
               <span>当前周</span>
@@ -726,11 +754,50 @@ function App() {
                 <CalendarRange size={18} />
                 <h2>教学周历</h2>
               </div>
-              <button type="button" className="compact-button" onClick={loadSchedule} disabled={!!loading}>
-                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-                获取个人课表
-              </button>
+              <div className="calendar-actions">
+                <button type="button" className="compact-button" onClick={loadSchedule} disabled={!!loading}>
+                  {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+                  获取个人课表
+                </button>
+                <button type="button" className="compact-button" onClick={importAppleCalendar} disabled={!!loading || !courses.length}>
+                  {loading === 'calendar-import' ? <Loader2 className="spin" size={17} /> : <CalendarPlus size={17} />}
+                  导入苹果日历
+                </button>
+              </div>
             </div>
+            <div className="date-course-view">
+              <label>
+                查看日期
+                <input
+                  type="date"
+                  value={targetDate}
+                  onChange={(event) => chooseCalendarDate(event.target.value)}
+                />
+              </label>
+              <div className="date-course-summary">
+                <span>{targetDate} · 第 {weekState.weekNumber || '-'} 周 · {WEEKDAY_LABELS[(weekState.weekday || 1) - 1] || '-'}</span>
+                <strong>{weekState.dayCourses.length} 门课</strong>
+              </div>
+            </div>
+            <div className="course-list day-course-list">
+              {weekState.dayCourses.length ? weekState.dayCourses.map((course) => (
+                <article key={`${targetDate}-${course.id}`} className="course-row">
+                  <div>
+                    <strong>{course.name}</strong>
+                    <span>{course.teacher || '教师未标注'}</span>
+                  </div>
+                  <div>
+                    <span>{course.time_range}</span>
+                    <span>{course.room || '地点未标注'}</span>
+                  </div>
+                </article>
+              )) : (
+                <div className="empty-state">所选日期暂无课程</div>
+              )}
+            </div>
+            {calendarImportedPath ? (
+              <p className="muted">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
+            ) : null}
             <div className="calendar-board">
               <div className="calendar-head">
                 <span>周次</span>
@@ -740,7 +807,7 @@ function App() {
                 <div key={week.weekNumber} className={`calendar-row ${week.weekNumber === weekState.weekNumber ? 'current-week' : ''}`}>
                   <div className="calendar-week">第 {week.weekNumber} 周</div>
                   {week.days.map((dateString, dayIndex) => {
-                    const dayState = getWeekState(courses, schedule?.term_start_date || settings.termStartDate, dateString)
+                    const dayState = getWeekState(courses, activeTermStartDate, dateString)
                     const isTarget = dateString === targetDate
                     const isToday = dateString === localDateString()
                     return (

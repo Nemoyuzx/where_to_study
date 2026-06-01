@@ -397,6 +397,53 @@ button:disabled {
   gap: 8px;
 }
 
+.calendar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.calendar-actions .compact-button {
+  flex: 0 0 auto;
+  min-width: 132px;
+  width: auto;
+}
+
+.date-course-view {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  margin-bottom: 12px;
+}
+
+.date-course-view label {
+  margin-top: 0;
+}
+
+.date-course-summary {
+  align-items: center;
+  background: #f8f9f6;
+  border: 1px solid #e2e7e2;
+  border-radius: 7px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.date-course-summary span {
+  color: #53605a;
+  font-size: 13px;
+}
+
+.date-course-summary strong {
+  color: #17201b;
+  font-size: 16px;
+}
+
 .filter-toggles {
   display: grid;
   gap: 8px;
@@ -442,6 +489,11 @@ button:disabled {
 .recommendation-list {
   display: grid;
   gap: 10px;
+}
+
+.day-course-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 14px;
 }
 
 .course-row,
@@ -772,6 +824,19 @@ button:disabled {
 
   .mini-actions {
     width: 100%;
+  }
+
+  .calendar-actions,
+  .calendar-actions .compact-button {
+    width: 100%;
+  }
+
+  .calendar-actions .compact-button {
+    justify-content: center;
+  }
+
+  .date-course-view {
+    grid-template-columns: 1fr;
   }
 
   .filter-toggles {

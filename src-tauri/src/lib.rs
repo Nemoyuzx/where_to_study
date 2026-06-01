@@ -1,10 +1,12 @@
 mod auth;
+mod calendar_export;
 mod classrooms;
 mod config;
 mod error;
 mod models;
 mod recommender;
 mod schedule;
+mod schedule_store;
 mod settings_store;
 
 use chrono::{Duration as ChronoDuration, NaiveDate};
@@ -46,9 +48,29 @@ fn save_saved_settings(
 }
 
 #[tauri::command]
-async fn fetch_schedule(payload: ScheduleRequest) -> Result<ScheduleResponse, String> {
-    schedule::fetch_schedule(&payload)
+fn load_saved_schedule(app: tauri::AppHandle) -> Result<Option<ScheduleResponse>, String> {
+    schedule_store::load(&app).map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_schedule(
+    app: tauri::AppHandle,
+    payload: ScheduleRequest,
+) -> Result<ScheduleResponse, String> {
+    let schedule = schedule::fetch_schedule(&payload)
         .await
+        .map_err(|error| error.message)?;
+    schedule_store::save(&app, &schedule).map_err(|error| error.message)?;
+    Ok(schedule)
+}
+
+#[tauri::command]
+fn import_schedule_to_calendar(app: tauri::AppHandle) -> Result<String, String> {
+    let Some(schedule) = schedule_store::load(&app).map_err(|error| error.message)? else {
+        return Err("请先获取个人课表，获取成功后会自动保存到本地。".to_string());
+    };
+    calendar_export::export_and_open(&app, &schedule)
+        .map(|path| path.to_string_lossy().to_string())
         .map_err(|error| error.message)
 }
 
@@ -61,6 +83,7 @@ async fn fetch_classrooms(payload: ClassroomsRequest) -> Result<ClassroomsRespon
 
 #[tauri::command]
 async fn fetch_recommendations(
+    app: tauri::AppHandle,
     payload: RecommendationRequest,
 ) -> Result<RecommendationResponse, String> {
     let schedule_request = ScheduleRequest {
@@ -79,6 +102,7 @@ async fn fetch_recommendations(
     let schedule = schedule::fetch_schedule(&schedule_request)
         .await
         .map_err(|error| error.message)?;
+    schedule_store::save(&app, &schedule).map_err(|error| error.message)?;
     let classrooms = classrooms::fetch_classrooms(&classrooms_request)
         .await
         .map_err(|error| error.message)?;
@@ -310,7 +334,18 @@ fn build_tray_day_courses(
 }
 
 #[cfg(not(mobile))]
-async fn load_today_course_content(app: tauri::AppHandle) -> TrayCourseContent {
+async fn load_today_course_content(
+    app: tauri::AppHandle,
+    prefer_saved_schedule: bool,
+) -> TrayCourseContent {
+    if prefer_saved_schedule {
+        match schedule_store::load(&app) {
+            Ok(Some(schedule)) => return schedule_to_tray_content(schedule),
+            Ok(None) => {}
+            Err(error) => return TrayCourseContent::Message(error.message),
+        }
+    }
+
     let settings = match settings_store::load(&app) {
         Ok(settings) => settings,
         Err(error) => return TrayCourseContent::Message(error.message),
@@ -322,9 +357,17 @@ async fn load_today_course_content(app: tauri::AppHandle) -> TrayCourseContent {
         term_start_date: non_empty_option(settings.term_start_date),
     };
     let schedule = match schedule::fetch_schedule(&request).await {
-        Ok(schedule) => schedule,
+        Ok(schedule) => {
+            let _ = schedule_store::save(&app, &schedule);
+            schedule
+        }
         Err(error) => return TrayCourseContent::Message(error.message),
     };
+    schedule_to_tray_content(schedule)
+}
+
+#[cfg(not(mobile))]
+fn schedule_to_tray_content(schedule: ScheduleResponse) -> TrayCourseContent {
     let term_start_date = match NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d") {
         Ok(date) => date,
         Err(_) => {
@@ -349,10 +392,10 @@ fn set_tray_menu(app: &tauri::AppHandle, content: TrayCourseContent) -> tauri::R
 }
 
 #[cfg(not(mobile))]
-fn refresh_tray_courses(app: tauri::AppHandle) {
+fn refresh_tray_courses(app: tauri::AppHandle, prefer_saved_schedule: bool) {
     let _ = set_tray_menu(&app, TrayCourseContent::Loading);
     tauri::async_runtime::spawn(async move {
-        let content = load_today_course_content(app.clone()).await;
+        let content = load_today_course_content(app.clone(), prefer_saved_schedule).await;
         let _ = set_tray_menu(&app, content);
     });
 }
@@ -384,7 +427,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 show_main_window(app);
                 let _ = app.emit("tray:navigate", "settings");
             }
-            "refresh_today" => refresh_tray_courses(app.clone()),
+            "refresh_today" => refresh_tray_courses(app.clone(), false),
             "quit" => app.exit(0),
             _ => {}
         });
@@ -395,7 +438,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         tray = tray.icon(icon).icon_as_template(false);
     }
     tray.build(app)?;
-    refresh_tray_courses(app.app_handle().clone());
+    refresh_tray_courses(app.app_handle().clone(), true);
     Ok(())
 }
 
@@ -438,7 +481,9 @@ pub fn run() {
             get_metadata,
             load_saved_settings,
             save_saved_settings,
+            load_saved_schedule,
             fetch_schedule,
+            import_schedule_to_calendar,
             fetch_classrooms,
             fetch_recommendations
         ])
