@@ -107,13 +107,7 @@ pub async fn login_empty_classroom(account: &str, password: &str) -> ServiceResu
     let response = client
         .post(EMPTY_CLASSROOM_LOGIN_URL)
         .headers(sjd_headers(None, SJD_LOGIN_PAGE_URL))
-        .form(&[
-            ("userNo", account),
-            ("pwd", password),
-            ("encode", "1"),
-            ("captchaData", ""),
-            ("codeVal", ""),
-        ])
+        .form(&[("userNo", account), ("pwd", password)])
         .send()
         .await
         .map_err(|_| {
