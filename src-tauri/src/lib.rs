@@ -3,6 +3,7 @@ mod calendar_export;
 mod classrooms;
 mod config;
 mod error;
+mod holidays;
 mod models;
 mod recommender;
 mod schedule;
@@ -22,8 +23,8 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
 
 use crate::models::{
-    ClassroomsRequest, ClassroomsResponse, MetadataResponse, SavedSettings, ScheduleRequest,
-    ScheduleResponse,
+    ClassroomsRequest, ClassroomsResponse, HolidaysRequest, HolidaysResponse, MetadataResponse,
+    SavedSettings, ScheduleRequest, ScheduleResponse,
 };
 
 #[tauri::command]
@@ -80,6 +81,16 @@ fn import_schedule_to_calendar(app: tauri::AppHandle) -> Result<String, String> 
 async fn fetch_classrooms(mut payload: ClassroomsRequest) -> Result<ClassroomsResponse, String> {
     payload.target_date = Some(config::today_in_app_tz().to_string());
     classrooms::fetch_classrooms(&payload)
+        .await
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_holidays(
+    app: tauri::AppHandle,
+    payload: HolidaysRequest,
+) -> Result<HolidaysResponse, String> {
+    holidays::fetch_holidays(&app, payload.year)
         .await
         .map_err(|error| error.message)
 }
@@ -498,7 +509,8 @@ pub fn run() {
             load_saved_schedule,
             fetch_schedule,
             import_schedule_to_calendar,
-            fetch_classrooms
+            fetch_classrooms,
+            fetch_holidays
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -14,6 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ANDROID_NDK_VERSION: 27.2.12479018
+      ANDROID_SIGNING_READY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -50,23 +55,50 @@ jobs:
 
       - name: Expose Android toolchain
         run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
-          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+          {
+            echo "ANDROID_HOME=$ANDROID_SDK_ROOT"
+            echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}"
+            echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}"
+          } >> "$GITHUB_ENV"
           echo "$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
-      - name: Build unsigned Android APK
+      - name: Prepare Android signing
+        if: env.ANDROID_SIGNING_READY == 'true'
+        run: |
+          KEYSTORE_PATH="$RUNNER_TEMP/android-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          {
+            echo "ANDROID_SIGNING_STORE_FILE=$KEYSTORE_PATH"
+            echo "ANDROID_SIGNING_STORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+            echo "ANDROID_SIGNING_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+            echo "ANDROID_SIGNING_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build Android APK
+        if: env.ANDROID_SIGNING_READY != 'true'
         run: ./scripts/android-build-local.sh
+
+      - name: Build signed Android APK
+        if: env.ANDROID_SIGNING_READY == 'true'
+        run: ./scripts/android-build-signed.sh
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
           name: where-to-study-android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release*.apk
           if-no-files-found: error
 
   ios:
     runs-on: macos-latest
+    env:
+      IOS_SIGNING_READY: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 != '' && secrets.IOS_CERTIFICATE_PASSWORD != '' && secrets.IOS_MOBILEPROVISION_BASE64 != '' && secrets.APPLE_DEVELOPMENT_TEAM != '' }}
+      IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      IOS_MOBILEPROVISION_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+      APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+      IOS_EXPORT_METHOD: ${{ secrets.IOS_EXPORT_METHOD }}
 
     steps:
       - name: Checkout
@@ -92,10 +124,53 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Prepare iOS signing assets
+        if: env.IOS_SIGNING_READY == 'true'
+        run: |
+          CERT_PATH="$RUNNER_TEMP/ios-signing.p12"
+          PROFILE_PATH="$RUNNER_TEMP/ios-signing.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="${IOS_KEYCHAIN_PASSWORD:-temp-$(uuidgen)}"
+
+          printf '%s' "$IOS_CERTIFICATE_P12_BASE64" | base64 -D > "$CERT_PATH"
+          printf '%s' "$IOS_MOBILEPROVISION_BASE64" | base64 -D > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$IOS_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -d user -s "$KEYCHAIN_PATH"
+
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
+          {
+            echo "APPLE_DEVELOPMENT_TEAM=$APPLE_DEVELOPMENT_TEAM"
+            if [ -n "${IOS_EXPORT_METHOD:-}" ]; then
+              echo "IOS_EXPORT_METHOD=$IOS_EXPORT_METHOD"
+            fi
+          } >> "$GITHUB_ENV"
+
+      - name: Build signed iOS IPA
+        if: env.IOS_SIGNING_READY == 'true'
+        run: printf 'y\n' | ./scripts/ios-build-signed.sh
+
       - name: Build unsigned iOS archive
+        if: env.IOS_SIGNING_READY != 'true'
         run: printf 'y\n' | ./scripts/ios-build-local.sh
 
+      - name: Upload signed iOS IPA
+        if: env.IOS_SIGNING_READY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: where-to-study-ios-ipa
+          path: src-tauri/gen/apple/build/**/*.ipa
+          if-no-files-found: error
+
       - name: Upload iOS archive
+        if: env.IOS_SIGNING_READY != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: where-to-study-ios-xcarchive

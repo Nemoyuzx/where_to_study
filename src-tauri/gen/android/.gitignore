@@ -15,6 +15,9 @@ build
 local.properties
 key.properties
 keystore.properties
+keystore/
+*.jks
+*.keystore
 
 /.tauri
 /tauri.settings.gradle

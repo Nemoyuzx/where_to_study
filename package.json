@@ -14,11 +14,14 @@
     "tauri:android:init": "tauri android init",
     "tauri:android:dev": "tauri android dev",
     "tauri:android:build": "tauri android build",
+    "tauri:android:sign:init": "./scripts/android-signing-init.sh",
     "tauri:android:build:local": "./scripts/android-build-local.sh",
+    "tauri:android:build:signed": "./scripts/android-build-signed.sh",
     "tauri:ios:init": "tauri ios init",
     "tauri:ios:dev": "tauri ios dev",
     "tauri:ios:build": "tauri ios build",
-    "tauri:ios:build:unsigned": "./scripts/ios-build-local.sh"
+    "tauri:ios:build:unsigned": "./scripts/ios-build-local.sh",
+    "tauri:ios:build:signed": "./scripts/ios-build-signed.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

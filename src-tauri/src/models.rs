@@ -80,6 +80,27 @@ pub struct ClassroomsRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HolidaysRequest {
+    pub year: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HolidayItem {
+    pub date: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HolidaysResponse {
+    pub year: i32,
+    pub source: String,
+    pub fetched_at: String,
+    pub items: Vec<HolidayItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Course {
     pub id: String,
     pub name: String,

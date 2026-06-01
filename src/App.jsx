@@ -62,7 +62,7 @@ const NAV_ITEMS = [
   { id: 'settings', label: '设置', Icon: Settings },
 ]
 
-const CHINA_HOLIDAY_PERIODS_2026 = [
+const FALLBACK_HOLIDAY_PERIODS_2026 = [
   { name: '元旦', start: '2026-01-01', end: '2026-01-03' },
   { name: '春节', start: '2026-02-15', end: '2026-02-23' },
   { name: '清明节', start: '2026-04-04', end: '2026-04-06' },
@@ -72,13 +72,13 @@ const CHINA_HOLIDAY_PERIODS_2026 = [
   { name: '国庆节', start: '2026-10-01', end: '2026-10-07' },
 ]
 
-const CHINA_WORKDAY_ADJUSTMENTS_2026 = [
-  { name: '元旦调休', date: '2026-01-04' },
-  { name: '春节调休', date: '2026-02-14' },
-  { name: '春节调休', date: '2026-02-28' },
-  { name: '劳动节调休', date: '2026-05-09' },
-  { name: '国庆节调休', date: '2026-09-20' },
-  { name: '国庆节调休', date: '2026-10-10' },
+const FALLBACK_WORKDAY_ADJUSTMENTS_2026 = [
+  { name: '元旦', date: '2026-01-04' },
+  { name: '春节', date: '2026-02-14' },
+  { name: '春节', date: '2026-02-28' },
+  { name: '劳动节', date: '2026-05-09' },
+  { name: '国庆节', date: '2026-09-20' },
+  { name: '国庆节', date: '2026-10-10' },
 ]
 
 function localDateString(date = new Date()) {
@@ -104,29 +104,31 @@ function dateRange(startDate, endDate) {
   return days
 }
 
-const CHINA_CALENDAR_DAY_MAP = (() => {
-  const map = new Map()
-  const addItem = (dateString, item) => {
-    const nextItems = map.get(dateString) || []
-    nextItems.push(item)
-    map.set(dateString, nextItems)
-  }
+function fallbackHolidayItems(year) {
+  if (year !== 2026) return []
+  const items = []
 
-  CHINA_HOLIDAY_PERIODS_2026.forEach((holiday) => {
+  FALLBACK_HOLIDAY_PERIODS_2026.forEach((holiday) => {
     dateRange(holiday.start, holiday.end).forEach((dateString) => {
-      addItem(dateString, { name: holiday.name, type: 'holiday' })
+      items.push({ date: dateString, name: holiday.name, type: 'holiday' })
     })
   })
 
-  CHINA_WORKDAY_ADJUSTMENTS_2026.forEach((workday) => {
-    addItem(workday.date, { name: workday.name, type: 'workday' })
+  FALLBACK_WORKDAY_ADJUSTMENTS_2026.forEach((workday) => {
+    items.push({ date: workday.date, name: workday.name, type: 'workday' })
   })
 
-  return map
-})()
+  return items
+}
 
-function getChinaCalendarItems(dateString) {
-  return CHINA_CALENDAR_DAY_MAP.get(dateString) || []
+function buildCalendarDayMap(items) {
+  const map = new Map()
+  items.forEach((item) => {
+    const nextItems = map.get(item.date) || []
+    nextItems.push({ name: item.name, type: item.type })
+    map.set(item.date, nextItems)
+  })
+  return map
 }
 
 function hasCalendarItemType(items, type) {
@@ -304,6 +306,14 @@ function App() {
   const [minSeats, setMinSeats] = useState(0)
   const [usePersonalSchedule, setUsePersonalSchedule] = useState(true)
   const [calendarPopover, setCalendarPopover] = useState(null)
+  const [holidayDataByYear, setHolidayDataByYear] = useState(() => ({
+    2026: {
+      year: 2026,
+      source: 'fallback',
+      fetched_at: '',
+      items: fallbackHolidayItems(2026),
+    },
+  }))
   const [now, setNow] = useState(() => new Date())
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
@@ -312,6 +322,7 @@ function App() {
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
+  const requestedHolidayYears = useRef(new Set())
 
   useEffect(() => {
     command('get_metadata')
@@ -415,6 +426,16 @@ function App() {
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
   const activeTermId = schedule?.term_id || settings.termId
   const activeTermStartDate = schedule?.term_start_date || settings.termStartDate
+  const calendarYear = dateFromString(calendarDate).getFullYear()
+  const calendarHolidayItems = useMemo(
+    () => Object.values(holidayDataByYear).flatMap((data) => data.items || []),
+    [holidayDataByYear],
+  )
+  const calendarDayMap = useMemo(
+    () => buildCalendarDayMap(calendarHolidayItems),
+    [calendarHolidayItems],
+  )
+  const calendarItemsFor = (dateString) => calendarDayMap.get(dateString) || []
   const plannerWeekState = useMemo(
     () => getWeekState(courses, activeTermStartDate, todayDate),
     [courses, activeTermStartDate, todayDate],

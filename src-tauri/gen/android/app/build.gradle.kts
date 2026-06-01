@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -13,9 +14,51 @@ val tauriProperties = Properties().apply {
     }
 }
 
+val signingProperties = Properties().apply {
+    val propFile = listOf(
+        rootProject.file("keystore.properties"),
+        rootProject.file("key.properties"),
+        file("keystore.properties"),
+        file("key.properties")
+    )
+        .firstOrNull(File::exists)
+    if (propFile != null) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
+fun signingValue(propertyName: String, envName: String): String? {
+    val propertyValue = signingProperties.getProperty(propertyName)?.trim().orEmpty()
+    if (propertyValue.isNotEmpty()) {
+        return propertyValue
+    }
+
+    val envValue = System.getenv(envName)?.trim().orEmpty()
+    return envValue.ifEmpty { null }
+}
+
+val releaseStoreFile = signingValue("storeFile", "ANDROID_SIGNING_STORE_FILE")?.let(::file)
+val releaseStorePassword = signingValue("storePassword", "ANDROID_SIGNING_STORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "ANDROID_SIGNING_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "ANDROID_SIGNING_KEY_PASSWORD")
+val hasReleaseSigning = releaseStoreFile?.exists() == true
+    && !releaseStorePassword.isNullOrBlank()
+    && !releaseKeyAlias.isNullOrBlank()
+    && !releaseKeyPassword.isNullOrBlank()
+
 android {
     compileSdk = 36
     namespace = "com.nemoyu.wheretostudy"
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.nemoyu.wheretostudy"
@@ -38,6 +81,9 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
                     .plus(getDefaultProguardFile("proguard-android-optimize.txt"))
