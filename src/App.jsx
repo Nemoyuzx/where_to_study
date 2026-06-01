@@ -573,18 +573,41 @@ function App() {
         </aside>
 
         <section className="page-content">
-          {activePage !== 'calendar' ? (
-            <header className="topbar">
-              <div>
-                <p className="eyebrow">BUPT Classroom Planner</p>
-                <h1>{activePage === 'settings' ? '设置' : '空教室与个人课表联动查询'}</h1>
+          <header className={`topbar ${activePage === 'calendar' ? 'calendar-topbar' : ''}`}>
+            <div>
+              <p className="eyebrow">BUPT Classroom Planner</p>
+              <h1>{activePage === 'calendar' ? '教学日历' : activePage === 'settings' ? '设置' : '空教室与个人课表联动查询'}</h1>
+              {activePage === 'calendar' ? (
+                <p className="topbar-subtitle">
+                  {formatCalendarTitle(calendarDate, calendarView)} · 第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入
+                </p>
+              ) : null}
+            </div>
+            {activePage === 'calendar' ? (
+              <div className="calendar-toolbar-actions">
+                <div className="calendar-view-switch" aria-label="日历视图">
+                  {CALENDAR_VIEWS.map((view) => (
+                    <button
+                      key={view.id}
+                      type="button"
+                      className={calendarView === view.id ? 'active' : ''}
+                      onClick={() => setCalendarView(view.id)}
+                    >
+                      {view.label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
+                <button type="button" className="calendar-today-button" onClick={() => setCalendarDate(todayDate)}>今天</button>
+                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
               </div>
+            ) : (
               <div className="status-pill">
                 <Clock3 size={16} />
                 <span>{todayDate}</span>
               </div>
-            </header>
-          ) : null}
+            )}
+          </header>
 
           {error ? (
             <div className="notice error">
@@ -854,33 +877,6 @@ function App() {
 
           {activePage === 'calendar' ? (
         <section className="calendar-page">
-          <div className="teaching-calendar-toolbar">
-            <div className="calendar-title-group">
-              <p className="eyebrow">BUPT Classroom Planner</p>
-              <h2>教学日历</h2>
-              <p>
-                {formatCalendarTitle(calendarDate, calendarView)} · 第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入
-              </p>
-            </div>
-            <div className="calendar-toolbar-actions">
-              <div className="calendar-view-switch" aria-label="日历视图">
-                {CALENDAR_VIEWS.map((view) => (
-                  <button
-                    key={view.id}
-                    type="button"
-                    className={calendarView === view.id ? 'active' : ''}
-                    onClick={() => setCalendarView(view.id)}
-                  >
-                    {view.label}
-                  </button>
-                ))}
-              </div>
-              <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
-              <button type="button" className="calendar-today-button" onClick={() => setCalendarDate(todayDate)}>今天</button>
-              <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
-            </div>
-          </div>
-
           <div className="teaching-calendar-layout">
             <section className="teaching-calendar-main">
               <div className="calendar-action-strip">
