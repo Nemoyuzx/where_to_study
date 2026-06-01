@@ -170,7 +170,7 @@ function App() {
   const [activePage, setActivePage] = useState('planner')
   const [metadata, setMetadata] = useState({ campuses: [], slots: FALLBACK_SLOTS })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
-  const [targetDate, setTargetDate] = useState(localDateString())
+  const [calendarDate, setCalendarDate] = useState(localDateString())
   const [schedule, setSchedule] = useState(null)
   const [classrooms, setClassrooms] = useState(null)
   const [recommendations, setRecommendations] = useState(null)
@@ -236,16 +236,21 @@ function App() {
   }, [])
 
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
+  const todayDate = localDateString()
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
   const activeTermId = schedule?.term_id || settings.termId
   const activeTermStartDate = schedule?.term_start_date || settings.termStartDate
-  const weekState = useMemo(
-    () => getWeekState(courses, activeTermStartDate, targetDate),
-    [courses, activeTermStartDate, targetDate],
+  const plannerWeekState = useMemo(
+    () => getWeekState(courses, activeTermStartDate, todayDate),
+    [courses, activeTermStartDate, todayDate],
+  )
+  const calendarWeekState = useMemo(
+    () => getWeekState(courses, activeTermStartDate, calendarDate),
+    [courses, activeTermStartDate, calendarDate],
   )
   const busySlots = useMemo(
-    () => (usePersonalSchedule ? weekState.busySlots : []),
-    [usePersonalSchedule, weekState.busySlots],
+    () => (usePersonalSchedule ? plannerWeekState.busySlots : []),
+    [usePersonalSchedule, plannerWeekState.busySlots],
   )
   const freeSlots = useMemo(
     () => slotMeta.map((slot) => slot.index).filter((slot) => !busySlots.includes(slot)),
@@ -275,8 +280,8 @@ function App() {
   const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
   const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
   const teachingWeeks = useMemo(
-    () => buildTeachingWeeks(activeTermStartDate, courses, weekState.weekNumber),
-    [courses, activeTermStartDate, weekState.weekNumber],
+    () => buildTeachingWeeks(activeTermStartDate, courses, calendarWeekState.weekNumber),
+    [courses, activeTermStartDate, calendarWeekState.weekNumber],
   )
 
   useEffect(() => {
@@ -341,13 +346,12 @@ function App() {
     setUsePersonalSchedule(nextValue)
     setRecommendations(null)
     if (nextValue) {
-      setSelectedSlots((current) => current.filter((slot) => !weekState.busySlots.includes(slot)))
+      setSelectedSlots((current) => current.filter((slot) => !plannerWeekState.busySlots.includes(slot)))
     }
   }
 
   function chooseCalendarDate(dateString) {
-    setTargetDate(dateString)
-    setRecommendations(null)
+    setCalendarDate(dateString)
   }
 
   async function runTask(name, task) {
@@ -371,7 +375,7 @@ function App() {
       setSchedule(data)
       setCalendarImportedPath('')
       setUsePersonalSchedule(true)
-      const nextState = getWeekState(data.courses, data.term_start_date, targetDate)
+      const nextState = getWeekState(data.courses, data.term_start_date, todayDate)
       const nextFreeSlots = slotMeta.map((slot) => slot.index).filter((slot) => !nextState.busySlots.includes(slot))
       setSelectedSlots(nextFreeSlots)
       setRecommendations(null)
@@ -382,7 +386,7 @@ function App() {
     await runTask('classrooms', async () => {
       const data = await command('fetch_classrooms', requestBody(settings, {
         campus_id: settings.campusId,
-        target_date: targetDate,
+        target_date: todayDate,
       }))
       setClassrooms(data)
       setRecommendations(null)
@@ -393,7 +397,7 @@ function App() {
     await runTask('recommendations', async () => {
       const data = await command('fetch_recommendations', requestBody(settings, {
         campus_id: settings.campusId,
-        target_date: targetDate,
+        target_date: todayDate,
         term_id: settings.termId,
         term_start_date: settings.termStartDate,
         selected_slots: selectedSlots,
@@ -454,7 +458,7 @@ function App() {
             </div>
             <div className="status-pill">
               <Clock3 size={16} />
-              <span>{targetDate}</span>
+              <span>{activePage === 'calendar' ? calendarDate : todayDate}</span>
             </div>
           </header>
 
@@ -477,11 +481,8 @@ function App() {
                 日期
                 <input
                   type="date"
-                  value={targetDate}
-                  onChange={(event) => {
-                    setTargetDate(event.target.value)
-                    setRecommendations(null)
-                  }}
+                  value={todayDate}
+                  disabled
                 />
               </label>
               <div className="field-group">
@@ -539,7 +540,7 @@ function App() {
             <section className="summary-band">
               <div>
                 <span>当天课程</span>
-                <strong>{weekState.dayCourses.length}</strong>
+                <strong>{plannerWeekState.dayCourses.length}</strong>
               </div>
               <div>
                 <span>个人空闲节次</span>
@@ -619,7 +620,7 @@ function App() {
                 })}
               </div>
               <p className="muted">
-                第 {weekState.weekNumber || '-'} 周，选中范围：
+                第 {plannerWeekState.weekNumber || '-'} 周，选中范围：
                 {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : '未选择'}
               </p>
             </section>
@@ -630,7 +631,7 @@ function App() {
                 <h2>当天课程</h2>
               </div>
               <div className="course-list">
-                {weekState.dayCourses.length ? weekState.dayCourses.map((course) => (
+                {plannerWeekState.dayCourses.length ? plannerWeekState.dayCourses.map((course) => (
                   <article key={course.id} className="course-row">
                     <div>
                       <strong>{course.name}</strong>
@@ -740,7 +741,7 @@ function App() {
             </div>
             <div>
               <span>当前周</span>
-              <strong>{weekState.weekNumber || '-'}</strong>
+              <strong>{calendarWeekState.weekNumber || '-'}</strong>
             </div>
             <div>
               <span>已载入课程</span>
@@ -770,18 +771,18 @@ function App() {
                 查看日期
                 <input
                   type="date"
-                  value={targetDate}
+                  value={calendarDate}
                   onChange={(event) => chooseCalendarDate(event.target.value)}
                 />
               </label>
               <div className="date-course-summary">
-                <span>{targetDate} · 第 {weekState.weekNumber || '-'} 周 · {WEEKDAY_LABELS[(weekState.weekday || 1) - 1] || '-'}</span>
-                <strong>{weekState.dayCourses.length} 门课</strong>
+                <span>{calendarDate} · 第 {calendarWeekState.weekNumber || '-'} 周 · {WEEKDAY_LABELS[(calendarWeekState.weekday || 1) - 1] || '-'}</span>
+                <strong>{calendarWeekState.dayCourses.length} 门课</strong>
               </div>
             </div>
             <div className="course-list day-course-list">
-              {weekState.dayCourses.length ? weekState.dayCourses.map((course) => (
-                <article key={`${targetDate}-${course.id}`} className="course-row">
+              {calendarWeekState.dayCourses.length ? calendarWeekState.dayCourses.map((course) => (
+                <article key={`${calendarDate}-${course.id}`} className="course-row">
                   <div>
                     <strong>{course.name}</strong>
                     <span>{course.teacher || '教师未标注'}</span>
@@ -804,11 +805,11 @@ function App() {
                 {WEEKDAY_LABELS.map((label) => <span key={label}>{label}</span>)}
               </div>
               {teachingWeeks.map((week) => (
-                <div key={week.weekNumber} className={`calendar-row ${week.weekNumber === weekState.weekNumber ? 'current-week' : ''}`}>
+                <div key={week.weekNumber} className={`calendar-row ${week.weekNumber === calendarWeekState.weekNumber ? 'current-week' : ''}`}>
                   <div className="calendar-week">第 {week.weekNumber} 周</div>
                   {week.days.map((dateString, dayIndex) => {
                     const dayState = getWeekState(courses, activeTermStartDate, dateString)
-                    const isTarget = dateString === targetDate
+                    const isTarget = dateString === calendarDate
                     const isToday = dateString === localDateString()
                     return (
                       <button

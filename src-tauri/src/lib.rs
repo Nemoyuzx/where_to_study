@@ -75,7 +75,8 @@ fn import_schedule_to_calendar(app: tauri::AppHandle) -> Result<String, String> 
 }
 
 #[tauri::command]
-async fn fetch_classrooms(payload: ClassroomsRequest) -> Result<ClassroomsResponse, String> {
+async fn fetch_classrooms(mut payload: ClassroomsRequest) -> Result<ClassroomsResponse, String> {
+    payload.target_date = Some(config::today_in_app_tz().to_string());
     classrooms::fetch_classrooms(&payload)
         .await
         .map_err(|error| error.message)
@@ -92,11 +93,12 @@ async fn fetch_recommendations(
         term_id: payload.term_id.clone(),
         term_start_date: payload.term_start_date.clone(),
     };
+    let today_date = config::today_in_app_tz().to_string();
     let classrooms_request = ClassroomsRequest {
         account: payload.account.clone(),
         password: payload.password.clone(),
         campus_id: payload.campus_id.clone(),
-        target_date: payload.target_date.clone(),
+        target_date: Some(today_date.clone()),
     };
 
     let schedule = schedule::fetch_schedule(&schedule_request)
@@ -109,7 +111,7 @@ async fn fetch_recommendations(
 
     let term_start_date = NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d")
         .map_err(|_| "第一周周一日期格式不正确。".to_string())?;
-    let target_date = recommender::parse_optional_date(payload.target_date.as_deref(), "查询日期")
+    let target_date = recommender::parse_optional_date(Some(&today_date), "查询日期")
         .map_err(|error| error.message)?;
 
     Ok(recommender::recommend(
