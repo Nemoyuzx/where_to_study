@@ -55,6 +55,12 @@ const DEFAULT_SETTINGS = {
   defaultMinSeats: 0,
 }
 
+const NAV_ITEMS = [
+  { id: 'planner', label: '空教室', Icon: Home },
+  { id: 'calendar', label: '教学日历', Icon: CalendarRange },
+  { id: 'settings', label: '设置', Icon: Settings },
+]
+
 function localDateString(date = new Date()) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -546,18 +552,19 @@ function App() {
             <strong>Where To Study</strong>
           </div>
           <nav className="app-nav" aria-label="应用导航">
-            <button type="button" className={activePage === 'planner' ? 'active' : ''} onClick={() => setActivePage('planner')}>
-              <Home size={17} />
-              空教室
-            </button>
-            <button type="button" className={activePage === 'calendar' ? 'active' : ''} onClick={() => setActivePage('calendar')}>
-              <CalendarRange size={17} />
-              教学日历
-            </button>
-            <button type="button" className={activePage === 'settings' ? 'active' : ''} onClick={() => setActivePage('settings')}>
-              <Settings size={17} />
-              设置
-            </button>
+            {NAV_ITEMS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                className={activePage === id ? 'active' : ''}
+                onClick={() => setActivePage(id)}
+                aria-label={label}
+                title={label}
+              >
+                <Icon size={17} />
+                <span className="nav-label">{label}</span>
+              </button>
+            ))}
           </nav>
         </aside>
 

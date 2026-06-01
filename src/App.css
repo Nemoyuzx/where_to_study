@@ -88,6 +88,10 @@
   grid-auto-rows: 44px;
 }
 
+.nav-label {
+  display: inline;
+}
+
 .app-nav button,
 .compact-button,
 .settings-actions button {
@@ -1185,19 +1189,39 @@ button:disabled {
 
 @media (max-width: 720px) {
   .app-frame {
-    grid-template-columns: 112px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 
   .page-content {
+    grid-row: 1;
     padding: 10px;
   }
 
   .side-nav {
-    padding: 10px 8px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.92);
+    border-right: 0;
+    border-top: 1px solid #dfe4df;
+    box-shadow: 0 -10px 28px rgba(18, 31, 27, 0.08);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+    gap: 0;
+    grid-row: 2;
+    grid-template-rows: 1fr;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
   }
 
-  .side-brand strong {
-    font-size: 13px;
+  .side-brand {
+    display: none;
+  }
+
+  .app-nav {
+    align-items: center;
+    gap: 6px;
+    grid-auto-rows: 48px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
   }
 
   .topbar {
@@ -1208,14 +1232,84 @@ button:disabled {
   }
 
   .app-nav button {
-    flex-direction: column;
-    font-size: 12px;
-    gap: 4px;
-    height: 54px;
+    background: transparent;
+    border: 0;
+    border-radius: 16px;
+    color: #7a8580;
+    gap: 0;
+    height: 48px;
     justify-content: center;
-    min-height: 54px;
-    padding: 0 6px;
-    text-align: center;
+    min-height: 48px;
+    padding: 0;
+    position: relative;
+    transition: color 0.18s ease, transform 0.18s ease;
+  }
+
+  .app-nav button::before {
+    background: linear-gradient(180deg, rgba(31, 123, 107, 0.14), rgba(31, 123, 107, 0.22));
+    border: 1px solid rgba(31, 123, 107, 0.12);
+    border-radius: 999px;
+    box-shadow: 0 8px 20px rgba(22, 107, 93, 0.12);
+    content: '';
+    height: 36px;
+    left: 50%;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.82);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    width: 44px;
+  }
+
+  .app-nav button::after {
+    background: #166b5d;
+    border-radius: 999px;
+    content: '';
+    height: 4px;
+    left: 50%;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    bottom: 3px;
+    transform: translateX(-50%) scaleX(0.45);
+    transform-origin: center;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    width: 18px;
+  }
+
+  .app-nav button svg {
+    height: 20px;
+    position: relative;
+    transition: transform 0.18s ease;
+    width: 20px;
+    z-index: 1;
+  }
+
+  .app-nav button.active {
+    background: transparent;
+    border-color: transparent;
+    color: #166b5d;
+    transform: translateY(-1px);
+  }
+
+  .app-nav button.active::before,
+  .app-nav button:focus-visible::before {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .app-nav button.active::after {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1);
+  }
+
+  .app-nav button.active svg {
+    transform: scale(1.06);
+  }
+
+  .app-nav .nav-label {
+    display: none;
   }
 
   .eyebrow {
