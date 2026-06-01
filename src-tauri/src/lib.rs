@@ -67,7 +67,7 @@ async fn fetch_schedule(
 #[tauri::command]
 fn import_schedule_to_calendar(app: tauri::AppHandle) -> Result<String, String> {
     let Some(schedule) = schedule_store::load(&app).map_err(|error| error.message)? else {
-        return Err("请先获取个人课表，获取成功后会自动保存到本地。".to_string());
+        return Err("请先获取/刷新个人课表，获取成功后会自动保存到本地。".to_string());
     };
     calendar_export::export_and_open(&app, &schedule)
         .map(|path| path.to_string_lossy().to_string())

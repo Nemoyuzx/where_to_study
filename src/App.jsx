@@ -523,7 +523,7 @@ function App() {
             <section className="panel action-panel">
               <button type="button" onClick={loadSchedule} disabled={!!loading}>
                 {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-                获取个人课表
+                获取/刷新个人课表
               </button>
               <button type="button" onClick={loadClassrooms} disabled={!!loading}>
                 {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
@@ -758,7 +758,7 @@ function App() {
               <div className="calendar-actions">
                 <button type="button" className="compact-button" onClick={loadSchedule} disabled={!!loading}>
                   {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-                  获取个人课表
+                  获取/刷新个人课表
                 </button>
                 <button type="button" className="compact-button" onClick={importAppleCalendar} disabled={!!loading || !courses.length}>
                   {loading === 'calendar-import' ? <Loader2 className="spin" size={17} /> : <CalendarPlus size={17} />}
