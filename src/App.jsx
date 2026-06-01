@@ -294,6 +294,25 @@ function browserPreviewCommand(name, payload = {}) {
   return null
 }
 
+function PlannerSummary({ dayCoursesCount, freeSlotsCount, matchingRoomsCount, className = '' }) {
+  return (
+    <section className={`summary-band ${className}`.trim()}>
+      <div>
+        <span>当天课程</span>
+        <strong>{dayCoursesCount}</strong>
+      </div>
+      <div>
+        <span>个人空闲节次</span>
+        <strong>{freeSlotsCount}</strong>
+      </div>
+      <div>
+        <span>匹配教室</span>
+        <strong>{matchingRoomsCount}</strong>
+      </div>
+    </section>
+  )
+}
+
 async function command(name, payload) {
   if (!hasTauriRuntime()) {
     return browserPreviewCommand(name, payload)
@@ -823,14 +842,6 @@ function App() {
                 <CalendarDays size={18} />
                 <h2>查询条件</h2>
               </div>
-              <label>
-                日期
-                <input
-                  type="date"
-                  value={todayDate}
-                  disabled
-                />
-              </label>
               <div className="field-group">
                 校区
                 <div className="campus-options">
@@ -851,33 +862,14 @@ function App() {
                   ))}
                 </div>
               </div>
-              <label>
-                最少座位
-                <input
-                  type="number"
-                  min="0"
-                  value={minSeats}
-                  onChange={(event) => {
-                    setMinSeats(Number(event.target.value))
-                  }}
-                />
-              </label>
             </section>
 
-            <section className="summary-band">
-              <div>
-                <span>当天课程</span>
-                <strong>{plannerWeekState.dayCourses.length}</strong>
-              </div>
-              <div>
-                <span>个人空闲节次</span>
-                <strong>{freeSlots.length}</strong>
-              </div>
-              <div>
-                <span>匹配教室</span>
-                <strong>{needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}</strong>
-              </div>
-            </section>
+            <PlannerSummary
+              className="planner-summary-desktop"
+              dayCoursesCount={plannerWeekState.dayCourses.length}
+              freeSlotsCount={freeSlots.length}
+              matchingRoomsCount={needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}
+            />
 
             <section className="panel action-panel">
               <button type="button" onClick={loadSchedule} disabled={!!loading}>
@@ -1026,6 +1018,13 @@ function App() {
               </div>
             </section>
           </section>
+
+          <PlannerSummary
+            className="planner-summary-mobile"
+            dayCoursesCount={plannerWeekState.dayCourses.length}
+            freeSlotsCount={freeSlots.length}
+            matchingRoomsCount={needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}
+          />
         </div>
           ) : null}
 

@@ -345,6 +345,14 @@ button:disabled {
   overflow: hidden;
 }
 
+.planner-summary-desktop {
+  display: grid;
+}
+
+.planner-summary-mobile {
+  display: none;
+}
+
 .summary-band div {
   display: grid;
   gap: 4px;
@@ -1461,6 +1469,14 @@ button:disabled {
   .page-grid,
   .settings-layout {
     gap: 10px;
+  }
+
+  .planner-summary-desktop {
+    display: none;
+  }
+
+  .planner-summary-mobile {
+    display: grid;
   }
 
   .panel {
