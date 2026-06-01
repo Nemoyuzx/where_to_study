@@ -918,7 +918,10 @@ function App() {
                       )
                     })}
                     <div className="time-labels">
-                      {calendarHours.map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}:00</span>)}
+                      {calendarHours.map((hour) => {
+                        const top = (((hour * 60) - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                        return <span key={hour} style={{ top: `${top}%` }}>{String(hour).padStart(2, '0')}:00</span>
+                      })}
                     </div>
                     {visibleCalendarDays.map((dateString) => {
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
