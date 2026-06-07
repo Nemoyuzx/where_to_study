@@ -21,6 +21,7 @@ use crate::models::{Course, ScheduleRequest, ScheduleResponse};
 const KEY_STR: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 const DEFAULT_USER_AGENT: &str =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
+const EXAM_WEEK_ORDINALS: [usize; 2] = [17, 18];
 
 pub fn encode_inp(raw: &str) -> String {
     let bytes = raw.as_bytes();
@@ -161,6 +162,30 @@ pub struct ParsedCourse {
 
 fn slot_time_range(start_slot: usize, end_slot: usize) -> String {
     format!("{}-{}", SLOT_TIMES[start_slot].0, SLOT_TIMES[end_slot].1)
+}
+
+pub fn annotate_exam_weeks(courses: &mut [Course]) {
+    let mut existing_weeks: Vec<i64> = courses
+        .iter()
+        .flat_map(|course| course.week_numbers.iter().copied())
+        .filter(|week| *week > 0)
+        .collect();
+    existing_weeks.sort_unstable();
+    existing_weeks.dedup();
+
+    let exam_weeks: HashSet<i64> = EXAM_WEEK_ORDINALS
+        .iter()
+        .filter_map(|ordinal| existing_weeks.get(ordinal - 1).copied())
+        .collect();
+
+    for course in courses {
+        course.exam_week_numbers = course
+            .week_numbers
+            .iter()
+            .copied()
+            .filter(|week| exam_weeks.contains(week))
+            .collect();
+    }
 }
 
 fn json_string(value: Option<&Value>) -> String {
@@ -339,6 +364,7 @@ pub fn parse_sjd_courses(
             room: location,
             week_text,
             week_numbers,
+            exam_week_numbers: Vec::new(),
             weekday,
             start_slot,
             end_slot,
@@ -359,6 +385,7 @@ pub fn parse_sjd_courses(
         });
     }
 
+    annotate_exam_weeks(&mut courses);
     courses.sort_by(|left, right| {
         (left.weekday, left.start_slot, &left.name).cmp(&(
             right.weekday,
@@ -481,6 +508,7 @@ pub fn parse_timetable_xls(
                     room: parsed.room,
                     week_text: parsed.week,
                     week_numbers,
+                    exam_week_numbers: Vec::new(),
                     weekday,
                     start_slot,
                     end_slot,
@@ -491,6 +519,7 @@ pub fn parse_timetable_xls(
         }
     }
 
+    annotate_exam_weeks(&mut courses);
     courses.sort_by(|left, right| {
         (left.weekday, left.start_slot, &left.name).cmp(&(
             right.weekday,
@@ -727,6 +756,45 @@ mod tests {
                 section: "1-2节".to_string(),
             }]
         );
+    }
+
+    #[test]
+    fn annotate_exam_weeks_counts_existing_weeks_in_order() {
+        let mut courses = vec![
+            Course {
+                id: "weekly".to_string(),
+                name: "周课".to_string(),
+                teacher: String::new(),
+                room: String::new(),
+                week_text: "2-19".to_string(),
+                week_numbers: (2..=19).collect(),
+                exam_week_numbers: Vec::new(),
+                weekday: 1,
+                start_slot: 0,
+                end_slot: 1,
+                section_text: String::new(),
+                time_range: String::new(),
+            },
+            Course {
+                id: "literal-17".to_string(),
+                name: "原始第十七周".to_string(),
+                teacher: String::new(),
+                room: String::new(),
+                week_text: "17".to_string(),
+                week_numbers: vec![17],
+                exam_week_numbers: Vec::new(),
+                weekday: 2,
+                start_slot: 0,
+                end_slot: 1,
+                section_text: String::new(),
+                time_range: String::new(),
+            },
+        ];
+
+        annotate_exam_weeks(&mut courses);
+
+        assert_eq!(courses[0].exam_week_numbers, vec![18, 19]);
+        assert!(courses[1].exam_week_numbers.is_empty());
     }
 
     #[test]

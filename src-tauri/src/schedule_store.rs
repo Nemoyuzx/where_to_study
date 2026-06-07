@@ -28,8 +28,9 @@ pub fn load(app: &AppHandle) -> ServiceResult<Option<ScheduleResponse>> {
         return Ok(None);
     }
 
-    let schedule: ScheduleResponse = serde_json::from_slice(&bytes)
+    let mut schedule: ScheduleResponse = serde_json::from_slice(&bytes)
         .map_err(|error| ServiceError::new(format!("本地课表格式不正确：{error}")))?;
+    crate::schedule::annotate_exam_weeks(&mut schedule.courses);
     Ok(Some(schedule))
 }
 

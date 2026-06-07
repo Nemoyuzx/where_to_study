@@ -264,14 +264,19 @@ fn course_time_label(course: &crate::models::Course) -> String {
 }
 
 #[cfg(not(mobile))]
-fn format_course_menu_line(course: &crate::models::Course) -> String {
+fn format_course_menu_line(course: &crate::models::Course, week_number: i64) -> String {
     let room = if course.room.trim().is_empty() {
         "地点未标注".to_string()
     } else {
         course.room.clone()
     };
+    let course_name = if course.exam_week_numbers.contains(&week_number) {
+        format!("试 {}", course.name)
+    } else {
+        course.name.clone()
+    };
     truncate_menu_label(
-        format!("{}  {}  @ {}", course_time_label(course), course.name, room),
+        format!("{}  {}  @ {}", course_time_label(course), course_name, room),
         42,
     )
 }
@@ -403,7 +408,11 @@ fn build_tray_day_courses(
         label: label.to_string(),
         date: target_date.to_string(),
         week_number: state.week_number,
-        courses: state.courses.iter().map(format_course_menu_line).collect(),
+        courses: state
+            .courses
+            .iter()
+            .map(|course| format_course_menu_line(course, state.week_number))
+            .collect(),
     }
 }
 
@@ -592,7 +601,7 @@ fn daily_course_notification_content(app: &tauri::AppHandle, today: NaiveDate) -
         .courses
         .iter()
         .take(4)
-        .map(format_course_menu_line)
+        .map(|course| format_course_menu_line(course, state.week_number))
         .collect();
     if state.courses.len() > lines.len() {
         lines.push(format!(

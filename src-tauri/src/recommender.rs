@@ -59,6 +59,7 @@ mod tests {
             room: String::new(),
             week_text: String::new(),
             week_numbers: vec![1],
+            exam_week_numbers: Vec::new(),
             weekday: 1,
             start_slot: 2,
             end_slot: 3,

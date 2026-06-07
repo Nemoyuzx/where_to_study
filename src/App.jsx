@@ -366,6 +366,28 @@ function PlannerSummary({ dayCoursesCount, freeSlotsCount, matchingRoomsCount, c
   )
 }
 
+function getScheduleExamWeeks(courses) {
+  const existingWeeks = [...new Set(
+    courses.flatMap((course) => Array.isArray(course.week_numbers) ? course.week_numbers : [])
+      .filter((week) => Number.isFinite(week) && week > 0),
+  )].sort((a, b) => a - b)
+  return [existingWeeks[16], existingWeeks[17]].filter(Boolean)
+}
+
+function isExamCourseOccurrence(course, weekNumber, scheduleExamWeeks) {
+  const savedExamWeeks = Array.isArray(course.exam_week_numbers) ? course.exam_week_numbers : []
+  return savedExamWeeks.includes(weekNumber) || scheduleExamWeeks.includes(weekNumber)
+}
+
+function CourseName({ course }) {
+  return (
+    <span className="course-name-with-badge">
+      {course.is_exam ? <em className="course-exam-badge">试</em> : null}
+      <span>{course.name}</span>
+    </span>
+  )
+}
+
 async function command(name, payload) {
   if (!hasTauriRuntime()) {
     return browserPreviewCommand(name, payload)
@@ -388,8 +410,13 @@ function getWeekState(courses, termStartDate, targetDate) {
   const days = Math.floor((target - start) / 86400000)
   const weekNumber = Math.floor(days / 7) + 1
   const weekday = target.getDay() === 0 ? 7 : target.getDay()
+  const scheduleExamWeeks = getScheduleExamWeeks(courses)
   const dayCourses = courses
     .filter((course) => course.weekday === weekday && course.week_numbers.includes(weekNumber))
+    .map((course) => ({
+      ...course,
+      is_exam: isExamCourseOccurrence(course, weekNumber, scheduleExamWeeks),
+    }))
     .sort((a, b) => a.start_slot - b.start_slot || a.name.localeCompare(b.name, 'zh-Hans-CN'))
   const busySlots = [...new Set(dayCourses.flatMap((course) => {
     const slots = []
@@ -508,7 +535,7 @@ function CourseWidget() {
 
         <div className="course-widget-overview">
           <span>第 {weekState.weekNumber || '-'} 周</span>
-          <strong>{upcomingCourse ? upcomingCourse.name : schedule ? '没有待上课程' : '课表未载入'}</strong>
+          <strong>{upcomingCourse ? <CourseName course={upcomingCourse} /> : schedule ? '没有待上课程' : '课表未载入'}</strong>
           {upcomingCourse ? (
             <small>{courseTimeBounds(upcomingCourse, slotMeta).start}-{courseTimeBounds(upcomingCourse, slotMeta).end} · {upcomingCourse.room || '地点未标注'}</small>
           ) : (
@@ -526,7 +553,7 @@ function CourseWidget() {
                 <article key={course.id}>
                   <time>{bounds.start}</time>
                   <div>
-                    <strong>{course.name}</strong>
+                    <strong><CourseName course={course} /></strong>
                     <span>{bounds.start}-{bounds.end} · {course.room || '地点未标注'}</span>
                   </div>
                 </article>
@@ -1166,7 +1193,7 @@ function App() {
                 {plannerWeekState.dayCourses.length ? plannerWeekState.dayCourses.map((course) => (
                   <article key={course.id} className="course-row">
                     <div>
-                      <strong>{course.name}</strong>
+                      <strong><CourseName course={course} /></strong>
                       <span>{course.teacher || '教师未标注'}</span>
                     </div>
                     <div>
@@ -1346,7 +1373,7 @@ function App() {
                                   style={{ top: `${top}%`, height: `${height}%` }}
                                   onClick={() => chooseCalendarDate(dateString)}
                                 >
-                                  <strong>{course.name}</strong>
+                                  <strong><CourseName course={course} /></strong>
                                   <span>{bounds.start}-{bounds.end}</span>
                                   <small>{course.room || '地点未标注'}</small>
                                 </button>
@@ -1387,7 +1414,7 @@ function App() {
                               return (
                                 <small key={`${dateString}-${course.id}`}>
                                   <strong>{bounds.start}-{bounds.end}</strong>
-                                  <span>{course.name}</span>
+                                  <span><CourseName course={course} /></span>
                                 </small>
                               )
                             })}
@@ -1462,7 +1489,7 @@ function App() {
                         const bounds = courseTimeBounds(course, slotMeta)
                         return (
                           <article key={`${calendarPopover.date}-${course.id}`}>
-                            <strong>{course.name}</strong>
+                            <strong><CourseName course={course} /></strong>
                             <span>{bounds.start}-{bounds.end}</span>
                             <small>{course.room || '地点未标注'}</small>
                           </article>
@@ -1492,7 +1519,7 @@ function App() {
                 </div>
                 {calendarDetailCourse ? (
                   <div className="inspector-card">
-                    <strong>{calendarDetailCourse.name}</strong>
+                    <strong><CourseName course={calendarDetailCourse} /></strong>
                     <span>{courseTimeBounds(calendarDetailCourse, slotMeta).start}-{courseTimeBounds(calendarDetailCourse, slotMeta).end}</span>
                     <span>{calendarDetailCourse.room || '地点未标注'}</span>
                     <small>{calendarDetailCourse.teacher || '教师未标注'}</small>
@@ -1505,7 +1532,7 @@ function App() {
                     const bounds = courseTimeBounds(course, slotMeta)
                     return (
                       <article key={`${calendarDate}-${course.id}`}>
-                        <strong>{course.name}</strong>
+                        <strong><CourseName course={course} /></strong>
                         <span>{bounds.start}-{bounds.end}</span>
                         <small>{course.room || '地点未标注'}</small>
                       </article>

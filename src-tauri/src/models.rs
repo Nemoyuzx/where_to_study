@@ -112,6 +112,8 @@ pub struct Course {
     pub week_text: String,
     #[serde(default)]
     pub week_numbers: Vec<i64>,
+    #[serde(default)]
+    pub exam_week_numbers: Vec<i64>,
     pub weekday: i64,
     pub start_slot: usize,
     pub end_slot: usize,
