@@ -1,6 +1,6 @@
 # Where To Study
 
-一个基于 Tauri 2、React 和 Rust 的跨平台空教室查询应用。功能对齐本地 `agenda_with_empty_classroom` 网站：
+一个基于 Tauri 2、React 和 Rust 的跨平台空教室查询应用。
 
 - 获取北邮个人课表并解析 XLS 课表文件。
 - 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
@@ -8,15 +8,37 @@
 - 按个人空闲节次、教学楼、最少座位数筛选空教室。
 - 推荐可以连续待着、不用换教室的候选教室。
 - macOS 桌面端在应用运行时每天 7:30 发送今日课程系统通知，并提供课程桌面小组件。
+- 极低的资源占用和快速的查询响应。
 
-## 开发运行
+欢迎大家提交 issue 和 pull request！如果你也想参与开发，可以先看看 [CONTRIBUTING.md](./CONTRIBUTING.md) 里的说明。
+
+认可我的工作的话，请给个 star 吧！✨
+
+## app下载
+
+- 现在有 MacOS 桌面端和 Android 移动端版本，请在release中查看。
+- ios版本受制于签名限制，不提供，可自行打包并签名安装。
+- Windows 桌面端 和 Linux 桌面端因为没有可以随手打包的机器随缘上传release版本，你也可以自己clone到你自己的电脑上然后（让AI帮你）打包完安装。
+
+
+## macOS 通知与小组件
+
+macOS 桌面端会在应用运行或驻留托盘时，于每天 7:30 根据本地保存的课表发送今日课程通知。首次触发时系统可能会请求通知权限。
+
+课程桌面小组件可以从托盘菜单的“显示课程小组件”打开，也可以在应用“设置”页点击“打开课程小组件”。小组件显示今日课程和下一节待上课程，并会在课表刷新后自动更新。
+
+## 数据来源与数据安全
+
+和企业微信里面查看课表和空教室用的是同一个接口，所以需要你的教务系统账号密码来获取课表数据。应用会在本地加密保存你的账号密码和课表数据，且仅在查询空教室时使用这些数据。请放心使用。
+
+## 开发与运行
 
 ```bash
 npm install
 npm run tauri dev
 ```
 
-## 构建桌面端
+### 构建桌面端
 
 ```bash
 npm run tauri build
@@ -30,13 +52,7 @@ npm run tauri:build:windows
 
 Windows 构建建议在 Windows 机器或 Windows CI runner 上执行，需要安装 Rust MSVC toolchain、Microsoft C++ Build Tools 和 WebView2 Runtime。
 
-## macOS 通知与小组件
-
-macOS 桌面端会在应用运行或驻留托盘时，于每天 7:30 根据本地保存的课表发送今日课程通知。首次触发时系统可能会请求通知权限。
-
-课程桌面小组件可以从托盘菜单的“显示课程小组件”打开，也可以在应用“设置”页点击“打开课程小组件”。小组件显示今日课程和下一节待上课程，并会在课表刷新后自动更新。
-
-## Android 开发与构建
+### Android 开发与构建
 
 首次开发前初始化 Android 原生工程：
 
@@ -110,7 +126,7 @@ sdkmanager --sdk_root="$HOME/Library/Android/sdk" "ndk;27.2.12479018"
 
 如果 Android Gradle 仍然报 `127.0.0.1:7890` 代理错误，或在 `plugins.gradle.org` 握手失败，先检查 `~/.gradle/gradle.properties` 里是否还保留了失效的 `systemProp.http[s].proxyHost/proxyPort` 设置。
 
-## iOS 开发与构建
+### iOS 开发与构建
 
 首次开发前初始化 iOS 原生工程：
 
