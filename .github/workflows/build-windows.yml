@@ -30,18 +30,18 @@ jobs:
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
 
       - name: Install npm dependencies
         run: npm ci
 
       - name: Build Windows bundle
-        run: npm run tauri -- build --target x86_64-pc-windows-msvc --ci
+        run: npm run tauri -- build --target x86_64-pc-windows-msvc --features custom-protocol --bundles nsis --ci
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: where-to-study-windows
-          path: |
-            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**
-            src-tauri/target/release/bundle/**
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           if-no-files-found: error

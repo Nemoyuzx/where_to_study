@@ -49,4 +49,4 @@ fi
 export PATH="$JAVA_HOME/bin:$HOME/.cargo/bin:$LLVM_PREBUILT:$PATH"
 
 cd "$ROOT_DIR"
-npm run tauri -- android build --target aarch64 --apk --ci "$@"
+npm run tauri -- android build --target aarch64 --features custom-protocol --apk --ci "$@"

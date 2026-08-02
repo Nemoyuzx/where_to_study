@@ -1,0 +1,57 @@
+name: WhereToStudyNative
+options:
+  bundleIdPrefix: com.nemoyu.wheretostudy
+  deploymentTarget:
+    macOS: "13.0"
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.1"
+    CURRENT_PROJECT_VERSION: "2"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  WhereToStudyMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Shared
+      - path: Sources/macOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
+        PRODUCT_NAME: WhereToStudyMac
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Where To Study
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+    scheme:
+      testTargets:
+        - WhereToStudyMacTests
+  WhereToStudyiOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/Shared
+      - path: Sources/iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios
+        PRODUCT_NAME: WhereToStudyiOS
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Where To Study
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+  WhereToStudyMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: WhereToStudyMac
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.tests
+        CODE_SIGNING_ALLOWED: NO

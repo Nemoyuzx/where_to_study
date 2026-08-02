@@ -1,25 +1,33 @@
 # Where To Study
 
-一个基于 Tauri 2、React 和 Rust 的跨平台空教室查询应用。
+北邮空教室与个人课表联动查询应用。当前可用客户端基于 Tauri 2、React 和
+Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户端。
 
 - 获取北邮个人课表并解析 XLS 课表文件。
 - 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
 - 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
 - 按个人空闲节次、教学楼、最少座位数筛选空教室。
-- 推荐可以连续待着、不用换教室的候选教室。
 - macOS 桌面端在应用运行时每天 7:30 发送今日课程系统通知，并提供课程桌面小组件。
-- 极低的资源占用和快速的查询响应。
+- 支持课表本地缓存、教学日历、法定节假日和 Apple 日历导入。
 
-欢迎大家提交 issue 和 pull request！如果你也想参与开发，可以先看看 [CONTRIBUTING.md](./CONTRIBUTING.md) 里的说明。
+贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台迁移范围和验收顺序见
+[docs/platform-roadmap.md](./docs/platform-roadmap.md)。
 
-认可我的工作的话，请给个 star 吧！✨
+## 平台状态
 
-## app下载
+| 平台 | 当前可用版本 | 原生迁移状态 |
+| --- | --- | --- |
+| macOS | Tauri 2，功能完整 | SwiftUI 双端工程已建立，联网服务待接入 |
+| Android | Tauri 2，功能完整 | Kotlin Views 工程已建立，联网服务待接入 |
+| Windows | Tauri 2，持续维护 | 保留 Tauri，并进行安全和资源占用优化 |
+| iOS | 暂不提供签名安装包 | SwiftUI 工程可构建，联网服务待接入 |
 
-- 现在有 MacOS 桌面端和 Android 移动端版本，请在release中查看。
-- ios版本受制于签名限制，不提供，可自行打包并签名安装。
-- Windows 桌面端 和 Linux 桌面端因为没有可以随手打包的机器随缘上传release版本，你也可以自己clone到你自己的电脑上然后（让AI帮你）打包完安装。
+## 下载
 
+macOS Apple Silicon 和 Android arm64 测试安装包在 GitHub Releases 中提供。macOS
+包目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；Android
+包使用项目维护者的本地 release key 签名。Windows 构建由标签触发的 CI 生成，iOS
+因缺少公开分发签名暂不提供安装包。
 
 ## macOS 通知与小组件
 
@@ -29,7 +37,11 @@ macOS 桌面端会在应用运行或驻留托盘时，于每天 7:30 根据本�
 
 ## 数据来源与数据安全
 
-和企业微信里面查看课表和空教室用的是同一个接口，所以需要你的教务系统账号密码来获取课表数据。应用会在本地加密保存你的账号密码和课表数据，且仅在查询空教室时使用这些数据。请放心使用。
+应用使用北邮课表和空教室相关接口，因此需要教务系统账号和密码。账号与密码不会写入
+普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Android
+使用 Android Keystore。旧版 `settings.json` 中的凭据会在首次启动时迁移并从普通设置
+中删除。课程和空教室缓存不包含密码、token 或 cookie。完整基线见
+[docs/security.md](./docs/security.md)。
 
 ## 开发与运行
 
@@ -41,7 +53,7 @@ npm run tauri dev
 ### 构建桌面端
 
 ```bash
-npm run tauri build
+npm run tauri:build
 ```
 
 在 Windows 机器上构建 64 位 Windows 包：
@@ -51,6 +63,23 @@ npm run tauri:build:windows
 ```
 
 Windows 构建建议在 Windows 机器或 Windows CI runner 上执行，需要安装 Rust MSVC toolchain、Microsoft C++ Build Tools 和 WebView2 Runtime。
+
+### 原生客户端基线
+
+生成并验证 macOS/iOS SwiftUI 工程：
+
+```bash
+./scripts/native-apple-build.sh
+```
+
+验证 Android Kotlin 工程：
+
+```bash
+./scripts/native-android-build.sh
+```
+
+这两个目录目前用于逐步迁移，不是 Release 中功能完整的 Tauri 安装包。不要把原生基线
+当作已完成客户端发布。
 
 ### Android 开发与构建
 
@@ -176,10 +205,13 @@ src-tauri/gen/apple/build/where_to_study_iOS.xcarchive
 
 ## GitHub Actions
 
-仓库内已提供两条手动触发 / `v*` 标签触发的工作流：
+仓库内提供以下构建和安全工作流：
 
 - `.github/workflows/build-windows.yml`：在 `windows-latest` 上构建 Windows 桌面安装包。
-- `.github/workflows/build-mobile.yml`：在 GitHub Actions 上构建 Android APK，并在存在 signing secrets 时产出 signed Android APK 和 signed iOS IPA；如果 iOS secrets 缺失，则回退为 unsigned `xcarchive`。
+- `.github/workflows/build-macos.yml`：在 `macos-15` 上构建并压缩 macOS Apple Silicon 应用。
+- `.github/workflows/build-mobile.yml`：构建 Android APK；iOS 有签名配置时输出 IPA，否则输出 unsigned `xcarchive`。
+- `.github/workflows/build-native.yml`：验证 SwiftUI 和 Kotlin 原生迁移工程。
+- `.github/workflows/security.yml`：扫描提交历史中的敏感信息。
 
 移动端 workflow 使用的 secrets 名称如下：
 

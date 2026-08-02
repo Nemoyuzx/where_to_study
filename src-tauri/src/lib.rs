@@ -3,9 +3,11 @@ mod calendar_export;
 mod classrooms;
 mod classrooms_store;
 mod config;
+mod credential_store;
 mod error;
 mod holidays;
 mod models;
+#[cfg(not(mobile))]
 mod recommender;
 mod schedule;
 mod schedule_store;

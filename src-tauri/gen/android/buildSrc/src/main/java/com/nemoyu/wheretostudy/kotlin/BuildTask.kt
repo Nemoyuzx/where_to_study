@@ -165,7 +165,7 @@ open class BuildTask : DefaultTask() {
             spec.executable = cargoExecutable
             spec.args("build", "--target", rustTarget.cargoTarget)
             if (release) {
-                spec.args("--release")
+                spec.args("--release", "--features", "custom-protocol")
             }
 
             val targetEnvName = rustTarget.cargoTarget.uppercase().replace('-', '_')

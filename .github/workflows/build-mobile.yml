@@ -46,9 +46,11 @@ jobs:
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
 
       - name: Install Android SDK packages
-        run: sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;${ANDROID_NDK_VERSION}"
+        run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;${ANDROID_NDK_VERSION}"
 
       - name: Install npm dependencies
         run: npm ci
@@ -117,6 +119,8 @@ jobs:
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
 
       - name: Install CocoaPods
         run: brew list cocoapods >/dev/null 2>&1 || brew install cocoapods

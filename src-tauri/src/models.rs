@@ -183,6 +183,7 @@ fn default_realtime() -> bool {
     true
 }
 
+#[cfg(not(mobile))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DateScheduleState {
     pub target_date: String,

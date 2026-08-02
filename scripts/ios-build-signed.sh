@@ -17,4 +17,4 @@ export PATH="$HOME/.cargo/bin:$PATH"
 export IOS_EXPORT_METHOD="${IOS_EXPORT_METHOD:-release-testing}"
 
 cd "$ROOT_DIR"
-npm run tauri -- ios build --target aarch64 --export-method "$IOS_EXPORT_METHOD" --ci "$@"
+npm run tauri -- ios build --target aarch64 --features custom-protocol --export-method "$IOS_EXPORT_METHOD" --ci "$@"

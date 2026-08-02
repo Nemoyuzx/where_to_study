@@ -108,6 +108,7 @@ pub fn parse_cell_courses(cell_info: &str) -> Vec<ParsedCourse> {
         .map(ToOwned::to_owned)
         .collect();
     let mut courses = Vec::new();
+    let course_number_regex = Regex::new(r"^\(\d+\)$").expect("valid regex");
 
     for (index, line) in lines.iter().enumerate() {
         if !line.contains("[周]") || !line.chars().any(|character| character.is_ascii_digit()) {
@@ -128,11 +129,7 @@ pub fn parse_cell_courses(cell_info: &str) -> Vec<ParsedCourse> {
             String::new()
         };
         let mut name_index = index as isize - 2;
-        if name_index >= 0
-            && Regex::new(r"^\(\d+\)$")
-                .expect("valid regex")
-                .is_match(&lines[name_index as usize])
-        {
+        if name_index >= 0 && course_number_regex.is_match(&lines[name_index as usize]) {
             name_index -= 1;
         }
         if name_index < 0 {

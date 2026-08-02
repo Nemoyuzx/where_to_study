@@ -1,0 +1,127 @@
+import Foundation
+
+struct SlotMetadata: Codable, Identifiable, Equatable, Sendable {
+    let index: Int
+    let label: String
+    let start: String
+    let end: String
+
+    var id: Int { index }
+
+    static let defaults: [SlotMetadata] = [
+        .init(index: 0, label: "1", start: "08:00", end: "08:45"),
+        .init(index: 1, label: "2", start: "08:50", end: "09:35"),
+        .init(index: 2, label: "3", start: "09:50", end: "10:35"),
+        .init(index: 3, label: "4", start: "10:40", end: "11:25"),
+        .init(index: 4, label: "5", start: "11:30", end: "12:15"),
+        .init(index: 5, label: "6", start: "13:00", end: "13:45"),
+        .init(index: 6, label: "7", start: "13:50", end: "14:35"),
+        .init(index: 7, label: "8", start: "14:45", end: "15:30"),
+        .init(index: 8, label: "9", start: "15:40", end: "16:25"),
+        .init(index: 9, label: "10", start: "16:35", end: "17:20"),
+        .init(index: 10, label: "11", start: "17:25", end: "18:10"),
+        .init(index: 11, label: "12", start: "18:30", end: "19:15"),
+        .init(index: 12, label: "13", start: "19:20", end: "20:05"),
+        .init(index: 13, label: "14", start: "20:10", end: "20:55")
+    ]
+}
+
+struct Course: Codable, Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let teacher: String
+    let room: String
+    let weekText: String
+    let weekNumbers: [Int]
+    let examWeekNumbers: [Int]
+    let weekday: Int
+    let startSlot: Int
+    let endSlot: Int
+    let sectionText: String
+    let timeRange: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, teacher, room, weekday
+        case weekText = "week_text"
+        case weekNumbers = "week_numbers"
+        case examWeekNumbers = "exam_week_numbers"
+        case startSlot = "start_slot"
+        case endSlot = "end_slot"
+        case sectionText = "section_text"
+        case timeRange = "time_range"
+    }
+}
+
+struct ScheduleSnapshot: Codable, Equatable, Sendable {
+    let termID: String
+    let termStartDate: String
+    let fetchedAt: String
+    let courses: [Course]
+
+    enum CodingKeys: String, CodingKey {
+        case courses
+        case termID = "term_id"
+        case termStartDate = "term_start_date"
+        case fetchedAt = "fetched_at"
+    }
+}
+
+struct Classroom: Codable, Identifiable, Equatable, Sendable {
+    let id: String
+    let building: String
+    let room: String
+    let name: String
+    let size: Int?
+    let type: String
+    let availableSlots: [Int]
+    let source: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, building, room, name, size, type, source
+        case availableSlots = "available_slots"
+    }
+}
+
+enum ScheduleLogic {
+    static func examWeeks(in courses: [Course]) -> Set<Int> {
+        let weeks = Array(Set(courses.flatMap(\.weekNumbers).filter { $0 > 0 })).sorted()
+        return Set([weeks[safe: 16], weeks[safe: 17]].compactMap { $0 })
+    }
+
+    static func weekNumber(on date: Date, termStart: Date, calendar: Calendar = .shanghai) -> Int {
+        let start = calendar.startOfDay(for: termStart)
+        let target = calendar.startOfDay(for: date)
+        let days = calendar.dateComponents([.day], from: start, to: target).day ?? 0
+        return days / 7 + 1
+    }
+
+    static func courses(
+        on date: Date,
+        termStart: Date,
+        courses: [Course],
+        calendar: Calendar = .shanghai
+    ) -> [Course] {
+        let week = weekNumber(on: date, termStart: termStart, calendar: calendar)
+        let weekday = ((calendar.component(.weekday, from: date) + 5) % 7) + 1
+        return courses
+            .filter { $0.weekday == weekday && $0.weekNumbers.contains(week) }
+            .sorted { lhs, rhs in
+                lhs.startSlot == rhs.startSlot ? lhs.name < rhs.name : lhs.startSlot < rhs.startSlot
+            }
+    }
+}
+
+extension Collection {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
+extension Calendar {
+    static var shanghai: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+        calendar.firstWeekday = 2
+        return calendar
+    }
+}

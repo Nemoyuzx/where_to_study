@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Where To Study</string>
+    <string name="brand_eyebrow">BUPT</string>
+    <string name="brand_name">Where To Study</string>
+    <string name="planner_eyebrow">BUPT CLASSROOM PLANNER</string>
+    <string name="slot_format">第 %1$s 节\n%2$s-%3$s</string>
+    <string name="month_empty_format">%1$d月\n暂无课程</string>
+    <string name="credential_security_note">账号和密码仅保存于本机，并由 Android Keystore 保护。</string>
+</resources>

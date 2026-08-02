@@ -64,7 +64,7 @@ pub fn parse_classroom(raw: &str) -> Option<(String, String, Option<usize>)> {
         }
     }
 
-    clean = clean.replace('－', "-").replace('—', "-").replace('–', "-");
+    clean = clean.replace(['－', '—', '–'], "-");
     let parts: Vec<&str> = clean
         .split('-')
         .map(str::trim)
@@ -171,18 +171,14 @@ fn value_string(value: Option<&Value>) -> String {
 }
 
 fn normalize_building_name(name: &str) -> String {
-    let normalized_separator = name
-        .trim()
-        .replace('－', "-")
-        .replace('—', "-")
-        .replace('–', "-");
+    let normalized_separator = name.trim().replace(['－', '—', '–'], "-");
     let clean = ["校本部-", "西土城-", "沙河-"]
         .iter()
         .find_map(|prefix| normalized_separator.strip_prefix(prefix))
         .unwrap_or(&normalized_separator)
         .trim();
 
-    let compact = clean.replace(' ', "").replace('　', "");
+    let compact = clean.replace([' ', '　'], "");
 
     match compact.as_str() {
         "1" | "教一楼" => "教1".to_string(),
@@ -275,11 +271,8 @@ fn infer_teaching_experiment_side(building: String, room_name: String) -> (Strin
 
     let clean_room = room_name
         .trim()
-        .replace('－', "-")
-        .replace('—', "-")
-        .replace('–', "-")
-        .replace(' ', "")
-        .replace('　', "");
+        .replace(['－', '—', '–'], "-")
+        .replace([' ', '　'], "");
     let Some(side) = clean_room.chars().next() else {
         return (building, room_name);
     };
@@ -301,11 +294,7 @@ fn infer_teaching_experiment_side(building: String, room_name: String) -> (Strin
 }
 
 fn extract_room_name(value: &str, building: &str) -> Option<String> {
-    let mut clean = value
-        .trim()
-        .replace('－', "-")
-        .replace('—', "-")
-        .replace('–', "-");
+    let mut clean = value.trim().replace(['－', '—', '–'], "-");
     if clean.is_empty() {
         return None;
     }
@@ -586,11 +575,11 @@ mod tests {
 
         parse_available_classrooms(items, &mut room_map);
 
-        assert!(room_map.get("教2-101").is_some());
-        assert!(room_map.get("教2-406").is_some());
-        assert!(room_map.get("教2-107").is_some());
-        assert!(room_map.get("教2-101A441").is_none());
-        assert!(room_map.get("教2-107343").is_none());
+        assert!(room_map.contains_key("教2-101"));
+        assert!(room_map.contains_key("教2-406"));
+        assert!(room_map.contains_key("教2-107"));
+        assert!(!room_map.contains_key("教2-101A441"));
+        assert!(!room_map.contains_key("教2-107343"));
     }
 
     #[test]
@@ -606,8 +595,8 @@ mod tests {
 
         parse_available_classrooms(items, &mut room_map);
 
-        assert!(room_map.get("教师自行安排-x").is_none());
-        assert!(room_map.get("主楼-101").is_some());
+        assert!(!room_map.contains_key("教师自行安排-x"));
+        assert!(room_map.contains_key("主楼-101"));
     }
 
     #[test]
@@ -633,8 +622,8 @@ mod tests {
         ] {
             assert_eq!(room_map.get(room).unwrap().available_slots, vec![9]);
         }
-        assert!(room_map.get("主楼-217").is_none());
-        assert!(room_map.get("主楼-218").is_none());
+        assert!(!room_map.contains_key("主楼-217"));
+        assert!(!room_map.contains_key("主楼-218"));
     }
 
     #[test]
@@ -728,7 +717,7 @@ mod tests {
                 .available_slots,
             vec![7]
         );
-        assert!(room_map.get("教学实验综合楼-999").is_none());
+        assert!(!room_map.contains_key("教学实验综合楼-999"));
     }
 
     #[test]

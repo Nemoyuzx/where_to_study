@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://where-to-study.local/contracts/v1/where-to-study.schema.json",
+  "title": "Where To Study v1",
+  "type": "object",
+  "$defs": {
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "label", "start", "end"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0, "maximum": 13 },
+        "label": { "type": "string", "minLength": 1 },
+        "start": { "type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$" },
+        "end": { "type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$" }
+      }
+    },
+    "campus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "course": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "teacher", "room", "week_text", "week_numbers", "exam_week_numbers", "weekday", "start_slot", "end_slot", "section_text", "time_range"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "teacher": { "type": "string" },
+        "room": { "type": "string" },
+        "week_text": { "type": "string" },
+        "week_numbers": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true },
+        "exam_week_numbers": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true },
+        "weekday": { "type": "integer", "minimum": 1, "maximum": 7 },
+        "start_slot": { "type": "integer", "minimum": 0, "maximum": 13 },
+        "end_slot": { "type": "integer", "minimum": 0, "maximum": 13 },
+        "section_text": { "type": "string" },
+        "time_range": { "type": "string" }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["term_id", "term_start_date", "fetched_at", "courses"],
+      "properties": {
+        "term_id": { "type": "string", "minLength": 1 },
+        "term_start_date": { "type": "string", "format": "date" },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "courses": { "type": "array", "items": { "$ref": "#/$defs/course" } }
+      }
+    },
+    "classroom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "building", "room", "name", "size", "type", "available_slots", "source"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "building": { "type": "string", "minLength": 1 },
+        "room": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "size": { "type": ["integer", "null"], "minimum": 0 },
+        "type": { "type": "string" },
+        "available_slots": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 13 }, "uniqueItems": true },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "classrooms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campus_id", "campus_name", "target_date", "fetched_at", "realtime", "provider", "rooms"],
+      "properties": {
+        "campus_id": { "type": "string", "minLength": 1 },
+        "campus_name": { "type": "string", "minLength": 1 },
+        "target_date": { "type": "string", "format": "date" },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "realtime": { "type": "boolean" },
+        "provider": { "type": "string", "minLength": 1 },
+        "rooms": { "type": "array", "items": { "$ref": "#/$defs/classroom" } }
+      }
+    }
+  },
+  "properties": {
+    "schedule": { "$ref": "#/$defs/schedule" },
+    "classrooms": { "$ref": "#/$defs/classrooms" }
+  }
+}
