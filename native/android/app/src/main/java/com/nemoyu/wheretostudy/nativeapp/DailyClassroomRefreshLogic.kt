@@ -1,5 +1,6 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import java.io.IOException
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -10,6 +11,8 @@ enum class ClassroomRefreshDecision {
 
 object DailyClassroomRefreshLogic {
     const val timeZoneID = "Asia/Shanghai"
+    const val runWindowMillis = 60L * 60L * 1_000L
+    const val retryBackoffMillis = 15L * 60L * 1_000L
 
     private val shanghai = TimeZone.getTimeZone(timeZoneID)
 
@@ -34,5 +37,17 @@ object DailyClassroomRefreshLogic {
             ClassroomRefreshDecision.SKIP_MISSING_CREDENTIALS
         }
 
+    fun shouldRetry(error: Throwable?): Boolean = when (error) {
+        null -> false
+        is ClassroomClientException -> error.retryable
+        is ScheduleClientException -> error.retryable
+        is IOException -> true
+        else -> false
+    }
+
+    fun canRequestRetry(previousAttempts: Int): Boolean =
+        previousAttempts in 0 until maximumRetryAttempts
+
     private const val REFRESH_HOUR = 7
+    const val maximumRetryAttempts = 2
 }

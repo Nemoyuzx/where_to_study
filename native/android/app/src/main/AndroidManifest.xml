@@ -25,5 +25,16 @@
             android:name=".DailyClassroomRefreshJobService"
             android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+        <receiver
+            android:name=".DailyClassroomRefreshRescheduleReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

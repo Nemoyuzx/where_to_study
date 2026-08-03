@@ -1,5 +1,6 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import java.net.SocketTimeoutException
 import java.util.Calendar
 import java.util.TimeZone
 import org.junit.Assert.assertEquals
@@ -70,6 +71,43 @@ class DailyClassroomRefreshLogicTest {
             ClassroomRefreshDecision.FETCH,
             DailyClassroomRefreshLogic.refreshDecision("account", "password"),
         )
+    }
+
+    @Test
+    fun retriesOnlyTemporaryRefreshFailures() {
+        assertEquals(false, DailyClassroomRefreshLogic.shouldRetry(null))
+        assertEquals(
+            false,
+            DailyClassroomRefreshLogic.shouldRetry(
+                ClassroomClientException("missing credentials", retryable = false),
+            ),
+        )
+        assertEquals(
+            true,
+            DailyClassroomRefreshLogic.shouldRetry(
+                ClassroomClientException("temporary provider failure", retryable = true),
+            ),
+        )
+        assertEquals(
+            true,
+            DailyClassroomRefreshLogic.shouldRetry(SocketTimeoutException("network timeout")),
+        )
+        assertEquals(
+            false,
+            DailyClassroomRefreshLogic.shouldRetry(ScheduleClientException("login rejected")),
+        )
+        assertEquals(
+            false,
+            DailyClassroomRefreshLogic.shouldRetry(IllegalStateException("unknown failure")),
+        )
+    }
+
+    @Test
+    fun backgroundRefreshRequestsAtMostTwoRetries() {
+        assertEquals(true, DailyClassroomRefreshLogic.canRequestRetry(0))
+        assertEquals(true, DailyClassroomRefreshLogic.canRequestRetry(1))
+        assertEquals(false, DailyClassroomRefreshLogic.canRequestRetry(2))
+        assertEquals(false, DailyClassroomRefreshLogic.canRequestRetry(3))
     }
 
     private fun shanghaiTime(

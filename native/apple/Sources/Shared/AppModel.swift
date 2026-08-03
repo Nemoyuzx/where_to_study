@@ -1,5 +1,84 @@
 import Foundation
 
+enum CredentialSettingsError: LocalizedError, Equatable {
+    case accountRequired
+    case passwordRequiredForChangedAccount
+    case accountDataResetFailed
+    case calendarImportInProgress
+
+    var errorDescription: String? {
+        switch self {
+        case .accountRequired:
+            "请输入教务账号。"
+        case .passwordRequiredForChangedAccount:
+            "更换教务账号时必须输入新密码。"
+        case .accountDataResetFailed:
+            "无法清除原账号的课表与空教室缓存，账号未更改。"
+        case .calendarImportInProgress:
+            "系统日历正在同步，请完成后再更换账号。"
+        }
+    }
+}
+
+enum CredentialSaveAction: Equatable {
+    case preserve
+    case replace(Credentials)
+    case clear
+}
+
+enum CredentialSettingsLogic {
+    static func saveAction(
+        account inputAccount: String,
+        password inputPassword: String,
+        storedAccount: String?,
+        hasStoredPassword: Bool
+    ) throws -> CredentialSaveAction {
+        let account = normalizedAccount(inputAccount)
+        if account.isEmpty {
+            guard inputPassword.isEmpty else { throw CredentialSettingsError.accountRequired }
+            return .clear
+        }
+        if !inputPassword.isEmpty {
+            return .replace(Credentials(account: account, password: inputPassword))
+        }
+        if hasStoredPassword, normalizedAccount(storedAccount ?? "") == account {
+            return .preserve
+        }
+        throw CredentialSettingsError.passwordRequiredForChangedAccount
+    }
+
+    static func credentialsForRequest(
+        account inputAccount: String,
+        password inputPassword: String,
+        storedCredentials: Credentials?
+    ) throws -> Credentials {
+        let action = try saveAction(
+            account: inputAccount,
+            password: inputPassword,
+            storedAccount: storedCredentials?.account,
+            hasStoredPassword: !(storedCredentials?.password.isEmpty ?? true)
+        )
+        switch action {
+        case let .replace(credentials):
+            return credentials
+        case .preserve:
+            guard let storedCredentials else {
+                throw CredentialSettingsError.passwordRequiredForChangedAccount
+            }
+            return Credentials(
+                account: normalizedAccount(inputAccount),
+                password: storedCredentials.password
+            )
+        case .clear:
+            throw CredentialSettingsError.accountRequired
+        }
+    }
+
+    static func normalizedAccount(_ account: String) -> String {
+        account.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
 enum AppSection: String, CaseIterable, Identifiable {
     case planner
     case calendar
@@ -29,6 +108,7 @@ final class AppModel: ObservableObject {
     @Published var selectedSection: AppSection = .planner
     @Published var account = ""
     @Published var password = ""
+    @Published private(set) var hasSavedPassword = false
     @Published var termID: String
     @Published var termStartDate: String
     @Published var campusID: String
@@ -58,7 +138,11 @@ final class AppModel: ObservableObject {
     private let defaults: UserDefaults
     private var holidayLoads = Set<Int>()
     private var localDataGeneration = 0
+    private var scheduleRefreshToken = 0
+    private var classroomRefreshToken = 0
+    private var calendarImportToken = 0
     private var dailyClassroomRefreshTask: Task<Void, Never>?
+    private var savedCredentialAccount: String?
 
     init(
         credentialStore: any CredentialStoring = KeychainCredentialStore(),
@@ -92,6 +176,12 @@ final class AppModel: ObservableObject {
 
     var selectedCampusName: String {
         campusID == "04" ? "沙河" : "西土城"
+    }
+
+    var canPreserveSavedPassword: Bool {
+        hasSavedPassword
+            && CredentialSettingsLogic.normalizedAccount(account)
+                == CredentialSettingsLogic.normalizedAccount(savedCredentialAccount ?? "")
     }
 
     var todayCourses: [Course] {
@@ -183,9 +273,45 @@ final class AppModel: ObservableObject {
         selectedBuildings.removeAll()
     }
 
-    func saveSettings() {
+    @discardableResult
+    func saveSettings() -> Bool {
         do {
-            try credentialStore.save(.init(account: account.trimmingCharacters(in: .whitespacesAndNewlines), password: password))
+            let storedCredentials = try credentialStore.load()
+            let credentialAction = try CredentialSettingsLogic.saveAction(
+                account: account,
+                password: password,
+                storedAccount: storedCredentials?.account,
+                hasStoredPassword: !(storedCredentials?.password.isEmpty ?? true)
+            )
+            let nextCredentialAccount: String? = switch credentialAction {
+            case .preserve:
+                storedCredentials?.account
+            case let .replace(credentials):
+                credentials.account
+            case .clear:
+                nil
+            }
+            let accountChanged = CredentialSettingsLogic.normalizedAccount(
+                storedCredentials?.account ?? ""
+            ) != CredentialSettingsLogic.normalizedAccount(nextCredentialAccount ?? "")
+            if accountChanged {
+                guard !isImportingCalendar else {
+                    throw CredentialSettingsError.calendarImportInProgress
+                }
+                try clearAccountScopedData()
+            }
+            switch credentialAction {
+            case .preserve:
+                updateSavedCredentialState(storedCredentials)
+            case let .replace(credentials):
+                try credentialStore.save(credentials)
+                updateSavedCredentialState(credentials)
+            case .clear:
+                try credentialStore.clear()
+                updateSavedCredentialState(nil)
+            }
+            account = CredentialSettingsLogic.normalizedAccount(account)
+            password = ""
             termID = termID.trimmingCharacters(in: .whitespacesAndNewlines)
             termStartDate = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
             if termID.isEmpty { termID = ScheduleDefaults.termID }
@@ -194,22 +320,25 @@ final class AppModel: ObservableObject {
             defaults.set(termID, forKey: "termID")
             defaults.set(termStartDate, forKey: "termStartDate")
             statusMessage = "设置已保存"
+            return true
         } catch {
             statusMessage = error.localizedDescription
+            return false
         }
     }
 
     func clearLocalData() {
-        localDataGeneration &+= 1
+        invalidatePendingOperations()
         var failures = [String]()
 
         do {
             try credentialStore.clear()
-            account = ""
-            password = ""
         } catch {
             failures.append("账户密码")
         }
+        account = ""
+        password = ""
+        updateSavedCredentialState(nil)
 
         do {
             try scheduleStore.clear()
@@ -253,12 +382,17 @@ final class AppModel: ObservableObject {
 
     func refreshSchedule() {
         guard !isRefreshingSchedule else { return }
+        let credentials: Credentials
+        do {
+            credentials = try credentialsForRequest()
+        } catch {
+            statusMessage = error.localizedDescription
+            return
+        }
         isRefreshingSchedule = true
+        scheduleRefreshToken &+= 1
+        let refreshToken = scheduleRefreshToken
         statusMessage = "正在获取个人课表…"
-        let credentials = Credentials(
-            account: account.trimmingCharacters(in: .whitespacesAndNewlines),
-            password: password
-        )
         let fallbackTermID = termID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ScheduleDefaults.termID : termID.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackTermStart = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -266,14 +400,16 @@ final class AppModel: ObservableObject {
         let generation = localDataGeneration
 
         Task {
-            defer { isRefreshingSchedule = false }
+            defer {
+                if refreshToken == scheduleRefreshToken { isRefreshingSchedule = false }
+            }
             do {
                 let fetched = try await scheduleClient.fetch(
                     credentials: credentials,
                     fallbackTermID: fallbackTermID,
                     fallbackTermStartDate: fallbackTermStart
                 )
-                guard generation == localDataGeneration else { return }
+                guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
                 try scheduleStore.save(fetched)
                 schedule = fetched
                 calendarImportStatusMessage = ""
@@ -284,7 +420,7 @@ final class AppModel: ObservableObject {
                 synchronizeSelectedSlots()
                 statusMessage = "个人课表已更新，共 \(fetched.courses.count) 门课程"
             } catch {
-                guard generation == localDataGeneration else { return }
+                guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
                 statusMessage = error.localizedDescription
             }
         }
@@ -297,21 +433,25 @@ final class AppModel: ObservableObject {
             return
         }
         isImportingCalendar = true
+        calendarImportToken &+= 1
+        let importToken = calendarImportToken
         calendarImportStatusMessage = "正在导入系统日历…"
         let generation = localDataGeneration
 
         Task {
-            defer { isImportingCalendar = false }
+            defer {
+                if importToken == calendarImportToken { isImportingCalendar = false }
+            }
             do {
                 let result = try await calendarImporter.importSchedule(schedule)
-                guard generation == localDataGeneration else { return }
+                guard generation == localDataGeneration, importToken == calendarImportToken else { return }
                 if result.total == 0 {
                     calendarImportStatusMessage = "课表中没有可导入的课程日期"
                 } else {
-                    calendarImportStatusMessage = "日历导入完成：新增 \(result.inserted)，更新 \(result.updated)，已存在 \(result.unchanged)"
+                    calendarImportStatusMessage = "日历同步完成：新增 \(result.inserted)，更新 \(result.updated)，删除 \(result.deleted)，已存在 \(result.unchanged)"
                 }
             } catch {
-                guard generation == localDataGeneration else { return }
+                guard generation == localDataGeneration, importToken == calendarImportToken else { return }
                 calendarImportStatusMessage = error.localizedDescription
             }
         }
@@ -319,39 +459,42 @@ final class AppModel: ObservableObject {
 
     func refreshClassroomsIfNeeded() {
         guard classroomsCache?.targetDate != Self.todayString else { return }
-        guard !account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !password.isEmpty else {
-            classroomStatusMessage = "请先在设置中保存教务账号和密码"
-            return
-        }
         refreshClassrooms(force: false)
     }
 
     func refreshClassrooms(force: Bool = true) {
         guard !isRefreshingClassrooms else { return }
         if !force, classroomsCache?.targetDate == Self.todayString { return }
+        let credentials: Credentials
+        do {
+            credentials = try credentialsForRequest()
+        } catch {
+            classroomStatusMessage = error.localizedDescription
+            return
+        }
         isRefreshingClassrooms = true
+        classroomRefreshToken &+= 1
+        let refreshToken = classroomRefreshToken
         classroomStatusMessage = "正在获取当天空教室…"
-        let credentials = Credentials(
-            account: account.trimmingCharacters(in: .whitespacesAndNewlines),
-            password: password
-        )
         let targetDate = Self.todayString
         let generation = localDataGeneration
 
         Task {
-            defer { isRefreshingClassrooms = false }
+            defer {
+                if refreshToken == classroomRefreshToken { isRefreshingClassrooms = false }
+            }
             do {
                 let fetched = try await classroomClient.fetch(
                     credentials: credentials,
                     targetDate: targetDate
                 )
-                guard generation == localDataGeneration else { return }
+                guard generation == localDataGeneration, refreshToken == classroomRefreshToken else { return }
                 try classroomStore.save(fetched)
                 classroomsCache = fetched
                 selectedBuildings.formIntersection(Set(campusBuildings))
                 classroomStatusMessage = "当天空教室已更新"
             } catch {
-                guard generation == localDataGeneration else { return }
+                guard generation == localDataGeneration, refreshToken == classroomRefreshToken else { return }
                 classroomStatusMessage = error.localizedDescription
             }
         }
@@ -414,12 +557,68 @@ final class AppModel: ObservableObject {
 
     private func loadCredentials() {
         do {
-            guard let credentials = try credentialStore.load() else { return }
+            guard let credentials = try credentialStore.load() else {
+                password = ""
+                updateSavedCredentialState(nil)
+                return
+            }
             account = credentials.account
-            password = credentials.password
+            password = ""
+            updateSavedCredentialState(credentials)
         } catch {
+            password = ""
+            updateSavedCredentialState(nil)
             statusMessage = error.localizedDescription
         }
+    }
+
+    private func credentialsForRequest() throws -> Credentials {
+        try CredentialSettingsLogic.credentialsForRequest(
+            account: account,
+            password: password,
+            storedCredentials: credentialStore.load()
+        )
+    }
+
+    private func updateSavedCredentialState(_ credentials: Credentials?) {
+        savedCredentialAccount = credentials?.account
+        hasSavedPassword = !(credentials?.password.isEmpty ?? true)
+    }
+
+    private func clearAccountScopedData() throws {
+        invalidatePendingAccountRequests()
+        var failed = false
+        do {
+            try scheduleStore.clear()
+        } catch {
+            failed = true
+        }
+        schedule = nil
+        calendarImportStatusMessage = ""
+        do {
+            try classroomStore.clear()
+        } catch {
+            failed = true
+        }
+        classroomsCache = nil
+        classroomStatusMessage = ""
+        selectedBuildings.removeAll()
+        synchronizeSelectedSlots()
+        if failed { throw CredentialSettingsError.accountDataResetFailed }
+    }
+
+    private func invalidatePendingAccountRequests() {
+        localDataGeneration &+= 1
+        scheduleRefreshToken &+= 1
+        classroomRefreshToken &+= 1
+        isRefreshingSchedule = false
+        isRefreshingClassrooms = false
+    }
+
+    private func invalidatePendingOperations() {
+        invalidatePendingAccountRequests()
+        calendarImportToken &+= 1
+        isImportingCalendar = false
     }
 
     private func loadSchedule() {

@@ -148,10 +148,16 @@ class TeachingCalendarPage(
                     } else {
                         ""
                     }
+                    val staleText = if (summary.removedStaleEvents > 0) {
+                        "，清理失效 ${summary.removedStaleEvents} 条"
+                    } else {
+                        ""
+                    }
                     Toast.makeText(
                         activity,
                         "已同步 ${summary.totalEvents} 条课程到「${summary.calendarName}」" +
-                            "（新增 ${summary.insertedEvents}，更新 ${summary.updatedEvents}${duplicateText}）",
+                            "（新增 ${summary.insertedEvents}，更新 ${summary.updatedEvents}" +
+                            "${duplicateText}${staleText}）",
                         Toast.LENGTH_LONG,
                     ).show()
                 }.onFailure { error ->

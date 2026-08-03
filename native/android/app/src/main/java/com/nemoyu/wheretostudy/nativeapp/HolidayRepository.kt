@@ -9,8 +9,8 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 internal class HolidayFailureCooldown(
     private val cooldownMillis: Long = DEFAULT_COOLDOWN_MILLIS,
@@ -75,17 +75,24 @@ class HolidayRepository(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val snapshots = ConcurrentHashMap<Int, HolidaysSnapshot>()
     private val loadedYears = ConcurrentHashMap.newKeySet<Int>()
-    private val inFlightYears = ConcurrentHashMap.newKeySet<Int>()
+    private val inFlightYears = ConcurrentHashMap<Int, Long>()
     private val statusByYear = ConcurrentHashMap<Int, String>()
     private val failureCooldown = HolidayFailureCooldown()
     private val observers = HolidayObserverRegistry()
     private val closed = AtomicBoolean(false)
-    private val dataGeneration = AtomicLong(0)
 
-    fun snapshot(year: Int): HolidaysSnapshot? {
-        snapshots[year]?.let { return it }
-        if (!loadedYears.add(year)) return snapshots[year]
-        return runCatching { store.load(year) }.getOrNull()?.also { snapshots[year] = it }
+    fun snapshot(year: Int): HolidaysSnapshot? = snapshot(year, LocalDataCoordinator.snapshot())
+
+    private fun snapshot(year: Int, generation: Long): HolidaysSnapshot? {
+        return runCatching {
+            LocalDataCoordinator.withCurrent(generation) {
+                snapshots[year] ?: if (!loadedYears.add(year)) {
+                    snapshots[year]
+                } else {
+                    store.load(year)?.also { snapshots[year] = it }
+                }
+            }
+        }.getOrNull()
     }
 
     fun items(year: Int): List<HolidayItem> = snapshot(year)?.items.orEmpty()
@@ -104,50 +111,65 @@ class HolidayRepository(
         year: Int,
         force: Boolean = false,
     ) {
+        val refreshGeneration = LocalDataCoordinator.snapshot()
         if (closed.get()) return
         if (year !in HolidayMetadata.minimumYear..HolidayMetadata.maximumYear) return
-        val cached = snapshot(year)
+        val cached = snapshot(year, refreshGeneration)
+        if (!LocalDataCoordinator.isCurrent(refreshGeneration)) return
         if (!force && cached != null && isFresh(cached)) return
         if (!failureCooldown.shouldAttempt(year, force)) return
-        if (!inFlightYears.add(year)) return
-        val refreshGeneration = dataGeneration.get()
-        worker.execute {
-            val result = runCatching {
-                client.fetch(year).also { fetched ->
-                    if (dataGeneration.get() != refreshGeneration) return@also
-                    store.save(fetched)
+        if (inFlightYears.putIfAbsent(year, refreshGeneration) != null) return
+        try {
+            worker.execute {
+                val result = runCatching {
+                    client.fetch(year).also { fetched ->
+                        LocalDataCoordinator.withCurrent(refreshGeneration) {
+                            store.save(fetched)
+                            snapshots[year] = fetched
+                            statusByYear.remove(year)
+                            failureCooldown.recordSuccess(year)
+                        }
+                    }
+                }
+                result.onFailure { error ->
+                    if (error !is LocalDataInvalidatedException &&
+                        LocalDataCoordinator.isCurrent(refreshGeneration)
+                    ) {
+                        runCatching {
+                            LocalDataCoordinator.withCurrent(refreshGeneration) {
+                                failureCooldown.recordFailure(year)
+                                statusByYear[year] = if (cached == null) {
+                                    "节假日数据暂不可用"
+                                } else {
+                                    "节假日更新失败，正在使用本地缓存"
+                                }
+                            }
+                        }
+                    }
+                }
+                if (closed.get() || !LocalDataCoordinator.isCurrent(refreshGeneration)) {
+                    inFlightYears.remove(year, refreshGeneration)
+                    return@execute
+                }
+                mainHandler.post {
+                    if (closed.get() || !LocalDataCoordinator.isCurrent(refreshGeneration)) {
+                        inFlightYears.remove(year, refreshGeneration)
+                        return@post
+                    }
+                    inFlightYears.remove(year, refreshGeneration)
+                    observers.snapshot().forEach { observer -> observer() }
                 }
             }
-            if (dataGeneration.get() != refreshGeneration) {
-                inFlightYears.remove(year)
-                return@execute
-            }
-            result.onSuccess { fetched ->
-                snapshots[year] = fetched
-                statusByYear.remove(year)
-                failureCooldown.recordSuccess(year)
-            }.onFailure {
-                failureCooldown.recordFailure(year)
-                statusByYear[year] = if (cached == null) {
-                    "节假日数据暂不可用"
-                } else {
-                    "节假日更新失败，正在使用本地缓存"
-                }
-            }
-            if (closed.get()) {
-                inFlightYears.remove(year)
-                return@execute
-            }
-            mainHandler.post {
-                if (closed.get()) return@post
-                inFlightYears.remove(year)
-                observers.snapshot().forEach { observer -> observer() }
-            }
+        } catch (_: RejectedExecutionException) {
+            inFlightYears.remove(year, refreshGeneration)
         }
     }
 
     fun clearLocalData() {
-        dataGeneration.incrementAndGet()
+        LocalDataCoordinator.clear(::clearLocalDataCoordinated)
+    }
+
+    internal fun clearLocalDataCoordinated() {
         store.clear()
         snapshots.clear()
         loadedYears.clear()

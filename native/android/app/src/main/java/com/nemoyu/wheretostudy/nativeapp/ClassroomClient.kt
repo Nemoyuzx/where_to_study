@@ -7,7 +7,10 @@ import java.util.TimeZone
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ClassroomClientException(message: String) : Exception(message)
+class ClassroomClientException(
+    message: String,
+    val retryable: Boolean = false,
+) : Exception(message)
 
 class SjdClassroomClient(
     private val api: SjdApiClient = SjdApiClient(),

@@ -5,8 +5,12 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.EditText
@@ -21,6 +25,7 @@ class SettingsPage(
     private val credentialStore: SecureCredentialStore,
     private val preferences: AppPreferences,
     private val scheduleRepository: ScheduleRepository,
+    private val classroomRepository: ClassroomRepository,
 ) {
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
@@ -32,15 +37,45 @@ class SettingsPage(
     }
 
     private fun accountSurface(): LinearLayout = surface(activity).apply {
-        val saved = credentialStore.load()
+        val savedIdentity = credentialStore.load()?.let { it.account to it.password.isNotEmpty() }
+        var persistedAccount = savedIdentity?.first.orEmpty()
+        var hasPersistedPassword = savedIdentity?.second == true
         addView(sectionTitle(activity, "个人账户"))
-        val account = field("教务账号", saved?.account.orEmpty(), false)
-        val password = field("密码", saved?.password.orEmpty(), true)
+        val account = field("教务账号", persistedAccount, false)
+        val password = field("密码", "", true)
+        val passwordStatus = TextView(activity).apply {
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setPadding(activity.dp(2), activity.dp(7), activity.dp(2), 0)
+        }
         val termID = field("学期编号", preferences.termID, false)
         val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
+        fun updatePasswordStatus() {
+            val preservesSavedPassword = hasPersistedPassword &&
+                persistedAccount == account.text.toString().trim()
+            passwordStatus.text = if (preservesSavedPassword) {
+                "密码已安全保存，留空保持不变"
+            } else if (hasPersistedPassword && account.text.toString().trim().isNotEmpty()) {
+                "更换账号时请输入新密码"
+            } else {
+                ""
+            }
+            passwordStatus.visibility = if (passwordStatus.text.isEmpty()) View.GONE else View.VISIBLE
+        }
+        account.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) {
+                updatePasswordStatus()
+            }
+
+            override fun afterTextChanged(value: Editable?) = Unit
+        })
+        updatePasswordStatus()
         addView(account)
         addView(spacer(activity, 10))
         addView(password)
+        addView(passwordStatus)
         addView(spacer(activity, 10))
         addView(termID)
         addView(spacer(activity, 10))
@@ -68,17 +103,39 @@ class SettingsPage(
         }
         addView(campus)
         addView(spacer(activity, 18))
-        fun saveSettings(): Result<Unit> = runCatching {
-            credentialStore.save(
-                Credentials(
-                    account = account.text.toString().trim(),
-                    password = password.text.toString(),
-                ),
+        fun saveSettings(): Result<Credentials> = runCatching {
+            val savedCredentials = credentialStore.load()
+            val credentials = CredentialUpdateLogic.resolve(
+                saved = savedCredentials,
+                requestedAccount = account.text.toString(),
+                enteredPassword = password.text.toString(),
             )
-            preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
-            preferences.termID = termID.text.toString().trim().ifEmpty { AppMetadata.defaultTermID }
-            preferences.termStartDate = termStartDate.text.toString().trim()
-                .ifEmpty { AppMetadata.defaultTermStartDate }
+            val persist: () -> Credentials = {
+                credentials.also {
+                    credentialStore.save(credentials)
+                    preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
+                    preferences.termID = termID.text.toString().trim()
+                        .ifEmpty { AppMetadata.defaultTermID }
+                    preferences.termStartDate = termStartDate.text.toString().trim()
+                        .ifEmpty { AppMetadata.defaultTermStartDate }
+                }
+            }
+            if (CredentialUpdateLogic.changesAccount(savedCredentials, credentials)) {
+                LocalDataCoordinator.clear {
+                    scheduleRepository.clearLocalDataCoordinated()
+                    classroomRepository.clearLocalDataCoordinated()
+                    persist()
+                }
+            } else {
+                val generation = LocalDataCoordinator.snapshot()
+                LocalDataCoordinator.withCurrent(generation, persist)
+            }
+        }
+        fun applySavedCredentials(credentials: Credentials) {
+            persistedAccount = credentials.account
+            hasPersistedPassword = credentials.password.isNotEmpty()
+            password.text.clear()
+            updatePasswordStatus()
         }
 
         addView(TextView(activity).apply {
@@ -95,10 +152,15 @@ class SettingsPage(
                 activity.dp(48),
             )
             setOnClickListener {
-                saveSettings().onSuccess {
+                saveSettings().onSuccess { credentials ->
+                    applySavedCredentials(credentials)
                     Toast.makeText(activity, "设置已保存", Toast.LENGTH_SHORT).show()
-                }.onFailure {
-                    Toast.makeText(activity, "无法安全保存账户信息", Toast.LENGTH_LONG).show()
+                }.onFailure { error ->
+                    Toast.makeText(
+                        activity,
+                        error.message ?: "无法安全保存账户信息",
+                        Toast.LENGTH_LONG,
+                    ).show()
                 }
             }
         })
@@ -118,10 +180,16 @@ class SettingsPage(
             )
             setOnClickListener {
                 val button = it as TextView
-                saveSettings().onFailure {
-                    Toast.makeText(activity, "无法安全保存账户信息", Toast.LENGTH_LONG).show()
+                val saveResult = saveSettings()
+                if (saveResult.isFailure) {
+                    Toast.makeText(
+                        activity,
+                        saveResult.exceptionOrNull()?.message ?: "无法安全保存账户信息",
+                        Toast.LENGTH_LONG,
+                    ).show()
                     return@setOnClickListener
                 }
+                applySavedCredentials(saveResult.getOrThrow())
                 button.text = "正在获取…"
                 button.isEnabled = false
                 scheduleRepository.refresh { result ->
@@ -221,6 +289,10 @@ class SettingsPage(
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         } else {
             InputType.TYPE_CLASS_TEXT
+        }
+        if (secure && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            setAutofillHints(null)
         }
         background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
         setPadding(activity.dp(13), 0, activity.dp(13), 0)

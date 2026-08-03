@@ -69,6 +69,106 @@ class ScheduleCalendarLogicTest {
     }
 
     @Test
+    fun syncPlanUpdatesOneEventAndRemovesOnlyScopedDuplicatesAndStaleEvents() {
+        val snapshot = schedule(course(weekNumbers = listOf(1, 2)))
+        val drafts = ScheduleCalendarLogic.expand(snapshot)
+        val window = ScheduleCalendarLogic.termWindow(snapshot)
+        val plan = CalendarSyncPlanner.plan(
+            snapshot,
+            drafts,
+            listOf(
+                ManagedCalendarEvent(11, drafts[0].marker, drafts[0].startsAtMillis),
+                ManagedCalendarEvent(12, drafts[0].marker, drafts[0].startsAtMillis),
+                ManagedCalendarEvent(
+                    13,
+                    ScheduleCalendarLogic.markerPrefix + "removed-course",
+                    drafts[1].startsAtMillis,
+                ),
+                ManagedCalendarEvent(
+                    14,
+                    ScheduleCalendarLogic.markerPrefix + "historic-course",
+                    window.endsAtMillis,
+                ),
+            ),
+        )
+
+        assertEquals(listOf(11L), plan.updates.map(CalendarEventUpdate::eventID))
+        assertEquals(listOf(drafts[1].marker), plan.inserts.map(CalendarEventDraft::marker))
+        assertEquals(listOf(12L), plan.duplicateEventIDs)
+        assertEquals(listOf(13L), plan.staleEventIDs)
+    }
+
+    @Test
+    fun changedCourseIdentityReplacesItsOldEventWithinTheCurrentTerm() {
+        val snapshot = schedule(course())
+        val draft = ScheduleCalendarLogic.expand(snapshot).single()
+        val oldMarker = ScheduleCalendarLogic.stableMarker(snapshot.termID, "old-course-id", 1)
+
+        val plan = CalendarSyncPlanner.plan(
+            snapshot,
+            listOf(draft),
+            listOf(ManagedCalendarEvent(21, oldMarker, draft.startsAtMillis)),
+        )
+
+        assertEquals(listOf(draft), plan.inserts)
+        assertEquals(listOf(21L), plan.staleEventIDs)
+        assertTrue(plan.updates.isEmpty())
+    }
+
+    @Test
+    fun termWindowCoversEighteenWeeksWithoutReachingTheNextTerm() {
+        val snapshot = schedule(course(weekNumbers = listOf(1)))
+        val window = ScheduleCalendarLogic.termWindow(snapshot)
+
+        assertEquals("2026-03-02 00:00", format(window.startsAtMillis))
+        assertEquals("2026-07-06 00:00", format(window.endsAtMillis))
+        assertTrue(window.contains(window.endsAtMillis - 1))
+        assertTrue(!window.contains(window.endsAtMillis))
+    }
+
+    @Test
+    fun termWindowExtendsToTheLatestValidTeachingWeek() {
+        val snapshot = schedule(course(weekNumbers = listOf(1, 20)))
+        val window = ScheduleCalendarLogic.termWindow(snapshot)
+
+        assertEquals("2026-07-20 00:00", format(window.endsAtMillis))
+    }
+
+    @Test
+    fun expectedMarkerOutsideTheTermIsUpdatedInsteadOfInsertedAgain() {
+        val snapshot = schedule(course())
+        val draft = ScheduleCalendarLogic.expand(snapshot).single()
+        val window = ScheduleCalendarLogic.termWindow(snapshot)
+
+        val plan = CalendarSyncPlanner.plan(
+            snapshot,
+            listOf(draft),
+            listOf(ManagedCalendarEvent(31, draft.marker, window.endsAtMillis + 1)),
+        )
+
+        assertEquals(listOf(31L), plan.updates.map(CalendarEventUpdate::eventID))
+        assertTrue(plan.inserts.isEmpty())
+        assertTrue(plan.staleEventIDs.isEmpty())
+    }
+
+    @Test
+    fun emptyScheduleRemovesScopedManagedEvents() {
+        val populated = schedule(course())
+        val draft = ScheduleCalendarLogic.expand(populated).single()
+        val empty = populated.copy(courses = emptyList())
+
+        val plan = CalendarSyncPlanner.plan(
+            empty,
+            emptyList(),
+            listOf(ManagedCalendarEvent(41, draft.marker, draft.startsAtMillis)),
+        )
+
+        assertEquals(listOf(41L), plan.staleEventIDs)
+        assertTrue(plan.inserts.isEmpty())
+        assertTrue(plan.updates.isEmpty())
+    }
+
+    @Test
     fun rejectsInvalidTermDates() {
         listOf("2026-02-30", "2026-3-02", "not-a-date").forEach { invalidDate ->
             assertThrows(ScheduleCalendarExpansionException::class.java) {

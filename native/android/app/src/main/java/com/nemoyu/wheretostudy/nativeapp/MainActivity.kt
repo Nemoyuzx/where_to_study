@@ -49,10 +49,19 @@ class MainActivity : Activity() {
     private val systemCalendarImporter by systemCalendarImporterDelegate
     private var selectedDestination = Destination.PLANNER
     private var calendarImportInFlight = false
+    private var calendarPermissionRequestPending = false
+    private var calendarImportToken: Long? = null
     private var pendingCalendarImport: PendingCalendarImport? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        calendarPermissionRequestPending = savedInstanceState
+            ?.getBoolean(CALENDAR_PERMISSION_PENDING_KEY, false)
+            ?: false
+        calendarImportToken = savedInstanceState
+            ?.getLong(CALENDAR_IMPORT_TOKEN_KEY, NO_CALENDAR_IMPORT_TOKEN)
+            ?.takeUnless { it == NO_CALENDAR_IMPORT_TOKEN }
+        calendarImportInFlight = calendarImportToken != null
 
         val root = if (resources.configuration.screenWidthDp >= TABLET_BREAKPOINT_DP) {
             tabletLayout()
@@ -65,6 +74,11 @@ class MainActivity : Activity() {
         navigate(Destination.PLANNER)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
         refreshClassroomsAtStartup()
+        if (calendarPermissionRequestPending && hasCalendarPermissions()) {
+            resumeCalendarImportAfterRecreation()
+        } else {
+            calendarImportToken?.let(::reattachCalendarImport)
+        }
     }
 
     private fun phoneLayout(): LinearLayout = LinearLayout(this).apply {
@@ -174,6 +188,7 @@ class MainActivity : Activity() {
                     credentialStore,
                     preferences,
                     scheduleRepository,
+                    classroomRepository,
                 ).build()
             },
             FrameLayout.LayoutParams(
@@ -191,7 +206,7 @@ class MainActivity : Activity() {
         onComplete: (Result<SystemCalendarImportResult>) -> Unit,
     ) {
         val schedule = scheduleRepository.schedule
-        if (schedule == null || schedule.courses.isEmpty()) {
+        if (schedule == null) {
             onComplete(Result.failure(SystemCalendarImportException("请先获取个人课表。")))
             return
         }
@@ -207,6 +222,7 @@ class MainActivity : Activity() {
             return
         }
         pendingCalendarImport = pending
+        calendarPermissionRequestPending = true
         runCatching {
             requestPermissions(CALENDAR_PERMISSIONS, CALENDAR_PERMISSION_REQUEST_CODE)
         }.onFailure { error ->
@@ -224,16 +240,38 @@ class MainActivity : Activity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != CALENDAR_PERMISSION_REQUEST_CODE) return
-        val pending = pendingCalendarImport ?: return
+        val pending = pendingCalendarImport
         pendingCalendarImport = null
+        val shouldResume = calendarPermissionRequestPending
+        calendarPermissionRequestPending = false
         if (hasCalendarPermissions()) {
-            startCalendarImport(pending)
+            if (pending != null) {
+                startCalendarImport(pending)
+            } else if (shouldResume) {
+                resumeCalendarImportAfterRecreation()
+            }
         } else {
-            finishCalendarImport(
-                pending,
-                Result.failure(SystemCalendarImportException("需要允许日历读写权限才能导入课程。")),
+            val failure = Result.failure<SystemCalendarImportResult>(
+                SystemCalendarImportException("需要允许日历读写权限才能导入课程。"),
             )
+            if (pending != null) {
+                finishCalendarImport(pending, failure)
+            } else if (shouldResume) {
+                showCalendarImportResult(failure)
+            }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(
+            CALENDAR_PERMISSION_PENDING_KEY,
+            calendarPermissionRequestPending || pendingCalendarImport != null,
+        )
+        outState.putLong(
+            CALENDAR_IMPORT_TOKEN_KEY,
+            calendarImportToken ?: NO_CALENDAR_IMPORT_TOKEN,
+        )
+        super.onSaveInstanceState(outState)
     }
 
     fun clearAllLocalData(): LocalDataClearResult {
@@ -242,15 +280,18 @@ class MainActivity : Activity() {
             runCatching(operation).onFailure { failures += label }
         }
 
-        clearItem("账号和密码") { credentialStore.clear() }
-        clearItem("应用设置") { preferences.clear() }
-        clearItem("个人课表") { scheduleRepository.clearLocalData() }
-        clearItem("空教室缓存") { classroomRepository.clearLocalData() }
-        clearItem("节假日缓存") {
-            if (holidayRepositoryDelegate.isInitialized()) {
-                holidayRepository.clearLocalData()
-            } else {
-                HolidayStore(this).clear()
+        LocalDataCoordinator.clear {
+            clearItem("账号和密码") { credentialStore.clear() }
+            clearItem("应用设置") { preferences.clear() }
+            clearItem("后台刷新状态") { DailyClassroomRetryStore(this).clear() }
+            clearItem("个人课表") { scheduleRepository.clearLocalDataCoordinated() }
+            clearItem("空教室缓存") { classroomRepository.clearLocalDataCoordinated() }
+            clearItem("节假日缓存") {
+                if (holidayRepositoryDelegate.isInitialized()) {
+                    holidayRepository.clearLocalDataCoordinated()
+                } else {
+                    HolidayStore(this).clear()
+                }
             }
         }
         runCatching(::refreshCurrentPage)
@@ -284,9 +325,14 @@ class MainActivity : Activity() {
 
     private fun startCalendarImport(pending: PendingCalendarImport) {
         pendingCalendarImport = null
-        systemCalendarImporter.importSchedule(pending.schedule) { result ->
+        calendarPermissionRequestPending = false
+        val registration = systemCalendarImporter.importSchedule(pending.schedule) { result ->
             finishCalendarImport(pending, result)
         }
+        registration.onSuccess { calendarImportToken = it.token }
+            .onFailure { error ->
+                finishCalendarImport(pending, Result.failure(error))
+            }
     }
 
     private fun finishCalendarImport(
@@ -294,8 +340,57 @@ class MainActivity : Activity() {
         result: Result<SystemCalendarImportResult>,
     ) {
         calendarImportInFlight = false
+        calendarPermissionRequestPending = false
+        calendarImportToken = null
         if (pendingCalendarImport === pending) pendingCalendarImport = null
         pending.onComplete(result)
+    }
+
+    private fun reattachCalendarImport(token: Long) {
+        calendarImportInFlight = true
+        if (systemCalendarImporter.attach(token) { result ->
+                calendarImportInFlight = false
+                calendarImportToken = null
+                showCalendarImportResult(result)
+            }
+        ) {
+            return
+        }
+        calendarImportInFlight = false
+        calendarImportToken = null
+        showCalendarImportResult(
+            Result.failure(SystemCalendarImportException("系统日历同步已中断，请重试。")),
+        )
+    }
+
+    private fun resumeCalendarImportAfterRecreation() {
+        calendarPermissionRequestPending = false
+        val schedule = scheduleRepository.schedule
+        if (schedule == null) {
+            showCalendarImportResult(
+                Result.failure(SystemCalendarImportException("请先获取个人课表。")),
+            )
+            return
+        }
+        if (systemCalendarImporter.isImporting) return
+        calendarImportInFlight = true
+        startCalendarImport(PendingCalendarImport(schedule, ::showCalendarImportResult))
+    }
+
+    private fun showCalendarImportResult(result: Result<SystemCalendarImportResult>) {
+        result.onSuccess { summary ->
+            android.widget.Toast.makeText(
+                this,
+                "已同步 ${summary.totalEvents} 条课程到系统日历。",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }.onFailure { error ->
+            android.widget.Toast.makeText(
+                this,
+                error.message ?: "系统日历导入失败。",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
     }
 
     private fun applySystemInsets(root: View) {
@@ -337,6 +432,9 @@ class MainActivity : Activity() {
     private companion object {
         const val TABLET_BREAKPOINT_DP = 700
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
+        const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"
+        const val CALENDAR_IMPORT_TOKEN_KEY = "calendar_import_token"
+        const val NO_CALENDAR_IMPORT_TOKEN = 0L
         val CALENDAR_PERMISSIONS = arrayOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,

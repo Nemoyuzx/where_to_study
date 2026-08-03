@@ -13,6 +13,7 @@ import android.provider.CalendarContract
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 data class SystemCalendarImportResult(
     val calendarName: String,
@@ -20,46 +21,147 @@ data class SystemCalendarImportResult(
     val insertedEvents: Int,
     val updatedEvents: Int,
     val removedDuplicates: Int,
+    val removedStaleEvents: Int,
 )
 
 class SystemCalendarImportException(message: String, cause: Throwable? = null) :
     Exception(message, cause)
 
+internal data class CalendarImportRegistration(val token: Long)
+
+internal sealed interface CalendarImportAttachment<out T> {
+    data object Active : CalendarImportAttachment<Nothing>
+    data class Completed<T>(val result: Result<T>) : CalendarImportAttachment<T>
+    data object Missing : CalendarImportAttachment<Nothing>
+}
+
+internal class CalendarImportProcessCoordinator<T> {
+    private data class ActiveImport<T>(
+        val token: Long,
+        val observers: MutableMap<Long, (Long, Result<T>) -> Unit>,
+    )
+
+    private data class CompletedImport<T>(val token: Long, val result: Result<T>)
+
+    private val lock = Any()
+    private var nextToken = 0L
+    private var active: ActiveImport<T>? = null
+    private var completed: CompletedImport<T>? = null
+
+    fun isRunning(): Boolean = synchronized(lock) { active != null }
+
+    fun start(
+        observerID: Long,
+        observer: (Long, Result<T>) -> Unit,
+    ): CalendarImportRegistration? = synchronized(lock) {
+        if (active != null) return@synchronized null
+        nextToken += 1
+        completed = null
+        active = ActiveImport(nextToken, mutableMapOf(observerID to observer))
+        CalendarImportRegistration(nextToken)
+    }
+
+    fun attach(
+        token: Long,
+        observerID: Long,
+        observer: (Long, Result<T>) -> Unit,
+    ): CalendarImportAttachment<T> = synchronized(lock) {
+        val running = active
+        if (running?.token == token) {
+            running.observers[observerID] = observer
+            return@synchronized CalendarImportAttachment.Active
+        }
+        val finished = completed
+        if (finished?.token == token) {
+            CalendarImportAttachment.Completed(finished.result)
+        } else {
+            CalendarImportAttachment.Missing
+        }
+    }
+
+    fun complete(token: Long, result: Result<T>): List<(Long, Result<T>) -> Unit> = synchronized(lock) {
+        val running = active?.takeIf { it.token == token } ?: return@synchronized emptyList()
+        active = null
+        completed = CompletedImport(token, result)
+        running.observers.values.toList()
+    }
+
+    fun cancelStart(token: Long) = synchronized(lock) {
+        if (active?.token == token) active = null
+    }
+
+    fun detach(observerID: Long) = synchronized(lock) {
+        active?.observers?.remove(observerID)
+    }
+
+}
+
 class SystemCalendarImporter(context: Context) {
     private val appContext = context.applicationContext
     private val resolver = appContext.contentResolver
-    private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val importInFlight = AtomicBoolean(false)
+    private val closed = AtomicBoolean(false)
+    private val observerID = nextObserverID.incrementAndGet()
 
     val isImporting: Boolean
-        get() = importInFlight.get()
+        get() = processCoordinator.isRunning()
 
-    fun importSchedule(
+    internal fun importSchedule(
         schedule: ScheduleSnapshot,
         onComplete: (Result<SystemCalendarImportResult>) -> Unit,
-    ) {
-        if (!importInFlight.compareAndSet(false, true)) {
-            onComplete(Result.failure(SystemCalendarImportException("课表正在导入系统日历。")))
-            return
+    ): Result<CalendarImportRegistration> {
+        if (closed.get()) {
+            return Result.failure(SystemCalendarImportException("日历导入服务已关闭。"))
         }
+        val registration = processCoordinator.start(observerID, completion(onComplete))
+            ?: return Result.failure(SystemCalendarImportException("课表正在导入系统日历。"))
 
         try {
-            worker.execute {
+            processWorker.execute {
                 val result = runCatching { importOnWorker(schedule) }
-                mainHandler.post {
-                    importInFlight.set(false)
-                    onComplete(result)
+                processCoordinator.complete(registration.token, result).forEach { observer ->
+                    observer(registration.token, result)
                 }
             }
         } catch (error: RejectedExecutionException) {
-            importInFlight.set(false)
-            onComplete(Result.failure(SystemCalendarImportException("日历导入服务已关闭。", error)))
+            processCoordinator.cancelStart(registration.token)
+            return Result.failure(SystemCalendarImportException("日历导入服务已关闭。", error))
+        }
+        return Result.success(registration)
+    }
+
+    internal fun attach(
+        token: Long,
+        onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+    ): Boolean {
+        if (closed.get()) return false
+        val observer = completion(onComplete)
+        return when (val attachment = processCoordinator.attach(token, observerID, observer)) {
+            CalendarImportAttachment.Active -> true
+            is CalendarImportAttachment.Completed -> {
+                observer(token, attachment.result)
+                true
+            }
+            CalendarImportAttachment.Missing -> false
         }
     }
 
     fun close() {
-        worker.shutdownNow()
+        if (!closed.compareAndSet(false, true)) return
+        processCoordinator.detach(observerID)
+        mainHandler.removeCallbacksAndMessages(null)
+    }
+
+    private fun completion(
+        onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+    ): (Long, Result<SystemCalendarImportResult>) -> Unit = { _, result ->
+        if (!closed.get()) {
+            mainHandler.post {
+                if (!closed.get()) {
+                    onComplete(result)
+                }
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -68,37 +170,27 @@ class SystemCalendarImporter(context: Context) {
             throw SystemCalendarImportException("需要日历读写权限才能导入课程。")
         }
         val drafts = ScheduleCalendarLogic.expand(schedule)
-        if (drafts.isEmpty()) {
-            throw SystemCalendarImportException("本地课表中没有可导入的课程。")
-        }
         val calendar = findPrimaryWritableCalendar()
         val existingEvents = existingEvents()
+        val plan = CalendarSyncPlanner.plan(schedule, drafts, existingEvents)
         val operations = mutableListOf<ContentProviderOperation>()
-        var inserted = 0
-        var updated = 0
-        var duplicates = 0
 
-        drafts.forEach { draft ->
-            val existingIDs = existingEvents[draft.marker].orEmpty().sorted()
-            if (existingIDs.isEmpty()) {
-                operations += ContentProviderOperation.newInsert(CalendarContract.Events.CONTENT_URI)
-                    .withValues(eventValues(draft, calendar.id))
-                    .build()
-                inserted += 1
-            } else {
-                operations += ContentProviderOperation.newUpdate(
-                    ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, existingIDs.first()),
-                )
-                    .withValues(eventValues(draft, calendar.id))
-                    .build()
-                updated += 1
-                existingIDs.drop(1).forEach { duplicateID ->
-                    operations += ContentProviderOperation.newDelete(
-                        ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, duplicateID),
-                    ).build()
-                    duplicates += 1
-                }
-            }
+        (plan.duplicateEventIDs + plan.staleEventIDs).distinct().forEach { eventID ->
+            operations += ContentProviderOperation.newDelete(
+                ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventID),
+            ).build()
+        }
+        plan.updates.forEach { update ->
+            operations += ContentProviderOperation.newUpdate(
+                ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, update.eventID),
+            )
+                .withValues(eventValues(update.draft, calendar.id))
+                .build()
+        }
+        plan.inserts.forEach { draft ->
+            operations += ContentProviderOperation.newInsert(CalendarContract.Events.CONTENT_URI)
+                .withValues(eventValues(draft, calendar.id))
+                .build()
         }
 
         operations.chunked(MAX_OPERATIONS_PER_BATCH).forEach { batch ->
@@ -107,9 +199,10 @@ class SystemCalendarImporter(context: Context) {
         return SystemCalendarImportResult(
             calendarName = calendar.name,
             totalEvents = drafts.size,
-            insertedEvents = inserted,
-            updatedEvents = updated,
-            removedDuplicates = duplicates,
+            insertedEvents = plan.inserts.size,
+            updatedEvents = plan.updates.size,
+            removedDuplicates = plan.duplicateEventIDs.size,
+            removedStaleEvents = plan.staleEventIDs.size,
         )
     }
 
@@ -123,7 +216,9 @@ class SystemCalendarImporter(context: Context) {
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
         )
-        val selection = "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ?"
+        val selection = "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ? AND " +
+            "${CalendarContract.Calendars.VISIBLE} = 1 AND " +
+            "${CalendarContract.Calendars.SYNC_EVENTS} = 1"
         val selectionArgs = arrayOf(CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR.toString())
         val order = "${CalendarContract.Calendars.IS_PRIMARY} DESC, " +
             "${CalendarContract.Calendars.VISIBLE} DESC, ${CalendarContract.Calendars._ID} ASC"
@@ -146,10 +241,11 @@ class SystemCalendarImporter(context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun existingEvents(): Map<String, List<Long>> {
+    private fun existingEvents(): List<ManagedCalendarEvent> {
         val projection = arrayOf(
             CalendarContract.Events._ID,
             CalendarContract.Events.CUSTOM_APP_URI,
+            CalendarContract.Events.DTSTART,
         )
         val selection = "${CalendarContract.Events.CUSTOM_APP_PACKAGE} = ? AND " +
             "${CalendarContract.Events.CUSTOM_APP_URI} LIKE ? AND " +
@@ -158,7 +254,7 @@ class SystemCalendarImporter(context: Context) {
             appContext.packageName,
             "${ScheduleCalendarLogic.markerPrefix}%",
         )
-        val events = linkedMapOf<String, MutableList<Long>>()
+        val events = mutableListOf<ManagedCalendarEvent>()
         resolver.query(
             CalendarContract.Events.CONTENT_URI,
             projection,
@@ -168,9 +264,14 @@ class SystemCalendarImporter(context: Context) {
         )?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(CalendarContract.Events._ID)
             val markerColumn = cursor.getColumnIndexOrThrow(CalendarContract.Events.CUSTOM_APP_URI)
+            val startsAtColumn = cursor.getColumnIndexOrThrow(CalendarContract.Events.DTSTART)
             while (cursor.moveToNext()) {
                 val marker = cursor.getString(markerColumn) ?: continue
-                events.getOrPut(marker) { mutableListOf() }.add(cursor.getLong(idColumn))
+                events += ManagedCalendarEvent(
+                    id = cursor.getLong(idColumn),
+                    marker = marker,
+                    startsAtMillis = cursor.getLong(startsAtColumn),
+                )
             }
         }
         return events
@@ -195,5 +296,8 @@ class SystemCalendarImporter(context: Context) {
 
     private companion object {
         const val MAX_OPERATIONS_PER_BATCH = 100
+        val processWorker = Executors.newSingleThreadExecutor()
+        val processCoordinator = CalendarImportProcessCoordinator<SystemCalendarImportResult>()
+        val nextObserverID = AtomicLong(0)
     }
 }

@@ -290,11 +290,11 @@ fn load_cache_from_path(path: &Path, year: i32) -> ServiceResult<Option<Holidays
     decode_cache(&bytes, year)
 }
 
-fn load_cache(app: &AppHandle, year: i32) -> ServiceResult<Option<HolidaysResponse>> {
+pub(super) fn load_cache(app: &AppHandle, year: i32) -> ServiceResult<Option<HolidaysResponse>> {
     load_cache_from_path(&cache_path(app, year)?, year)
 }
 
-fn save_cache_to_path(path: &Path, response: &HolidaysResponse) -> ServiceResult<()> {
+pub(super) fn save_cache_to_path(path: &Path, response: &HolidaysResponse) -> ServiceResult<()> {
     let bytes = encode_cache(response)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -325,11 +325,11 @@ fn save_cache_to_path(path: &Path, response: &HolidaysResponse) -> ServiceResult
     Err(ServiceError::new("无法定位本地节假日缓存目录。"))
 }
 
-fn save_cache(app: &AppHandle, response: &HolidaysResponse) -> ServiceResult<()> {
+pub(super) fn save_cache(app: &AppHandle, response: &HolidaysResponse) -> ServiceResult<()> {
     save_cache_to_path(&cache_path(app, response.year)?, response)
 }
 
-fn validate_fetch_year(year: i32) -> ServiceResult<()> {
+pub(super) fn validate_fetch_year(year: i32) -> ServiceResult<()> {
     validate_requested_year(year)
         .map_err(|_| ServiceError::with_status("节假日年份不在支持范围内。", 400))?;
     Ok(())
@@ -407,7 +407,7 @@ fn fallback_2026_items() -> Vec<HolidayItem> {
     expand_source_items(source, 2026).unwrap_or_default()
 }
 
-fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
+pub(super) fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
     let response = if year == 2026 {
         HolidaysResponse {
             year,
@@ -427,7 +427,7 @@ fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
     Ok(response)
 }
 
-async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
+pub(super) async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
     let url = format!("{HOLIDAY_DATA_SOURCE}/{year}.json");
     let mut response = reqwest::Client::new()
         .get(url)
@@ -463,23 +463,6 @@ async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
         fetched_at: now_contract_timestamp()?,
         items: expand_source_items(items, year)?,
     })
-}
-
-pub async fn fetch_holidays(app: &AppHandle, year: i32) -> ServiceResult<HolidaysResponse> {
-    validate_fetch_year(year)?;
-
-    match fetch_remote(year).await {
-        Ok(response) => {
-            save_cache(app, &response)?;
-            Ok(response)
-        }
-        Err(_) => {
-            if let Ok(Some(cached)) = load_cache(app, year) {
-                return Ok(cached);
-            }
-            offline_response(year)
-        }
-    }
 }
 
 #[cfg(test)]

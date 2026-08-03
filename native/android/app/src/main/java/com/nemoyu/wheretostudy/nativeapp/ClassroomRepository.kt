@@ -13,29 +13,25 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 private object ClassroomRefreshProcessState {
-    private val lock = Any()
-    private var refreshInFlight = false
-    private val completions = mutableListOf<(Result<ClassroomsCache>) -> Unit>()
-    val dataGeneration = AtomicLong(0)
+    private val registry = GenerationSingleFlight<ClassroomsCache> { LocalDataInvalidatedException() }
 
-    fun isRefreshing(): Boolean = synchronized(lock) { refreshInFlight }
+    fun isRefreshing(): Boolean = registry.isRunning()
 
-    fun join(completion: (Result<ClassroomsCache>) -> Unit): Boolean = synchronized(lock) {
-        completions += completion
-        if (refreshInFlight) {
-            false
-        } else {
-            refreshInFlight = true
-            true
-        }
+    fun join(
+        generation: Long,
+        completion: (Result<ClassroomsCache>) -> Unit,
+    ): GenerationSingleFlightRegistration = registry.join(generation, completion)
+
+    fun complete(token: Long, result: Result<ClassroomsCache>) {
+        registry.complete(token, result)
     }
 
-    fun complete(result: Result<ClassroomsCache>) {
-        val pending = synchronized(lock) {
-            refreshInFlight = false
-            completions.toList().also { completions.clear() }
-        }
-        pending.forEach { completion -> runCatching { completion(result) } }
+    fun cancel(token: Long, error: Throwable) {
+        registry.cancel(token, error)
+    }
+
+    fun invalidate() {
+        registry.invalidate()
     }
 }
 
@@ -48,12 +44,12 @@ class ClassroomRepository(
 ) {
     private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val ownsRefresh = AtomicBoolean(false)
+    private val ownedRefreshToken = AtomicLong(NO_REFRESH_TOKEN)
     private val closed = AtomicBoolean(false)
 
     @Volatile
     var cache: ClassroomsCache? = if (loadCachedData) {
-        runCatching(store::load).getOrNull()?.takeIf { it.targetDate == today() }
+        loadCachedClassrooms()?.takeIf { it.targetDate == today() }
     } else {
         null
     }
@@ -69,6 +65,7 @@ class ClassroomRepository(
         force: Boolean,
         onComplete: (Result<ClassroomsCache>) -> Unit,
     ) {
+        val refreshGeneration = LocalDataCoordinator.snapshot()
         val current = cache
         if (!force && current?.targetDate == today()) {
             mainHandler.post { onComplete(Result.success(current)) }
@@ -82,69 +79,115 @@ class ClassroomRepository(
         }
         val joinedCompletion: (Result<ClassroomsCache>) -> Unit = { result ->
             if (!closed.get()) {
-                result.onSuccess { cache = it }
                 mainHandler.post {
-                    if (!closed.get()) onComplete(result)
+                    if (!closed.get()) {
+                        val delivered = result.fold(
+                            onSuccess = { fetched ->
+                                runCatching {
+                                    LocalDataCoordinator.withCurrent(refreshGeneration) {
+                                        cache = fetched
+                                        fetched
+                                    }
+                                }
+                            },
+                            onFailure = { Result.failure(it) },
+                        )
+                        onComplete(delivered)
+                    }
                 }
             }
         }
-        if (!ClassroomRefreshProcessState.join(joinedCompletion)) {
+        val registration = ClassroomRefreshProcessState.join(
+            refreshGeneration,
+            joinedCompletion,
+        )
+        if (!registration.shouldStart) {
             return
         }
-        ownsRefresh.set(true)
-        val refreshGeneration = ClassroomRefreshProcessState.dataGeneration.get()
+        ownedRefreshToken.set(registration.token)
         try {
             worker.execute {
                 val result = runCatching {
                     if (closed.get()) {
                         throw ClassroomClientException("空教室获取服务已关闭。")
                     }
-                    val credentials = credentialStore.load()
+                    val credentials = LocalDataCoordinator.withCurrent(refreshGeneration) {
+                        credentialStore.load()
+                    }
                     if (DailyClassroomRefreshLogic.refreshDecision(
                             credentials?.account,
                             credentials?.password,
-                        ) == ClassroomRefreshDecision.SKIP_MISSING_CREDENTIALS
+                    ) == ClassroomRefreshDecision.SKIP_MISSING_CREDENTIALS
                     ) {
-                        throw ClassroomClientException("请先在设置中保存教务账号和密码。")
+                        throw ClassroomClientException(
+                            "请先在设置中保存教务账号和密码。",
+                            retryable = false,
+                        )
                     }
                     val targetDate = today()
                     client.fetch(checkNotNull(credentials), targetDate).also { fetched ->
-                        if (closed.get() ||
-                            ClassroomRefreshProcessState.dataGeneration.get() != refreshGeneration
-                        ) {
-                            throw ClassroomClientException("本地数据已清除，本次空教室结果未保存。")
+                        if (closed.get()) {
+                            throw ClassroomClientException("空教室获取服务已关闭。")
                         }
-                        store.save(fetched)
+                        LocalDataCoordinator.withCurrent(refreshGeneration) {
+                            store.save(fetched)
+                        }
                     }
                 }
-                completeRefresh(result)
+                val delivered = if (LocalDataCoordinator.isCurrent(refreshGeneration)) {
+                    result
+                } else {
+                    Result.failure(LocalDataInvalidatedException())
+                }
+                completeRefresh(registration.token, delivered)
             }
         } catch (_: RejectedExecutionException) {
-            completeRefresh(Result.failure(ClassroomClientException("空教室获取服务已关闭。")))
+            completeRefresh(
+                registration.token,
+                Result.failure(ClassroomClientException("空教室获取服务已关闭。")),
+            )
         }
     }
 
     fun clearLocalData() {
-        ClassroomRefreshProcessState.dataGeneration.incrementAndGet()
+        LocalDataCoordinator.clear(::clearLocalDataCoordinated)
+    }
+
+    internal fun clearLocalDataCoordinated() {
+        ClassroomRefreshProcessState.invalidate()
+        ownedRefreshToken.set(NO_REFRESH_TOKEN)
         store.clear()
         cache = null
     }
 
     fun close() {
         if (!closed.compareAndSet(false, true)) return
-        val queuedTasks = worker.shutdownNow()
-        if (queuedTasks.isNotEmpty()) {
-            completeRefresh(Result.failure(ClassroomClientException("空教室获取服务已关闭。")))
+        mainHandler.removeCallbacksAndMessages(null)
+        val token = ownedRefreshToken.getAndSet(NO_REFRESH_TOKEN)
+        if (token != NO_REFRESH_TOKEN) {
+            ClassroomRefreshProcessState.cancel(
+                token,
+                ClassroomClientException("空教室获取服务已关闭。"),
+            )
+        }
+        worker.shutdownNow()
+    }
+
+    private fun completeRefresh(token: Long, result: Result<ClassroomsCache>) {
+        if (ownedRefreshToken.compareAndSet(token, NO_REFRESH_TOKEN)) {
+            ClassroomRefreshProcessState.complete(token, result)
         }
     }
 
-    private fun completeRefresh(result: Result<ClassroomsCache>) {
-        if (ownsRefresh.compareAndSet(true, false)) {
-            ClassroomRefreshProcessState.complete(result)
-        }
+    private fun loadCachedClassrooms(): ClassroomsCache? {
+        val generation = LocalDataCoordinator.snapshot()
+        return runCatching {
+            LocalDataCoordinator.withCurrent(generation, store::load)
+        }.getOrNull()
     }
 
     companion object {
+        private const val NO_REFRESH_TOKEN = 0L
         private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
 
         fun today(date: Date = Date()): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {

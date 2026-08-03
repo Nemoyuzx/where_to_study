@@ -13,7 +13,10 @@ import java.util.TimeZone
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ScheduleClientException(message: String) : Exception(message)
+class ScheduleClientException(
+    message: String,
+    val retryable: Boolean = false,
+) : Exception(message)
 
 class SjdApiClient {
     fun login(credentials: Credentials): String {
@@ -85,7 +88,12 @@ class SjdApiClient {
             val stream = if (status in 200..399) connection.inputStream else connection.errorStream
             val body = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..399) {
-                throw ScheduleClientException("移动教务请求失败，HTTP $status。")
+                throw ScheduleClientException(
+                    "移动教务请求失败，HTTP $status。",
+                    retryable = status == HTTP_REQUEST_TIMEOUT ||
+                        status == HTTP_TOO_MANY_REQUESTS ||
+                        status >= HTTP_SERVER_ERROR,
+                )
             }
             return runCatching { JSONObject(body) }.getOrElse {
                 throw ScheduleClientException("移动教务返回了无法识别的数据。")
@@ -103,6 +111,9 @@ class SjdApiClient {
     private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
     companion object {
+        private const val HTTP_REQUEST_TIMEOUT = 408
+        private const val HTTP_TOO_MANY_REQUESTS = 429
+        private const val HTTP_SERVER_ERROR = 500
         const val ORIGIN = "https://jwglweixin.bupt.edu.cn"
         const val LOGIN_REFERER = "$ORIGIN/sjd/#/login"
         const val CLASSROOM_REFERER = "$ORIGIN/sjd/#/restClassroom"

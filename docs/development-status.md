@@ -1,14 +1,18 @@
-# 开发检查点（2026-08-03）
+# 开发冻结检查点（2026-08-04）
 
-## 检查点范围
+## 当前状态
 
 - 分支：`codex/native-platform-foundation`
-- 起始基线：`v0.1.1-alpha.5`（`1e6dd28`）
+- 上一个远端检查点：`db4297b`（`feat: checkpoint native platform integrations`）
 - 数据源：继续使用现有移动教务 SJD 接口，没有切换数据源
-- 发布状态：源码检查点，尚不是可发布版本
-- 本地发布暂存：`release-artifacts/`（被 `.gitignore` 排除，不提交二进制）
+- 版本：应用版本 `0.1.1`；Apple `CURRENT_PROJECT_VERSION=5`；Android `versionCode=5`
+- 发布状态：开发中检查点，不是可发布版本，未创建新的 GitHub Release
+- 二进制暂存：`release-artifacts/` 仅保存在本机并由 `.gitignore` 排除
+- 停止状态：所有子任务、构建进程、开发服务器、Android 模拟器和 iOS Simulator 已停止
 
-## 已完成
+本检查点按用户要求冻结。源码中包含已完成且通过验证的改动，也包含已识别但尚未修复或尚未完成最终验证的改动。恢复开发时必须先处理下方 P0/P1 项，不能直接打包发布。
+
+## 已完成功能
 
 ### 共享契约与业务规则
 
@@ -16,16 +20,18 @@
 - Rust、Swift、Kotlin 统一教室名称解析：教学楼与教室号分开，普通教室保留三位号，`202-203`、`217-218` 等双门号码保持为同一间教室。
 - 空教室只查询当天，使用原有教学楼集合；已移除“推荐同一教室”。
 - 个人课表持久化到本地；课表实际存在第 17、18 周时将对应课程标记为“试”。
-- 保留原有浅色、绿色品牌样式，日/周/月/年仅复用系统日历的交互能力。
+- 保留原有浅色、绿色品牌样式，日/周/月/年仅复用系统日历的功能和交互模式。
 
 ### Apple 原生端
 
 - SwiftUI macOS/iOS 三个一级页面：空教室、教学日历、设置。
 - 接入个人课表、当天空教室、法定节假日、本地缓存和 Keychain。
 - 日/周/月/年日历、课程节次与整点刻度、今日/选中日期状态、年视图课程热度、日期日程浮层和当前时间线。
-- EventKit 课程导入、考试标题、提醒能力。
+- EventKit 课程导入、考试标题、五分钟前提醒和应用自有事件标记。
 - macOS 菜单栏图标与今日/明日课程内容；关闭主窗口后保持菜单栏运行。
 - 启动时按需刷新当天空教室；macOS 每日 07:00 低频刷新任务。
+- 密码不回填到界面；同账号留空保留 Keychain 密码，换账号要求新密码。
+- 账号切换时使课表、空教室和日历导入操作代次失效，并清理账号范围内的本地缓存。
 - 原生图标、隐私清单、通用 macOS 构建和无签名 iOS Archive 脚本。
 
 ### Android 原生端
@@ -33,40 +39,56 @@
 - Kotlin + Android Views 手机/平板布局及三个一级页面。
 - 接入个人课表、当天空教室、法定节假日、Keystore 凭据和 `AtomicFile` 缓存。
 - 日/周/月/年日历、节次与整点刻度、课程热度、日期浮层、法定节假日和当前时间线。
-- Android Calendar Provider 课程导入。
-- 启动刷新与 `JobScheduler` 每日 07:00 刷新基础实现。
+- Android Calendar Provider 学期范围真同步：更新已有事件、删除当前学期内失效/重复事件，并保留其他应用事件。
+- 日历导入增加进程级互斥、Activity 重建后的结果恢复和权限拒绝恢复。
+- 本地数据代次与单飞协调已覆盖课表、空教室和节假日，旧请求不能在清除后写回缓存。
+- 密码不回填；同账号留空保留 Keystore 密码，换账号必须输入新密码；切换/清空账号会清理账号范围缓存。
+- 启动刷新与 `JobScheduler` 每日 07:00 刷新；临时错误最多重试两次，永久错误不重试。
 - APK/AAB 本地签名与打包脚本。
 
 ### Tauri / Windows 基线
 
-- 保留 Tauri + React 作为 Windows 客户端，并保持现有 macOS 迁移期构建可用。
+- 保留 Tauri + React 作为 Windows 客户端，并保持现有 macOS 迁移期构建能力。
 - 只使用当前 SJD 请求路径，移除旧接口/XLS 回退和旧 macOS User-Agent 分支。
-- 密码不再返回 WebView；系统安全存储、旧明文设置迁移及敏感结构内存清理已接入。
+- 密码不返回 WebView；系统安全存储、旧明文设置迁移及敏感结构内存清理已接入。
 - 托盘、今日/明日课程、通知、日历导入、节假日和本地数据清除命令已接入。
-- 启动/每日定时任务已扩展为跨日调度基础实现。
+- 托盘重复刷新已移除；桌面每日任务支持临时错误有界重试。
+- `LOCAL_DATA` 已增加代次与 I/O 锁，课表、教室、设置、托盘和节假日写入具备基础旧请求保护。
+- 后端凭据规则已覆盖同账号留空保留、换账号必须输入新密码、空账号清除凭据；React 提示状态已同步。
 
 ### 工程与安全
 
 - GitHub Actions 第三方 Action 固定到提交 SHA，并增加 Dependabot 配置。
 - 增加隐私、安全、贡献、行为准则、Issue 与 PR 模板。
 - 忽略环境文件、证书、签名密钥、构建目录和发布二进制。
-- 当前源码检查点的高风险密钥、GitHub token、私钥和 Gmail 地址模式扫描无命中。
+- 测试只使用虚构账号和脱敏夹具；真实账号和密码不得进入源码、测试、日志或 Release。
 
-## 最近验证结果
+## 最新验证记录
 
-| 范围 | 结果 | 说明 |
+| 范围 | 结果 | 最后记录 |
 | --- | --- | --- |
-| Android 全量 Debug 构建 | 通过 | 2026-08-03；编译、44 个 JVM 测试、Lint、APK 组装全部通过，Lint 为 `No issues found` |
-| macOS XCTest | 通过 | 最新结果 33/33，通过时间 2026-08-03 22:45（Asia/Shanghai） |
-| iOS Simulator XCTest | 通过 | 最新结果 32/32，通过时间 2026-08-03 22:16（Asia/Shanghai） |
-| React 生产构建 | 通过 | 最近一次 `npm run build` 通过 |
-| Rust | 部分通过 | 此检查点之前完整套件 45/45；新增共享 fixture 测试单独通过，当前完整套件尚未重跑 |
-| npm 生产依赖审计 | 通过 | `npm audit --omit=dev --audit-level=high` 为 0 个漏洞 |
-| Workflow YAML | 通过 | Ruby YAML 解析通过 |
+| Android Debug JVM 测试 | 通过 | 63/63，0 失败；包含凭据切换、代次、重试、日历同步和 Activity 重建用例 |
+| Android Lint | 通过 | `lintDebug`：`No issues found` |
+| Android Debug APK | 通过 | `assembleDebug` 成功；尚未按下一构建号重新发布打包 |
+| Android 运行检查 | 通过但需最终复测 | Pixel Tablet 与 Medium Phone 已检查空教室及日/周/月/年视图；模拟器已清理并关闭 |
+| Rust 格式检查 | 通过 | `cargo fmt --all -- --check` |
+| Rust Clippy | 通过 | `cargo clippy --lib --all-targets -- -D warnings` |
+| Rust 测试 | 通过 | 55/55，0 失败 |
+| React 生产构建 | 通过 | `npm run build` |
+| iOS Simulator XCTest | 通过 | 39/39，0 失败；2026-08-04 00:05（Asia/Shanghai） |
+| macOS XCTest | **未通过** | 最新 38/40；2026-08-04 00:25，两项 CalendarImport 测试失败 |
+| npm 生产依赖审计 | 通过（早于最后改动） | 最近一次 `npm audit --omit=dev --audit-level=high` 为 0 个漏洞，最终发布前需重跑 |
+| 敏感信息模式扫描 | 通过 | 2026-08-04；私钥、常见 Token/API Key、常见个人邮箱模式无命中；密码字面量均为测试夹具或环境变量名 |
+| 工作树空白错误检查 | 通过 | `git diff --check` 无输出 |
+
+最新 macOS 测试失败项：
+
+- `CalendarImportTests/testExpectedMarkerOutsideTheTermIsUpdatedInsteadOfInsertedAgain()`
+- `CalendarImportTests/testSyncPlanRemovesStaleAndDuplicateEventsButKeepsOutsideAndUnownedEvents()`
 
 ## 本地暂存包
 
-这些文件已保留在 `release-artifacts/`，校验和文件均已通过 `shasum -a 256 -c`：
+以下文件保留在被忽略的 `release-artifacts/`。2026-08-04 已重新执行全部相邻 SHA-256 校验，五项均为 `OK`。
 
 | 文件 | SHA-256 | 状态 |
 | --- | --- | --- |
@@ -76,42 +98,42 @@
 | `Where-To-Study-v0.1.1-alpha.6-native-android-universal.apk` | `ac520349e2027bdadfee865f2b97880e61fd5baba03f38d70c221c0169f2324e` | Android universal APK，v2 自签名 |
 | `Where-To-Study-v0.1.1-alpha.6-native-android.aab` | `782d70db12bab276b803c354618e1f0bc641fc7b8b197d0d7544d13a71a972d3` | Android AAB，自签名 |
 
-注意：这些包的内部版本均为 `0.1.1` / build `5`，且生成时间早于本检查点的最后一批源码和测试。因此它们只作为已完成打包流程的本地暂存证据，不能直接发布为最终 `alpha.6`。
+这些包的内部版本均为 `0.1.1` / build `5`，生成时间早于本检查点最后一批源码修改。它们只用于暂存已完成的打包流程，**不能直接发布，也不能代表本次冻结源码**。
 
-## 待完成（按优先级）
+## 待完成任务
 
-### P1：发布前必须修复
+### P0：恢复后首先处理
 
-- Android：消除异步课表、空教室、节假日写入与“清除本地数据”的竞态，防止旧请求重新写回缓存。
-- Android：密码输入框默认保持空白；仅同一账号留空时保留 Keystore 密码，切换账号必须输入新密码，并禁止 Autofill 回填。
-- Android：系统日历导入增加进程级互斥、Activity 重建恢复和学期范围内旧事件清理；避免课程时间/地点变化产生重复事件。
-- Android：每日任务增加明确的失败重试、执行窗口和停止后取消旧请求语义。
-- Apple：设置页不回填 Keychain 明文密码；实现同账号留空保留、换账号必须输入新密码。
-- Apple：EventKit 在当前学期范围内清理本应用已失效事件，避免课程变化后重复。
-- Tauri：用进程级写入协调解决清除数据与后台保存竞态，并修正切换账号后的“留空保持密码”提示状态。
-- Tauri：复核启动托盘刷新是否重复，并为每日任务的临时失败增加有界重试。
+- Apple：修正上列两个 EventKit 同步规划测试失败，明确“预期事件被移出学期范围”与“历史范围事件”的更新/保留语义。
+- Apple：将按年份进行中的节假日加载由集合改为带令牌的状态，避免清除数据后的旧任务 `defer` 删除新任务标记并造成重复请求。
+- Tauri：账号 A 切换到账号 B 或清空账号时，在同一次 `LOCAL_DATA` 代次内原子清除课表和空教室缓存。
+- Tauri：账号切换必须使账号 A 的在途请求失效；同账号仅改密码必须保留缓存。
+- Tauri：补齐 A→B、A→空、同账号改密和在途请求失效的单元测试。
 
-### P1：完整验证
+### P1：发布前完整验证
 
-- 重跑当前源码的 Rust 全量测试、React 构建、Android 全量构建、macOS/iOS 全量测试和依赖审计。
-- 使用 Android 手机和平板模拟器完成实际截图和交互检查；结束后关闭模拟器、ADB 和 Gradle daemon。
-- 使用 iPhone/iPad 模拟器完成实际截图和交互检查；结束后关闭所有 Simulator。
-- macOS 在可解锁桌面环境中检查菜单栏、关闭驻留、今日/明日课程和主窗口交互。
-- 使用虚构账号完成凭据保存、留空保留、换账号、清除和重启恢复测试；不得把真实账号写入日志或夹具。
+- 修复 P0 后重跑 Rust `fmt`、`clippy`、全量测试、React 构建和 npm 依赖审计。
+- 重跑 Android 63 项以上 JVM 测试、`lintDebug`、Debug/Release 组装，并检查账号切换和日历导入生命周期。
+- 重跑 macOS 与 iOS 全量 XCTest，要求 0 失败；保留 `.xcresult` 摘要。
+- 使用 Android 手机和平板完成最终截图和交互检查；结束后关闭模拟器、ADB 和 Gradle daemon。
+- 使用 iPhone/iPad 完成最终截图和交互检查；结束后关闭全部 Simulator。
+- 在 macOS 实机检查菜单栏点击不闪退、顶部可点击区域、动态高度、今日/明日课程、关闭主窗口后驻留和退出。
+- 在 Windows GitHub Actions 或 Windows 实机完成 Tauri 构建及托盘行为检查。
+- 重新执行敏感信息扫描，确认无真实账号、密码、Token、私钥或签名材料进入提交和产物。
 
-### P2：重新打包与发布
+### P2：版本、打包、安装与发布
 
-- 选择并添加根目录 `LICENSE`（MIT、Apache-2.0 或 GPL-3.0）；选择前不能声称项目已获得开源授权。
+- 由维护者选择并添加根目录 `LICENSE`：MIT、Apache-2.0 或 GPL-3.0；选择前不能声称仓库已获得开源授权。
 - 将 Apple `CURRENT_PROJECT_VERSION` 和 Android `versionCode` 从 5 更新为下一构建号。
-- 在所有测试通过后重新生成 macOS、iOS、Android 和 Windows/Tauri 产物，重新计算 SHA-256。
-- 安装并验证最新 macOS Tauri 与原生应用；确认二进制哈希与暂存包一致。
-- 完成 Apple Developer 签名/公证、Android 正式签名和 Windows 签名；当前 adhoc、自签名或无签名包仅供测试。
-- 提交、推送、创建测试 Release，并核对每个平台附件和 Release Notes。
+- 全部测试通过后重新生成 Tauri macOS/Windows、原生 macOS、iOS Archive、Android APK/AAB，并重新计算 SHA-256。
+- 安装并验证最新 Tauri macOS 与原生 macOS 应用，确认安装包、安装后二进制和校验和对应。
+- 完成 Apple Developer 签名/公证、Android 正式签名和 Windows 签名；当前 adhoc、自签名或无签名包只适合本地测试。
+- 提交最终发布改动、推送、创建测试 Release，逐项下载并核对附件与 Release Notes。
 
-## 恢复工作顺序
+## 恢复顺序
 
-1. 先完成 P1 数据一致性、凭据和日历同步修复。
-2. 完成四端全量自动化测试与手机、平板、macOS 运行检查。
-3. 确认许可证和下一构建号。
-4. 重新打包、安装并验证，不复用本页列出的旧包。
-5. 最后创建并验证新的测试 Release。
+1. 先修复 Apple 两项失败测试和节假日加载竞态。
+2. 完成 Tauri 账号切换的原子清理、在途请求失效和对应测试。
+3. 完成四端自动化测试、安全扫描和手机、平板、macOS、Windows 运行检查。
+4. 确认开源许可证和下一构建号。
+5. 重新打包、安装、校验并发布；不得复用本页列出的旧包。

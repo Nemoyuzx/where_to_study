@@ -95,9 +95,7 @@ fn json_string(value: Option<&Value>) -> String {
 }
 
 fn normalize_course_room(value: &str) -> String {
-    let normalized = value
-        .trim()
-        .replace(['－', '—', '–'], "-");
+    let normalized = value.trim().replace(['－', '—', '–'], "-");
     let Some((prefix, room)) = normalized.split_once('-') else {
         return normalized;
     };
@@ -546,10 +544,9 @@ mod tests {
 
     #[test]
     fn shared_sjd_fixtures_match_schedule_contract() {
-        let expected: ScheduleResponse = serde_json::from_str(include_str!(
-            "../../contracts/v1/fixtures/schedule.json"
-        ))
-        .expect("valid schedule fixture");
+        let expected: ScheduleResponse =
+            serde_json::from_str(include_str!("../../contracts/v1/fixtures/schedule.json"))
+                .expect("valid schedule fixture");
         let current: Value = serde_json::from_str(include_str!(
             "../../contracts/v1/fixtures/sjd-current-week.json"
         ))

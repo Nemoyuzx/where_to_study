@@ -10,12 +10,53 @@ struct CalendarEventDraft: Equatable, Sendable {
     let endDate: Date
 }
 
+struct CalendarImportScope: Equatable, Sendable {
+    let startDate: Date
+    let endDate: Date
+
+    func contains(_ date: Date) -> Bool {
+        date >= startDate && date < endDate
+    }
+}
+
+struct CalendarScheduleImportPlan: Equatable, Sendable {
+    let scope: CalendarImportScope
+    let drafts: [CalendarEventDraft]
+}
+
+struct CalendarExistingEvent: Equatable, Sendable {
+    let identifier: String
+    let marker: String?
+    let title: String
+    let location: String
+    let notes: String
+    let startDate: Date
+    let endDate: Date
+    let calendarIdentifier: String
+    let timeZoneIdentifier: String?
+    let isBusy: Bool
+    let alarmOffsets: [TimeInterval]
+}
+
+struct CalendarSyncMatch: Equatable, Sendable {
+    let existingIdentifier: String
+    let draft: CalendarEventDraft
+    let needsUpdate: Bool
+}
+
+struct CalendarSyncPlan: Equatable, Sendable {
+    let inserts: [CalendarEventDraft]
+    let matches: [CalendarSyncMatch]
+    let deleteIdentifiers: [String]
+}
+
 struct CalendarImportResult: Equatable, Sendable {
     let inserted: Int
     let updated: Int
+    let deleted: Int
     let unchanged: Int
 
-    var total: Int { inserted + updated + unchanged }
+    var total: Int { inserted + updated + deleted + unchanged }
 }
 
 enum CalendarImportError: LocalizedError, Equatable {
@@ -24,6 +65,7 @@ enum CalendarImportError: LocalizedError, Equatable {
     case invalidCourse(String)
     case permissionDenied
     case noWritableCalendar
+    case eventStoreChanged
 
     var errorDescription: String? {
         switch self {
@@ -37,22 +79,140 @@ enum CalendarImportError: LocalizedError, Equatable {
             "没有日历完整访问权限，请在系统设置中允许后重试。"
         case .noWritableCalendar:
             "系统中没有可写入的默认日历。"
+        case .eventStoreChanged:
+            "系统日历在同步期间发生变化，请重试。"
         }
     }
 }
 
 enum CalendarImportLogic {
     static let markerPrefix = "where-to-study:event:"
+    static let minimumTermWeeks = 18
+    static let reminderOffset: TimeInterval = -5 * 60
+
+    static func schedulePlan(
+        from schedule: ScheduleSnapshot,
+        slots: [SlotMetadata] = SlotMetadata.defaults,
+        calendar: Calendar = .shanghai
+    ) throws -> CalendarScheduleImportPlan {
+        guard let termStart = contractDate(schedule.termStartDate, calendar: calendar) else {
+            throw CalendarImportError.invalidTermStartDate
+        }
+
+        let positiveWeeks = schedule.courses.flatMap(\.weekNumbers).filter { $0 > 0 }
+        let maximumWeek = positiveWeeks.max() ?? minimumTermWeeks
+        if maximumWeek > 53 {
+            let courseName = schedule.courses.first(where: { course in
+                course.weekNumbers.contains(where: { $0 > 53 })
+            })?.name ?? "未知课程"
+            throw CalendarImportError.invalidCourse(courseName)
+        }
+        let termWeeks = max(minimumTermWeeks, maximumWeek)
+        guard let termEnd = calendar.date(byAdding: .day, value: termWeeks * 7, to: termStart) else {
+            throw CalendarImportError.invalidTermStartDate
+        }
+
+        let drafts = try eventDrafts(
+            from: schedule,
+            termStart: termStart,
+            slots: slots,
+            calendar: calendar
+        )
+        return CalendarScheduleImportPlan(
+            scope: CalendarImportScope(startDate: termStart, endDate: termEnd),
+            drafts: drafts
+        )
+    }
 
     static func eventDrafts(
         from schedule: ScheduleSnapshot,
         slots: [SlotMetadata] = SlotMetadata.defaults,
         calendar: Calendar = .shanghai
     ) throws -> [CalendarEventDraft] {
-        guard let termStart = contractDate(schedule.termStartDate, calendar: calendar) else {
-            throw CalendarImportError.invalidTermStartDate
+        try schedulePlan(from: schedule, slots: slots, calendar: calendar).drafts
+    }
+
+    static func syncPlan(
+        drafts: [CalendarEventDraft],
+        scope: CalendarImportScope,
+        existingEvents: [CalendarExistingEvent],
+        destinationCalendarIdentifier: String
+    ) -> CalendarSyncPlan {
+        let ownedEvents = existingEvents.filter { event in
+            event.marker?.hasPrefix(markerPrefix) ?? false
+        }
+        let scopedOwnedEvents = ownedEvents.filter { scope.contains($0.startDate) }
+        let desiredMarkers = Set(drafts.map(\.marker))
+        var eventsByMarker = [String: [CalendarExistingEvent]]()
+        for event in scopedOwnedEvents {
+            guard let marker = event.marker else { continue }
+            eventsByMarker[marker, default: []].append(event)
+        }
+        for marker in eventsByMarker.keys {
+            eventsByMarker[marker]?.sort { $0.identifier < $1.identifier }
         }
 
+        var inserts = [CalendarEventDraft]()
+        var matches = [CalendarSyncMatch]()
+        var deleteIdentifiers = Set<String>()
+        for draft in drafts {
+            let candidates = eventsByMarker[draft.marker] ?? []
+            guard !candidates.isEmpty else {
+                inserts.append(draft)
+                continue
+            }
+            let selected = candidates.first(where: {
+                eventMatches(
+                    $0,
+                    draft: draft,
+                    destinationCalendarIdentifier: destinationCalendarIdentifier
+                )
+            }) ?? candidates[0]
+            let needsUpdate = !eventMatches(
+                selected,
+                draft: draft,
+                destinationCalendarIdentifier: destinationCalendarIdentifier
+            )
+            matches.append(CalendarSyncMatch(
+                existingIdentifier: selected.identifier,
+                draft: draft,
+                needsUpdate: needsUpdate
+            ))
+            for duplicate in candidates where duplicate.identifier != selected.identifier {
+                deleteIdentifiers.insert(duplicate.identifier)
+            }
+        }
+
+        for event in ownedEvents {
+            guard let marker = event.marker, !desiredMarkers.contains(marker) else { continue }
+            deleteIdentifiers.insert(event.identifier)
+        }
+
+        return CalendarSyncPlan(
+            inserts: inserts,
+            matches: matches,
+            deleteIdentifiers: deleteIdentifiers.sorted()
+        )
+    }
+
+    static func eventMarker(termID: String, courseID: String, week: Int) -> String {
+        let identity = "\(termID)\u{0}\(courseID)\u{0}\(week)"
+        return markerPrefix + Data(identity.utf8).base64EncodedString()
+    }
+
+    static func marker(in notes: String?) -> String? {
+        notes?
+            .split(whereSeparator: \Character.isNewline)
+            .map(String.init)
+            .first { $0.hasPrefix(markerPrefix) }
+    }
+
+    private static func eventDrafts(
+        from schedule: ScheduleSnapshot,
+        termStart: Date,
+        slots: [SlotMetadata],
+        calendar: Calendar
+    ) throws -> [CalendarEventDraft] {
         var drafts = [CalendarEventDraft]()
         var markers = Set<String>()
         for course in schedule.courses {
@@ -104,16 +264,20 @@ enum CalendarImportLogic {
         }
     }
 
-    static func eventMarker(termID: String, courseID: String, week: Int) -> String {
-        let identity = "\(termID)\u{0}\(courseID)\u{0}\(week)"
-        return markerPrefix + Data(identity.utf8).base64EncodedString()
-    }
-
-    static func marker(in notes: String?) -> String? {
-        notes?
-            .split(whereSeparator: \Character.isNewline)
-            .map(String.init)
-            .first { $0.hasPrefix(markerPrefix) }
+    private static func eventMatches(
+        _ event: CalendarExistingEvent,
+        draft: CalendarEventDraft,
+        destinationCalendarIdentifier: String
+    ) -> Bool {
+        event.title == draft.title
+            && event.location == draft.location
+            && event.notes == draft.notes
+            && event.startDate == draft.startDate
+            && event.endDate == draft.endDate
+            && event.calendarIdentifier == destinationCalendarIdentifier
+            && event.timeZoneIdentifier == Calendar.shanghai.timeZone.identifier
+            && event.isBusy
+            && event.alarmOffsets == [reminderOffset]
     }
 
     private static func contractDate(_ value: String, calendar: Calendar) -> Date? {
@@ -147,12 +311,11 @@ protocol CalendarImporting {
 @MainActor
 final class EventKitCalendarImporter: CalendarImporting {
     func importSchedule(_ schedule: ScheduleSnapshot) async throws -> CalendarImportResult {
-        let drafts = try CalendarImportLogic.eventDrafts(from: schedule)
-        guard !drafts.isEmpty else { return CalendarImportResult(inserted: 0, updated: 0, unchanged: 0) }
+        let importPlan = try CalendarImportLogic.schedulePlan(from: schedule)
         guard try await requestAccess() else { throw CalendarImportError.permissionDenied }
 
         return try await Task.detached(priority: .userInitiated) {
-            try Self.write(drafts)
+            try Self.write(importPlan)
         }.value
     }
 
@@ -178,60 +341,95 @@ final class EventKitCalendarImporter: CalendarImporting {
         }
     }
 
-    nonisolated private static func write(_ drafts: [CalendarEventDraft]) throws -> CalendarImportResult {
+    nonisolated private static func write(
+        _ importPlan: CalendarScheduleImportPlan
+    ) throws -> CalendarImportResult {
         let store = EKEventStore()
         guard let destination = store.defaultCalendarForNewEvents else {
             throw CalendarImportError.noWritableCalendar
         }
-        guard let first = drafts.first, let last = drafts.last else {
-            return CalendarImportResult(inserted: 0, updated: 0, unchanged: 0)
-        }
 
-        let searchStart = first.startDate.addingTimeInterval(-86_400)
-        let searchEnd = last.endDate.addingTimeInterval(86_400)
-        let predicate = store.predicateForEvents(withStart: searchStart, end: searchEnd, calendars: nil)
-        let existingByMarker = Dictionary(
-            store.events(matching: predicate).compactMap { event in
-                CalendarImportLogic.marker(in: event.notes).map { ($0, event) }
-            },
-            uniquingKeysWith: { first, _ in first }
+        let searchStart = importPlan.scope.startDate.addingTimeInterval(-366 * 24 * 60 * 60)
+        let searchEnd = importPlan.scope.endDate.addingTimeInterval(366 * 24 * 60 * 60)
+        let predicate = store.predicateForEvents(
+            withStart: searchStart,
+            end: searchEnd,
+            calendars: nil
+        )
+        let existingEvents = store.events(matching: predicate)
+        let indexedEvents = existingEvents.enumerated().map { index, event in
+            let identifier = String(index)
+            let snapshot = CalendarExistingEvent(
+                identifier: identifier,
+                marker: CalendarImportLogic.marker(in: event.notes),
+                title: event.title ?? "",
+                location: event.location ?? "",
+                notes: event.notes ?? "",
+                startDate: event.startDate,
+                endDate: event.endDate,
+                calendarIdentifier: event.calendar.calendarIdentifier,
+                timeZoneIdentifier: event.timeZone?.identifier,
+                isBusy: event.availability == .busy,
+                alarmOffsets: (event.alarms ?? []).map(\.relativeOffset).sorted()
+            )
+            return (identifier: identifier, event: event, snapshot: snapshot)
+        }
+        let eventsByIdentifier = Dictionary(
+            uniqueKeysWithValues: indexedEvents.map { ($0.identifier, $0.event) }
+        )
+        let syncPlan = CalendarImportLogic.syncPlan(
+            drafts: importPlan.drafts,
+            scope: importPlan.scope,
+            existingEvents: indexedEvents.map(\.snapshot),
+            destinationCalendarIdentifier: destination.calendarIdentifier
         )
 
-        var inserted = 0
+        for identifier in syncPlan.deleteIdentifiers {
+            guard let event = eventsByIdentifier[identifier] else {
+                throw CalendarImportError.eventStoreChanged
+            }
+            try store.remove(event, span: .thisEvent, commit: false)
+        }
+
         var updated = 0
         var unchanged = 0
-        for draft in drafts {
-            if let event = existingByMarker[draft.marker] {
-                if apply(draft, to: event, calendar: destination) {
-                    try store.save(event, span: .thisEvent, commit: false)
-                    updated += 1
-                } else {
-                    unchanged += 1
-                }
-            } else {
-                let event = EKEvent(eventStore: store)
-                _ = apply(draft, to: event, calendar: destination)
+        for match in syncPlan.matches {
+            guard let event = eventsByIdentifier[match.existingIdentifier] else {
+                throw CalendarImportError.eventStoreChanged
+            }
+            if match.needsUpdate {
+                apply(match.draft, to: event, calendar: destination)
                 try store.save(event, span: .thisEvent, commit: false)
-                inserted += 1
+                updated += 1
+            } else {
+                unchanged += 1
             }
         }
-        if inserted > 0 || updated > 0 { try store.commit() }
-        return CalendarImportResult(inserted: inserted, updated: updated, unchanged: unchanged)
+
+        for draft in syncPlan.inserts {
+            let event = EKEvent(eventStore: store)
+            apply(draft, to: event, calendar: destination)
+            try store.save(event, span: .thisEvent, commit: false)
+        }
+
+        let deleted = syncPlan.deleteIdentifiers.count
+        let inserted = syncPlan.inserts.count
+        if inserted > 0 || updated > 0 || deleted > 0 {
+            try store.commit()
+        }
+        return CalendarImportResult(
+            inserted: inserted,
+            updated: updated,
+            deleted: deleted,
+            unchanged: unchanged
+        )
     }
 
     nonisolated private static func apply(
         _ draft: CalendarEventDraft,
         to event: EKEvent,
         calendar: EKCalendar
-    ) -> Bool {
-        let needsUpdate = event.title != draft.title
-            || event.location != draft.location
-            || event.notes != draft.notes
-            || event.startDate != draft.startDate
-            || event.endDate != draft.endDate
-            || event.calendar.calendarIdentifier != calendar.calendarIdentifier
-
-        guard needsUpdate else { return false }
+    ) {
         event.calendar = calendar
         event.title = draft.title
         event.location = draft.location
@@ -240,7 +438,6 @@ final class EventKitCalendarImporter: CalendarImporting {
         event.endDate = draft.endDate
         event.timeZone = Calendar.shanghai.timeZone
         event.availability = .busy
-        event.alarms = [EKAlarm(relativeOffset: -5 * 60)]
-        return true
+        event.alarms = [EKAlarm(relativeOffset: CalendarImportLogic.reminderOffset)]
     }
 }

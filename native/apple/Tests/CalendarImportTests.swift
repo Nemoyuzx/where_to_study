@@ -56,6 +56,146 @@ final class CalendarImportTests: XCTestCase {
         }
     }
 
+    func testSchedulePlanCoversTheFullEighteenWeekTerm() throws {
+        let plan = try CalendarImportLogic.schedulePlan(
+            from: fixtureSchedule(weeks: [1], examWeeks: [])
+        )
+
+        XCTAssertEqual(Self.formatter.string(from: plan.scope.startDate), "2026-03-02 00:00")
+        XCTAssertEqual(Self.formatter.string(from: plan.scope.endDate), "2026-07-06 00:00")
+        XCTAssertTrue(plan.scope.contains(try XCTUnwrap(Self.formatter.date(from: "2026-07-05 23:59"))))
+        XCTAssertFalse(plan.scope.contains(plan.scope.endDate))
+    }
+
+    func testSyncPlanRemovesStaleAndDuplicateEventsButKeepsOutsideAndUnownedEvents() throws {
+        let schedulePlan = try CalendarImportLogic.schedulePlan(
+            from: fixtureSchedule(weeks: [1, 2], examWeeks: [])
+        )
+        let firstDraft = try XCTUnwrap(schedulePlan.drafts.first)
+        let secondDraft = try XCTUnwrap(schedulePlan.drafts.last)
+        let staleMarker = CalendarImportLogic.eventMarker(
+            termID: "2025-2026-2",
+            courseID: "removed-course",
+            week: 1
+        )
+        let outsideDate = schedulePlan.scope.endDate.addingTimeInterval(60)
+        let existingEvents = [
+            existingEvent(
+                identifier: "a-duplicate",
+                marker: firstDraft.marker,
+                draft: firstDraft,
+                title: "旧标题"
+            ),
+            existingEvent(identifier: "z-exact", marker: firstDraft.marker, draft: firstDraft),
+            existingEvent(identifier: "stale", marker: staleMarker, draft: firstDraft),
+            existingEvent(
+                identifier: "outside-history",
+                marker: staleMarker,
+                draft: firstDraft,
+                startDate: outsideDate
+            ),
+            existingEvent(identifier: "other-app", marker: nil, draft: firstDraft),
+        ]
+
+        let syncPlan = CalendarImportLogic.syncPlan(
+            drafts: schedulePlan.drafts,
+            scope: schedulePlan.scope,
+            existingEvents: existingEvents,
+            destinationCalendarIdentifier: "destination"
+        )
+
+        XCTAssertEqual(syncPlan.inserts, [secondDraft])
+        XCTAssertEqual(
+            syncPlan.matches,
+            [CalendarSyncMatch(existingIdentifier: "z-exact", draft: firstDraft, needsUpdate: false)]
+        )
+        XCTAssertEqual(syncPlan.deleteIdentifiers, ["a-duplicate", "stale"])
+        XCTAssertFalse(syncPlan.deleteIdentifiers.contains("outside-history"))
+        XCTAssertFalse(syncPlan.deleteIdentifiers.contains("other-app"))
+    }
+
+    func testSyncPlanUpdatesChangedEventWithoutCreatingAnotherCopy() throws {
+        let schedulePlan = try CalendarImportLogic.schedulePlan(
+            from: fixtureSchedule(weeks: [1], examWeeks: [])
+        )
+        let draft = try XCTUnwrap(schedulePlan.drafts.first)
+        let changed = existingEvent(
+            identifier: "changed",
+            marker: draft.marker,
+            draft: draft,
+            location: "旧地点"
+        )
+
+        let syncPlan = CalendarImportLogic.syncPlan(
+            drafts: [draft],
+            scope: schedulePlan.scope,
+            existingEvents: [changed],
+            destinationCalendarIdentifier: "destination"
+        )
+
+        XCTAssertTrue(syncPlan.inserts.isEmpty)
+        XCTAssertEqual(
+            syncPlan.matches,
+            [CalendarSyncMatch(existingIdentifier: "changed", draft: draft, needsUpdate: true)]
+        )
+        XCTAssertTrue(syncPlan.deleteIdentifiers.isEmpty)
+    }
+
+    func testExpectedMarkerOutsideTheTermIsUpdatedInsteadOfInsertedAgain() throws {
+        let schedulePlan = try CalendarImportLogic.schedulePlan(
+            from: fixtureSchedule(weeks: [1], examWeeks: [])
+        )
+        let draft = try XCTUnwrap(schedulePlan.drafts.first)
+        let movedDate = schedulePlan.scope.endDate.addingTimeInterval(60)
+        let moved = existingEvent(
+            identifier: "moved",
+            marker: draft.marker,
+            draft: draft,
+            startDate: movedDate
+        )
+
+        let syncPlan = CalendarImportLogic.syncPlan(
+            drafts: [draft],
+            scope: schedulePlan.scope,
+            existingEvents: [moved],
+            destinationCalendarIdentifier: "destination"
+        )
+
+        XCTAssertTrue(syncPlan.inserts.isEmpty)
+        XCTAssertEqual(
+            syncPlan.matches,
+            [CalendarSyncMatch(existingIdentifier: "moved", draft: draft, needsUpdate: true)]
+        )
+        XCTAssertTrue(syncPlan.deleteIdentifiers.isEmpty)
+    }
+
+    func testEmptyScheduleStillRemovesOwnedEventsInsideTheTerm() throws {
+        let populatedPlan = try CalendarImportLogic.schedulePlan(
+            from: fixtureSchedule(weeks: [1], examWeeks: [])
+        )
+        let oldDraft = try XCTUnwrap(populatedPlan.drafts.first)
+        let emptySchedule = ScheduleSnapshot(
+            termID: "2025-2026-2",
+            termStartDate: "2026-03-02",
+            fetchedAt: "2026-03-01T00:00:00Z",
+            courses: []
+        )
+        let emptyPlan = try CalendarImportLogic.schedulePlan(from: emptySchedule)
+
+        let syncPlan = CalendarImportLogic.syncPlan(
+            drafts: emptyPlan.drafts,
+            scope: emptyPlan.scope,
+            existingEvents: [
+                existingEvent(identifier: "old-event", marker: oldDraft.marker, draft: oldDraft),
+            ],
+            destinationCalendarIdentifier: "destination"
+        )
+
+        XCTAssertTrue(syncPlan.inserts.isEmpty)
+        XCTAssertTrue(syncPlan.matches.isEmpty)
+        XCTAssertEqual(syncPlan.deleteIdentifiers, ["old-event"])
+    }
+
     func testDailyRefreshUsesNextSevenOClockWithoutPolling() throws {
         let before = try XCTUnwrap(Self.formatter.date(from: "2026-08-03 06:59"))
         let atTarget = try XCTUnwrap(Self.formatter.date(from: "2026-08-03 07:00"))
@@ -93,6 +233,34 @@ final class CalendarImportTests: XCTestCase {
                     timeRange: ""
                 ),
             ]
+        )
+    }
+
+    private func existingEvent(
+        identifier: String,
+        marker: String?,
+        draft: CalendarEventDraft,
+        title: String? = nil,
+        location: String? = nil,
+        startDate: Date? = nil
+    ) -> CalendarExistingEvent {
+        let resolvedStart = startDate ?? draft.startDate
+        let duration = draft.endDate.timeIntervalSince(draft.startDate)
+        let resolvedNotes = marker.map {
+            draft.notes.replacingOccurrences(of: draft.marker, with: $0)
+        } ?? "其他应用事件"
+        return CalendarExistingEvent(
+            identifier: identifier,
+            marker: marker,
+            title: title ?? draft.title,
+            location: location ?? draft.location,
+            notes: resolvedNotes,
+            startDate: resolvedStart,
+            endDate: resolvedStart.addingTimeInterval(duration),
+            calendarIdentifier: "destination",
+            timeZoneIdentifier: Calendar.shanghai.timeZone.identifier,
+            isBusy: true,
+            alarmOffsets: [CalendarImportLogic.reminderOffset]
         )
     }
 

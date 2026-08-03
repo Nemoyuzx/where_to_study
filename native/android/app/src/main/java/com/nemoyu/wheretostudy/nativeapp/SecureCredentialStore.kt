@@ -17,6 +17,30 @@ data class Credentials(
     val password: String,
 )
 
+internal class CredentialUpdateException(message: String) : IllegalArgumentException(message)
+
+internal object CredentialUpdateLogic {
+    fun resolve(
+        saved: Credentials?,
+        requestedAccount: String,
+        enteredPassword: String,
+    ): Credentials {
+        val account = requestedAccount.trim()
+        if (account.isEmpty()) {
+            if (enteredPassword.isNotEmpty()) {
+                throw CredentialUpdateException("请输入教务账号。")
+            }
+            return Credentials("", "")
+        }
+        if (enteredPassword.isNotEmpty()) return Credentials(account, enteredPassword)
+        if (saved != null && saved.account == account) return saved
+        throw CredentialUpdateException("更换教务账号时必须输入新密码。")
+    }
+
+    fun changesAccount(saved: Credentials?, resolved: Credentials): Boolean =
+        saved?.account?.trim().orEmpty() != resolved.account
+}
+
 class SecureCredentialStore(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
@@ -28,12 +52,17 @@ class SecureCredentialStore(context: Context) {
             .put("password", credentials.password)
             .toString()
             .toByteArray(StandardCharsets.UTF_8)
-        val ciphertext = cipher.doFinal(payload)
+        val ciphertext = try {
+            cipher.doFinal(payload)
+        } finally {
+            payload.fill(0)
+        }
 
-        preferences.edit()
+        val saved = preferences.edit()
             .putString(IV_KEY, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
             .putString(PAYLOAD_KEY, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
-            .apply()
+            .commit()
+        if (!saved) throw IllegalStateException("无法安全保存本地凭据。")
     }
 
     fun load(): Credentials? {
@@ -44,11 +73,15 @@ class SecureCredentialStore(context: Context) {
             val iv = Base64.decode(encodedIv, Base64.NO_WRAP)
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
             val plaintext = cipher.doFinal(Base64.decode(encodedPayload, Base64.NO_WRAP))
-            val objectValue = JSONObject(String(plaintext, StandardCharsets.UTF_8))
-            Credentials(
-                account = objectValue.optString("account"),
-                password = objectValue.optString("password"),
-            )
+            try {
+                val objectValue = JSONObject(String(plaintext, StandardCharsets.UTF_8))
+                Credentials(
+                    account = objectValue.optString("account"),
+                    password = objectValue.optString("password"),
+                )
+            } finally {
+                plaintext.fill(0)
+            }
         }.getOrNull()
     }
 
@@ -95,26 +128,32 @@ class AppPreferences(context: Context) {
         get() = preferences.getString(CAMPUS_KEY, AppMetadata.campuses.first().id)
             ?: AppMetadata.campuses.first().id
         set(value) {
-            preferences.edit().putString(CAMPUS_KEY, value).apply()
+            save(CAMPUS_KEY, value)
         }
 
     var termID: String
         get() = preferences.getString(TERM_ID_KEY, AppMetadata.defaultTermID)
             ?: AppMetadata.defaultTermID
         set(value) {
-            preferences.edit().putString(TERM_ID_KEY, value).apply()
+            save(TERM_ID_KEY, value)
         }
 
     var termStartDate: String
         get() = preferences.getString(TERM_START_DATE_KEY, AppMetadata.defaultTermStartDate)
             ?: AppMetadata.defaultTermStartDate
         set(value) {
-            preferences.edit().putString(TERM_START_DATE_KEY, value).apply()
+            save(TERM_START_DATE_KEY, value)
         }
 
     fun clear() {
         if (!preferences.edit().clear().commit()) {
             throw IllegalStateException("无法清除本地偏好。")
+        }
+    }
+
+    private fun save(key: String, value: String) {
+        if (!preferences.edit().putString(key, value).commit()) {
+            throw IllegalStateException("无法保存本地偏好。")
         }
     }
 

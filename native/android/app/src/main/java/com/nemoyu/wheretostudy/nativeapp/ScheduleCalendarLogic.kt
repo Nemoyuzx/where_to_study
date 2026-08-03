@@ -17,6 +17,31 @@ data class CalendarEventDraft(
     val timeZoneID: String,
 )
 
+data class ManagedCalendarEvent(
+    val id: Long,
+    val marker: String,
+    val startsAtMillis: Long,
+)
+
+data class CalendarEventUpdate(
+    val eventID: Long,
+    val draft: CalendarEventDraft,
+)
+
+data class CalendarTermWindow(
+    val startsAtMillis: Long,
+    val endsAtMillis: Long,
+) {
+    fun contains(value: Long): Boolean = value >= startsAtMillis && value < endsAtMillis
+}
+
+data class CalendarSyncPlan(
+    val inserts: List<CalendarEventDraft>,
+    val updates: List<CalendarEventUpdate>,
+    val duplicateEventIDs: List<Long>,
+    val staleEventIDs: List<Long>,
+)
+
 class ScheduleCalendarExpansionException(message: String) : IllegalArgumentException(message)
 
 object ScheduleCalendarLogic {
@@ -88,6 +113,24 @@ object ScheduleCalendarLogic {
         }
     }
 
+    fun termWindow(schedule: ScheduleSnapshot): CalendarTermWindow {
+        val termStart = parseContractDate(schedule.termStartDate)
+            ?: throw ScheduleCalendarExpansionException("课表的学期开始日期无效。")
+        val maximumWeek = schedule.courses
+            .flatMap(Course::weekNumbers)
+            .filter { it > 0 }
+            .maxOrNull()
+            ?: MINIMUM_TERM_SCOPE_WEEKS
+        if (maximumWeek > MAXIMUM_TERM_SCOPE_WEEKS) {
+            throw ScheduleCalendarExpansionException("课表包含超出范围的教学周。")
+        }
+        val scopeWeeks = maxOf(MINIMUM_TERM_SCOPE_WEEKS, maximumWeek)
+        val termEnd = (termStart.clone() as Calendar).apply {
+            add(Calendar.DAY_OF_MONTH, scopeWeeks * 7)
+        }
+        return CalendarTermWindow(termStart.timeInMillis, termEnd.timeInMillis)
+    }
+
     private fun validateCourse(course: Course) {
         if (course.id.isBlank() || course.name.isBlank()) {
             throw ScheduleCalendarExpansionException("课表包含缺少标识或名称的课程。")
@@ -136,4 +179,45 @@ object ScheduleCalendarLogic {
     }
 
     private const val HEX_DIGITS = "0123456789abcdef"
+    private const val MINIMUM_TERM_SCOPE_WEEKS = 18
+    private const val MAXIMUM_TERM_SCOPE_WEEKS = 53
+}
+
+object CalendarSyncPlanner {
+    fun plan(
+        schedule: ScheduleSnapshot,
+        drafts: List<CalendarEventDraft>,
+        existingEvents: List<ManagedCalendarEvent>,
+    ): CalendarSyncPlan {
+        val termWindow = ScheduleCalendarLogic.termWindow(schedule)
+        val scopedEvents = existingEvents.filter { termWindow.contains(it.startsAtMillis) }
+        val existingByMarker = existingEvents.groupBy(ManagedCalendarEvent::marker)
+        val expectedMarkers = drafts.mapTo(mutableSetOf(), CalendarEventDraft::marker)
+        val inserts = mutableListOf<CalendarEventDraft>()
+        val updates = mutableListOf<CalendarEventUpdate>()
+        val duplicates = mutableListOf<Long>()
+
+        drafts.forEach { draft ->
+            val matches = existingByMarker[draft.marker].orEmpty().sortedBy(ManagedCalendarEvent::id)
+            val primary = matches.firstOrNull()
+            if (primary == null) {
+                inserts += draft
+            } else {
+                updates += CalendarEventUpdate(primary.id, draft)
+                duplicates += matches.drop(1).map(ManagedCalendarEvent::id)
+            }
+        }
+        val stale = scopedEvents
+            .filterNot { it.marker in expectedMarkers }
+            .map(ManagedCalendarEvent::id)
+            .distinct()
+            .sorted()
+
+        return CalendarSyncPlan(
+            inserts = inserts,
+            updates = updates,
+            duplicateEventIDs = duplicates.distinct().sorted(),
+            staleEventIDs = stale,
+        )
+    }
 }

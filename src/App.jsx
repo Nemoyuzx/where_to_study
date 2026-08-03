@@ -234,6 +234,18 @@ function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
   }
 }
 
+function savedCredentialSnapshot(settings) {
+  return {
+    account: settings.account.trim(),
+    hasSavedPassword: settings.hasSavedPassword,
+  }
+}
+
+function accountHasSavedPassword(account, savedCredential) {
+  return savedCredential.hasSavedPassword
+    && account.trim() === savedCredential.account
+}
+
 function settingsToPayload(settings) {
   return {
     account: settings.account,
@@ -644,6 +656,9 @@ function App() {
   const calendarPopoverRef = useRef(null)
   const pageContentRef = useRef(null)
   const requestedHolidayYears = useRef(new Set())
+  const savedCredentialState = useRef({ account: '', hasSavedPassword: false })
+  const credentialStateRevision = useRef(0)
+  const localDataClearRevision = useRef(0)
 
   useEffect(() => {
     pageContentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' })
@@ -667,13 +682,28 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
+    const revision = credentialStateRevision.current
+    const clearRevision = localDataClearRevision.current
 
     command('load_saved_settings')
       .then((data) => {
         if (cancelled) return
+        if (clearRevision !== localDataClearRevision.current) {
+          setSettingsLoaded(true)
+          return
+        }
         const nextSettings = savedSettingsToState(data)
-        setSettings(nextSettings)
-        setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
+        const savedCredential = savedCredentialSnapshot(nextSettings)
+        savedCredentialState.current = savedCredential
+        if (revision === credentialStateRevision.current) {
+          setSettings(nextSettings)
+          setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
+        } else {
+          setSettings((current) => ({
+            ...current,
+            hasSavedPassword: accountHasSavedPassword(current.account, savedCredential),
+          }))
+        }
         setSettingsLoaded(true)
       })
       .catch((loadError) => {
@@ -918,16 +948,38 @@ function App() {
 
   function updateSetting(field, value) {
     setSettingsSaved(false)
-    setSettings((current) => ({ ...current, [field]: value }))
+    if (field === 'account' || field === 'password') {
+      credentialStateRevision.current += 1
+    }
+    setSettings((current) => {
+      const next = { ...current, [field]: value }
+      if (field === 'account') {
+        const saved = savedCredentialState.current
+        next.hasSavedPassword = accountHasSavedPassword(value, saved)
+      }
+      return next
+    })
   }
 
   async function saveCurrentSettings() {
     setError('')
     setSettingsSaved(false)
+    const revision = credentialStateRevision.current
+    const clearRevision = localDataClearRevision.current
 
     try {
       const data = await command('save_saved_settings', settingsToPayload(settings))
       const nextSettings = savedSettingsToState(data, settings)
+      if (clearRevision !== localDataClearRevision.current) return
+      const savedCredential = savedCredentialSnapshot(nextSettings)
+      savedCredentialState.current = savedCredential
+      if (revision !== credentialStateRevision.current) {
+        setSettings((current) => ({
+          ...current,
+          hasSavedPassword: accountHasSavedPassword(current.account, savedCredential),
+        }))
+        return
+      }
       setSettings(nextSettings)
       setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
       setSelectedBuildings([])
@@ -1040,6 +1092,9 @@ function App() {
 
   async function clearAllLocalData() {
     await runTask('clear-local-data', async () => {
+      credentialStateRevision.current += 1
+      localDataClearRevision.current += 1
+      savedCredentialState.current = { account: '', hasSavedPassword: false }
       let clearError = null
       try {
         await command('clear_local_data')

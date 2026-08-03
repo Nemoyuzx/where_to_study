@@ -6,6 +6,65 @@ import XCTest
 #endif
 
 final class LocalDataClearTests: XCTestCase {
+    func testCredentialSaveDecisionPreservesOnlyTheSameStoredAccount() throws {
+        XCTAssertEqual(
+            try CredentialSettingsLogic.saveAction(
+                account: " saved-account ",
+                password: "",
+                storedAccount: "saved-account",
+                hasStoredPassword: true
+            ),
+            .preserve
+        )
+
+        XCTAssertThrowsError(try CredentialSettingsLogic.saveAction(
+            account: "different-account",
+            password: "",
+            storedAccount: "saved-account",
+            hasStoredPassword: true
+        )) { error in
+            XCTAssertEqual(error as? CredentialSettingsError, .passwordRequiredForChangedAccount)
+        }
+
+        XCTAssertEqual(
+            try CredentialSettingsLogic.saveAction(
+                account: " different-account ",
+                password: "typed-value",
+                storedAccount: "saved-account",
+                hasStoredPassword: true
+            ),
+            .replace(Credentials(account: "different-account", password: "typed-value"))
+        )
+        XCTAssertEqual(
+            try CredentialSettingsLogic.saveAction(
+                account: "  ",
+                password: "",
+                storedAccount: "saved-account",
+                hasStoredPassword: true
+            ),
+            .clear
+        )
+    }
+
+    func testRequestCredentialsUseStoredValueOnlyForMatchingAccount() throws {
+        let stored = Credentials(account: "saved-account", password: "stored-value")
+        XCTAssertEqual(
+            try CredentialSettingsLogic.credentialsForRequest(
+                account: "saved-account",
+                password: "",
+                storedCredentials: stored
+            ),
+            stored
+        )
+        XCTAssertThrowsError(try CredentialSettingsLogic.credentialsForRequest(
+            account: "different-account",
+            password: "",
+            storedCredentials: stored
+        )) { error in
+            XCTAssertEqual(error as? CredentialSettingsError, .passwordRequiredForChangedAccount)
+        }
+    }
+
     func testFileStoresClearOwnedCachesIdempotently() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -81,6 +140,39 @@ final class LocalDataClearTests: XCTestCase {
         model.selectedBuildings = ["主楼"]
         model.selectedSlots = [0]
         model.usePersonalSchedule = false
+
+        XCTAssertEqual(model.account, "fixture-account")
+        XCTAssertTrue(model.password.isEmpty)
+        XCTAssertTrue(model.canPreserveSavedPassword)
+        XCTAssertTrue(model.saveSettings())
+        XCTAssertEqual(
+            try credentialStore.load(),
+            Credentials(account: "fixture-account", password: "fixture-password")
+        )
+        XCTAssertTrue(model.password.isEmpty)
+
+        model.account = "replacement-account"
+        XCTAssertFalse(model.saveSettings())
+        XCTAssertEqual(
+            model.statusMessage,
+            CredentialSettingsError.passwordRequiredForChangedAccount.localizedDescription
+        )
+        XCTAssertEqual(
+            try credentialStore.load(),
+            Credentials(account: "fixture-account", password: "fixture-password")
+        )
+
+        model.password = "replacement-value"
+        XCTAssertTrue(model.saveSettings())
+        XCTAssertTrue(model.password.isEmpty)
+        XCTAssertEqual(
+            try credentialStore.load(),
+            Credentials(account: "replacement-account", password: "replacement-value")
+        )
+        XCTAssertNil(model.schedule)
+        XCTAssertNil(model.classroomsCache)
+        XCTAssertNil(try scheduleStore.load())
+        XCTAssertNil(try classroomStore.load())
 
         model.clearLocalData()
 

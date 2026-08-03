@@ -14,7 +14,10 @@ struct SettingsView: View {
                             .font(.headline)
                         TextField("学号", text: $model.account)
                             .textFieldStyle(.roundedBorder)
-                        SecureField("教务密码", text: $model.password)
+                        SecureField(
+                            model.canPreserveSavedPassword ? "已安全保存，留空保持不变" : "教务密码",
+                            text: $model.password
+                        )
                             .textFieldStyle(.roundedBorder)
                         TextField("学期编号", text: $model.termID)
                             .textFieldStyle(.roundedBorder)
@@ -33,8 +36,9 @@ struct SettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(AppTheme.primary)
                         Button {
-                            model.saveSettings()
-                            model.refreshSchedule()
+                            if model.saveSettings() {
+                                model.refreshSchedule()
+                            }
                         } label: {
                             Label(
                                 model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",

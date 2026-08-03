@@ -160,18 +160,24 @@ where
     request.apply_defaults();
     let existing = load_credentials()?;
     let requested_account = request.account.trim();
-    let password = request
+    let entered_password = request
         .password
-        .as_ref()
-        .filter(|value| !value.is_empty())
-        .cloned()
-        .or_else(|| {
-            existing
-                .as_ref()
-                .filter(|credentials| credentials.account.trim() == requested_account)
-                .map(|credentials| credentials.password.clone())
-        })
-        .unwrap_or_default();
+        .as_deref()
+        .filter(|value| !value.is_empty());
+    let password = if requested_account.is_empty() {
+        if entered_password.is_some() {
+            return Err(ServiceError::new("请输入教务账号。"));
+        }
+        String::new()
+    } else if let Some(entered_password) = entered_password {
+        entered_password.to_string()
+    } else if let Some(existing) = existing.as_ref().filter(|credentials| {
+        credentials.account.trim() == requested_account && !credentials.password.is_empty()
+    }) {
+        existing.password.clone()
+    } else {
+        return Err(ServiceError::new("更换教务账号时必须输入新密码。"));
+    };
     let credentials = Credentials {
         account: requested_account.to_string(),
         password,
@@ -465,19 +471,22 @@ mod tests {
     }
 
     #[test]
-    fn explicit_password_replaces_existing_secure_password() {
+    fn explicit_password_can_replace_credentials_for_a_changed_account() {
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
         let stored = Credentials {
             account: "fixture-account".to_string(),
             password: "existing-secret".to_string(),
         };
+        let mut request = fixture_request(Some("replacement-secret"));
+        request.account = "other-account".to_string();
 
         save_to_path(
             &path,
-            fixture_request(Some("replacement-secret")),
+            request,
             || Ok(Some(stored.clone())),
             |credentials| {
+                assert_eq!(credentials.account, "other-account");
                 assert_eq!(credentials.password, "replacement-secret");
                 Ok(())
             },
@@ -486,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn changing_account_does_not_reuse_previous_accounts_password() {
+    fn changing_account_without_a_new_password_is_rejected() {
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
         let stored = Credentials {
@@ -495,20 +504,94 @@ mod tests {
         };
         let mut request = fixture_request(None);
         request.account = "other-account".to_string();
+        let save_called = Cell::new(false);
+
+        let error = save_to_path(
+            &path,
+            request,
+            || Ok(Some(stored)),
+            |_| {
+                save_called.set(true);
+                Ok(())
+            },
+        )
+        .expect_err("changed account must provide a password");
+
+        assert_eq!(error.message, "更换教务账号时必须输入新密码。");
+        assert!(!save_called.get());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn same_account_without_an_existing_password_is_rejected() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let path = directory.path().join("settings.json");
+        let stored = Credentials {
+            account: "fixture-account".to_string(),
+            password: String::new(),
+        };
+
+        let error = save_to_path(
+            &path,
+            fixture_request(None),
+            || Ok(Some(stored)),
+            |_| Ok(()),
+        )
+        .expect_err("there is no secure password to preserve");
+
+        assert_eq!(error.message, "更换教务账号时必须输入新密码。");
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn empty_account_and_password_clear_secure_credentials() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let path = directory.path().join("settings.json");
+        let stored = Credentials {
+            account: "fixture-account".to_string(),
+            password: "existing-secret".to_string(),
+        };
+        let mut request = fixture_request(Some(""));
+        request.account = "  ".to_string();
 
         let saved = save_to_path(
             &path,
             request,
             || Ok(Some(stored)),
             |credentials| {
-                assert_eq!(credentials.account, "other-account");
+                assert!(credentials.account.is_empty());
                 assert!(credentials.password.is_empty());
                 Ok(())
             },
         )
-        .expect("save changed account");
+        .expect("clear secure credentials");
 
+        assert!(saved.account.is_empty());
         assert!(!saved.has_saved_password);
+    }
+
+    #[test]
+    fn password_without_an_account_is_rejected() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let path = directory.path().join("settings.json");
+        let mut request = fixture_request(Some("orphan-secret"));
+        request.account = " ".to_string();
+        let save_called = Cell::new(false);
+
+        let error = save_to_path(
+            &path,
+            request,
+            || Ok(None),
+            |_| {
+                save_called.set(true);
+                Ok(())
+            },
+        )
+        .expect_err("password requires an account");
+
+        assert_eq!(error.message, "请输入教务账号。");
+        assert!(!save_called.get());
+        assert!(!path.exists());
     }
 
     #[test]
