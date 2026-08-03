@@ -21,6 +21,10 @@ xcodebuild \
   ARCHS="arm64 x86_64" \
   ONLY_ACTIVE_ARCH=NO \
   CODE_SIGNING_ALLOWED=NO \
+  SWIFT_STRICT_CONCURRENCY=complete \
+  SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+  SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO \
+  OTHER_SWIFT_FLAGS="-debug-prefix-map $ROOT_DIR=. -file-prefix-map $ROOT_DIR=." \
   build
 
 SOURCE_APP="$DERIVED_DATA/Build/Products/Release/WhereToStudyMac.app"
@@ -40,6 +44,27 @@ for architecture in arm64 x86_64; do
 done
 
 ditto "$SOURCE_APP" "$PACKAGE_APP"
+PACKAGE_BINARY="$PACKAGE_APP/Contents/MacOS/WhereToStudyMac"
+strip -S "$PACKAGE_BINARY"
+
+if rg --text --fixed-strings --quiet --no-ignore --hidden "$ROOT_DIR" "$PACKAGE_APP"; then
+  echo "Native macOS package contains a local source path." >&2
+  exit 1
+fi
+if rg --text --fixed-strings --quiet 'http://jwglweixin\.bupt\.edu\.cn' "$PACKAGE_APP"; then
+  echo "Native macOS package contains the retired HTTP teaching-system endpoint." >&2
+  exit 1
+fi
+if ! rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn' "$PACKAGE_APP"; then
+  echo "Native macOS package is missing the expected HTTPS teaching-system endpoint." >&2
+  exit 1
+fi
+if [[ ! -f "$PACKAGE_APP/Contents/Resources/PrivacyInfo.xcprivacy" ]]; then
+  echo "Native macOS package is missing PrivacyInfo.xcprivacy." >&2
+  exit 1
+fi
+plutil -lint "$PACKAGE_APP/Contents/Resources/PrivacyInfo.xcprivacy" >/dev/null
+
 codesign --force --deep --sign - --timestamp=none "$PACKAGE_APP"
 codesign --verify --deep --strict --verbose=2 "$PACKAGE_APP"
 

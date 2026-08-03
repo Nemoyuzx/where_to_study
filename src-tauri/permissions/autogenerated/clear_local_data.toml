@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-local-data"
+description = "Enables the clear_local_data command without any pre-configured scope."
+commands.allow = ["clear_local_data"]
+
+[[permission]]
+identifier = "deny-clear-local-data"
+description = "Denies the clear_local_data command without any pre-configured scope."
+commands.deny = ["clear_local_data"]

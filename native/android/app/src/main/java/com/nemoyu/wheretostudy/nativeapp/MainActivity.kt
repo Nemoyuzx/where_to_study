@@ -1,6 +1,8 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Build
@@ -10,9 +12,15 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+
+data class LocalDataClearResult(val failedItems: List<String>) {
+    val isComplete: Boolean
+        get() = failedItems.isEmpty()
+}
 
 class MainActivity : Activity() {
     private enum class Destination(val label: String) {
@@ -31,7 +39,17 @@ class MainActivity : Activity() {
     private val classroomRepository by lazy {
         ClassroomRepository(this, credentialStore)
     }
+    private val holidayRepositoryDelegate = lazy {
+        HolidayRepository(this)
+    }
+    private val holidayRepository by holidayRepositoryDelegate
+    private val systemCalendarImporterDelegate = lazy {
+        SystemCalendarImporter(this)
+    }
+    private val systemCalendarImporter by systemCalendarImporterDelegate
     private var selectedDestination = Destination.PLANNER
+    private var calendarImportInFlight = false
+    private var pendingCalendarImport: PendingCalendarImport? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +63,7 @@ class MainActivity : Activity() {
         setContentView(root)
         configureSystemBarIcons()
         navigate(Destination.PLANNER)
+        DailyClassroomRefreshScheduler.ensureScheduled(this)
         refreshClassroomsAtStartup()
     }
 
@@ -122,6 +141,11 @@ class MainActivity : Activity() {
 
     private fun navigate(destination: Destination) {
         selectedDestination = destination
+        if (destination == Destination.SETTINGS) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
         navigationViews.forEach { (item, view) ->
             view.setTextColor(if (item == destination) Color.WHITE else Palette.text)
             view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
@@ -140,7 +164,11 @@ class MainActivity : Activity() {
                     scheduleRepository,
                     classroomRepository,
                 ).build()
-                Destination.CALENDAR -> TeachingCalendarPage(this, scheduleRepository).build()
+                Destination.CALENDAR -> TeachingCalendarPage(
+                    this,
+                    scheduleRepository,
+                    holidayRepository,
+                ).build()
                 Destination.SETTINGS -> SettingsPage(
                     this,
                     credentialStore,
@@ -159,9 +187,77 @@ class MainActivity : Activity() {
         navigate(selectedDestination)
     }
 
+    fun importCachedScheduleToSystemCalendar(
+        onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+    ) {
+        val schedule = scheduleRepository.schedule
+        if (schedule == null || schedule.courses.isEmpty()) {
+            onComplete(Result.failure(SystemCalendarImportException("请先获取个人课表。")))
+            return
+        }
+        if (calendarImportInFlight || systemCalendarImporter.isImporting) {
+            onComplete(Result.failure(SystemCalendarImportException("课表正在导入系统日历。")))
+            return
+        }
+
+        calendarImportInFlight = true
+        val pending = PendingCalendarImport(schedule, onComplete)
+        if (hasCalendarPermissions()) {
+            startCalendarImport(pending)
+            return
+        }
+        pendingCalendarImport = pending
+        runCatching {
+            requestPermissions(CALENDAR_PERMISSIONS, CALENDAR_PERMISSION_REQUEST_CODE)
+        }.onFailure { error ->
+            finishCalendarImport(
+                pending,
+                Result.failure(SystemCalendarImportException("无法申请系统日历权限。", error)),
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != CALENDAR_PERMISSION_REQUEST_CODE) return
+        val pending = pendingCalendarImport ?: return
+        pendingCalendarImport = null
+        if (hasCalendarPermissions()) {
+            startCalendarImport(pending)
+        } else {
+            finishCalendarImport(
+                pending,
+                Result.failure(SystemCalendarImportException("需要允许日历读写权限才能导入课程。")),
+            )
+        }
+    }
+
+    fun clearAllLocalData(): LocalDataClearResult {
+        val failures = mutableListOf<String>()
+        fun clearItem(label: String, operation: () -> Unit) {
+            runCatching(operation).onFailure { failures += label }
+        }
+
+        clearItem("账号和密码") { credentialStore.clear() }
+        clearItem("应用设置") { preferences.clear() }
+        clearItem("个人课表") { scheduleRepository.clearLocalData() }
+        clearItem("空教室缓存") { classroomRepository.clearLocalData() }
+        clearItem("节假日缓存") {
+            if (holidayRepositoryDelegate.isInitialized()) {
+                holidayRepository.clearLocalData()
+            } else {
+                HolidayStore(this).clear()
+            }
+        }
+        runCatching(::refreshCurrentPage)
+        return LocalDataClearResult(failures)
+    }
+
     private fun refreshClassroomsAtStartup() {
-        val credentials = credentialStore.load() ?: return
-        if (credentials.account.isBlank() || credentials.password.isEmpty()) return
         classroomRepository.refresh(force = false) { result ->
             if (result.isSuccess && selectedDestination == Destination.PLANNER) {
                 refreshCurrentPage()
@@ -170,9 +266,36 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        pendingCalendarImport = null
         scheduleRepository.close()
         classroomRepository.close()
+        if (holidayRepositoryDelegate.isInitialized()) {
+            holidayRepository.close()
+        }
+        if (systemCalendarImporterDelegate.isInitialized()) {
+            systemCalendarImporter.close()
+        }
         super.onDestroy()
+    }
+
+    private fun hasCalendarPermissions(): Boolean = CALENDAR_PERMISSIONS.all { permission ->
+        checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun startCalendarImport(pending: PendingCalendarImport) {
+        pendingCalendarImport = null
+        systemCalendarImporter.importSchedule(pending.schedule) { result ->
+            finishCalendarImport(pending, result)
+        }
+    }
+
+    private fun finishCalendarImport(
+        pending: PendingCalendarImport,
+        result: Result<SystemCalendarImportResult>,
+    ) {
+        calendarImportInFlight = false
+        if (pendingCalendarImport === pending) pendingCalendarImport = null
+        pending.onComplete(result)
     }
 
     private fun applySystemInsets(root: View) {
@@ -213,5 +336,15 @@ class MainActivity : Activity() {
 
     private companion object {
         const val TABLET_BREAKPOINT_DP = 700
+        const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
+        val CALENDAR_PERMISSIONS = arrayOf(
+            Manifest.permission.READ_CALENDAR,
+            Manifest.permission.WRITE_CALENDAR,
+        )
     }
+
+    private data class PendingCalendarImport(
+        val schedule: ScheduleSnapshot,
+        val onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+    )
 }

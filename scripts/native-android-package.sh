@@ -6,7 +6,8 @@ ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ROOT_DIR/src-tauri/gen/android/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 RELEASE_LABEL="${1:-v0.1.1-native-preview}"
-ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"
+APK_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"
+AAB_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android.aab"
 
 read_property() {
   local key="$1"
@@ -47,11 +48,17 @@ export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 
 "$ANDROID_DIR/gradlew" \
   --project-dir "$ANDROID_DIR" \
-  testReleaseUnitTest lintRelease assembleRelease
+  testReleaseUnitTest lintRelease assembleRelease bundleRelease
 
 SIGNED_APK="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
 if [[ ! -f "$SIGNED_APK" ]]; then
   echo "Native Android build did not produce a signed release APK." >&2
+  exit 1
+fi
+
+SIGNED_AAB="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
+if [[ ! -f "$SIGNED_AAB" ]]; then
+  echo "Native Android build did not produce a signed release AAB." >&2
   exit 1
 fi
 
@@ -69,12 +76,37 @@ if [[ -z "$ZIPALIGN" ]]; then
 fi
 "$ZIPALIGN" -c -P 16 -v 4 "$SIGNED_APK" >/dev/null
 
+JARSIGNER="$JAVA_HOME/bin/jarsigner"
+if [[ ! -x "$JARSIGNER" ]]; then
+  echo "Android AAB verifier was not found: $JARSIGNER" >&2
+  exit 1
+fi
+"$JARSIGNER" -verify "$SIGNED_AAB" >/dev/null
+unzip -t "$SIGNED_AAB" >/dev/null
+
+if unzip -p "$SIGNED_APK" 'classes*.dex' | rg --text --fixed-strings --quiet 'http://jwglweixin.bupt.edu.cn'; then
+  echo "Native Android package contains the retired HTTP teaching-system endpoint." >&2
+  exit 1
+fi
+if ! unzip -p "$SIGNED_APK" 'classes*.dex' | rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn'; then
+  echo "Native Android package is missing the expected HTTPS teaching-system endpoint." >&2
+  exit 1
+fi
+if unzip -p "$SIGNED_APK" AndroidManifest.xml | rg --text --fixed-strings --quiet 'networkSecurityConfig'; then
+  echo "Native Android package still declares a custom network security configuration." >&2
+  exit 1
+fi
+
 mkdir -p "$OUTPUT_DIR"
-cp "$SIGNED_APK" "$ARCHIVE"
+cp "$SIGNED_APK" "$APK_ARCHIVE"
+cp "$SIGNED_AAB" "$AAB_ARCHIVE"
 (
   cd "$OUTPUT_DIR"
-  shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$ARCHIVE").sha256"
+  for artifact in "$APK_ARCHIVE" "$AAB_ARCHIVE"; do
+    shasum -a 256 "$(basename "$artifact")" > "$(basename "$artifact").sha256"
+  done
 )
 
-echo "Native Android package ready at:"
-echo "  $ARCHIVE"
+echo "Native Android packages ready at:"
+echo "  $APK_ARCHIVE"
+echo "  $AAB_ARCHIVE"

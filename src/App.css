@@ -341,6 +341,52 @@ button:disabled {
   width: 100%;
 }
 
+.settings-actions button.danger {
+  background: #fff2ed;
+  border: 1px solid #e6b7aa;
+  color: #8a2d1c;
+  justify-content: center;
+  width: 100%;
+}
+
+.settings-privacy-link {
+  align-items: center;
+  color: #1d3650;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 650;
+  gap: 6px;
+  justify-content: center;
+  min-height: 38px;
+  text-decoration: none;
+}
+
+.settings-privacy-link:hover {
+  color: #166b5d;
+  text-decoration: underline;
+}
+
+.clear-data-confirmation {
+  border-top: 1px solid #dfe4df;
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+  padding-top: 12px;
+}
+
+.clear-data-confirmation p {
+  color: #66746f;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.clear-data-confirmation > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .settings-actions span {
   color: #1c5d51;
   font-size: 13px;
@@ -1151,24 +1197,8 @@ button:disabled {
 }
 
 .mini-month-grid button.has-course {
-  color: #123a32;
-}
-
-.mini-month-grid button.course-load-1 {
-  background: #dbeee8;
-}
-
-.mini-month-grid button.course-load-2 {
-  background: #b9ded3;
-}
-
-.mini-month-grid button.course-load-3 {
-  background: #72b6a6;
-}
-
-.mini-month-grid button.course-load-4 {
-  background: #166b5d;
-  color: #ffffff;
+  background: rgb(22 107 93 / var(--course-load-opacity, 0.12));
+  color: #17201b;
 }
 
 .mini-month-grid button.today {

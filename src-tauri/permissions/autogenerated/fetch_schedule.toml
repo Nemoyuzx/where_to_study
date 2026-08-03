@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-schedule"
+description = "Enables the fetch_schedule command without any pre-configured scope."
+commands.allow = ["fetch_schedule"]
+
+[[permission]]
+identifier = "deny-fetch-schedule"
+description = "Denies the fetch_schedule command without any pre-configured scope."
+commands.deny = ["fetch_schedule"]

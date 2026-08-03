@@ -1,7 +1,21 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "default",
-  "description": "Default app capability",
-  "windows": ["main", "course-widget"],
-  "permissions": []
+  "identifier": "main",
+  "description": "Business commands required by the main application window",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:default",
+    "allow-get-metadata",
+    "allow-load-saved-settings",
+    "allow-save-saved-settings",
+    "allow-clear-local-data",
+    "allow-load-saved-schedule",
+    "allow-load-saved-classrooms",
+    "allow-fetch-schedule",
+    "allow-import-schedule-to-calendar",
+    "allow-fetch-classrooms",
+    "allow-fetch-holidays",
+    "allow-show-desktop-widget",
+    "allow-hide-desktop-widget"
+  ]
 }

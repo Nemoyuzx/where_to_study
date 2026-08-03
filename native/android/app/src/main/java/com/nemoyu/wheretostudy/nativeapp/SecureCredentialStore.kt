@@ -53,7 +53,11 @@ class SecureCredentialStore(context: Context) {
     }
 
     fun clear() {
-        preferences.edit().clear().apply()
+        if (!preferences.edit().clear().commit()) {
+            throw IllegalStateException("无法清除本地凭据记录。")
+        }
+        val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+        if (keyStore.containsAlias(KEY_ALIAS)) keyStore.deleteEntry(KEY_ALIAS)
     }
 
     private fun secretKey(): SecretKey {
@@ -107,6 +111,12 @@ class AppPreferences(context: Context) {
         set(value) {
             preferences.edit().putString(TERM_START_DATE_KEY, value).apply()
         }
+
+    fun clear() {
+        if (!preferences.edit().clear().commit()) {
+            throw IllegalStateException("无法清除本地偏好。")
+        }
+    }
 
     private companion object {
         const val PREFERENCES_NAME = "app_preferences_v1"

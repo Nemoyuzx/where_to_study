@@ -121,6 +121,32 @@ struct ClassroomsCache: Codable, Equatable, Sendable {
     }
 }
 
+struct HolidayItem: Codable, Identifiable, Equatable, Sendable {
+    let date: String
+    let name: String
+    let type: String
+
+    var id: String { "\(date)|\(type)|\(name)" }
+}
+
+struct HolidaysSnapshot: Codable, Equatable, Sendable {
+    let year: Int
+    let source: String
+    let fetchedAt: String
+    let items: [HolidayItem]
+
+    enum CodingKeys: String, CodingKey {
+        case year, source, items
+        case fetchedAt = "fetched_at"
+    }
+}
+
+enum HolidayDefaults {
+    static let source = "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data"
+    static let supportedYears = 1900 ... 2100
+    static let refreshInterval: TimeInterval = 7 * 24 * 60 * 60
+}
+
 enum ClassroomDefaults {
     static let cacheVersion = 2
     static let campuses = [

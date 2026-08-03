@@ -3,6 +3,7 @@ import Foundation
 protocol ScheduleStoring: Sendable {
     func load() throws -> ScheduleSnapshot?
     func save(_ schedule: ScheduleSnapshot) throws
+    func clear() throws
 }
 
 enum ScheduleStoreError: LocalizedError {
@@ -44,6 +45,11 @@ struct FileScheduleStore: ScheduleStoring {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(schedule).write(to: fileURL, options: .atomic)
+    }
+
+    func clear() throws {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        try FileManager.default.removeItem(at: fileURL)
     }
 
     private static var defaultFileURL: URL {

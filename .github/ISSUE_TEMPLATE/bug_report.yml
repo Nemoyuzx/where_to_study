@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a reproducible defect without including credentials or private data.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not use this form for an unpatched vulnerability. Follow `SECURITY.md` instead. Remove account names, passwords, cookies, tokens, course-owner names, and other personal data from logs and screenshots.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows (Tauri)
+        - macOS (Tauri)
+        - macOS (native preview)
+        - iOS (native preview)
+        - Android (Tauri)
+        - Android (native preview)
+        - Web development preview
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Use the app version, release tag, or full commit SHA.
+      placeholder: v0.1.1-alpha.5 or 0123456789abcdef...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and architecture
+      placeholder: Windows 11 24H2, x86_64
+    validations:
+      required: true
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Actual behavior
+      description: State what happened, including the exact visible error after redaction.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest deterministic sequence and whether it reproduces every time.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted logs or screenshots
+      description: Attach only material checked for secrets and personal data.
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues for the same defect.
+          required: true
+        - label: I removed credentials, tokens, cookies, and personal data.
+          required: true
+        - label: This report does not disclose an unpatched security vulnerability.
+          required: true

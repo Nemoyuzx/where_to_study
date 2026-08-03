@@ -9,6 +9,7 @@ import {
   CalendarRange,
   CheckCircle2,
   Clock3,
+  ExternalLink,
   Home,
   KeyRound,
   Loader2,
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Trash2,
   X,
 } from 'lucide-react'
 import './App.css'
@@ -51,6 +53,7 @@ const CALENDAR_VISIBLE_MINUTES = (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60
 const DEFAULT_SETTINGS = {
   account: '',
   password: '',
+  hasSavedPassword: false,
   termId: '2025-2026-2',
   termStartDate: '2026-03-02',
   campusId: '01',
@@ -91,6 +94,10 @@ function localDateString(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function contractTimestamp(date = new Date()) {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
 function addDays(dateString, days) {
@@ -138,6 +145,11 @@ function buildCalendarDayMap(items) {
 
 function hasCalendarItemType(items, type) {
   return items.some((item) => item.type === type)
+}
+
+function yearCourseOpacity(courseCount) {
+  if (courseCount <= 0) return 0
+  return 0.12 + (0.72 * courseCount) / (courseCount + 3)
 }
 
 function formatShortDate(dateString) {
@@ -213,7 +225,8 @@ function courseTimeBounds(course, slotMeta) {
 function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
   return {
     account: data.account ?? fallback.account ?? '',
-    password: data.password ?? fallback.password ?? '',
+    password: '',
+    hasSavedPassword: Boolean(data.has_saved_password),
     termId: data.term_id || fallback.termId || DEFAULT_SETTINGS.termId,
     termStartDate: data.term_start_date || fallback.termStartDate || DEFAULT_SETTINGS.termStartDate,
     campusId: data.campus_id || fallback.campusId || DEFAULT_SETTINGS.campusId,
@@ -224,7 +237,7 @@ function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
 function settingsToPayload(settings) {
   return {
     account: settings.account,
-    password: settings.password,
+    password: settings.password || null,
     term_id: settings.termId,
     term_start_date: settings.termStartDate,
     campus_id: settings.campusId,
@@ -287,8 +300,25 @@ function browserPreviewCommand(name, payload = {}) {
       default_term_start_date: DEFAULT_SETTINGS.termStartDate,
     }
   }
-  if (name === 'load_saved_settings' || name === 'save_saved_settings') {
-    return settingsToPayload(DEFAULT_SETTINGS)
+  if (name === 'load_saved_settings') {
+    return {
+      account: DEFAULT_SETTINGS.account,
+      has_saved_password: false,
+      term_id: DEFAULT_SETTINGS.termId,
+      term_start_date: DEFAULT_SETTINGS.termStartDate,
+      campus_id: DEFAULT_SETTINGS.campusId,
+      default_min_seats: DEFAULT_SETTINGS.defaultMinSeats,
+    }
+  }
+  if (name === 'save_saved_settings') {
+    return {
+      account: payload.account || '',
+      has_saved_password: Boolean(payload.password),
+      term_id: payload.term_id || DEFAULT_SETTINGS.termId,
+      term_start_date: payload.term_start_date || DEFAULT_SETTINGS.termStartDate,
+      campus_id: payload.campus_id || DEFAULT_SETTINGS.campusId,
+      default_min_seats: Number(payload.default_min_seats) || 0,
+    }
   }
   if (name === 'load_saved_schedule' || name === 'load_saved_classrooms') {
     return null
@@ -297,7 +327,7 @@ function browserPreviewCommand(name, payload = {}) {
     return {
       year,
       source: 'browser-preview',
-      fetched_at: new Date().toISOString(),
+      fetched_at: contractTimestamp(),
       items: fallbackHolidayItems(year),
     }
   }
@@ -305,7 +335,7 @@ function browserPreviewCommand(name, payload = {}) {
     return {
       cache_version: 2,
       target_date: localDateString(),
-      fetched_at: new Date().toISOString(),
+      fetched_at: contractTimestamp(),
       realtime: true,
       provider: 'browser-preview',
       campuses: [
@@ -313,7 +343,7 @@ function browserPreviewCommand(name, payload = {}) {
           campus_id: '01',
           campus_name: '西土城',
           target_date: localDateString(),
-          fetched_at: new Date().toISOString(),
+          fetched_at: contractTimestamp(),
           realtime: true,
           provider: 'browser-preview',
           rooms: [],
@@ -322,7 +352,7 @@ function browserPreviewCommand(name, payload = {}) {
           campus_id: '04',
           campus_name: '沙河',
           target_date: localDateString(),
-          fetched_at: new Date().toISOString(),
+          fetched_at: contractTimestamp(),
           realtime: true,
           provider: 'browser-preview',
           rooms: [],
@@ -334,7 +364,7 @@ function browserPreviewCommand(name, payload = {}) {
     return {
       term_id: DEFAULT_SETTINGS.termId,
       term_start_date: DEFAULT_SETTINGS.termStartDate,
-      fetched_at: new Date().toISOString(),
+      fetched_at: contractTimestamp(),
       courses: [],
     }
   }
@@ -342,6 +372,9 @@ function browserPreviewCommand(name, payload = {}) {
     throw new Error('手机浏览器预览不支持导入苹果日历，请在 macOS App 中使用。')
   }
   if (name === 'show_desktop_widget' || name === 'hide_desktop_widget') {
+    return true
+  }
+  if (name === 'clear_local_data') {
     return true
   }
   return null
@@ -408,7 +441,7 @@ function getWeekState(courses, termStartDate, targetDate) {
   const start = new Date(`${termStartDate}T00:00:00`)
   const target = new Date(`${targetDate}T00:00:00`)
   const days = Math.floor((target - start) / 86400000)
-  const weekNumber = Math.floor(days / 7) + 1
+  const weekNumber = Math.max(0, Math.floor(days / 7) + 1)
   const weekday = target.getDay() === 0 ? 7 : target.getDay()
   const scheduleExamWeeks = getScheduleExamWeeks(courses)
   const dayCourses = courses
@@ -424,6 +457,10 @@ function getWeekState(courses, termStartDate, targetDate) {
     return slots
   }))].sort((a, b) => a - b)
   return { weekNumber, weekday, busySlots, dayCourses }
+}
+
+function formatTeachingWeek(weekNumber) {
+  return weekNumber > 0 ? `第 ${weekNumber} 周` : '非教学周'
 }
 
 function slotsToRanges(slots, slotMeta) {
@@ -534,7 +571,7 @@ function CourseWidget() {
         </header>
 
         <div className="course-widget-overview">
-          <span>第 {weekState.weekNumber || '-'} 周</span>
+          <span>{formatTeachingWeek(weekState.weekNumber)}</span>
           <strong>{upcomingCourse ? <CourseName course={upcomingCourse} /> : schedule ? '没有待上课程' : '课表未载入'}</strong>
           {upcomingCourse ? (
             <small>{courseTimeBounds(upcomingCourse, slotMeta).start}-{courseTimeBounds(upcomingCourse, slotMeta).end} · {upcomingCourse.room || '地点未标注'}</small>
@@ -602,9 +639,15 @@ function App() {
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
+  const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
+  const pageContentRef = useRef(null)
   const requestedHolidayYears = useRef(new Set())
+
+  useEffect(() => {
+    pageContentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [activePage])
 
   useEffect(() => {
     command('get_metadata')
@@ -778,14 +821,6 @@ function App() {
       days: buildMiniMonthDays(year, monthIndex),
     }))
   }, [calendarDate])
-  const maxYearDayCourseCount = useMemo(() => {
-    const courseCounts = calendarYearMonths.flatMap((month) => (
-      month.days
-        .filter((dateString) => dateFromString(dateString).getMonth() === month.monthIndex)
-        .map((dateString) => getWeekState(courses, activeTermStartDate, dateString).dayCourses.length)
-    ))
-    return Math.max(1, ...courseCounts)
-  }, [activeTermStartDate, calendarYearMonths, courses])
   const calendarDetailCourse = calendarWeekState.dayCourses[0] || null
   const calendarPopoverState = useMemo(() => (
     calendarPopover
@@ -990,7 +1025,7 @@ function App() {
     })
   }
 
-  async function importAppleCalendar() {
+  async function importSystemCalendar() {
     await runTask('calendar-import', async () => {
       const path = await command('import_schedule_to_calendar')
       setCalendarImportedPath(path)
@@ -1000,6 +1035,33 @@ function App() {
   async function openDesktopWidget() {
     await runTask('widget', async () => {
       await command('show_desktop_widget')
+    })
+  }
+
+  async function clearAllLocalData() {
+    await runTask('clear-local-data', async () => {
+      let clearError = null
+      try {
+        await command('clear_local_data')
+      } catch (taskError) {
+        clearError = taskError
+      }
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        termId: metadata.default_term_id || DEFAULT_SETTINGS.termId,
+        termStartDate: metadata.default_term_start_date || DEFAULT_SETTINGS.termStartDate,
+        campusId: metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId,
+      })
+      setSchedule(null)
+      setClassroomsCache(null)
+      setSelectedSlots([])
+      setSelectedBuildings([])
+      setMinSeats(0)
+      setUsePersonalSchedule(true)
+      setCalendarImportedPath('')
+      setSettingsSaved(false)
+      setClearConfirmationOpen(false)
+      if (clearError) throw clearError
     })
   }
 
@@ -1028,14 +1090,14 @@ function App() {
           </nav>
         </aside>
 
-        <section className="page-content">
+        <section ref={pageContentRef} className="page-content">
           <header className={`topbar ${activePage === 'calendar' ? 'calendar-topbar' : ''}`}>
             <div>
               <p className="eyebrow">BUPT Classroom Planner</p>
               <h1>{activePage === 'calendar' ? '教学日历' : activePage === 'settings' ? '设置' : '空教室与个人课表联动查询'}</h1>
               {activePage === 'calendar' ? (
                 <p className="topbar-subtitle">
-                  {formatCalendarTitle(calendarDate, calendarView)} · 第 {calendarWeekState.weekNumber || '-'} 周 · {activeTermId} · {courses.length} 门已载入
+                  {formatCalendarTitle(calendarDate, calendarView)} · {formatTeachingWeek(calendarWeekState.weekNumber)} · {activeTermId} · {courses.length} 门已载入
                 </p>
               ) : null}
             </div>
@@ -1179,7 +1241,7 @@ function App() {
                 })}
               </div>
               <p className="muted">
-                第 {plannerWeekState.weekNumber || '-'} 周，选中范围：
+                {formatTeachingWeek(plannerWeekState.weekNumber)}，选中范围：
                 {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : '未选择'}
               </p>
             </section>
@@ -1282,7 +1344,7 @@ function App() {
                   {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
                   获取/刷新个人课表
                 </button>
-                <button type="button" onClick={importAppleCalendar} disabled={!!loading || !courses.length}>
+                <button type="button" onClick={importSystemCalendar} disabled={!!loading || !courses.length}>
                   {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
                   导入苹果日历
                 </button>
@@ -1440,7 +1502,7 @@ function App() {
                             const state = getWeekState(courses, activeTermStartDate, dateString)
                             const currentMonth = date.getMonth() === month.monthIndex
                             const courseCount = currentMonth ? state.dayCourses.length : 0
-                            const courseLoad = courseCount / maxYearDayCourseCount
+                            const courseOpacity = yearCourseOpacity(courseCount)
                             const calendarItems = currentMonth ? calendarItemsFor(dateString) : []
                             const hasHoliday = hasCalendarItemType(calendarItems, 'holiday')
                             const hasWorkday = hasCalendarItemType(calendarItems, 'workday')
@@ -1448,8 +1510,8 @@ function App() {
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? `has-course course-load-${Math.min(courseCount, 4)}` : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
-                                style={courseCount ? { '--course-load': courseLoad } : null}
+                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                style={courseCount ? { '--course-load-opacity': courseOpacity } : null}
                                 title={calendarItems.map((item) => `${item.type === 'holiday' ? '休' : '班'} ${item.name}`).join(' / ')}
                                 onClick={(event) => openYearDayPopover(event, dateString)}
                               >
@@ -1474,7 +1536,7 @@ function App() {
                   >
                     <span>{formatCourseDate(calendarPopover.date)}</span>
                     <strong>{calendarPopoverState.dayCourses.length} 门课</strong>
-                    <small>第 {calendarPopoverState.weekNumber || '-'} 周</small>
+                    <small>{formatTeachingWeek(calendarPopoverState.weekNumber)}</small>
                     {calendarItemsFor(calendarPopover.date).length ? (
                       <div className="popover-holiday-list">
                         {calendarItemsFor(calendarPopover.date).map((item) => (
@@ -1506,7 +1568,7 @@ function App() {
                 <div className="inspector-card primary">
                   <span>{formatCourseDate(calendarDate)}</span>
                   <strong>{calendarWeekState.dayCourses.length} 门课</strong>
-                  <small>第 {calendarWeekState.weekNumber || '-'} 周</small>
+                  <small>{formatTeachingWeek(calendarWeekState.weekNumber)}</small>
                   {calendarItemsFor(calendarDate).length ? (
                     <div className="inspector-calendar-items">
                       {calendarItemsFor(calendarDate).map((item) => (
@@ -1566,7 +1628,8 @@ function App() {
                 value={settings.password}
                 onChange={(event) => updateSetting('password', event.target.value)}
                 type="password"
-                placeholder="保存到本地数据"
+                placeholder={settings.hasSavedPassword ? '已安全保存，留空保持不变' : '输入后保存到系统凭据存储'}
+                autoComplete="new-password"
               />
             </label>
           </section>
@@ -1627,6 +1690,39 @@ function App() {
               {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <CalendarDays size={17} />}
               打开课程小组件
             </button>
+            <a
+              className="settings-privacy-link"
+              href="https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              隐私说明
+              <ExternalLink size={15} />
+            </a>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => setClearConfirmationOpen(true)}
+              disabled={!!loading}
+            >
+              <Trash2 size={17} />
+              清除本地数据
+            </button>
+            {clearConfirmationOpen ? (
+              <div className="clear-data-confirmation" role="alertdialog" aria-labelledby="clear-data-title">
+                <strong id="clear-data-title">清除全部本地数据？</strong>
+                <p>将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。</p>
+                <div>
+                  <button type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={!!loading}>
+                    取消
+                  </button>
+                  <button type="button" className="danger" onClick={clearAllLocalData} disabled={!!loading}>
+                    {loading === 'clear-local-data' ? <Loader2 className="spin" size={17} /> : <Trash2 size={17} />}
+                    确认清除
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {settingsSaved ? <span>已保存</span> : null}
           </section>
         </section>

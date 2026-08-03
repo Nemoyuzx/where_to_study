@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security policy
+    url: https://github.com/Nemoyuzx/where_to_study/blob/main/SECURITY.md
+    about: Read the disclosure process before sharing any security information.
+  - name: Code of conduct
+    url: https://github.com/Nemoyuzx/where_to_study/blob/main/CODE_OF_CONDUCT.md
+    about: Review participation standards and the conduct contact process.

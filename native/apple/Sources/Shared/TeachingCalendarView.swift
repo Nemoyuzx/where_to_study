@@ -9,36 +9,67 @@ private enum CalendarMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum TeachingCalendarLogic {
+    static func yearCourseOpacity(courseCount: Int) -> Double {
+        guard courseCount > 0 else { return 0 }
+        let count = Double(courseCount)
+        return 0.12 + 0.72 * count / (count + 3)
+    }
+}
+
 struct TeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @State private var selectedDate = Date()
     @State private var mode: CalendarMode = .week
+    @State private var yearPopoverDate: Date?
+    @State private var yearPopoverLocation: CGPoint?
 
     private let calendar = Calendar.shanghai
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                titleBar
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    titleBar
 
-                Surface {
-                    VStack(alignment: .leading, spacing: 14) {
-                        dateControls
-                        if !model.statusMessage.isEmpty {
-                            Text(model.statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                    Surface {
+                        VStack(alignment: .leading, spacing: 14) {
+                            dateControls
+                            if let status = holidayStatus {
+                                Text(status)
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.secondaryText)
+                            }
+                            if !model.statusMessage.isEmpty {
+                                Text(model.statusMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.secondaryText)
+                            }
+                            if !model.calendarImportStatusMessage.isEmpty {
+                                Text(model.calendarImportStatusMessage)
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.secondaryText)
+                            }
+                            Divider()
+                            calendarContent
                         }
-                        Divider()
-                        calendarContent
                     }
                 }
+                .padding(20)
+                .frame(maxWidth: 1200)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: 1200)
-            .frame(maxWidth: .infinity)
+
+            yearPopoverOverlay
         }
         .background(AppTheme.background)
+        .coordinateSpace(name: Self.calendarCoordinateSpace)
+        .onAppear(perform: ensureVisibleHolidays)
+        .onChange(of: selectedDate) { _ in ensureVisibleHolidays() }
+        .onChange(of: mode) { _ in
+            dismissYearPopover()
+            ensureVisibleHolidays()
+        }
     }
 
     @ViewBuilder
@@ -68,240 +99,317 @@ struct TeachingCalendarView: View {
     @ViewBuilder
     private var dateControls: some View {
         ViewThatFits(in: .horizontal) {
-            HStack {
-                datePicker
-                Spacer(minLength: 16)
-                refreshButton
+            HStack(spacing: 8) {
+                dateNavigation
+                Spacer(minLength: 12)
+                calendarActions
             }
             VStack(alignment: .leading, spacing: 10) {
-                datePicker
-                refreshButton
+                dateNavigation
+                calendarActions
             }
         }
     }
 
-    private var datePicker: some View {
-        DatePicker("日期", selection: $selectedDate, displayedComponents: .date)
-            .datePickerStyle(.compact)
+    private var dateNavigation: some View {
+        HStack(spacing: 8) {
+            Button { moveDate(-1) } label: { Image(systemName: "chevron.left") }
+                .help("上一时间段")
+            DatePicker("日期", selection: $selectedDate, displayedComponents: .date)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .environment(\.locale, Locale(identifier: "zh_CN"))
+                .environment(\.timeZone, Self.shanghaiTimeZone)
+            Button("今天") { selectedDate = .now }
+            Button { moveDate(1) } label: { Image(systemName: "chevron.right") }
+                .help("下一时间段")
+        }
+        .controlSize(.regular)
     }
 
-    private var refreshButton: some View {
-        Button {
-            model.refreshSchedule()
-        } label: {
-            Label(
-                model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
-                systemImage: "arrow.clockwise"
-            )
+    private var calendarActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                model.refreshSchedule()
+            } label: {
+                Label(
+                    model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
+                    systemImage: "arrow.clockwise"
+                )
+            }
+            .disabled(model.isRefreshingSchedule || model.isImportingCalendar)
+            Button {
+                model.importScheduleToCalendar()
+            } label: {
+                Label(
+                    model.isImportingCalendar ? "正在导入…" : "导入系统日历",
+                    systemImage: "calendar.badge.plus"
+                )
+            }
+            .disabled(model.schedule == nil || model.isRefreshingSchedule || model.isImportingCalendar)
         }
-        .disabled(model.isRefreshingSchedule)
     }
 
     @ViewBuilder
     private var calendarContent: some View {
         switch mode {
-        case .day:
-            dayView
-        case .week:
-            weekView
-        case .month:
-            monthView
-        case .year:
-            yearView
+        case .day: dayView
+        case .week: weekView
+        case .month: monthView
+        case .year: yearView
         }
     }
 
     private var dayView: some View {
         let courses = courses(on: selectedDate)
-        return VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 12) {
             calendarHeading(title: Self.fullDateFormatter.string(from: selectedDate), count: courses.count)
-            ForEach(model.slots) { slot in
-                let course = courses.first { slot.index >= $0.startSlot && slot.index <= $0.endSlot }
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("第 \(slot.label) 节").font(.caption.bold())
-                        Text("\(slot.start)-\(slot.end)").font(.caption2.monospacedDigit())
-                    }
-                    .foregroundStyle(AppTheme.secondaryText)
-                    .frame(width: 92, alignment: .trailing)
-                    Rectangle().fill(AppTheme.border).frame(width: 1)
-                    if let course {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(course.startSlot == slot.index ? course.name : "\(course.name)（延续）")
-                                .font(.subheadline.weight(.semibold))
-                            if course.startSlot == slot.index {
-                                Text([course.timeRange, course.room].filter { !$0.isEmpty }.joined(separator: "  ·  "))
-                                    .font(.caption)
-                            }
-                        }
-                        .foregroundStyle(Color.white)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .background(AppTheme.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                    } else {
-                        Text("暂无课程")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    }
-                }
-                .padding(.vertical, 5)
-                Divider()
-            }
+            CalendarTimelineView(
+                days: [timelineDay(selectedDate)],
+                selectedDate: selectedDate
+            )
         }
     }
 
     private var weekView: some View {
-        let weekStart = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start ?? selectedDate
-        let days = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: weekStart) }
-        let columns = [GridItem(.adaptive(minimum: 150), spacing: 8)]
+        let days = weekDates()
+        let weekStart = days.first ?? selectedDate
         return VStack(alignment: .leading, spacing: 12) {
             calendarHeading(
                 title: "\(Self.monthDayFormatter.string(from: weekStart)) 起的一周",
                 count: days.reduce(0) { $0 + courses(on: $1).count }
             )
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach(days, id: \.self) { day in
-                    let dayCourses = courses(on: day)
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(Self.weekDayFormatter.string(from: day))
-                                .font(.subheadline.bold())
-                            Spacer()
-                            Text(dayCourses.isEmpty ? "无课" : "\(dayCourses.count) 门")
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
-                        }
-                        if dayCourses.isEmpty {
-                            Text("暂无课程")
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
-                        } else {
-                            ForEach(dayCourses) { course in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(course.name)
-                                        .font(.caption.weight(.semibold))
-                                        .lineLimit(2)
-                                    Text(course.timeRange)
-                                        .font(.caption2.monospacedDigit())
-                                }
-                                .foregroundStyle(AppTheme.primary)
-                            }
-                        }
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
-                    .background(sameDay(day, selectedDate) ? AppTheme.primary.opacity(0.10) : AppTheme.background)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5)
-                            .stroke(sameDay(day, Date()) ? AppTheme.accent : AppTheme.border, lineWidth: sameDay(day, Date()) ? 2 : 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .onTapGesture { selectedDate = day }
-                }
-            }
+            CalendarTimelineView(
+                days: days.map(timelineDay),
+                selectedDate: selectedDate,
+                onSelectDay: { selectedDate = $0 }
+            )
         }
     }
 
     private var monthView: some View {
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
-        let days = dates(inMonthContaining: first)
-        let leading = (calendar.component(.weekday, from: first) + 5) % 7
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+        let days = monthGridDates(containing: first)
+        let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(Self.yearMonthFormatter.string(from: first)).font(.title2.bold())
                 Spacer()
                 Button("今天") { selectedDate = .now }
             }
-            LazyVGrid(columns: columns, spacing: 6) {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) {
-                    Text($0).font(.caption.bold()).foregroundStyle(AppTheme.secondaryText)
+            LazyVGrid(columns: columns, spacing: 4) {
+                ForEach(Self.weekdayLabels, id: \.self) { label in
+                    Text(label)
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .frame(maxWidth: .infinity)
                 }
-                ForEach(0..<leading, id: \.self) { _ in Color.clear.frame(height: 64) }
                 ForEach(days, id: \.self) { day in
-                    let dayCourses = courses(on: day)
-                    Button {
-                        selectedDate = day
-                    } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("\(calendar.component(.day, from: day))")
-                                .font(.subheadline.bold())
-                            if dayCourses.isEmpty {
-                                Text("无课")
-                                    .font(.caption2)
-                                    .foregroundStyle(sameDay(day, selectedDate) ? Color.white.opacity(0.85) : AppTheme.secondaryText)
-                            } else {
-                                Text("\(dayCourses.count) 门课")
-                                    .font(.caption2.bold())
-                            }
-                        }
-                        .foregroundStyle(sameDay(day, selectedDate) ? Color.white : AppTheme.text)
-                        .padding(7)
-                        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
-                        .background(sameDay(day, selectedDate) ? AppTheme.primary : AppTheme.background)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5)
-                                .stroke(sameDay(day, Date()) ? AppTheme.accent : AppTheme.border, lineWidth: sameDay(day, Date()) ? 2 : 1)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                    }
-                    .buttonStyle(.plain)
+                    monthDayButton(day, month: first)
                 }
             }
-            selectedDaySummary
+            selectedDaySummary(selectedDate)
         }
+    }
+
+    private func monthDayButton(_ day: Date, month: Date) -> some View {
+        let dayCourses = courses(on: day)
+        let holidays = holidayItems(on: day)
+        let isSelected = sameDay(day, selectedDate)
+        let isToday = sameDay(day, .now)
+        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
+        let detail = holidays.first.map {
+            "\($0.type == "holiday" ? "休" : "班") \($0.name)"
+        } ?? (dayCourses.isEmpty ? "无课" : "\(dayCourses.count) 门课")
+        return Button {
+            selectedDate = day
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isToday ? "今天 \(calendar.component(.day, from: day))" : "\(calendar.component(.day, from: day))")
+                    .font(.caption.bold())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(detail)
+                    .font(.system(size: 10, weight: holidays.isEmpty ? .regular : .semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+            }
+            .foregroundStyle(monthTextColor(selected: isSelected, inMonth: inMonth, holidays: holidays))
+            .padding(6)
+            .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
+            .background(monthCellColor(selected: isSelected, inMonth: inMonth, courseCount: dayCourses.count))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(isToday ? Self.nowRed : AppTheme.border, lineWidth: isToday ? 2 : 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(dayAccessibilityLabel(day))
     }
 
     private var yearView: some View {
         let year = calendar.component(.year, from: selectedDate)
-        let months = (1...12).compactMap {
+        let months = (1 ... 12).compactMap {
             calendar.date(from: DateComponents(year: year, month: $0, day: 1))
         }
-        let columns = [GridItem(.adaptive(minimum: 170), spacing: 8)]
+        let columns = [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: 14)]
         return VStack(alignment: .leading, spacing: 12) {
-            Text(verbatim: "\(year) 年").font(.title2.bold())
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            Text(verbatim: "\(year) 年课程分布").font(.title2.bold())
+            Text("颜色越深表示当天课程越多；点击日期查看日程")
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryText)
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
                 ForEach(months, id: \.self) { month in
-                    let count = dates(inMonthContaining: month).reduce(0) { $0 + courses(on: $1).count }
-                    Button {
-                        selectedDate = month
-                        mode = .month
-                    } label: {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(Self.monthFormatter.string(from: month))
-                                .font(.headline)
-                            Text(count == 0 ? "暂无课程" : "\(count) 门课")
-                                .font(.subheadline)
-                                .foregroundStyle(AppTheme.secondaryText)
-                        }
-                        .padding(12)
-                        .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-                        .background(
-                            calendar.isDate(month, equalTo: selectedDate, toGranularity: .month)
-                                ? AppTheme.primary.opacity(0.10) : AppTheme.background
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5)
-                                .stroke(
-                                    calendar.isDate(month, equalTo: Date(), toGranularity: .month)
-                                        ? AppTheme.accent : AppTheme.border,
-                                    lineWidth: calendar.isDate(month, equalTo: Date(), toGranularity: .month) ? 2 : 1
-                                )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                    }
-                    .buttonStyle(.plain)
+                    miniMonth(month)
                 }
             }
         }
     }
 
-    private var selectedDaySummary: some View {
-        let dayCourses = courses(on: selectedDate)
+    private func miniMonth(_ month: Date) -> some View {
+        let days = monthGridDates(containing: month)
+        let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 2), count: 7)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(Self.monthFormatter.string(from: month)).font(.headline)
+            LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(Self.weekdayLabels, id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .frame(maxWidth: .infinity)
+                }
+                ForEach(days, id: \.self) { day in
+                    yearDayButton(day, month: month)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func yearDayButton(_ day: Date, month: Date) -> some View {
+        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
+        if inMonth {
+            let dayCourses = courses(on: day)
+            let holidays = holidayItems(on: day)
+            let isToday = sameDay(day, .now)
+            let isSelected = yearPopoverDate.map { sameDay($0, day) } ?? false
+            VStack(spacing: 0) {
+                Text("\(calendar.component(.day, from: day))")
+                if let item = holidays.first {
+                    Text(item.type == "holiday" ? "休" : "班")
+                        .foregroundStyle(isSelected ? Color.white : Self.holidayColor(item))
+                }
+            }
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(isSelected ? Color.white : AppTheme.text)
+            .frame(maxWidth: .infinity, minHeight: 30)
+            .background(yearCellColor(selected: isSelected, courseCount: dayCourses.count))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(isToday ? Self.nowRed : AppTheme.border, lineWidth: isToday ? 2 : 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(dayAccessibilityLabel(day))
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                yearPopoverDate = day
+                yearPopoverLocation = nil
+            }
+            .gesture(
+                SpatialTapGesture(coordinateSpace: .named(Self.calendarCoordinateSpace))
+                    .onEnded { value in
+                        yearPopoverDate = day
+                        yearPopoverLocation = value.location
+                    }
+            )
+        } else {
+            Color.clear.frame(height: 30)
+        }
+    }
+
+    @ViewBuilder
+    private var yearPopoverOverlay: some View {
+        if mode == .year, let day = yearPopoverDate {
+            GeometryReader { proxy in
+                let panelWidth = min(300, max(220, proxy.size.width - 32))
+                let panelHeight = estimatedYearPopoverHeight(day, availableHeight: proxy.size.height)
+                let fallback = CGPoint(x: proxy.size.width / 2, y: min(220, proxy.size.height / 2))
+                let location = yearPopoverLocation ?? fallback
+                let originX = min(
+                    max(16, location.x - panelWidth / 2),
+                    max(16, proxy.size.width - panelWidth - 16)
+                )
+                let belowY = location.y + 12
+                let originY = belowY + panelHeight <= proxy.size.height - 16
+                    ? belowY
+                    : max(16, location.y - panelHeight - 12)
+
+                ZStack(alignment: .topLeading) {
+                    Color.black.opacity(0.001)
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: dismissYearPopover)
+
+                    ScrollView {
+                        selectedDayPopover(day)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(width: panelWidth - 32)
+                    .frame(maxHeight: panelHeight - 32, alignment: .topLeading)
+                    .padding(16)
+                    .background(AppTheme.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(AppTheme.border, lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
+                    .offset(x: originX, y: originY)
+                    .contentShape(Rectangle())
+                    .onTapGesture { }
+                }
+            }
+            .zIndex(20)
+        }
+    }
+
+    private func selectedDayPopover(_ day: Date) -> some View {
+        let dayCourses = courses(on: day)
+        let holidays = holidayItems(on: day)
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(Self.fullDateFormatter.string(from: day)).font(.headline)
+            ForEach(holidays) { item in
+                Text("\(item.type == "holiday" ? "休" : "班") \(item.name)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Self.holidayColor(item))
+            }
+            if dayCourses.isEmpty {
+                Text("暂无课程").foregroundStyle(AppTheme.secondaryText)
+            } else {
+                ForEach(dayCourses) { course in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(course.name).font(.subheadline.weight(.semibold))
+                        Text([course.timeRange, course.room].filter { !$0.isEmpty }.joined(separator: "  ·  "))
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                    }
+                }
+            }
+        }
+    }
+
+    private func selectedDaySummary(_ day: Date) -> some View {
+        let dayCourses = courses(on: day)
+        let holidays = holidayItems(on: day)
         return VStack(alignment: .leading, spacing: 8) {
-            Text(Self.fullDateFormatter.string(from: selectedDate)).font(.headline)
+            Text(Self.fullDateFormatter.string(from: day)).font(.headline)
+            ForEach(holidays) { item in
+                Text("\(item.type == "holiday" ? "休" : "班") \(item.name)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Self.holidayColor(item))
+            }
             if dayCourses.isEmpty {
                 Text("暂无课程").foregroundStyle(AppTheme.secondaryText)
             } else {
@@ -325,7 +433,15 @@ struct TeachingCalendarView: View {
                 .font(.subheadline)
                 .foregroundStyle(AppTheme.secondaryText)
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, 2)
+    }
+
+    private func timelineDay(_ date: Date) -> CalendarTimelineDay {
+        CalendarTimelineDay(
+            date: date,
+            courses: courses(on: date),
+            holidays: holidayItems(on: date)
+        )
     }
 
     private func courses(on date: Date) -> [Course] {
@@ -336,22 +452,119 @@ struct TeachingCalendarView: View {
         return ScheduleLogic.courses(on: date, termStart: start, courses: schedule.courses)
     }
 
-    private func dates(inMonthContaining date: Date) -> [Date] {
-        guard
-            let interval = calendar.dateInterval(of: .month, for: date),
-            let dayRange = calendar.range(of: .day, in: .month, for: interval.start)
-        else { return [] }
-        return dayRange.compactMap {
-            calendar.date(byAdding: .day, value: $0 - 1, to: interval.start)
+    private func holidayItems(on date: Date) -> [HolidayItem] {
+        let year = calendar.component(.year, from: date)
+        let target = DateFormatter.contractDate.string(from: date)
+        return model.holidayItems(for: year).filter { $0.date == target }
+    }
+
+    private func weekDates() -> [Date] {
+        let start = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start ?? selectedDate
+        return (0 ..< 7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+    }
+
+    private func monthGridDates(containing date: Date) -> [Date] {
+        let first = calendar.dateInterval(of: .month, for: date)?.start ?? date
+        let leading = (calendar.component(.weekday, from: first) + 5) % 7
+        guard let gridStart = calendar.date(byAdding: .day, value: -leading, to: first) else { return [] }
+        return (0 ..< 42).compactMap { calendar.date(byAdding: .day, value: $0, to: gridStart) }
+    }
+
+    private var visibleHolidayYears: Set<Int> {
+        switch mode {
+        case .day:
+            return [calendar.component(.year, from: selectedDate)]
+        case .week:
+            return Set(weekDates().map { calendar.component(.year, from: $0) })
+        case .month:
+            return Set(monthGridDates(containing: selectedDate).map { calendar.component(.year, from: $0) })
+        case .year:
+            return [calendar.component(.year, from: selectedDate)]
         }
+    }
+
+    private var holidayStatus: String? {
+        visibleHolidayYears.compactMap { model.holidayStatusByYear[$0] }.first
+    }
+
+    private func ensureVisibleHolidays() {
+        visibleHolidayYears.forEach { model.ensureHolidays(for: $0) }
+    }
+
+    private func moveDate(_ direction: Int) {
+        let component: Calendar.Component
+        let amount: Int
+        switch mode {
+        case .day:
+            component = .day
+            amount = direction
+        case .week:
+            component = .day
+            amount = direction * 7
+        case .month:
+            component = .month
+            amount = direction
+        case .year:
+            component = .year
+            amount = direction
+        }
+        if let moved = calendar.date(byAdding: component, value: amount, to: selectedDate) {
+            selectedDate = moved
+        }
+    }
+
+    private func dismissYearPopover() {
+        yearPopoverDate = nil
+        yearPopoverLocation = nil
+    }
+
+    private func estimatedYearPopoverHeight(_ day: Date, availableHeight: CGFloat) -> CGFloat {
+        let rows = max(1, holidayItems(on: day).count + courses(on: day).count)
+        return min(max(112, CGFloat(rows * 48 + 72)), min(320, max(112, availableHeight - 32)))
+    }
+
+    private func monthCellColor(selected: Bool, inMonth: Bool, courseCount: Int) -> Color {
+        if selected { return AppTheme.primary }
+        if !inMonth { return AppTheme.surface }
+        guard courseCount > 0 else { return AppTheme.background }
+        return AppTheme.primary.opacity(min(0.08 + Double(courseCount) * 0.10, 0.48))
+    }
+
+    private func monthTextColor(selected: Bool, inMonth: Bool, holidays: [HolidayItem]) -> Color {
+        if selected { return .white }
+        if !inMonth { return AppTheme.secondaryText.opacity(0.55) }
+        if let holiday = holidays.first { return Self.holidayColor(holiday) }
+        return AppTheme.text
+    }
+
+    private func yearCellColor(selected: Bool, courseCount: Int) -> Color {
+        if selected { return AppTheme.primary }
+        guard courseCount > 0 else { return AppTheme.background }
+        return AppTheme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount))
+    }
+
+    private func dayAccessibilityLabel(_ day: Date) -> String {
+        let holidays = holidayItems(on: day).map(\.name).joined(separator: "，")
+        let dayCourses = courses(on: day).map { "\($0.timeRange)\($0.name)" }.joined(separator: "，")
+        return [Self.fullDateFormatter.string(from: day), holidays, dayCourses.isEmpty ? "无课" : dayCourses]
+            .filter { !$0.isEmpty }
+            .joined(separator: "，")
     }
 
     private func sameDay(_ left: Date, _ right: Date) -> Bool {
         calendar.isDate(left, inSameDayAs: right)
     }
 
+    private static func holidayColor(_ item: HolidayItem) -> Color {
+        item.type == "holiday" ? holidayRed : AppTheme.primary
+    }
+
+    private static let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
+    private static let nowRed = Color(red: 220 / 255, green: 53 / 255, blue: 69 / 255)
+    private static let holidayRed = Color(red: 184 / 255, green: 50 / 255, blue: 52 / 255)
+    private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
+    private static let calendarCoordinateSpace = "teaching-calendar"
     private static let fullDateFormatter = dateFormatter("yyyy年M月d日 EEEE")
-    private static let weekDayFormatter = dateFormatter("M月d日 E")
     private static let monthDayFormatter = dateFormatter("yyyy年M月d日")
     private static let yearMonthFormatter = dateFormatter("yyyy年M月")
     private static let monthFormatter = dateFormatter("M月")
@@ -360,6 +573,7 @@ struct TeachingCalendarView: View {
         let formatter = DateFormatter()
         formatter.calendar = .shanghai
         formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = format
         return formatter
     }
@@ -370,7 +584,9 @@ extension DateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = .shanghai
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
         return formatter
     }()
 }

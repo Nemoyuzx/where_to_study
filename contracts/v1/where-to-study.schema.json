@@ -24,6 +24,32 @@
         "name": { "type": "string", "minLength": 1 }
       }
     },
+    "saved_settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "has_saved_password", "term_id", "term_start_date", "campus_id", "default_min_seats"],
+      "properties": {
+        "account": { "type": "string" },
+        "has_saved_password": { "type": "boolean" },
+        "term_id": { "type": "string", "minLength": 1 },
+        "term_start_date": { "type": "string", "format": "date" },
+        "campus_id": { "type": "string", "minLength": 1 },
+        "default_min_seats": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "save_settings_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["account", "password", "term_id", "term_start_date", "campus_id", "default_min_seats"],
+      "properties": {
+        "account": { "type": "string" },
+        "password": { "type": ["string", "null"] },
+        "term_id": { "type": "string", "minLength": 1 },
+        "term_start_date": { "type": "string", "format": "date" },
+        "campus_id": { "type": "string", "minLength": 1 },
+        "default_min_seats": { "type": "integer", "minimum": 0 }
+      }
+    },
     "course": {
       "type": "object",
       "additionalProperties": false,
@@ -50,7 +76,7 @@
       "properties": {
         "term_id": { "type": "string", "minLength": 1 },
         "term_start_date": { "type": "string", "format": "date" },
-        "fetched_at": { "type": "string", "format": "date-time" },
+        "fetched_at": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})$" },
         "courses": { "type": "array", "items": { "$ref": "#/$defs/course" } }
       }
     },
@@ -77,7 +103,7 @@
         "campus_id": { "type": "string", "minLength": 1 },
         "campus_name": { "type": "string", "minLength": 1 },
         "target_date": { "type": "string", "format": "date" },
-        "fetched_at": { "type": "string", "format": "date-time" },
+        "fetched_at": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})$" },
         "realtime": { "type": "boolean" },
         "provider": { "type": "string", "minLength": 1 },
         "rooms": { "type": "array", "items": { "$ref": "#/$defs/classroom" } }
@@ -90,16 +116,40 @@
       "properties": {
         "cache_version": { "type": "integer", "minimum": 2 },
         "target_date": { "type": "string", "format": "date" },
-        "fetched_at": { "type": "string", "format": "date-time" },
+        "fetched_at": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})$" },
         "realtime": { "type": "boolean" },
         "provider": { "type": "string", "minLength": 1 },
         "campuses": { "type": "array", "items": { "$ref": "#/$defs/classrooms" } }
       }
+    },
+    "holiday_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "name", "type"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "type": { "type": "string", "enum": ["holiday", "workday"] }
+      }
+    },
+    "holidays": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["year", "source", "fetched_at", "items"],
+      "properties": {
+        "year": { "type": "integer", "minimum": 1900, "maximum": 2100 },
+        "source": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "fetched_at": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})$" },
+        "items": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/holiday_item" } }
+      }
     }
   },
   "properties": {
+    "saved_settings": { "$ref": "#/$defs/saved_settings" },
+    "save_settings_request": { "$ref": "#/$defs/save_settings_request" },
     "schedule": { "$ref": "#/$defs/schedule" },
     "classrooms": { "$ref": "#/$defs/classrooms" },
-    "classrooms_cache": { "$ref": "#/$defs/classrooms_cache" }
+    "classrooms_cache": { "$ref": "#/$defs/classrooms_cache" },
+    "holidays": { "$ref": "#/$defs/holidays" }
   }
 }

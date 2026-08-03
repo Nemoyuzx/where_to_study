@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var showingClearDataConfirmation = false
 
     var body: some View {
         ScrollView {
@@ -50,11 +51,48 @@ struct SettingsView: View {
                         }
                     }
                 }
+                Surface {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("本地数据", systemImage: "externaldrive")
+                            .font(.headline)
+                        Text("清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。")
+                            .font(.callout)
+                            .foregroundStyle(AppTheme.secondaryText)
+                        Link(destination: URL(
+                            string: "https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
+                        )!) {
+                            Label("隐私说明", systemImage: "hand.raised")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("隐私说明")
+                        .accessibilityHint("在浏览器中打开隐私说明")
+                        Button(role: .destructive) {
+                            showingClearDataConfirmation = true
+                        } label: {
+                            Label("清除本地数据", systemImage: "trash")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
             }
             .padding(20)
             .frame(maxWidth: 720)
             .frame(maxWidth: .infinity)
         }
         .background(AppTheme.background)
+        .confirmationDialog(
+            "清除本地数据？",
+            isPresented: $showingClearDataConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("清除本地数据", role: .destructive) {
+                model.clearLocalData()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作会删除本机保存的账户密码、个人课表、空教室和节假日缓存，且无法撤销。")
+        }
     }
 }

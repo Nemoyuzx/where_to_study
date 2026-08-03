@@ -1,0 +1,27 @@
+{
+  "year": 2026,
+  "source": "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data",
+  "fetched_at": "2026-01-05T08:00:00+08:00",
+  "items": [
+    {
+      "date": "2026-01-01",
+      "name": "示例假期",
+      "type": "holiday"
+    },
+    {
+      "date": "2026-01-02",
+      "name": "示例假期",
+      "type": "holiday"
+    },
+    {
+      "date": "2026-01-03",
+      "name": "示例假期",
+      "type": "holiday"
+    },
+    {
+      "date": "2026-01-04",
+      "name": "示例调休",
+      "type": "workday"
+    }
+  ]
+}

@@ -4,10 +4,10 @@
   "fetched_at": "2026-03-02T00:00:00Z",
   "courses": [
     {
-      "id": "620b8c9fe8e7",
+      "id": "0cb282cebe22",
       "name": "示例课程",
       "teacher": "测试教师",
-      "room": "教一楼-1-101",
+      "room": "教一楼-101",
       "week_text": "1-18",
       "week_numbers": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
       "exam_week_numbers": [17, 18],

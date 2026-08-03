@@ -5,6 +5,13 @@
     <string name="brand_name">Where To Study</string>
     <string name="planner_eyebrow">BUPT CLASSROOM PLANNER</string>
     <string name="slot_format">第 %1$s 节\n%2$s-%3$s</string>
-    <string name="month_empty_format">%1$d月\n暂无课程</string>
+    <string name="classroom_source_format">数据源：移动教务实时接口 · %1$s</string>
+    <string name="personal_schedule_state_format">个人课表 %1$s</string>
+    <string name="state_on">开</string>
+    <string name="state_off">关</string>
+    <string name="room_result_limit_format">仅显示前 %1$d 间，请缩小教学楼或节次范围</string>
+    <string name="holiday_item_format">%1$s %2$s</string>
+    <string name="holiday_marker">休</string>
+    <string name="workday_marker">班</string>
     <string name="credential_security_note">账号和密码仅保存于本机，并由 Android Keystore 保护。</string>
 </resources>

@@ -10,12 +10,20 @@ on:
     paths:
       - "contracts/**"
       - "native/**"
+      - "src-tauri/src/**"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/build.rs"
       - "scripts/native-*.sh"
       - ".github/workflows/build-native.yml"
   pull_request:
     paths:
       - "contracts/**"
       - "native/**"
+      - "src-tauri/src/**"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/build.rs"
       - "scripts/native-*.sh"
       - ".github/workflows/build-native.yml"
 
@@ -24,65 +32,179 @@ permissions:
 
 jobs:
   apple:
-    name: Apple native build and tests
-    runs-on: macos-15
+    name: Apple builds, archives, platform tests, and shared Rust tests
+    runs-on: macos-26
     timeout-minutes: 30
+    env:
+      RELEASE_LABEL: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'ci' }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Run Rust contract and unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Build macOS and iOS clients
+      - name: Require Xcode 26 and iOS 26 SDK
+        run: |
+          set -euo pipefail
+          xcode_version="$(xcodebuild -version | sed -n '1s/^Xcode //p')"
+          ios_sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
+          [[ "$xcode_version" == 26.* ]]
+          [[ "$ios_sdk" == 26.* ]]
+
+      - name: Build Apple clients and run platform unit tests
         run: ./scripts/native-apple-build.sh
 
       - name: Package native macOS preview
-        run: ./scripts/native-macos-package.sh ci
+        run: ./scripts/native-macos-package.sh "$RELEASE_LABEL"
+
+      - name: Package unsigned native iOS archive
+        run: ./scripts/native-ios-package.sh "$RELEASE_LABEL"
 
       - name: Upload native macOS preview
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: where-to-study-native-macos-universal
           path: |
-            release-artifacts/Where-To-Study-ci-native-macos-universal.zip
-            release-artifacts/Where-To-Study-ci-native-macos-universal.zip.sha256
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-macos-universal.zip
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-macos-universal.zip.sha256
           if-no-files-found: error
 
-  android:
-    name: Android native build, tests, and lint
+      - name: Upload unsigned native iOS archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: where-to-study-native-ios-unsigned-archive
+          path: |
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-ios-unsigned.xcarchive.zip
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-ios-unsigned.xcarchive.zip.sha256
+          if-no-files-found: error
+
+  android-debug:
+    name: Android Debug tests, lint, and build
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@v4
+        uses: gradle/actions/wrapper-validation@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       - name: Install Android SDK packages
         run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Build native Android client
+      - name: Run Android unit tests, lint, and debug build
         run: ./scripts/native-android-build.sh
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+      - name: Upload Android Debug APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: where-to-study-native-android-debug
+          name: where-to-study-native-android-debug-${{ github.sha }}
           path: native/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  android-release:
+    name: Android signed release package
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Require Android release signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for variable in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!variable:-}" ]]; then
+              missing+=("$variable")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required Android release signing secret: %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+
+      - name: Setup Java
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build signed universal native Android package
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          keystore_path="$RUNNER_TEMP/where-to-study-release.jks"
+          trap 'rm -f "$keystore_path"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          if [[ ! -s "$keystore_path" ]]; then
+            echo "Decoded Android release keystore is empty." >&2
+            exit 1
+          fi
+
+          export ANDROID_SIGNING_STORE_FILE="$keystore_path"
+          export ANDROID_SIGNING_STORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+          export ANDROID_SIGNING_KEY_ALIAS="$ANDROID_KEY_ALIAS"
+          export ANDROID_SIGNING_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
+          ./scripts/native-android-package.sh "${{ github.ref_name }}"
+
+      - name: Upload signed universal native Android package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: where-to-study-native-android-signed-universal-${{ github.ref_name }}
+          path: |
+            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android-universal.apk
+            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android-universal.apk.sha256
+            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android.aab
+            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android.aab.sha256
           if-no-files-found: error

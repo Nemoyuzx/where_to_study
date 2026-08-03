@@ -14,6 +14,27 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+if rg --text --fixed-strings --quiet --no-ignore --hidden "$ROOT_DIR" "$APP_PATH"; then
+  echo "macOS app bundle contains a local source path." >&2
+  exit 1
+fi
+if rg --text --fixed-strings --quiet 'http://jwglweixin\.bupt\.edu\.cn' "$APP_PATH"; then
+  echo "macOS app bundle contains the retired HTTP teaching-system endpoint." >&2
+  exit 1
+fi
+if ! rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn' "$APP_PATH"; then
+  echo "macOS app bundle is missing the expected HTTPS teaching-system endpoint." >&2
+  exit 1
+fi
+
+INFO_PLIST="$APP_PATH/Contents/Info.plist"
+EXECUTABLE_NAME="$(plutil -extract CFBundleExecutable raw "$INFO_PLIST")"
+APP_BINARY="$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME"
+if [[ ! -f "$APP_BINARY" ]] || [[ " $(lipo -archs "$APP_BINARY") " != *" arm64 "* ]]; then
+  echo "macOS app bundle is missing its arm64 executable." >&2
+  exit 1
+fi
+
 mkdir -p "$OUTPUT_DIR"
 codesign --force --deep --sign - --timestamp=none "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"

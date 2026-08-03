@@ -91,6 +91,10 @@ class ScheduleStore(context: Context) {
         }
     }
 
+    fun clear() {
+        file.delete()
+    }
+
     private companion object {
         const val FILE_NAME = "schedule.json"
     }

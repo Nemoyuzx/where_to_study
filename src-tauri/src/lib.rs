@@ -13,11 +13,13 @@ mod schedule;
 mod schedule_store;
 mod settings_store;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 #[cfg(not(mobile))]
 use std::time::Duration;
 
 #[cfg(not(mobile))]
-use chrono::{Duration as ChronoDuration, NaiveDate, Timelike};
+use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime, NaiveTime};
 #[cfg(not(mobile))]
 use tauri::image::Image;
 #[cfg(not(mobile))]
@@ -25,14 +27,29 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
 use tauri::tray::TrayIconBuilder;
 #[cfg(not(mobile))]
-use tauri::{Emitter, Manager};
-#[cfg(all(not(mobile), target_os = "macos"))]
+use tauri::Emitter;
+use tauri::Manager;
+#[cfg(not(mobile))]
 use tauri_plugin_notification::NotificationExt;
 
 use crate::models::{
     ClassroomsCacheResponse, ClassroomsRequest, HolidaysRequest, HolidaysResponse,
-    MetadataResponse, SavedSettings, ScheduleRequest, ScheduleResponse,
+    MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest, ScheduleResponse,
 };
+
+static LOCAL_DATA_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+fn local_data_generation() -> u64 {
+    LOCAL_DATA_GENERATION.load(Ordering::Acquire)
+}
+
+fn ensure_local_data_generation(expected: u64) -> Result<(), String> {
+    if local_data_generation() == expected {
+        Ok(())
+    } else {
+        Err("本地数据已清除，本次后台结果未保存。".to_string())
+    }
+}
 
 #[tauri::command]
 fn get_metadata() -> MetadataResponse {
@@ -52,9 +69,34 @@ fn load_saved_settings(app: tauri::AppHandle) -> Result<SavedSettings, String> {
 #[tauri::command]
 fn save_saved_settings(
     app: tauri::AppHandle,
-    payload: SavedSettings,
+    payload: SaveSettingsRequest,
 ) -> Result<SavedSettings, String> {
     settings_store::save(&app, payload).map_err(|error| error.message)
+}
+
+#[tauri::command]
+fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
+    LOCAL_DATA_GENERATION.fetch_add(1, Ordering::AcqRel);
+    let mut errors = Vec::new();
+    if let Err(error) = credential_store::save(&credential_store::Credentials::default()) {
+        errors.push(error.message);
+    }
+
+    match app.path().app_config_dir() {
+        Ok(directory) if directory.exists() => {
+            if let Err(error) = std::fs::remove_dir_all(&directory) {
+                errors.push(format!("无法清除本地缓存与设置：{error}"));
+            }
+        }
+        Ok(_) => {}
+        Err(error) => errors.push(format!("无法定位本地数据目录：{error}")),
+    }
+
+    if errors.is_empty() {
+        Ok(true)
+    } else {
+        Err(errors.join("；"))
+    }
 }
 
 #[tauri::command]
@@ -70,11 +112,15 @@ fn load_saved_classrooms(app: tauri::AppHandle) -> Result<Option<ClassroomsCache
 #[tauri::command]
 async fn fetch_schedule(
     app: tauri::AppHandle,
-    payload: ScheduleRequest,
+    mut payload: ScheduleRequest,
 ) -> Result<ScheduleResponse, String> {
+    let generation = local_data_generation();
+    settings_store::apply_saved_credentials(&mut payload.account, &mut payload.password)
+        .map_err(|error| error.message)?;
     let schedule = schedule::fetch_schedule(&payload)
         .await
         .map_err(|error| error.message)?;
+    ensure_local_data_generation(generation)?;
     schedule_store::save(&app, &schedule).map_err(|error| error.message)?;
     #[cfg(not(mobile))]
     let _ = app.emit("schedule:updated", schedule.clone());
@@ -96,10 +142,14 @@ async fn fetch_classrooms(
     app: tauri::AppHandle,
     mut payload: ClassroomsRequest,
 ) -> Result<ClassroomsCacheResponse, String> {
+    let generation = local_data_generation();
+    settings_store::apply_saved_credentials(&mut payload.account, &mut payload.password)
+        .map_err(|error| error.message)?;
     payload.target_date = Some(config::today_in_app_tz().to_string());
     let classrooms = classrooms::fetch_all_classrooms(&payload)
         .await
         .map_err(|error| error.message)?;
+    ensure_local_data_generation(generation)?;
     classrooms_store::save(&app, &classrooms).map_err(|error| error.message)?;
     Ok(classrooms)
 }
@@ -134,7 +184,7 @@ async fn hide_desktop_widget(app: tauri::AppHandle) -> Result<bool, String> {
     #[cfg(not(mobile))]
     {
         if let Some(window) = app.get_webview_window("course-widget") {
-            window.hide().map_err(|error| error.to_string())?;
+            window.close().map_err(|error| error.to_string())?;
         }
         Ok(true)
     }
@@ -217,7 +267,7 @@ fn non_empty_option(value: String) -> Option<String> {
 fn classrooms_request_from_settings(settings: SavedSettings) -> ClassroomsRequest {
     ClassroomsRequest {
         account: non_empty_option(settings.account),
-        password: non_empty_option(settings.password),
+        password: None,
         campus_id: None,
         target_date: Some(config::today_in_app_tz().to_string()),
     }
@@ -227,11 +277,15 @@ fn classrooms_request_from_settings(settings: SavedSettings) -> ClassroomsReques
 async fn fetch_today_classrooms_from_saved_settings(
     app: tauri::AppHandle,
 ) -> Result<ClassroomsCacheResponse, String> {
+    let generation = local_data_generation();
     let settings = settings_store::load(&app).map_err(|error| error.message)?;
-    let request = classrooms_request_from_settings(settings);
+    let mut request = classrooms_request_from_settings(settings);
+    settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
+        .map_err(|error| error.message)?;
     let classrooms = classrooms::fetch_all_classrooms(&request)
         .await
         .map_err(|error| error.message)?;
+    ensure_local_data_generation(generation)?;
     classrooms_store::save(&app, &classrooms).map_err(|error| error.message)?;
     Ok(classrooms)
 }
@@ -435,15 +489,26 @@ async fn load_today_course_content(
         Ok(settings) => settings,
         Err(error) => return TrayCourseContent::Message(error.message),
     };
-    let request = ScheduleRequest {
+    let mut request = ScheduleRequest {
         account: non_empty_option(settings.account),
-        password: non_empty_option(settings.password),
+        password: None,
         term_id: non_empty_option(settings.term_id),
         term_start_date: non_empty_option(settings.term_start_date),
     };
+    if let Err(error) =
+        settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
+    {
+        return TrayCourseContent::Message(error.message);
+    }
+    let generation = local_data_generation();
     let schedule = match schedule::fetch_schedule(&request).await {
         Ok(schedule) => {
-            let _ = schedule_store::save(&app, &schedule);
+            if let Err(error) = ensure_local_data_generation(generation) {
+                return TrayCourseContent::Message(error);
+            }
+            if let Err(error) = schedule_store::save(&app, &schedule) {
+                return TrayCourseContent::Message(error.message);
+            }
             schedule
         }
         Err(error) => return TrayCourseContent::Message(error.message),
@@ -542,36 +607,123 @@ fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) 
 }
 
 #[cfg(not(mobile))]
-fn schedule_daily_classroom_refresh(app: tauri::AppHandle) {
-    std::thread::spawn(move || {
-        let mut refreshed_date: Option<NaiveDate> = None;
-
-        loop {
-            let now = chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai);
-            let today = now.date_naive();
-            if now.hour() == 7 && refreshed_date != Some(today) {
-                match tauri::async_runtime::block_on(fetch_today_classrooms_from_saved_settings(
-                    app.clone(),
-                )) {
-                    Ok(classrooms) => {
-                        let _ = app.emit("classrooms:auto-fetched", classrooms);
-                    }
-                    Err(error) => {
-                        let _ = app.emit(
-                            "classrooms:auto-fetch-error",
-                            format!("自动获取当天空教室失败：{error}"),
-                        );
-                    }
-                }
-                refreshed_date = Some(today);
-            }
-
-            std::thread::sleep(Duration::from_secs(60));
-        }
-    });
+fn next_daily_trigger_after(now: NaiveDateTime, hour: u32, minute: u32) -> NaiveDateTime {
+    let time = NaiveTime::from_hms_opt(hour, minute, 0).expect("valid daily trigger time");
+    let today_trigger = now.date().and_time(time);
+    if now < today_trigger {
+        today_trigger
+    } else {
+        today_trigger + ChronoDuration::days(1)
+    }
 }
 
-#[cfg(all(not(mobile), target_os = "macos"))]
+#[cfg(not(mobile))]
+fn desktop_now() -> NaiveDateTime {
+    chrono::Utc::now()
+        .with_timezone(&chrono_tz::Asia::Shanghai)
+        .naive_local()
+}
+
+#[cfg(not(mobile))]
+fn next_desktop_schedule_boundary(now: NaiveDateTime) -> NaiveDateTime {
+    [
+        next_daily_trigger_after(now, 0, 0),
+        next_daily_trigger_after(now, 7, 0),
+        next_daily_trigger_after(now, 7, 30),
+    ]
+    .into_iter()
+    .min()
+    .expect("desktop schedule always has a boundary")
+}
+
+#[cfg(not(mobile))]
+fn sleep_until(boundary: NaiveDateTime) {
+    let wait = (boundary - desktop_now())
+        .to_std()
+        .unwrap_or_else(|_| Duration::from_secs(1));
+    std::thread::sleep(wait);
+}
+
+#[cfg(not(mobile))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DesktopScheduledTask {
+    RebuildTrayForDate,
+    RefreshClassroomsAndTray,
+    SendCourseNotification,
+}
+
+#[cfg(not(mobile))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DesktopScheduleState {
+    tray_date: NaiveDate,
+    classroom_refresh_date: Option<NaiveDate>,
+    notification_date: Option<NaiveDate>,
+}
+
+#[cfg(not(mobile))]
+impl DesktopScheduleState {
+    fn after_startup(now: NaiveDateTime) -> Self {
+        let today = now.date();
+        let seven = NaiveTime::from_hms_opt(7, 0, 0).expect("valid refresh time");
+        let seven_thirty = NaiveTime::from_hms_opt(7, 30, 0).expect("valid notification time");
+        Self {
+            tray_date: today,
+            classroom_refresh_date: (now.time() >= seven).then_some(today),
+            notification_date: (now.time() >= seven_thirty).then_some(today),
+        }
+    }
+
+    fn mark_completed(&mut self, task: DesktopScheduledTask, date: NaiveDate) {
+        match task {
+            DesktopScheduledTask::RebuildTrayForDate => self.tray_date = date,
+            DesktopScheduledTask::RefreshClassroomsAndTray => {
+                self.tray_date = date;
+                self.classroom_refresh_date = Some(date);
+            }
+            DesktopScheduledTask::SendCourseNotification => {
+                self.notification_date = Some(date);
+            }
+        }
+    }
+}
+
+#[cfg(not(mobile))]
+fn due_desktop_tasks(now: NaiveDateTime, state: DesktopScheduleState) -> Vec<DesktopScheduledTask> {
+    let today = now.date();
+    let classroom_due = now.time() >= NaiveTime::from_hms_opt(7, 0, 0).expect("valid refresh time")
+        && state.classroom_refresh_date != Some(today);
+    let notification_due = now.time()
+        >= NaiveTime::from_hms_opt(7, 30, 0).expect("valid notification time")
+        && state.notification_date != Some(today);
+
+    let mut tasks = Vec::with_capacity(2);
+    if classroom_due {
+        tasks.push(DesktopScheduledTask::RefreshClassroomsAndTray);
+    } else if state.tray_date != today {
+        tasks.push(DesktopScheduledTask::RebuildTrayForDate);
+    }
+    if notification_due {
+        tasks.push(DesktopScheduledTask::SendCourseNotification);
+    }
+    tasks
+}
+
+#[cfg(not(mobile))]
+fn refresh_today_classrooms_and_emit(app: &tauri::AppHandle) {
+    match tauri::async_runtime::block_on(fetch_today_classrooms_from_saved_settings(app.clone())) {
+        Ok(classrooms) => {
+            let _ = app.emit("classrooms:auto-fetched", classrooms);
+        }
+        Err(error) => {
+            let _ = app.emit(
+                "classrooms:auto-fetch-error",
+                format!("自动获取当天空教室失败：{error}"),
+            );
+        }
+    }
+}
+
+#[cfg(not(mobile))]
 fn daily_course_notification_content(app: &tauri::AppHandle, today: NaiveDate) -> (String, String) {
     let Some(schedule) = (match schedule_store::load(app) {
         Ok(schedule) => schedule,
@@ -617,11 +769,13 @@ fn daily_course_notification_content(app: &tauri::AppHandle, today: NaiveDate) -
     )
 }
 
-#[cfg(all(not(mobile), target_os = "macos"))]
+#[cfg(not(mobile))]
 fn send_daily_course_notification(app: &tauri::AppHandle, today: NaiveDate) -> Result<(), String> {
     let (title, body) = daily_course_notification_content(app, today);
     let notification = app.notification();
-    let _ = notification.request_permission();
+    notification
+        .request_permission()
+        .map_err(|error| format!("无法确认系统通知权限：{error}"))?;
     notification
         .builder()
         .title(title)
@@ -632,36 +786,144 @@ fn send_daily_course_notification(app: &tauri::AppHandle, today: NaiveDate) -> R
         .map_err(|error| error.to_string())
 }
 
-#[cfg(all(not(mobile), target_os = "macos"))]
-fn schedule_daily_course_notification(app: tauri::AppHandle) {
+#[cfg(not(mobile))]
+fn run_desktop_scheduled_task(
+    app: &tauri::AppHandle,
+    task: DesktopScheduledTask,
+    today: NaiveDate,
+) {
+    match task {
+        DesktopScheduledTask::RebuildTrayForDate => {
+            refresh_tray_courses(app.clone(), true);
+        }
+        DesktopScheduledTask::RefreshClassroomsAndTray => {
+            refresh_today_classrooms_and_emit(app);
+            refresh_tray_courses(app.clone(), true);
+        }
+        DesktopScheduledTask::SendCourseNotification => {
+            if let Err(error) = send_daily_course_notification(app, today) {
+                eprintln!("daily course notification failed: {error}");
+                let _ = app.emit(
+                    "schedule:daily-notification-error",
+                    format!("发送今日课程提醒失败：{error}"),
+                );
+            }
+        }
+    }
+}
+
+#[cfg(not(mobile))]
+fn schedule_desktop_background_tasks(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        let mut notified_date: Option<NaiveDate> = None;
+        let started_at = desktop_now();
+        let mut state = DesktopScheduleState::after_startup(started_at);
+        refresh_tray_courses(app.clone(), true);
 
         loop {
-            let now = chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai);
-            let today = now.date_naive();
-            if now.hour() == 7 && now.minute() >= 30 && notified_date != Some(today) {
-                if let Err(error) = send_daily_course_notification(&app, today) {
-                    let _ = app.emit(
-                        "schedule:daily-notification-error",
-                        format!("发送今日课程提醒失败：{error}"),
-                    );
-                }
-                notified_date = Some(today);
+            let now = desktop_now();
+            for task in due_desktop_tasks(now, state) {
+                run_desktop_scheduled_task(&app, task, now.date());
+                state.mark_completed(task, now.date());
             }
-
-            std::thread::sleep(Duration::from_secs(60));
+            sleep_until(next_desktop_schedule_boundary(desktop_now()));
         }
     });
+}
+
+#[cfg(all(test, not(mobile)))]
+mod background_schedule_tests {
+    use super::*;
+
+    fn date_time(hour: u32, minute: u32, second: u32) -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(2026, 8, 3)
+            .unwrap()
+            .and_hms_opt(hour, minute, second)
+            .unwrap()
+    }
+
+    #[test]
+    fn daily_trigger_is_strictly_after_now() {
+        assert_eq!(
+            next_daily_trigger_after(date_time(6, 59, 59), 7, 0),
+            date_time(7, 0, 0)
+        );
+        assert_eq!(
+            next_daily_trigger_after(date_time(7, 0, 0), 7, 0),
+            date_time(7, 0, 0) + ChronoDuration::days(1)
+        );
+    }
+
+    #[test]
+    fn scheduler_only_wakes_at_midnight_refresh_and_notification_boundaries() {
+        assert_eq!(
+            next_desktop_schedule_boundary(date_time(6, 59, 59)),
+            date_time(7, 0, 0)
+        );
+        assert_eq!(
+            next_desktop_schedule_boundary(date_time(7, 0, 0)),
+            date_time(7, 30, 0)
+        );
+        assert_eq!(
+            next_desktop_schedule_boundary(date_time(7, 30, 0)),
+            date_time(0, 0, 0) + ChronoDuration::days(1)
+        );
+    }
+
+    #[test]
+    fn midnight_rebuilds_tray_without_network_refresh() {
+        let yesterday = date_time(0, 0, 0).date() - ChronoDuration::days(1);
+        let state = DesktopScheduleState {
+            tray_date: yesterday,
+            classroom_refresh_date: Some(yesterday),
+            notification_date: Some(yesterday),
+        };
+
+        assert_eq!(
+            due_desktop_tasks(date_time(0, 0, 1), state),
+            vec![DesktopScheduledTask::RebuildTrayForDate]
+        );
+    }
+
+    #[test]
+    fn delayed_wake_refreshes_classrooms_tray_and_notification_once() {
+        let yesterday = date_time(0, 0, 0).date() - ChronoDuration::days(1);
+        let mut state = DesktopScheduleState {
+            tray_date: yesterday,
+            classroom_refresh_date: Some(yesterday),
+            notification_date: Some(yesterday),
+        };
+        let now = date_time(8, 0, 0);
+        let tasks = due_desktop_tasks(now, state);
+        assert_eq!(
+            tasks,
+            vec![
+                DesktopScheduledTask::RefreshClassroomsAndTray,
+                DesktopScheduledTask::SendCourseNotification,
+            ]
+        );
+
+        for task in tasks {
+            state.mark_completed(task, now.date());
+        }
+        assert!(due_desktop_tasks(now, state).is_empty());
+    }
+
+    #[test]
+    fn startup_before_seven_keeps_the_seven_oclock_refresh_due() {
+        let state = DesktopScheduleState::after_startup(date_time(6, 0, 0));
+        assert!(due_desktop_tasks(date_time(6, 59, 59), state).is_empty());
+        assert_eq!(
+            due_desktop_tasks(date_time(7, 0, 0), state),
+            vec![DesktopScheduledTask::RefreshClassroomsAndTray]
+        );
+    }
 }
 
 fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
     #[cfg(not(mobile))]
     {
         setup_tray(app)?;
-        schedule_daily_classroom_refresh(app.app_handle().clone());
-        #[cfg(target_os = "macos")]
-        schedule_daily_course_notification(app.app_handle().clone());
+        schedule_desktop_background_tasks(app.app_handle().clone());
     }
 
     #[cfg(mobile)]
@@ -692,6 +954,7 @@ pub fn run() {
             get_metadata,
             load_saved_settings,
             save_saved_settings,
+            clear_local_data,
             load_saved_schedule,
             load_saved_classrooms,
             fetch_schedule,

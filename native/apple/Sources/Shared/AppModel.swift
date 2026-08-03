@@ -37,10 +37,14 @@ final class AppModel: ObservableObject {
     @Published var usePersonalSchedule = true
     @Published var schedule: ScheduleSnapshot?
     @Published var classroomsCache: ClassroomsCache?
+    @Published private(set) var holidaysByYear = [Int: HolidaysSnapshot]()
     @Published var statusMessage = ""
     @Published var classroomStatusMessage = ""
+    @Published var calendarImportStatusMessage = ""
     @Published var isRefreshingSchedule = false
     @Published var isRefreshingClassrooms = false
+    @Published var isImportingCalendar = false
+    @Published private(set) var holidayStatusByYear = [Int: String]()
 
     let slots = SlotMetadata.defaults
     private let credentialStore: any CredentialStoring
@@ -48,7 +52,13 @@ final class AppModel: ObservableObject {
     private let scheduleClient: any ScheduleFetching
     private let classroomStore: any ClassroomStoring
     private let classroomClient: any ClassroomFetching
+    private let holidayStore: any HolidayStoring
+    private let holidayClient: any HolidayFetching
+    private let calendarImporter: any CalendarImporting
     private let defaults: UserDefaults
+    private var holidayLoads = Set<Int>()
+    private var localDataGeneration = 0
+    private var dailyClassroomRefreshTask: Task<Void, Never>?
 
     init(
         credentialStore: any CredentialStoring = KeychainCredentialStore(),
@@ -56,6 +66,9 @@ final class AppModel: ObservableObject {
         scheduleClient: any ScheduleFetching = SJDScheduleClient(),
         classroomStore: any ClassroomStoring = FileClassroomStore(),
         classroomClient: any ClassroomFetching = SJDClassroomClient(),
+        holidayStore: any HolidayStoring = FileHolidayStore(),
+        holidayClient: any HolidayFetching = HolidayClient(),
+        calendarImporter: any CalendarImporting = EventKitCalendarImporter(),
         defaults: UserDefaults = .standard
     ) {
         self.credentialStore = credentialStore
@@ -63,6 +76,9 @@ final class AppModel: ObservableObject {
         self.scheduleClient = scheduleClient
         self.classroomStore = classroomStore
         self.classroomClient = classroomClient
+        self.holidayStore = holidayStore
+        self.holidayClient = holidayClient
+        self.calendarImporter = calendarImporter
         self.defaults = defaults
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
@@ -71,6 +87,7 @@ final class AppModel: ObservableObject {
         loadSchedule()
         loadClassrooms()
         synchronizeSelectedSlots()
+        ensureHolidays(for: Calendar.shanghai.component(.year, from: .now))
     }
 
     var selectedCampusName: String {
@@ -78,11 +95,28 @@ final class AppModel: ObservableObject {
     }
 
     var todayCourses: [Course] {
+        courses(on: .now)
+    }
+
+    var tomorrowCourses: [Course] {
+        guard let tomorrow = Calendar.shanghai.date(byAdding: .day, value: 1, to: .now) else { return [] }
+        return courses(on: tomorrow)
+    }
+
+    func courses(on date: Date) -> [Course] {
         guard
             let schedule,
             let termStart = Self.dateFormatter.date(from: schedule.termStartDate)
         else { return [] }
-        return ScheduleLogic.courses(on: .now, termStart: termStart, courses: schedule.courses)
+        return ScheduleLogic.courses(on: date, termStart: termStart, courses: schedule.courses)
+    }
+
+    func weekNumber(on date: Date) -> Int? {
+        guard
+            let schedule,
+            let termStart = Self.dateFormatter.date(from: schedule.termStartDate)
+        else { return nil }
+        return ScheduleLogic.weekNumber(on: date, termStart: termStart)
     }
 
     var personalBusySlots: Set<Int> {
@@ -165,6 +199,58 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func clearLocalData() {
+        localDataGeneration &+= 1
+        var failures = [String]()
+
+        do {
+            try credentialStore.clear()
+            account = ""
+            password = ""
+        } catch {
+            failures.append("账户密码")
+        }
+
+        do {
+            try scheduleStore.clear()
+            schedule = nil
+            calendarImportStatusMessage = ""
+        } catch {
+            failures.append("个人课表")
+        }
+
+        do {
+            try classroomStore.clear()
+            classroomsCache = nil
+            classroomStatusMessage = ""
+        } catch {
+            failures.append("空教室缓存")
+        }
+
+        do {
+            try holidayStore.clear()
+            holidaysByYear.removeAll()
+            holidayStatusByYear.removeAll()
+            holidayLoads.removeAll()
+        } catch {
+            failures.append("节假日缓存")
+        }
+
+        defaults.removeObject(forKey: "campusID")
+        defaults.removeObject(forKey: "termID")
+        defaults.removeObject(forKey: "termStartDate")
+        campusID = "01"
+        termID = ScheduleDefaults.termID
+        termStartDate = ScheduleDefaults.termStartDate
+        selectedBuildings.removeAll()
+        usePersonalSchedule = true
+        synchronizeSelectedSlots()
+
+        statusMessage = failures.isEmpty
+            ? "本地数据已清除"
+            : "以下本地数据未能清除：\(failures.joined(separator: "、"))"
+    }
+
     func refreshSchedule() {
         guard !isRefreshingSchedule else { return }
         isRefreshingSchedule = true
@@ -177,6 +263,7 @@ final class AppModel: ObservableObject {
             ? ScheduleDefaults.termID : termID.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackTermStart = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ScheduleDefaults.termStartDate : termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let generation = localDataGeneration
 
         Task {
             defer { isRefreshingSchedule = false }
@@ -186,8 +273,10 @@ final class AppModel: ObservableObject {
                     fallbackTermID: fallbackTermID,
                     fallbackTermStartDate: fallbackTermStart
                 )
+                guard generation == localDataGeneration else { return }
                 try scheduleStore.save(fetched)
                 schedule = fetched
+                calendarImportStatusMessage = ""
                 termID = fetched.termID
                 termStartDate = fetched.termStartDate
                 defaults.set(termID, forKey: "termID")
@@ -195,7 +284,35 @@ final class AppModel: ObservableObject {
                 synchronizeSelectedSlots()
                 statusMessage = "个人课表已更新，共 \(fetched.courses.count) 门课程"
             } catch {
+                guard generation == localDataGeneration else { return }
                 statusMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func importScheduleToCalendar() {
+        guard !isImportingCalendar else { return }
+        guard let schedule else {
+            calendarImportStatusMessage = CalendarImportError.noSchedule.localizedDescription
+            return
+        }
+        isImportingCalendar = true
+        calendarImportStatusMessage = "正在导入系统日历…"
+        let generation = localDataGeneration
+
+        Task {
+            defer { isImportingCalendar = false }
+            do {
+                let result = try await calendarImporter.importSchedule(schedule)
+                guard generation == localDataGeneration else { return }
+                if result.total == 0 {
+                    calendarImportStatusMessage = "课表中没有可导入的课程日期"
+                } else {
+                    calendarImportStatusMessage = "日历导入完成：新增 \(result.inserted)，更新 \(result.updated)，已存在 \(result.unchanged)"
+                }
+            } catch {
+                guard generation == localDataGeneration else { return }
+                calendarImportStatusMessage = error.localizedDescription
             }
         }
     }
@@ -219,6 +336,7 @@ final class AppModel: ObservableObject {
             password: password
         )
         let targetDate = Self.todayString
+        let generation = localDataGeneration
 
         Task {
             defer { isRefreshingClassrooms = false }
@@ -227,12 +345,69 @@ final class AppModel: ObservableObject {
                     credentials: credentials,
                     targetDate: targetDate
                 )
+                guard generation == localDataGeneration else { return }
                 try classroomStore.save(fetched)
                 classroomsCache = fetched
                 selectedBuildings.formIntersection(Set(campusBuildings))
                 classroomStatusMessage = "当天空教室已更新"
             } catch {
+                guard generation == localDataGeneration else { return }
                 classroomStatusMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func startDailyClassroomRefresh() {
+        guard dailyClassroomRefreshTask == nil else { return }
+        dailyClassroomRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let now = Date()
+                let next = DailyRefreshLogic.nextRefresh(after: now)
+                let delay = max(1, next.timeIntervalSince(now))
+                do {
+                    try await Task.sleep(for: .seconds(delay))
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                self.refreshClassrooms(force: true)
+            }
+        }
+    }
+
+    func holidayItems(for year: Int) -> [HolidayItem] {
+        holidaysByYear[year]?.items ?? []
+    }
+
+    func ensureHolidays(for year: Int, force: Bool = false) {
+        guard HolidayDefaults.supportedYears.contains(year) else { return }
+        if holidaysByYear[year] == nil {
+            do {
+                holidaysByYear[year] = try holidayStore.load(year: year)
+            } catch {
+                holidayStatusByYear[year] = "本地节假日读取失败"
+            }
+        }
+        if !force, let cached = holidaysByYear[year], Self.isFreshHolidaySnapshot(cached) {
+            return
+        }
+        guard holidayLoads.insert(year).inserted else { return }
+        let cached = holidaysByYear[year]
+        let generation = localDataGeneration
+
+        Task {
+            defer { holidayLoads.remove(year) }
+            do {
+                let fetched = try await holidayClient.fetch(year: year)
+                guard generation == localDataGeneration else { return }
+                try holidayStore.save(fetched)
+                holidaysByYear[year] = fetched
+                holidayStatusByYear.removeValue(forKey: year)
+            } catch {
+                guard generation == localDataGeneration else { return }
+                holidayStatusByYear[year] = cached == nil
+                    ? "节假日数据暂不可用"
+                    : "节假日更新失败，正在使用本地缓存"
             }
         }
     }
@@ -279,6 +454,12 @@ final class AppModel: ObservableObject {
         dateFormatter.string(from: .now)
     }
 
+    private static func isFreshHolidaySnapshot(_ snapshot: HolidaysSnapshot, now: Date = .now) -> Bool {
+        guard let fetchedAt = ISO8601DateFormatter().date(from: snapshot.fetchedAt) else { return false }
+        let age = now.timeIntervalSince(fetchedAt)
+        return age >= 0 && age <= HolidayDefaults.refreshInterval
+    }
+
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.calendar = .shanghai
@@ -286,4 +467,26 @@ final class AppModel: ObservableObject {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+}
+
+enum DailyRefreshLogic {
+    static func nextRefresh(
+        after date: Date,
+        hour: Int = 7,
+        minute: Int = 0,
+        calendar: Calendar = .shanghai
+    ) -> Date {
+        let day = calendar.dateComponents([.year, .month, .day], from: date)
+        let candidate = calendar.date(from: DateComponents(
+            timeZone: calendar.timeZone,
+            year: day.year,
+            month: day.month,
+            day: day.day,
+            hour: hour,
+            minute: minute
+        )) ?? date.addingTimeInterval(60)
+        if candidate > date { return candidate }
+        return calendar.date(byAdding: .day, value: 1, to: candidate)
+            ?? date.addingTimeInterval(24 * 60 * 60)
+    }
 }

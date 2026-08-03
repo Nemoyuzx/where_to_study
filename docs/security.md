@@ -18,13 +18,24 @@
 - macOS/iOS：账号和密码存入 Keychain；原生客户端普通偏好存入 `UserDefaults`，Tauri 客户端存入应用配置目录。
 - Android：账号和密码使用 Android Keystore 保护后存储；原生客户端普通偏好存入 `SharedPreferences`，Tauri 客户端存入应用配置目录。
 - 课程和空教室缓存不得包含密码、token 或完整响应头。
+- Tauri `load_saved_settings` 的响应不得包含密码，只能返回 `has_saved_password`；WebView 中的密码输入仅作为一次性替换值。
+- 旧版普通设置中的明文凭据必须先通过同目录临时文件、所有者权限和原子替换完成脱敏，再写入系统凭据存储；后续步骤失败不得把明文写回。
 
 ## 网络
 
 - 只向产品所需的北邮教务与节假日数据源发送请求。
 - 不记录请求体、密码、token、cookie 或完整响应。
 - 错误信息面向用户时不得回显凭据。
-- 现有教务部分端点仍使用 HTTP；客户端必须明确限制目标 host，后续评估可用的 HTTPS 替代端点。
+- 教务请求只使用 `jwglweixin.bupt.edu.cn` 的 HTTPS 端点；客户端不得为该数据源开放明文传输例外。
+- 个人课表请求失败时必须原样返回移动教务链路的错误，不得自动切换到旧教务或其他数据源。
+- 节假日数据只通过 `raw.githubusercontent.com` 的 HTTPS 地址读取，不为其开放明文传输例外；其来源归属和许可证边界以根目录 README 为准。
+
+## Apple 隐私清单
+
+- 原生 Apple 目标必须把 `native/apple/Resources/PrivacyInfo.xcprivacy` 打入应用资源。
+- `UserDefaults` 只保存应用自身可见的普通偏好，对应 `CA92.1`。
+- 文件元数据访问只用于应用容器内缓存的大小和状态校验，对应 `C617.1`。
+- 应用不接入分析或广告 SDK，不声明跟踪域；账号、课表和教室缓存不会发送给项目维护者。
 
 ## 开源发布检查
 

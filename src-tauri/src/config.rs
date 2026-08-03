@@ -1,19 +1,15 @@
-use chrono::{NaiveDate, Utc};
+use chrono::{NaiveDate, SecondsFormat, Utc};
 use chrono_tz::Asia::Shanghai;
 
 use crate::models::{CampusMetadata, SlotMetadata};
 
-pub const JWGL_HOME_URL: &str = "https://jwgl.bupt.edu.cn/jsxsd/";
-pub const JWGL_LOGIN_URL: &str = "https://jwgl.bupt.edu.cn/jsxsd/xk/LoginToXk";
-pub const JWGL_TIMETABLE_URL: &str = "https://jwgl.bupt.edu.cn/jsxsd/xskb/xskb_print.do";
-
-pub const SJD_ORIGIN: &str = "http://jwglweixin.bupt.edu.cn";
-pub const SJD_LOGIN_PAGE_URL: &str = "http://jwglweixin.bupt.edu.cn/sjd/#/login";
-pub const SJD_REST_CLASSROOM_PAGE_URL: &str = "http://jwglweixin.bupt.edu.cn/sjd/#/restClassroom";
+pub const SJD_ORIGIN: &str = "https://jwglweixin.bupt.edu.cn";
+pub const SJD_LOGIN_PAGE_URL: &str = "https://jwglweixin.bupt.edu.cn/sjd/#/login";
+pub const SJD_REST_CLASSROOM_PAGE_URL: &str = "https://jwglweixin.bupt.edu.cn/sjd/#/restClassroom";
 pub const SJD_STUDENT_CURRICULUM_URL: &str =
-    "http://jwglweixin.bupt.edu.cn/bjyddx/student/curriculum";
-pub const EMPTY_CLASSROOM_LOGIN_URL: &str = "http://jwglweixin.bupt.edu.cn/bjyddx/login";
-pub const EMPTY_CLASSROOM_TODAY_URL: &str = "http://jwglweixin.bupt.edu.cn/bjyddx/todayClassrooms";
+    "https://jwglweixin.bupt.edu.cn/bjyddx/student/curriculum";
+pub const EMPTY_CLASSROOM_LOGIN_URL: &str = "https://jwglweixin.bupt.edu.cn/bjyddx/login";
+pub const EMPTY_CLASSROOM_TODAY_URL: &str = "https://jwglweixin.bupt.edu.cn/bjyddx/todayClassrooms";
 
 pub const DEFAULT_TERM_ID: &str = "2025-2026-2";
 pub const DEFAULT_TERM_START_DATE: &str = "2026-03-02";
@@ -104,9 +100,41 @@ pub fn campus_name(campus_id: &str) -> String {
 }
 
 pub fn now_in_app_tz() -> String {
-    Utc::now().with_timezone(&Shanghai).to_rfc3339()
+    Utc::now()
+        .with_timezone(&Shanghai)
+        .to_rfc3339_opts(SecondsFormat::Secs, false)
 }
 
 pub fn today_in_app_tz() -> NaiveDate {
     Utc::now().with_timezone(&Shanghai).date_naive()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_timestamp_uses_second_precision_rfc3339() {
+        let timestamp = now_in_app_tz();
+
+        assert!(!timestamp.contains('.'));
+        assert!(chrono::DateTime::parse_from_rfc3339(&timestamp).is_ok());
+    }
+
+    #[test]
+    fn sjd_transport_uses_https_for_all_endpoints() {
+        for endpoint in [
+            SJD_ORIGIN,
+            SJD_LOGIN_PAGE_URL,
+            SJD_REST_CLASSROOM_PAGE_URL,
+            SJD_STUDENT_CURRICULUM_URL,
+            EMPTY_CLASSROOM_LOGIN_URL,
+            EMPTY_CLASSROOM_TODAY_URL,
+        ] {
+            assert!(
+                endpoint.starts_with("https://"),
+                "insecure endpoint: {endpoint}"
+            );
+        }
+    }
 }

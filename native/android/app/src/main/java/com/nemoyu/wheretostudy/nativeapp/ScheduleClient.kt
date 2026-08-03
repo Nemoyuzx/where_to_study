@@ -103,7 +103,7 @@ class SjdApiClient {
     private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
     companion object {
-        const val ORIGIN = "http://jwglweixin.bupt.edu.cn"
+        const val ORIGIN = "https://jwglweixin.bupt.edu.cn"
         const val LOGIN_REFERER = "$ORIGIN/sjd/#/login"
         const val CLASSROOM_REFERER = "$ORIGIN/sjd/#/restClassroom"
     }
@@ -195,8 +195,9 @@ object SjdScheduleParser {
         val name = raw.opt("courseName").stringValue().trim().ifEmpty { "未命名课程" }
         val teacher = raw.opt("teacherName").stringValue().trim()
         val building = raw.opt("buildingName").stringValue().trim()
-        val room = raw.opt("classroomName").stringValue().trim()
+        val rawRoom = raw.opt("classroomName").stringValue().trim()
             .ifEmpty { raw.opt("location").stringValue().trim() }
+        val room = normalizeCourseRoom(rawRoom)
         val location = when {
             building.isNotEmpty() && room.isNotEmpty() && !room.contains(building) -> "$building-$room"
             room.isNotEmpty() -> room
@@ -231,6 +232,24 @@ object SjdScheduleParser {
             sectionText = "${startSlot + 1}-${endSlot + 1}节",
             timeRange = "$startTime-$endTime",
         )
+    }
+
+    internal fun normalizeCourseRoom(value: String): String {
+        val normalized = value.trim()
+            .replace('－', '-')
+            .replace('—', '-')
+            .replace('–', '-')
+        val parts = normalized.split('-')
+        if (parts.size != 2) return normalized
+        val buildingPrefix = parts[0].removePrefix("教")
+        return if (
+            buildingPrefix.length == 1 && buildingPrefix.all(Char::isDigit) &&
+            parts[1].length == 3 && parts[1].all(Char::isDigit)
+        ) {
+            parts[1]
+        } else {
+            normalized
+        }
     }
 
     private fun weekNumbers(raw: JSONObject): List<Int> {

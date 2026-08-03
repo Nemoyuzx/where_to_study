@@ -1,7 +1,10 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.Uri
 import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
@@ -147,6 +150,64 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(12), 0, 0)
         })
+        addView(spacer(activity, 18))
+        addView(TextView(activity).apply {
+            text = "隐私说明"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.primaryDark)
+            setTypeface(typeface, Typeface.BOLD)
+            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(46),
+            )
+            setOnClickListener {
+                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
+            }
+        })
+        addView(spacer(activity, 10))
+        addView(TextView(activity).apply {
+            text = "清除本地数据"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(138, 45, 28))
+            setTypeface(typeface, Typeface.BOLD)
+            background = roundedBackground(
+                activity,
+                Color.rgb(255, 242, 237),
+                Color.rgb(230, 183, 170),
+                radius = 6,
+            )
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(46),
+            )
+            setOnClickListener {
+                AlertDialog.Builder(activity)
+                    .setTitle("清除全部本地数据？")
+                    .setMessage("将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("确认清除") { _, _ ->
+                        val result = activity.clearAllLocalData()
+                        val message = if (result.isComplete) {
+                            "本地数据已清除"
+                        } else {
+                            "已清除其余本地数据；未能清除：${result.failedItems.joinToString("、")}"
+                        }
+                        Toast.makeText(
+                            activity,
+                            message,
+                            if (result.isComplete) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                    .show()
+            }
+        })
     }
 
     private fun field(hintText: String, value: String, secure: Boolean): EditText = EditText(activity).apply {
@@ -167,5 +228,9 @@ class SettingsPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(50),
         )
+    }
+
+    private companion object {
+        const val PRIVACY_URL = "https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
     }
 }

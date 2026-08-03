@@ -54,7 +54,7 @@ struct SJDScheduleClient: ScheduleFetching {
 }
 
 struct SJDAPIClient: Sendable {
-    static let origin = "http://jwglweixin.bupt.edu.cn"
+    static let origin = "https://jwglweixin.bupt.edu.cn"
     static let loginReferer = "\(origin)/sjd/#/login"
     static let classroomReferer = "\(origin)/sjd/#/restClassroom"
 
@@ -252,10 +252,11 @@ enum SJDScheduleParser {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let building = SJDScheduleClient.string(raw["buildingName"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let room = [raw["classroomName"], raw["location"]]
+        let rawRoom = [raw["classroomName"], raw["location"]]
             .map(SJDScheduleClient.string)
             .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let room = normalizeCourseRoom(rawRoom)
         let location: String
         if !building.isEmpty, !room.isEmpty, !room.contains(building) {
             location = "\(building)-\(room)"
@@ -293,6 +294,24 @@ enum SJDScheduleParser {
             sectionText: "\(startSlot + 1)-\(endSlot + 1)节",
             timeRange: "\(startTime)-\(endTime)"
         )
+    }
+
+    static func normalizeCourseRoom(_ value: String) -> String {
+        let normalized = value
+            .replacingOccurrences(of: "－", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+            .replacingOccurrences(of: "–", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = normalized.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return normalized }
+        let buildingPrefix = parts[0].hasPrefix("教") ? parts[0].dropFirst() : parts[0][...]
+        guard
+            buildingPrefix.count == 1,
+            buildingPrefix.allSatisfy(\.isNumber),
+            parts[1].count == 3,
+            parts[1].allSatisfy(\.isNumber)
+        else { return normalized }
+        return String(parts[1])
     }
 
     private static func weekNumbers(from raw: [String: Any]) -> [Int] {

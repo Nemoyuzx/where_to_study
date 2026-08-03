@@ -5,7 +5,7 @@
 - `WhereToStudyMac`：macOS 13+
 - `WhereToStudyiOS`：iOS 16+
 
-生成工程并构建：
+生成工程、构建 macOS/iOS，并运行两个平台的原生单元测试：
 
 ```bash
 ./scripts/native-apple-generate.sh
@@ -14,12 +14,22 @@
 
 账号和密码由 Apple Keychain 保存，普通偏好使用 `UserDefaults`。当前原生预览版已接入移动教务的个人课表和当天两校区空教室请求，课表与空教室数据会分别原子写入应用支持目录并供后续启动离线读取。课程联动、原有教学楼限制、三位教室号、双门教室号、日/周/月/年视图和第 17、18 个实际教学周的“试”标记均复用 `contracts/v1` 的脱敏夹具测试。
 
-空教室数据仅查询当天；应用启动时会在已有凭据且当天缓存缺失时自动刷新，不进行常驻轮询。节假日、当前时间线、菜单栏、通知和系统日历导入仍在后续阶段；需要这些功能时应继续使用 Tauri 客户端。
+空教室数据仅查询当天；应用启动和重新进入前台时会在已有凭据且当天缓存缺失时自动刷新，不进行常驻轮询。macOS 常驻时使用单次睡眠到下一个 07:00 的调度任务更新当天空教室，不做分钟级检查。教学日历支持本地缓存的法定节假日、当前时间线和日/周/月/年视图，并可在用户授权后把实际上课日期幂等写入系统日历。Apple 目标包含统一应用图标与 `PrivacyInfo.xcprivacy`；隐私清单声明应用容器文件元数据和 `UserDefaults` 的实际用途，不声明跟踪或开发者数据收集。macOS 还提供菜单栏入口、今日与明日课程、关闭主窗口后常驻及明确退出命令；通知仍在后续阶段。
 
-生成经过测试的 macOS Universal 预览包：
+iOS 模拟器构建会使用 Xcode 的本地临时签名，以便 Keychain 在调试安装中正常工作。`native-apple-build.sh` 会在 macOS 与 iPhone 模拟器上运行原生单元测试，并在退出时关闭测试模拟器。账号保存、应用重启后恢复和清除凭据已使用虚构账号做过人工运行验证；这部分交互仍不属于自动化 UI 测试。无签名真机 archive 可以在没有开发者账号的环境中构建，但安装到真机、TestFlight 或 App Store 分发仍需要配置开发团队、签名身份和 provisioning profile。
+
+生成并校验无签名 iOS 真机 archive：
+
+```bash
+./scripts/native-ios-package.sh vX.Y.Z-preview.N
+```
+
+脚本会生成仅含 arm64 真机应用的 `xcarchive.zip` 和 SHA-256 文件，并检查应用图标资源与隐私清单。该 archive 供 CI 验证和后续签名使用，不能直接安装到 iPhone。
+
+生成并校验 macOS Universal 预览包：
 
 ```bash
 ./scripts/native-macos-package.sh vX.Y.Z-preview.N
 ```
 
-脚本会构建 arm64 与 x86_64 双架构应用、进行临时代码签名和签名校验，并把 ZIP 与 SHA-256 文件写入 `release-artifacts/`。该包未使用 Developer ID 签名，也未公证。
+脚本会构建 arm64 与 x86_64 双架构应用、检查二进制架构、进行临时代码签名和签名校验，并把 ZIP 与 SHA-256 文件写入 `release-artifacts/`。脚本不会运行单元测试或启动应用做运行时测试；发布前应另外运行 `native-apple-build.sh` 并完成所需的人工运行检查。该包未使用 Developer ID 签名，也未公证。

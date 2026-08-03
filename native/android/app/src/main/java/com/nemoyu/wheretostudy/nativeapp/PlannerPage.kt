@@ -64,7 +64,7 @@ class PlannerPage(
         addView(fetchButton())
         classroomRepository.cache?.let { cache ->
             addView(TextView(activity).apply {
-                text = "数据源：移动教务实时接口 · ${cache.targetDate}"
+                text = activity.getString(R.string.classroom_source_format, cache.targetDate)
                 textSize = 12f
                 setTextColor(Palette.muted)
                 setPadding(0, activity.dp(10), 0, 0)
@@ -159,7 +159,10 @@ class PlannerPage(
         val cells = mutableMapOf<Int, TextView>()
 
         fun refreshCells() {
-            personalToggle.text = "个人课表 ${if (usePersonalSchedule) "开" else "关"}"
+            personalToggle.text = activity.getString(
+                R.string.personal_schedule_state_format,
+                activity.getString(if (usePersonalSchedule) R.string.state_on else R.string.state_off),
+            )
             personalToggle.setSelectedStyle(activity, usePersonalSchedule)
             cells.forEach { (index, cell) ->
                 val busy = usePersonalSchedule && index in personalBusySlots
@@ -348,7 +351,7 @@ class PlannerPage(
                     }
                     if (rooms.size > MAX_VISIBLE_ROOMS) {
                         resultsContainer.addView(TextView(activity).apply {
-                            text = "仅显示前 $MAX_VISIBLE_ROOMS 间，请缩小教学楼或节次范围"
+                            text = activity.getString(R.string.room_result_limit_format, MAX_VISIBLE_ROOMS)
                             textSize = 12f
                             setTextColor(Palette.muted)
                             gravity = Gravity.CENTER

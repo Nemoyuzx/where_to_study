@@ -3,8 +3,25 @@ name: Build Windows
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.js"
+      - ".github/workflows/build-windows.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.js"
+      - ".github/workflows/build-windows.yml"
 
 permissions:
   contents: read
@@ -12,36 +29,72 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           targets: x86_64-pc-windows-msvc
+          components: clippy, rustfmt
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ./src-tauri
 
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Build web frontend
+        run: npm run build
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Test Rust core
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+
+      - name: Run strict Clippy checks
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+
       - name: Build Windows bundle
         run: npm run tauri -- build --target x86_64-pc-windows-msvc --features custom-protocol --bundles nsis --ci
 
+      - name: Package versioned Windows installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $source = Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if (-not $source) {
+            throw "Windows NSIS installer was not produced."
+          }
+
+          $label = if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $env:GITHUB_REF_NAME
+          } else {
+            "ci-$($env:GITHUB_SHA.Substring(0, 12))"
+          }
+          New-Item -ItemType Directory -Force "release-artifacts" | Out-Null
+          $output = "release-artifacts/Where-To-Study-$label-windows-x64-setup.exe"
+          Copy-Item $source.FullName $output
+          $hash = (Get-FileHash -Algorithm SHA256 $output).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path -Leaf $output)" | Set-Content -Encoding ascii "$output.sha256"
+
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: where-to-study-windows
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          path: |
+            release-artifacts/*.exe
+            release-artifacts/*.exe.sha256
           if-no-files-found: error

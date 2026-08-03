@@ -67,6 +67,19 @@ data class ClassroomsCache(
     val campuses: List<CampusClassrooms>,
 )
 
+data class HolidayItem(
+    val date: String,
+    val name: String,
+    val type: String,
+)
+
+data class HolidaysSnapshot(
+    val year: Int,
+    val source: String,
+    val fetchedAt: String,
+    val items: List<HolidayItem>,
+)
+
 object AppMetadata {
     const val classroomsCacheVersion = 2
     const val defaultTermID = "2025-2026-2"
@@ -93,6 +106,13 @@ object AppMetadata {
         SlotMetadata(12, "13", "19:20", "20:05"),
         SlotMetadata(13, "14", "20:10", "20:55"),
     )
+}
+
+object HolidayMetadata {
+    const val source = "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data"
+    const val minimumYear = 1900
+    const val maximumYear = 2100
+    const val refreshIntervalMillis = 7L * 24L * 60L * 60L * 1_000L
 }
 
 object ScheduleLogic {

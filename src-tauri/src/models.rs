@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlotMetadata {
@@ -27,7 +28,7 @@ pub struct SavedSettings {
     #[serde(default)]
     pub account: String,
     #[serde(default)]
-    pub password: String,
+    pub has_saved_password: bool,
     #[serde(default)]
     pub term_id: String,
     #[serde(default)]
@@ -42,7 +43,7 @@ impl SavedSettings {
     pub fn with_defaults() -> Self {
         Self {
             account: String::new(),
-            password: String::new(),
+            has_saved_password: false,
             term_id: crate::config::default_term_id(),
             term_start_date: crate::config::default_term_start_date(),
             campus_id: crate::config::CAMPUSES[0].id.to_string(),
@@ -63,7 +64,37 @@ impl SavedSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Deserialize, Zeroize, ZeroizeOnDrop)]
+pub struct SaveSettingsRequest {
+    #[serde(default)]
+    pub account: String,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub term_id: String,
+    #[serde(default)]
+    pub term_start_date: String,
+    #[serde(default)]
+    pub campus_id: String,
+    #[serde(default)]
+    pub default_min_seats: usize,
+}
+
+impl SaveSettingsRequest {
+    pub fn apply_defaults(&mut self) {
+        if self.term_id.trim().is_empty() {
+            self.term_id = crate::config::default_term_id();
+        }
+        if self.term_start_date.trim().is_empty() {
+            self.term_start_date = crate::config::default_term_start_date();
+        }
+        if self.campus_id.trim().is_empty() {
+            self.campus_id = crate::config::CAMPUSES[0].id.to_string();
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct ScheduleRequest {
     pub account: Option<String>,
     pub password: Option<String>,
@@ -71,7 +102,7 @@ pub struct ScheduleRequest {
     pub term_start_date: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct ClassroomsRequest {
     pub account: Option<String>,
     pub password: Option<String>,
@@ -84,7 +115,7 @@ pub struct HolidaysRequest {
     pub year: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HolidayItem {
     pub date: String,
     pub name: String,
@@ -92,7 +123,7 @@ pub struct HolidayItem {
     pub kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HolidaysResponse {
     pub year: i32,
     pub source: String,

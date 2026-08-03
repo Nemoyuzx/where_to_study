@@ -1,0 +1,38 @@
+name: Conduct contact request
+description: Request a private channel without publishing allegations or personal details.
+title: "[Conduct contact] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is public. Do not name people, quote abusive content, describe allegations, or attach screenshots. Read `CODE_OF_CONDUCT.md` first.
+  - type: dropdown
+    id: context
+    attributes:
+      label: Broad context
+      options:
+        - Repository issue or discussion
+        - Pull request or code review
+        - Release or project coordination
+        - Public project representation
+    validations:
+      required: true
+  - type: input
+    id: request
+    attributes:
+      label: Non-sensitive request
+      description: Ask only for a private contact channel; include no names, allegations, or evidence.
+      placeholder: I need a private channel to report a conduct concern.
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Privacy checks
+      options:
+        - label: I have not identified any person or described the allegation in this public issue.
+          required: true
+        - label: I have not attached private communications, screenshots, or personal data.
+          required: true
+        - label: I understand that this request does not have a promised response SLA.
+          required: true

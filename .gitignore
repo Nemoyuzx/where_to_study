@@ -6,6 +6,32 @@ dist-ssr
 preview-*.png
 release-artifacts/
 .github/modernize/
+.playwright-cli/
+output/playwright/
+
+# Local environment files. Keep documented examples available to contributors.
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Certificates, private keys, provisioning profiles, and local signing config.
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.cer
+*.crt
+*.der
+*.mobileprovision
+*.provisionprofile
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+codesign.properties
+*.signing.properties
 
 src-tauri/target
 src-tauri/gen/schemas

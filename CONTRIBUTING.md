@@ -7,6 +7,7 @@
 ## 目录
 
 - [行为准则](#行为准则)
+- [许可证状态](#许可证状态)
 - [我可以贡献什么](#我可以贡献什么)
 - [提交 Issue](#提交-issue)
 - [开发环境准备](#开发环境准备)
@@ -21,11 +22,15 @@
 
 请保持友善、尊重和包容。讨论问题时对事不对人，欢迎新人提问，乐于分享知识。
 
+## 许可证状态
+
+仓库当前尚未选定软件许可证，也没有 `LICENSE` 文件。许可证由维护者决定；在许可证落地前，正式开源发布处于阻塞状态，文档、PR 和 release notes 不得声称项目已经完成开源授权。
+
 ## 我可以贡献什么
 
 - **报告 Bug**：发现问题就提 issue，附上复现步骤。
 - **修复 Bug**：认领 issue 并提交 PR。
-- **新功能**：例如支持更多校区/教学楼、改进推荐算法、优化 UI 等。
+- **新功能**：例如完善教学楼过滤、改进日历交互、优化 UI 等。
 - **文档**：完善 README、注释或本指南。
 - **平台支持**：补充 Windows / Linux 桌面端打包验证，或完善 iOS 签名流程。
 
@@ -100,11 +105,12 @@ export BUPT_PASSWORD=你的教务密码
 - **后端（Rust）**：源码位于 `src-tauri/src/`，提交前请运行：
 
   ```bash
-  cargo fmt
-  cargo clippy
+  cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+  cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+  cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
   ```
 
-  尽量消除 clippy 警告，保持模块职责清晰（如 `classrooms.rs`、`recommender.rs`、`schedule.rs` 等已有划分）。
+  尽量消除 clippy 警告，保持模块职责清晰（如 `classrooms.rs`、`schedule.rs`、`holidays.rs` 等已有划分）。
 - 保持改动聚焦：一个 PR 只解决一个问题，避免无关的格式化或重构混入。
 - 不要提交本地生成的产物和敏感文件（构建输出、keystore、签名证书等，仓库已通过 `.gitignore` 忽略）。
 
@@ -137,14 +143,14 @@ export BUPT_PASSWORD=你的教务密码
 feat: 支持沙河智慧教学楼空教室查询
 fix: 修复跨校区缓存覆盖问题
 docs: 补充 Android 签名构建说明
-refactor: 拆分 recommender 推荐逻辑
+refactor: 拆分日期节次计算逻辑
 ```
 
 ## 项目结构速览
 
 ```
 src/                前端 React 应用（UI、交互）
-src-tauri/src/      Rust 后端（教务认证、课表、空教室、推荐、通知等）
+src-tauri/src/      Rust 后端（教务认证、课表、空教室、日期节次计算、通知等）
 src-tauri/gen/      各平台原生工程（android / apple）
 scripts/            移动端构建与签名脚本
 release-artifacts/  发布产物的校验文件
@@ -155,7 +161,7 @@ release-artifacts/  发布产物的校验文件
 - `auth.rs`：教务系统认证。
 - `schedule.rs` / `schedule_store.rs`：课表获取与缓存。
 - `classrooms.rs` / `classrooms_store.rs`：空教室数据与缓存。
-- `recommender.rs`：连续可用教室推荐。
+- `recommender.rs`：按日期计算课程及忙碌/空闲节次。
 - `calendar_export.rs`：课程日历导出。
 - `holidays.rs`：节假日处理。
 

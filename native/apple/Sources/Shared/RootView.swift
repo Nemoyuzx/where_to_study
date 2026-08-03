@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -40,6 +41,14 @@ struct RootView: View {
         }
         .onAppear {
             model.refreshClassroomsIfNeeded()
+            #if os(macOS)
+            model.startDailyClassroomRefresh()
+            #endif
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                model.refreshClassroomsIfNeeded()
+            }
         }
         .preferredColorScheme(.light)
     }

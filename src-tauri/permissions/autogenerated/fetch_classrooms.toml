@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-classrooms"
+description = "Enables the fetch_classrooms command without any pre-configured scope."
+commands.allow = ["fetch_classrooms"]
+
+[[permission]]
+identifier = "deny-fetch-classrooms"
+description = "Denies the fetch_classrooms command without any pre-configured scope."
+commands.deny = ["fetch_classrooms"]

@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class ScheduleRepository(
     context: Context,
@@ -16,6 +17,7 @@ class ScheduleRepository(
     private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val refreshInFlight = AtomicBoolean(false)
+    private val dataGeneration = AtomicLong(0)
 
     @Volatile
     var schedule: ScheduleSnapshot? = runCatching(store::load).getOrNull()
@@ -29,10 +31,14 @@ class ScheduleRepository(
         val credentials = credentialStore.load() ?: Credentials("", "")
         val fallbackTermID = preferences.termID
         val fallbackTermStartDate = preferences.termStartDate
+        val refreshGeneration = dataGeneration.get()
 
         worker.execute {
             val result = runCatching {
                 client.fetch(credentials, fallbackTermID, fallbackTermStartDate).also { fetched ->
+                    if (dataGeneration.get() != refreshGeneration) {
+                        throw ScheduleClientException("本地数据已清除，本次课表结果未保存。")
+                    }
                     store.save(fetched)
                     schedule = fetched
                     preferences.termID = fetched.termID
@@ -44,6 +50,12 @@ class ScheduleRepository(
                 onComplete(result)
             }
         }
+    }
+
+    fun clearLocalData() {
+        dataGeneration.incrementAndGet()
+        store.clear()
+        schedule = null
     }
 
     fun close() {

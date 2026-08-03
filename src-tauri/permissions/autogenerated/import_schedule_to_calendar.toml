@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-import-schedule-to-calendar"
+description = "Enables the import_schedule_to_calendar command without any pre-configured scope."
+commands.allow = ["import_schedule_to_calendar"]
+
+[[permission]]
+identifier = "deny-import-schedule-to-calendar"
+description = "Denies the import_schedule_to_calendar command without any pre-configured scope."
+commands.deny = ["import_schedule_to_calendar"]

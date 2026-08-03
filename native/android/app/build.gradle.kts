@@ -19,7 +19,7 @@ android {
         applicationId = "com.nemoyu.wheretostudy.nativeapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
+        versionCode = 5
         versionName = "0.1.1"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
@@ -62,7 +62,7 @@ android {
     }
 
     buildFeatures {
-        buildConfig = false
+        buildConfig = true
     }
 
     sourceSets {
@@ -72,5 +72,5 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260719")
 }

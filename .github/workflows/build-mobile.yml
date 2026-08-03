@@ -15,37 +15,33 @@ jobs:
     env:
       ANDROID_NDK_VERSION: 27.2.12479018
       ANDROID_SIGNING_READY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           targets: aarch64-linux-android
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ./src-tauri
 
@@ -64,28 +60,33 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
-      - name: Prepare Android signing
-        if: env.ANDROID_SIGNING_READY == 'true'
-        run: |
-          KEYSTORE_PATH="$RUNNER_TEMP/android-release.keystore"
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
-          {
-            echo "ANDROID_SIGNING_STORE_FILE=$KEYSTORE_PATH"
-            echo "ANDROID_SIGNING_STORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
-            echo "ANDROID_SIGNING_KEY_ALIAS=$ANDROID_KEY_ALIAS"
-            echo "ANDROID_SIGNING_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
-
       - name: Build Android APK
         if: env.ANDROID_SIGNING_READY != 'true'
         run: ./scripts/android-build-local.sh
 
       - name: Build signed Android APK
         if: env.ANDROID_SIGNING_READY == 'true'
-        run: ./scripts/android-build-signed.sh
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          keystore_path="$RUNNER_TEMP/android-release.keystore"
+          trap 'rm -f "$keystore_path"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          test -s "$keystore_path"
+
+          export ANDROID_SIGNING_STORE_FILE="$keystore_path"
+          export ANDROID_SIGNING_STORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+          export ANDROID_SIGNING_KEY_ALIAS="$ANDROID_KEY_ALIAS"
+          export ANDROID_SIGNING_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
+          ./scripts/android-build-signed.sh
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: where-to-study-android-apk
           path: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release*.apk
@@ -95,30 +96,24 @@ jobs:
     runs-on: macos-latest
     env:
       IOS_SIGNING_READY: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 != '' && secrets.IOS_CERTIFICATE_PASSWORD != '' && secrets.IOS_MOBILEPROVISION_BASE64 != '' && secrets.APPLE_DEVELOPMENT_TEAM != '' }}
-      IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
-      IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-      IOS_MOBILEPROVISION_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
-      IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
-      APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-      IOS_EXPORT_METHOD: ${{ secrets.IOS_EXPORT_METHOD }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           targets: aarch64-apple-ios
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ./src-tauri
 
@@ -128,38 +123,47 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Prepare iOS signing assets
-        if: env.IOS_SIGNING_READY == 'true'
-        run: |
-          CERT_PATH="$RUNNER_TEMP/ios-signing.p12"
-          PROFILE_PATH="$RUNNER_TEMP/ios-signing.mobileprovision"
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          KEYCHAIN_PASSWORD="${IOS_KEYCHAIN_PASSWORD:-temp-$(uuidgen)}"
-
-          printf '%s' "$IOS_CERTIFICATE_P12_BASE64" | base64 -D > "$CERT_PATH"
-          printf '%s' "$IOS_MOBILEPROVISION_BASE64" | base64 -D > "$PROFILE_PATH"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$IOS_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-          security default-keychain -d user -s "$KEYCHAIN_PATH"
-
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
-
-          {
-            echo "APPLE_DEVELOPMENT_TEAM=$APPLE_DEVELOPMENT_TEAM"
-            if [ -n "${IOS_EXPORT_METHOD:-}" ]; then
-              echo "IOS_EXPORT_METHOD=$IOS_EXPORT_METHOD"
-            fi
-          } >> "$GITHUB_ENV"
-
       - name: Build signed iOS IPA
         if: env.IOS_SIGNING_READY == 'true'
-        run: printf 'y\n' | ./scripts/ios-build-signed.sh
+        env:
+          IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILEPROVISION_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+          IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          IOS_EXPORT_METHOD: ${{ secrets.IOS_EXPORT_METHOD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          cert_path="$RUNNER_TEMP/ios-signing.p12"
+          profile_path="$RUNNER_TEMP/ios-signing.mobileprovision"
+          installed_profile="$HOME/Library/MobileDevice/Provisioning Profiles/where-to-study-$GITHUB_RUN_ID.mobileprovision"
+          keychain_path="$RUNNER_TEMP/app-signing.keychain-db"
+          keychain_password="${IOS_KEYCHAIN_PASSWORD:-temp-$(uuidgen)}"
+          cleanup() {
+            security delete-keychain "$keychain_path" >/dev/null 2>&1 || true
+            rm -f "$cert_path" "$profile_path" "$installed_profile"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$IOS_CERTIFICATE_P12_BASE64" | base64 -D > "$cert_path"
+          printf '%s' "$IOS_MOBILEPROVISION_BASE64" | base64 -D > "$profile_path"
+          test -s "$cert_path"
+          test -s "$profile_path"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$cert_path" -P "$IOS_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$keychain_path" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+          security default-keychain -d user -s "$keychain_path"
+
+          mkdir -p "$(dirname "$installed_profile")"
+          cp "$profile_path" "$installed_profile"
+          export APPLE_DEVELOPMENT_TEAM
+          export IOS_EXPORT_METHOD
+          printf 'y\n' | ./scripts/ios-build-signed.sh
 
       - name: Build unsigned iOS archive
         if: env.IOS_SIGNING_READY != 'true'
@@ -167,7 +171,7 @@ jobs:
 
       - name: Upload signed iOS IPA
         if: env.IOS_SIGNING_READY == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: where-to-study-ios-ipa
           path: src-tauri/gen/apple/build/**/*.ipa
@@ -175,7 +179,7 @@ jobs:
 
       - name: Upload iOS archive
         if: env.IOS_SIGNING_READY != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: where-to-study-ios-xcarchive
           path: src-tauri/gen/apple/build/where_to_study_iOS.xcarchive

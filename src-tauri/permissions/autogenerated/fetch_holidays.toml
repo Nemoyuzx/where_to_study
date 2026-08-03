@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-holidays"
+description = "Enables the fetch_holidays command without any pre-configured scope."
+commands.allow = ["fetch_holidays"]
+
+[[permission]]
+identifier = "deny-fetch-holidays"
+description = "Denies the fetch_holidays command without any pre-configured scope."
+commands.deny = ["fetch_holidays"]

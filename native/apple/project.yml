@@ -8,9 +8,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.1"
-    CURRENT_PROJECT_VERSION: "4"
+    CURRENT_PROJECT_VERSION: "5"
     DEVELOPMENT_TEAM: ""
-    CODE_SIGNING_ALLOWED: NO
 targets:
   WhereToStudyMac:
     type: application
@@ -20,6 +19,8 @@ targets:
       - path: Sources/macOS
       - path: ../../src-tauri/icons/icon.icns
         buildPhase: resources
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: Generated/WhereToStudyMac-Info.plist
       properties:
@@ -27,12 +28,8 @@ targets:
         CFBundleIconFile: icon.icns
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        NSAppTransportSecurity: &transportSecurity
-          NSAllowsArbitraryLoads: false
-          NSExceptionDomains:
-            jwglweixin.bupt.edu.cn:
-              NSExceptionAllowsInsecureHTTPLoads: true
-              NSIncludesSubdomains: false
+        NSCalendarsFullAccessUsageDescription: 将个人课表中的课程写入系统日历，并在重复导入时更新已有课程。
+        NSCalendarsUsageDescription: 将个人课表中的课程写入系统日历。
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
@@ -47,20 +44,39 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/iOS
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: Generated/WhereToStudyiOS-Info.plist
       properties:
         CFBundleDisplayName: Where To Study
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        NSCalendarsFullAccessUsageDescription: 将个人课表中的课程写入系统日历，并在重复导入时更新已有课程。
+        NSCalendarsUsageDescription: 将个人课表中的课程写入系统日历。
         UILaunchScreen: {}
-        NSAppTransportSecurity: *transportSecurity
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios
         PRODUCT_NAME: WhereToStudyiOS
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"
         IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    scheme:
+      testTargets:
+        - WhereToStudyiOSTests
   WhereToStudyMacTests:
     type: bundle.unit-test
     platform: macOS
@@ -72,4 +88,16 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.tests
+        CODE_SIGNING_ALLOWED: NO
+  WhereToStudyiOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: WhereToStudyiOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios.tests
         CODE_SIGNING_ALLOWED: NO

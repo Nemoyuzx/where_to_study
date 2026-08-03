@@ -1,0 +1,57 @@
+name: Feature request
+description: Propose a user-facing change with a concrete problem and scope.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository currently has no `LICENSE`. A proposal or contribution does not select a license, and third-party code or assets must not be pasted without permission.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user need and current limitation without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe observable behavior, important states, and failure handling.
+    validations:
+      required: true
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Platforms
+      options:
+        - label: Windows
+        - label: macOS
+        - label: iOS
+        - label: Android
+        - label: Web development preview
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List objective conditions that would make the request complete and testable.
+    validations:
+      required: true
+  - type: textarea
+    id: source_material
+    attributes:
+      label: Authorized references
+      description: Link specifications or assets and state their license or permission status.
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues for the same request.
+          required: true
+        - label: I have not included credentials, private data, or unauthorized third-party material.
+          required: true

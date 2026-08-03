@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "course-widget",
+  "description": "Read-only schedule access required by the desktop course widget",
+  "windows": ["course-widget"],
+  "platforms": ["macOS", "windows", "linux"],
+  "permissions": [
+    "core:event:default",
+    "allow-get-metadata",
+    "allow-load-saved-schedule",
+    "allow-hide-desktop-widget"
+  ]
+}
