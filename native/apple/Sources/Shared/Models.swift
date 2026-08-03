@@ -66,6 +66,11 @@ struct ScheduleSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+enum ScheduleDefaults {
+    static let termID = "2025-2026-2"
+    static let termStartDate = "2026-03-02"
+}
+
 struct Classroom: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let building: String
@@ -92,7 +97,28 @@ enum ScheduleLogic {
         let start = calendar.startOfDay(for: termStart)
         let target = calendar.startOfDay(for: date)
         let days = calendar.dateComponents([.day], from: start, to: target).day ?? 0
+        guard days >= 0 else { return 0 }
         return days / 7 + 1
+    }
+
+    static func applyingExamWeeks(to courses: [Course]) -> [Course] {
+        let examWeeks = examWeeks(in: courses)
+        return courses.map { course in
+            Course(
+                id: course.id,
+                name: course.name,
+                teacher: course.teacher,
+                room: course.room,
+                weekText: course.weekText,
+                weekNumbers: course.weekNumbers,
+                examWeekNumbers: course.weekNumbers.filter(examWeeks.contains),
+                weekday: course.weekday,
+                startSlot: course.startSlot,
+                endSlot: course.endSlot,
+                sectionText: course.sectionText,
+                timeRange: course.timeRange
+            )
+        }
     }
 
     static func courses(

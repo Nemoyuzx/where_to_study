@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -14,6 +15,7 @@ import java.util.TimeZone
 class PlannerPage(
     private val activity: MainActivity,
     private val preferences: AppPreferences,
+    private val scheduleRepository: ScheduleRepository,
 ) {
     private val selectedSlots = AppMetadata.slots.mapTo(mutableSetOf()) { it.index }
 
@@ -129,7 +131,13 @@ class PlannerPage(
 
     private fun todayCoursesSurface(): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "当天课程"))
-        addView(emptyMessage("暂无本地课程"))
+        val today = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai"))
+        val courses = ScheduleLogic.courses(scheduleRepository.schedule, today)
+        if (courses.isEmpty()) {
+            addView(emptyMessage("暂无本地课程，请在设置中获取/刷新个人课表"))
+        } else {
+            courses.forEach { course -> addView(courseRow(course)) }
+        }
     }
 
     private fun classroomsSurface(): LinearLayout = surface(activity).apply {
@@ -146,5 +154,36 @@ class PlannerPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(92),
         )
+    }
+
+    private fun courseRow(course: Course): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
+        background = roundedBackground(activity, Palette.background, Palette.border, radius = 4)
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = activity.dp(8) }
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(activity).apply {
+                text = if (course.examWeekNumbers.isEmpty()) course.name else "试  ${course.name}"
+                textSize = 15f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            addView(TextView(activity).apply {
+                text = course.room.ifEmpty { "地点未标注" }
+                textSize = 12f
+                setTextColor(Palette.muted)
+            })
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(TextView(activity).apply {
+            text = course.timeRange
+            textSize = 13f
+            setTextColor(Palette.muted)
+            gravity = Gravity.END
+        })
     }
 }

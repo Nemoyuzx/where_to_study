@@ -13,3 +13,7 @@
 - 缓存不得包含账号、密码、token 或 cookie。
 
 修改契约时必须保持向后兼容，破坏性修改需要新建版本目录。
+
+`fixtures/` 只包含虚构、脱敏数据：`sjd-current-week.json` 和
+`sjd-curriculum.json` 模拟移动教务响应，`schedule.json` 是两者规范化后的预期课表。
+Rust、Swift 和 Kotlin 测试必须复用这些文件，防止不同客户端产生不同课程语义。

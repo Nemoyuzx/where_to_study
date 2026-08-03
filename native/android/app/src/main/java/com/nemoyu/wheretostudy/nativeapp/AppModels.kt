@@ -30,7 +30,17 @@ data class Course(
     val timeRange: String,
 )
 
+data class ScheduleSnapshot(
+    val termID: String,
+    val termStartDate: String,
+    val fetchedAt: String,
+    val courses: List<Course>,
+)
+
 object AppMetadata {
+    const val defaultTermID = "2025-2026-2"
+    const val defaultTermStartDate = "2026-03-02"
+
     val campuses = listOf(
         CampusMetadata(id = "01", name = "西土城"),
         CampusMetadata(id = "04", name = "沙河"),
@@ -70,12 +80,44 @@ object ScheduleLogic {
         val start = startOfDay(termStart)
         val day = startOfDay(target)
         val elapsedDays = Math.floorDiv(day.timeInMillis - start.timeInMillis, MILLIS_PER_DAY)
+        if (elapsedDays < 0) return 0
         return Math.floorDiv(elapsedDays.toInt(), 7) + 1
+    }
+
+    fun applyingExamWeeks(courses: List<Course>): List<Course> {
+        val examWeeks = examWeeks(courses)
+        return courses.map { course ->
+            course.copy(examWeekNumbers = course.weekNumbers.filter(examWeeks::contains))
+        }
+    }
+
+    fun courses(
+        schedule: ScheduleSnapshot?,
+        target: Calendar,
+    ): List<Course> {
+        schedule ?: return emptyList()
+        val start = parseContractDate(schedule.termStartDate) ?: return emptyList()
+        val week = weekNumber(start, target)
+        val weekday = ((target.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+        return schedule.courses
+            .filter { it.weekday == weekday && week in it.weekNumbers }
+            .sortedWith(compareBy(Course::startSlot, Course::name))
     }
 
     private fun startOfDay(source: Calendar): Calendar = Calendar.getInstance(shanghai).apply {
         set(source.get(Calendar.YEAR), source.get(Calendar.MONTH), source.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
         set(Calendar.MILLISECOND, 0)
+    }
+
+    private fun parseContractDate(value: String): Calendar? {
+        val parts = value.split('-').mapNotNull(String::toIntOrNull)
+        if (parts.size != 3) return null
+        val date = Calendar.getInstance(shanghai).apply {
+            isLenient = false
+            set(parts[0], parts[1] - 1, parts[2], 0, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return runCatching { date.timeInMillis }.map { date }.getOrNull()
     }
 
     private const val MILLIS_PER_DAY = 86_400_000L

@@ -17,17 +17,14 @@ Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户�
 
 | 平台 | 当前可用版本 | 原生迁移状态 |
 | --- | --- | --- |
-| macOS | Tauri 2，功能完整 | SwiftUI 双端工程已建立，联网服务待接入 |
-| Android | Tauri 2，功能完整 | Kotlin Views 工程已建立，联网服务待接入 |
+| macOS | Tauri 2，功能完整 | SwiftUI 原生预览已支持个人课表获取、缓存和日/周/月/年查看 |
+| Android | Tauri 2，功能完整 | Kotlin Views 原生预览已支持个人课表获取、缓存和日/周/月/年查看 |
 | Windows | Tauri 2，持续维护 | 保留 Tauri，并进行安全和资源占用优化 |
-| iOS | 暂不提供签名安装包 | SwiftUI 工程可构建，联网服务待接入 |
+| iOS | 暂不提供签名安装包 | SwiftUI 工程可构建，已接入只读个人课表服务 |
 
 ## 下载
 
-macOS Apple Silicon 和 Android arm64 测试安装包在 GitHub Releases 中提供。macOS
-包目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；Android
-包使用项目维护者的本地 release key 签名。Windows 构建由标签触发的 CI 生成，iOS
-因缺少公开分发签名暂不提供安装包。
+GitHub Releases 会按阶段提供 Tauri 安装包和明确标注的原生预览包。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的本地 release key 签名。原生预览当前只完成个人课表读取与日历查看，空教室实时请求、平台通知和系统日历导入仍应使用功能完整的 Tauri 客户端。iOS 因缺少公开分发签名暂不提供安装包。
 
 ## macOS 通知与小组件
 
@@ -78,8 +75,16 @@ Windows 构建建议在 Windows 机器或 Windows CI runner 上执行，需要�
 ./scripts/native-android-build.sh
 ```
 
-这两个目录目前用于逐步迁移，不是 Release 中功能完整的 Tauri 安装包。不要把原生基线
-当作已完成客户端发布。
+这两个目录用于逐步迁移。当前原生预览包只完成只读个人课表阶段，不是功能完整的 Tauri 客户端替代品。
+
+生成本地签名 Android APK 和 macOS Universal ZIP：
+
+```bash
+./scripts/native-android-package.sh vX.Y.Z-preview.N
+./scripts/native-macos-package.sh vX.Y.Z-preview.N
+```
+
+两个脚本都会先验证对应 Release 构建，并在 `release-artifacts/` 中生成安装包和 SHA-256 文件。Android 脚本需要本地、已忽略的 release keystore；macOS 预览包使用临时签名，不包含 Developer ID 公证票据。
 
 ### Android 开发与构建
 

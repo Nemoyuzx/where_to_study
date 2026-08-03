@@ -808,7 +808,7 @@ mod tests {
                                     "classTime": "1030405",
                                     "weekDay": "1",
                                     "courseName": "数据挖掘",
-                                    "teacherName": "徐思雅",
+                                    "teacherName": "测试教师",
                                     "buildingName": "教三楼",
                                     "classroomName": "3-335",
                                     "startTime": "09:50",

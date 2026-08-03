@@ -2,6 +2,7 @@ package com.nemoyu.wheretostudy.nativeapp
 
 import java.util.Calendar
 import java.util.TimeZone
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -33,5 +34,42 @@ class ScheduleLogicTest {
         val target = Calendar.getInstance(zone).apply { set(2026, Calendar.MARCH, 16, 0, 0, 0) }
 
         assertEquals(3, ScheduleLogic.weekNumber(start, target))
+    }
+
+    @Test
+    fun weekNumberBeforeTermIsZero() {
+        val zone = TimeZone.getTimeZone("Asia/Shanghai")
+        val start = Calendar.getInstance(zone).apply { set(2026, Calendar.MARCH, 2, 0, 0, 0) }
+        val target = Calendar.getInstance(zone).apply { set(2026, Calendar.MARCH, 1, 0, 0, 0) }
+
+        assertEquals(0, ScheduleLogic.weekNumber(start, target))
+    }
+
+    @Test
+    fun sharedSjdFixturesMatchScheduleContract() {
+        val expected = ScheduleJsonCodec.decode(fixture("schedule.json"))
+        val actual = SjdScheduleParser.parse(
+            current = JSONObject(fixture("sjd-current-week.json")),
+            curriculum = JSONObject(fixture("sjd-curriculum.json")),
+            fallbackTermID = "unused-term",
+            fallbackTermStartDate = "2000-01-03",
+            fetchedAt = expected.fetchedAt,
+        )
+
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun scheduleCodecRoundTripsSharedFixture() {
+        val expected = ScheduleJsonCodec.decode(fixture("schedule.json"))
+
+        assertEquals(expected, ScheduleJsonCodec.decode(ScheduleJsonCodec.encode(expected)))
+    }
+
+    private fun fixture(name: String): String {
+        val stream = checkNotNull(javaClass.classLoader?.getResourceAsStream(name)) {
+            "Missing shared fixture: $name"
+        }
+        return stream.bufferedReader().use { it.readText() }
     }
 }

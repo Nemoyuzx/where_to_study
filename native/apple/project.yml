@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.1"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "3"
     DEVELOPMENT_TEAM: ""
     CODE_SIGNING_ALLOWED: NO
 targets:
@@ -18,12 +18,25 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/macOS
+      - path: ../../src-tauri/icons/icon.icns
+        buildPhase: resources
+    info:
+      path: Generated/WhereToStudyMac-Info.plist
+      properties:
+        CFBundleDisplayName: Where To Study
+        CFBundleIconFile: icon.icns
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSAppTransportSecurity: &transportSecurity
+          NSAllowsArbitraryLoads: false
+          NSExceptionDomains:
+            jwglweixin.bupt.edu.cn:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
         PRODUCT_NAME: WhereToStudyMac
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Where To Study
         MACOSX_DEPLOYMENT_TARGET: "13.0"
     scheme:
       testTargets:
@@ -34,13 +47,18 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/iOS
+    info:
+      path: Generated/WhereToStudyiOS-Info.plist
+      properties:
+        CFBundleDisplayName: Where To Study
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        NSAppTransportSecurity: *transportSecurity
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios
         PRODUCT_NAME: WhereToStudyiOS
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Where To Study
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         TARGETED_DEVICE_FAMILY: "1,2"
         IPHONEOS_DEPLOYMENT_TARGET: "16.0"
   WhereToStudyMacTests:

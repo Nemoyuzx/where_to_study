@@ -17,6 +17,7 @@ class SettingsPage(
     private val activity: MainActivity,
     private val credentialStore: SecureCredentialStore,
     private val preferences: AppPreferences,
+    private val scheduleRepository: ScheduleRepository,
 ) {
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
@@ -32,9 +33,15 @@ class SettingsPage(
         addView(sectionTitle(activity, "个人账户"))
         val account = field("教务账号", saved?.account.orEmpty(), false)
         val password = field("密码", saved?.password.orEmpty(), true)
+        val termID = field("学期编号", preferences.termID, false)
+        val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
         addView(account)
         addView(spacer(activity, 10))
         addView(password)
+        addView(spacer(activity, 10))
+        addView(termID)
+        addView(spacer(activity, 10))
+        addView(termStartDate)
         addView(spacer(activity, 16))
         addView(TextView(activity).apply {
             text = "默认校区"
@@ -58,6 +65,19 @@ class SettingsPage(
         }
         addView(campus)
         addView(spacer(activity, 18))
+        fun saveSettings(): Result<Unit> = runCatching {
+            credentialStore.save(
+                Credentials(
+                    account = account.text.toString().trim(),
+                    password = password.text.toString(),
+                ),
+            )
+            preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
+            preferences.termID = termID.text.toString().trim().ifEmpty { AppMetadata.defaultTermID }
+            preferences.termStartDate = termStartDate.text.toString().trim()
+                .ifEmpty { AppMetadata.defaultTermStartDate }
+        }
+
         addView(TextView(activity).apply {
             text = "保存设置"
             textSize = 16f
@@ -72,18 +92,52 @@ class SettingsPage(
                 activity.dp(48),
             )
             setOnClickListener {
-                runCatching {
-                    credentialStore.save(
-                        Credentials(
-                            account = account.text.toString().trim(),
-                            password = password.text.toString(),
-                        ),
-                    )
-                    preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
-                }.onSuccess {
+                saveSettings().onSuccess {
                     Toast.makeText(activity, "设置已保存", Toast.LENGTH_SHORT).show()
                 }.onFailure {
                     Toast.makeText(activity, "无法安全保存账户信息", Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+        addView(spacer(activity, 10))
+        addView(TextView(activity).apply {
+            text = "获取/刷新个人课表"
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.primaryDark)
+            setTypeface(typeface, Typeface.BOLD)
+            background = roundedBackground(activity, Palette.surface, Palette.primary, radius = 6)
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(48),
+            )
+            setOnClickListener {
+                val button = it as TextView
+                saveSettings().onFailure {
+                    Toast.makeText(activity, "无法安全保存账户信息", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                button.text = "正在获取…"
+                button.isEnabled = false
+                scheduleRepository.refresh { result ->
+                    button.text = "获取/刷新个人课表"
+                    button.isEnabled = true
+                    result.onSuccess { schedule ->
+                        Toast.makeText(
+                            activity,
+                            "个人课表已更新，共 ${schedule.courses.size} 门课程",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        activity.refreshCurrentPage()
+                    }.onFailure { error ->
+                        Toast.makeText(
+                            activity,
+                            error.message ?: "个人课表获取失败",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
                 }
             }
         })

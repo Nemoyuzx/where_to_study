@@ -15,6 +15,10 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
                         SecureField("教务密码", text: $model.password)
                             .textFieldStyle(.roundedBorder)
+                        TextField("学期编号", text: $model.termID)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("第一周周一（YYYY-MM-DD）", text: $model.termStartDate)
+                            .textFieldStyle(.roundedBorder)
                         Picker("默认校区", selection: $model.campusID) {
                             Text("西土城").tag("01")
                             Text("沙河").tag("04")
@@ -27,6 +31,18 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(AppTheme.primary)
+                        Button {
+                            model.saveSettings()
+                            model.refreshSchedule()
+                        } label: {
+                            Label(
+                                model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
+                                systemImage: "arrow.clockwise"
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(model.isRefreshingSchedule)
                         if !model.statusMessage.isEmpty {
                             Text(model.statusMessage)
                                 .font(.caption)

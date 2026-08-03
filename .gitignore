@@ -12,6 +12,7 @@ src-tauri/gen/schemas
 
 native/apple/WhereToStudyNative.xcodeproj/
 native/apple/DerivedData/
+native/apple/Generated/
 native/android/.gradle/
 native/android/**/build/
 native/android/local.properties

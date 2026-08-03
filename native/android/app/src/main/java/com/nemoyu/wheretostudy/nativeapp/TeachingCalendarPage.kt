@@ -13,7 +13,10 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 
-class TeachingCalendarPage(private val activity: MainActivity) {
+class TeachingCalendarPage(
+    private val activity: MainActivity,
+    private val scheduleRepository: ScheduleRepository,
+) {
     private enum class Mode(val label: String) {
         DAY("日"),
         WEEK("周"),
@@ -85,7 +88,8 @@ class TeachingCalendarPage(private val activity: MainActivity) {
             setTypeface(typeface, Typeface.BOLD)
         })
         addView(TextView(activity).apply {
-            text = "暂无课程"
+            val courses = coursesOn(selectedDate)
+            text = if (courses.isEmpty()) "暂无课程" else "${courses.size} 门课"
             textSize = 14f
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(5), 0, 0)
@@ -94,6 +98,7 @@ class TeachingCalendarPage(private val activity: MainActivity) {
 
     private fun dayView(): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "当日课表"))
+        val courses = coursesOn(selectedDate)
         AppMetadata.slots.forEach { slot ->
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -117,9 +122,21 @@ class TeachingCalendarPage(private val activity: MainActivity) {
                     layoutParams = LinearLayout.LayoutParams(activity.dp(112), ViewGroup.LayoutParams.MATCH_PARENT)
                 })
                 addView(TextView(activity).apply {
-                    text = "暂无课程"
+                    val course = courses.firstOrNull {
+                        slot.index in it.startSlot..it.endSlot
+                    }
+                    text = when {
+                        course == null -> "暂无课程"
+                        course.startSlot == slot.index -> listOf(
+                            course.name,
+                            course.room,
+                            course.timeRange,
+                        ).filter(String::isNotEmpty).joinToString("  ·  ")
+                        else -> "${course.name}（延续）"
+                    }
                     textSize = 14f
-                    setTextColor(Palette.muted)
+                    setTextColor(if (course == null) Palette.muted else Palette.primaryDark)
+                    if (course != null) setTypeface(typeface, Typeface.BOLD)
                     gravity = Gravity.CENTER_VERTICAL
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
                 })
@@ -136,6 +153,7 @@ class TeachingCalendarPage(private val activity: MainActivity) {
         repeat(7) { dayIndex ->
             val day = firstDay.clone() as Calendar
             day.add(Calendar.DAY_OF_MONTH, dayIndex)
+            val courses = coursesOn(day)
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -148,8 +166,9 @@ class TeachingCalendarPage(private val activity: MainActivity) {
                 )
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    activity.dp(56),
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply { bottomMargin = activity.dp(6) }
+                minimumHeight = activity.dp(56)
                 addView(TextView(activity).apply {
                     text = dayFormatter.format(day.time)
                     textSize = 15f
@@ -159,10 +178,15 @@ class TeachingCalendarPage(private val activity: MainActivity) {
                     gravity = Gravity.CENTER_VERTICAL
                 })
                 addView(TextView(activity).apply {
-                    text = "暂无课程"
+                    text = if (courses.isEmpty()) {
+                        "暂无课程"
+                    } else {
+                        courses.joinToString("\n") { "${it.timeRange}  ${it.name}" }
+                    }
                     textSize = 14f
-                    setTextColor(Palette.muted)
+                    setTextColor(if (courses.isEmpty()) Palette.muted else Palette.primaryDark)
                     gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, activity.dp(8), 0, activity.dp(8))
                 })
             })
         }
@@ -178,6 +202,17 @@ class TeachingCalendarPage(private val activity: MainActivity) {
                 onDateChanged()
             }
         })
+        val selectedCourses = coursesOn(selectedDate)
+        addView(TextView(activity).apply {
+            text = if (selectedCourses.isEmpty()) {
+                "选中日期暂无课程"
+            } else {
+                selectedCourses.joinToString("\n") { "${it.timeRange}  ${it.name}  ${it.room}" }
+            }
+            textSize = 14f
+            setTextColor(if (selectedCourses.isEmpty()) Palette.muted else Palette.primaryDark)
+            setPadding(0, activity.dp(12), 0, 0)
+        })
     }
 
     private fun yearView(): LinearLayout = surface(activity).apply {
@@ -187,8 +222,9 @@ class TeachingCalendarPage(private val activity: MainActivity) {
             months.addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 rowMonths.forEach { month ->
+                    val courseCount = courseCountInMonth(selectedDate.get(Calendar.YEAR), month)
                     addView(TextView(activity).apply {
-                        text = activity.getString(R.string.month_empty_format, month)
+                        text = if (courseCount == 0) "$month 月\n暂无课程" else "$month 月\n$courseCount 门课"
                         textSize = 15f
                         gravity = Gravity.CENTER
                         setTextColor(Palette.text)
@@ -208,6 +244,22 @@ class TeachingCalendarPage(private val activity: MainActivity) {
         left.get(Calendar.ERA) == right.get(Calendar.ERA) &&
             left.get(Calendar.YEAR) == right.get(Calendar.YEAR) &&
             left.get(Calendar.DAY_OF_YEAR) == right.get(Calendar.DAY_OF_YEAR)
+
+    private fun coursesOn(date: Calendar): List<Course> =
+        ScheduleLogic.courses(scheduleRepository.schedule, date)
+
+    private fun courseCountInMonth(year: Int, month: Int): Int {
+        val date = Calendar.getInstance(shanghai).apply {
+            set(year, month - 1, 1, 0, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val days = date.getActualMaximum(Calendar.DAY_OF_MONTH)
+        return (1..days).sumOf { day ->
+            val target = date.clone() as Calendar
+            target.set(Calendar.DAY_OF_MONTH, day)
+            coursesOn(target).size
+        }
+    }
 
     private object ColorTokens {
         val selectedDay = android.graphics.Color.rgb(232, 244, 239)

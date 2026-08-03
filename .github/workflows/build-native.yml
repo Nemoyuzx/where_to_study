@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
     paths:
       - "contracts/**"
       - "native/**"
@@ -37,17 +39,15 @@ jobs:
         run: ./scripts/native-apple-build.sh
 
       - name: Package native macOS preview
-        run: |
-          mkdir -p release-artifacts
-          ditto -c -k --sequesterRsrc --keepParent \
-            "native/apple/DerivedData/macOS/Build/Products/Debug/WhereToStudyMac.app" \
-            "release-artifacts/where-to-study-native-macos-debug.zip"
+        run: ./scripts/native-macos-package.sh ci
 
       - name: Upload native macOS preview
         uses: actions/upload-artifact@v4
         with:
-          name: where-to-study-native-macos-debug
-          path: release-artifacts/where-to-study-native-macos-debug.zip
+          name: where-to-study-native-macos-universal
+          path: |
+            release-artifacts/Where-To-Study-ci-native-macos-universal.zip
+            release-artifacts/Where-To-Study-ci-native-macos-universal.zip.sha256
           if-no-files-found: error
 
   android:

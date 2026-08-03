@@ -1,0 +1,35 @@
+{
+  "term_id": "2025-2026-2",
+  "term_start_date": "2026-03-02",
+  "fetched_at": "2026-03-02T00:00:00Z",
+  "courses": [
+    {
+      "id": "620b8c9fe8e7",
+      "name": "示例课程",
+      "teacher": "测试教师",
+      "room": "教一楼-1-101",
+      "week_text": "1-18",
+      "week_numbers": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+      "exam_week_numbers": [17, 18],
+      "weekday": 1,
+      "start_slot": 2,
+      "end_slot": 4,
+      "section_text": "3-5节",
+      "time_range": "09:50-12:15"
+    },
+    {
+      "id": "9fcc32896745",
+      "name": "示例实验",
+      "teacher": "测试教师",
+      "room": "主楼-201",
+      "week_text": "2-18双",
+      "week_numbers": [2, 4, 6, 8, 10, 12, 14, 16, 18],
+      "exam_week_numbers": [18],
+      "weekday": 2,
+      "start_slot": 5,
+      "end_slot": 6,
+      "section_text": "6-7节",
+      "time_range": "13:00-14:35"
+    }
+  ]
+}

@@ -25,6 +25,9 @@ class MainActivity : Activity() {
     private val navigationViews = mutableMapOf<Destination, TextView>()
     private val credentialStore by lazy { SecureCredentialStore(this) }
     private val preferences by lazy { AppPreferences(this) }
+    private val scheduleRepository by lazy {
+        ScheduleRepository(this, credentialStore, preferences)
+    }
     private var selectedDestination = Destination.PLANNER
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,15 +130,29 @@ class MainActivity : Activity() {
         content.removeAllViews()
         content.addView(
             when (destination) {
-                Destination.PLANNER -> PlannerPage(this, preferences).build()
-                Destination.CALENDAR -> TeachingCalendarPage(this).build()
-                Destination.SETTINGS -> SettingsPage(this, credentialStore, preferences).build()
+                Destination.PLANNER -> PlannerPage(this, preferences, scheduleRepository).build()
+                Destination.CALENDAR -> TeachingCalendarPage(this, scheduleRepository).build()
+                Destination.SETTINGS -> SettingsPage(
+                    this,
+                    credentialStore,
+                    preferences,
+                    scheduleRepository,
+                ).build()
             },
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ),
         )
+    }
+
+    fun refreshCurrentPage() {
+        navigate(selectedDestination)
+    }
+
+    override fun onDestroy() {
+        scheduleRepository.close()
+        super.onDestroy()
     }
 
     private fun applySystemInsets(root: View) {

@@ -73,6 +73,7 @@
 ## 当前状态
 
 - Windows/Tauri：功能最完整，凭据已迁移到系统安全存储；React 单文件仍需拆分。
-- macOS/iOS 原生：共享 SwiftUI 基线已建立并通过双 target 构建与 macOS 单测，教务网络层待接入。
-- Android 原生：Kotlin + Android Views 基线已建立，使用 Android Keystore 保护凭据，并通过单测、Lint、手机与宽屏运行检查；教务网络层待接入。
+- macOS/iOS 原生：共享 SwiftUI 已接入移动教务只读课表、Keychain、本地缓存及日/周/月/年视图；macOS 通过单测、Release 双架构构建和实际界面检查，iOS 通过模拟器构建。阶段 1 的节假日和当前时间线仍待迁移。
+- Android 原生：Kotlin + Android Views 已接入移动教务只读课表、Android Keystore、`AtomicFile` 缓存及日/周/月/年视图，并通过单测、Debug/Release Lint、手机和平板实际运行检查。阶段 1 的节假日和当前时间线仍待迁移。
+- 原生预览限制：空教室实时请求与平台通知尚未进入原生客户端，当前预览包不能替代功能完整的 Tauri 客户端。
 - 开源发布：已有 README 与 CONTRIBUTING；许可证选择仍需仓库所有者确认。

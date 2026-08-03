@@ -94,8 +94,24 @@ class AppPreferences(context: Context) {
             preferences.edit().putString(CAMPUS_KEY, value).apply()
         }
 
+    var termID: String
+        get() = preferences.getString(TERM_ID_KEY, AppMetadata.defaultTermID)
+            ?: AppMetadata.defaultTermID
+        set(value) {
+            preferences.edit().putString(TERM_ID_KEY, value).apply()
+        }
+
+    var termStartDate: String
+        get() = preferences.getString(TERM_START_DATE_KEY, AppMetadata.defaultTermStartDate)
+            ?: AppMetadata.defaultTermStartDate
+        set(value) {
+            preferences.edit().putString(TERM_START_DATE_KEY, value).apply()
+        }
+
     private companion object {
         const val PREFERENCES_NAME = "app_preferences_v1"
         const val CAMPUS_KEY = "campus_id"
+        const val TERM_ID_KEY = "term_id"
+        const val TERM_START_DATE_KEY = "term_start_date"
     }
 }
