@@ -37,7 +37,38 @@ data class ScheduleSnapshot(
     val courses: List<Course>,
 )
 
+data class Classroom(
+    val id: String,
+    val building: String,
+    val room: String,
+    val name: String,
+    val size: Int?,
+    val type: String,
+    val availableSlots: List<Int>,
+    val source: String,
+)
+
+data class CampusClassrooms(
+    val campusID: String,
+    val campusName: String,
+    val targetDate: String,
+    val fetchedAt: String,
+    val realtime: Boolean,
+    val provider: String,
+    val rooms: List<Classroom>,
+)
+
+data class ClassroomsCache(
+    val cacheVersion: Int,
+    val targetDate: String,
+    val fetchedAt: String,
+    val realtime: Boolean,
+    val provider: String,
+    val campuses: List<CampusClassrooms>,
+)
+
 object AppMetadata {
+    const val classroomsCacheVersion = 2
     const val defaultTermID = "2025-2026-2"
     const val defaultTermStartDate = "2026-03-02"
 
@@ -103,6 +134,14 @@ object ScheduleLogic {
             .filter { it.weekday == weekday && week in it.weekNumbers }
             .sortedWith(compareBy(Course::startSlot, Course::name))
     }
+
+    fun busySlots(
+        schedule: ScheduleSnapshot?,
+        target: Calendar,
+    ): Set<Int> = courses(schedule, target)
+        .flatMap { it.startSlot..it.endSlot }
+        .filter { it in AppMetadata.slots.indices }
+        .toSet()
 
     private fun startOfDay(source: Calendar): Calendar = Calendar.getInstance(shanghai).apply {
         set(source.get(Calendar.YEAR), source.get(Calendar.MONTH), source.get(Calendar.DAY_OF_MONTH), 0, 0, 0)

@@ -4,6 +4,7 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
+        Group {
         #if os(macOS)
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 14) {
@@ -36,6 +37,11 @@ struct RootView: View {
         }
         .tint(AppTheme.primary)
         #endif
+        }
+        .onAppear {
+            model.refreshClassroomsIfNeeded()
+        }
+        .preferredColorScheme(.light)
     }
 
     @ViewBuilder

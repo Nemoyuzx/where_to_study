@@ -28,6 +28,9 @@ class MainActivity : Activity() {
     private val scheduleRepository by lazy {
         ScheduleRepository(this, credentialStore, preferences)
     }
+    private val classroomRepository by lazy {
+        ClassroomRepository(this, credentialStore)
+    }
     private var selectedDestination = Destination.PLANNER
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,6 +45,7 @@ class MainActivity : Activity() {
         setContentView(root)
         configureSystemBarIcons()
         navigate(Destination.PLANNER)
+        refreshClassroomsAtStartup()
     }
 
     private fun phoneLayout(): LinearLayout = LinearLayout(this).apply {
@@ -130,7 +134,12 @@ class MainActivity : Activity() {
         content.removeAllViews()
         content.addView(
             when (destination) {
-                Destination.PLANNER -> PlannerPage(this, preferences, scheduleRepository).build()
+                Destination.PLANNER -> PlannerPage(
+                    this,
+                    preferences,
+                    scheduleRepository,
+                    classroomRepository,
+                ).build()
                 Destination.CALENDAR -> TeachingCalendarPage(this, scheduleRepository).build()
                 Destination.SETTINGS -> SettingsPage(
                     this,
@@ -150,8 +159,19 @@ class MainActivity : Activity() {
         navigate(selectedDestination)
     }
 
+    private fun refreshClassroomsAtStartup() {
+        val credentials = credentialStore.load() ?: return
+        if (credentials.account.isBlank() || credentials.password.isEmpty()) return
+        classroomRepository.refresh(force = false) { result ->
+            if (result.isSuccess && selectedDestination == Destination.PLANNER) {
+                refreshCurrentPage()
+            }
+        }
+    }
+
     override fun onDestroy() {
         scheduleRepository.close()
+        classroomRepository.close()
         super.onDestroy()
     }
 

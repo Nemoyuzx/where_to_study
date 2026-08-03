@@ -439,6 +439,7 @@ fn service_date_from_payload(payload: &ClassroomsRequest) -> ServiceResult<Naive
 fn classrooms_response_from_items(
     campus_id: &str,
     service_date: NaiveDate,
+    fetched_at: &str,
     available_classrooms: &[Value],
 ) -> ClassroomsResponse {
     let mut room_map = HashMap::new();
@@ -470,25 +471,11 @@ fn classrooms_response_from_items(
         campus_id: campus_id.to_string(),
         campus_name: campus_name(campus_id),
         target_date: service_date.to_string(),
-        fetched_at: now_in_app_tz(),
+        fetched_at: fetched_at.to_string(),
         realtime: true,
         provider: "sjd".to_string(),
         rooms,
     }
-}
-
-async fn fetch_classrooms_for_campus(
-    client: &reqwest::Client,
-    token: &str,
-    campus_id: &str,
-    service_date: NaiveDate,
-) -> ServiceResult<ClassroomsResponse> {
-    let available_classrooms = fetch_realtime_classrooms(client, token, campus_id).await?;
-    Ok(classrooms_response_from_items(
-        campus_id,
-        service_date,
-        &available_classrooms,
-    ))
 }
 
 pub async fn fetch_all_classrooms(
@@ -499,9 +486,9 @@ pub async fn fetch_all_classrooms(
     let token = login_empty_classroom(&user, &secret).await?;
     let client = http_client(30)?;
 
-    let mut campuses = Vec::with_capacity(CAMPUSES.len());
+    let mut campus_items = Vec::with_capacity(CAMPUSES.len());
     for campus in CAMPUSES {
-        let response = fetch_classrooms_for_campus(&client, &token, campus.id, service_date)
+        let items = fetch_realtime_classrooms(&client, &token, campus.id)
             .await
             .map_err(|error| {
                 ServiceError::new(format!(
@@ -509,13 +496,21 @@ pub async fn fetch_all_classrooms(
                     campus.name, error
                 ))
             })?;
-        campuses.push(response);
+        campus_items.push((campus.id, items));
     }
+
+    let fetched_at = now_in_app_tz();
+    let campuses = campus_items
+        .into_iter()
+        .map(|(campus_id, items)| {
+            classrooms_response_from_items(campus_id, service_date, &fetched_at, &items)
+        })
+        .collect();
 
     Ok(ClassroomsCacheResponse {
         cache_version: CLASSROOMS_CACHE_VERSION,
         target_date: service_date.to_string(),
-        fetched_at: now_in_app_tz(),
+        fetched_at,
         realtime: true,
         provider: "sjd".to_string(),
         campuses,
@@ -725,5 +720,45 @@ mod tests {
         assert_eq!(node_name_to_slot("1"), Some(0));
         assert_eq!(node_name_to_slot("第14节"), Some(13));
         assert_eq!(node_name_to_slot("15"), None);
+    }
+
+    #[test]
+    fn shared_classroom_fixtures_match_contract() {
+        let xitucheng: Value = serde_json::from_str(include_str!(
+            "../../contracts/v1/fixtures/sjd-classrooms-xitucheng.json"
+        ))
+        .unwrap();
+        let shahe: Value = serde_json::from_str(include_str!(
+            "../../contracts/v1/fixtures/sjd-classrooms-shahe.json"
+        ))
+        .unwrap();
+        let expected: ClassroomsCacheResponse =
+            serde_json::from_str(include_str!("../../contracts/v1/fixtures/classrooms.json"))
+                .unwrap();
+        let service_date = NaiveDate::parse_from_str(&expected.target_date, "%Y-%m-%d").unwrap();
+        let campuses = [("01", xitucheng), ("04", shahe)]
+            .into_iter()
+            .map(|(campus_id, payload)| {
+                classrooms_response_from_items(
+                    campus_id,
+                    service_date,
+                    &expected.fetched_at,
+                    payload.get("data").and_then(Value::as_array).unwrap(),
+                )
+            })
+            .collect();
+        let actual = ClassroomsCacheResponse {
+            cache_version: CLASSROOMS_CACHE_VERSION,
+            target_date: expected.target_date.clone(),
+            fetched_at: expected.fetched_at.clone(),
+            realtime: true,
+            provider: "sjd".to_string(),
+            campuses,
+        };
+
+        assert_eq!(
+            serde_json::to_value(actual).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
     }
 }

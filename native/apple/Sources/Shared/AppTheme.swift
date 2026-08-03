@@ -33,6 +33,7 @@ struct Surface<Content: View>: View {
     var body: some View {
         content
             .padding(16)
+            .foregroundStyle(AppTheme.text)
             .background(AppTheme.surface)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)

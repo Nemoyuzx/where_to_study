@@ -82,10 +82,24 @@
         "provider": { "type": "string", "minLength": 1 },
         "rooms": { "type": "array", "items": { "$ref": "#/$defs/classroom" } }
       }
+    },
+    "classrooms_cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cache_version", "target_date", "fetched_at", "realtime", "provider", "campuses"],
+      "properties": {
+        "cache_version": { "type": "integer", "minimum": 2 },
+        "target_date": { "type": "string", "format": "date" },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "realtime": { "type": "boolean" },
+        "provider": { "type": "string", "minLength": 1 },
+        "campuses": { "type": "array", "items": { "$ref": "#/$defs/classrooms" } }
+      }
     }
   },
   "properties": {
     "schedule": { "$ref": "#/$defs/schedule" },
-    "classrooms": { "$ref": "#/$defs/classrooms" }
+    "classrooms": { "$ref": "#/$defs/classrooms" },
+    "classrooms_cache": { "$ref": "#/$defs/classrooms_cache" }
   }
 }

@@ -66,6 +66,28 @@ class ScheduleLogicTest {
         assertEquals(expected, ScheduleJsonCodec.decode(ScheduleJsonCodec.encode(expected)))
     }
 
+    @Test
+    fun sharedClassroomFixturesMatchCacheContract() {
+        val expected = ClassroomsJsonCodec.decode(fixture("classrooms.json"))
+        val actual = SjdClassroomParser.parse(
+            payloads = mapOf(
+                "01" to JSONObject(fixture("sjd-classrooms-xitucheng.json")),
+                "04" to JSONObject(fixture("sjd-classrooms-shahe.json")),
+            ),
+            targetDate = expected.targetDate,
+            fetchedAt = expected.fetchedAt,
+        )
+
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun classroomCodecRoundTripsSharedFixture() {
+        val expected = ClassroomsJsonCodec.decode(fixture("classrooms.json"))
+
+        assertEquals(expected, ClassroomsJsonCodec.decode(ClassroomsJsonCodec.encode(expected)))
+    }
+
     private fun fixture(name: String): String {
         val stream = checkNotNull(javaClass.classLoader?.getResourceAsStream(name)) {
             "Missing shared fixture: $name"

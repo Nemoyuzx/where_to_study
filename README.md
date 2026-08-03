@@ -17,14 +17,14 @@ Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户�
 
 | 平台 | 当前可用版本 | 原生迁移状态 |
 | --- | --- | --- |
-| macOS | Tauri 2，功能完整 | SwiftUI 原生预览已支持个人课表获取、缓存和日/周/月/年查看 |
-| Android | Tauri 2，功能完整 | Kotlin Views 原生预览已支持个人课表获取、缓存和日/周/月/年查看 |
+| macOS | Tauri 2，功能完整 | SwiftUI 原生预览已支持个人课表、教学日历和当天空教室联动查询 |
+| Android | Tauri 2，功能完整 | Kotlin Views 原生预览已支持个人课表、教学日历和当天空教室联动查询 |
 | Windows | Tauri 2，持续维护 | 保留 Tauri，并进行安全和资源占用优化 |
-| iOS | 暂不提供签名安装包 | SwiftUI 工程可构建，已接入只读个人课表服务 |
+| iOS | 暂不提供签名安装包 | SwiftUI 工程可构建，已接入个人课表、教学日历和当天空教室联动查询 |
 
 ## 下载
 
-GitHub Releases 会按阶段提供 Tauri 安装包和明确标注的原生预览包。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的本地 release key 签名。原生预览当前只完成个人课表读取与日历查看，空教室实时请求、平台通知和系统日历导入仍应使用功能完整的 Tauri 客户端。iOS 因缺少公开分发签名暂不提供安装包。
+GitHub Releases 会按阶段提供 Tauri 安装包和明确标注的原生预览包。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的本地 release key 签名。原生预览现已完成个人课表、日历查看和当天空教室联动查询，平台通知、托盘、节假日与系统日历导入等功能仍应使用功能完整的 Tauri 客户端。iOS 因缺少公开分发签名暂不提供安装包。
 
 ## macOS 通知与小组件
 
@@ -75,7 +75,7 @@ Windows 构建建议在 Windows 机器或 Windows CI runner 上执行，需要�
 ./scripts/native-android-build.sh
 ```
 
-这两个目录用于逐步迁移。当前原生预览包只完成只读个人课表阶段，不是功能完整的 Tauri 客户端替代品。
+这两个目录用于逐步迁移。当前原生预览包已完成只读个人课表和当天空教室阶段，但尚不是功能完整的 Tauri 客户端替代品。
 
 生成本地签名 Android APK 和 macOS Universal ZIP：
 

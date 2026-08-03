@@ -15,19 +15,15 @@ import org.json.JSONObject
 
 class ScheduleClientException(message: String) : Exception(message)
 
-class SjdScheduleClient {
-    fun fetch(
-        credentials: Credentials,
-        fallbackTermID: String,
-        fallbackTermStartDate: String,
-    ): ScheduleSnapshot {
+class SjdApiClient {
+    fun login(credentials: Credentials): String {
         val account = credentials.account.trim()
         if (account.isEmpty() || credentials.password.isEmpty()) {
             throw ScheduleClientException("请先在设置中填写并保存教务账号和密码。")
         }
         val login = post(
             path = "/bjyddx/login",
-            referer = "$ORIGIN/sjd/#/login",
+            referer = LOGIN_REFERER,
             form = mapOf("userNo" to account, "pwd" to credentials.password),
         )
         if (!isSuccessful(login)) {
@@ -37,36 +33,41 @@ class SjdScheduleClient {
         if (token.isEmpty()) {
             throw ScheduleClientException("移动教务登录成功但没有返回 token。")
         }
-        val current = post(
-            path = "/bjyddx/student/curriculum?week=",
-            referer = "$ORIGIN/sjd/#/restClassroom",
-            token = token,
-        )
-        val curriculum = post(
-            path = "/bjyddx/student/curriculum?week=all",
-            referer = "$ORIGIN/sjd/#/restClassroom",
-            token = token,
-        )
-        if (!isSuccessful(current) || !isSuccessful(curriculum)) {
-            throw ScheduleClientException("移动教务课表获取失败。")
-        }
-        return SjdScheduleParser.parse(
-            current = current,
-            curriculum = curriculum,
-            fallbackTermID = fallbackTermID,
-            fallbackTermStartDate = fallbackTermStartDate,
-        )
+        return token
     }
 
-    private fun post(
+    fun post(
         path: String,
         referer: String,
         form: Map<String, String> = emptyMap(),
         token: String? = null,
+    ): JSONObject = request("POST", path, referer, form, token)
+
+    fun get(
+        path: String,
+        referer: String,
+        query: Map<String, String> = emptyMap(),
+        token: String? = null,
+    ): JSONObject {
+        val queryString = if (query.isEmpty()) "" else "?${String(formData(query), StandardCharsets.UTF_8)}"
+        return request("GET", "$path$queryString", referer, emptyMap(), token)
+    }
+
+    fun isSuccessful(payload: JSONObject): Boolean = payload.opt("code").stringValue() == "1"
+
+    fun message(payload: JSONObject, fallback: String): String =
+        payload.opt("Msg").stringValue().ifEmpty { payload.opt("msg").stringValue() }.ifEmpty { fallback }
+
+    private fun request(
+        method: String,
+        path: String,
+        referer: String,
+        form: Map<String, String>,
+        token: String?,
     ): JSONObject {
         val connection = URI.create("$ORIGIN$path").toURL().openConnection() as HttpURLConnection
         try {
-            connection.requestMethod = "POST"
+            connection.requestMethod = method
             connection.connectTimeout = 20_000
             connection.readTimeout = 30_000
             connection.instanceFollowRedirects = true
@@ -101,14 +102,48 @@ class SjdScheduleClient {
 
     private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
-    private fun isSuccessful(payload: JSONObject): Boolean = payload.opt("code").stringValue() == "1"
-
-    private fun message(payload: JSONObject, fallback: String): String =
-        payload.opt("Msg").stringValue().ifEmpty { payload.opt("msg").stringValue() }.ifEmpty { fallback }
-
-    private companion object {
+    companion object {
         const val ORIGIN = "http://jwglweixin.bupt.edu.cn"
+        const val LOGIN_REFERER = "$ORIGIN/sjd/#/login"
+        const val CLASSROOM_REFERER = "$ORIGIN/sjd/#/restClassroom"
     }
+}
+
+class SjdScheduleClient(
+    private val api: SjdApiClient = SjdApiClient(),
+) {
+    fun fetch(
+        credentials: Credentials,
+        fallbackTermID: String,
+        fallbackTermStartDate: String,
+    ): ScheduleSnapshot {
+        val token = api.login(credentials)
+        val current = post(
+            path = "/bjyddx/student/curriculum?week=",
+            referer = SjdApiClient.CLASSROOM_REFERER,
+            token = token,
+        )
+        val curriculum = post(
+            path = "/bjyddx/student/curriculum?week=all",
+            referer = SjdApiClient.CLASSROOM_REFERER,
+            token = token,
+        )
+        if (!api.isSuccessful(current) || !api.isSuccessful(curriculum)) {
+            throw ScheduleClientException("移动教务课表获取失败。")
+        }
+        return SjdScheduleParser.parse(
+            current = current,
+            curriculum = curriculum,
+            fallbackTermID = fallbackTermID,
+            fallbackTermStartDate = fallbackTermStartDate,
+        )
+    }
+
+    private fun post(
+        path: String,
+        referer: String,
+        token: String? = null,
+    ): JSONObject = api.post(path, referer, token = token)
 }
 
 object SjdScheduleParser {

@@ -79,4 +79,60 @@ final class ScheduleLogicTests: XCTestCase {
 
         XCTAssertEqual(try store.load(), expected)
     }
+
+    func testSharedSJDClassroomFixturesProduceContractCache() throws {
+        let expected = try JSONDecoder().decode(
+            ClassroomsCache.self,
+            from: fixtureData("classrooms.json")
+        )
+        let parsed = try SJDClassroomParser.parse(
+            payloads: [
+                "01": fixtureData("sjd-classrooms-xitucheng.json"),
+                "04": fixtureData("sjd-classrooms-shahe.json")
+            ],
+            targetDate: expected.targetDate,
+            fetchedAt: expected.fetchedAt
+        )
+
+        XCTAssertEqual(parsed, expected)
+    }
+
+    func testClassroomStoreRoundTripsSharedFixture() throws {
+        let expected = try JSONDecoder().decode(
+            ClassroomsCache.self,
+            from: fixtureData("classrooms.json")
+        )
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FileClassroomStore(fileURL: directory.appendingPathComponent("classrooms.json"))
+
+        try store.save(expected)
+
+        XCTAssertEqual(try store.load(), expected)
+    }
+
+    func testBusySlotsIncludeEverySlotCoveredByTodaysCourses() {
+        let calendar = Calendar.shanghai
+        let start = calendar.date(from: DateComponents(year: 2026, month: 3, day: 2))!
+        let course = Course(
+            id: "busy",
+            name: "测试课程",
+            teacher: "测试教师",
+            room: "主楼-101",
+            weekText: "1-18",
+            weekNumbers: Array(1 ... 18),
+            examWeekNumbers: [],
+            weekday: 1,
+            startSlot: 2,
+            endSlot: 4,
+            sectionText: "3-5节",
+            timeRange: "09:50-12:15"
+        )
+
+        XCTAssertEqual(
+            ScheduleLogic.busySlots(on: start, termStart: start, courses: [course]),
+            Set([2, 3, 4])
+        )
+    }
 }

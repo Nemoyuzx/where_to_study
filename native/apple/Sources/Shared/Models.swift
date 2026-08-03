@@ -87,6 +87,48 @@ struct Classroom: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+struct CampusClassrooms: Codable, Equatable, Sendable {
+    let campusID: String
+    let campusName: String
+    let targetDate: String
+    let fetchedAt: String
+    let realtime: Bool
+    let provider: String
+    let rooms: [Classroom]
+
+    enum CodingKeys: String, CodingKey {
+        case realtime, provider, rooms
+        case campusID = "campus_id"
+        case campusName = "campus_name"
+        case targetDate = "target_date"
+        case fetchedAt = "fetched_at"
+    }
+}
+
+struct ClassroomsCache: Codable, Equatable, Sendable {
+    let cacheVersion: Int
+    let targetDate: String
+    let fetchedAt: String
+    let realtime: Bool
+    let provider: String
+    let campuses: [CampusClassrooms]
+
+    enum CodingKeys: String, CodingKey {
+        case realtime, provider, campuses
+        case cacheVersion = "cache_version"
+        case targetDate = "target_date"
+        case fetchedAt = "fetched_at"
+    }
+}
+
+enum ClassroomDefaults {
+    static let cacheVersion = 2
+    static let campuses = [
+        (id: "01", name: "西土城"),
+        (id: "04", name: "沙河")
+    ]
+}
+
 enum ScheduleLogic {
     static func examWeeks(in courses: [Course]) -> Set<Int> {
         let weeks = Array(Set(courses.flatMap(\.weekNumbers).filter { $0 > 0 })).sorted()
@@ -134,6 +176,17 @@ enum ScheduleLogic {
             .sorted { lhs, rhs in
                 lhs.startSlot == rhs.startSlot ? lhs.name < rhs.name : lhs.startSlot < rhs.startSlot
             }
+    }
+
+    static func busySlots(
+        on date: Date,
+        termStart: Date,
+        courses: [Course],
+        calendar: Calendar = .shanghai
+    ) -> Set<Int> {
+        Set(self.courses(on: date, termStart: termStart, courses: courses, calendar: calendar)
+            .flatMap { $0.startSlot ... $0.endSlot }
+            .filter { SlotMetadata.defaults.indices.contains($0) })
     }
 }
 

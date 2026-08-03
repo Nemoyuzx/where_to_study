@@ -25,16 +25,10 @@ enum ScheduleClientError: LocalizedError {
 }
 
 struct SJDScheduleClient: ScheduleFetching {
-    private static let origin = "http://jwglweixin.bupt.edu.cn"
-    private static let loginURL = URL(string: "\(origin)/bjyddx/login")!
-    private static let curriculumURL = URL(string: "\(origin)/bjyddx/student/curriculum")!
-    private static let loginReferer = "\(origin)/sjd/#/login"
-    private static let curriculumReferer = "\(origin)/sjd/#/restClassroom"
-
-    private let session: URLSession
+    private let api: SJDAPIClient
 
     init(session: URLSession = .shared) {
-        self.session = session
+        api = SJDAPIClient(session: session)
     }
 
     func fetch(
@@ -42,27 +36,46 @@ struct SJDScheduleClient: ScheduleFetching {
         fallbackTermID: String,
         fallbackTermStartDate: String
     ) async throws -> ScheduleSnapshot {
-        let account = credentials.account.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !account.isEmpty, !credentials.password.isEmpty else {
-            throw ScheduleClientError.missingCredentials
-        }
-
-        let token = try await login(account: account, password: credentials.password)
-        async let currentData = curriculum(token: token, week: "")
-        async let allData = curriculum(token: token, week: "all")
+        let token = try await api.login(credentials: credentials)
+        async let currentRequest = api.curriculum(token: token, week: "")
+        async let allRequest = api.curriculum(token: token, week: "all")
+        let (currentData, allData) = try await (currentRequest, allRequest)
         return try SJDScheduleParser.parse(
-            currentData: await currentData,
-            curriculumData: await allData,
+            currentData: currentData,
+            curriculumData: allData,
             fallbackTermID: fallbackTermID,
             fallbackTermStartDate: fallbackTermStartDate
         )
     }
 
-    private func login(account: String, password: String) async throws -> String {
+    fileprivate static func string(_ value: Any?) -> String {
+        SJDAPIClient.string(value)
+    }
+}
+
+struct SJDAPIClient: Sendable {
+    static let origin = "http://jwglweixin.bupt.edu.cn"
+    static let loginReferer = "\(origin)/sjd/#/login"
+    static let classroomReferer = "\(origin)/sjd/#/restClassroom"
+
+    private static let loginURL = URL(string: "\(origin)/bjyddx/login")!
+    private static let curriculumURL = URL(string: "\(origin)/bjyddx/student/curriculum")!
+    private static let classroomsURL = URL(string: "\(origin)/bjyddx/todayClassrooms")!
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    func login(credentials: Credentials) async throws -> String {
+        let account = credentials.account.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !account.isEmpty, !credentials.password.isEmpty else {
+            throw ScheduleClientError.missingCredentials
+        }
         var request = URLRequest(url: Self.loginURL)
         request.httpMethod = "POST"
         request.timeoutInterval = 20
-        request.httpBody = formData(["userNo": account, "pwd": password])
+        request.httpBody = formData(["userNo": account, "pwd": credentials.password])
         applyHeaders(to: &request, referer: Self.loginReferer, token: nil)
 
         let payload = try await responseObject(for: request, failureMessage: "无法连接移动教务服务。")
@@ -79,13 +92,13 @@ struct SJDScheduleClient: ScheduleFetching {
         return token
     }
 
-    private func curriculum(token: String, week: String) async throws -> Data {
+    func curriculum(token: String, week: String) async throws -> Data {
         var components = URLComponents(url: Self.curriculumURL, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "week", value: week)]
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
-        applyHeaders(to: &request, referer: Self.curriculumReferer, token: token)
+        applyHeaders(to: &request, referer: Self.classroomReferer, token: token)
 
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) else {
@@ -96,6 +109,29 @@ struct SJDScheduleClient: ScheduleFetching {
             Self.isSuccessful(payload)
         else {
             throw ScheduleClientError.invalidResponse("移动教务课表返回了无法识别的数据。")
+        }
+        return data
+    }
+
+    func classrooms(token: String, campusID: String) async throws -> Data {
+        var components = URLComponents(url: Self.classroomsURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "campusId", value: campusID)]
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 30
+        applyHeaders(to: &request, referer: Self.classroomReferer, token: token)
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) else {
+            throw ScheduleClientError.service("实时教室数据获取失败，请稍后重试。")
+        }
+        guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ScheduleClientError.invalidResponse("实时教室服务返回了无法识别的数据。")
+        }
+        guard Self.isSuccessful(payload) else {
+            throw ScheduleClientError.service(
+                Self.message(in: payload, fallback: "实时教室数据获取失败。")
+            )
         }
         return data
     }
@@ -132,15 +168,15 @@ struct SJDScheduleClient: ScheduleFetching {
         return components.percentEncodedQuery?.data(using: .utf8)
     }
 
-    private static func isSuccessful(_ payload: [String: Any]) -> Bool {
+    static func isSuccessful(_ payload: [String: Any]) -> Bool {
         string(payload["code"]) == "1"
     }
 
-    private static func message(in payload: [String: Any], fallback: String) -> String {
+    static func message(in payload: [String: Any], fallback: String) -> String {
         string(payload["Msg"]).nilIfEmpty ?? string(payload["msg"]).nilIfEmpty ?? fallback
     }
 
-    fileprivate static func string(_ value: Any?) -> String {
+    static func string(_ value: Any?) -> String {
         switch value {
         case let value as String: value
         case let value as NSNumber: value.stringValue

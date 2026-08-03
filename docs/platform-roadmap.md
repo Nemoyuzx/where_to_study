@@ -73,7 +73,8 @@
 ## 当前状态
 
 - Windows/Tauri：功能最完整，凭据已迁移到系统安全存储；React 单文件仍需拆分。
-- macOS/iOS 原生：共享 SwiftUI 已接入移动教务只读课表、Keychain、本地缓存及日/周/月/年视图；macOS 通过单测、Release 双架构构建和实际界面检查，iOS 通过模拟器构建。阶段 1 的节假日和当前时间线仍待迁移。
-- Android 原生：Kotlin + Android Views 已接入移动教务只读课表、Android Keystore、`AtomicFile` 缓存及日/周/月/年视图，并通过单测、Debug/Release Lint、手机和平板实际运行检查。阶段 1 的节假日和当前时间线仍待迁移。
-- 原生预览限制：空教室实时请求与平台通知尚未进入原生客户端，当前预览包不能替代功能完整的 Tauri 客户端。
+- macOS/iOS 原生：共享 SwiftUI 已接入移动教务个人课表、Keychain、本地缓存、日/周/月/年视图及当天两校区空教室联动查询；通过共享 fixture 单测、macOS 实际窗口和 iPhone 模拟器交互检查。阶段 1 的节假日和当前时间线仍待迁移。
+- Android 原生：Kotlin + Android Views 已接入移动教务个人课表、Android Keystore、`AtomicFile` 缓存、日/周/月/年视图及当天两校区空教室联动查询，并通过共享 fixture 单测、Lint、手机和平板实际运行检查。
+- 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift 和 Kotlin 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
+- 原生预览限制：平台通知、托盘/菜单栏、节假日、当前时间线和系统日历导入尚未全部迁移，当前预览包不能替代功能完整的 Tauri 客户端。
 - 开源发布：已有 README 与 CONTRIBUTING；许可证选择仍需仓库所有者确认。
