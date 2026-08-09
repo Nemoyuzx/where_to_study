@@ -103,6 +103,7 @@ Apple 测试报告：
 
 - Android signing 改用全新的 `ANDROID_RELEASE_*` secret 名称，避免继续依赖旧 secret 的不可观测状态。
 - 打包脚本会在 Gradle 前直接验证解码后的 keystore 证书，并分别报告 keystore、APK 和 AAB 的证书读取或不匹配错误。
+- 手动门禁确认固定 keystore、Release 测试、Lint 和 Gradle 签名全部通过；APK 证书读取现兼容不同 `apksigner` 版本的输出流与前缀。
 - 原生工作流把手动触发定义为独立 Android 签名门禁，可在创建新标签前单独验证固定签名链路。
 
 ## 发布前剩余步骤

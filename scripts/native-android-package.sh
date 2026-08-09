@@ -147,7 +147,15 @@ if [[ -z "$CONFIGURED_BUILD" || "$ACTUAL_BUILD" != "$CONFIGURED_BUILD" ]]; then
   exit 1
 fi
 
-ACTUAL_APK_CERTIFICATE="$("$APKSIGNER" verify --print-certs "$SIGNED_APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+if ! APK_CERTIFICATE_OUTPUT="$("$APKSIGNER" verify --print-certs "$SIGNED_APK" 2>&1)"; then
+  echo "Native Android APK signer certificate could not be inspected." >&2
+  exit 1
+fi
+ACTUAL_APK_CERTIFICATE="$(
+  sed -n 's/^.*certificate SHA-256 digest:[[:space:]]*//p' <<<"$APK_CERTIFICATE_OUTPUT" \
+    | tr -d '[:space:]:' \
+    | tr '[:upper:]' '[:lower:]'
+)"
 if [[ ! "$ACTUAL_APK_CERTIFICATE" =~ ^[0-9a-f]{64}$ ]]; then
   echo "Native Android APK signer certificate could not be inspected." >&2
   exit 1
