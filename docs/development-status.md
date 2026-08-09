@@ -122,13 +122,19 @@ Apple 测试报告：
 - 失败测试仍通过了“取消调用在 0.25 秒内返回”的非阻塞断言，失败只发生在等待后台清理完成的测试上限。
 - 异步完成上限调整为 10 秒，产品代码和非阻塞要求不变；build 10 将先做重复压力测试和完整 Apple 测试再创建标签。
 
+## Alpha 10 Android 签名门禁
+
+候选提交 `4afc1a4` 的手动原生工作流 [31308452212](https://github.com/Nemoyuzx/where_to_study/actions/runs/31308452212) 已通过。该门禁只运行 Android signed release job，Apple 和 Android Debug job 按设计跳过。
+
+- 81 项 Release JVM 测试、Lint、APK/AAB 构建、固定 keystore 预检、APK/AAB 二次证书校验和 Actions artifact 上传全部成功。
+- 下载后的 CI APK/AAB 已再次通过相邻 SHA-256、`versionName=0.1.1`、`versionCode=10` 和仓库固定公开证书复核。
+
 ## 发布前剩余步骤
 
-1. 推送 build 10 候选提交并通过标签创建前的 Android 签名门禁。
-2. 创建并推送 `v0.1.1-alpha.10` 标签。
-3. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
-4. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
-5. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。
-6. 维护者选择 MIT、Apache-2.0 或 GPL-3.0 后再添加根 `LICENSE`；在此之前只能称为公开测试代码，不能声称已完成开源授权。
+1. 创建并推送 `v0.1.1-alpha.10` 标签。
+2. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
+3. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
+4. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。
+5. 维护者选择 MIT、Apache-2.0 或 GPL-3.0 后再添加根 `LICENSE`；在此之前只能称为公开测试代码，不能声称已完成开源授权。
 
 正式生产发布仍需要 Apple Developer ID 签名与公证、可分发的 iOS 签名以及 Windows Authenticode。Android 维护者密钥只通过本地忽略文件和 GitHub Actions secrets 提供，不进入仓库或发布日志。
