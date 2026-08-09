@@ -3,9 +3,9 @@
 ## 当前状态
 
 - 分支：`codex/native-platform-foundation`
-- 目标测试版：`v0.1.1-alpha.9`
+- 目标测试版：`v0.1.1-alpha.10`
 - 应用版本：`0.1.1`
-- 原生构建号：Apple `CURRENT_PROJECT_VERSION=9`；Android `versionCode=9`
+- 原生构建号：Apple `CURRENT_PROJECT_VERSION=10`；Android `versionCode=10`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：Tauri 主应用安装在 `/Applications/Where To Study.app`；SwiftUI 预览安装在 `/Applications/Where To Study Native Preview.app`
 - 发布边界：当前是测试版候选，不是已签名、公证的生产版本；仓库仍等待维护者选择根许可证
@@ -67,20 +67,21 @@
 
 Apple 测试报告：
 
-- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.09_16-46-01-+0800.xcresult`
-- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.09_16-46-07-+0800.xcresult`
+- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.09_18-15-38-+0800.xcresult`
+- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.09_18-15-45-+0800.xcresult`
+- iOS 后台清理压力测试（10 次）：`native/apple/DerivedData/stress-iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.09_18-14-22-+0800.xcresult`
 
-## Build 9 本地产物
+## Build 10 本地产物
 
 所有文件位于被 Git 忽略的 `release-artifacts/`，相邻 `.sha256` 已逐项回读验证。
 
 | 文件 | SHA-256 | 签名状态 |
 | --- | --- | --- |
-| `Where-To-Study-v0.1.1-alpha.9-macos-arm64.zip` | `9e00e157ed19a53de838608bd7c6e5ec2f53252d451148565c2b460a687b0ae3` | Tauri macOS arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.9-native-macos-universal.zip` | `d39035f63c60eaed5710c0955ead2382e95ad5278eff736528e2b4175e8b1bb4` | SwiftUI macOS x86_64 + arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.9-native-ios-unsigned.xcarchive.zip` | `5ddefe39773956e68b34de498210a371b540eaa73e632a586bcff10978a8834a` | iOS arm64 archive，无签名，不可直接安装 |
-| `Where-To-Study-v0.1.1-alpha.9-native-android-universal.apk` | `01f87ec07a02769598a911cdc752de2706668edecde4a1675532187557633329` | Android APK，固定 release key |
-| `Where-To-Study-v0.1.1-alpha.9-native-android.aab` | `f304360baab38f503ee3dcac6d0bad2f50233274c5420f18f3c4018314a94280` | Android AAB，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.10-macos-arm64.zip` | `af66760cefbb009de3cca58a37cba40158b02c449e3c7622c0317bcc0d3c180e` | Tauri macOS arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.10-native-macos-universal.zip` | `6123d01e55d13ff542e0875027be44f61e3b664e7d1a8e44a5fd3c6e3436dbda` | SwiftUI macOS x86_64 + arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.10-native-ios-unsigned.xcarchive.zip` | `ef2eecdd1f2b038af8a75a840840c5b6c1c60cbeef70fa68eeb716dd992774de` | iOS arm64 archive，无签名，不可直接安装 |
+| `Where-To-Study-v0.1.1-alpha.10-native-android-universal.apk` | `e6b9e0214069f8b371b9b28821dfb70957866e40ddd86c01dae8c1bc54b87c76` | Android APK，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.10-native-android.aab` | `72f2d3fa3efbcac3af938764f942405c10592f213758172b9e7ed630544b577e` | Android AAB，固定 release key |
 
 ## Alpha 6 CI 回归记录
 
@@ -114,12 +115,20 @@ Apple 测试报告：
 - 下载后的 CI APK/AAB 已再次通过相邻 SHA-256、`versionName=0.1.1`、`versionCode=9` 和仓库固定公开证书复核。
 - 工作流不再引用的旧 Android signing secrets 已删除，只保留验证通过的 `ANDROID_RELEASE_*` 命名空间。
 
+## Alpha 9 CI 回归记录
+
+`v0.1.1-alpha.9` 保留为不可变的失败候选标签，没有创建 GitHub Release。Windows、Tauri macOS、安全检查和 Android signed release 全部通过；Apple job 的 macOS 构建与测试、59 项 iOS 单元测试和 1 项导航 UI 测试通过，但后台通知清理测试在负载较高的 runner 上超过原 2 秒等待上限。
+
+- 失败测试仍通过了“取消调用在 0.25 秒内返回”的非阻塞断言，失败只发生在等待后台清理完成的测试上限。
+- 异步完成上限调整为 10 秒，产品代码和非阻塞要求不变；build 10 将先做重复压力测试和完整 Apple 测试再创建标签。
+
 ## 发布前剩余步骤
 
-1. 创建并推送 `v0.1.1-alpha.9` 标签。
-2. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
-3. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
-4. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。
-5. 维护者选择 MIT、Apache-2.0 或 GPL-3.0 后再添加根 `LICENSE`；在此之前只能称为公开测试代码，不能声称已完成开源授权。
+1. 推送 build 10 候选提交并通过标签创建前的 Android 签名门禁。
+2. 创建并推送 `v0.1.1-alpha.10` 标签。
+3. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
+4. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
+5. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。
+6. 维护者选择 MIT、Apache-2.0 或 GPL-3.0 后再添加根 `LICENSE`；在此之前只能称为公开测试代码，不能声称已完成开源授权。
 
 正式生产发布仍需要 Apple Developer ID 签名与公证、可分发的 iOS 签名以及 Windows Authenticode。Android 维护者密钥只通过本地忽略文件和 GitHub Actions secrets 提供，不进入仓库或发布日志。
