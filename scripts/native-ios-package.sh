@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/package-validation.sh
+source "$ROOT_DIR/scripts/package-validation.sh"
 APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-iOS"
@@ -74,15 +76,15 @@ while IFS= read -r -d '' relocation_file; do
   RELEASE_SOURCE_ROOT="$ROOT_DIR" perl -0pi -e 's/\Q$ENV{RELEASE_SOURCE_ROOT}\E/./g' "$relocation_file"
 done < <(find "$ARCHIVE_PATH/dSYMs" -type f -path '*/Relocations/*' -name '*.yml' -print0 2>/dev/null)
 
-if rg --text --fixed-strings --quiet --no-ignore --hidden "$ROOT_DIR" "$ARCHIVE_PATH"; then
+if path_contains_fixed_text "$ROOT_DIR" "$ARCHIVE_PATH"; then
   echo "Native iOS archive contains a local source path." >&2
   exit 1
 fi
-if rg --text --fixed-strings --quiet 'http://jwglweixin\.bupt\.edu\.cn' "$ARCHIVE_PATH"; then
+if path_contains_fixed_text 'http://jwglweixin.bupt.edu.cn' "$ARCHIVE_PATH"; then
   echo "Native iOS archive contains the retired HTTP teaching-system endpoint." >&2
   exit 1
 fi
-if ! rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn' "$ARCHIVE_PATH"; then
+if ! path_contains_fixed_text 'https://jwglweixin.bupt.edu.cn' "$ARCHIVE_PATH"; then
   echo "Native iOS archive is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi

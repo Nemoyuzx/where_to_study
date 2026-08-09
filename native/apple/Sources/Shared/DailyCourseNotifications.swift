@@ -218,9 +218,13 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
             ($0, systemIdentifier(for: $0, revision: revision))
         }
         let replacementIdentifiers = Set(batch.map(\.1))
-        guard prepareRevision(revision, replacementIdentifiers: replacementIdentifiers) else {
+        guard let identifiersToRemove = prepareRevision(
+            revision,
+            replacementIdentifiers: replacementIdentifiers
+        ) else {
             return
         }
+        await removeNotifications(identifiersToRemove)
 
         for (request, identifier) in batch {
             guard isCurrent(revision) else { return }
@@ -238,20 +242,28 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
     }
 
     func cancelPending(revision: UInt64) {
-        _ = prepareRevision(revision, replacementIdentifiers: [])
+        guard let identifiersToRemove = prepareRevision(revision, replacementIdentifiers: []) else {
+            return
+        }
+        let center = center
+        Task.detached(priority: .utility) {
+            Self.removeNotifications(identifiersToRemove, center: center)
+        }
     }
 
     private func prepareRevision(
         _ revision: UInt64,
         replacementIdentifiers: Set<String>
-    ) -> Bool {
+    ) -> [String]? {
         revisionLock.lock()
         defer { revisionLock.unlock() }
-        guard revision >= currentRevision else { return false }
+        guard revision >= currentRevision else { return nil }
         currentRevision = revision
-        removeOwnedNotifications(additionalIdentifiers: replacementIdentifiers)
+        let identifiersToRemove = ownedNotificationIdentifiers(
+            additionalIdentifiers: replacementIdentifiers
+        )
         storeIdentifiers(replacementIdentifiers)
-        return true
+        return identifiersToRemove
     }
 
     private func isCurrent(_ revision: UInt64) -> Bool {
@@ -267,12 +279,27 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         "\(request.identifier).revision-\(revision)"
     }
 
-    private func removeOwnedNotifications(additionalIdentifiers: Set<String> = []) {
-        let identifiers = storedIdentifiers()
+    private func ownedNotificationIdentifiers(
+        additionalIdentifiers: Set<String> = []
+    ) -> [String] {
+        storedIdentifiers()
             .union(additionalIdentifiers)
             .union(legacyDateIdentifiers())
             .filter { $0.hasPrefix(DailyCourseNotificationPlanner.identifierPrefix) }
             .sorted()
+    }
+
+    private func removeNotifications(_ identifiers: [String]) async {
+        let center = center
+        await Task.detached(priority: .utility) {
+            Self.removeNotifications(identifiers, center: center)
+        }.value
+    }
+
+    private static func removeNotifications(
+        _ identifiers: [String],
+        center: any CourseNotificationCenter
+    ) {
         center.removePending(withIdentifiers: identifiers)
         center.removeDelivered(withIdentifiers: identifiers)
     }

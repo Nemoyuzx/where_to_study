@@ -3,9 +3,9 @@
 ## 当前状态
 
 - 分支：`codex/native-platform-foundation`
-- 目标测试版：`v0.1.1-alpha.6`
+- 目标测试版：`v0.1.1-alpha.7`
 - 应用版本：`0.1.1`
-- 原生构建号：Apple `CURRENT_PROJECT_VERSION=6`；Android `versionCode=6`
+- 原生构建号：Apple `CURRENT_PROJECT_VERSION=7`；Android `versionCode=7`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：Tauri 主应用安装在 `/Applications/Where To Study.app`；SwiftUI 预览安装在 `/Applications/Where To Study Native Preview.app`
 - 发布边界：当前是测试版候选，不是已签名、公证的生产版本；仓库仍等待维护者选择根许可证
@@ -34,8 +34,10 @@
 - SwiftUI macOS/iOS 已实现空教室、教学日历、设置三页和自适应手机、平板、桌面布局。
 - 接入 Keychain、本地账号范围缓存、SJD 课表/空教室、节假日、EventKit 真同步和考试标题。
 - macOS 菜单栏显示今日/明日课程；关闭主窗口后应用继续驻留。
+- macOS 侧栏品牌标题与系统导航行内容对齐，实机窗口截图确认标题、三项导航和 14 个节次均无重叠。
 - 可选 07:30 本地课程摘要会在系统上限内安排最多 63 个未来有课日；关闭提醒、撤销权限、切换账号或清除数据会立即撤销旧通知。
 - 发布脚本生成 arm64 + x86_64 通用 macOS 预览包和 arm64 无签名 iOS archive，并校验版本、架构、隐私清单、HTTPS 数据源与本地路径泄漏。
+- 二进制内容校验只依赖 macOS/Linux runner 自带的 `grep`，不再要求额外安装 `ripgrep`；退役 HTTP 地址按固定字符串实际检查。
 
 ### Android 原生端
 
@@ -51,37 +53,45 @@
 | React | `npm ci`、`npm run build` 通过；完整 `npm audit --audit-level=high` 为 0 漏洞 |
 | Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；81/81 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
-| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；59/59 XCTest 通过 |
-| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；59 项单元测试 + 1 项真实导航 UI 测试，共 60/60 通过 |
+| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；60/60 XCTest 通过 |
+| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；60 项单元测试 + 1 项真实导航 UI 测试，共 61/61 通过 |
 | Android Debug | 81/81 JVM 测试、`lintDebug`、Debug APK 构建通过 |
 | Android Release | 81/81 JVM 测试、`lintRelease`、签名 APK/AAB 构建通过 |
 | Android UI | Medium Phone 与 Pixel Tablet 各 1/1 导航冒烟测试通过 |
 | 浏览器视觉检查 | 桌面与手机空教室/设置/日历通过；节假日标题、14 节次与整点、年视图浮层、红色时间线、移动端三列摘要均无重叠；控制台 0 错误 |
 | macOS 安装检查 | Tauri arm64 与 SwiftUI universal 安装包版本/架构/adhoc 签名通过；两端关闭窗口后均保持运行 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
-| 敏感信息扫描 | Gitleaks 扫描 52 个提交及当前全部拟提交文件，0 泄漏 |
+| 敏感信息扫描 | Gitleaks 扫描 53 个提交及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
 
 Apple 测试报告：
 
-- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.09_14-51-16-+0800.xcresult`
-- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.09_14-51-21-+0800.xcresult`
+- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.09_16-19-00-+0800.xcresult`
+- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.09_16-05-12-+0800.xcresult`
 
-## Build 6 本地产物
+## Build 7 本地产物
 
 所有文件位于被 Git 忽略的 `release-artifacts/`，相邻 `.sha256` 已逐项回读验证。
 
 | 文件 | SHA-256 | 签名状态 |
 | --- | --- | --- |
-| `Where-To-Study-v0.1.1-alpha.6-macos-arm64.zip` | `6a177f89cdaa8a4768354d1af7d8b37ae653c6d305c7741aaba53770b602b3d4` | Tauri macOS arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.6-native-macos-universal.zip` | `90cabb8270e312fef0893fd61904a39f548ff265edcbcdbe41f0488b571a1cbf` | SwiftUI macOS x86_64 + arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.6-native-ios-unsigned.xcarchive.zip` | `afcfc0c4b7a3085b3a176bafcf57d88c8f789595da5284419ce9c948aa078821` | iOS arm64 archive，无签名，不可直接安装 |
-| `Where-To-Study-v0.1.1-alpha.6-native-android-universal.apk` | `1bcc606189d728aacafbf7747f5c6812996f39baea0c5f5223a4150ce3b49bb2` | Android APK，固定 release key |
-| `Where-To-Study-v0.1.1-alpha.6-native-android.aab` | `a405395fa02e968489fae03220bcdcf72fae7dd3bbe3c7fdf40aed578d4eda0f` | Android AAB，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.7-macos-arm64.zip` | `7624c98a1f8067e373e451146a1ff4ac70b0e46391cce20af84fe7e319880bd1` | Tauri macOS arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.7-native-macos-universal.zip` | `5bf690698ae5d7661e6667e13b28db3709efdaa89ad261f8622aa8aeee928d36` | SwiftUI macOS x86_64 + arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.7-native-ios-unsigned.xcarchive.zip` | `18fe9dfa5a62c087e09064d5170cbd9e2d6db7263841e507997023e214498f2b` | iOS arm64 archive，无签名，不可直接安装 |
+| `Where-To-Study-v0.1.1-alpha.7-native-android-universal.apk` | `906e1fff1cab524b0af720a9feb832e6dc484709ed3b6b8b8ba162251434399b` | Android APK，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.7-native-android.aab` | `169691eab919ab55759cadffeaa8d635041a9926ded292afee72850749e351ff` | Android AAB，固定 release key |
+
+## Alpha 6 CI 回归记录
+
+`v0.1.1-alpha.6` 保留为不可变的失败候选标签，没有创建 GitHub Release。该标签在干净 runner 上发现并推动修复了以下发布环境问题：
+
+- Xcode 26.6 无法在时限内推断日历课程块的深层 SwiftUI 表达式；已拆为显式辅助视图，并在本地严格 Swift 6 构建和测试中通过。
+- GitHub Actions 中的 Android signing secret 与仓库固定证书不一致；已从本地忽略的维护者密钥安全重置 secrets，未输出密钥内容。
+- Tauri/Apple 打包脚本依赖 runner 未预装的 `rg`；已改为系统工具并补充可移植性正反向测试。
 
 ## 发布前剩余步骤
 
-1. 提交并推送当前候选代码，创建并推送 `v0.1.1-alpha.6` 标签。
+1. 提交并推送修复后的候选代码，创建并推送 `v0.1.1-alpha.7` 标签。
 2. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
 3. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
 4. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。

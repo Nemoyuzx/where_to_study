@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/package-validation.sh
+source "$ROOT_DIR/scripts/package-validation.sh"
 ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ROOT_DIR/src-tauri/gen/android/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
@@ -140,15 +142,15 @@ if [[ "$ACTUAL_AAB_CERTIFICATE" != "$EXPECTED_CERTIFICATE" ]]; then
 fi
 unzip -t "$SIGNED_AAB" >/dev/null
 
-if unzip -p "$SIGNED_APK" 'classes*.dex' | rg --text --fixed-strings --quiet 'http://jwglweixin.bupt.edu.cn'; then
+if unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text 'http://jwglweixin.bupt.edu.cn'; then
   echo "Native Android package contains the retired HTTP teaching-system endpoint." >&2
   exit 1
 fi
-if ! unzip -p "$SIGNED_APK" 'classes*.dex' | rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn'; then
+if ! unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text 'https://jwglweixin.bupt.edu.cn'; then
   echo "Native Android package is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
-if unzip -p "$SIGNED_APK" AndroidManifest.xml | rg --text --fixed-strings --quiet 'networkSecurityConfig'; then
+if unzip -p "$SIGNED_APK" AndroidManifest.xml | stream_contains_fixed_text 'networkSecurityConfig'; then
   echo "Native Android package still declares a custom network security configuration." >&2
   exit 1
 fi

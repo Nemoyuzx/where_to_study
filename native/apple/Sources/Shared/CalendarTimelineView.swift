@@ -285,41 +285,57 @@ struct CalendarTimelineView: View {
                         + 3
                     let top = yPosition(minute: start) + 2
                     let bottom = max(top + 34, yPosition(minute: end) - 2)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(placement.course.name)
-                            .font(.system(size: days.count == 1 ? 12 : 9, weight: .semibold))
-                            .lineLimit(1)
-                        if bottom - top >= 42 {
-                            Text(placement.course.timeRange)
-                                .font(.system(size: days.count == 1 ? 10 : 8, design: .monospaced))
-                                .lineLimit(1)
-                        }
-                        if days.count == 1, bottom - top >= 60, !placement.course.room.isEmpty {
-                            Text(placement.course.room)
-                                .font(.system(size: 10))
-                                .lineLimit(1)
-                        }
-                    }
-                    .foregroundStyle(Color.white)
-                    .padding(6)
-                    .frame(
-                        width: max(trackWidth - 6, 20),
-                        height: bottom - top,
-                        alignment: .topLeading
-                    )
-                    .background(placement.track == 0 ? AppTheme.primary : AppTheme.primary.opacity(0.86))
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
-                    .position(
-                        x: x + max(trackWidth - 6, 20) / 2,
-                        y: (top + bottom) / 2
-                    )
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(
-                        "\(placement.course.timeRange)，\(placement.course.name)，\(placement.course.room)"
+                    courseBlock(
+                        placement: placement,
+                        trackWidth: trackWidth,
+                        x: x,
+                        top: top,
+                        bottom: bottom
                     )
                 }
             }
         }
+    }
+
+    private func courseBlock(
+        placement: CoursePlacement,
+        trackWidth: CGFloat,
+        x: CGFloat,
+        top: CGFloat,
+        bottom: CGFloat
+    ) -> some View {
+        let blockWidth = max(trackWidth - 6, 20)
+        let blockHeight = bottom - top
+        let isSingleDay = days.count == 1
+        let background = placement.track == 0
+            ? AppTheme.primary
+            : AppTheme.primary.opacity(0.86)
+
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(placement.course.name)
+                .font(.system(size: isSingleDay ? 12 : 9, weight: .semibold))
+                .lineLimit(1)
+            if blockHeight >= 42 {
+                Text(placement.course.timeRange)
+                    .font(.system(size: isSingleDay ? 10 : 8, design: .monospaced))
+                    .lineLimit(1)
+            }
+            if isSingleDay, blockHeight >= 60, !placement.course.room.isEmpty {
+                Text(placement.course.room)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+            }
+        }
+        .foregroundStyle(Color.white)
+        .padding(6)
+        .frame(width: blockWidth, height: blockHeight, alignment: .topLeading)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .position(x: x + blockWidth / 2, y: (top + bottom) / 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(placement.course.timeRange)，\(placement.course.name)，\(placement.course.room)"
+        )
     }
 
     @ViewBuilder

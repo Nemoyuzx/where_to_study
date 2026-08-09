@@ -151,7 +151,13 @@ final class DailyCourseNotificationTests: XCTestCase {
         ).first)
 
         try await scheduler.replacePending(with: [request], revision: 4)
+        let pendingRemovalCount = center.pendingRemovalBatches.count
+        let deliveredRemovalCount = center.deliveredRemovalBatches.count
         scheduler.cancelPending(revision: 5)
+        try await waitForNotificationCleanup {
+            center.pendingRemovalBatches.count > pendingRemovalCount
+                && center.deliveredRemovalBatches.count > deliveredRemovalCount
+        }
 
         XCTAssertEqual(center.addedIdentifiers, ["daily-course-summary.2026-03-02.revision-4"])
         XCTAssertTrue(try XCTUnwrap(center.pendingRemovalBatches.last).contains(
@@ -161,6 +167,22 @@ final class DailyCourseNotificationTests: XCTestCase {
             "daily-course-summary.2026-03-02.revision-4"
         ))
         XCTAssertEqual(defaults.stringArray(forKey: "dailyCourseNotificationIdentifiers"), [])
+    }
+
+    func testSchedulerCancellationDoesNotBlockCallerDuringSystemCleanup() async throws {
+        let center = RecordingCourseNotificationCenter(pendingRemovalDelay: 0.75)
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let scheduler = UserNotificationCourseScheduler(center: center, defaults: defaults)
+
+        let startedAt = Date()
+        scheduler.cancelPending(revision: 1)
+        let elapsed = Date().timeIntervalSince(startedAt)
+
+        XCTAssertLessThan(elapsed, 0.25)
+        try await waitForNotificationCleanup {
+            !center.pendingRemovalBatches.isEmpty && !center.deliveredRemovalBatches.isEmpty
+        }
     }
 
     func testSchedulerRetainsPlannedIdentifiersWhenSystemAddFails() async throws {
@@ -186,7 +208,11 @@ final class DailyCourseNotificationTests: XCTestCase {
             // The identifier must remain persisted so the lifecycle cleanup can remove it.
         }
         center.setAddFailureEnabled(false)
+        let pendingRemovalCount = center.pendingRemovalBatches.count
         scheduler.cancelPending(revision: 7)
+        try await waitForNotificationCleanup {
+            center.pendingRemovalBatches.count > pendingRemovalCount
+        }
 
         XCTAssertTrue(try XCTUnwrap(center.pendingRemovalBatches.last).contains(
             "daily-course-summary.2026-03-02.revision-6"
@@ -391,6 +417,18 @@ final class DailyCourseNotificationTests: XCTestCase {
     }
 }
 
+private func waitForNotificationCleanup(
+    timeout: Duration = .seconds(2),
+    condition: @escaping @Sendable () -> Bool
+) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while !condition(), clock.now < deadline {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    XCTAssertTrue(condition(), "Timed out waiting for notification cleanup.")
+}
+
 private final class RecordingNotificationScheduler: DailyCourseNotificationScheduling, @unchecked Sendable {
     struct Replacement: Sendable {
         let requests: [DailyCourseNotificationRequest]
@@ -441,6 +479,7 @@ private final class RecordingNotificationScheduler: DailyCourseNotificationSched
 
 private final class RecordingCourseNotificationCenter: CourseNotificationCenter, @unchecked Sendable {
     private let lock = NSLock()
+    private let pendingRemovalDelay: TimeInterval
     private var shouldFailAdd = false
     private var storedAddedIdentifiers = [String]()
     private var storedPendingRemovalBatches = [[String]]()
@@ -449,6 +488,10 @@ private final class RecordingCourseNotificationCenter: CourseNotificationCenter,
     var addedIdentifiers: [String] { lock.withLock { storedAddedIdentifiers } }
     var pendingRemovalBatches: [[String]] { lock.withLock { storedPendingRemovalBatches } }
     var deliveredRemovalBatches: [[String]] { lock.withLock { storedDeliveredRemovalBatches } }
+
+    init(pendingRemovalDelay: TimeInterval = 0) {
+        self.pendingRemovalDelay = pendingRemovalDelay
+    }
 
     func setAddFailureEnabled(_ enabled: Bool) {
         lock.withLock { shouldFailAdd = enabled }
@@ -471,6 +514,9 @@ private final class RecordingCourseNotificationCenter: CourseNotificationCenter,
     }
 
     func removePending(withIdentifiers identifiers: [String]) {
+        if pendingRemovalDelay > 0 {
+            Thread.sleep(forTimeInterval: pendingRemovalDelay)
+        }
         lock.withLock { storedPendingRemovalBatches.append(identifiers) }
     }
 

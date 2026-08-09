@@ -16,6 +16,7 @@ struct RootView: View {
                     Text("Where To Study")
                         .font(.headline)
                 }
+                .padding(.horizontal, 20)
                 Divider()
                 List(AppSection.allCases, selection: $model.selectedSection) { section in
                     Label(section.title, systemImage: section.systemImage)

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/package-validation.sh
+source "$ROOT_DIR/scripts/package-validation.sh"
 APP_PATH="${MACOS_APP_PATH:-$ROOT_DIR/src-tauri/target/release/bundle/macos/Where To Study.app}"
 OUTPUT_DIR="${MACOS_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
@@ -20,15 +22,15 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-if rg --text --fixed-strings --quiet --no-ignore --hidden "$ROOT_DIR" "$APP_PATH"; then
+if path_contains_fixed_text "$ROOT_DIR" "$APP_PATH"; then
   echo "macOS app bundle contains a local source path." >&2
   exit 1
 fi
-if rg --text --fixed-strings --quiet 'http://jwglweixin\.bupt\.edu\.cn' "$APP_PATH"; then
+if path_contains_fixed_text 'http://jwglweixin.bupt.edu.cn' "$APP_PATH"; then
   echo "macOS app bundle contains the retired HTTP teaching-system endpoint." >&2
   exit 1
 fi
-if ! rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn' "$APP_PATH"; then
+if ! path_contains_fixed_text 'https://jwglweixin.bupt.edu.cn' "$APP_PATH"; then
   echo "macOS app bundle is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi

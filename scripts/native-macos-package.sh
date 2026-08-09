@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/package-validation.sh
+source "$ROOT_DIR/scripts/package-validation.sh"
 APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-macOS"
@@ -66,15 +68,15 @@ if [[ -z "$CONFIGURED_BUILD" || "$ACTUAL_BUILD" != "$CONFIGURED_BUILD" ]]; then
   exit 1
 fi
 
-if rg --text --fixed-strings --quiet --no-ignore --hidden "$ROOT_DIR" "$PACKAGE_APP"; then
+if path_contains_fixed_text "$ROOT_DIR" "$PACKAGE_APP"; then
   echo "Native macOS package contains a local source path." >&2
   exit 1
 fi
-if rg --text --fixed-strings --quiet 'http://jwglweixin\.bupt\.edu\.cn' "$PACKAGE_APP"; then
+if path_contains_fixed_text 'http://jwglweixin.bupt.edu.cn' "$PACKAGE_APP"; then
   echo "Native macOS package contains the retired HTTP teaching-system endpoint." >&2
   exit 1
 fi
-if ! rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn' "$PACKAGE_APP"; then
+if ! path_contains_fixed_text 'https://jwglweixin.bupt.edu.cn' "$PACKAGE_APP"; then
   echo "Native macOS package is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
