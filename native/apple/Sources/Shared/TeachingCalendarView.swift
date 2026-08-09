@@ -63,6 +63,7 @@ struct TeachingCalendarView: View {
             yearPopoverOverlay
         }
         .background(AppTheme.background)
+        .accessibilityIdentifier("screen.calendar")
         .coordinateSpace(name: Self.calendarCoordinateSpace)
         .onAppear(perform: ensureVisibleHolidays)
         .onChange(of: selectedDate) { _ in ensureVisibleHolidays() }

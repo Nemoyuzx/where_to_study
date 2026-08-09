@@ -1,10 +1,7 @@
-name: Build Mobile
+name: Build Legacy Tauri Mobile (Manual)
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: read

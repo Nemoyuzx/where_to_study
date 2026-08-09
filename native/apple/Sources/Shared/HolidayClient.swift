@@ -18,8 +18,6 @@ enum HolidaySourceLimits {
     static let maximumPayloadBytes = 256 * 1024
     static let maximumRecords = 128
     static let maximumNameLength = 80
-    static let maximumRangeEntries = 32
-    static let maximumRangeDays = 32
     static let maximumExpandedItems = 512
 }
 
@@ -86,10 +84,24 @@ struct HolidayClient: HolidayFetching {
 }
 
 enum HolidaySourceParser {
+    private struct SourceResponse: Decodable {
+        let year: Int
+        let region: String
+        let dates: [SourceHoliday]
+    }
+
     private struct SourceHoliday: Decodable {
-        let name: String
-        let range: [String]
+        let date: String
+        let name: String?
+        let nameCN: String?
+        let nameEN: String?
         let type: String
+
+        enum CodingKeys: String, CodingKey {
+            case date, name, type
+            case nameCN = "name_cn"
+            case nameEN = "name_en"
+        }
     }
 
     static func parse(
@@ -104,61 +116,50 @@ enum HolidaySourceParser {
         guard data.count <= HolidaySourceLimits.maximumPayloadBytes else {
             throw HolidayClientError.service("节假日数据响应过大。")
         }
-        let sourceItems: [SourceHoliday]
+        let payload: SourceResponse
         do {
-            sourceItems = try JSONDecoder().decode([SourceHoliday].self, from: data)
+            payload = try JSONDecoder().decode(SourceResponse.self, from: data)
         } catch {
             throw HolidayClientError.service("节假日数据格式不正确。")
         }
-        guard sourceItems.count <= HolidaySourceLimits.maximumRecords else {
+        guard payload.year == year else {
+            throw HolidayClientError.service("节假日数据年份与请求不一致。")
+        }
+        guard payload.region == "CN" else {
+            throw HolidayClientError.service("节假日数据区域不正确。")
+        }
+        guard payload.dates.count <= HolidaySourceLimits.maximumRecords else {
             throw HolidayClientError.service("节假日数据记录过多。")
         }
         var items = [HolidayItem]()
-        for item in sourceItems {
-            let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        for item in payload.dates {
+            let chineseName = item.nameCN?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fallbackName = item.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = chineseName.flatMap { $0.isEmpty ? nil : $0 } ?? fallbackName ?? ""
             guard !name.isEmpty else {
                 throw HolidayClientError.service("节假日名称不能为空。")
             }
             guard name.unicodeScalars.count <= HolidaySourceLimits.maximumNameLength else {
                 throw HolidayClientError.service("节假日名称过长。")
             }
-            guard !item.range.isEmpty else {
-                throw HolidayClientError.service("节假日日期范围不能为空。")
+            guard let date = parseDate(item.date) else {
+                throw HolidayClientError.service("节假日数据日期格式不正确。")
             }
-            guard item.range.count <= HolidaySourceLimits.maximumRangeEntries else {
-                throw HolidayClientError.service("节假日日期范围记录过多。")
-            }
-            let rangeDates = try item.range.map { value -> Date in
-                guard let date = parseDate(value) else {
-                    throw HolidayClientError.service("节假日数据日期格式不正确。")
-                }
-                return date
-            }
-            for (previous, next) in zip(rangeDates, rangeDates.dropFirst()) where next <= previous {
-                throw HolidayClientError.service("节假日数据日期范围顺序不正确。")
-            }
-            let start = rangeDates[0]
-            let end = rangeDates[rangeDates.count - 1]
-            let daySpan = Calendar.shanghai.dateComponents([.day], from: start, to: end).day ?? .max
-            guard daySpan >= 0, daySpan < HolidaySourceLimits.maximumRangeDays else {
-                throw HolidayClientError.service("节假日数据日期跨度过大。")
+            guard Calendar.shanghai.component(.year, from: date) == year else {
+                throw HolidayClientError.service("节假日数据包含其他年份的日期。")
             }
             guard let type = normalizedType(item.type) else { continue }
-            var day = start
-            while day <= end {
-                if Calendar.shanghai.component(.year, from: day) == year {
-                    guard items.count < HolidaySourceLimits.maximumExpandedItems else {
-                        throw HolidayClientError.service("节假日展开记录过多。")
-                    }
-                    items.append(HolidayItem(
-                        date: contractDateFormatter.string(from: day),
-                        name: name,
-                        type: type
-                    ))
-                }
-                guard let next = Calendar.shanghai.date(byAdding: .day, value: 1, to: day) else { break }
-                day = next
+            guard items.count < HolidaySourceLimits.maximumExpandedItems else {
+                throw HolidayClientError.service("节假日展开记录过多。")
             }
+            items.append(HolidayItem(
+                date: contractDateFormatter.string(from: date),
+                name: name,
+                type: type
+            ))
+        }
+        guard !items.isEmpty else {
+            throw HolidayClientError.service("节假日数据没有可识别的法定节假日或调休记录。")
         }
         return HolidaysSnapshot(
             year: year,
@@ -170,8 +171,8 @@ enum HolidaySourceParser {
 
     private static func normalizedType(_ value: String) -> String? {
         switch value {
-        case "holiday": "holiday"
-        case "workingday", "workday": "workday"
+        case "public_holiday": "holiday"
+        case "transfer_workday": "workday"
         default: nil
         }
     }
@@ -184,6 +185,69 @@ enum HolidaySourceParser {
             contractDateFormatter.string(from: date) == value
         else { return nil }
         return date
+    }
+
+    private static let contractDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = .shanghai
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.isLenient = false
+        return formatter
+    }()
+}
+
+enum HolidayOfflineFallback {
+    static let source = "https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm"
+
+    static func snapshot(year: Int, fetchedAt: String = timestamp()) -> HolidaysSnapshot? {
+        guard year == 2026 else { return nil }
+        let ranges = [
+            ("元旦", "2026-01-01", "2026-01-03", "holiday"),
+            ("元旦补班", "2026-01-04", "2026-01-04", "workday"),
+            ("春节补班", "2026-02-14", "2026-02-14", "workday"),
+            ("春节", "2026-02-15", "2026-02-23", "holiday"),
+            ("春节补班", "2026-02-28", "2026-02-28", "workday"),
+            ("清明节", "2026-04-04", "2026-04-06", "holiday"),
+            ("劳动节", "2026-05-01", "2026-05-05", "holiday"),
+            ("劳动节补班", "2026-05-09", "2026-05-09", "workday"),
+            ("端午节", "2026-06-19", "2026-06-21", "holiday"),
+            ("中秋节", "2026-09-25", "2026-09-27", "holiday"),
+            ("国庆节补班", "2026-09-20", "2026-09-20", "workday"),
+            ("国庆节", "2026-10-01", "2026-10-07", "holiday"),
+            ("国庆节补班", "2026-10-10", "2026-10-10", "workday")
+        ]
+        var items = [HolidayItem]()
+        for (name, startValue, endValue, type) in ranges {
+            guard
+                var date = contractDateFormatter.date(from: startValue),
+                let end = contractDateFormatter.date(from: endValue)
+            else { return nil }
+            while date <= end {
+                items.append(HolidayItem(
+                    date: contractDateFormatter.string(from: date),
+                    name: name,
+                    type: type
+                ))
+                guard let next = Calendar.shanghai.date(byAdding: .day, value: 1, to: date) else {
+                    return nil
+                }
+                date = next
+            }
+        }
+        return HolidaysSnapshot(
+            year: year,
+            source: source,
+            fetchedAt: fetchedAt,
+            items: items
+        )
+    }
+
+    private static func timestamp(_ date: Date = .now) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
+        return formatter.string(from: date)
     }
 
     private static let contractDateFormatter: DateFormatter = {

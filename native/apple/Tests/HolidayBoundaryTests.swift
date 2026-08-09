@@ -6,29 +6,105 @@ import XCTest
 #endif
 
 final class HolidayBoundaryTests: XCTestCase {
-    func testEmptyNameAndRangeAreRejectedBeforeUnknownTypeIsSkipped() {
+    func testEmptyNameAndInvalidDateAreRejectedBeforeUnknownTypeIsSkipped() {
         assertParserRejects(
-            #"[{"name":"  ","range":["2026-01-01"],"type":"future-type"}]"#,
+            source(dates: #"[{"date":"2026-01-01","name":"  ","type":"future-type"}]"#),
             message: "节假日名称不能为空。"
         )
         assertParserRejects(
-            #"[{"name":"测试","range":[],"type":"future-type"}]"#,
-            message: "节假日日期范围不能为空。"
+            source(dates: #"[{"date":"invalid","name":"测试","type":"future-type"}]"#),
+            message: "节假日数据日期格式不正确。"
         )
     }
 
-    func testValidUnknownTypeIsIgnored() throws {
-        let snapshot = try parse(
-            #"[{"name":"测试","range":["2026-01-01"],"type":"future-type"}]"#
+    func testEmptyAndAllUnknownResponsesAreRejected() {
+        assertParserRejects(
+            source(dates: "[]"),
+            message: "节假日数据没有可识别的法定节假日或调休记录。"
         )
-
-        XCTAssertTrue(snapshot.items.isEmpty)
+        assertParserRejects(
+            source(dates: #"[{"date":"2026-01-01","name":"测试","type":"future-type"}]"#),
+            message: "节假日数据没有可识别的法定节假日或调休记录。"
+        )
     }
 
-    func testTransportMetadataUsesRawHTTPS() {
+    func testTransportMetadataUsesLicensedHTTPSSource() {
         XCTAssertEqual(
             HolidayDefaults.source,
-            "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data"
+            "https://unpkg.com/holiday-calendar@1.3.3/data/CN"
+        )
+    }
+
+    func testRejectedRemotePayloadDoesNotReplaceValidCache() throws {
+        let (store, directory) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cached = snapshot(
+            source: "cached-source",
+            fetchedAt: "2026-01-01T00:00:00Z",
+            items: [HolidayItem(date: "2026-01-01", name: "缓存假期", type: "holiday")]
+        )
+        try store.save(cached)
+        let originalData = try Data(contentsOf: cacheURL(in: directory, year: 2026))
+
+        XCTAssertThrowsError(try parse(source(dates: "[]")))
+
+        XCTAssertEqual(try store.load(year: 2026), cached)
+        XCTAssertEqual(try Data(contentsOf: cacheURL(in: directory, year: 2026)), originalData)
+    }
+
+    func test2026OfflineFallbackMatchesContractAndRustDataset() throws {
+        let fallback = try XCTUnwrap(HolidayOfflineFallback.snapshot(
+            year: 2026,
+            fetchedAt: "2026-01-05T08:00:00+08:00"
+        ))
+
+        XCTAssertEqual(fallback.year, 2026)
+        XCTAssertEqual(
+            fallback.source,
+            "https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm"
+        )
+        XCTAssertEqual(fallback.items.count, 39)
+        XCTAssertEqual(fallback.items.first, HolidayItem(
+            date: "2026-01-01",
+            name: "元旦",
+            type: "holiday"
+        ))
+        XCTAssertTrue(fallback.items.contains(HolidayItem(
+            date: "2026-02-28",
+            name: "春节补班",
+            type: "workday"
+        )))
+        XCTAssertTrue(fallback.items.contains(HolidayItem(
+            date: "2026-10-07",
+            name: "国庆节",
+            type: "holiday"
+        )))
+        XCTAssertEqual(fallback.items.last, HolidayItem(
+            date: "2026-10-10",
+            name: "国庆节补班",
+            type: "workday"
+        ))
+
+        let (store, directory) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try store.save(fallback)
+        XCTAssertEqual(try store.load(year: 2026), fallback)
+        XCTAssertNil(HolidayOfflineFallback.snapshot(year: 2025))
+        XCTAssertNil(HolidayOfflineFallback.snapshot(year: 2027))
+    }
+
+    func testMismatchedYearAndMalformedEnvelopeAreRejected() {
+        assertParserRejects(
+            #"{"year":2025,"region":"CN","dates":[]}"#,
+            message: "节假日数据年份与请求不一致。"
+        )
+        assertParserRejects(
+            #"{"year":2026,"region":"CN","dates":{}}"#,
+            message: "节假日数据格式不正确。"
+        )
+        assertParserRejects(
+            source(dates: #"[{"date":"2025-12-31","name":"跨年","type":"public_holiday"}]"#),
+            message: "节假日数据包含其他年份的日期。"
         )
     }
 
@@ -233,6 +309,10 @@ final class HolidayBoundaryTests: XCTestCase {
             source: HolidayDefaults.source,
             fetchedAt: "2026-01-05T08:00:00+08:00"
         )
+    }
+
+    private func source(dates: String) -> String {
+        #"{"year":2026,"region":"CN","dates":\#(dates)}"#
     }
 
     private func assertParserRejects(

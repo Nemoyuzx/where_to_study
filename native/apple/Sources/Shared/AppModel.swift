@@ -101,6 +101,30 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .settings: "gearshape"
         }
     }
+
+    var accessibilityIdentifier: String {
+        "navigation.\(rawValue)"
+    }
+}
+
+struct HolidayLoadState {
+    private var tokensByYear = [Int: UUID]()
+
+    mutating func begin(year: Int) -> UUID? {
+        guard tokensByYear[year] == nil else { return nil }
+        let token = UUID()
+        tokensByYear[year] = token
+        return token
+    }
+
+    mutating func finish(year: Int, token: UUID) {
+        guard tokensByYear[year] == token else { return }
+        tokensByYear.removeValue(forKey: year)
+    }
+
+    mutating func reset() {
+        tokensByYear.removeAll()
+    }
 }
 
 @MainActor
@@ -125,6 +149,8 @@ final class AppModel: ObservableObject {
     @Published var isRefreshingClassrooms = false
     @Published var isImportingCalendar = false
     @Published private(set) var holidayStatusByYear = [Int: String]()
+    @Published private(set) var dailyCourseNotificationsEnabled = false
+    @Published private(set) var dailyCourseNotificationStatusMessage = ""
 
     let slots = SlotMetadata.defaults
     private let credentialStore: any CredentialStoring
@@ -135,12 +161,14 @@ final class AppModel: ObservableObject {
     private let holidayStore: any HolidayStoring
     private let holidayClient: any HolidayFetching
     private let calendarImporter: any CalendarImporting
+    private let dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling
     private let defaults: UserDefaults
-    private var holidayLoads = Set<Int>()
+    private var holidayLoads = HolidayLoadState()
     private var localDataGeneration = 0
     private var scheduleRefreshToken = 0
     private var classroomRefreshToken = 0
     private var calendarImportToken = 0
+    private var dailyCourseNotificationRevision: UInt64 = 0
     private var dailyClassroomRefreshTask: Task<Void, Never>?
     private var savedCredentialAccount: String?
 
@@ -153,6 +181,7 @@ final class AppModel: ObservableObject {
         holidayStore: any HolidayStoring = FileHolidayStore(),
         holidayClient: any HolidayFetching = HolidayClient(),
         calendarImporter: any CalendarImporting = EventKitCalendarImporter(),
+        dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling = UserNotificationCourseScheduler(),
         defaults: UserDefaults = .standard
     ) {
         self.credentialStore = credentialStore
@@ -163,15 +192,20 @@ final class AppModel: ObservableObject {
         self.holidayStore = holidayStore
         self.holidayClient = holidayClient
         self.calendarImporter = calendarImporter
+        self.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler
         self.defaults = defaults
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
         campusID = defaults.string(forKey: "campusID") ?? "01"
+        dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
         loadCredentials()
         loadSchedule()
         loadClassrooms()
         synchronizeSelectedSlots()
         ensureHolidays(for: Calendar.shanghai.component(.year, from: .now))
+        // Always reconcile on a cold launch so a previously scheduled batch is
+        // removed even when the persisted feature switch is already off.
+        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
     }
 
     var selectedCampusName: String {
@@ -327,8 +361,28 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func setDailyCourseNotificationsEnabled(_ enabled: Bool) {
+        dailyCourseNotificationsEnabled = enabled
+        if enabled {
+            dailyCourseNotificationStatusMessage = "正在确认通知权限…"
+            reconcileDailyCourseNotifications(requestPermissionIfNeeded: true)
+        } else {
+            defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
+            dailyCourseNotificationStatusMessage = "每日课程摘要已关闭"
+            cancelDailyCourseNotifications()
+        }
+    }
+
+    func refreshDailyCourseNotificationAuthorization() {
+        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+    }
+
     func clearLocalData() {
         invalidatePendingOperations()
+        dailyCourseNotificationsEnabled = false
+        defaults.removeObject(forKey: Self.dailyCourseNotificationsKey)
+        dailyCourseNotificationStatusMessage = ""
+        cancelDailyCourseNotifications()
         var failures = [String]()
 
         do {
@@ -360,7 +414,7 @@ final class AppModel: ObservableObject {
             try holidayStore.clear()
             holidaysByYear.removeAll()
             holidayStatusByYear.removeAll()
-            holidayLoads.removeAll()
+            holidayLoads.reset()
         } catch {
             failures.append("节假日缓存")
         }
@@ -418,6 +472,7 @@ final class AppModel: ObservableObject {
                 defaults.set(termID, forKey: "termID")
                 defaults.set(termStartDate, forKey: "termStartDate")
                 synchronizeSelectedSlots()
+                reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
                 statusMessage = "个人课表已更新，共 \(fetched.courses.count) 门课程"
             } catch {
                 guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
@@ -534,12 +589,12 @@ final class AppModel: ObservableObject {
         if !force, let cached = holidaysByYear[year], Self.isFreshHolidaySnapshot(cached) {
             return
         }
-        guard holidayLoads.insert(year).inserted else { return }
+        guard let loadToken = holidayLoads.begin(year: year) else { return }
         let cached = holidaysByYear[year]
         let generation = localDataGeneration
 
         Task {
-            defer { holidayLoads.remove(year) }
+            defer { holidayLoads.finish(year: year, token: loadToken) }
             do {
                 let fetched = try await holidayClient.fetch(year: year)
                 guard generation == localDataGeneration else { return }
@@ -548,9 +603,14 @@ final class AppModel: ObservableObject {
                 holidayStatusByYear.removeValue(forKey: year)
             } catch {
                 guard generation == localDataGeneration else { return }
-                holidayStatusByYear[year] = cached == nil
-                    ? "节假日数据暂不可用"
-                    : "节假日更新失败，正在使用本地缓存"
+                if cached != nil {
+                    holidayStatusByYear[year] = "节假日更新失败，正在使用本地缓存"
+                } else if let fallback = HolidayOfflineFallback.snapshot(year: year) {
+                    holidaysByYear[year] = fallback
+                    holidayStatusByYear[year] = "节假日更新失败，正在使用内置 2026 年数据"
+                } else {
+                    holidayStatusByYear[year] = "节假日数据暂不可用"
+                }
             }
         }
     }
@@ -587,6 +647,10 @@ final class AppModel: ObservableObject {
 
     private func clearAccountScopedData() throws {
         invalidatePendingAccountRequests()
+        cancelDailyCourseNotifications()
+        if dailyCourseNotificationsEnabled {
+            dailyCourseNotificationStatusMessage = "账号已更改，获取课表后将重新安排摘要"
+        }
         var failed = false
         do {
             try scheduleStore.clear()
@@ -649,6 +713,58 @@ final class AppModel: ObservableObject {
         if usePersonalSchedule { selectedSlots.subtract(personalBusySlots) }
     }
 
+    private func reconcileDailyCourseNotifications(requestPermissionIfNeeded: Bool) {
+        dailyCourseNotificationRevision &+= 1
+        let revision = dailyCourseNotificationRevision
+        guard dailyCourseNotificationsEnabled else {
+            dailyCourseNotificationScheduler.cancelPending(revision: revision)
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let outcome = try await DailyCourseNotificationCoordinator(
+                    scheduler: dailyCourseNotificationScheduler
+                ).reconcile(
+                    enabled: dailyCourseNotificationsEnabled,
+                    requestPermissionIfNeeded: requestPermissionIfNeeded,
+                    hasCredentials: hasSavedPassword,
+                    schedule: schedule,
+                    revision: revision
+                )
+                guard revision == dailyCourseNotificationRevision else { return }
+                switch outcome {
+                case .disabled:
+                    defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
+                case .permissionDenied:
+                    dailyCourseNotificationsEnabled = false
+                    defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
+                    dailyCourseNotificationStatusMessage = "通知权限未开启，未安排课程摘要"
+                case .waitingForSchedule:
+                    defaults.set(true, forKey: Self.dailyCourseNotificationsKey)
+                    dailyCourseNotificationStatusMessage = "每日课程摘要已开启，获取课表后自动安排"
+                case let .scheduled(count):
+                    defaults.set(true, forKey: Self.dailyCourseNotificationsKey)
+                    dailyCourseNotificationStatusMessage = count == 0
+                        ? "每日课程摘要已开启，当前课表没有待通知课程"
+                        : "已安排未来 \(count) 个有课日的课程摘要"
+                }
+            } catch {
+                guard revision == dailyCourseNotificationRevision else { return }
+                dailyCourseNotificationsEnabled = false
+                defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
+                dailyCourseNotificationScheduler.cancelPending(revision: revision)
+                dailyCourseNotificationStatusMessage = "课程摘要安排失败：\(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func cancelDailyCourseNotifications() {
+        dailyCourseNotificationRevision &+= 1
+        dailyCourseNotificationScheduler.cancelPending(revision: dailyCourseNotificationRevision)
+    }
+
     private static var todayString: String {
         dateFormatter.string(from: .now)
     }
@@ -666,6 +782,8 @@ final class AppModel: ObservableObject {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+
+    private static let dailyCourseNotificationsKey = "dailyCourseNotificationsEnabled"
 }
 
 enum DailyRefreshLogic {

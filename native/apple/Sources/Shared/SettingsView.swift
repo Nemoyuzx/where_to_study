@@ -57,6 +57,30 @@ struct SettingsView: View {
                 }
                 Surface {
                     VStack(alignment: .leading, spacing: 12) {
+                        Label("课程提醒", systemImage: "bell")
+                            .font(.headline)
+                        Toggle(
+                            "每天 07:30 发送当日课程摘要",
+                            isOn: Binding(
+                                get: { model.dailyCourseNotificationsEnabled },
+                                set: { enabled in
+                                    model.setDailyCourseNotificationsEnabled(enabled)
+                                }
+                            )
+                        )
+                        .tint(AppTheme.primary)
+                        Text("仅在当天有课时通知；课表更新或账号变更后会自动重排。")
+                            .font(.callout)
+                            .foregroundStyle(AppTheme.secondaryText)
+                        if !model.dailyCourseNotificationStatusMessage.isEmpty {
+                            Text(model.dailyCourseNotificationStatusMessage)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.secondaryText)
+                        }
+                    }
+                }
+                Surface {
+                    VStack(alignment: .leading, spacing: 12) {
                         Label("本地数据", systemImage: "externaldrive")
                             .font(.headline)
                         Text("清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。")
@@ -86,6 +110,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
         }
         .background(AppTheme.background)
+        .accessibilityIdentifier("screen.settings")
         .confirmationDialog(
             "清除本地数据？",
             isPresented: $showingClearDataConfirmation,

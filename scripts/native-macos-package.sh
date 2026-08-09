@@ -11,6 +11,13 @@ ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-macos-universal.zip"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/where-to-study-native-macos.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
+if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]]; then
+  EXPECTED_VERSION="${BASH_REMATCH[1]}"
+else
+  EXPECTED_VERSION=""
+fi
+CONFIGURED_BUILD="$(sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION: "\([^"]*\)"/\1/p' "$APPLE_DIR/project.yml" | head -n 1)"
+
 "$ROOT_DIR/scripts/native-apple-generate.sh"
 xcodebuild \
   -project "$PROJECT" \
@@ -46,6 +53,18 @@ done
 ditto "$SOURCE_APP" "$PACKAGE_APP"
 PACKAGE_BINARY="$PACKAGE_APP/Contents/MacOS/WhereToStudyMac"
 strip -S "$PACKAGE_BINARY"
+
+INFO_PLIST="$PACKAGE_APP/Contents/Info.plist"
+ACTUAL_VERSION="$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")"
+ACTUAL_BUILD="$(plutil -extract CFBundleVersion raw "$INFO_PLIST")"
+if [[ -n "$EXPECTED_VERSION" && "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
+  echo "Native macOS package version $ACTUAL_VERSION does not match release label $RELEASE_LABEL." >&2
+  exit 1
+fi
+if [[ -z "$CONFIGURED_BUILD" || "$ACTUAL_BUILD" != "$CONFIGURED_BUILD" ]]; then
+  echo "Native macOS package build $ACTUAL_BUILD does not match project build $CONFIGURED_BUILD." >&2
+  exit 1
+fi
 
 if rg --text --fixed-strings --quiet --no-ignore --hidden "$ROOT_DIR" "$PACKAGE_APP"; then
   echo "Native macOS package contains a local source path." >&2

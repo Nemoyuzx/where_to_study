@@ -142,7 +142,7 @@ struct HolidaysSnapshot: Codable, Equatable, Sendable {
 }
 
 enum HolidayDefaults {
-    static let source = "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data"
+    static let source = "https://unpkg.com/holiday-calendar@1.3.3/data/CN"
     static let supportedYears = 1900 ... 2100
     static let refreshInterval: TimeInterval = 7 * 24 * 60 * 60
 }

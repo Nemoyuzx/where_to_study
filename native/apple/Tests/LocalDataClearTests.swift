@@ -6,6 +6,20 @@ import XCTest
 #endif
 
 final class LocalDataClearTests: XCTestCase {
+    func testHolidayLoadStateKeepsNewLoadWhenOldLoadFinishesAfterReset() throws {
+        let year = 2026
+        var loads = HolidayLoadState()
+        let oldToken = try XCTUnwrap(loads.begin(year: year))
+
+        loads.reset()
+        let newToken = try XCTUnwrap(loads.begin(year: year))
+        loads.finish(year: year, token: oldToken)
+
+        XCTAssertNil(loads.begin(year: year))
+        loads.finish(year: year, token: newToken)
+        XCTAssertNotNil(loads.begin(year: year))
+    }
+
     func testCredentialSaveDecisionPreservesOnlyTheSameStoredAccount() throws {
         XCTAssertEqual(
             try CredentialSettingsLogic.saveAction(
@@ -135,6 +149,7 @@ final class LocalDataClearTests: XCTestCase {
             scheduleStore: scheduleStore,
             classroomStore: classroomStore,
             holidayStore: holidayStore,
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
             defaults: defaults
         )
         model.selectedBuildings = ["主楼"]
@@ -259,4 +274,14 @@ private final class InMemoryCredentialStore: CredentialStoring, @unchecked Senda
         defer { lock.unlock() }
         credentials = nil
     }
+}
+
+private struct NoopNotificationScheduler: DailyCourseNotificationScheduling {
+    func authorizationStatus() async -> DailyCourseNotificationAuthorization { .denied }
+    func requestAuthorization() async throws -> Bool { false }
+    func replacePending(
+        with _: [DailyCourseNotificationRequest],
+        revision _: UInt64
+    ) async throws {}
+    func cancelPending(revision _: UInt64) {}
 }

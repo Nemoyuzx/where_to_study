@@ -51,7 +51,7 @@
 
 - macOS：菜单栏、关闭主窗口后驻留、每日通知。
 - iOS：本地通知、系统日历导入、后台刷新能力评估。
-- Android：通知、日历 Provider 导入、WorkManager 定时刷新。
+- Android：通知、日历 Provider 导入、`JobScheduler` 定时刷新。
 - Windows：托盘、通知、启动性能和 WebView 内存优化。
 
 ### 阶段 4：发布
@@ -75,8 +75,8 @@
 详细的源码、测试、打包和待完成事项检查点见 [`development-status.md`](development-status.md)。
 
 - Windows/Tauri：功能最完整，凭据已迁移到系统安全存储；React 单文件仍需拆分。
-- macOS/iOS 原生：共享 SwiftUI 已接入移动教务个人课表、Keychain、本地缓存、法定节假日、日/周/月/年视图、当前时间线及当天两校区空教室联动查询；通过共享 fixture 单测、macOS 实际窗口和 iPhone 模拟器人工交互检查。Keychain 保存、重启恢复与清除只完成了使用虚构账号的人工模拟器验证，尚无自动化运行时测试。
-- Android 原生：Kotlin + Android Views 已接入移动教务个人课表、Android Keystore、`AtomicFile` 缓存、法定节假日、日/周/月/年视图、当前时间线及当天两校区空教室联动查询，并通过共享 fixture 单测、Lint、手机和平板实际运行检查。
+- macOS/iOS 原生：共享 SwiftUI 已接入移动教务个人课表、Keychain、本地缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知取消、权限撤销、账号切换和 63 条系统上限已有自动化测试，主导航已通过 iOS UI 测试。
+- Android 原生：Kotlin + Android Views 已接入移动教务个人课表、Android Keystore、`AtomicFile` 缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知持久撤销、有效送达窗口、后台中断和主导航已有自动化测试。
 - 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift 和 Kotlin 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
-- 原生预览限制：平台通知、托盘/菜单栏和系统日历导入尚未全部迁移，当前预览包不能替代功能完整的 Tauri 客户端。
+- 原生预览限制：每日课程摘要已迁移，Apple Developer 签名/公证、iOS 真机分发和 Windows 可信签名链路尚未闭环；当前包仍按测试预览发布。
 - 正式开源发布阻塞项：仓库尚无 `LICENSE`，许可证必须由维护者选择并添加；完成前不得声称项目已经获得开源授权。

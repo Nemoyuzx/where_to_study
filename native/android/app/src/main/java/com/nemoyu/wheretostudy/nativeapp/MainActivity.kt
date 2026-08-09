@@ -23,10 +23,14 @@ data class LocalDataClearResult(val failedItems: List<String>) {
 }
 
 class MainActivity : Activity() {
-    private enum class Destination(val label: String) {
-        PLANNER("空教室"),
-        CALENDAR("教学日历"),
-        SETTINGS("设置"),
+    private enum class Destination(
+        val label: String,
+        val navigationViewID: Int,
+        val pageViewID: Int,
+    ) {
+        PLANNER("空教室", R.id.navigation_planner, R.id.page_planner),
+        CALENDAR("教学日历", R.id.navigation_calendar, R.id.page_calendar),
+        SETTINGS("设置", R.id.navigation_settings, R.id.page_settings),
     }
 
     private lateinit var content: FrameLayout
@@ -52,8 +56,11 @@ class MainActivity : Activity() {
     private var calendarPermissionRequestPending = false
     private var calendarImportToken: Long? = null
     private var pendingCalendarImport: PendingCalendarImport? = null
+    private var notificationPermissionRequestPending = false
+    private var pendingNotificationPermissionCompletion: ((Boolean) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        DailyCourseNotificationRuntimeMode.activateFrom(intent)
         super.onCreate(savedInstanceState)
         calendarPermissionRequestPending = savedInstanceState
             ?.getBoolean(CALENDAR_PERMISSION_PENDING_KEY, false)
@@ -62,6 +69,9 @@ class MainActivity : Activity() {
             ?.getLong(CALENDAR_IMPORT_TOKEN_KEY, NO_CALENDAR_IMPORT_TOKEN)
             ?.takeUnless { it == NO_CALENDAR_IMPORT_TOKEN }
         calendarImportInFlight = calendarImportToken != null
+        notificationPermissionRequestPending = savedInstanceState
+            ?.getBoolean(NOTIFICATION_PERMISSION_PENDING_KEY, false)
+            ?: false
 
         val root = if (resources.configuration.screenWidthDp >= TABLET_BREAKPOINT_DP) {
             tabletLayout()
@@ -73,11 +83,23 @@ class MainActivity : Activity() {
         configureSystemBarIcons()
         navigate(Destination.PLANNER)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
+        DailyCourseSummaryScheduler.reconcile(this)
         refreshClassroomsAtStartup()
         if (calendarPermissionRequestPending && hasCalendarPermissions()) {
             resumeCalendarImportAfterRecreation()
         } else {
             calendarImportToken?.let(::reattachCalendarImport)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val settingChanged = DailyCourseSummaryScheduler.synchronizePermissionState(this)
+        DailyCourseSummaryScheduler.reconcile(this)
+        if (settingChanged && ::content.isInitialized &&
+            selectedDestination == Destination.SETTINGS
+        ) {
+            refreshCurrentPage()
         }
     }
 
@@ -93,6 +115,7 @@ class MainActivity : Activity() {
         }
         addView(content)
         addView(LinearLayout(this@MainActivity).apply {
+            id = R.id.phone_navigation
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(8), dp(6), dp(8), dp(6))
@@ -107,6 +130,7 @@ class MainActivity : Activity() {
         orientation = LinearLayout.HORIZONTAL
         setBackgroundColor(Palette.background)
         addView(LinearLayout(this@MainActivity).apply {
+            id = R.id.tablet_navigation
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(24), dp(18), dp(18))
             setBackgroundColor(Palette.surface)
@@ -135,6 +159,7 @@ class MainActivity : Activity() {
 
     private fun navigationTab(destination: Destination, compact: Boolean): TextView =
         TextView(this).apply {
+            id = destination.navigationViewID
             text = destination.label
             textSize = if (compact) 13f else 15f
             gravity = Gravity.CENTER
@@ -169,28 +194,30 @@ class MainActivity : Activity() {
                 radius = 6,
             )
         }
+        val page = when (destination) {
+            Destination.PLANNER -> PlannerPage(
+                this,
+                preferences,
+                scheduleRepository,
+                classroomRepository,
+            ).build()
+            Destination.CALENDAR -> TeachingCalendarPage(
+                this,
+                scheduleRepository,
+                holidayRepository,
+            ).build()
+            Destination.SETTINGS -> SettingsPage(
+                this,
+                credentialStore,
+                preferences,
+                scheduleRepository,
+                classroomRepository,
+            ).build()
+        }
+        page.id = destination.pageViewID
         content.removeAllViews()
         content.addView(
-            when (destination) {
-                Destination.PLANNER -> PlannerPage(
-                    this,
-                    preferences,
-                    scheduleRepository,
-                    classroomRepository,
-                ).build()
-                Destination.CALENDAR -> TeachingCalendarPage(
-                    this,
-                    scheduleRepository,
-                    holidayRepository,
-                ).build()
-                Destination.SETTINGS -> SettingsPage(
-                    this,
-                    credentialStore,
-                    preferences,
-                    scheduleRepository,
-                    classroomRepository,
-                ).build()
-            },
+            page,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -200,6 +227,53 @@ class MainActivity : Activity() {
 
     fun refreshCurrentPage() {
         navigate(selectedDestination)
+    }
+
+    fun setDailyCourseNotificationsEnabled(
+        enabled: Boolean,
+        onComplete: (Boolean) -> Unit,
+    ) {
+        if (!enabled) {
+            onComplete(DailyCourseSummaryScheduler.revoke(this))
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionRequestPending = true
+            pendingNotificationPermissionCompletion = onComplete
+            runCatching {
+                requestPermissions(
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE,
+                )
+            }.onFailure {
+                notificationPermissionRequestPending = false
+                pendingNotificationPermissionCompletion = null
+                DailyCourseSummaryScheduler.revoke(this)
+                onComplete(false)
+            }
+            return
+        }
+        if (!DailyCourseSummaryNotificationRuntime.hasPermission(this)) {
+            DailyCourseSummaryScheduler.revoke(this)
+            onComplete(false)
+            return
+        }
+        if (!DailyCourseSummaryScheduler.authorize(this)) {
+            onComplete(false)
+            return
+        }
+        DailyCourseSummaryScheduler.reconcile(this)
+        onComplete(true)
+    }
+
+    fun clearDailyCourseNotificationsForAccountChange(): Boolean =
+        DailyCourseSummaryScheduler.revoke(this)
+
+    fun reconcileDailyCourseNotifications() {
+        DailyCourseSummaryScheduler.reconcile(this)
     }
 
     fun importCachedScheduleToSystemCalendar(
@@ -239,6 +313,20 @@ class MainActivity : Activity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
+            val granted = DailyCourseSummaryNotificationRuntime.hasPermission(this)
+            val enabled = granted && DailyCourseSummaryScheduler.authorize(this)
+            if (enabled) {
+                DailyCourseSummaryScheduler.reconcile(this)
+            } else {
+                DailyCourseSummaryScheduler.revoke(this)
+            }
+            notificationPermissionRequestPending = false
+            pendingNotificationPermissionCompletion?.invoke(enabled)
+            pendingNotificationPermissionCompletion = null
+            if (selectedDestination == Destination.SETTINGS) refreshCurrentPage()
+            return
+        }
         if (requestCode != CALENDAR_PERMISSION_REQUEST_CODE) return
         val pending = pendingCalendarImport
         pendingCalendarImport = null
@@ -271,6 +359,10 @@ class MainActivity : Activity() {
             CALENDAR_IMPORT_TOKEN_KEY,
             calendarImportToken ?: NO_CALENDAR_IMPORT_TOKEN,
         )
+        outState.putBoolean(
+            NOTIFICATION_PERMISSION_PENDING_KEY,
+            notificationPermissionRequestPending,
+        )
         super.onSaveInstanceState(outState)
     }
 
@@ -280,6 +372,13 @@ class MainActivity : Activity() {
             runCatching(operation).onFailure { failures += label }
         }
 
+        notificationPermissionRequestPending = false
+        pendingNotificationPermissionCompletion = null
+        if (!DailyCourseSummaryScheduler.revoke(this)) {
+            failures += "课程提醒授权"
+            runCatching(::refreshCurrentPage)
+            return LocalDataClearResult(failures)
+        }
         LocalDataCoordinator.clear {
             clearItem("账号和密码") { credentialStore.clear() }
             clearItem("应用设置") { preferences.clear() }
@@ -308,6 +407,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         pendingCalendarImport = null
+        pendingNotificationPermissionCompletion = null
         scheduleRepository.close()
         classroomRepository.close()
         if (holidayRepositoryDelegate.isInitialized()) {
@@ -435,6 +535,8 @@ class MainActivity : Activity() {
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"
         const val CALENDAR_IMPORT_TOKEN_KEY = "calendar_import_token"
         const val NO_CALENDAR_IMPORT_TOKEN = 0L
+        const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4108
+        const val NOTIFICATION_PERMISSION_PENDING_KEY = "notification_permission_request_pending"
         val CALENDAR_PERMISSIONS = arrayOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,

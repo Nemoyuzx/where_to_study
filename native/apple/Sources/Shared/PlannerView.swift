@@ -35,6 +35,7 @@ struct PlannerView: View {
             .frame(maxWidth: .infinity)
         }
         .background(AppTheme.background)
+        .accessibilityIdentifier("screen.planner")
     }
 
     private var querySurface: some View {
@@ -237,16 +238,12 @@ struct PlannerView: View {
                 } else if model.matchingRooms.isEmpty {
                     emptyMessage("暂无匹配空教室")
                 } else {
-                    ForEach(Array(model.matchingRooms.prefix(Self.maximumVisibleRooms).enumerated()), id: \.element.id) { index, room in
-                        classroomRow(room)
-                        if index < min(model.matchingRooms.count, Self.maximumVisibleRooms) - 1 { Divider() }
-                    }
-                    if model.matchingRooms.count > Self.maximumVisibleRooms {
-                        Text("仅显示前 \(Self.maximumVisibleRooms) 间，请缩小教学楼或节次范围")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 4)
+                    let rooms = model.matchingRooms
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(rooms.indices, id: \.self) { index in
+                            classroomRow(rooms[index])
+                            if index < rooms.count - 1 { Divider() }
+                        }
                     }
                 }
             }
@@ -338,8 +335,6 @@ struct PlannerView: View {
             return "\(label) \(firstSlot.start)-\(lastSlot.end)"
         }.joined(separator: " / ")
     }
-
-    private static let maximumVisibleRooms = 80
 
     private static var todayLabel: String {
         let formatter = DateFormatter()

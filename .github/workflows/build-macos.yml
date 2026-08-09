@@ -39,7 +39,7 @@ jobs:
         run: npm ci
 
       - name: Test Rust core
-        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
 
       - name: Build macOS app
         run: npm run tauri -- build --target aarch64-apple-darwin --features custom-protocol --ci

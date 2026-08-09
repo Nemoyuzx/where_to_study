@@ -8,6 +8,12 @@ APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 RELEASE_LABEL="${1:-v$APP_VERSION}"
 ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-macos-arm64.zip"
 
+if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]] &&
+  [[ "${BASH_REMATCH[1]}" != "$APP_VERSION" ]]; then
+  echo "Release label $RELEASE_LABEL does not match app version $APP_VERSION." >&2
+  exit 1
+fi
+
 if [[ ! -d "$APP_PATH" ]]; then
   echo "macOS app bundle not found: $APP_PATH" >&2
   echo "Run npm run tauri:build first." >&2
@@ -28,6 +34,11 @@ if ! rg --text --fixed-strings --quiet 'https://jwglweixin.bupt.edu.cn' "$APP_PA
 fi
 
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
+ACTUAL_VERSION="$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")"
+if [[ "$ACTUAL_VERSION" != "$APP_VERSION" ]]; then
+  echo "macOS app bundle version $ACTUAL_VERSION does not match package version $APP_VERSION." >&2
+  exit 1
+fi
 EXECUTABLE_NAME="$(plutil -extract CFBundleExecutable raw "$INFO_PLIST")"
 APP_BINARY="$APP_PATH/Contents/MacOS/$EXECUTABLE_NAME"
 if [[ ! -f "$APP_BINARY" ]] || [[ " $(lipo -archs "$APP_BINARY") " != *" arm64 "* ]]; then

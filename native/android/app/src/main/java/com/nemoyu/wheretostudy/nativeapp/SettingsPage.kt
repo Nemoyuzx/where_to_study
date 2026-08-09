@@ -17,6 +17,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -121,6 +122,9 @@ class SettingsPage(
                 }
             }
             if (CredentialUpdateLogic.changesAccount(savedCredentials, credentials)) {
+                check(activity.clearDailyCourseNotificationsForAccountChange()) {
+                    "无法可靠撤销旧账号的课程提醒，设置未保存。"
+                }
                 LocalDataCoordinator.clear {
                     scheduleRepository.clearLocalDataCoordinated()
                     classroomRepository.clearLocalDataCoordinated()
@@ -196,6 +200,7 @@ class SettingsPage(
                     button.text = "获取/刷新个人课表"
                     button.isEnabled = true
                     result.onSuccess { schedule ->
+                        activity.reconcileDailyCourseNotifications()
                         Toast.makeText(
                             activity,
                             "个人课表已更新，共 ${schedule.courses.size} 门课程",
@@ -217,6 +222,36 @@ class SettingsPage(
             textSize = 12f
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(12), 0, 0)
+        })
+        addView(spacer(activity, 20))
+        addView(sectionTitle(activity, "课程提醒"))
+        addView(Switch(activity).apply {
+            text = activity.getString(R.string.daily_course_notification_toggle)
+            textSize = 15f
+            setTextColor(Palette.text)
+            isChecked = preferences.dailyCourseNotificationsEnabled
+            minHeight = activity.dp(48)
+            setPadding(0, 0, 0, 0)
+            setOnClickListener {
+                val requested = isChecked
+                isEnabled = false
+                activity.setDailyCourseNotificationsEnabled(requested) { enabled ->
+                    isChecked = enabled
+                    isEnabled = true
+                    val message = when {
+                        enabled -> "每日课程摘要已开启"
+                        requested -> "通知权限未开启，无法启用课程摘要"
+                        else -> "每日课程摘要已关闭"
+                    }
+                    Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+        addView(TextView(activity).apply {
+            text = activity.getString(R.string.daily_course_notification_description)
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setPadding(0, activity.dp(4), 0, 0)
         })
         addView(spacer(activity, 18))
         addView(TextView(activity).apply {

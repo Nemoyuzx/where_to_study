@@ -10,6 +10,13 @@ RELEASE_LABEL="${1:-v0.1.1-native-preview}"
 ARCHIVE_PATH="$DERIVED_DATA/WhereToStudyiOS.xcarchive"
 PACKAGE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-ios-unsigned.xcarchive.zip"
 
+if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]]; then
+  EXPECTED_VERSION="${BASH_REMATCH[1]}"
+else
+  EXPECTED_VERSION=""
+fi
+CONFIGURED_BUILD="$(sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION: "\([^"]*\)"/\1/p' "$APPLE_DIR/project.yml" | head -n 1)"
+
 "$ROOT_DIR/scripts/native-apple-generate.sh"
 rm -rf "$ARCHIVE_PATH"
 
@@ -48,6 +55,16 @@ if [[ ! -f "$APP/PrivacyInfo.xcprivacy" ]]; then
   exit 1
 fi
 plutil -lint "$APP/Info.plist" "$APP/PrivacyInfo.xcprivacy" >/dev/null
+ACTUAL_VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Info.plist")"
+ACTUAL_BUILD="$(plutil -extract CFBundleVersion raw "$APP/Info.plist")"
+if [[ -n "$EXPECTED_VERSION" && "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
+  echo "Native iOS archive version $ACTUAL_VERSION does not match release label $RELEASE_LABEL." >&2
+  exit 1
+fi
+if [[ -z "$CONFIGURED_BUILD" || "$ACTUAL_BUILD" != "$CONFIGURED_BUILD" ]]; then
+  echo "Native iOS archive build $ACTUAL_BUILD does not match project build $CONFIGURED_BUILD." >&2
+  exit 1
+fi
 if [[ "$(plutil -extract ITSAppUsesNonExemptEncryption raw "$APP/Info.plist")" != "false" ]]; then
   echo "Native iOS archive does not declare ITSAppUsesNonExemptEncryption=false." >&2
   exit 1

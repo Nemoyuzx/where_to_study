@@ -19,6 +19,7 @@ struct RootView: View {
                 Divider()
                 List(AppSection.allCases, selection: $model.selectedSection) { section in
                     Label(section.title, systemImage: section.systemImage)
+                        .accessibilityIdentifier(section.accessibilityIdentifier)
                         .tag(section)
                 }
                 .listStyle(.sidebar)
@@ -32,7 +33,10 @@ struct RootView: View {
         TabView(selection: $model.selectedSection) {
             ForEach(AppSection.allCases) { section in
                 sectionView(section)
-                    .tabItem { Label(section.title, systemImage: section.systemImage) }
+                    .tabItem {
+                        Label(section.title, systemImage: section.systemImage)
+                            .accessibilityIdentifier(section.accessibilityIdentifier)
+                    }
                     .tag(section)
             }
         }
@@ -48,6 +52,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active {
                 model.refreshClassroomsIfNeeded()
+                model.refreshDailyCourseNotificationAuthorization()
             }
         }
         .preferredColorScheme(.light)

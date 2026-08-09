@@ -66,6 +66,62 @@ internal class HolidayObserverRegistry {
     }
 }
 
+internal object HolidayOfflineFallback {
+    fun snapshot(
+        year: Int,
+        fetchedAt: String = timestamp(),
+    ): HolidaysSnapshot? {
+        if (year != 2026) return null
+        val items = buildList {
+            addRange("元旦", "2026-01-01", "2026-01-03", "holiday")
+            addRange("元旦补班", "2026-01-04", "2026-01-04", "workday")
+            addRange("春节补班", "2026-02-14", "2026-02-14", "workday")
+            addRange("春节", "2026-02-15", "2026-02-23", "holiday")
+            addRange("春节补班", "2026-02-28", "2026-02-28", "workday")
+            addRange("清明节", "2026-04-04", "2026-04-06", "holiday")
+            addRange("劳动节", "2026-05-01", "2026-05-05", "holiday")
+            addRange("劳动节补班", "2026-05-09", "2026-05-09", "workday")
+            addRange("端午节", "2026-06-19", "2026-06-21", "holiday")
+            addRange("中秋节", "2026-09-25", "2026-09-27", "holiday")
+            addRange("国庆节补班", "2026-09-20", "2026-09-20", "workday")
+            addRange("国庆节", "2026-10-01", "2026-10-07", "holiday")
+            addRange("国庆节补班", "2026-10-10", "2026-10-10", "workday")
+        }
+        return HolidaysSnapshot(
+            year = year,
+            source = HolidayMetadata.fallbackSource,
+            fetchedAt = fetchedAt,
+            items = items,
+        ).also(HolidaySnapshotValidator::validate)
+    }
+
+    private fun MutableList<HolidayItem>.addRange(
+        name: String,
+        start: String,
+        end: String,
+        type: String,
+    ) {
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+            timeZone = SHANGHAI
+            isLenient = false
+        }
+        val startDate = checkNotNull(formatter.parse(start))
+        val endDate = checkNotNull(formatter.parse(end))
+        val calendar = java.util.Calendar.getInstance(SHANGHAI).apply { time = startDate }
+        while (!calendar.time.after(endDate)) {
+            add(HolidayItem(formatter.format(calendar.time), name, type))
+            calendar.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        }
+    }
+
+    private fun timestamp(date: Date = Date()): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
+            timeZone = SHANGHAI
+        }.format(date)
+
+    private val SHANGHAI = TimeZone.getTimeZone("Asia/Shanghai")
+}
+
 class HolidayRepository(
     context: Context,
     private val client: HolidayClient = HolidayClient(),
@@ -114,7 +170,7 @@ class HolidayRepository(
         val refreshGeneration = LocalDataCoordinator.snapshot()
         if (closed.get()) return
         if (year !in HolidayMetadata.minimumYear..HolidayMetadata.maximumYear) return
-        val cached = snapshot(year, refreshGeneration)
+        val cached = snapshot(year, refreshGeneration)?.takeIf { it.items.isNotEmpty() }
         if (!LocalDataCoordinator.isCurrent(refreshGeneration)) return
         if (!force && cached != null && isFresh(cached)) return
         if (!failureCooldown.shouldAttempt(year, force)) return
@@ -138,10 +194,17 @@ class HolidayRepository(
                         runCatching {
                             LocalDataCoordinator.withCurrent(refreshGeneration) {
                                 failureCooldown.recordFailure(year)
-                                statusByYear[year] = if (cached == null) {
-                                    "节假日数据暂不可用"
-                                } else {
-                                    "节假日更新失败，正在使用本地缓存"
+                                statusByYear[year] = when {
+                                    cached != null -> "节假日更新失败，正在使用本地缓存"
+                                    else -> {
+                                        val fallback = HolidayOfflineFallback.snapshot(year)
+                                        if (fallback == null) {
+                                            "节假日数据暂不可用"
+                                        } else {
+                                            snapshots[year] = fallback
+                                            "节假日更新失败，正在使用内置数据"
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -187,6 +250,7 @@ class HolidayRepository(
     }
 
     private fun isFresh(snapshot: HolidaysSnapshot, now: Date = Date()): Boolean {
+        if (snapshot.source == HolidayMetadata.fallbackSource) return false
         val fetchedAt = timestampParser().parse(snapshot.fetchedAt) ?: return false
         val age = now.time - fetchedAt.time
         return age in 0..HolidayMetadata.refreshIntervalMillis

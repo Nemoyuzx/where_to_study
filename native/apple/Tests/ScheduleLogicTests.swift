@@ -140,22 +140,23 @@ final class ScheduleLogicTests: XCTestCase {
             fetchedAt: expected.fetchedAt
         )
 
+        XCTAssertEqual(expected.source, HolidayDefaults.source)
         XCTAssertEqual(actual, expected)
     }
 
-    func testHolidayParserKeepsOnlyRequestedYearForCrossYearRange() throws {
+    func testHolidayParserRejectsMismatchedItemYear() {
         let source = """
-        [{"name":"跨年假期","range":["2025-12-31","2026-01-02"],"type":"holiday"}]
+        {"year":2026,"region":"CN","dates":[
+          {"date":"2025-12-31","name":"跨年假期","type":"public_holiday"}
+        ]}
         """.data(using: .utf8)!
 
-        let snapshot = try HolidaySourceParser.parse(
+        XCTAssertThrowsError(try HolidaySourceParser.parse(
             data: source,
             year: 2026,
             source: HolidayDefaults.source,
             fetchedAt: "2026-01-01T00:00:00+08:00"
-        )
-
-        XCTAssertEqual(snapshot.items.map(\.date), ["2026-01-01", "2026-01-02"])
+        ))
     }
 
     func testHolidayParserRejectsOversizedOrMalformedSourceData() {
@@ -168,7 +169,9 @@ final class ScheduleLogicTests: XCTestCase {
         ))
 
         let malformedDate = """
-        [{"name":"测试","range":["2026-1-01"],"type":"holiday"}]
+        {"year":2026,"region":"CN","dates":[
+          {"date":"2026-1-01","name":"测试","type":"public_holiday"}
+        ]}
         """.data(using: .utf8)!
         XCTAssertThrowsError(try HolidaySourceParser.parse(
             data: malformedDate,
@@ -177,31 +180,23 @@ final class ScheduleLogicTests: XCTestCase {
             fetchedAt: "2026-01-01T00:00:00+08:00"
         ))
 
-        let malformedMiddleDate = """
-        [{"name":"测试","range":["2026-01-01","2026-1-02","2026-01-03"],"type":"holiday"}]
-        """.data(using: .utf8)!
+        let malformedEnvelope = #"{"year":2026,"region":"CN","dates":{}}"#.data(using: .utf8)!
         XCTAssertThrowsError(try HolidaySourceParser.parse(
-            data: malformedMiddleDate,
-            year: 2026,
-            source: HolidayDefaults.source,
-            fetchedAt: "2026-01-01T00:00:00+08:00"
-        ))
-
-        let longRange = """
-        [{"name":"测试","range":["2026-01-01","2026-02-02"],"type":"holiday"}]
-        """.data(using: .utf8)!
-        XCTAssertThrowsError(try HolidaySourceParser.parse(
-            data: longRange,
+            data: malformedEnvelope,
             year: 2026,
             source: HolidayDefaults.source,
             fetchedAt: "2026-01-01T00:00:00+08:00"
         ))
 
         let tooManyRecords = Array(
-            repeating: ["name": "测试", "range": ["2026-01-01"], "type": "holiday"],
+            repeating: ["date": "2026-01-01", "name": "测试", "type": "public_holiday"],
             count: HolidaySourceLimits.maximumRecords + 1
         )
-        let tooManyRecordsData = try! JSONSerialization.data(withJSONObject: tooManyRecords)
+        let tooManyRecordsData = try! JSONSerialization.data(withJSONObject: [
+            "year": 2026,
+            "region": "CN",
+            "dates": tooManyRecords
+        ])
         XCTAssertThrowsError(try HolidaySourceParser.parse(
             data: tooManyRecordsData,
             year: 2026,
@@ -210,11 +205,15 @@ final class ScheduleLogicTests: XCTestCase {
         ))
 
         let longName = String(repeating: "节", count: HolidaySourceLimits.maximumNameLength + 1)
-        let longNameData = try! JSONSerialization.data(withJSONObject: [[
-            "name": longName,
-            "range": ["2026-01-01"],
-            "type": "holiday"
-        ]])
+        let longNameData = try! JSONSerialization.data(withJSONObject: [
+            "year": 2026,
+            "region": "CN",
+            "dates": [[
+                "date": "2026-01-01",
+                "name": longName,
+                "type": "public_holiday"
+            ]]
+        ])
         XCTAssertThrowsError(try HolidaySourceParser.parse(
             data: longNameData,
             year: 2026,

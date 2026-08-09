@@ -3,7 +3,7 @@ package com.nemoyu.wheretostudy.nativeapp
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,39 +12,66 @@ import org.junit.Test
 
 class HolidaySourceBoundaryTest {
     @Test
-    fun emptyNameAndRangeAreRejectedBeforeUnknownTypeIsSkipped() {
+    fun emptyNameAndInvalidDateAreRejectedBeforeUnknownTypeIsSkipped() {
         assertHolidayError("节假日服务返回的名称不能为空。") {
-            parse("""[{"name":"  ","range":["2026-01-01"],"type":"future-type"}]""")
+            parse(source("""[{"date":"2026-01-01","name":"  ","type":"future-type"}]"""))
         }
-        assertHolidayError("节假日服务返回的日期范围不能为空。") {
-            parse("""[{"name":"测试","range":[],"type":"future-type"}]""")
+        assertHolidayError("节假日服务返回的日期格式不正确。") {
+            parse(source("""[{"date":"invalid","name":"测试","type":"future-type"}]"""))
         }
     }
 
     @Test
-    fun validUnknownTypeIsIgnored() {
-        val snapshot = parse(
-            """[{"name":"测试","range":["2026-01-01"],"type":"future-type"}]""",
-        )
-
-        assertTrue(snapshot.items.isEmpty())
+    fun emptyAndAllUnknownTypeResponsesAreRejected() {
+        assertHolidayError("节假日服务未返回可识别的法定节假日记录。") {
+            parse(source("[]"))
+        }
+        assertHolidayError("节假日服务未返回可识别的法定节假日记录。") {
+            parse(source("""[{"date":"2026-01-01","name":"测试","type":"future-type"}]"""))
+        }
     }
 
     @Test
-    fun transportMetadataUsesRawHttpsAndBuildVersion() {
+    fun unknownTypesAreIgnoredWhenRecognizedRecordsRemain() {
+        val snapshot = parse(source("""[
+            {"date":"2026-01-01","name":"测试","type":"future-type"},
+            {"date":"2026-01-02","name":"元旦","type":"public_holiday"}
+        ]"""))
+
+        assertEquals(listOf(HolidayItem("2026-01-02", "元旦", "holiday")), snapshot.items)
+    }
+
+    @Test
+    fun transportMetadataUsesLicensedHttpsSourceAndBuildVersion() {
         assertEquals(
-            "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data",
+            "https://unpkg.com/holiday-calendar@1.3.3/data/CN",
             HolidayMetadata.source,
         )
         assertEquals("WhereToStudyNative/0.1.1", HolidayUserAgent.value)
     }
 
+    @Test
+    fun mismatchedYearAndMalformedEnvelopeAreRejected() {
+        assertHolidayError("节假日数据年份与请求不一致。") {
+            parse("""{"year":2025,"region":"CN","dates":[]}""")
+        }
+        assertHolidayError("节假日服务返回的日期列表格式不正确。") {
+            parse("""{"year":2026,"region":"CN","dates":{}}""")
+        }
+        assertHolidayError("节假日数据包含其他年份的日期。") {
+            parse(source("""[{"date":"2025-12-31","name":"跨年","type":"public_holiday"}]"""))
+        }
+    }
+
     private fun parse(value: String): HolidaysSnapshot = HolidaySourceParser.parse(
-        payload = JSONArray(value),
+        payload = JSONObject(value),
         year = 2026,
         source = HolidayMetadata.source,
         fetchedAt = "2026-01-05T08:00:00+08:00",
     )
+
+    private fun source(dates: String): String =
+        """{"year":2026,"region":"CN","dates":$dates}"""
 
     private fun assertHolidayError(message: String, block: () -> Unit) {
         val error = runCatching(block).exceptionOrNull()
@@ -148,6 +175,27 @@ class HolidayStoreBoundaryTest {
         assertFalse(File(directory, "holidays_2026.json").exists())
     }
 
+    @Test
+    fun rejectedRemotePayloadCannotReplaceValidCache() {
+        val store = HolidayStore(directory)
+        val cached = validSnapshot()
+        store.save(cached)
+
+        val failure = runCatching {
+            HolidaySourceParser.parse(
+                payload = JSONObject(
+                    """{"year":2026,"region":"CN","dates":[{"date":"2026-01-01","name":"未知","type":"future-type"}]}""",
+                ),
+                year = 2026,
+                source = HolidayMetadata.source,
+                fetchedAt = "2026-08-09T08:00:00+08:00",
+            ).also(store::save)
+        }.exceptionOrNull()
+
+        assertTrue(failure is HolidayClientException)
+        assertEquals(cached, store.load(2026))
+    }
+
     private fun validSnapshot(): HolidaysSnapshot = HolidaysSnapshot(
         year = 2026,
         source = HolidayMetadata.source,
@@ -159,5 +207,72 @@ class HolidayStoreBoundaryTest {
         val error = runCatching(block).exceptionOrNull()
         assertTrue(error is HolidayClientException)
         assertEquals(message, error?.message)
+    }
+}
+
+class HolidayOfflineFallbackTest {
+    @Test
+    fun fallback2026MatchesCacheContractAndRustDataset() {
+        val snapshot = requireNotNull(
+            HolidayOfflineFallback.snapshot(2026, "2026-08-09T08:00:00+08:00"),
+        )
+
+        assertEquals(2026, snapshot.year)
+        assertEquals(HolidayMetadata.fallbackSource, snapshot.source)
+        assertEquals(EXPECTED_2026_ITEMS, snapshot.items)
+        assertEquals(snapshot, HolidaysJsonCodec.decode(HolidaysJsonCodec.encode(snapshot)))
+    }
+
+    @Test
+    fun fallbackIsUnavailableOutside2026() {
+        assertEquals(null, HolidayOfflineFallback.snapshot(2025))
+        assertEquals(null, HolidayOfflineFallback.snapshot(2027))
+    }
+
+    private companion object {
+        val EXPECTED_2026_ITEMS = """
+            2026-01-01|元旦|holiday
+            2026-01-02|元旦|holiday
+            2026-01-03|元旦|holiday
+            2026-01-04|元旦补班|workday
+            2026-02-14|春节补班|workday
+            2026-02-15|春节|holiday
+            2026-02-16|春节|holiday
+            2026-02-17|春节|holiday
+            2026-02-18|春节|holiday
+            2026-02-19|春节|holiday
+            2026-02-20|春节|holiday
+            2026-02-21|春节|holiday
+            2026-02-22|春节|holiday
+            2026-02-23|春节|holiday
+            2026-02-28|春节补班|workday
+            2026-04-04|清明节|holiday
+            2026-04-05|清明节|holiday
+            2026-04-06|清明节|holiday
+            2026-05-01|劳动节|holiday
+            2026-05-02|劳动节|holiday
+            2026-05-03|劳动节|holiday
+            2026-05-04|劳动节|holiday
+            2026-05-05|劳动节|holiday
+            2026-05-09|劳动节补班|workday
+            2026-06-19|端午节|holiday
+            2026-06-20|端午节|holiday
+            2026-06-21|端午节|holiday
+            2026-09-25|中秋节|holiday
+            2026-09-26|中秋节|holiday
+            2026-09-27|中秋节|holiday
+            2026-09-20|国庆节补班|workday
+            2026-10-01|国庆节|holiday
+            2026-10-02|国庆节|holiday
+            2026-10-03|国庆节|holiday
+            2026-10-04|国庆节|holiday
+            2026-10-05|国庆节|holiday
+            2026-10-06|国庆节|holiday
+            2026-10-07|国庆节|holiday
+            2026-10-10|国庆节补班|workday
+        """.trimIndent().lineSequence().map { line ->
+            val (date, name, type) = line.split('|')
+            HolidayItem(date, name, type)
+        }.toList()
     }
 }

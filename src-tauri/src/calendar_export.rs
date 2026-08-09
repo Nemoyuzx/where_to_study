@@ -11,12 +11,27 @@ use crate::models::{Course, ScheduleResponse};
 
 const CALENDAR_FILE_NAME: &str = "where-to-study-personal-courses.ics";
 
+pub const fn is_supported() -> bool {
+    cfg!(target_os = "macos")
+}
+
 fn export_path(app: &AppHandle) -> ServiceResult<PathBuf> {
     let directory = app
         .path()
         .app_cache_dir()
         .map_err(|error| ServiceError::new(format!("无法定位日历导出目录：{error}")))?;
     Ok(directory.join(CALENDAR_FILE_NAME))
+}
+
+pub fn clear(app: &AppHandle) -> ServiceResult<()> {
+    let path = export_path(app)?;
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(ServiceError::new(format!(
+            "无法清除本地日历导出文件：{error}"
+        ))),
+    }
 }
 
 fn escape_ics_text(value: &str) -> String {
@@ -128,6 +143,10 @@ fn build_ics(schedule: &ScheduleResponse) -> ServiceResult<String> {
 }
 
 pub fn export_and_open(app: &AppHandle, schedule: &ScheduleResponse) -> ServiceResult<PathBuf> {
+    if !is_supported() {
+        return Err(ServiceError::new("当前平台不支持导入苹果日历。"));
+    }
+
     let path = export_path(app)?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)

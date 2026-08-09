@@ -6,10 +6,12 @@ use crate::error::{ServiceError, ServiceResult};
 const SERVICE_NAME: &str = "com.nemoyu.wheretostudy";
 const ENTRY_NAME: &str = "default-account";
 
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Credentials {
     pub account: String,
     pub password: String,
+    #[serde(default)]
+    pub account_scope: String,
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -243,6 +245,9 @@ mod tests {
         let credentials = Credentials {
             account: "fixture-account".to_string(),
             password: "fixture-password".to_string(),
+            account_scope:
+                "opaque-v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    .to_string(),
         };
         let payload = Zeroizing::new(
             serde_json::to_string(&credentials).expect("serialize fixture credentials"),

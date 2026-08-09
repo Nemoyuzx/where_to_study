@@ -18,6 +18,7 @@
 - macOS/iOS：账号和密码存入 Keychain；原生客户端普通偏好存入 `UserDefaults`，Tauri 客户端存入应用配置目录。
 - Android：账号和密码使用 Android Keystore 保护后存储；原生客户端普通偏好存入 `SharedPreferences`，Tauri 客户端存入应用配置目录。
 - 课程和空教室缓存不得包含密码、token 或完整响应头。
+- 课程通知只读取本地课表；关闭提醒、切换账号或清除本地数据时必须先持久撤销调度权限，再清理系统任务和已显示摘要。
 - Tauri `load_saved_settings` 的响应不得包含密码，只能返回 `has_saved_password`；WebView 中的密码输入仅作为一次性替换值。
 - 旧版普通设置中的明文凭据必须先通过同目录临时文件、所有者权限和原子替换完成脱敏，再写入系统凭据存储；后续步骤失败不得把明文写回。
 
@@ -28,7 +29,7 @@
 - 错误信息面向用户时不得回显凭据。
 - 教务请求只使用 `jwglweixin.bupt.edu.cn` 的 HTTPS 端点；客户端不得为该数据源开放明文传输例外。
 - 个人课表请求失败时必须原样返回移动教务链路的错误，不得自动切换到旧教务或其他数据源。
-- 节假日数据只通过 `raw.githubusercontent.com` 的 HTTPS 地址读取，不为其开放明文传输例外；其来源归属和许可证边界以根目录 README 为准。
+- 节假日数据只通过固定版本的 `unpkg.com/holiday-calendar@1.3.3/data/CN/{year}.json` HTTPS 地址按年份读取，不为其开放明文传输例外；来源说明见根目录 README，MIT 许可文本与归属记录见 `THIRD_PARTY_NOTICES.md`。
 
 ## Apple 隐私清单
 
@@ -43,5 +44,6 @@
 2. tracked-file 扫描无真实凭据。
 3. release 产物不包含开发日志、本地路径或未使用调试资源。
 4. 生成 SHA-256 校验文件。
-5. 发布说明注明平台、架构、最低系统版本和签名状态。
-6. 许可证由仓库所有者明确选择后加入根目录。
+5. Android APK 与 AAB 的签名证书必须同时匹配 `native/android/release-certificate.sha256`。
+6. 发布说明注明平台、架构、最低系统版本和签名状态。
+7. 许可证由仓库所有者明确选择后加入根目录。

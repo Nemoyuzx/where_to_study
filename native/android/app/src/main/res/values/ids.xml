@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="phone_navigation" type="id" />
+    <item name="tablet_navigation" type="id" />
+    <item name="navigation_planner" type="id" />
+    <item name="navigation_calendar" type="id" />
+    <item name="navigation_settings" type="id" />
+    <item name="page_planner" type="id" />
+    <item name="page_calendar" type="id" />
+    <item name="page_settings" type="id" />
+</resources>

@@ -10,7 +10,7 @@ final class MacAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct WhereToStudyMacApp: App {
     @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var appDelegate
-    @StateObject private var model = AppModel()
+    @StateObject private var model = AppLaunchConfiguration.makeModel()
 
     var body: some Scene {
         Window("Where To Study", id: "main") {

@@ -3,9 +3,13 @@ package com.nemoyu.wheretostudy.nativeapp
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.AbsListView
+import android.widget.BaseAdapter
+import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
+import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import java.text.SimpleDateFormat
@@ -28,13 +32,19 @@ class PlannerPage(
     }
     private val selectedBuildings = mutableSetOf<String>()
     private var usePersonalSchedule = true
-    private lateinit var resultsContainer: LinearLayout
+    private lateinit var resultsAdapter: ClassroomResultsAdapter
     private lateinit var summaryContainer: LinearLayout
 
-    fun build(): ScrollView = ScrollView(activity).apply {
-        isFillViewport = true
+    fun build(): ListView = ListView(activity).apply {
         setBackgroundColor(Palette.background)
-        addView(verticalPage(activity).apply {
+        divider = null
+        dividerHeight = 0
+        isVerticalScrollBarEnabled = true
+        addHeaderView(verticalPage(activity).apply {
+            layoutParams = AbsListView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
                 timeZone = shanghai
             }.format(Date())
@@ -43,12 +53,22 @@ class PlannerPage(
             addSection(slotSurface())
             addSection(todayCoursesSurface())
             addSection(buildingsSurface())
-            resultsContainer = surface(activity)
-            addSection(resultsContainer)
+            addView(surface(activity).apply {
+                addView(sectionTitle(activity, "空教室结果"))
+            })
+        }, null, false)
+        addFooterView(verticalPage(activity).apply {
+            layoutParams = AbsListView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
+            addView(spacer(activity, 8))
             summaryContainer = surface(activity)
             addView(summaryContainer)
-            renderResultsAndSummary()
-        })
+        }, null, false)
+        resultsAdapter = ClassroomResultsAdapter()
+        adapter = resultsAdapter
+        renderResultsAndSummary()
     }
 
     private fun LinearLayout.addSection(view: LinearLayout) {
@@ -324,43 +344,31 @@ class PlannerPage(
     }
 
     private fun renderResultsAndSummary() {
-        if (::resultsContainer.isInitialized) renderResults()
+        if (::resultsAdapter.isInitialized) renderResults()
         if (::summaryContainer.isInitialized) renderSummary()
     }
 
     private fun renderResults() {
-        resultsContainer.removeAllViews()
-        resultsContainer.addView(sectionTitle(activity, "空教室结果"))
-        when {
+        val presentation = when {
             classroomRepository.cache == null -> {
-                resultsContainer.addView(emptyMessage("暂无本地空教室数据"))
+                ClassroomResultsPresentation.empty("暂无本地空教室数据")
             }
             selectedBuildings.isEmpty() -> {
-                resultsContainer.addView(emptyMessage("未选择教学楼"))
+                ClassroomResultsPresentation.empty("未选择教学楼")
             }
             selectedSlots.isEmpty() -> {
-                resultsContainer.addView(emptyMessage("未选择节次"))
+                ClassroomResultsPresentation.empty("未选择节次")
             }
             else -> {
                 val rooms = matchingRooms()
                 if (rooms.isEmpty()) {
-                    resultsContainer.addView(emptyMessage("暂无匹配空教室"))
+                    ClassroomResultsPresentation.empty("暂无匹配空教室")
                 } else {
-                    rooms.take(MAX_VISIBLE_ROOMS).forEach { room ->
-                        resultsContainer.addView(classroomRow(room))
-                    }
-                    if (rooms.size > MAX_VISIBLE_ROOMS) {
-                        resultsContainer.addView(TextView(activity).apply {
-                            text = activity.getString(R.string.room_result_limit_format, MAX_VISIBLE_ROOMS)
-                            textSize = 12f
-                            setTextColor(Palette.muted)
-                            gravity = Gravity.CENTER
-                            setPadding(0, activity.dp(8), 0, 0)
-                        })
-                    }
+                    ClassroomResultsPresentation.from(rooms)
                 }
             }
         }
+        resultsAdapter.submit(presentation)
     }
 
     private fun renderSummary() {
@@ -460,37 +468,6 @@ class PlannerPage(
         }
     }
 
-    private fun classroomRow(room: Classroom): LinearLayout = LinearLayout(activity).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
-        background = roundedBackground(activity, Palette.background, Palette.border, radius = 4)
-        layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { bottomMargin = activity.dp(8) }
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(TextView(activity).apply {
-                text = room.name
-                textSize = 15f
-                setTextColor(Palette.text)
-                setTypeface(typeface, Typeface.BOLD)
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(TextView(activity).apply {
-                text = room.size?.let { "$it 座" } ?: "座位未知"
-                textSize = 12f
-                setTextColor(Palette.muted)
-            })
-        })
-        addView(TextView(activity).apply {
-            text = selectedRanges()
-            textSize = 12f
-            setTextColor(Palette.primaryDark)
-            setPadding(0, activity.dp(5), 0, 0)
-        })
-    }
-
     private fun emptyMessage(message: String): TextView = TextView(activity).apply {
         text = message
         textSize = 14f
@@ -534,6 +511,113 @@ class PlannerPage(
     }
 
     private companion object {
-        const val MAX_VISIBLE_ROOMS = 80
+        const val ROOM_VIEW_TYPE = 0
+        const val MESSAGE_VIEW_TYPE = 1
+    }
+
+    private inner class ClassroomResultsAdapter : BaseAdapter() {
+        private var presentation = ClassroomResultsPresentation.empty("暂无本地空教室数据")
+
+        fun submit(value: ClassroomResultsPresentation) {
+            presentation = value
+            notifyDataSetChanged()
+        }
+
+        override fun getCount(): Int = presentation.rooms.size +
+            if (presentation.message != null) 1 else 0
+
+        override fun getItem(position: Int): Any? = presentation.rooms.getOrNull(position)
+
+        override fun getItemId(position: Int): Long = position.toLong()
+
+        override fun getViewTypeCount(): Int = 2
+
+        override fun getItemViewType(position: Int): Int =
+            if (position < presentation.rooms.size) ROOM_VIEW_TYPE else MESSAGE_VIEW_TYPE
+
+        override fun isEnabled(position: Int): Boolean = false
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+            if (getItemViewType(position) == ROOM_VIEW_TYPE) {
+                val holder = (convertView?.tag as? ClassroomRowHolder)
+                    ?: createClassroomRow(parent).also { it.root.tag = it }
+                holder.bind(presentation.rooms[position])
+                holder.root
+            } else {
+                val message = convertView as? TextView ?: TextView(activity).apply {
+                    textSize = 13f
+                    gravity = Gravity.CENTER
+                    setTextColor(Palette.muted)
+                    setPadding(activity.dp(20), activity.dp(12), activity.dp(20), activity.dp(20))
+                    minHeight = activity.dp(72)
+                }
+                message.text = presentation.message
+                message
+            }
+
+        private fun createClassroomRow(parent: ViewGroup): ClassroomRowHolder {
+            val root = FrameLayout(parent.context).apply {
+                setPadding(activity.dp(20), 0, activity.dp(20), activity.dp(8))
+            }
+            val card = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
+                background = roundedBackground(activity, Palette.surface, Palette.border, radius = 4)
+            }
+            root.addView(
+                card,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            val heading = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            card.addView(heading)
+            val name = TextView(parent.context).apply {
+                textSize = 15f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            heading.addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val size = TextView(parent.context).apply {
+                textSize = 12f
+                setTextColor(Palette.muted)
+            }
+            heading.addView(size)
+            val ranges = TextView(parent.context).apply {
+                textSize = 12f
+                setTextColor(Palette.primaryDark)
+                setPadding(0, activity.dp(5), 0, 0)
+            }
+            card.addView(ranges)
+            return ClassroomRowHolder(root, name, size, ranges)
+        }
+
+        private inner class ClassroomRowHolder(
+            val root: FrameLayout,
+            private val name: TextView,
+            private val size: TextView,
+            private val ranges: TextView,
+        ) {
+            fun bind(room: Classroom) {
+                name.text = room.name
+                size.text = room.size?.let { "$it 座" } ?: "座位未知"
+                ranges.text = selectedRanges()
+            }
+        }
+    }
+}
+
+internal data class ClassroomResultsPresentation(
+    val rooms: List<Classroom>,
+    val message: String?,
+) {
+    companion object {
+        fun empty(message: String) = ClassroomResultsPresentation(emptyList(), message)
+
+        fun from(rooms: List<Classroom>) = ClassroomResultsPresentation(rooms, null)
     }
 }

@@ -109,7 +109,9 @@ object AppMetadata {
 }
 
 object HolidayMetadata {
-    const val source = "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data"
+    const val source = "https://unpkg.com/holiday-calendar@1.3.3/data/CN"
+    const val fallbackSource =
+        "https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm"
     const val minimumYear = 1900
     const val maximumYear = 2100
     const val refreshIntervalMillis = 7L * 24L * 60L * 60L * 1_000L

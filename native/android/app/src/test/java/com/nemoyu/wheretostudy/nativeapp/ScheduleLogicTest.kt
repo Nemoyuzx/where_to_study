@@ -110,7 +110,7 @@ class ScheduleLogicTest {
     fun sharedHolidayFixtureMatchesContract() {
         val expected = HolidaysJsonCodec.decode(fixture("holidays.json"))
         val actual = HolidaySourceParser.parse(
-            payload = JSONArray(fixture("holiday-source.json")),
+            payload = JSONObject(fixture("holiday-source.json")),
             year = expected.year,
             source = expected.source,
             fetchedAt = expected.fetchedAt,
@@ -167,27 +167,13 @@ class ScheduleLogicTest {
     }
 
     @Test
-    fun holidayParserRejectsOverlongNamesAndRanges() {
+    fun holidayParserRejectsOverlongNames() {
         val overlongName = holidayRecord(
             name = "假".repeat(HolidayInputLimits.maxNameLength + 1),
-            start = "2026-01-01",
+            date = "2026-01-01",
         )
         assertHolidayError("节假日服务返回的名称超过长度限制。") {
             parseHolidays(JSONArray().put(overlongName))
-        }
-
-        val overlongRange = JSONArray().apply {
-            repeat(HolidayInputLimits.maxRangeEntries + 1) { put("2026-01-01") }
-        }
-        assertHolidayError("节假日服务返回的日期范围数量超过限制。") {
-            parseHolidays(
-                JSONArray().put(
-                    JSONObject()
-                        .put("name", "假期")
-                        .put("range", overlongRange)
-                        .put("type", "holiday"),
-                ),
-            )
         }
     }
 
@@ -199,69 +185,30 @@ class ScheduleLogicTest {
             }
         }
 
-        val invalidMiddleDate = JSONObject()
-            .put("name", "假期")
-            .put(
-                "range",
-                JSONArray()
-                    .put("2026-01-01")
-                    .put("2026-1-02")
-                    .put("2026-01-03"),
-            )
-            .put("type", "holiday")
-        assertHolidayError("节假日服务返回的日期格式不正确。") {
-            parseHolidays(JSONArray().put(invalidMiddleDate))
+    }
+
+    @Test
+    fun holidayParserRejectsMismatchedPayloadYearAndRegion() {
+        assertHolidayError("节假日数据年份与请求不一致。") {
+            parseHolidays(JSONArray(), payloadYear = 2025)
+        }
+        assertHolidayError("节假日数据区域不正确。") {
+            parseHolidays(JSONArray(), region = "JP")
         }
     }
 
     @Test
-    fun holidayParserRejectsOversizedSpanAndExpandedResult() {
-        val oversizedSpan = holidayRecord(
-            name = "超长假期",
-            start = "2026-01-01",
-            end = "2026-02-02",
-        )
-        assertHolidayError("节假日服务返回的单条日期跨度超过限制。") {
-            parseHolidays(JSONArray().put(oversizedSpan))
-        }
-
-        fun expandedPayload(recordCount: Int) = JSONArray().apply {
-            repeat(recordCount) { index ->
-                put(
-                    holidayRecord(
-                        name = "假期$index",
-                        start = "2026-01-01",
-                        end = "2026-02-01",
-                    ),
-                )
-            }
-        }
-
-        assertEquals(
-            HolidayInputLimits.maxExpandedItems,
-            parseHolidays(expandedPayload(recordCount = 16)).items.size,
-        )
-        assertHolidayError("节假日服务返回的展开记录数量超过限制。") {
-            parseHolidays(expandedPayload(recordCount = 17))
-        }
-    }
-
-    @Test
-    fun holidayParserKeepsOnlyRequestedYearAcrossBoundary() {
-        val snapshot = parseHolidays(
+    fun holidayParserRejectsItemOutsideRequestedYear() {
+        assertHolidayError("节假日数据包含其他年份的日期。") {
+            parseHolidays(
             JSONArray().put(
                 holidayRecord(
                     name = "跨年假期",
-                    start = "2025-12-20",
-                    end = "2026-01-20",
+                    date = "2025-12-31",
                 ),
             ),
-        )
-
-        assertEquals(20, snapshot.items.size)
-        assertEquals("2026-01-01", snapshot.items.first().date)
-        assertEquals("2026-01-20", snapshot.items.last().date)
-        assertTrue(snapshot.items.all { it.date.startsWith("2026-") })
+            )
+        }
     }
 
     @Test
@@ -340,9 +287,17 @@ class ScheduleLogicTest {
         assertEquals(null, YearCalendarLogic.dayNumber(2026, 6, 4, 2))
     }
 
-    private fun parseHolidays(payload: JSONArray, year: Int = 2026): HolidaysSnapshot =
+    private fun parseHolidays(
+        dates: JSONArray,
+        year: Int = 2026,
+        payloadYear: Int = year,
+        region: String = "CN",
+    ): HolidaysSnapshot =
         HolidaySourceParser.parse(
-            payload = payload,
+            payload = JSONObject()
+                .put("year", payloadYear)
+                .put("region", region)
+                .put("dates", dates),
             year = year,
             source = HolidayMetadata.source,
             fetchedAt = "2026-01-05T08:00:00+08:00",
@@ -350,12 +305,11 @@ class ScheduleLogicTest {
 
     private fun holidayRecord(
         name: String,
-        start: String,
-        end: String? = null,
-        type: String = "holiday",
+        date: String,
+        type: String = "public_holiday",
     ): JSONObject = JSONObject()
         .put("name", name)
-        .put("range", JSONArray().put(start).apply { if (end != null) put(end) })
+        .put("date", date)
         .put("type", type)
 
     private fun assertHolidayError(expectedMessage: String, block: () -> Unit) {

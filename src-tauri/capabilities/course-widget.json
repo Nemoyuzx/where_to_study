@@ -5,9 +5,11 @@
   "windows": ["course-widget"],
   "platforms": ["macOS", "windows", "linux"],
   "permissions": [
-    "core:event:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "allow-get-metadata",
     "allow-load-saved-schedule",
+    "allow-load-saved-schedule-for-scope",
     "allow-hide-desktop-widget"
   ]
 }

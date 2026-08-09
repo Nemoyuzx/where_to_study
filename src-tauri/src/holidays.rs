@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration as StdDuration;
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, SecondsFormat};
 use serde::Deserialize;
@@ -12,8 +13,7 @@ use crate::error::{ServiceError, ServiceResult};
 use crate::models::{HolidayItem, HolidaysResponse};
 
 const HOLIDAY_CACHE_PREFIX: &str = "holidays";
-const HOLIDAY_DATA_SOURCE: &str =
-    "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data";
+const HOLIDAY_DATA_SOURCE: &str = "https://unpkg.com/holiday-calendar@1.3.3/data/CN";
 const HOLIDAY_FALLBACK_SOURCE: &str =
     "https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm";
 const HOLIDAY_USER_AGENT: &str = concat!("WhereToStudyNative/", env!("CARGO_PKG_VERSION"));
@@ -24,14 +24,22 @@ const MAX_HOLIDAY_SOURCE_LENGTH: usize = 512;
 const MAX_HOLIDAY_FETCHED_AT_LENGTH: usize = 64;
 const MAX_HOLIDAY_RECORDS: usize = 128;
 const MAX_HOLIDAY_NAME_LENGTH: usize = 80;
-const MAX_HOLIDAY_RANGE_ENTRIES: usize = 32;
-const MAX_HOLIDAY_RANGE_DAYS: i64 = 32;
 const MAX_EXPANDED_HOLIDAY_ITEMS: usize = 512;
 
 #[derive(Debug, Deserialize)]
+struct SourceHolidaysResponse {
+    year: i32,
+    region: String,
+    dates: Vec<SourceHoliday>,
+}
+
+#[derive(Debug, Deserialize)]
 struct SourceHoliday {
-    name: String,
-    range: Vec<String>,
+    date: String,
+    name: Option<String>,
+    name_cn: Option<String>,
+    #[serde(rename = "name_en")]
+    _name_en: Option<String>,
     #[serde(rename = "type")]
     kind: String,
 }
@@ -64,8 +72,8 @@ fn cache_path(app: &AppHandle, year: i32) -> ServiceResult<PathBuf> {
 
 fn normalize_kind(kind: &str) -> Option<&'static str> {
     match kind {
-        "holiday" => Some("holiday"),
-        "workingday" | "workday" => Some("workday"),
+        "public_holiday" => Some("holiday"),
+        "transfer_workday" => Some("workday"),
         _ => None,
     }
 }
@@ -170,69 +178,76 @@ fn validate_holidays_response(
     Ok(())
 }
 
-fn expand_source_item(item: SourceHoliday, year: i32) -> ServiceResult<Vec<HolidayItem>> {
-    let name = item.name.trim();
+fn parse_source_item(item: SourceHoliday, year: i32) -> ServiceResult<Option<HolidayItem>> {
+    let name = item
+        .name_cn
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .or(item.name.as_deref())
+        .map(str::trim)
+        .unwrap_or_default();
     if name.is_empty() {
         return Err(ServiceError::new("节假日名称不能为空。"));
     }
     if name.chars().count() > MAX_HOLIDAY_NAME_LENGTH {
         return Err(ServiceError::new("节假日名称过长。"));
     }
-    if item.range.len() > MAX_HOLIDAY_RANGE_ENTRIES {
-        return Err(ServiceError::new("节假日日期范围记录过多。"));
-    }
-    if item.range.is_empty() {
-        return Err(ServiceError::new("节假日日期范围不能为空。"));
-    }
-    let range_dates = item
-        .range
-        .iter()
-        .map(|value| parse_contract_date(value))
-        .collect::<ServiceResult<Vec<_>>>()?;
-    if range_dates.windows(2).any(|dates| dates[1] <= dates[0]) {
-        return Err(ServiceError::new("节假日数据日期范围顺序不正确。"));
-    }
-    let mut current = range_dates[0];
-    let end = *range_dates.last().unwrap_or(&current);
-    let span = end.signed_duration_since(current).num_days();
-    if span >= MAX_HOLIDAY_RANGE_DAYS {
-        return Err(ServiceError::new("节假日数据日期跨度过大。"));
+    let date = parse_contract_date(&item.date)?;
+    if date.year() != year {
+        return Err(ServiceError::new("节假日数据包含其他年份的日期。"));
     }
     let Some(kind) = normalize_kind(item.kind.as_str()) else {
-        return Ok(Vec::new());
+        return Ok(None);
     };
-    let mut days = Vec::new();
 
-    while current <= end {
-        if current.year() == year {
-            days.push(HolidayItem {
-                date: current.to_string(),
-                name: name.to_string(),
-                kind: kind.to_string(),
-            });
-        }
-        current += Duration::days(1);
-    }
-
-    Ok(days)
+    Ok(Some(HolidayItem {
+        date: date.to_string(),
+        name: name.to_string(),
+        kind: kind.to_string(),
+    }))
 }
 
-fn expand_source_items(items: Vec<SourceHoliday>, year: i32) -> ServiceResult<Vec<HolidayItem>> {
-    if items.len() > MAX_HOLIDAY_RECORDS {
+fn parse_source_payload(
+    payload: SourceHolidaysResponse,
+    year: i32,
+) -> ServiceResult<Vec<HolidayItem>> {
+    validate_requested_year(year)?;
+    if payload.year != year {
+        return Err(ServiceError::new("节假日数据年份与请求不一致。"));
+    }
+    if payload.region != "CN" {
+        return Err(ServiceError::new("节假日数据区域不正确。"));
+    }
+    if payload.dates.len() > MAX_HOLIDAY_RECORDS {
         return Err(ServiceError::new("节假日数据记录过多。"));
     }
     let mut days = Vec::new();
-    for item in items {
-        let expanded = expand_source_item(item, year)?;
-        if days.len() + expanded.len() > MAX_EXPANDED_HOLIDAY_ITEMS {
+    for item in payload.dates {
+        if let Some(item) = parse_source_item(item, year)? {
+            if days.len() >= MAX_EXPANDED_HOLIDAY_ITEMS {
+                return Err(ServiceError::new("节假日展开记录过多。"));
+            }
+            days.push(item);
+        }
+        if days.len() > MAX_EXPANDED_HOLIDAY_ITEMS {
             return Err(ServiceError::new("节假日展开记录过多。"));
         }
-        days.extend(expanded);
     }
     days.sort_by(|left, right| {
         (&left.date, &left.kind, &left.name).cmp(&(&right.date, &right.kind, &right.name))
     });
+    if days.is_empty() {
+        return Err(ServiceError::new(
+            "节假日数据没有可识别的法定节假日或调休记录。",
+        ));
+    }
     Ok(days)
+}
+
+fn decode_source(bytes: &[u8], year: i32) -> ServiceResult<Vec<HolidayItem>> {
+    let payload = serde_json::from_slice::<SourceHolidaysResponse>(bytes)
+        .map_err(|error| ServiceError::new(format!("节假日数据解析失败：{error}")))?;
+    parse_source_payload(payload, year)
 }
 
 fn decode_cache(bytes: &[u8], expected_year: i32) -> ServiceResult<Option<HolidaysResponse>> {
@@ -336,75 +351,36 @@ pub(super) fn validate_fetch_year(year: i32) -> ServiceResult<()> {
 }
 
 fn fallback_2026_items() -> Vec<HolidayItem> {
-    let source = vec![
-        SourceHoliday {
-            name: "元旦".to_string(),
-            range: vec!["2026-01-01".to_string(), "2026-01-03".to_string()],
-            kind: "holiday".to_string(),
-        },
-        SourceHoliday {
-            name: "元旦".to_string(),
-            range: vec!["2026-01-04".to_string()],
-            kind: "workingday".to_string(),
-        },
-        SourceHoliday {
-            name: "春节".to_string(),
-            range: vec!["2026-02-14".to_string()],
-            kind: "workingday".to_string(),
-        },
-        SourceHoliday {
-            name: "春节".to_string(),
-            range: vec!["2026-02-15".to_string(), "2026-02-23".to_string()],
-            kind: "holiday".to_string(),
-        },
-        SourceHoliday {
-            name: "春节".to_string(),
-            range: vec!["2026-02-28".to_string()],
-            kind: "workingday".to_string(),
-        },
-        SourceHoliday {
-            name: "清明节".to_string(),
-            range: vec!["2026-04-04".to_string(), "2026-04-06".to_string()],
-            kind: "holiday".to_string(),
-        },
-        SourceHoliday {
-            name: "劳动节".to_string(),
-            range: vec!["2026-05-01".to_string(), "2026-05-05".to_string()],
-            kind: "holiday".to_string(),
-        },
-        SourceHoliday {
-            name: "劳动节".to_string(),
-            range: vec!["2026-05-09".to_string()],
-            kind: "workingday".to_string(),
-        },
-        SourceHoliday {
-            name: "端午节".to_string(),
-            range: vec!["2026-06-19".to_string(), "2026-06-21".to_string()],
-            kind: "holiday".to_string(),
-        },
-        SourceHoliday {
-            name: "中秋节".to_string(),
-            range: vec!["2026-09-25".to_string(), "2026-09-27".to_string()],
-            kind: "holiday".to_string(),
-        },
-        SourceHoliday {
-            name: "国庆节".to_string(),
-            range: vec!["2026-09-20".to_string()],
-            kind: "workingday".to_string(),
-        },
-        SourceHoliday {
-            name: "国庆节".to_string(),
-            range: vec!["2026-10-01".to_string(), "2026-10-07".to_string()],
-            kind: "holiday".to_string(),
-        },
-        SourceHoliday {
-            name: "国庆节".to_string(),
-            range: vec!["2026-10-10".to_string()],
-            kind: "workingday".to_string(),
-        },
+    let ranges = [
+        ("元旦", "2026-01-01", "2026-01-03", "holiday"),
+        ("元旦补班", "2026-01-04", "2026-01-04", "workday"),
+        ("春节补班", "2026-02-14", "2026-02-14", "workday"),
+        ("春节", "2026-02-15", "2026-02-23", "holiday"),
+        ("春节补班", "2026-02-28", "2026-02-28", "workday"),
+        ("清明节", "2026-04-04", "2026-04-06", "holiday"),
+        ("劳动节", "2026-05-01", "2026-05-05", "holiday"),
+        ("劳动节补班", "2026-05-09", "2026-05-09", "workday"),
+        ("端午节", "2026-06-19", "2026-06-21", "holiday"),
+        ("中秋节", "2026-09-25", "2026-09-27", "holiday"),
+        ("国庆节补班", "2026-09-20", "2026-09-20", "workday"),
+        ("国庆节", "2026-10-01", "2026-10-07", "holiday"),
+        ("国庆节补班", "2026-10-10", "2026-10-10", "workday"),
     ];
-
-    expand_source_items(source, 2026).unwrap_or_default()
+    let mut items = Vec::new();
+    for (name, start, end, kind) in ranges {
+        let (Ok(mut date), Ok(end)) = (parse_contract_date(start), parse_contract_date(end)) else {
+            continue;
+        };
+        while date <= end {
+            items.push(HolidayItem {
+                date: date.to_string(),
+                name: name.to_string(),
+                kind: kind.to_string(),
+            });
+            date += Duration::days(1);
+        }
+    }
+    items
 }
 
 pub(super) fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
@@ -429,8 +405,14 @@ pub(super) fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
 
 pub(super) async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
     let url = format!("{HOLIDAY_DATA_SOURCE}/{year}.json");
-    let mut response = reqwest::Client::new()
+    let client = reqwest::Client::builder()
+        .connect_timeout(StdDuration::from_secs(15))
+        .timeout(StdDuration::from_secs(20))
+        .build()
+        .map_err(|error| ServiceError::new(format!("无法创建节假日请求：{error}")))?;
+    let mut response = client
         .get(url)
+        .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::USER_AGENT, HOLIDAY_USER_AGENT)
         .send()
         .await
@@ -454,14 +436,11 @@ pub(super) async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
         }
         body.extend_from_slice(&chunk);
     }
-    let items = serde_json::from_slice::<Vec<SourceHoliday>>(&body)
-        .map_err(|error| ServiceError::new(format!("节假日数据解析失败：{error}")))?;
-
     Ok(HolidaysResponse {
         year,
         source: HOLIDAY_DATA_SOURCE.to_string(),
         fetched_at: now_contract_timestamp()?,
-        items: expand_source_items(items, year)?,
+        items: decode_source(&body, year)?,
     })
 }
 
@@ -484,126 +463,183 @@ mod tests {
     }
 
     #[test]
-    fn expands_holiday_range() {
-        let item = SourceHoliday {
-            name: "测试节日".to_string(),
-            range: vec!["2026-01-01".to_string(), "2026-01-03".to_string()],
-            kind: "holiday".to_string(),
-        };
+    fn parses_public_holiday_and_prefers_chinese_name() {
+        let items = decode_source(
+            r#"{
+                "year": 2026,
+                "region": "CN",
+                "dates": [{
+                    "date": "2026-01-01",
+                    "name": "Fallback",
+                    "name_cn": "元旦",
+                    "name_en": "New Year's Day",
+                    "type": "public_holiday"
+                }]
+            }"#
+            .as_bytes(),
+            2026,
+        )
+        .unwrap();
 
-        let days = expand_source_item(item, 2026).unwrap();
-        assert_eq!(days.len(), 3);
-        assert_eq!(days[0].date, "2026-01-01");
-        assert_eq!(days[2].date, "2026-01-03");
-        assert_eq!(days[0].kind, "holiday");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].date, "2026-01-01");
+        assert_eq!(items[0].name, "元旦");
+        assert_eq!(items[0].kind, "holiday");
     }
 
     #[test]
-    fn normalizes_workingday_type() {
+    fn normalizes_transfer_workday_and_falls_back_to_name() {
         let item = SourceHoliday {
-            name: "调休".to_string(),
-            range: vec!["2026-01-04".to_string()],
-            kind: "workingday".to_string(),
+            date: "2026-01-04".to_string(),
+            name: Some("调休".to_string()),
+            name_cn: None,
+            _name_en: None,
+            kind: "transfer_workday".to_string(),
         };
 
-        let days = expand_source_item(item, 2026).unwrap();
-        assert_eq!(days[0].kind, "workday");
+        let day = parse_source_item(item, 2026).unwrap().unwrap();
+        assert_eq!(day.kind, "workday");
+        assert_eq!(day.name, "调休");
     }
 
     #[test]
-    fn filters_cross_year_ranges_to_requested_year() {
-        let item = SourceHoliday {
-            name: "跨年假期".to_string(),
-            range: vec!["2025-12-31".to_string(), "2026-01-02".to_string()],
-            kind: "holiday".to_string(),
-        };
-
-        let days = expand_source_item(item, 2026).unwrap();
+    fn rejects_mismatched_payload_and_item_years() {
+        let wrong_payload_year = br#"{
+            "year": 2025,
+            "region": "CN",
+            "dates": []
+        }"#;
         assert_eq!(
-            days.iter()
-                .map(|item| item.date.as_str())
-                .collect::<Vec<_>>(),
-            vec!["2026-01-01", "2026-01-02"]
+            decode_source(wrong_payload_year, 2026).unwrap_err().message,
+            "节假日数据年份与请求不一致。"
+        );
+
+        let wrong_item_year = r#"{
+            "year": 2026,
+            "region": "CN",
+            "dates": [{
+                "date": "2025-12-31",
+                "name": "跨年",
+                "type": "public_holiday"
+            }]
+        }"#;
+        assert_eq!(
+            decode_source(wrong_item_year.as_bytes(), 2026)
+                .unwrap_err()
+                .message,
+            "节假日数据包含其他年份的日期。"
         );
     }
 
     #[test]
-    fn rejects_invalid_or_excessive_source_fields() {
+    fn rejects_malformed_source_fields_and_region() {
         let invalid_date = SourceHoliday {
-            name: "测试".to_string(),
-            range: vec!["2026-1-01".to_string()],
-            kind: "holiday".to_string(),
+            date: "2026-1-01".to_string(),
+            name: Some("测试".to_string()),
+            name_cn: None,
+            _name_en: None,
+            kind: "public_holiday".to_string(),
         };
-        assert!(expand_source_item(invalid_date, 2026).is_err());
-
-        let invalid_middle_date = SourceHoliday {
-            name: "测试".to_string(),
-            range: vec![
-                "2026-01-01".to_string(),
-                "2026-1-02".to_string(),
-                "2026-01-03".to_string(),
-            ],
-            kind: "holiday".to_string(),
-        };
-        assert!(expand_source_item(invalid_middle_date, 2026).is_err());
-
-        let excessive_span = SourceHoliday {
-            name: "测试".to_string(),
-            range: vec!["2026-01-01".to_string(), "2026-02-02".to_string()],
-            kind: "holiday".to_string(),
-        };
-        assert!(expand_source_item(excessive_span, 2026).is_err());
+        assert!(parse_source_item(invalid_date, 2026).is_err());
 
         let long_name = SourceHoliday {
-            name: "节".repeat(MAX_HOLIDAY_NAME_LENGTH + 1),
-            range: vec!["2026-01-01".to_string()],
-            kind: "holiday".to_string(),
+            date: "2026-01-01".to_string(),
+            name: Some("节".repeat(MAX_HOLIDAY_NAME_LENGTH + 1)),
+            name_cn: None,
+            _name_en: None,
+            kind: "public_holiday".to_string(),
         };
-        assert!(expand_source_item(long_name, 2026).is_err());
+        assert!(parse_source_item(long_name, 2026).is_err());
 
         let too_many_records = (0..=MAX_HOLIDAY_RECORDS)
             .map(|index| SourceHoliday {
-                name: format!("假期{index}"),
-                range: vec!["2026-01-01".to_string()],
-                kind: "holiday".to_string(),
+                date: "2026-01-01".to_string(),
+                name: Some(format!("假期{index}")),
+                name_cn: None,
+                _name_en: None,
+                kind: "public_holiday".to_string(),
             })
             .collect();
-        assert!(expand_source_items(too_many_records, 2026).is_err());
+        assert!(parse_source_payload(
+            SourceHolidaysResponse {
+                year: 2026,
+                region: "CN".to_string(),
+                dates: too_many_records,
+            },
+            2026
+        )
+        .is_err());
+
+        assert_eq!(
+            parse_source_payload(
+                SourceHolidaysResponse {
+                    year: 2026,
+                    region: "JP".to_string(),
+                    dates: Vec::new(),
+                },
+                2026
+            )
+            .unwrap_err()
+            .message,
+            "节假日数据区域不正确。"
+        );
+
+        assert!(decode_source(br#"{"year":2026,"region":"CN","dates":{}}"#, 2026).is_err());
     }
 
     #[test]
     fn rejects_empty_required_fields_before_skipping_unknown_types() {
         let empty_name = SourceHoliday {
-            name: "  ".to_string(),
-            range: vec!["2026-01-01".to_string()],
+            date: "2026-01-01".to_string(),
+            name: Some("  ".to_string()),
+            name_cn: None,
+            _name_en: None,
             kind: "future-type".to_string(),
         };
-        assert!(expand_source_item(empty_name, 2026).is_err());
+        assert!(parse_source_item(empty_name, 2026).is_err());
 
-        let empty_range = SourceHoliday {
-            name: "测试".to_string(),
-            range: Vec::new(),
+        let invalid_date = SourceHoliday {
+            date: "invalid".to_string(),
+            name: Some("测试".to_string()),
+            name_cn: None,
+            _name_en: None,
             kind: "future-type".to_string(),
         };
-        assert!(expand_source_item(empty_range, 2026).is_err());
+        assert!(parse_source_item(invalid_date, 2026).is_err());
     }
 
     #[test]
     fn skips_valid_unknown_types() {
         let item = SourceHoliday {
-            name: "测试".to_string(),
-            range: vec!["2026-01-01".to_string()],
+            date: "2026-01-01".to_string(),
+            name: Some("测试".to_string()),
+            name_cn: None,
+            _name_en: None,
             kind: "future-type".to_string(),
         };
 
-        assert!(expand_source_item(item, 2026).unwrap().is_empty());
+        assert!(parse_source_item(item, 2026).unwrap().is_none());
     }
 
     #[test]
-    fn transport_metadata_uses_raw_https_and_package_version() {
+    fn rejects_empty_or_entirely_unknown_source_payloads() {
+        for dates in [
+            r#"[]"#,
+            r#"[{"date":"2026-01-01","name":"未知记录","type":"future-type"}]"#,
+        ] {
+            let payload = format!(r#"{{"year":2026,"region":"CN","dates":{dates}}}"#);
+            assert_eq!(
+                decode_source(payload.as_bytes(), 2026).unwrap_err().message,
+                "节假日数据没有可识别的法定节假日或调休记录。"
+            );
+        }
+    }
+
+    #[test]
+    fn transport_metadata_uses_licensed_https_source_and_package_version() {
         assert_eq!(
             HOLIDAY_DATA_SOURCE,
-            "https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data"
+            "https://unpkg.com/holiday-calendar@1.3.3/data/CN"
         );
         assert_eq!(HOLIDAY_USER_AGENT, "WhereToStudyNative/0.1.1");
     }
@@ -749,7 +785,7 @@ mod tests {
 
     #[test]
     fn shared_fixture_matches_holiday_contract() {
-        let source: Vec<SourceHoliday> = serde_json::from_str(include_str!(
+        let source: SourceHolidaysResponse = serde_json::from_str(include_str!(
             "../../contracts/v1/fixtures/holiday-source.json"
         ))
         .unwrap();
@@ -758,7 +794,7 @@ mod tests {
                 .unwrap();
 
         assert_eq!(
-            expand_source_items(source, expected.year).unwrap(),
+            parse_source_payload(source, expected.year).unwrap(),
             expected.items
         );
     }

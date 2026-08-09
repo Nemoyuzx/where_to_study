@@ -144,7 +144,7 @@ enum CalendarImportLogic {
         let scopedOwnedEvents = ownedEvents.filter { scope.contains($0.startDate) }
         let desiredMarkers = Set(drafts.map(\.marker))
         var eventsByMarker = [String: [CalendarExistingEvent]]()
-        for event in scopedOwnedEvents {
+        for event in ownedEvents {
             guard let marker = event.marker else { continue }
             eventsByMarker[marker, default: []].append(event)
         }
@@ -183,7 +183,7 @@ enum CalendarImportLogic {
             }
         }
 
-        for event in ownedEvents {
+        for event in scopedOwnedEvents {
             guard let marker = event.marker, !desiredMarkers.contains(marker) else { continue }
             deleteIdentifiers.insert(event.identifier)
         }

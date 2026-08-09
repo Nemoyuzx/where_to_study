@@ -298,6 +298,10 @@ function normalizeError(error) {
   return '请求失败，请稍后重试。'
 }
 
+function isValidAccountScope(value) {
+  return /^opaque-v1:[0-9a-f]{64}$/.test(String(value || ''))
+}
+
 function hasTauriRuntime() {
   return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__?.invoke)
 }
@@ -310,6 +314,7 @@ function browserPreviewCommand(name, payload = {}) {
       slots: FALLBACK_SLOTS,
       default_term_id: DEFAULT_SETTINGS.termId,
       default_term_start_date: DEFAULT_SETTINGS.termStartDate,
+      supports_calendar_import: false,
     }
   }
   if (name === 'load_saved_settings') {
@@ -332,7 +337,12 @@ function browserPreviewCommand(name, payload = {}) {
       default_min_seats: Number(payload.default_min_seats) || 0,
     }
   }
-  if (name === 'load_saved_schedule' || name === 'load_saved_classrooms') {
+  if (
+    name === 'load_saved_schedule'
+    || name === 'load_saved_schedule_for_scope'
+    || name === 'load_saved_classrooms'
+    || name === 'load_saved_classrooms_for_scope'
+  ) {
     return null
   }
   if (name === 'fetch_holidays') {
@@ -442,7 +452,9 @@ async function command(name, payload) {
     if (payload === undefined) return await invoke(name)
     return await invoke(name, { payload })
   } catch (error) {
-    throw new Error(normalizeError(error))
+    const commandError = new Error(normalizeError(error))
+    commandError.accountScopeCleared = Boolean(error?.account_scope_cleared)
+    throw commandError
   }
 }
 
@@ -504,6 +516,7 @@ function CourseWidget() {
   const [now, setNow] = useState(() => new Date())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const scheduleRevision = useRef(0)
 
   const todayDate = localDateString(now)
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
@@ -515,46 +528,100 @@ function CourseWidget() {
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
   const upcomingCourse = weekState.dayCourses.find((course) => courseTimeBounds(course, slotMeta).endMinutes >= nowMinutes) || weekState.dayCourses[0] || null
 
-  async function loadWidgetSchedule() {
+  async function loadWidgetSchedule(expectedAccountScope = '') {
+    const revision = scheduleRevision.current + 1
+    scheduleRevision.current = revision
     setLoading(true)
     setError('')
     try {
       const [nextMetadata, savedSchedule] = await Promise.all([
         command('get_metadata'),
-        command('load_saved_schedule'),
+        expectedAccountScope
+          ? command('load_saved_schedule_for_scope', { account_scope: expectedAccountScope })
+          : command('load_saved_schedule'),
       ])
+      if (revision !== scheduleRevision.current) return
       setMetadata(nextMetadata || { slots: FALLBACK_SLOTS })
       setSchedule(savedSchedule)
     } catch (widgetError) {
-      setError(widgetError.message)
+      if (revision === scheduleRevision.current) setError(widgetError.message)
     } finally {
-      setLoading(false)
+      if (revision === scheduleRevision.current) setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadWidgetSchedule()
-  }, [])
+    let disposed = false
+    let unlistenUpdated = null
+    let unlistenCleared = null
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60000)
-    return () => window.clearInterval(timer)
-  }, [])
+    async function startWidget() {
+      if (hasTauriRuntime()) {
+        try {
+          unlistenCleared = await listen('account-scope:cleared', () => {
+            scheduleRevision.current += 1
+            setSchedule(null)
+            setLoading(false)
+            setError('')
+          })
+          if (disposed) {
+            unlistenCleared()
+            unlistenCleared = null
+            return
+          }
+          unlistenUpdated = await listen('schedule:updated', (event) => {
+            const accountScope = event.payload?.account_scope
+            setSchedule(null)
+            if (!isValidAccountScope(accountScope)) {
+              scheduleRevision.current += 1
+              setLoading(false)
+              setError('课程更新的账号作用域无效，已拒绝显示。')
+              return
+            }
+            void loadWidgetSchedule(accountScope)
+          })
+          if (disposed) {
+            unlistenUpdated()
+            unlistenUpdated = null
+            return
+          }
+        } catch (listenError) {
+          if (!disposed) setError(normalizeError(listenError))
+          return
+        }
+      }
+      if (!disposed) await loadWidgetSchedule()
+    }
 
-  useEffect(() => {
-    if (!hasTauriRuntime()) return undefined
-
-    let unlisten = null
-    listen('schedule:updated', (event) => {
-      if (event.payload) setSchedule(event.payload)
-    }).then((dispose) => {
-      unlisten = dispose
-    })
-
+    startWidget()
     return () => {
-      if (unlisten) unlisten()
+      disposed = true
+      scheduleRevision.current += 1
+      if (unlistenUpdated) unlistenUpdated()
+      if (unlistenCleared) unlistenCleared()
     }
   }, [])
+
+  useEffect(() => {
+    const current = new Date()
+    const currentMinutes = current.getHours() * 60 + current.getMinutes()
+    const nextMidnight = new Date(current)
+    nextMidnight.setHours(24, 0, 0, 0)
+    const wakeTimes = [nextMidnight.getTime()]
+
+    weekState.dayCourses.forEach((course) => {
+      const { endMinutes } = courseTimeBounds(course, slotMeta)
+      if (endMinutes < currentMinutes) return
+      const wake = new Date(current)
+      const nextMinute = endMinutes + 1
+      wake.setHours(Math.floor(nextMinute / 60), nextMinute % 60, 0, 0)
+      wakeTimes.push(wake.getTime())
+    })
+
+    const delay = Math.max(1000, Math.min(...wakeTimes) - current.getTime())
+    const timer = window.setTimeout(() => setNow(new Date()), delay)
+    return () => window.clearTimeout(timer)
+  }, [now, slotMeta, weekState.dayCourses])
 
   async function hideWidget() {
     try {
@@ -625,7 +692,11 @@ function App() {
   }
 
   const [activePage, setActivePage] = useState('planner')
-  const [metadata, setMetadata] = useState({ campuses: [], slots: FALLBACK_SLOTS })
+  const [metadata, setMetadata] = useState({
+    campuses: [],
+    slots: FALLBACK_SLOTS,
+    supports_calendar_import: false,
+  })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
   const [calendarDate, setCalendarDate] = useState(localDateString())
   const [calendarView, setCalendarView] = useState('week')
@@ -649,6 +720,7 @@ function App() {
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
@@ -659,6 +731,7 @@ function App() {
   const savedCredentialState = useRef({ account: '', hasSavedPassword: false })
   const credentialStateRevision = useRef(0)
   const localDataClearRevision = useRef(0)
+  const todayDate = localDateString(now)
 
   useEffect(() => {
     pageContentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' })
@@ -676,7 +749,11 @@ function App() {
         }))
       })
       .catch(() => {
-        setMetadata({ campuses: [{ id: '01', name: '西土城' }], slots: FALLBACK_SLOTS })
+        setMetadata({
+          campuses: [{ id: '01', name: '西土城' }],
+          slots: FALLBACK_SLOTS,
+          supports_calendar_import: false,
+        })
       })
   }, [])
 
@@ -743,8 +820,24 @@ function App() {
     let unlistenError = null
 
     listen('classrooms:auto-fetched', (event) => {
-      const nextCache = normalizeClassroomsCache(event.payload)
-      if (nextCache) setClassroomsCache(nextCache)
+      const accountScope = event.payload?.account_scope
+      if (!isValidAccountScope(accountScope)) {
+        setClassroomsCache(null)
+        setError('空教室更新的账号作用域无效，已拒绝显示。')
+        return
+      }
+      const accountDataRevision = localDataClearRevision.current
+      command('load_saved_classrooms_for_scope', { account_scope: accountScope })
+        .then((data) => {
+          if (accountDataRevision !== localDataClearRevision.current) return
+          const nextCache = normalizeClassroomsCache(data)
+          if (nextCache) setClassroomsCache(nextCache)
+        })
+        .catch(() => {
+          if (accountDataRevision === localDataClearRevision.current) {
+            setClassroomsCache(null)
+          }
+        })
     }).then((dispose) => {
       unlistenFetched = dispose
     })
@@ -763,9 +856,25 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const current = new Date()
+    const nextMidnight = new Date(current)
+    nextMidnight.setHours(24, 0, 0, 0)
+    const timer = window.setTimeout(
+      () => setNow(new Date()),
+      Math.max(1000, nextMidnight.getTime() - current.getTime()),
+    )
+    return () => window.clearTimeout(timer)
+  }, [todayDate])
+
+  useEffect(() => {
+    if (activePage !== 'calendar' || calendarView !== 'day' || calendarDate !== todayDate) {
+      return undefined
+    }
+
+    setNow(new Date())
     const timer = window.setInterval(() => setNow(new Date()), 60000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [activePage, calendarDate, calendarView, todayDate])
 
   useEffect(() => {
     if (!calendarPopover) return undefined
@@ -782,11 +891,9 @@ function App() {
   }, [calendarPopover])
 
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
-  const todayDate = localDateString()
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
   const activeTermId = schedule?.term_id || settings.termId
   const activeTermStartDate = schedule?.term_start_date || settings.termStartDate
-  const calendarYear = dateFromString(calendarDate).getFullYear()
   const calendarHolidayItems = useMemo(
     () => Object.values(holidayDataByYear).flatMap((data) => data.items || []),
     [holidayDataByYear],
@@ -843,6 +950,10 @@ function App() {
     if (calendarView === 'month') return buildMonthDays(calendarDate)
     return []
   }, [calendarDate, calendarView])
+  const visibleHolidayYears = useMemo(() => {
+    const dates = calendarView === 'year' ? [calendarDate] : visibleCalendarDays
+    return [...new Set(dates.map((dateString) => dateFromString(dateString).getFullYear()))]
+  }, [calendarDate, calendarView, visibleCalendarDays])
   const calendarYearMonths = useMemo(() => {
     const year = dateFromString(calendarDate).getFullYear()
     return Array.from({ length: 12 }, (_, monthIndex) => ({
@@ -870,38 +981,41 @@ function App() {
   }, [calendarDate, calendarView, now, todayDate])
 
   useEffect(() => {
-    if (requestedHolidayYears.current.has(calendarYear)) return
-    requestedHolidayYears.current.add(calendarYear)
+    visibleHolidayYears.forEach((year) => {
+      if (requestedHolidayYears.current.has(year)) return
+      requestedHolidayYears.current.add(year)
 
-    command('fetch_holidays', { year: calendarYear })
-      .then((data) => {
-        setHolidayDataByYear((current) => ({
-          ...current,
-          [data.year]: data,
-        }))
-      })
-      .catch(() => {
-        setHolidayDataByYear((current) => {
-          if (current[calendarYear]) return current
-          return {
+      command('fetch_holidays', { year })
+        .then((data) => {
+          setHolidayDataByYear((current) => ({
             ...current,
-            [calendarYear]: {
-              year: calendarYear,
-              source: 'fallback',
-              fetched_at: '',
-              items: fallbackHolidayItems(calendarYear),
-            },
-          }
+            [data.year]: data,
+          }))
         })
-      })
-  }, [calendarYear])
+        .catch(() => {
+          setHolidayDataByYear((current) => {
+            if (current[year]) return current
+            return {
+              ...current,
+              [year]: {
+                year,
+                source: 'fallback',
+                fetched_at: '',
+                items: fallbackHolidayItems(year),
+              },
+            }
+          })
+        })
+    })
+  }, [visibleHolidayYears])
 
   useEffect(() => {
     let cancelled = false
+    const accountDataRevision = localDataClearRevision.current
 
     command('load_saved_classrooms')
       .then((data) => {
-        if (cancelled) return
+        if (cancelled || accountDataRevision !== localDataClearRevision.current) return
         const nextCache = normalizeClassroomsCache(data)
         if (nextCache && nextCache.target_date === todayDate) {
           setClassroomsCache(nextCache)
@@ -918,24 +1032,26 @@ function App() {
   }, [todayDate])
 
   useEffect(() => {
-    if (!settingsLoaded || !classroomsCacheLoaded || autoFetchedClassroomsDate.current === todayDate) {
+    if (settingsSaving || !settingsLoaded || !classroomsCacheLoaded || autoFetchedClassroomsDate.current === todayDate) {
       return
     }
     if (classroomsCache?.target_date === todayDate) {
       autoFetchedClassroomsDate.current = todayDate
       return
     }
+    if (!settings.account.trim() || !settings.hasSavedPassword) return
 
     autoFetchedClassroomsDate.current = todayDate
     loadClassrooms()
-  }, [classroomsCache, classroomsCacheLoaded, settingsLoaded, todayDate])
+  }, [classroomsCache, classroomsCacheLoaded, settings.account, settings.hasSavedPassword, settingsLoaded, settingsSaving, todayDate])
 
   useEffect(() => {
     let cancelled = false
+    const accountDataRevision = localDataClearRevision.current
 
     command('load_saved_schedule')
       .then((data) => {
-        if (!cancelled && data) {
+        if (!cancelled && accountDataRevision === localDataClearRevision.current && data) {
           setSchedule(data)
         }
       })
@@ -962,17 +1078,25 @@ function App() {
   }
 
   async function saveCurrentSettings() {
+    if (settingsSaving || !settingsLoaded) return
     setError('')
     setSettingsSaved(false)
+    setSettingsSaving(true)
     const revision = credentialStateRevision.current
     const clearRevision = localDataClearRevision.current
+    const previousSavedCredential = { ...savedCredentialState.current }
 
     try {
       const data = await command('save_saved_settings', settingsToPayload(settings))
       const nextSettings = savedSettingsToState(data, settings)
       if (clearRevision !== localDataClearRevision.current) return
       const savedCredential = savedCredentialSnapshot(nextSettings)
+      const accountChanged = previousSavedCredential.account !== savedCredential.account
       savedCredentialState.current = savedCredential
+      if (accountChanged) {
+        localDataClearRevision.current += 1
+        clearAccountScopedViewState()
+      }
       if (revision !== credentialStateRevision.current) {
         setSettings((current) => ({
           ...current,
@@ -985,7 +1109,25 @@ function App() {
       setSelectedBuildings([])
       setSettingsSaved(true)
     } catch (saveError) {
+      if (saveError.accountScopeCleared) {
+        credentialStateRevision.current += 1
+        localDataClearRevision.current += 1
+        clearAccountScopedViewState()
+        try {
+          const persisted = await command('load_saved_settings')
+          const recoveredSettings = savedSettingsToState(persisted)
+          savedCredentialState.current = savedCredentialSnapshot(recoveredSettings)
+          setSettings(recoveredSettings)
+          setMinSeats(Number(recoveredSettings.defaultMinSeats) || 0)
+        } catch {
+          savedCredentialState.current = { account: '', hasSavedPassword: false }
+          setSettings({ ...DEFAULT_SETTINGS })
+          setMinSeats(0)
+        }
+      }
       setError(saveError.message)
+    } finally {
+      setSettingsSaving(false)
     }
   }
 
@@ -1053,11 +1195,14 @@ function App() {
   }
 
   async function loadSchedule() {
+    if (settingsSaving) return
     await runTask('schedule', async () => {
+      const accountDataRevision = localDataClearRevision.current
       const data = await command('fetch_schedule', requestBody(settings, {
         term_id: settings.termId,
         term_start_date: settings.termStartDate,
       }))
+      if (accountDataRevision !== localDataClearRevision.current) return
       setSchedule(data)
       setCalendarImportedPath('')
       setUsePersonalSchedule(true)
@@ -1068,16 +1213,20 @@ function App() {
   }
 
   async function loadClassrooms() {
+    if (settingsSaving) return
     await runTask('classrooms', async () => {
+      const accountDataRevision = localDataClearRevision.current
       const data = await command('fetch_classrooms', requestBody(settings, {
         target_date: todayDate,
       }))
+      if (accountDataRevision !== localDataClearRevision.current) return
       const nextCache = normalizeClassroomsCache(data)
       if (nextCache) setClassroomsCache(nextCache)
     })
   }
 
   async function importSystemCalendar() {
+    if (settingsSaving) return
     await runTask('calendar-import', async () => {
       const path = await command('import_schedule_to_calendar')
       setCalendarImportedPath(path)
@@ -1107,17 +1256,22 @@ function App() {
         termStartDate: metadata.default_term_start_date || DEFAULT_SETTINGS.termStartDate,
         campusId: metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId,
       })
-      setSchedule(null)
-      setClassroomsCache(null)
-      setSelectedSlots([])
-      setSelectedBuildings([])
+      clearAccountScopedViewState()
       setMinSeats(0)
-      setUsePersonalSchedule(true)
-      setCalendarImportedPath('')
       setSettingsSaved(false)
       setClearConfirmationOpen(false)
       if (clearError) throw clearError
     })
+  }
+
+  function clearAccountScopedViewState() {
+    setSchedule(null)
+    setClassroomsCache(null)
+    setSelectedSlots([])
+    setSelectedBuildings([])
+    setUsePersonalSchedule(true)
+    setCalendarImportedPath('')
+    autoFetchedClassroomsDate.current = ''
   }
 
   return (
@@ -1229,11 +1383,11 @@ function App() {
             />
 
             <section className="panel action-panel">
-              <button type="button" onClick={loadSchedule} disabled={!!loading}>
+              <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
                 {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
                 获取/刷新个人课表
               </button>
-              <button type="button" onClick={loadClassrooms} disabled={!!loading}>
+              <button type="button" onClick={loadClassrooms} disabled={settingsSaving || !!loading}>
                 {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
                 获取空教室信息
               </button>
@@ -1395,14 +1549,16 @@ function App() {
                   value={calendarDate}
                   onChange={(event) => chooseCalendarDate(event.target.value)}
                 />
-                <button type="button" onClick={loadSchedule} disabled={!!loading}>
+                <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
                   {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
                   获取/刷新个人课表
                 </button>
-                <button type="button" onClick={importSystemCalendar} disabled={!!loading || !courses.length}>
-                  {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
-                  导入苹果日历
-                </button>
+                {metadata.supports_calendar_import ? (
+                  <button type="button" onClick={importSystemCalendar} disabled={settingsSaving || !!loading || !courses.length}>
+                    {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
+                    导入苹果日历
+                  </button>
+                ) : null}
               </div>
               {calendarImportedPath ? (
                 <p className="calendar-export-note">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
@@ -1737,11 +1893,11 @@ function App() {
           </section>
 
           <section className="panel settings-actions">
-            <button type="button" className="primary" onClick={saveCurrentSettings}>
-              <CheckCircle2 size={17} />
+            <button type="button" className="primary" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
+              {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />}
               保存设置
             </button>
-            <button type="button" className="secondary" onClick={openDesktopWidget} disabled={!!loading}>
+            <button type="button" className="secondary" onClick={openDesktopWidget} disabled={settingsSaving || !!loading}>
               {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <CalendarDays size={17} />}
               打开课程小组件
             </button>
@@ -1758,7 +1914,7 @@ function App() {
               type="button"
               className="danger"
               onClick={() => setClearConfirmationOpen(true)}
-              disabled={!!loading}
+              disabled={settingsSaving || !!loading}
             >
               <Trash2 size={17} />
               清除本地数据
@@ -1768,10 +1924,10 @@ function App() {
                 <strong id="clear-data-title">清除全部本地数据？</strong>
                 <p>将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。</p>
                 <div>
-                  <button type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={!!loading}>
+                  <button type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={settingsSaving || !!loading}>
                     取消
                   </button>
-                  <button type="button" className="danger" onClick={clearAllLocalData} disabled={!!loading}>
+                  <button type="button" className="danger" onClick={clearAllLocalData} disabled={settingsSaving || !!loading}>
                     {loading === 'clear-local-data' ? <Loader2 className="spin" size={17} /> : <Trash2 size={17} />}
                     确认清除
                   </button>

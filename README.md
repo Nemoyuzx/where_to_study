@@ -8,6 +8,7 @@ Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户�
 - 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
 - 按个人空闲节次、教学楼、最少座位数筛选空教室。
 - macOS 与 Windows 桌面端在应用运行时每天 7:30 发送今日课程系统通知，并提供课程桌面小组件。
+- SwiftUI 与 Android 原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
 - 支持课表本地缓存、教学日历、法定节假日和 Apple 日历导入。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台迁移范围和验收顺序见
@@ -17,41 +18,43 @@ Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户�
 
 | 平台 | 当前可用版本 | 原生迁移状态 |
 | --- | --- | --- |
-| macOS | Tauri 2，功能完整 | SwiftUI 原生预览已支持个人课表、含节假日和当前时间线的教学日历、当天空教室联动查询 |
-| Android | Tauri 2，功能完整 | Kotlin Views 原生预览已支持个人课表、含节假日和当前时间线的教学日历、当天空教室联动查询 |
+| macOS | Tauri 2 迁移期版本 | SwiftUI 原生预览已支持个人课表、系统日历、菜单栏、每日课程摘要、含节假日和当前时间线的教学日历、当天空教室联动查询 |
+| Android | Kotlin Views 原生预览 | 已支持个人课表、系统日历、每日课程摘要、含节假日和当前时间线的教学日历、当天空教室联动查询 |
 | Windows | Tauri 2，持续维护 | 保留 Tauri，并进行安全和资源占用优化 |
-| iOS | 暂不提供签名安装包 | SwiftUI 模拟器与 arm64 真机 archive 可重复构建，已接入个人课表、含节假日和当前时间线的教学日历、当天空教室联动查询 |
+| iOS | 暂不提供签名安装包 | SwiftUI 模拟器与 arm64 真机 archive 可重复构建，已接入个人课表、每日课程摘要、含节假日和当前时间线的教学日历、当天空教室联动查询 |
 
 ## 下载
 
-GitHub Releases 会按阶段提供 Tauri 安装包和明确标注的原生预览包。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的本地 release key 签名。原生预览现已完成个人课表、法定节假日、日/周/月/年日历、当前时间线和当天空教室联动查询；平台通知、托盘/菜单栏与系统日历导入尚未全部迁移，需要这些功能时应继续使用功能完整的 Tauri 客户端。iOS 因缺少公开分发签名暂不提供安装包。
+GitHub Releases 会按阶段提供 Windows Tauri 安装包和明确标注的 Apple/Android 原生预览包。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。原生预览现已完成功能范围内的个人课表、法定节假日、日/周/月/年日历、当前时间线、每日课程摘要、系统日历导入和当天空教室联动查询。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
 
 ## 许可证状态
 
 仓库当前尚未选定软件许可证，也没有 `LICENSE` 文件。许可证必须由维护者确认并添加；在此之前，不应把仓库或发布物描述为已经完成开源授权，正式开源发布因此处于阻塞状态。
 
-## 桌面通知与小组件
+## 课程提醒与桌面小组件
 
-macOS 与 Windows 桌面端会在应用运行或驻留托盘时，于每天 7:30 根据本地保存的课表发送今日课程通知。首次触发时系统可能会请求通知权限。后台调度只在跨日、每天 7:00 和 7:30 三个边界唤醒；跨日会重建托盘中的今日/明日课程，7:00 获取当天空教室后也会再次重建托盘。
+macOS 与 Windows 桌面端会在应用运行或驻留托盘时，于每天 7:30 根据本地保存的课表发送今日课程通知。首次触发时系统可能会请求通知权限。后台调度休眠到跨日、每天 7:00、7:30 或明确的有界重试时间；系统恢复或窗口重新聚焦会中断休眠并重算边界，不进行固定间隔轮询。跨日会重建托盘中的今日/明日课程，7:00 获取当天空教室后也会再次重建托盘。
 
 课程桌面小组件可以从托盘菜单的“显示课程小组件”打开，也可以在应用“设置”页点击“打开课程小组件”。小组件显示今日课程和下一节待上课程，并会在课表刷新后自动更新。
+
+SwiftUI 客户端会在系统待处理通知上限内安排最多 63 个未来有课日的 07:30 摘要；Android 使用持久化 `JobScheduler` 在 07:30–08:00 的有效窗口内发送当天摘要。两端都默认关闭，只有用户明确授权后才启用；系统权限被撤销、账号切换、关闭开关或清除本地数据时会同步撤销任务和已显示摘要。
 
 ## 数据来源与数据安全
 
 应用使用北邮课表和空教室相关接口，因此需要教务系统账号和密码。账号与密码不会写入
 普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Android
 使用 Android Keystore。旧版 `settings.json` 中的凭据会在首次启动时迁移并从普通设置
-中删除。迁移先原子替换脱敏设置文件，再写入系统凭据存储。Tauri 的
+中删除。迁移先原子替换脱敏设置文件，再写入系统凭据存储。Tauri 为每个已保存账号生成不含账号信息的随机不透明缓存作用域，账号切换或清除失败时会持久化撤销标记并拒绝旧缓存。Tauri 的
 `load_saved_settings` 只向 WebView 返回 `has_saved_password`，不会返回真实密码；密码输入留空时保留已有系统凭据，只有显式输入新密码才替换。课程和空教室缓存不包含密码、token 或 cookie。完整基线见
 [docs/security.md](./docs/security.md)。
 
 法定节假日运行时数据来自
-[bastengao/chinese-holidays-data](https://github.com/bastengao/chinese-holidays-data)，客户端从该
-仓库的 [GitHub Raw HTTPS 数据目录](https://raw.githubusercontent.com/bastengao/chinese-holidays-data/master/data)
-按年份读取。这只是把同一上游数据的传输地址从旧 HTTP 端点迁移到 HTTPS Raw，不改变数据语义。
-截至 2026-08-03，上游仓库未声明许可证；这里仅作事实性来源归属，不声称其数据已经获得开源授权，
-也不把该运行时数据纳入本仓库未来的软件许可证范围。使用或再分发前应自行核对上游最新授权状态。
-Tauri 桌面端还保留一份仅用于首次离线展示的 2026 年最小兜底日期，其内容对应
+[cg-zhou/holiday-calendar](https://github.com/cg-zhou/holiday-calendar)，客户端通过其文档列出的
+[固定到 1.3.3 版本的 unpkg HTTPS 年度 JSON 地址](https://unpkg.com/holiday-calendar@1.3.3/data/CN/2026.json)按年份读取 `CN`
+数据。上游说明中国数据依据国务院办公厅年度节假日安排通知整理，并以 MIT License 发布；完整版权与
+许可文本见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。客户端严格核对响应年份、地区、日期、
+名称和类型，将 `public_holiday` 与 `transfer_workday` 映射到现有本地契约，未知类型不会写入缓存。
+Tauri、SwiftUI 和 Android 客户端都保留一份仅用于首次离线展示的 2026 年兜底日期，其内容对应
 [国务院办公厅关于 2026 年部分节假日安排的通知](https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm)；
 远端或本地缓存可用后会使用自动获取的数据。
 
@@ -90,7 +93,7 @@ npm run tauri:build:windows
 ./scripts/native-android-build.sh
 ```
 
-这两个目录用于逐步迁移。当前原生预览包已完成个人课表与本地缓存、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询，但尚不是功能完整的 Tauri 客户端替代品。
+这两个目录用于逐步迁移。当前原生预览包已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询；发布签名、公证和真机分发仍按平台分别受限。
 
 生成本地签名 Android APK/AAB、macOS Universal ZIP 和无签名 iOS 真机 archive：
 
@@ -230,9 +233,9 @@ src-tauri/gen/apple/build/where_to_study_iOS.xcarchive
 
 - `.github/workflows/build-windows.yml`：在 `windows-latest` 上构建 Windows 桌面安装包。
 - `.github/workflows/build-macos.yml`：在 `macos-15` 上构建并压缩 macOS Apple Silicon 应用。
-- `.github/workflows/build-mobile.yml`：构建 Android APK；iOS 有签名配置时输出 IPA，否则输出 unsigned `xcarchive`。
+- `.github/workflows/build-mobile.yml`：仅供手动验证旧 Tauri Android/iOS 迁移基线，不随版本标签或正式 Release 构建。
 - `.github/workflows/build-native.yml`：运行 Rust 共享契约/单元测试、macOS 与 iOS 模拟器单元测试、Apple 原生构建，生成无签名原生 iOS 真机 archive，以及运行 Android 单元测试、Lint 和构建。
-- `.github/workflows/security.yml`：扫描提交历史中的敏感信息。
+- `.github/workflows/security.yml`：扫描提交历史中的敏感信息，并审计完整 npm 与 Rust 锁文件依赖。
 
 移动端 workflow 使用的 secrets 名称如下：
 

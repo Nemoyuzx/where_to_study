@@ -8,6 +8,20 @@ OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 RELEASE_LABEL="${1:-v0.1.1-native-preview}"
 APK_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"
 AAB_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android.aab"
+EXPECTED_CERTIFICATE_FILE="$ANDROID_DIR/release-certificate.sha256"
+
+if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]]; then
+  EXPECTED_VERSION="${BASH_REMATCH[1]}"
+else
+  EXPECTED_VERSION=""
+fi
+CONFIGURED_VERSION="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' "$ANDROID_DIR/app/build.gradle.kts" | head -n 1)"
+CONFIGURED_BUILD="$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' "$ANDROID_DIR/app/build.gradle.kts" | head -n 1)"
+
+cleanup() {
+  "$ANDROID_DIR/gradlew" --project-dir "$ANDROID_DIR" --stop >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
 
 read_property() {
   local key="$1"
@@ -69,6 +83,38 @@ if [[ -z "$APKSIGNER" ]]; then
 fi
 "$APKSIGNER" verify --verbose "$SIGNED_APK" >/dev/null
 
+AAPT="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+if [[ -z "$AAPT" ]]; then
+  echo "Android aapt was not found." >&2
+  exit 1
+fi
+PACKAGE_BADGING="$("$AAPT" dump badging "$SIGNED_APK" | head -n 1)"
+ACTUAL_BUILD="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<<"$PACKAGE_BADGING")"
+ACTUAL_VERSION="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$PACKAGE_BADGING")"
+if [[ -n "$EXPECTED_VERSION" && "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
+  echo "Native Android package version $ACTUAL_VERSION does not match release label $RELEASE_LABEL." >&2
+  exit 1
+fi
+if [[ -z "$CONFIGURED_VERSION" || "$ACTUAL_VERSION" != "$CONFIGURED_VERSION" ]]; then
+  echo "Native Android package version $ACTUAL_VERSION does not match Gradle version $CONFIGURED_VERSION." >&2
+  exit 1
+fi
+if [[ -z "$CONFIGURED_BUILD" || "$ACTUAL_BUILD" != "$CONFIGURED_BUILD" ]]; then
+  echo "Native Android package build $ACTUAL_BUILD does not match Gradle build $CONFIGURED_BUILD." >&2
+  exit 1
+fi
+
+if [[ ! -f "$EXPECTED_CERTIFICATE_FILE" ]]; then
+  echo "Expected Android release certificate fingerprint was not found." >&2
+  exit 1
+fi
+EXPECTED_CERTIFICATE="$(tr -d '[:space:]:' < "$EXPECTED_CERTIFICATE_FILE" | tr '[:upper:]' '[:lower:]')"
+ACTUAL_APK_CERTIFICATE="$("$APKSIGNER" verify --print-certs "$SIGNED_APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+if [[ ! "$EXPECTED_CERTIFICATE" =~ ^[0-9a-f]{64}$ || "$ACTUAL_APK_CERTIFICATE" != "$EXPECTED_CERTIFICATE" ]]; then
+  echo "Native Android APK signer does not match the pinned release certificate." >&2
+  exit 1
+fi
+
 ZIPALIGN="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
 if [[ -z "$ZIPALIGN" ]]; then
   echo "Android zipalign was not found." >&2
@@ -82,6 +128,16 @@ if [[ ! -x "$JARSIGNER" ]]; then
   exit 1
 fi
 "$JARSIGNER" -verify "$SIGNED_AAB" >/dev/null
+KEYTOOL="$JAVA_HOME/bin/keytool"
+if [[ ! -x "$KEYTOOL" ]]; then
+  echo "Android AAB certificate inspector was not found: $KEYTOOL" >&2
+  exit 1
+fi
+ACTUAL_AAB_CERTIFICATE="$(LC_ALL=C "$KEYTOOL" -printcert -jarfile "$SIGNED_AAB" | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+if [[ "$ACTUAL_AAB_CERTIFICATE" != "$EXPECTED_CERTIFICATE" ]]; then
+  echo "Native Android AAB signer does not match the pinned release certificate." >&2
+  exit 1
+fi
 unzip -t "$SIGNED_AAB" >/dev/null
 
 if unzip -p "$SIGNED_APK" 'classes*.dex' | rg --text --fixed-strings --quiet 'http://jwglweixin.bupt.edu.cn'; then

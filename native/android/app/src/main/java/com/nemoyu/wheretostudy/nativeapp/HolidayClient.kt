@@ -13,6 +13,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import org.json.JSONArray
+import org.json.JSONObject
 
 class HolidayClientException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -22,8 +23,6 @@ internal object HolidayInputLimits {
     const val maxNameLength = 80
     const val maxSourceLength = 512
     const val maxTimestampLength = 64
-    const val maxRangeEntries = 32
-    const val maxRangeSpanDays = 32
     const val maxExpandedItems = 512
 }
 
@@ -94,7 +93,7 @@ class HolidayClient(
                     stream = connection.inputStream,
                     declaredLength = connection.contentLengthLong,
                 )
-                val payload = runCatching { JSONArray(body) }.getOrElse {
+                val payload = runCatching { JSONObject(body) }.getOrElse {
                     throw HolidayClientException("节假日服务返回的数据格式不正确。", it)
                 }
                 HolidaySourceParser.parse(
@@ -127,7 +126,7 @@ object HolidaySourceParser {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
 
     fun parse(
-        payload: JSONArray,
+        payload: JSONObject,
         year: Int,
         source: String,
         fetchedAt: String,
@@ -135,18 +134,38 @@ object HolidaySourceParser {
         if (year !in HolidayMetadata.minimumYear..HolidayMetadata.maximumYear) {
             throw HolidayClientException("节假日年份不在支持范围内。")
         }
-        if (payload.length() > HolidayInputLimits.maxRecords) {
+        val payloadYear = payload.opt("year") as? Int
+            ?: throw HolidayClientException("节假日服务返回的年份格式不正确。")
+        if (payloadYear != year) {
+            throw HolidayClientException("节假日数据年份与请求不一致。")
+        }
+        val region = payload.opt("region") as? String
+            ?: throw HolidayClientException("节假日服务返回的区域格式不正确。")
+        if (region != "CN") {
+            throw HolidayClientException("节假日数据区域不正确。")
+        }
+        val dates = payload.opt("dates") as? JSONArray
+            ?: throw HolidayClientException("节假日服务返回的日期列表格式不正确。")
+        if (dates.length() > HolidayInputLimits.maxRecords) {
             throw HolidayClientException("节假日服务返回的记录数量超过限制。")
         }
 
         val items = mutableListOf<HolidayItem>()
         val formatter = contractDate()
-        for (index in 0 until payload.length()) {
-            val raw = payload.optJSONObject(index)
+        for (index in 0 until dates.length()) {
+            val raw = dates.optJSONObject(index)
                 ?: throw HolidayClientException("节假日服务返回的记录格式不正确。")
-            val rawName = raw.opt("name") as? String
-                ?: throw HolidayClientException("节假日服务返回的名称格式不正确。")
-            val name = rawName.trim()
+            val rawChineseName = when {
+                !raw.has("name_cn") -> null
+                raw.opt("name_cn") is String -> raw.optString("name_cn").trim()
+                else -> throw HolidayClientException("节假日服务返回的名称格式不正确。")
+            }
+            val rawFallbackName = when {
+                !raw.has("name") -> null
+                raw.opt("name") is String -> raw.optString("name").trim()
+                else -> throw HolidayClientException("节假日服务返回的名称格式不正确。")
+            }
+            val name = rawChineseName?.takeIf(String::isNotEmpty) ?: rawFallbackName.orEmpty()
             if (name.isEmpty()) {
                 throw HolidayClientException("节假日服务返回的名称不能为空。")
             }
@@ -155,47 +174,27 @@ object HolidaySourceParser {
             }
             val rawType = raw.opt("type") as? String
                 ?: throw HolidayClientException("节假日服务返回的类型格式不正确。")
-            val range = raw.opt("range") as? JSONArray
-                ?: throw HolidayClientException("节假日服务返回的日期范围格式不正确。")
-            if (range.length() == 0) {
-                throw HolidayClientException("节假日服务返回的日期范围不能为空。")
-            }
-            if (range.length() > HolidayInputLimits.maxRangeEntries) {
-                throw HolidayClientException("节假日服务返回的日期范围数量超过限制。")
-            }
-            val rangeDates = (0 until range.length()).map { rangeIndex ->
-                val rawDate = range.opt(rangeIndex) as? String
-                    ?: throw HolidayClientException("节假日服务返回的日期格式不正确。")
-                parseDate(rawDate)
-                    ?: throw HolidayClientException("节假日服务返回的日期格式不正确。")
-            }
-            rangeDates.zipWithNext().forEach { (previous, next) ->
-                if (!next.after(previous)) {
-                    throw HolidayClientException("节假日服务返回的日期范围顺序不正确。")
-                }
+            val rawDate = raw.opt("date") as? String
+                ?: throw HolidayClientException("节假日服务返回的日期格式不正确。")
+            val date = parseDate(rawDate)
+                ?: throw HolidayClientException("节假日服务返回的日期格式不正确。")
+            if (date.get(Calendar.YEAR) != year) {
+                throw HolidayClientException("节假日数据包含其他年份的日期。")
             }
             val type = normalizeType(rawType)
-            val start = rangeDates.first()
-            val end = rangeDates.last()
-            val current = start.clone() as Calendar
-            var spanDays = 0
-            while (!current.after(end)) {
-                spanDays += 1
-                if (spanDays > HolidayInputLimits.maxRangeSpanDays) {
-                    throw HolidayClientException("节假日服务返回的单条日期跨度超过限制。")
+            if (type != null) {
+                if (items.size >= HolidayInputLimits.maxExpandedItems) {
+                    throw HolidayClientException("节假日服务返回的展开记录数量超过限制。")
                 }
-                if (type != null && current.get(Calendar.YEAR) == year) {
-                    if (items.size >= HolidayInputLimits.maxExpandedItems) {
-                        throw HolidayClientException("节假日服务返回的展开记录数量超过限制。")
-                    }
-                    items += HolidayItem(
-                        date = formatter.format(current.time),
-                        name = name,
-                        type = type,
-                    )
-                }
-                current.add(Calendar.DAY_OF_MONTH, 1)
+                items += HolidayItem(
+                    date = formatter.format(date.time),
+                    name = name,
+                    type = type,
+                )
             }
+        }
+        if (items.isEmpty()) {
+            throw HolidayClientException("节假日服务未返回可识别的法定节假日记录。")
         }
         return HolidaysSnapshot(
             year = year,
@@ -206,8 +205,8 @@ object HolidaySourceParser {
     }
 
     private fun normalizeType(value: String): String? = when (value) {
-        "holiday" -> "holiday"
-        "workingday", "workday" -> "workday"
+        "public_holiday" -> "holiday"
+        "transfer_workday" -> "workday"
         else -> null
     }
 

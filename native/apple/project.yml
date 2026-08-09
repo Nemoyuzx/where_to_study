@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.1"
-    CURRENT_PROJECT_VERSION: "5"
+    CURRENT_PROJECT_VERSION: "6"
     DEVELOPMENT_TEAM: ""
 targets:
   WhereToStudyMac:
@@ -77,6 +77,7 @@ targets:
     scheme:
       testTargets:
         - WhereToStudyiOSTests
+        - WhereToStudyiOSUITests
   WhereToStudyMacTests:
     type: bundle.unit-test
     platform: macOS
@@ -100,4 +101,16 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios.tests
+        CODE_SIGNING_ALLOWED: NO
+  WhereToStudyiOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: WhereToStudyiOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios.ui-tests
         CODE_SIGNING_ALLOWED: NO

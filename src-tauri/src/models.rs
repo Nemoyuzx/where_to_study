@@ -21,6 +21,7 @@ pub struct MetadataResponse {
     pub slots: Vec<SlotMetadata>,
     pub default_term_id: String,
     pub default_term_start_date: String,
+    pub supports_calendar_import: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

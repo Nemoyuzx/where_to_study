@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.provider.CalendarContract
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
@@ -96,12 +97,38 @@ internal class CalendarImportProcessCoordinator<T> {
 
 }
 
+internal class CalendarImportWorker(
+    private val executor: ExecutorService = Executors.newSingleThreadExecutor(),
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+
+    fun execute(task: () -> Unit): Boolean {
+        if (closed.get()) return false
+        return try {
+            executor.execute(task)
+            true
+        } catch (_: RejectedExecutionException) {
+            false
+        }
+    }
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) {
+            executor.shutdown()
+        }
+    }
+
+    internal val isShutdown: Boolean
+        get() = executor.isShutdown
+}
+
 class SystemCalendarImporter(context: Context) {
     private val appContext = context.applicationContext
     private val resolver = appContext.contentResolver
     private val mainHandler = Handler(Looper.getMainLooper())
     private val closed = AtomicBoolean(false)
     private val observerID = nextObserverID.incrementAndGet()
+    private val processWorker = CalendarImportWorker()
 
     val isImporting: Boolean
         get() = processCoordinator.isRunning()
@@ -116,16 +143,15 @@ class SystemCalendarImporter(context: Context) {
         val registration = processCoordinator.start(observerID, completion(onComplete))
             ?: return Result.failure(SystemCalendarImportException("课表正在导入系统日历。"))
 
-        try {
-            processWorker.execute {
-                val result = runCatching { importOnWorker(schedule) }
-                processCoordinator.complete(registration.token, result).forEach { observer ->
-                    observer(registration.token, result)
-                }
+        val accepted = processWorker.execute {
+            val result = runCatching { importOnWorker(schedule) }
+            processCoordinator.complete(registration.token, result).forEach { observer ->
+                observer(registration.token, result)
             }
-        } catch (error: RejectedExecutionException) {
+        }
+        if (!accepted) {
             processCoordinator.cancelStart(registration.token)
-            return Result.failure(SystemCalendarImportException("日历导入服务已关闭。", error))
+            return Result.failure(SystemCalendarImportException("日历导入服务已关闭。"))
         }
         return Result.success(registration)
     }
@@ -150,6 +176,7 @@ class SystemCalendarImporter(context: Context) {
         if (!closed.compareAndSet(false, true)) return
         processCoordinator.detach(observerID)
         mainHandler.removeCallbacksAndMessages(null)
+        processWorker.close()
     }
 
     private fun completion(
@@ -296,7 +323,6 @@ class SystemCalendarImporter(context: Context) {
 
     private companion object {
         const val MAX_OPERATIONS_PER_BATCH = 100
-        val processWorker = Executors.newSingleThreadExecutor()
         val processCoordinator = CalendarImportProcessCoordinator<SystemCalendarImportResult>()
         val nextObserverID = AtomicLong(0)
     }

@@ -11,9 +11,10 @@ mod models;
 mod recommender;
 mod schedule;
 mod schedule_store;
+mod scoped_cache;
 mod settings_store;
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 #[cfg(not(mobile))]
@@ -27,9 +28,7 @@ use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
 use tauri::tray::TrayIconBuilder;
-#[cfg(not(mobile))]
-use tauri::Emitter;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 #[cfg(not(mobile))]
 use tauri_plugin_notification::NotificationExt;
 
@@ -39,6 +38,7 @@ use crate::models::{
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
+const ACCOUNT_SCOPE_CLEARED_EVENT: &str = "account-scope:cleared";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct LocalDataGeneration(u64);
@@ -46,6 +46,7 @@ struct LocalDataGeneration(u64);
 #[derive(Debug, PartialEq, Eq)]
 enum LocalDataAccessError {
     Stale,
+    AccountAccessRevoked,
     Operation(String),
 }
 
@@ -53,13 +54,57 @@ impl LocalDataAccessError {
     fn message(self) -> String {
         match self {
             Self::Stale => STALE_LOCAL_DATA_MESSAGE.to_string(),
+            Self::AccountAccessRevoked => {
+                "本地账号访问已撤销，请先在设置中重新保存账号。".to_string()
+            }
             Self::Operation(message) => message,
+        }
+    }
+}
+
+fn finish_remote_holiday_fetch(
+    response: HolidaysResponse,
+    cache_attempt: Result<(), LocalDataAccessError>,
+) -> Result<HolidaysResponse, String> {
+    match cache_attempt {
+        Ok(()) | Err(LocalDataAccessError::Operation(_)) => Ok(response),
+        Err(error) => Err(error.message()),
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+struct AccountScopeUpdateError {
+    message: String,
+    account_scope_cleared: bool,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AccountScopeRequest {
+    account_scope: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct ScheduleUpdatedEvent {
+    account_scope: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct ClassroomsUpdatedEvent {
+    account_scope: String,
+}
+
+impl AccountScopeUpdateError {
+    fn new(message: String, account_scope_cleared: bool) -> Self {
+        Self {
+            message,
+            account_scope_cleared,
         }
     }
 }
 
 struct LocalDataCoordinator {
     generation: AtomicU64,
+    account_access_revoked: AtomicBool,
     io_lock: Mutex<()>,
 }
 
@@ -67,6 +112,7 @@ impl LocalDataCoordinator {
     const fn new() -> Self {
         Self {
             generation: AtomicU64::new(0),
+            account_access_revoked: AtomicBool::new(false),
             io_lock: Mutex::new(()),
         }
     }
@@ -90,17 +136,155 @@ impl LocalDataCoordinator {
         operation().map_err(LocalDataAccessError::Operation)
     }
 
-    fn clear<T>(&self, operation: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    fn with_current_account<T>(
+        &self,
+        expected: LocalDataGeneration,
+        operation: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, LocalDataAccessError> {
         let _guard = self
             .io_lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.generation.load(Ordering::Acquire) != expected.0 {
+            return Err(LocalDataAccessError::Stale);
+        }
+        if self.account_access_revoked.load(Ordering::Acquire) {
+            return Err(LocalDataAccessError::AccountAccessRevoked);
+        }
+        operation().map_err(LocalDataAccessError::Operation)
+    }
+
+    fn revoke_and_clear<T>(
+        &self,
+        persist_revocation: impl FnOnce() -> Result<(), String>,
+        operation: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        let _guard = self
+            .io_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        persist_revocation()?;
         self.generation.fetch_add(1, Ordering::AcqRel);
+        self.account_access_revoked.store(true, Ordering::Release);
         operation()
+    }
+
+    fn set_account_access_revoked(&self, revoked: bool) {
+        let _guard = self
+            .io_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.account_access_revoked
+            .store(revoked, Ordering::Release);
+    }
+
+    fn account_access_revoked(&self) -> bool {
+        self.account_access_revoked.load(Ordering::Acquire)
+    }
+
+    fn update_account_scope<P, T>(
+        &self,
+        prepare: impl FnOnce() -> Result<P, String>,
+        scope_state: impl FnOnce(&P) -> (bool, bool),
+        persist_revocation: impl FnOnce() -> Result<(), String>,
+        revoke_existing_account: impl FnOnce() -> Result<(), String>,
+        clear_account_scope: impl FnOnce() -> Result<(), String>,
+        commit: impl FnOnce(P) -> Result<T, String>,
+    ) -> Result<(T, bool), AccountScopeUpdateError> {
+        let _guard = self
+            .io_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let plan = prepare().map_err(|message| AccountScopeUpdateError::new(message, false))?;
+        let (changed, account_available) = scope_state(&plan);
+        if changed {
+            persist_revocation().map_err(|message| AccountScopeUpdateError::new(message, false))?;
+            self.generation.fetch_add(1, Ordering::AcqRel);
+            self.account_access_revoked.store(true, Ordering::Release);
+            revoke_existing_account()
+                .map_err(|message| AccountScopeUpdateError::new(message, true))?;
+            clear_account_scope().map_err(|message| AccountScopeUpdateError::new(message, true))?;
+        }
+        match commit(plan) {
+            Ok(result) => {
+                self.account_access_revoked
+                    .store(!account_available, Ordering::Release);
+                Ok((result, changed))
+            }
+            Err(message) => Err(AccountScopeUpdateError::new(
+                message,
+                changed || self.account_access_revoked.load(Ordering::Acquire),
+            )),
+        }
     }
 }
 
+fn finalize_account_scope_update<T>(
+    update: Result<(T, bool), AccountScopeUpdateError>,
+    on_account_scope_cleared: impl FnOnce(),
+) -> Result<T, AccountScopeUpdateError> {
+    let account_scope_cleared = match &update {
+        Ok((_, changed)) => *changed,
+        Err(error) => error.account_scope_cleared,
+    };
+    if account_scope_cleared {
+        on_account_scope_cleared();
+    }
+    update.map(|(result, _)| result)
+}
+
+fn finalize_local_data_clear<T>(
+    result: Result<T, String>,
+    on_account_data_cleared: impl FnOnce(),
+) -> Result<T, String> {
+    on_account_data_cleared();
+    result
+}
+
+#[cfg(not(mobile))]
+fn reset_account_scope_surfaces<EmitError, TrayError>(
+    emit_clear: impl FnOnce() -> Result<(), EmitError>,
+    hide_widget: impl FnOnce(),
+    reset_tray: impl FnOnce() -> Result<(), TrayError>,
+    hide_tray: impl FnOnce(),
+) {
+    let _ = emit_clear();
+    hide_widget();
+    if reset_tray().is_err() {
+        hide_tray();
+    }
+}
+
+fn notify_account_scope_cleared(app: &tauri::AppHandle) {
+    #[cfg(not(mobile))]
+    reset_account_scope_surfaces(
+        || app.emit(ACCOUNT_SCOPE_CLEARED_EVENT, ()),
+        || {
+            if let Some(window) = app.get_webview_window("course-widget") {
+                let _ = window.hide();
+                let _ = window.close();
+            }
+        },
+        || {
+            set_tray_menu(
+                app,
+                TrayCourseContent::Message("暂无本地课表，请先获取/刷新个人课表。".to_string()),
+            )
+        },
+        || {
+            if let Some(tray) = app.tray_by_id("where-to-study-tray") {
+                let _ = tray.set_visible(false);
+            }
+        },
+    );
+
+    #[cfg(mobile)]
+    let _ = app.emit(ACCOUNT_SCOPE_CLEARED_EVENT, ());
+}
+
 static LOCAL_DATA: LocalDataCoordinator = LocalDataCoordinator::new();
+#[cfg(not(mobile))]
+static DESKTOP_SCHEDULER_THREAD: Mutex<Option<std::thread::Thread>> = Mutex::new(None);
 
 #[cfg(test)]
 mod local_data_coordination_tests {
@@ -109,6 +293,62 @@ mod local_data_coordination_tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::{mpsc, Arc};
     use std::thread;
+
+    fn write_account_caches(
+        directory: &std::path::Path,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
+        let schedule = directory.join("schedule.json");
+        let classrooms = directory.join("classrooms.json");
+        fs::write(&schedule, b"account-a schedule").expect("write schedule cache");
+        fs::write(&classrooms, b"account-a classrooms").expect("write classrooms cache");
+        (schedule, classrooms)
+    }
+
+    fn clear_cache_paths(paths: &[&std::path::Path]) -> Result<(), String> {
+        for path in paths {
+            if let Err(error) = fs::remove_file(path) {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    return Err(error.to_string());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn sample_holiday_response() -> HolidaysResponse {
+        HolidaysResponse {
+            year: 2026,
+            source: "remote".to_string(),
+            fetched_at: "2026-01-01T00:00:00+08:00".to_string(),
+            items: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn remote_holiday_result_survives_cache_write_failure() {
+        let response = sample_holiday_response();
+        let result = finish_remote_holiday_fetch(
+            response.clone(),
+            Err(LocalDataAccessError::Operation(
+                "cache unavailable".to_string(),
+            )),
+        );
+
+        assert_eq!(result.expect("return valid remote response"), response);
+    }
+
+    #[test]
+    fn stale_remote_holiday_result_is_still_rejected() {
+        let result = finish_remote_holiday_fetch(
+            sample_holiday_response(),
+            Err(LocalDataAccessError::Stale),
+        );
+
+        assert_eq!(
+            result.expect_err("reject stale response"),
+            STALE_LOCAL_DATA_MESSAGE
+        );
+    }
 
     #[test]
     fn clear_after_write_removes_disk_and_memory_results() {
@@ -141,13 +381,16 @@ mod local_data_coordination_tests {
             let path = path.clone();
             let memory_value = Arc::clone(&memory_value);
             thread::spawn(move || {
-                coordinator.clear(|| {
-                    if path.exists() {
-                        fs::remove_file(&path).map_err(|error| error.to_string())?;
-                    }
-                    memory_value.store(0, Ordering::Release);
-                    Ok(())
-                })
+                coordinator.revoke_and_clear(
+                    || Ok(()),
+                    || {
+                        if path.exists() {
+                            fs::remove_file(&path).map_err(|error| error.to_string())?;
+                        }
+                        memory_value.store(0, Ordering::Release);
+                        Ok(())
+                    },
+                )
             })
         };
 
@@ -167,10 +410,13 @@ mod local_data_coordination_tests {
         let generation = coordinator.begin();
 
         coordinator
-            .clear(|| {
-                memory_value.store(0, Ordering::Release);
-                Ok(())
-            })
+            .revoke_and_clear(
+                || Ok(()),
+                || {
+                    memory_value.store(0, Ordering::Release);
+                    Ok(())
+                },
+            )
             .expect("clear local data");
         let result = coordinator.with_current(generation, || {
             fs::write(&path, b"stale result").map_err(|error| error.to_string())?;
@@ -196,13 +442,350 @@ mod local_data_coordination_tests {
             items: Vec::new(),
         };
 
-        coordinator.clear(|| Ok(())).expect("clear local data");
+        coordinator
+            .revoke_and_clear(|| Ok(()), || Ok(()))
+            .expect("clear local data");
         let result = coordinator.with_current(generation, || {
             holidays::save_cache_to_path(&path, &response).map_err(|error| error.message)
         });
 
         assert_eq!(result, Err(LocalDataAccessError::Stale));
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn account_a_to_b_clears_caches_and_invalidates_old_generation() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let (schedule, classrooms) = write_account_caches(directory.path());
+        let coordinator = LocalDataCoordinator::new();
+        let account_a_request = coordinator.begin();
+
+        let (saved_account, changed) = coordinator
+            .update_account_scope(
+                || Ok(("account-a", "account-b")),
+                |(old, new)| (old != new, !new.is_empty()),
+                || Ok(()),
+                || Ok(()),
+                || clear_cache_paths(&[&schedule, &classrooms]),
+                |(_, new)| Ok(new),
+            )
+            .expect("switch account");
+
+        assert_eq!(saved_account, "account-b");
+        assert!(changed);
+        assert!(!schedule.exists());
+        assert!(!classrooms.exists());
+        assert_eq!(
+            coordinator.with_current(account_a_request, || Ok(())),
+            Err(LocalDataAccessError::Stale)
+        );
+    }
+
+    #[test]
+    fn account_a_to_empty_clears_caches_and_invalidates_old_generation() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let (schedule, classrooms) = write_account_caches(directory.path());
+        let coordinator = LocalDataCoordinator::new();
+        let account_a_request = coordinator.begin();
+
+        let (saved_account, changed) = coordinator
+            .update_account_scope(
+                || Ok(("account-a", "")),
+                |(old, new)| (old != new, !new.is_empty()),
+                || Ok(()),
+                || Ok(()),
+                || clear_cache_paths(&[&schedule, &classrooms]),
+                |(_, new)| Ok(new),
+            )
+            .expect("clear account");
+
+        assert_eq!(saved_account, "");
+        assert!(changed);
+        assert!(!schedule.exists());
+        assert!(!classrooms.exists());
+        assert_eq!(
+            coordinator.with_current(account_a_request, || Ok(())),
+            Err(LocalDataAccessError::Stale)
+        );
+    }
+
+    #[test]
+    fn same_account_password_change_preserves_caches_and_generation() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let (schedule, classrooms) = write_account_caches(directory.path());
+        let coordinator = LocalDataCoordinator::new();
+        let account_a_request = coordinator.begin();
+        let clear_called = AtomicUsize::new(0);
+
+        let (_, changed) = coordinator
+            .update_account_scope(
+                || Ok(("account-a", "account-a")),
+                |(old, new)| (old != new, !new.is_empty()),
+                || Ok(()),
+                || Ok(()),
+                || {
+                    clear_called.fetch_add(1, Ordering::Relaxed);
+                    Ok(())
+                },
+                |_| Ok(()),
+            )
+            .expect("change password for same account");
+
+        assert!(!changed);
+        assert_eq!(clear_called.load(Ordering::Relaxed), 0);
+        assert!(schedule.exists());
+        assert!(classrooms.exists());
+        assert_eq!(
+            coordinator.with_current(account_a_request, || Ok("current")),
+            Ok("current")
+        );
+    }
+
+    #[test]
+    fn in_flight_account_a_result_cannot_write_after_account_switch() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let stale_path = directory.path().join("schedule.json");
+        let coordinator = Arc::new(LocalDataCoordinator::new());
+        let account_a_request = coordinator.begin();
+        let (remote_started_tx, remote_started_rx) = mpsc::channel();
+        let (release_remote_tx, release_remote_rx) = mpsc::channel();
+
+        let writer = {
+            let coordinator = Arc::clone(&coordinator);
+            let stale_path = stale_path.clone();
+            thread::spawn(move || {
+                remote_started_tx.send(()).expect("signal remote request");
+                release_remote_rx.recv().expect("release remote response");
+                coordinator.with_current(account_a_request, || {
+                    fs::write(&stale_path, b"stale account-a response")
+                        .map_err(|error| error.to_string())
+                })
+            })
+        };
+
+        remote_started_rx.recv().expect("wait for remote request");
+        coordinator
+            .update_account_scope(
+                || Ok(true),
+                |changed| (*changed, true),
+                || Ok(()),
+                || Ok(()),
+                || Ok(()),
+                |_| Ok(()),
+            )
+            .expect("switch account while request is active");
+        release_remote_tx.send(()).expect("release stale response");
+
+        assert_eq!(
+            writer.join().expect("join stale writer"),
+            Err(LocalDataAccessError::Stale)
+        );
+        assert!(!stale_path.exists());
+    }
+
+    #[test]
+    fn failed_changed_account_commit_remains_fail_closed() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let (schedule, classrooms) = write_account_caches(directory.path());
+        let coordinator = LocalDataCoordinator::new();
+        let account_a_request = coordinator.begin();
+        let clear_notifications = AtomicUsize::new(0);
+
+        let update = coordinator.update_account_scope(
+            || Ok(true),
+            |changed| (*changed, true),
+            || Ok(()),
+            || Ok(()),
+            || clear_cache_paths(&[&schedule, &classrooms]),
+            |_| Err::<(), _>("credential store unavailable".to_string()),
+        );
+        let error = finalize_account_scope_update(update, || {
+            clear_notifications.fetch_add(1, Ordering::Relaxed);
+        })
+        .expect_err("changed account commit must fail");
+
+        assert_eq!(error.message, "credential store unavailable");
+        assert!(error.account_scope_cleared);
+        assert_eq!(clear_notifications.load(Ordering::Relaxed), 1);
+        assert!(!schedule.exists());
+        assert!(!classrooms.exists());
+        assert_eq!(
+            coordinator.with_current_account(coordinator.begin(), || Ok(())),
+            Err(LocalDataAccessError::AccountAccessRevoked)
+        );
+        assert_eq!(
+            coordinator.with_current(account_a_request, || Ok(())),
+            Err(LocalDataAccessError::Stale)
+        );
+    }
+
+    #[test]
+    fn partial_cache_clear_failure_revokes_old_account_until_a_save_succeeds() {
+        let coordinator = LocalDataCoordinator::new();
+        let revoked_credentials = AtomicBool::new(false);
+
+        let error = coordinator
+            .update_account_scope(
+                || Ok(true),
+                |changed| (*changed, true),
+                || Ok(()),
+                || {
+                    revoked_credentials.store(true, Ordering::Release);
+                    Ok(())
+                },
+                || Err("无法删除旧课表缓存".to_string()),
+                |_| Ok(()),
+            )
+            .expect_err("partial cache clear must fail");
+
+        assert!(error.account_scope_cleared);
+        assert!(revoked_credentials.load(Ordering::Acquire));
+        assert_eq!(
+            coordinator.with_current_account(coordinator.begin(), || Ok("old account data")),
+            Err(LocalDataAccessError::AccountAccessRevoked)
+        );
+    }
+
+    #[test]
+    fn failed_local_clear_disables_all_future_account_operations() {
+        let coordinator = LocalDataCoordinator::new();
+
+        let error = coordinator
+            .revoke_and_clear(
+                || Ok(()),
+                || Err::<(), _>("credential deletion failed".to_string()),
+            )
+            .expect_err("clear operation must report the storage failure");
+
+        assert_eq!(error, "credential deletion failed");
+        assert_eq!(
+            coordinator.with_current_account(coordinator.begin(), || Ok(())),
+            Err(LocalDataAccessError::AccountAccessRevoked)
+        );
+    }
+
+    #[test]
+    fn failed_local_clear_still_notifies_all_account_surfaces() {
+        let notifications = AtomicUsize::new(0);
+
+        let error =
+            finalize_local_data_clear(Err::<(), _>("partial storage failure".to_string()), || {
+                notifications.fetch_add(1, Ordering::Relaxed);
+            })
+            .expect_err("partial clear must remain visible to the caller");
+
+        assert_eq!(error, "partial storage failure");
+        assert_eq!(notifications.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn persistent_revocation_failure_keeps_the_existing_account_active() {
+        let coordinator = LocalDataCoordinator::new();
+        let generation = coordinator.begin();
+
+        let error = coordinator
+            .update_account_scope(
+                || Ok(true),
+                |changed| (*changed, true),
+                || Err("revocation marker unavailable".to_string()),
+                || panic!("credential deletion must not run"),
+                || panic!("cache clear must not run"),
+                |_| -> Result<(), String> { panic!("commit must not run") },
+            )
+            .expect_err("revocation must fail before the transition starts");
+
+        assert!(!error.account_scope_cleared);
+        assert_eq!(
+            coordinator.with_current_account(generation, || Ok("account-a")),
+            Ok("account-a")
+        );
+    }
+
+    #[test]
+    fn successful_saved_account_reenables_access_after_a_local_clear() {
+        let coordinator = LocalDataCoordinator::new();
+        coordinator
+            .revoke_and_clear(|| Ok(()), || Ok(()))
+            .expect("clear local data");
+        assert!(coordinator.account_access_revoked());
+
+        coordinator
+            .update_account_scope(
+                || Ok("account-a"),
+                |account| (false, !account.is_empty()),
+                || panic!("same account recovery does not revoke twice"),
+                || panic!("same account recovery does not delete credentials"),
+                || panic!("same account recovery does not clear twice"),
+                |_| Ok(()),
+            )
+            .expect("save account after local clear");
+
+        assert_eq!(
+            coordinator.with_current_account(coordinator.begin(), || Ok("available")),
+            Ok("available")
+        );
+    }
+
+    #[test]
+    fn account_scope_validation_rejects_unsaved_accounts_and_event_is_scope_only() {
+        let saved_scope = scoped_cache::new_account_scope().expect("saved scope");
+        let other_scope = scoped_cache::new_account_scope().expect("other scope");
+
+        assert!(validate_account_scope_match(&saved_scope, &saved_scope).is_ok());
+        assert!(validate_account_scope_match(&other_scope, &saved_scope).is_err());
+
+        let event = serde_json::to_value(ScheduleUpdatedEvent {
+            account_scope: saved_scope.clone(),
+        })
+        .expect("serialize schedule event");
+        assert_eq!(event["account_scope"], saved_scope);
+        assert!(event.get("schedule").is_none());
+        assert!(event.get("courses").is_none());
+
+        let classrooms_event = serde_json::to_value(ClassroomsUpdatedEvent {
+            account_scope: saved_scope,
+        })
+        .expect("serialize classrooms event");
+        assert!(classrooms_event.get("classrooms").is_none());
+        assert!(classrooms_event.get("campuses").is_none());
+    }
+
+    #[cfg(not(mobile))]
+    #[test]
+    fn account_scope_surface_failures_hide_stale_widget_and_tray_content() {
+        let widget_hides = AtomicUsize::new(0);
+        let tray_hides = AtomicUsize::new(0);
+
+        reset_account_scope_surfaces(
+            || Err::<(), _>("event unavailable"),
+            || {
+                widget_hides.fetch_add(1, Ordering::Relaxed);
+            },
+            || Err::<(), _>("tray menu unavailable"),
+            || {
+                tray_hides.fetch_add(1, Ordering::Relaxed);
+            },
+        );
+
+        assert_eq!(widget_hides.load(Ordering::Relaxed), 1);
+        assert_eq!(tray_hides.load(Ordering::Relaxed), 1);
+    }
+
+    #[cfg(not(mobile))]
+    #[test]
+    fn successful_clear_event_also_hides_the_widget_immediately() {
+        let widget_hides = AtomicUsize::new(0);
+
+        reset_account_scope_surfaces(
+            || Ok::<(), ()>(()),
+            || {
+                widget_hides.fetch_add(1, Ordering::Relaxed);
+            },
+            || Ok::<(), ()>(()),
+            || panic!("successful tray reset must not hide the tray"),
+        );
+
+        assert_eq!(widget_hides.load(Ordering::Relaxed), 1);
     }
 }
 
@@ -213,6 +796,7 @@ fn get_metadata() -> MetadataResponse {
         slots: config::slot_payload(),
         default_term_id: config::default_term_id(),
         default_term_start_date: config::default_term_start_date(),
+        supports_calendar_import: calendar_export::is_supported(),
     }
 }
 
@@ -221,6 +805,11 @@ fn load_saved_settings(app: tauri::AppHandle) -> Result<SavedSettings, String> {
     let generation = LOCAL_DATA.begin();
     LOCAL_DATA
         .with_current(generation, || {
+            if LOCAL_DATA.account_access_revoked()
+                || settings_store::account_access_revoked(&app).map_err(|error| error.message)?
+            {
+                return Ok(SavedSettings::with_defaults());
+            }
             settings_store::load(&app).map_err(|error| error.message)
         })
         .map_err(LocalDataAccessError::message)
@@ -230,55 +819,89 @@ fn load_saved_settings(app: tauri::AppHandle) -> Result<SavedSettings, String> {
 fn save_saved_settings(
     app: tauri::AppHandle,
     payload: SaveSettingsRequest,
-) -> Result<SavedSettings, String> {
-    let generation = LOCAL_DATA.begin();
-    LOCAL_DATA
-        .with_current(generation, || {
-            settings_store::save(&app, payload).map_err(|error| error.message)
-        })
-        .map_err(LocalDataAccessError::message)
+) -> Result<SavedSettings, AccountScopeUpdateError> {
+    let update = LOCAL_DATA.update_account_scope(
+        || settings_store::prepare_save(payload).map_err(|error| error.message),
+        |plan| (plan.account_changed(), plan.has_account()),
+        || settings_store::mark_account_access_revoked(&app).map_err(|error| error.message),
+        || {
+            credential_store::save(&credential_store::Credentials::default())
+                .map_err(|error| error.message)
+        },
+        || clear_account_scoped_caches(&app),
+        |plan| {
+            let saved = settings_store::commit_save(&app, plan).map_err(|error| error.message)?;
+            settings_store::clear_account_access_revoked(&app).map_err(|error| error.message)?;
+            Ok(saved)
+        },
+    );
+
+    finalize_account_scope_update(update, || notify_account_scope_cleared(&app))
+}
+
+fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
+    let mut errors = Vec::new();
+    if let Err(error) = schedule_store::clear(app) {
+        errors.push(error.message);
+    }
+    if let Err(error) = classrooms_store::clear(app) {
+        errors.push(error.message);
+    }
+    if let Err(error) = calendar_export::clear(app) {
+        errors.push(error.message);
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("；"))
+    }
 }
 
 #[tauri::command]
 fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
-    LOCAL_DATA.clear(|| {
-        let mut errors = Vec::new();
-        if let Err(error) = credential_store::save(&credential_store::Credentials::default()) {
-            errors.push(error.message);
-        }
-
-        match app.path().app_config_dir() {
-            Ok(directory) if directory.exists() => {
-                if let Err(error) = std::fs::remove_dir_all(&directory) {
-                    errors.push(format!("无法清除本地缓存与设置：{error}"));
-                }
+    let result = LOCAL_DATA.revoke_and_clear(
+        || settings_store::mark_account_access_revoked(&app).map_err(|error| error.message),
+        || {
+            let mut errors = Vec::new();
+            if let Err(error) = credential_store::save(&credential_store::Credentials::default()) {
+                errors.push(error.message);
             }
-            Ok(_) => {}
-            Err(error) => errors.push(format!("无法定位本地数据目录：{error}")),
-        }
+            if let Err(error) = calendar_export::clear(&app) {
+                errors.push(error.message);
+            }
+            if let Err(error) = settings_store::clear_local_files_preserving_revocation(&app) {
+                errors.push(error.message);
+            }
 
-        #[cfg(not(mobile))]
-        if let Err(error) = set_tray_menu(
-            &app,
-            TrayCourseContent::Message("暂无本地课表，请先获取/刷新个人课表。".to_string()),
-        ) {
-            errors.push(format!("无法重置托盘课程信息：{error}"));
-        }
-
-        if errors.is_empty() {
-            Ok(true)
-        } else {
-            Err(errors.join("；"))
-        }
-    })
+            if errors.is_empty() {
+                Ok(true)
+            } else {
+                Err(errors.join("；"))
+            }
+        },
+    );
+    finalize_local_data_clear(result, || notify_account_scope_cleared(&app))
 }
 
 #[tauri::command]
 fn load_saved_schedule(app: tauri::AppHandle) -> Result<Option<ScheduleResponse>, String> {
     let generation = LOCAL_DATA.begin();
     LOCAL_DATA
-        .with_current(generation, || {
-            schedule_store::load(&app).map_err(|error| error.message)
+        .with_current_account(generation, || load_current_schedule(&app))
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+fn load_saved_schedule_for_scope(
+    app: tauri::AppHandle,
+    payload: AccountScopeRequest,
+) -> Result<Option<ScheduleResponse>, String> {
+    let generation = LOCAL_DATA.begin();
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            let current_scope = require_saved_account_scope()?;
+            validate_account_scope_match(&payload.account_scope, &current_scope)?;
+            schedule_store::load(&app, &current_scope).map_err(|error| error.message)
         })
         .map_err(LocalDataAccessError::message)
 }
@@ -287,8 +910,21 @@ fn load_saved_schedule(app: tauri::AppHandle) -> Result<Option<ScheduleResponse>
 fn load_saved_classrooms(app: tauri::AppHandle) -> Result<Option<ClassroomsCacheResponse>, String> {
     let generation = LOCAL_DATA.begin();
     LOCAL_DATA
-        .with_current(generation, || {
-            classrooms_store::load(&app).map_err(|error| error.message)
+        .with_current_account(generation, || load_current_classrooms(&app))
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+fn load_saved_classrooms_for_scope(
+    app: tauri::AppHandle,
+    payload: AccountScopeRequest,
+) -> Result<Option<ClassroomsCacheResponse>, String> {
+    let generation = LOCAL_DATA.begin();
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            let current_scope = require_saved_account_scope()?;
+            validate_account_scope_match(&payload.account_scope, &current_scope)?;
+            classrooms_store::load(&app, &current_scope).map_err(|error| error.message)
         })
         .map_err(LocalDataAccessError::message)
 }
@@ -299,20 +935,29 @@ async fn fetch_schedule(
     mut payload: ScheduleRequest,
 ) -> Result<ScheduleResponse, String> {
     let generation = LOCAL_DATA.begin();
-    LOCAL_DATA
-        .with_current(generation, || {
+    let account_scope = LOCAL_DATA
+        .with_current_account(generation, || {
             settings_store::apply_saved_credentials(&mut payload.account, &mut payload.password)
-                .map_err(|error| error.message)
+                .map_err(|error| error.message)?;
+            let request_scope = request_account_scope(&payload.account)?;
+            let saved_scope = require_saved_account_scope()?;
+            validate_account_scope_match(&request_scope, &saved_scope)?;
+            Ok(request_scope)
         })
         .map_err(LocalDataAccessError::message)?;
     let schedule = schedule::fetch_schedule(&payload)
         .await
         .map_err(|error| error.message)?;
     LOCAL_DATA
-        .with_current(generation, || {
-            schedule_store::save(&app, &schedule).map_err(|error| error.message)?;
+        .with_current_account(generation, || {
+            schedule_store::save(&app, &account_scope, &schedule).map_err(|error| error.message)?;
             #[cfg(not(mobile))]
-            let _ = app.emit("schedule:updated", schedule.clone());
+            let _ = app.emit(
+                "schedule:updated",
+                ScheduleUpdatedEvent {
+                    account_scope: account_scope.clone(),
+                },
+            );
             Ok(())
         })
         .map_err(LocalDataAccessError::message)?;
@@ -323,8 +968,8 @@ async fn fetch_schedule(
 fn import_schedule_to_calendar(app: tauri::AppHandle) -> Result<String, String> {
     let generation = LOCAL_DATA.begin();
     LOCAL_DATA
-        .with_current(generation, || {
-            let Some(schedule) = schedule_store::load(&app).map_err(|error| error.message)? else {
+        .with_current_account(generation, || {
+            let Some(schedule) = load_current_schedule(&app)? else {
                 return Err("请先获取/刷新个人课表，获取成功后会自动保存到本地。".to_string());
             };
             calendar_export::export_and_open(&app, &schedule)
@@ -340,10 +985,14 @@ async fn fetch_classrooms(
     mut payload: ClassroomsRequest,
 ) -> Result<ClassroomsCacheResponse, String> {
     let generation = LOCAL_DATA.begin();
-    LOCAL_DATA
-        .with_current(generation, || {
+    let account_scope = LOCAL_DATA
+        .with_current_account(generation, || {
             settings_store::apply_saved_credentials(&mut payload.account, &mut payload.password)
-                .map_err(|error| error.message)
+                .map_err(|error| error.message)?;
+            let request_scope = request_account_scope(&payload.account)?;
+            let saved_scope = require_saved_account_scope()?;
+            validate_account_scope_match(&request_scope, &saved_scope)?;
+            Ok(request_scope)
         })
         .map_err(LocalDataAccessError::message)?;
     payload.target_date = Some(config::today_in_app_tz().to_string());
@@ -351,8 +1000,8 @@ async fn fetch_classrooms(
         .await
         .map_err(|error| error.message)?;
     LOCAL_DATA
-        .with_current(generation, || {
-            classrooms_store::save(&app, &classrooms).map_err(|error| error.message)
+        .with_current_account(generation, || {
+            classrooms_store::save(&app, &account_scope, &classrooms).map_err(|error| error.message)
         })
         .map_err(LocalDataAccessError::message)?;
     Ok(classrooms)
@@ -368,12 +1017,10 @@ async fn fetch_holidays(
 
     match holidays::fetch_remote(payload.year).await {
         Ok(response) => {
-            LOCAL_DATA
-                .with_current(generation, || {
-                    holidays::save_cache(&app, &response).map_err(|error| error.message)
-                })
-                .map_err(LocalDataAccessError::message)?;
-            Ok(response)
+            let cache_attempt = LOCAL_DATA.with_current(generation, || {
+                holidays::save_cache(&app, &response).map_err(|error| error.message)
+            });
+            finish_remote_holiday_fetch(response, cache_attempt)
         }
         Err(_) => {
             let cached = LOCAL_DATA
@@ -493,6 +1140,67 @@ fn non_empty_option(value: String) -> Option<String> {
     }
 }
 
+fn request_account_scope(account: &Option<String>) -> Result<String, String> {
+    let requested_account = account
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "请输入教务账号。".to_string())?;
+    let credentials = load_saved_credentials_with_scope()?
+        .ok_or_else(|| "请先在设置中保存教务账号。".to_string())?;
+    if credentials.account.trim() != requested_account {
+        return Err("当前查询账号尚未保存，请先在设置中保存后再获取数据。".to_string());
+    }
+    Ok(credentials.account_scope.clone())
+}
+
+fn saved_account_scope() -> Result<Option<String>, String> {
+    Ok(load_saved_credentials_with_scope()?.map(|credentials| credentials.account_scope.clone()))
+}
+
+fn load_saved_credentials_with_scope() -> Result<Option<credential_store::Credentials>, String> {
+    let Some(mut credentials) = credential_store::load().map_err(|error| error.message)? else {
+        return Ok(None);
+    };
+    if credentials.account.trim().is_empty() {
+        return Ok(None);
+    }
+    if !scoped_cache::is_valid_account_scope(&credentials.account_scope) {
+        credentials.account_scope =
+            scoped_cache::new_account_scope().map_err(|error| error.message)?;
+        credential_store::save(&credentials).map_err(|error| error.message)?;
+    }
+    Ok(Some(credentials))
+}
+
+fn require_saved_account_scope() -> Result<String, String> {
+    saved_account_scope()?.ok_or_else(|| "请先在设置中保存教务账号。".to_string())
+}
+
+fn validate_account_scope_match(request_scope: &str, saved_scope: &str) -> Result<(), String> {
+    if request_scope == saved_scope {
+        Ok(())
+    } else {
+        Err("当前查询账号尚未保存，请先在设置中保存后再获取数据。".to_string())
+    }
+}
+
+fn load_current_schedule(app: &tauri::AppHandle) -> Result<Option<ScheduleResponse>, String> {
+    let Some(account_scope) = saved_account_scope()? else {
+        return Ok(None);
+    };
+    schedule_store::load(app, &account_scope).map_err(|error| error.message)
+}
+
+fn load_current_classrooms(
+    app: &tauri::AppHandle,
+) -> Result<Option<ClassroomsCacheResponse>, String> {
+    let Some(account_scope) = saved_account_scope()? else {
+        return Ok(None);
+    };
+    classrooms_store::load(app, &account_scope).map_err(|error| error.message)
+}
+
 #[cfg(not(mobile))]
 fn classrooms_request_from_settings(settings: SavedSettings) -> ClassroomsRequest {
     ClassroomsRequest {
@@ -515,7 +1223,9 @@ enum ScheduledClassroomRefreshError {
 impl ScheduledClassroomRefreshError {
     fn from_local_data(error: LocalDataAccessError) -> Self {
         match error {
-            LocalDataAccessError::Stale => Self::Cancelled,
+            LocalDataAccessError::Stale | LocalDataAccessError::AccountAccessRevoked => {
+                Self::Cancelled
+            }
             LocalDataAccessError::Operation(message) => Self::Retryable(message),
         }
     }
@@ -540,13 +1250,14 @@ async fn fetch_today_classrooms_from_saved_settings(
     app: tauri::AppHandle,
 ) -> Result<ClassroomsCacheResponse, ScheduledClassroomRefreshError> {
     let generation = LOCAL_DATA.begin();
-    let request = LOCAL_DATA
-        .with_current(generation, || {
+    let (request, account_scope) = LOCAL_DATA
+        .with_current_account(generation, || {
             let settings = settings_store::load(&app).map_err(|error| error.message)?;
             let mut request = classrooms_request_from_settings(settings);
             settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
                 .map_err(|error| error.message)?;
-            Ok(request)
+            let account_scope = request_account_scope(&request.account)?;
+            Ok((request, account_scope))
         })
         .map_err(ScheduledClassroomRefreshError::from_local_data)?;
     auth::resolve_credentials(&request.account, &request.password)
@@ -555,9 +1266,15 @@ async fn fetch_today_classrooms_from_saved_settings(
         .await
         .map_err(|error| ScheduledClassroomRefreshError::Retryable(error.message))?;
     LOCAL_DATA
-        .with_current(generation, || {
-            classrooms_store::save(&app, &classrooms).map_err(|error| error.message)?;
-            let _ = app.emit("classrooms:auto-fetched", classrooms.clone());
+        .with_current_account(generation, || {
+            classrooms_store::save(&app, &account_scope, &classrooms)
+                .map_err(|error| error.message)?;
+            let _ = app.emit(
+                "classrooms:auto-fetched",
+                ClassroomsUpdatedEvent {
+                    account_scope: account_scope.clone(),
+                },
+            );
             Ok(())
         })
         .map_err(ScheduledClassroomRefreshError::from_local_data)?;
@@ -753,16 +1470,14 @@ async fn load_today_course_content(
     prefer_saved_schedule: bool,
 ) -> TrayCourseContent {
     if prefer_saved_schedule {
-        match LOCAL_DATA.with_current(generation, || {
-            schedule_store::load(&app).map_err(|error| error.message)
-        }) {
+        match LOCAL_DATA.with_current_account(generation, || load_current_schedule(&app)) {
             Ok(Some(schedule)) => return schedule_to_tray_content(schedule),
             Ok(None) => {}
             Err(error) => return TrayCourseContent::Message(error.message()),
         }
     }
 
-    let request = match LOCAL_DATA.with_current(generation, || {
+    let (request, account_scope) = match LOCAL_DATA.with_current_account(generation, || {
         let settings = settings_store::load(&app).map_err(|error| error.message)?;
         let mut request = ScheduleRequest {
             account: non_empty_option(settings.account),
@@ -772,15 +1487,16 @@ async fn load_today_course_content(
         };
         settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
             .map_err(|error| error.message)?;
-        Ok(request)
+        let account_scope = request_account_scope(&request.account)?;
+        Ok((request, account_scope))
     }) {
         Ok(request) => request,
         Err(error) => return TrayCourseContent::Message(error.message()),
     };
     let schedule = match schedule::fetch_schedule(&request).await {
         Ok(schedule) => {
-            if let Err(error) = LOCAL_DATA.with_current(generation, || {
-                schedule_store::save(&app, &schedule).map_err(|error| error.message)
+            if let Err(error) = LOCAL_DATA.with_current_account(generation, || {
+                schedule_store::save(&app, &account_scope, &schedule).map_err(|error| error.message)
             }) {
                 return TrayCourseContent::Message(error.message());
             }
@@ -812,6 +1528,7 @@ fn set_tray_menu(app: &tauri::AppHandle, content: TrayCourseContent) -> tauri::R
     if let Some(tray) = app.tray_by_id("where-to-study-tray") {
         let menu = build_tray_menu(app, content)?;
         tray.set_menu(Some(menu))?;
+        tray.set_visible(true)?;
     }
     Ok(())
 }
@@ -819,18 +1536,26 @@ fn set_tray_menu(app: &tauri::AppHandle, content: TrayCourseContent) -> tauri::R
 #[cfg(not(mobile))]
 fn refresh_tray_courses(app: tauri::AppHandle, prefer_saved_schedule: bool) {
     let generation = LOCAL_DATA.begin();
-    if LOCAL_DATA
-        .with_current(generation, || {
-            set_tray_menu(&app, TrayCourseContent::Loading).map_err(|error| error.to_string())
-        })
-        .is_err()
-    {
+    if let Err(error) = LOCAL_DATA.with_current_account(generation, || {
+        set_tray_menu(&app, TrayCourseContent::Loading).map_err(|error| error.to_string())
+    }) {
+        if error == LocalDataAccessError::AccountAccessRevoked {
+            let _ = LOCAL_DATA.with_current(generation, || {
+                set_tray_menu(
+                    &app,
+                    TrayCourseContent::Message(
+                        "暂无本地课表，请先在设置中重新保存账号。".to_string(),
+                    ),
+                )
+                .map_err(|error| error.to_string())
+            });
+        }
         return;
     }
     tauri::async_runtime::spawn(async move {
         let content =
             load_today_course_content(app.clone(), generation, prefer_saved_schedule).await;
-        let _ = LOCAL_DATA.with_current(generation, || {
+        let _ = LOCAL_DATA.with_current_account(generation, || {
             set_tray_menu(&app, content).map_err(|error| error.to_string())
         });
     });
@@ -911,8 +1636,6 @@ fn desktop_now() -> NaiveDateTime {
 }
 
 #[cfg(not(mobile))]
-const MAX_SCHEDULER_SLEEP: Duration = Duration::from_secs(5 * 60);
-#[cfg(not(mobile))]
 const CLASSROOM_REFRESH_RETRY_DELAY: ChronoDuration = ChronoDuration::minutes(15);
 #[cfg(not(mobile))]
 const MAX_CLASSROOM_REFRESH_RETRIES: u8 = 2;
@@ -944,12 +1667,23 @@ fn scheduler_sleep_duration(now: NaiveDateTime, boundary: NaiveDateTime) -> Dura
     let wait = (boundary - now)
         .to_std()
         .unwrap_or_else(|_| Duration::from_secs(1));
-    wait.clamp(Duration::from_secs(1), MAX_SCHEDULER_SLEEP)
+    wait.max(Duration::from_secs(1))
 }
 
 #[cfg(not(mobile))]
 fn sleep_until(boundary: NaiveDateTime) {
-    std::thread::sleep(scheduler_sleep_duration(desktop_now(), boundary));
+    std::thread::park_timeout(scheduler_sleep_duration(desktop_now(), boundary));
+}
+
+#[cfg(not(mobile))]
+fn wake_desktop_scheduler() {
+    let scheduler = DESKTOP_SCHEDULER_THREAD
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    if let Some(scheduler) = scheduler {
+        scheduler.unpark();
+    }
 }
 
 #[cfg(not(mobile))]
@@ -1091,15 +1825,18 @@ fn daily_course_notification_content(
     today: NaiveDate,
     generation: LocalDataGeneration,
 ) -> Result<(String, String), String> {
-    let Some(schedule) = (match LOCAL_DATA.with_current(generation, || {
-        schedule_store::load(app).map_err(|error| error.message)
-    }) {
-        Ok(schedule) => schedule,
-        Err(LocalDataAccessError::Stale) => return Err(STALE_LOCAL_DATA_MESSAGE.to_string()),
-        Err(LocalDataAccessError::Operation(message)) => {
-            return Ok(("今日课程提醒".to_string(), message));
-        }
-    }) else {
+    let Some(schedule) =
+        (match LOCAL_DATA.with_current_account(generation, || load_current_schedule(app)) {
+            Ok(schedule) => schedule,
+            Err(LocalDataAccessError::Stale) => return Err(STALE_LOCAL_DATA_MESSAGE.to_string()),
+            Err(LocalDataAccessError::AccountAccessRevoked) => {
+                return Err("本地账号访问已撤销。".to_string());
+            }
+            Err(LocalDataAccessError::Operation(message)) => {
+                return Ok(("今日课程提醒".to_string(), message));
+            }
+        })
+    else {
         return Ok((
             "今日课程提醒".to_string(),
             "还没有保存课表，打开应用刷新个人课表后会在这里提醒。".to_string(),
@@ -1149,7 +1886,7 @@ fn send_daily_course_notification(app: &tauri::AppHandle, today: NaiveDate) -> R
         .request_permission()
         .map_err(|error| format!("无法确认系统通知权限：{error}"))?;
     LOCAL_DATA
-        .with_current(generation, || {
+        .with_current_account(generation, || {
             notification
                 .builder()
                 .title(title)
@@ -1194,6 +1931,9 @@ fn run_desktop_scheduled_task(
 #[cfg(not(mobile))]
 fn schedule_desktop_background_tasks(app: tauri::AppHandle) {
     std::thread::spawn(move || {
+        *DESKTOP_SCHEDULER_THREAD
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(std::thread::current());
         let started_at = desktop_now();
         let mut state = DesktopScheduleState::after_startup(started_at);
 
@@ -1356,10 +2096,10 @@ mod background_schedule_tests {
     }
 
     #[test]
-    fn scheduler_sleep_is_capped_and_rechecks_after_clock_changes() {
+    fn scheduler_sleep_reaches_the_next_boundary_without_periodic_wakeups() {
         assert_eq!(
             scheduler_sleep_duration(date_time(7, 0, 0), date_time(8, 0, 0)),
-            MAX_SCHEDULER_SLEEP
+            Duration::from_secs(60 * 60)
         );
         assert_eq!(
             scheduler_sleep_duration(date_time(8, 0, 0), date_time(7, 0, 0)),
@@ -1369,6 +2109,10 @@ mod background_schedule_tests {
 }
 
 fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
+    let account_access_revoked =
+        settings_store::account_access_revoked(app.app_handle()).unwrap_or(true);
+    LOCAL_DATA.set_account_access_revoked(account_access_revoked);
+
     #[cfg(not(mobile))]
     {
         setup_tray(app)?;
@@ -1394,7 +2138,12 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             #[cfg(not(mobile))]
-            keep_main_window_in_tray(window, event);
+            {
+                keep_main_window_in_tray(window, event);
+                if matches!(event, tauri::WindowEvent::Focused(true)) {
+                    wake_desktop_scheduler();
+                }
+            }
 
             #[cfg(mobile)]
             let _ = (window, event);
@@ -1405,7 +2154,9 @@ pub fn run() {
             save_saved_settings,
             clear_local_data,
             load_saved_schedule,
+            load_saved_schedule_for_scope,
             load_saved_classrooms,
+            load_saved_classrooms_for_scope,
             fetch_schedule,
             import_schedule_to_calendar,
             fetch_classrooms,
@@ -1413,6 +2164,15 @@ pub fn run() {
             show_desktop_widget,
             hide_desktop_widget
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_, event| {
+            #[cfg(not(mobile))]
+            if matches!(event, tauri::RunEvent::Resumed) {
+                wake_desktop_scheduler();
+            }
+
+            #[cfg(mobile)]
+            let _ = event;
+        });
 }
