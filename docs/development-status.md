@@ -106,9 +106,17 @@ Apple 测试报告：
 - 手动门禁确认固定 keystore、Release 测试、Lint 和 Gradle 签名全部通过；APK 证书读取现兼容不同 `apksigner` 版本的输出流与前缀。
 - 原生工作流把手动触发定义为独立 Android 签名门禁，可在创建新标签前单独验证固定签名链路。
 
+## Alpha 9 Android 签名门禁
+
+候选提交 `58d1a3f` 的手动原生工作流 [31306843399](https://github.com/Nemoyuzx/where_to_study/actions/runs/31306843399) 已通过。该门禁只运行 Android signed release job，Apple 和 Android Debug job 按设计跳过。
+
+- 81 项 Release JVM 测试、Lint、APK/AAB 构建、固定 keystore 预检、APK/AAB 二次证书校验和 Actions artifact 上传全部成功。
+- 下载后的 CI APK/AAB 已再次通过相邻 SHA-256、`versionName=0.1.1`、`versionCode=9` 和仓库固定公开证书复核。
+- 工作流不再引用的旧 Android signing secrets 已删除，只保留验证通过的 `ANDROID_RELEASE_*` 命名空间。
+
 ## 发布前剩余步骤
 
-1. 先通过原生工作流的手动 Android 签名门禁，再创建并推送 `v0.1.1-alpha.9` 标签。
+1. 创建并推送 `v0.1.1-alpha.9` 标签。
 2. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
 3. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
 4. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。
