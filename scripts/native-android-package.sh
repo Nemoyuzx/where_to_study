@@ -62,6 +62,47 @@ export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Con
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 
+if [[ ! -f "$EXPECTED_CERTIFICATE_FILE" ]]; then
+  echo "Expected Android release certificate fingerprint was not found." >&2
+  exit 1
+fi
+EXPECTED_CERTIFICATE="$(tr -d '[:space:]:' < "$EXPECTED_CERTIFICATE_FILE" | tr '[:upper:]' '[:lower:]')"
+if [[ ! "$EXPECTED_CERTIFICATE" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Expected Android release certificate fingerprint is invalid." >&2
+  exit 1
+fi
+
+KEYTOOL="$JAVA_HOME/bin/keytool"
+if [[ ! -x "$KEYTOOL" ]]; then
+  echo "Android release keystore inspector was not found: $KEYTOOL" >&2
+  exit 1
+fi
+if ! KEYSTORE_CERTIFICATE_OUTPUT="$(
+  LC_ALL=C "$KEYTOOL" \
+    -list \
+    -v \
+    -keystore "$ANDROID_SIGNING_STORE_FILE" \
+    -storepass:env ANDROID_SIGNING_STORE_PASSWORD \
+    -alias "$ANDROID_SIGNING_KEY_ALIAS" \
+    2>/dev/null
+)"; then
+  echo "Android release keystore could not be opened with the configured credentials." >&2
+  exit 1
+fi
+KEYSTORE_CERTIFICATE="$(
+  sed -n 's/^[[:space:]]*SHA256: //p' <<<"$KEYSTORE_CERTIFICATE_OUTPUT" \
+    | tr -d '[:space:]:' \
+    | tr '[:upper:]' '[:lower:]'
+)"
+if [[ ! "$KEYSTORE_CERTIFICATE" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Android release keystore certificate could not be inspected." >&2
+  exit 1
+fi
+if [[ "$KEYSTORE_CERTIFICATE" != "$EXPECTED_CERTIFICATE" ]]; then
+  echo "Android release keystore does not match the pinned release certificate." >&2
+  exit 1
+fi
+
 "$ANDROID_DIR/gradlew" \
   --project-dir "$ANDROID_DIR" \
   testReleaseUnitTest lintRelease assembleRelease bundleRelease
@@ -106,13 +147,12 @@ if [[ -z "$CONFIGURED_BUILD" || "$ACTUAL_BUILD" != "$CONFIGURED_BUILD" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$EXPECTED_CERTIFICATE_FILE" ]]; then
-  echo "Expected Android release certificate fingerprint was not found." >&2
+ACTUAL_APK_CERTIFICATE="$("$APKSIGNER" verify --print-certs "$SIGNED_APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+if [[ ! "$ACTUAL_APK_CERTIFICATE" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Native Android APK signer certificate could not be inspected." >&2
   exit 1
 fi
-EXPECTED_CERTIFICATE="$(tr -d '[:space:]:' < "$EXPECTED_CERTIFICATE_FILE" | tr '[:upper:]' '[:lower:]')"
-ACTUAL_APK_CERTIFICATE="$("$APKSIGNER" verify --print-certs "$SIGNED_APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
-if [[ ! "$EXPECTED_CERTIFICATE" =~ ^[0-9a-f]{64}$ || "$ACTUAL_APK_CERTIFICATE" != "$EXPECTED_CERTIFICATE" ]]; then
+if [[ "$ACTUAL_APK_CERTIFICATE" != "$EXPECTED_CERTIFICATE" ]]; then
   echo "Native Android APK signer does not match the pinned release certificate." >&2
   exit 1
 fi
@@ -130,12 +170,11 @@ if [[ ! -x "$JARSIGNER" ]]; then
   exit 1
 fi
 "$JARSIGNER" -verify "$SIGNED_AAB" >/dev/null
-KEYTOOL="$JAVA_HOME/bin/keytool"
-if [[ ! -x "$KEYTOOL" ]]; then
-  echo "Android AAB certificate inspector was not found: $KEYTOOL" >&2
+ACTUAL_AAB_CERTIFICATE="$(LC_ALL=C "$KEYTOOL" -printcert -jarfile "$SIGNED_AAB" | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+if [[ ! "$ACTUAL_AAB_CERTIFICATE" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Native Android AAB signer certificate could not be inspected." >&2
   exit 1
 fi
-ACTUAL_AAB_CERTIFICATE="$(LC_ALL=C "$KEYTOOL" -printcert -jarfile "$SIGNED_AAB" | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
 if [[ "$ACTUAL_AAB_CERTIFICATE" != "$EXPECTED_CERTIFICATE" ]]; then
   echo "Native Android AAB signer does not match the pinned release certificate." >&2
   exit 1

@@ -3,9 +3,9 @@
 ## 当前状态
 
 - 分支：`codex/native-platform-foundation`
-- 目标测试版：`v0.1.1-alpha.8`
+- 目标测试版：`v0.1.1-alpha.9`
 - 应用版本：`0.1.1`
-- 原生构建号：Apple `CURRENT_PROJECT_VERSION=8`；Android `versionCode=8`
+- 原生构建号：Apple `CURRENT_PROJECT_VERSION=9`；Android `versionCode=9`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：Tauri 主应用安装在 `/Applications/Where To Study.app`；SwiftUI 预览安装在 `/Applications/Where To Study Native Preview.app`
 - 发布边界：当前是测试版候选，不是已签名、公证的生产版本；仓库仍等待维护者选择根许可证
@@ -62,7 +62,7 @@
 | 浏览器视觉检查 | 桌面与手机空教室/设置/日历通过；节假日标题、14 节次与整点、年视图浮层、红色时间线、移动端三列摘要均无重叠；控制台 0 错误 |
 | macOS 安装检查 | Tauri arm64 与 SwiftUI universal 安装包版本/架构/adhoc 签名通过；两端关闭窗口后均保持运行 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
-| 敏感信息扫描 | Gitleaks 扫描 55 个提交及当前全部拟提交文件，0 泄漏 |
+| 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
 
 Apple 测试报告：
@@ -70,17 +70,17 @@ Apple 测试报告：
 - macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.09_16-46-01-+0800.xcresult`
 - iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.09_16-46-07-+0800.xcresult`
 
-## Build 8 本地产物
+## Build 9 本地产物
 
 所有文件位于被 Git 忽略的 `release-artifacts/`，相邻 `.sha256` 已逐项回读验证。
 
 | 文件 | SHA-256 | 签名状态 |
 | --- | --- | --- |
-| `Where-To-Study-v0.1.1-alpha.8-macos-arm64.zip` | `62b0503b53805ecc030733fc11ca529ec5bc698dab9834790918cfa1b8570b0b` | Tauri macOS arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.8-native-macos-universal.zip` | `956a9e58adcbe05f2ecf4a52e0443222705ee4349528edc75a9eced8e1feab37` | SwiftUI macOS x86_64 + arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.8-native-ios-unsigned.xcarchive.zip` | `d00b99dc5e169e7aa8a287bd05f867a2f98f5a327b9ca7710fd49827b022df5c` | iOS arm64 archive，无签名，不可直接安装 |
-| `Where-To-Study-v0.1.1-alpha.8-native-android-universal.apk` | `c4bb667352dce0d474a67b8c02160aba9b2591170ee8e2584983af6ab22a6125` | Android APK，固定 release key |
-| `Where-To-Study-v0.1.1-alpha.8-native-android.aab` | `ac4a3fe0541227afbfb5d23a304c3da8cee7b9e1e280cc4740296e36984af1d6` | Android AAB，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.9-macos-arm64.zip` | `9e00e157ed19a53de838608bd7c6e5ec2f53252d451148565c2b460a687b0ae3` | Tauri macOS arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.9-native-macos-universal.zip` | `d39035f63c60eaed5710c0955ead2382e95ad5278eff736528e2b4175e8b1bb4` | SwiftUI macOS x86_64 + arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.9-native-ios-unsigned.xcarchive.zip` | `5ddefe39773956e68b34de498210a371b540eaa73e632a586bcff10978a8834a` | iOS arm64 archive，无签名，不可直接安装 |
+| `Where-To-Study-v0.1.1-alpha.9-native-android-universal.apk` | `01f87ec07a02769598a911cdc752de2706668edecde4a1675532187557633329` | Android APK，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.9-native-android.aab` | `f304360baab38f503ee3dcac6d0bad2f50233274c5420f18f3c4018314a94280` | Android AAB，固定 release key |
 
 ## Alpha 6 CI 回归记录
 
@@ -97,9 +97,17 @@ Apple 测试报告：
 - `iPhone 16e` 在 runner 上只存在于 iOS 26.2，而 `OS=latest` 指向 26.5；脚本现从可用设备列表选择真实 UDID，并已在本机跑完 60 项 iOS 单元测试和 1 项导航 UI 测试。
 - Android Release 构建、81 项 JVM 测试和 Lint 均通过，但 Actions secret 中的证书未匹配固定指纹；四个 secret 已从本地忽略且逐字节验证的维护者密钥重新安全写入，未输出密钥内容。
 
+## Alpha 8 CI 回归记录
+
+`v0.1.1-alpha.8` 保留为不可变的失败候选标签，没有创建 GitHub Release。Windows、Tauri macOS、安全检查以及 Apple 原生构建和测试全部通过，证明动态模拟器 UDID 修复有效；Android Release 再次在 APK 证书比对处失败。
+
+- Android signing 改用全新的 `ANDROID_RELEASE_*` secret 名称，避免继续依赖旧 secret 的不可观测状态。
+- 打包脚本会在 Gradle 前直接验证解码后的 keystore 证书，并分别报告 keystore、APK 和 AAB 的证书读取或不匹配错误。
+- 原生工作流增加 `signed_android_only` 手动门禁，可在创建新标签前单独验证固定签名链路。
+
 ## 发布前剩余步骤
 
-1. 提交并推送修复后的候选代码，创建并推送 `v0.1.1-alpha.8` 标签。
+1. 先通过 `signed_android_only` 手动门禁，再创建并推送 `v0.1.1-alpha.9` 标签。
 2. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
 3. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
 4. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。

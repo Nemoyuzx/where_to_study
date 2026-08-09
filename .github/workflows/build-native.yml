@@ -2,6 +2,12 @@ name: Build Native Clients
 
 on:
   workflow_dispatch:
+    inputs:
+      signed_android_only:
+        description: Validate and package the signed Android release without running Apple jobs
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -15,6 +21,7 @@ on:
       - "src-tauri/Cargo.lock"
       - "src-tauri/build.rs"
       - "scripts/native-*.sh"
+      - "scripts/package-validation.sh"
       - ".github/workflows/build-native.yml"
   pull_request:
     paths:
@@ -25,6 +32,7 @@ on:
       - "src-tauri/Cargo.lock"
       - "src-tauri/build.rs"
       - "scripts/native-*.sh"
+      - "scripts/package-validation.sh"
       - ".github/workflows/build-native.yml"
 
 permissions:
@@ -33,6 +41,7 @@ permissions:
 jobs:
   apple:
     name: Apple builds, archives, platform tests, and shared Rust tests
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.signed_android_only) }}
     runs-on: macos-26
     timeout-minutes: 30
     env:
@@ -88,7 +97,7 @@ jobs:
 
   android-debug:
     name: Android Debug tests, lint, and build
-    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') && !(github.event_name == 'workflow_dispatch' && inputs.signed_android_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -126,9 +135,11 @@ jobs:
 
   android-release:
     name: Android signed release package
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.signed_android_only) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      RELEASE_LABEL: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'ci-signing' }}
 
     steps:
       - name: Checkout
@@ -136,10 +147,10 @@ jobs:
 
       - name: Require Android release signing secrets
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           missing=()
@@ -177,10 +188,10 @@ jobs:
 
       - name: Build signed universal native Android package
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           umask 077
@@ -196,15 +207,15 @@ jobs:
           export ANDROID_SIGNING_STORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
           export ANDROID_SIGNING_KEY_ALIAS="$ANDROID_KEY_ALIAS"
           export ANDROID_SIGNING_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
-          ./scripts/native-android-package.sh "${{ github.ref_name }}"
+          ./scripts/native-android-package.sh "$RELEASE_LABEL"
 
       - name: Upload signed universal native Android package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: where-to-study-native-android-signed-universal-${{ github.ref_name }}
+          name: where-to-study-native-android-signed-universal-${{ env.RELEASE_LABEL }}
           path: |
-            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android-universal.apk
-            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android-universal.apk.sha256
-            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android.aab
-            release-artifacts/Where-To-Study-${{ github.ref_name }}-native-android.aab.sha256
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android-universal.apk
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android-universal.apk.sha256
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android.aab
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android.aab.sha256
           if-no-files-found: error
