@@ -103,11 +103,11 @@ Apple 测试报告：
 
 - Android signing 改用全新的 `ANDROID_RELEASE_*` secret 名称，避免继续依赖旧 secret 的不可观测状态。
 - 打包脚本会在 Gradle 前直接验证解码后的 keystore 证书，并分别报告 keystore、APK 和 AAB 的证书读取或不匹配错误。
-- 原生工作流增加 `signed_android_only` 手动门禁，可在创建新标签前单独验证固定签名链路。
+- 原生工作流把手动触发定义为独立 Android 签名门禁，可在创建新标签前单独验证固定签名链路。
 
 ## 发布前剩余步骤
 
-1. 先通过 `signed_android_only` 手动门禁，再创建并推送 `v0.1.1-alpha.9` 标签。
+1. 先通过原生工作流的手动 Android 签名门禁，再创建并推送 `v0.1.1-alpha.9` 标签。
 2. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
 3. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
 4. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。

@@ -2,12 +2,6 @@ name: Build Native Clients
 
 on:
   workflow_dispatch:
-    inputs:
-      signed_android_only:
-        description: Validate and package the signed Android release without running Apple jobs
-        required: false
-        default: false
-        type: boolean
   push:
     branches:
       - main
@@ -41,7 +35,7 @@ permissions:
 jobs:
   apple:
     name: Apple builds, archives, platform tests, and shared Rust tests
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.signed_android_only) }}
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     runs-on: macos-26
     timeout-minutes: 30
     env:
@@ -97,7 +91,7 @@ jobs:
 
   android-debug:
     name: Android Debug tests, lint, and build
-    if: ${{ !startsWith(github.ref, 'refs/tags/v') && !(github.event_name == 'workflow_dispatch' && inputs.signed_android_only) }}
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') && github.event_name != 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -135,7 +129,7 @@ jobs:
 
   android-release:
     name: Android signed release package
-    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.signed_android_only) }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
