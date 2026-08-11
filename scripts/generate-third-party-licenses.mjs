@@ -297,11 +297,37 @@ function generate() {
   ].join('\n')
 }
 
+function reportStaleOutput(existing, generated) {
+  let differenceIndex = 0
+  const sharedLength = Math.min(existing.length, generated.length)
+  while (differenceIndex < sharedLength && existing[differenceIndex] === generated[differenceIndex]) {
+    differenceIndex += 1
+  }
+  const lineNumber = existing.slice(0, differenceIndex).split('\n').length
+  const lineStart = existing.lastIndexOf('\n', Math.max(0, differenceIndex - 1)) + 1
+  const existingLineEnd = existing.indexOf('\n', differenceIndex)
+  const generatedLineEnd = generated.indexOf('\n', differenceIndex)
+  const committedLine = existing.slice(
+    lineStart,
+    existingLineEnd === -1 ? undefined : existingLineEnd,
+  ).slice(0, 500)
+  const generatedLine = generated.slice(
+    lineStart,
+    generatedLineEnd === -1 ? undefined : generatedLineEnd,
+  ).slice(0, 500)
+  console.error(`Committed SHA-256: ${createHash('sha256').update(existing).digest('hex')}`)
+  console.error(`Generated SHA-256: ${createHash('sha256').update(generated).digest('hex')}`)
+  console.error(`First difference at line ${lineNumber}.`)
+  console.error(`Committed: ${JSON.stringify(committedLine)}`)
+  console.error(`Generated: ${JSON.stringify(generatedLine)}`)
+}
+
 const generated = generate()
 if (process.argv.includes('--check')) {
   const existing = fs.existsSync(OUTPUT_PATH) ? fs.readFileSync(OUTPUT_PATH, 'utf8') : ''
   if (existing !== generated) {
     console.error('THIRD_PARTY_LICENSES.html is stale. Run npm run licenses:generate.')
+    reportStaleOutput(existing, generated)
     process.exit(1)
   }
 } else {
