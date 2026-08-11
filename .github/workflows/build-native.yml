@@ -8,6 +8,7 @@ on:
     tags:
       - "v*"
     paths:
+      - ".gitattributes"
       - "LICENSE"
       - "THIRD_PARTY_LICENSES.html"
       - "THIRD_PARTY_NOTICES.md"
@@ -25,6 +26,7 @@ on:
       - ".github/workflows/build-native.yml"
   pull_request:
     paths:
+      - ".gitattributes"
       - "LICENSE"
       - "THIRD_PARTY_LICENSES.html"
       - "THIRD_PARTY_NOTICES.md"

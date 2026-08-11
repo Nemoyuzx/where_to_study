@@ -8,6 +8,7 @@ on:
     tags:
       - "v*"
     paths:
+      - ".gitattributes"
       - "src/**"
       - "src-tauri/**"
       - "package.json"
@@ -19,6 +20,7 @@ on:
       - ".github/workflows/build-windows.yml"
   pull_request:
     paths:
+      - ".gitattributes"
       - "src/**"
       - "src-tauri/**"
       - "package.json"
