@@ -88,7 +88,17 @@ jobs:
           $output = "release-artifacts/Where-To-Study-$label-windows-x64-setup.exe"
           Copy-Item $source.FullName $output
           $hash = (Get-FileHash -Algorithm SHA256 $output).Hash.ToLowerInvariant()
-          "$hash  $(Split-Path -Leaf $output)" | Set-Content -Encoding ascii "$output.sha256"
+          $checksumPath = "$output.sha256"
+          $checksumLine = "$hash  $(Split-Path -Leaf $output)`n"
+          [System.IO.File]::WriteAllText($checksumPath, $checksumLine, [System.Text.Encoding]::ASCII)
+
+          $checksumBytes = [System.IO.File]::ReadAllBytes($checksumPath)
+          if ($checksumBytes -contains [byte]13) {
+            throw "Windows checksum sidecar contains a carriage return."
+          }
+          if ([System.Text.Encoding]::ASCII.GetString($checksumBytes) -cne $checksumLine) {
+            throw "Windows checksum sidecar did not round-trip exactly."
+          }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
