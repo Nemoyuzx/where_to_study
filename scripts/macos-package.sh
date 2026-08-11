@@ -10,6 +10,7 @@ OUTPUT_DIR="${MACOS_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 RELEASE_LABEL="${1:-v$APP_VERSION}"
 ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-macos-arm64.zip"
+validate_release_label "$RELEASE_LABEL"
 
 if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]] &&
   [[ "${BASH_REMATCH[1]}" != "$APP_VERSION" ]]; then

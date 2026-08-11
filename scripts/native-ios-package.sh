@@ -12,6 +12,7 @@ OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 RELEASE_LABEL="${1:-v0.1.1-native-preview}"
 ARCHIVE_PATH="$DERIVED_DATA/WhereToStudyiOS.xcarchive"
 PACKAGE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-ios-unsigned.xcarchive.zip"
+validate_release_label "$RELEASE_LABEL"
 
 if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]]; then
   EXPECTED_VERSION="${BASH_REMATCH[1]}"

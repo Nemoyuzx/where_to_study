@@ -11,6 +11,7 @@ DERIVED_DATA="$APPLE_DIR/DerivedData/release-macOS"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 RELEASE_LABEL="${1:-v0.1.1-native-preview}"
 ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-macos-universal.zip"
+validate_release_label "$RELEASE_LABEL"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/where-to-study-native-macos.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
