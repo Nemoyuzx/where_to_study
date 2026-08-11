@@ -1,7 +1,9 @@
 use std::fs;
-use std::path::PathBuf;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager};
+use tempfile::NamedTempFile;
 
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{ClassroomsCacheResponse, CLASSROOMS_CACHE_VERSION};
@@ -48,15 +50,46 @@ pub fn save(
     account_scope: &str,
     classrooms: &ClassroomsCacheResponse,
 ) -> ServiceResult<()> {
-    let path = classrooms_path(app)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| ServiceError::new(format!("无法创建本地空教室目录：{error}")))?;
-    }
+    save_to_path(&classrooms_path(app)?, account_scope, classrooms)
+}
 
+fn save_to_path(
+    path: &Path,
+    account_scope: &str,
+    classrooms: &ClassroomsCacheResponse,
+) -> ServiceResult<()> {
     let bytes = scoped_cache::encode(account_scope, classrooms, "本地空教室信息")?;
-    fs::write(&path, bytes)
-        .map_err(|error| ServiceError::new(format!("无法保存本地空教室信息：{error}")))?;
+    write_cache_bytes_to_path(path, &bytes)
+}
+
+fn write_cache_bytes_to_path(path: &Path, bytes: &[u8]) -> ServiceResult<()> {
+    write_cache_bytes_to_path_with(path, bytes, |temporary, bytes| {
+        temporary.write_all(bytes)?;
+        temporary.flush()?;
+        temporary.as_file().sync_all()
+    })
+}
+
+fn write_cache_bytes_to_path_with<W>(
+    path: &Path,
+    bytes: &[u8],
+    write_temporary: W,
+) -> ServiceResult<()>
+where
+    W: FnOnce(&mut NamedTempFile, &[u8]) -> io::Result<()>,
+{
+    let parent = path
+        .parent()
+        .ok_or_else(|| ServiceError::new("本地空教室路径没有父目录。"))?;
+    fs::create_dir_all(parent)
+        .map_err(|error| ServiceError::new(format!("无法创建本地空教室目录：{error}")))?;
+    let mut temporary = NamedTempFile::new_in(parent)
+        .map_err(|error| ServiceError::new(format!("无法创建临时空教室文件：{error}")))?;
+    write_temporary(&mut temporary, bytes)
+        .map_err(|error| ServiceError::new(format!("无法写入临时空教室文件：{error}")))?;
+    temporary.persist(path).map_err(|error| {
+        ServiceError::new(format!("无法原子替换本地空教室信息：{}", error.error))
+    })?;
     Ok(())
 }
 
@@ -68,5 +101,58 @@ pub fn clear(app: &AppHandle) -> ServiceResult<()> {
         Err(error) => Err(ServiceError::new(format!(
             "无法清除本地空教室信息：{error}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIXTURE_SCOPE: &str =
+        "opaque-v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    fn fixture_classrooms() -> ClassroomsCacheResponse {
+        serde_json::from_str(include_str!("../../contracts/v1/fixtures/classrooms.json"))
+            .expect("valid classrooms fixture")
+    }
+
+    #[test]
+    fn failed_temporary_classrooms_write_preserves_existing_cache() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let path = directory.path().join(CLASSROOMS_FILE_NAME);
+        let old_cache = b"existing classrooms cache";
+        fs::write(&path, old_cache).expect("write existing classrooms cache");
+
+        let error = write_cache_bytes_to_path_with(&path, b"replacement", |temporary, bytes| {
+            temporary.write_all(&bytes[..1])?;
+            Err(io::Error::other("injected classrooms write failure"))
+        })
+        .expect_err("temporary write must fail");
+
+        assert!(error.message.contains("injected classrooms write failure"));
+        assert_eq!(fs::read(&path).unwrap(), old_cache);
+    }
+
+    #[test]
+    fn successful_classrooms_save_atomically_replaces_existing_cache() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let path = directory.path().join(CLASSROOMS_FILE_NAME);
+        fs::write(&path, b"existing classrooms cache").expect("write existing classrooms cache");
+        let expected = fixture_classrooms();
+
+        save_to_path(&path, FIXTURE_SCOPE, &expected).expect("replace classrooms cache");
+
+        let bytes = fs::read(&path).expect("read replaced classrooms cache");
+        let actual = scoped_cache::decode::<ClassroomsCacheResponse>(
+            &bytes,
+            FIXTURE_SCOPE,
+            "本地空教室信息",
+        )
+        .expect("decode replaced classrooms cache")
+        .expect("matching classrooms cache");
+        assert_eq!(
+            serde_json::to_value(actual).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
     }
 }

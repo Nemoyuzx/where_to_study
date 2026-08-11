@@ -1,4 +1,5 @@
 import XCTest
+import UserNotifications
 #if os(macOS)
 @testable import WhereToStudyMac
 #elseif os(iOS)
@@ -6,6 +7,38 @@ import XCTest
 #endif
 
 final class DailyCourseNotificationTests: XCTestCase {
+    func testForegroundDelegateInstallationAndPresentationPolicy() {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let delegate = DailyCourseNotificationForegroundDelegate(defaults: defaults)
+        let center = RecordingNotificationDelegateInstaller()
+        let identifier = DailyCourseNotificationPlanner.identifierPrefix + "2026-03-02.revision-1"
+
+        DailyCourseNotificationCenterConfiguration.installForegroundDelegate(
+            center: center,
+            delegate: delegate
+        )
+
+        XCTAssertTrue(center.delegate === delegate)
+        XCTAssertFalse(defaults.bool(forKey: DailyCourseNotificationSettings.enabledKey))
+        XCTAssertEqual(DailyCourseNotificationForegroundPolicy.presentationOptions(
+            identifier: identifier,
+            isEnabled: false
+        ), [])
+        XCTAssertEqual(DailyCourseNotificationForegroundPolicy.presentationOptions(
+            identifier: "unrelated-notification",
+            isEnabled: true
+        ), [])
+
+        let enabledOptions = DailyCourseNotificationForegroundPolicy.presentationOptions(
+            identifier: identifier,
+            isEnabled: true
+        )
+        XCTAssertTrue(enabledOptions.contains(.banner))
+        XCTAssertTrue(enabledOptions.contains(.list))
+        XCTAssertTrue(enabledOptions.contains(.sound))
+    }
+
     func testPlannerCreatesOnlyCourseDaysWithStableIdentifiers() throws {
         let now = try date("2026-03-02 06:00")
         let requests = DailyCourseNotificationPlanner.requests(
@@ -32,6 +65,18 @@ final class DailyCourseNotificationTests: XCTestCase {
             after: try date("2026-03-02 08:00"),
             scanDayLimit: 1
         ).isEmpty)
+    }
+
+    func testPlannerRejectsInvalidContractDates() throws {
+        let now = try date("2026-03-02 06:00")
+
+        for value in ["2026-02-30", "2026-13-01"] {
+            XCTAssertTrue(DailyCourseNotificationPlanner.requests(
+                for: schedule(courses: [course()], termStartDate: value),
+                after: now,
+                scanDayLimit: 1
+            ).isEmpty, value)
+        }
     }
 
     func testPlannerMarksExamCourseTitle() throws {
@@ -337,10 +382,13 @@ final class DailyCourseNotificationTests: XCTestCase {
         XCTAssertEqual(scheduler.cancelledRevisions, [1, 2, 3])
     }
 
-    private func schedule(courses: [Course]) -> ScheduleSnapshot {
+    private func schedule(
+        courses: [Course],
+        termStartDate: String = "2026-03-02"
+    ) -> ScheduleSnapshot {
         ScheduleSnapshot(
             termID: "fixture-term",
-            termStartDate: "2026-03-02",
+            termStartDate: termStartDate,
             fetchedAt: "2026-03-01T12:00:00+08:00",
             courses: courses
         )
@@ -527,6 +575,10 @@ private final class RecordingCourseNotificationCenter: CourseNotificationCenter,
 
 private enum NotificationTestError: Error {
     case unavailable
+}
+
+private final class RecordingNotificationDelegateInstaller: UserNotificationCenterDelegateInstalling {
+    var delegate: (any UNUserNotificationCenterDelegate)?
 }
 
 private final class NotificationTestCredentialStore: CredentialStoring, @unchecked Sendable {

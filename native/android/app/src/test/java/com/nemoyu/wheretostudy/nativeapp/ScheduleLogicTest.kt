@@ -1,6 +1,8 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import java.io.ByteArrayInputStream
+import java.net.HttpURLConnection
+import java.net.URI
 import java.util.Calendar
 import java.util.TimeZone
 import org.json.JSONArray
@@ -15,6 +17,126 @@ class ScheduleLogicTest {
     fun sjdTransportUsesHttps() {
         assertEquals("https://jwglweixin.bupt.edu.cn", SjdApiClient.ORIGIN)
         assertTrue(SjdApiClient.ORIGIN.startsWith("https://"))
+    }
+
+    @Test
+    fun sjdRedirectPolicyAllowsOnlySameHttpsOriginAndPort() {
+        val current = URI.create("${SjdApiClient.ORIGIN}/bjyddx/login")
+
+        assertEquals(
+            URI.create("${SjdApiClient.ORIGIN}/bjyddx/student/curriculum?week=all"),
+            SjdRedirectPolicy.resolve(
+                current,
+                "/bjyddx/student/curriculum?week=all",
+                redirectsFollowed = 0,
+            ),
+        )
+        assertEquals(
+            URI.create("https://JWGLWEIXIN.BUPT.EDU.CN:443/bjyddx/todayClassrooms?campusId=01"),
+            SjdRedirectPolicy.resolve(
+                current,
+                "https://JWGLWEIXIN.BUPT.EDU.CN:443/bjyddx/todayClassrooms?campusId=01",
+                redirectsFollowed = 1,
+            ),
+        )
+    }
+
+    @Test
+    fun sjdRedirectPolicyRejectsCrossOriginAndUnsafeTargets() {
+        val current = URI.create("${SjdApiClient.ORIGIN}/bjyddx/login")
+        listOf(
+            "http://jwglweixin.bupt.edu.cn/bjyddx/login",
+            "https://example.com/bjyddx/login",
+            "https://jwglweixin.bupt.edu.cn.example.com/bjyddx/login",
+            "https://jwglweixin.bupt.edu.cn:/bjyddx/login",
+            "https://jwglweixin.bupt.edu.cn:444/bjyddx/login",
+            "https://user@jwglweixin.bupt.edu.cn/bjyddx/login",
+        ).forEach { location ->
+            assertSjdError("移动教务拒绝了不安全的重定向。") {
+                SjdRedirectPolicy.resolve(current, location, redirectsFollowed = 0)
+            }
+        }
+    }
+
+    @Test
+    fun sjdRedirectPolicyRejectsInvalidAndExcessiveRedirects() {
+        val current = URI.create("${SjdApiClient.ORIGIN}/bjyddx/login")
+
+        listOf<String?>(null, "", "http://[").forEach { location ->
+            assertSjdError("移动教务返回了无效的重定向地址。") {
+                SjdRedirectPolicy.resolve(current, location, redirectsFollowed = 0)
+            }
+        }
+        assertSjdError("移动教务重定向次数过多。") {
+            SjdRedirectPolicy.resolve(
+                current,
+                "/bjyddx/login",
+                redirectsFollowed = SjdRedirectPolicy.maxRedirects,
+            )
+        }
+    }
+
+    @Test
+    fun sjdRedirectPolicyConvertsPostForLegacyAndSeeOtherRedirects() {
+        listOf(
+            HttpURLConnection.HTTP_MOVED_PERM,
+            HttpURLConnection.HTTP_MOVED_TEMP,
+            HttpURLConnection.HTTP_SEE_OTHER,
+        ).forEach { status ->
+            assertEquals(
+                SjdRedirectRequest("GET", preserveBody = false),
+                SjdRedirectPolicy.followUp(status, "POST"),
+            )
+        }
+    }
+
+    @Test
+    fun sjdRedirectPolicyPreservesMethodAndBodyForTemporaryAndPermanentRedirects() {
+        listOf(307, 308).forEach { status ->
+            assertEquals(
+                SjdRedirectRequest("POST", preserveBody = true),
+                SjdRedirectPolicy.followUp(status, "POST"),
+            )
+        }
+        assertEquals(
+            SjdRedirectRequest("HEAD", preserveBody = true),
+            SjdRedirectPolicy.followUp(HttpURLConnection.HTTP_SEE_OTHER, "HEAD"),
+        )
+        assertEquals(
+            SjdRedirectRequest("GET", preserveBody = true),
+            SjdRedirectPolicy.followUp(HttpURLConnection.HTTP_MOVED_TEMP, "GET"),
+        )
+    }
+
+    @Test
+    fun sjdResponseReaderAcceptsNormalPayload() {
+        val payload = "{\"code\":1,\"message\":\"正常\"}"
+        val bytes = payload.toByteArray(Charsets.UTF_8)
+
+        assertEquals(
+            payload,
+            SjdResponseReader.read(ByteArrayInputStream(bytes), bytes.size.toLong()),
+        )
+    }
+
+    @Test
+    fun sjdResponseReaderRejectsActualBytesBeyondLimit() {
+        assertSjdError("移动教务返回的数据超过大小限制。") {
+            SjdResponseReader.read(
+                ByteArrayInputStream(ByteArray(SjdInputLimits.maxResponseBytes + 1)),
+                declaredLength = -1L,
+            )
+        }
+    }
+
+    @Test
+    fun sjdResponseReaderRejectsDeclaredLengthBeyondLimit() {
+        assertSjdError("移动教务返回的数据超过大小限制。") {
+            SjdResponseReader.read(
+                ByteArrayInputStream(byteArrayOf()),
+                declaredLength = SjdInputLimits.maxResponseBytes + 1L,
+            )
+        }
     }
 
     @Test
@@ -315,6 +437,12 @@ class ScheduleLogicTest {
     private fun assertHolidayError(expectedMessage: String, block: () -> Unit) {
         val error = runCatching(block).exceptionOrNull()
         assertTrue("Expected HolidayClientException, got $error", error is HolidayClientException)
+        assertEquals(expectedMessage, error?.message)
+    }
+
+    private fun assertSjdError(expectedMessage: String, block: () -> Unit) {
+        val error = runCatching(block).exceptionOrNull()
+        assertTrue("Expected ScheduleClientException, got $error", error is ScheduleClientException)
         assertEquals(expectedMessage, error?.message)
     }
 

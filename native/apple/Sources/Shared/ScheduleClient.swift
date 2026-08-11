@@ -24,10 +24,147 @@ enum ScheduleClientError: LocalizedError {
     }
 }
 
+enum SJDResponseEndpoint: CaseIterable, Sendable {
+    case login
+    case curriculum
+    case classrooms
+}
+
+enum SJDResponseLimits {
+    static let maximumLoginBytes = 64 * 1024
+    static let maximumCurriculumBytes = 2 * 1024 * 1024
+    static let maximumClassroomsBytes = 2 * 1024 * 1024
+
+    static func maximumBytes(for endpoint: SJDResponseEndpoint) -> Int {
+        switch endpoint {
+        case .login:
+            maximumLoginBytes
+        case .curriculum:
+            maximumCurriculumBytes
+        case .classrooms:
+            maximumClassroomsBytes
+        }
+    }
+
+    static func validate(_ data: Data, endpoint: SJDResponseEndpoint) throws {
+        guard data.count <= maximumBytes(for: endpoint) else {
+            throw oversizedResponseError(for: endpoint)
+        }
+    }
+
+    static func oversizedResponseError(for endpoint: SJDResponseEndpoint) -> ScheduleClientError {
+        let message = switch endpoint {
+        case .login: "移动教务登录响应过大。"
+        case .curriculum: "移动教务课表响应过大。"
+        case .classrooms: "实时教室数据响应过大。"
+        }
+        return .invalidResponse(message)
+    }
+}
+
+enum SJDNetworkPolicy {
+    static let allowedScheme = "https"
+    static let allowedHost = "jwglweixin.bupt.edu.cn"
+    static let allowedPort = 443
+
+    static func allows(_ url: URL?) -> Bool {
+        guard
+            let url,
+            url.scheme?.lowercased() == allowedScheme,
+            url.host?.lowercased() == allowedHost,
+            url.user == nil,
+            url.password == nil,
+            effectivePort(of: url) == allowedPort
+        else { return false }
+        return true
+    }
+
+    static func allowsRedirect(from sourceURL: URL?, to destinationURL: URL?) -> Bool {
+        guard
+            allows(sourceURL),
+            allows(destinationURL),
+            let sourceURL,
+            let destinationURL
+        else { return false }
+        return sourceURL.host?.lowercased() == destinationURL.host?.lowercased()
+            && effectivePort(of: sourceURL) == effectivePort(of: destinationURL)
+    }
+
+    private static func effectivePort(of url: URL) -> Int? {
+        if let port = url.port { return port }
+        return url.scheme?.lowercased() == allowedScheme ? allowedPort : nil
+    }
+}
+
+final class SJDURLSessionRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(
+        _: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        let sourceURL = response.url ?? task.currentRequest?.url ?? task.originalRequest?.url
+        completionHandler(
+            SJDNetworkPolicy.allowsRedirect(from: sourceURL, to: request.url) ? request : nil
+        )
+    }
+}
+
+enum SJDURLSession {
+    static let shared: URLSession = make()
+
+    static func make(configuration: URLSessionConfiguration = .default) -> URLSession {
+        URLSession(
+            configuration: configuration,
+            delegate: SJDURLSessionRedirectDelegate(),
+            delegateQueue: nil
+        )
+    }
+}
+
+protocol SJDHTTPTransport: Sendable {
+    func data(
+        for request: URLRequest,
+        maximumBytes: Int
+    ) async throws -> (Data, URLResponse)
+}
+
+enum SJDHTTPTransportError: Error {
+    case responseTooLarge
+}
+
+struct SJDURLSessionTransport: SJDHTTPTransport {
+    let session: URLSession
+
+    func data(
+        for request: URLRequest,
+        maximumBytes: Int
+    ) async throws -> (Data, URLResponse) {
+        let (bytes, response) = try await session.bytes(for: request)
+        if response.expectedContentLength > Int64(maximumBytes) {
+            throw SJDHTTPTransportError.responseTooLarge
+        }
+
+        var data = Data()
+        data.reserveCapacity(min(
+            max(Int(response.expectedContentLength), 0),
+            maximumBytes
+        ))
+        for try await byte in bytes {
+            guard data.count < maximumBytes else {
+                throw SJDHTTPTransportError.responseTooLarge
+            }
+            data.append(byte)
+        }
+        return (data, response)
+    }
+}
+
 struct SJDScheduleClient: ScheduleFetching {
     private let api: SJDAPIClient
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = SJDURLSession.shared) {
         api = SJDAPIClient(session: session)
     }
 
@@ -61,10 +198,14 @@ struct SJDAPIClient: Sendable {
     private static let loginURL = URL(string: "\(origin)/bjyddx/login")!
     private static let curriculumURL = URL(string: "\(origin)/bjyddx/student/curriculum")!
     private static let classroomsURL = URL(string: "\(origin)/bjyddx/todayClassrooms")!
-    private let session: URLSession
+    private let transport: any SJDHTTPTransport
 
-    init(session: URLSession = .shared) {
-        self.session = session
+    init(session: URLSession = SJDURLSession.shared) {
+        transport = SJDURLSessionTransport(session: session)
+    }
+
+    init(transport: any SJDHTTPTransport) {
+        self.transport = transport
     }
 
     func login(credentials: Credentials) async throws -> String {
@@ -100,7 +241,7 @@ struct SJDAPIClient: Sendable {
         request.timeoutInterval = 30
         applyHeaders(to: &request, referer: Self.classroomReferer, token: token)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await responseData(for: request, endpoint: .curriculum)
         guard let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) else {
             throw ScheduleClientError.service("移动教务课表获取失败。")
         }
@@ -121,7 +262,7 @@ struct SJDAPIClient: Sendable {
         request.timeoutInterval = 30
         applyHeaders(to: &request, referer: Self.classroomReferer, token: token)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await responseData(for: request, endpoint: .classrooms)
         guard let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) else {
             throw ScheduleClientError.service("实时教室数据获取失败，请稍后重试。")
         }
@@ -138,7 +279,7 @@ struct SJDAPIClient: Sendable {
 
     private func responseObject(for request: URLRequest, failureMessage: String) async throws -> [String: Any] {
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await responseData(for: request, endpoint: .login)
             guard let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) else {
                 throw ScheduleClientError.service(failureMessage)
             }
@@ -151,6 +292,24 @@ struct SJDAPIClient: Sendable {
         } catch {
             throw ScheduleClientError.service(failureMessage)
         }
+    }
+
+    private func responseData(
+        for request: URLRequest,
+        endpoint: SJDResponseEndpoint
+    ) async throws -> (Data, URLResponse) {
+        guard SJDNetworkPolicy.allows(request.url) else {
+            throw ScheduleClientError.invalidResponse("移动教务请求地址不符合安全策略。")
+        }
+        let maximumBytes = SJDResponseLimits.maximumBytes(for: endpoint)
+        let result: (Data, URLResponse)
+        do {
+            result = try await transport.data(for: request, maximumBytes: maximumBytes)
+        } catch SJDHTTPTransportError.responseTooLarge {
+            throw SJDResponseLimits.oversizedResponseError(for: endpoint)
+        }
+        try SJDResponseLimits.validate(result.0, endpoint: endpoint)
+        return result
     }
 
     private func applyHeaders(to request: inout URLRequest, referer: String, token: String?) {
@@ -356,7 +515,9 @@ enum SJDScheduleParser {
         guard let dated = (root["date"] as? [[String: Any]])?.first(where: {
             $0["mxrq"] != nil && SJDScheduleClient.string($0["zc"]) != "all"
         }) else { return nil }
-        guard let day = contractDate.date(from: SJDScheduleClient.string(dated["mxrq"])) else { return nil }
+        guard let day = StrictContractDateParser.date(
+            from: SJDScheduleClient.string(dated["mxrq"])
+        ) else { return nil }
         let calendarWeekday = Calendar.shanghai.component(.weekday, from: day)
         let mondayBasedWeekday = ((calendarWeekday + 5) % 7) + 1
         let weekday = Int(SJDScheduleClient.string(dated["xqid"])) ?? mondayBasedWeekday
@@ -364,7 +525,7 @@ enum SJDScheduleParser {
             let monday = Calendar.shanghai.date(byAdding: .day, value: -(weekday - 1), to: day),
             let termStart = Calendar.shanghai.date(byAdding: .day, value: -((week - 1) * 7), to: monday)
         else { return nil }
-        return contractDate.string(from: termStart)
+        return StrictContractDateParser.string(from: termStart)
     }
 
     private static func integerMatches(in text: String) -> [Int] {
@@ -379,13 +540,6 @@ enum SJDScheduleParser {
         }
     }
 
-    private static let contractDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
 }
 
 private extension String {

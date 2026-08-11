@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/package-validation.sh
 source "$ROOT_DIR/scripts/package-validation.sh"
+npm --prefix "$ROOT_DIR" run licenses:check
 ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ROOT_DIR/src-tauri/gen/android/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
@@ -201,6 +202,24 @@ if unzip -p "$SIGNED_APK" AndroidManifest.xml | stream_contains_fixed_text 'netw
   echo "Native Android package still declares a custom network security configuration." >&2
   exit 1
 fi
+if ! unzip -p "$SIGNED_APK" assets/LICENSE | cmp -s - "$ROOT_DIR/LICENSE"; then
+  echo "Native Android APK is missing the exact project license." >&2
+  exit 1
+fi
+if ! unzip -p "$SIGNED_AAB" base/assets/LICENSE | cmp -s - "$ROOT_DIR/LICENSE"; then
+  echo "Native Android AAB is missing the exact project license." >&2
+  exit 1
+fi
+for notice in THIRD_PARTY_LICENSES.html THIRD_PARTY_NOTICES.md; do
+  if ! unzip -p "$SIGNED_APK" "assets/$notice" | cmp -s - "$ROOT_DIR/$notice"; then
+    echo "Native Android APK is missing the exact $notice file." >&2
+    exit 1
+  fi
+  if ! unzip -p "$SIGNED_AAB" "base/assets/$notice" | cmp -s - "$ROOT_DIR/$notice"; then
+    echo "Native Android AAB is missing the exact $notice file." >&2
+    exit 1
+  fi
+done
 
 mkdir -p "$OUTPUT_DIR"
 cp "$SIGNED_APK" "$APK_ARCHIVE"

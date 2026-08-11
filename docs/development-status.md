@@ -1,14 +1,14 @@
-# 发布候选检查点（2026-08-09）
+# 发布候选检查点（2026-08-11）
 
 ## 当前状态
 
 - 分支：`codex/native-platform-foundation`
 - 已发布测试版：[v0.1.1-alpha.11](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.1-alpha.11)
 - 应用版本：`0.1.1`
-- 原生构建号：Apple `CURRENT_PROJECT_VERSION=11`；Android `versionCode=11`
+- 当前候选构建号：Apple `CURRENT_PROJECT_VERSION=12`；Android `versionCode=12`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：Tauri 主应用安装在 `/Applications/Where To Study.app`；SwiftUI 预览安装在 `/Applications/Where To Study Native Preview.app`
-- 发布边界：当前是测试版候选，不是已签名、公证的生产版本；仓库仍等待维护者选择根许可证
+- 发布边界：当前是测试版候选，不是已签名、公证的生产版本；项目已按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -25,7 +25,7 @@
 - 保留 Tauri 2 + React + Rust 作为 Windows 客户端，并继续提供迁移期 macOS 构建。
 - 完成空教室、教学日历、设置、教学楼/三位教室号、个人课表联动、系统日历导入、托盘和课程小组件。
 - 教学日历保留绿白配色，支持日/周/月/年、整点与 14 个节次、当前时间红线、节假日、年视图课程热度及日期日程浮层。
-- 托盘提供今日/明日课程；关闭主窗口后保持运行；启动和每天 07:00 获取当天空教室，07:30 发送课程摘要。
+- 托盘提供今日/明日课程；关闭主窗口后保持运行；启动和每天 07:00 获取当天空教室；课程摘要默认关闭，用户显式开启后才在 07:30 发送。
 - 为每个账号生成不含账号信息的随机不透明缓存作用域；账号切换、清除或持久化失败时采用失效代次和撤销标记拒绝旧数据。
 - 设置与安全凭据提交具备回滚；WebView 不接收密码；课程小组件权限缩减为仅监听所需事件。
 
@@ -51,25 +51,38 @@
 
 | 范围 | 结果 |
 | --- | --- |
-| React | `npm ci`、`npm run build` 通过；完整 `npm audit --audit-level=high` 为 0 漏洞 |
-| Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；81/81 测试通过 |
+| React | 10/10 业务规则测试与 `npm run build` 通过；完整 `npm audit --audit-level=high` 为 0 漏洞 |
+| 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
+| Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；91/91 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
-| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；60/60 XCTest 通过 |
-| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；60 项单元测试 + 1 项真实导航 UI 测试，共 61/61 通过 |
-| Android Debug | 81/81 JVM 测试、`lintDebug`、Debug APK 构建通过 |
-| Android Release | 81/81 JVM 测试、`lintRelease`、签名 APK/AAB 构建通过 |
+| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；68/68 XCTest 通过 |
+| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；68 项单元测试 + 1 项真实导航 UI 测试，共 69/69 通过 |
+| Android Debug | 95/95 JVM 测试、`lintDebug`、Debug APK 构建通过 |
+| Android Release | 95/95 JVM 测试、`lintRelease`、签名 APK/AAB 构建通过 |
 | Android UI | Medium Phone 与 Pixel Tablet 各 1/1 导航冒烟测试通过 |
 | 浏览器视觉检查 | 桌面与手机空教室/设置/日历通过；节假日标题、14 节次与整点、年视图浮层、红色时间线、移动端三列摘要均无重叠；控制台 0 错误 |
-| macOS 安装检查 | Tauri arm64 与 SwiftUI universal 安装包版本/架构/adhoc 签名通过；两端关闭窗口后均保持运行 |
+| macOS 安装检查 | Tauri arm64 与 SwiftUI universal build 12 安装包版本/架构/adhoc 签名通过；原生侧栏标题与导航文字列对齐；两端关闭窗口后均保持运行；Tauri 二次启动维持单进程并恢复窗口 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
 
 Apple 测试报告：
 
-- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.11_09-42-02-+0800.xcresult`
-- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.11_09-42-08-+0800.xcresult`
+- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.11_12-58-11-+0800.xcresult`
+- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.11_12-58-19-+0800.xcresult`
 - iOS 后台清理压力测试（10 次）：`native/apple/DerivedData/stress-iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.11_09-47-45-+0800.xcresult`
+
+## Build 12 本地候选制品
+
+以下五个非 Windows 制品已完成本地打包、相邻 SHA-256 回读、版本/构建号、架构、签名边界和法律文件检查。Windows x64 NSIS 必须由干净的 GitHub Actions Windows runner 生成，发布前不会用跨平台替代物补位。
+
+| 文件 | SHA-256 | 签名状态 |
+| --- | --- | --- |
+| `Where-To-Study-v0.1.1-alpha.12-macos-arm64.zip` | `421e9b4c3d46bb15c3e5fed6ad564def6cbb1e39944d9cf8798b38ea56fdbb01` | Tauri macOS arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.12-native-macos-universal.zip` | `6b715e1ee42d99c868df5c40f33e8526e56bc3e5a1ebc883fbb16ed427b376b2` | SwiftUI macOS x86_64 + arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.12-native-ios-unsigned.xcarchive.zip` | `517b603c702fb1e357ab7dfbd33bcab3633500452dfbf736952836906f5cffc3` | iOS arm64 archive，无签名，不可直接安装 |
+| `Where-To-Study-v0.1.1-alpha.12-native-android-universal.apk` | `a19f5169e6c41a277c3e122d3b79e3a3674c606c91902a4cd4d62c3ce67ac586` | Android APK，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.12-native-android.aab` | `0ac5501a1ca9c1fbdcda53bfa12c387fbc8ccd75fce71761574c32b591d6a967` | Android AAB，固定 release key |
 
 ## Build 11 发布制品
 
@@ -153,7 +166,6 @@ Apple 测试报告：
 
 ## 后续发布步骤
 
-1. 维护者选择 MIT、Apache-2.0 或 GPL-3.0 后添加根 `LICENSE`；在此之前只能称为公开测试代码，不能声称已完成开源授权。
-2. 正式生产发布仍需 Apple Developer ID 签名与公证、可分发的 iOS 签名以及 Windows Authenticode。
+1. 正式生产发布仍需 Apple Developer ID 签名与公证、可分发的 iOS 签名以及 Windows Authenticode。
 
 Android 维护者密钥只通过本地忽略文件和 GitHub Actions secrets 提供，不进入仓库或发布日志。

@@ -159,6 +159,26 @@ final class LocalDataClearTests: XCTestCase {
         XCTAssertEqual(model.account, "fixture-account")
         XCTAssertTrue(model.password.isEmpty)
         XCTAssertTrue(model.canPreserveSavedPassword)
+
+        for value in ["2026-02-30", "2026-13-01"] {
+            model.termStartDate = value
+            XCTAssertFalse(model.saveSettings(), value)
+            XCTAssertEqual(
+                model.statusMessage,
+                CredentialSettingsError.invalidTermStartDate.localizedDescription
+            )
+            XCTAssertEqual(
+                try credentialStore.load(),
+                Credentials(account: "fixture-account", password: "fixture-password")
+            )
+            XCTAssertEqual(model.schedule, Self.schedule)
+            XCTAssertEqual(model.classroomsCache, Self.classrooms)
+            XCTAssertEqual(try scheduleStore.load(), Self.schedule)
+            XCTAssertEqual(try classroomStore.load(), Self.classrooms)
+            XCTAssertEqual(defaults.string(forKey: "termStartDate"), "2026-02-23")
+        }
+
+        model.termStartDate = "2026-02-23"
         XCTAssertTrue(model.saveSettings())
         XCTAssertEqual(
             try credentialStore.load(),

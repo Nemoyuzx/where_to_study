@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/package-validation.sh
 source "$ROOT_DIR/scripts/package-validation.sh"
+npm --prefix "$ROOT_DIR" run licenses:check
 APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-iOS"
@@ -56,6 +57,16 @@ if [[ ! -f "$APP/PrivacyInfo.xcprivacy" ]]; then
   echo "Native iOS archive is missing PrivacyInfo.xcprivacy." >&2
   exit 1
 fi
+if ! cmp -s "$ROOT_DIR/LICENSE" "$APP/LICENSE"; then
+  echo "Native iOS archive is missing the exact project license." >&2
+  exit 1
+fi
+for notice in THIRD_PARTY_LICENSES.html THIRD_PARTY_NOTICES.md; do
+  if ! cmp -s "$ROOT_DIR/$notice" "$APP/$notice"; then
+    echo "Native iOS archive is missing the exact $notice file." >&2
+    exit 1
+  fi
+done
 plutil -lint "$APP/Info.plist" "$APP/PrivacyInfo.xcprivacy" >/dev/null
 ACTUAL_VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Info.plist")"
 ACTUAL_BUILD="$(plutil -extract CFBundleVersion raw "$APP/Info.plist")"

@@ -61,7 +61,8 @@ the secret in an issue, log, screenshot, or attachment.
 
 ## License status
 
-This repository currently has no `LICENSE` file and no selected open-source
-license. Default copyright rules apply except for permissions provided by
-GitHub's Terms of Service or separately granted by the relevant rights holder.
-This policy does not grant a software license.
+Project code is distributed under the GNU General Public License v3.0 only
+(`GPL-3.0-only`); see `LICENSE`. Third-party materials retain the licenses
+recorded in `THIRD_PARTY_NOTICES.md` and `THIRD_PARTY_LICENSES.html`. This
+security policy does not grant any additional permissions beyond those
+applicable terms.

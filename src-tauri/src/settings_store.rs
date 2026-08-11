@@ -4,6 +4,7 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tempfile::NamedTempFile;
@@ -15,7 +16,7 @@ use crate::models::{SaveSettingsRequest, SavedSettings};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 2;
+const SETTINGS_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Default, Deserialize, Zeroize, ZeroizeOnDrop)]
 struct SettingsFile {
@@ -31,6 +32,8 @@ struct SettingsFile {
     campus_id: String,
     #[serde(default)]
     default_min_seats: usize,
+    #[serde(default)]
+    daily_course_notifications_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -40,6 +43,7 @@ struct PersistedSettings<'a> {
     term_start_date: &'a str,
     campus_id: &'a str,
     default_min_seats: usize,
+    daily_course_notifications_enabled: bool,
 }
 
 fn settings_path(app: &AppHandle) -> ServiceResult<PathBuf> {
@@ -171,6 +175,7 @@ where
         term_start_date: file.term_start_date.clone(),
         campus_id: file.campus_id.clone(),
         default_min_seats: file.default_min_seats,
+        daily_course_notifications_enabled: file.daily_course_notifications_enabled,
     };
     settings.apply_defaults();
 
@@ -205,6 +210,11 @@ where
     L: FnOnce() -> ServiceResult<Option<Credentials>>,
 {
     request.apply_defaults();
+    if !is_strict_contract_date(&request.term_start_date) {
+        return Err(ServiceError::new(
+            "第一周周一日期格式不正确，请使用 yyyy-MM-dd。",
+        ));
+    }
     let existing = load_credentials()?;
     let requested_account = request.account.trim();
     let entered_password = request
@@ -249,6 +259,7 @@ where
         term_start_date: request.term_start_date.clone(),
         campus_id: request.campus_id.clone(),
         default_min_seats: request.default_min_seats,
+        daily_course_notifications_enabled: request.daily_course_notifications_enabled,
     };
 
     let existing_account = existing
@@ -266,6 +277,14 @@ where
         previous_credentials: existing,
         account_changed,
     })
+}
+
+fn is_strict_contract_date(value: &str) -> bool {
+    value.len() == 10
+        && value.as_bytes().get(4) == Some(&b'-')
+        && value.as_bytes().get(7) == Some(&b'-')
+        && NaiveDate::parse_from_str(value, "%Y-%m-%d")
+            .is_ok_and(|date| date.format("%Y-%m-%d").to_string() == value)
 }
 
 fn commit_save_to_path<S>(
@@ -365,6 +384,7 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         term_start_date: &settings.term_start_date,
         campus_id: &settings.campus_id,
         default_min_seats: settings.default_min_seats,
+        daily_course_notifications_enabled: settings.daily_course_notifications_enabled,
     };
     let bytes = Zeroizing::new(
         serde_json::to_vec_pretty(&persisted)
@@ -514,6 +534,7 @@ mod tests {
             term_start_date: "2026-03-02".to_string(),
             campus_id: "01".to_string(),
             default_min_seats: 20,
+            daily_course_notifications_enabled: true,
         }
     }
 
@@ -525,6 +546,7 @@ mod tests {
             term_start_date: "2026-03-02".to_string(),
             campus_id: "01".to_string(),
             default_min_seats: 20,
+            daily_course_notifications_enabled: true,
         }
     }
 
@@ -538,6 +560,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&content).expect("valid JSON");
 
         assert_eq!(value["schema_version"], SETTINGS_SCHEMA_VERSION);
+        assert_eq!(value["daily_course_notifications_enabled"], true);
         assert!(value.get("account").is_none());
         assert!(value.get("password").is_none());
         assert!(!content.contains("fixture-account"));
@@ -578,6 +601,7 @@ mod tests {
         assert!(save_called.get());
         assert_eq!(loaded.account, "legacy-user");
         assert!(loaded.has_saved_password);
+        assert!(!loaded.daily_course_notifications_enabled);
     }
 
     #[test]
@@ -675,6 +699,30 @@ mod tests {
             Ok(())
         })
         .expect("replace password");
+    }
+
+    #[test]
+    fn invalid_term_start_date_is_rejected_before_credentials_are_loaded() {
+        for invalid in ["2026-02-30", "2026-13-01", "2026-2-03"] {
+            let credentials_loaded = Cell::new(false);
+            let mut request = fixture_request(Some("replacement-secret"));
+            request.term_start_date = invalid.to_string();
+
+            let result = prepare_save_with(request, || {
+                credentials_loaded.set(true);
+                Ok(None)
+            });
+            let error = match result {
+                Ok(_) => panic!("invalid date must be rejected"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.message,
+                "第一周周一日期格式不正确，请使用 yyyy-MM-dd。"
+            );
+            assert!(!credentials_loaded.get());
+        }
     }
 
     #[test]

@@ -9,6 +9,36 @@ enum class ClassroomRefreshDecision {
     SKIP_MISSING_CREDENTIALS,
 }
 
+internal enum class DailyClassroomScheduleAction {
+    CANCEL,
+    KEEP,
+    SCHEDULE,
+}
+
+internal object DailyClassroomRefreshSchedulingLogic {
+    fun action(
+        account: String?,
+        password: String?,
+        hasPendingJob: Boolean,
+        forceReschedule: Boolean,
+    ): DailyClassroomScheduleAction {
+        val refreshDecision = DailyClassroomRefreshLogic.refreshDecision(account, password)
+        if (refreshDecision == ClassroomRefreshDecision.SKIP_MISSING_CREDENTIALS) {
+            return DailyClassroomScheduleAction.CANCEL
+        }
+        return if (hasPendingJob && !forceReschedule) {
+            DailyClassroomScheduleAction.KEEP
+        } else {
+            DailyClassroomScheduleAction.SCHEDULE
+        }
+    }
+
+    fun cancellationSucceeded(
+        managedJobsCancelled: Boolean,
+        retryStateCleared: Boolean,
+    ): Boolean = managedJobsCancelled && retryStateCleared
+}
+
 object DailyClassroomRefreshLogic {
     const val timeZoneID = "Asia/Shanghai"
     const val runWindowMillis = 60L * 60L * 1_000L

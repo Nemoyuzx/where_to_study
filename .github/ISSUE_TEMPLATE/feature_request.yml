@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        This repository currently has no `LICENSE`. A proposal or contribution does not select a license, and third-party code or assets must not be pasted without permission.
+        This project is distributed under `GPL-3.0-only`. Do not paste third-party code or assets unless you have permission and can document the applicable terms.
   - type: textarea
     id: problem
     attributes:

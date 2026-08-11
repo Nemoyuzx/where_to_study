@@ -448,14 +448,14 @@ struct TeachingCalendarView: View {
     private func courses(on date: Date) -> [Course] {
         guard
             let schedule = model.schedule,
-            let start = DateFormatter.contractDate.date(from: schedule.termStartDate)
+            let start = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [] }
         return ScheduleLogic.courses(on: date, termStart: start, courses: schedule.courses)
     }
 
     private func holidayItems(on date: Date) -> [HolidayItem] {
         let year = calendar.component(.year, from: date)
-        let target = DateFormatter.contractDate.string(from: date)
+        let target = StrictContractDateParser.string(from: date)
         return model.holidayItems(for: year).filter { $0.date == target }
     }
 
@@ -578,16 +578,4 @@ struct TeachingCalendarView: View {
         formatter.dateFormat = format
         return formatter
     }
-}
-
-extension DateFormatter {
-    static let contractDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.isLenient = false
-        return formatter
-    }()
 }

@@ -17,7 +17,7 @@ enum ClassroomClientError: LocalizedError {
 struct SJDClassroomClient: ClassroomFetching {
     private let api: SJDAPIClient
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = SJDURLSession.shared) {
         api = SJDAPIClient(session: session)
     }
 

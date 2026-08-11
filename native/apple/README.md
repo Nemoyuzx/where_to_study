@@ -26,7 +26,7 @@ iOS 模拟器构建会使用 Xcode 的本地临时签名，以便 Keychain 在�
 ./scripts/native-ios-package.sh vX.Y.Z-preview.N
 ```
 
-脚本会生成仅含 arm64 真机应用的 `xcarchive.zip` 和 SHA-256 文件，并检查应用图标资源与隐私清单。该 archive 供 CI 验证和后续签名使用，不能直接安装到 iPhone。
+脚本会生成仅含 arm64 真机应用的 `xcarchive.zip` 和 SHA-256 文件，并检查应用图标资源、隐私清单、根 GPL 许可证与第三方许可文件。该 archive 供 CI 验证和后续签名使用，不能直接安装到 iPhone。
 
 生成并校验 macOS Universal 预览包：
 
@@ -34,4 +34,4 @@ iOS 模拟器构建会使用 Xcode 的本地临时签名，以便 Keychain 在�
 ./scripts/native-macos-package.sh vX.Y.Z-preview.N
 ```
 
-脚本会构建 arm64 与 x86_64 双架构应用、检查二进制架构、进行临时代码签名和签名校验，并把 ZIP 与 SHA-256 文件写入 `release-artifacts/`。脚本不会运行单元测试或启动应用做运行时测试；发布前应另外运行 `native-apple-build.sh` 并完成所需的人工运行检查。该包未使用 Developer ID 签名，也未公证。
+脚本会构建 arm64 与 x86_64 双架构应用、检查二进制架构、根 GPL 许可证与第三方许可文件、进行临时代码签名和签名校验，并把 ZIP 与 SHA-256 文件写入 `release-artifacts/`。脚本不会运行单元测试或启动应用做运行时测试；发布前应另外运行 `native-apple-build.sh` 并完成所需的人工运行检查。该包未使用 Developer ID 签名，也未公证。

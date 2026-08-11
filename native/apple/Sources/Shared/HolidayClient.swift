@@ -21,6 +21,15 @@ enum HolidaySourceLimits {
     static let maximumExpandedItems = 512
 }
 
+enum HolidayResponseAccumulator {
+    static func append(_ byte: UInt8, to data: inout Data) throws {
+        guard data.count < HolidaySourceLimits.maximumPayloadBytes else {
+            throw HolidayClientError.service("节假日数据响应过大。")
+        }
+        data.append(byte)
+    }
+}
+
 enum HolidayUserAgent {
     static func value(bundle: Bundle = .main) -> String {
         let version = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?
@@ -63,10 +72,7 @@ struct HolidayClient: HolidayFetching {
             HolidaySourceLimits.maximumPayloadBytes
         ))
         for try await byte in bytes {
-            guard data.count < HolidaySourceLimits.maximumPayloadBytes else {
-                throw HolidayClientError.service("节假日数据响应过大。")
-            }
-            data.append(byte)
+            try HolidayResponseAccumulator.append(byte, to: &data)
         }
         return try HolidaySourceParser.parse(
             data: data,

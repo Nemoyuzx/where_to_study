@@ -1,5 +1,49 @@
 import Foundation
 
+enum StrictContractDateParser {
+    static func date(from value: String, calendar: Calendar = .shanghai) -> Date? {
+        let bytes = Array(value.utf8)
+        guard
+            bytes.count == 10,
+            bytes[4] == 0x2D,
+            bytes[7] == 0x2D,
+            [0, 1, 2, 3, 5, 6, 8, 9].allSatisfy({ (0x30 ... 0x39).contains(bytes[$0]) })
+        else { return nil }
+
+        let year = number(in: bytes[0 ... 3])
+        let month = number(in: bytes[5 ... 6])
+        let day = number(in: bytes[8 ... 9])
+        guard year > 0 else { return nil }
+
+        let components = DateComponents(
+            timeZone: calendar.timeZone,
+            year: year,
+            month: month,
+            day: day
+        )
+        guard let date = calendar.date(from: components) else { return nil }
+        let resolved = calendar.dateComponents([.year, .month, .day], from: date)
+        guard resolved.year == year, resolved.month == month, resolved.day == day else {
+            return nil
+        }
+        return date
+    }
+
+    static func string(from date: Date, calendar: Calendar = .shanghai) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
+    }
+
+    private static func number(in bytes: ArraySlice<UInt8>) -> Int {
+        bytes.reduce(0) { $0 * 10 + Int($1 - 0x30) }
+    }
+}
+
 struct SlotMetadata: Codable, Identifiable, Equatable, Sendable {
     let index: Int
     let label: String

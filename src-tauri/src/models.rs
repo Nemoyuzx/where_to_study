@@ -38,6 +38,8 @@ pub struct SavedSettings {
     pub campus_id: String,
     #[serde(default)]
     pub default_min_seats: usize,
+    #[serde(default)]
+    pub daily_course_notifications_enabled: bool,
 }
 
 impl SavedSettings {
@@ -49,6 +51,7 @@ impl SavedSettings {
             term_start_date: crate::config::default_term_start_date(),
             campus_id: crate::config::CAMPUSES[0].id.to_string(),
             default_min_seats: 0,
+            daily_course_notifications_enabled: false,
         }
     }
 
@@ -79,6 +82,8 @@ pub struct SaveSettingsRequest {
     pub campus_id: String,
     #[serde(default)]
     pub default_min_seats: usize,
+    #[serde(default)]
+    pub daily_course_notifications_enabled: bool,
 }
 
 impl SaveSettingsRequest {

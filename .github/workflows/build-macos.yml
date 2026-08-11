@@ -38,6 +38,12 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
+
+      - name: Test web domain logic
+        run: npm test
+
       - name: Test Rust core
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
 

@@ -27,27 +27,29 @@
     "saved_settings": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["account", "has_saved_password", "term_id", "term_start_date", "campus_id", "default_min_seats"],
+      "required": ["account", "has_saved_password", "term_id", "term_start_date", "campus_id", "default_min_seats", "daily_course_notifications_enabled"],
       "properties": {
         "account": { "type": "string" },
         "has_saved_password": { "type": "boolean" },
         "term_id": { "type": "string", "minLength": 1 },
         "term_start_date": { "type": "string", "format": "date" },
         "campus_id": { "type": "string", "minLength": 1 },
-        "default_min_seats": { "type": "integer", "minimum": 0 }
+        "default_min_seats": { "type": "integer", "minimum": 0 },
+        "daily_course_notifications_enabled": { "type": "boolean" }
       }
     },
     "save_settings_request": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["account", "password", "term_id", "term_start_date", "campus_id", "default_min_seats"],
+      "required": ["account", "password", "term_id", "term_start_date", "campus_id", "default_min_seats", "daily_course_notifications_enabled"],
       "properties": {
         "account": { "type": "string" },
         "password": { "type": ["string", "null"] },
         "term_id": { "type": "string", "minLength": 1 },
         "term_start_date": { "type": "string", "format": "date" },
         "campus_id": { "type": "string", "minLength": 1 },
-        "default_min_seats": { "type": "integer", "minimum": 0 }
+        "default_min_seats": { "type": "integer", "minimum": 0 },
+        "daily_course_notifications_enabled": { "type": "boolean" }
       }
     },
     "course": {

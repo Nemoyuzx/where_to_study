@@ -95,7 +95,10 @@ enum CalendarImportLogic {
         slots: [SlotMetadata] = SlotMetadata.defaults,
         calendar: Calendar = .shanghai
     ) throws -> CalendarScheduleImportPlan {
-        guard let termStart = contractDate(schedule.termStartDate, calendar: calendar) else {
+        guard let termStart = StrictContractDateParser.date(
+            from: schedule.termStartDate,
+            calendar: calendar
+        ) else {
             throw CalendarImportError.invalidTermStartDate
         }
 
@@ -278,12 +281,6 @@ enum CalendarImportLogic {
             && event.timeZoneIdentifier == Calendar.shanghai.timeZone.identifier
             && event.isBusy
             && event.alarmOffsets == [reminderOffset]
-    }
-
-    private static func contractDate(_ value: String, calendar: Calendar) -> Date? {
-        let parts = value.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        return calendar.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
     private static func date(on day: Date, time: String, calendar: Calendar) -> Date? {

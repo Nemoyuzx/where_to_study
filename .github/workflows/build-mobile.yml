@@ -48,6 +48,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
+
       - name: Expose Android toolchain
         run: |
           {
@@ -119,6 +122,9 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
 
       - name: Build signed iOS IPA
         if: env.IOS_SIGNING_READY == 'true'

@@ -12,6 +12,9 @@ on:
       - "src-tauri/**"
       - "package.json"
       - "package-lock.json"
+      - "LICENSE"
+      - "THIRD_PARTY_LICENSES.html"
+      - "THIRD_PARTY_NOTICES.md"
       - "vite.config.js"
       - ".github/workflows/build-windows.yml"
   pull_request:
@@ -20,6 +23,9 @@ on:
       - "src-tauri/**"
       - "package.json"
       - "package-lock.json"
+      - "LICENSE"
+      - "THIRD_PARTY_LICENSES.html"
+      - "THIRD_PARTY_NOTICES.md"
       - "vite.config.js"
       - ".github/workflows/build-windows.yml"
 
@@ -54,6 +60,12 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
+
+      - name: Test web domain logic
+        run: npm test
 
       - name: Build web frontend
         run: npm run build
@@ -98,6 +110,33 @@ jobs:
           }
           if ([System.Text.Encoding]::ASCII.GetString($checksumBytes) -cne $checksumLine) {
             throw "Windows checksum sidecar did not round-trip exactly."
+          }
+
+          $installDirectory = Join-Path $env:RUNNER_TEMP "where-to-study-nsis-$env:GITHUB_RUN_ID"
+          $installer = Start-Process -FilePath (Resolve-Path $output) -ArgumentList @("/S", "/D=$installDirectory") -Wait -PassThru
+          if ($installer.ExitCode -ne 0) {
+            throw "Windows NSIS installer smoke test failed with exit code $($installer.ExitCode)."
+          }
+
+          try {
+            foreach ($legalFile in @("LICENSE", "THIRD_PARTY_LICENSES.html", "THIRD_PARTY_NOTICES.md")) {
+              $expectedPath = Join-Path $env:GITHUB_WORKSPACE $legalFile
+              $expectedHash = (Get-FileHash -Algorithm SHA256 $expectedPath).Hash
+              $matchingFiles = Get-ChildItem $installDirectory -Recurse -File -Filter $legalFile |
+                Where-Object { (Get-FileHash -Algorithm SHA256 $_.FullName).Hash -eq $expectedHash }
+              if (-not $matchingFiles) {
+                throw "Installed Windows app is missing the exact $legalFile file."
+              }
+            }
+          } finally {
+            $uninstaller = Get-ChildItem $installDirectory -Recurse -File -Filter "*uninstall*.exe" |
+              Select-Object -First 1
+            if ($uninstaller) {
+              Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait
+            }
+            if (Test-Path $installDirectory) {
+              Remove-Item -Recurse -Force $installDirectory
+            }
           }
 
       - name: Upload Windows artifacts

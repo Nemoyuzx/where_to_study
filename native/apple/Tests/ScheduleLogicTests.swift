@@ -20,6 +20,76 @@ final class ScheduleLogicTests: XCTestCase {
     func testSJDTransportUsesHTTPS() {
         XCTAssertEqual(SJDAPIClient.origin, "https://jwglweixin.bupt.edu.cn")
         XCTAssertEqual(URL(string: SJDAPIClient.origin)?.scheme, "https")
+        XCTAssertTrue(SJDURLSession.shared.delegate is SJDURLSessionRedirectDelegate)
+    }
+
+    func testSJDRedirectPolicyAllowsOnlySameSecureOriginAndEffectivePort() throws {
+        let source = try XCTUnwrap(URL(string: "https://jwglweixin.bupt.edu.cn/bjyddx/login"))
+        let explicitDefaultPort = try XCTUnwrap(URL(
+            string: "https://jwglweixin.bupt.edu.cn:443/bjyddx/student/curriculum"
+        ))
+
+        XCTAssertTrue(SJDNetworkPolicy.allows(source))
+        XCTAssertTrue(SJDNetworkPolicy.allowsRedirect(from: source, to: explicitDefaultPort))
+
+        for destination in [
+            "http://jwglweixin.bupt.edu.cn/bjyddx/student/curriculum",
+            "https://example.com/bjyddx/student/curriculum",
+            "https://sub.jwglweixin.bupt.edu.cn/bjyddx/student/curriculum",
+            "https://jwglweixin.bupt.edu.cn:444/bjyddx/student/curriculum",
+            "https://user@jwglweixin.bupt.edu.cn/bjyddx/student/curriculum",
+        ] {
+            XCTAssertFalse(
+                SJDNetworkPolicy.allowsRedirect(from: source, to: URL(string: destination)),
+                destination
+            )
+        }
+
+        XCTAssertFalse(SJDNetworkPolicy.allowsRedirect(
+            from: URL(string: "https://jwglweixin.bupt.edu.cn:444/bjyddx/login"),
+            to: source
+        ))
+    }
+
+    func testSJDResponseLimitsAcceptBoundaryAndRejectOneAdditionalByte() {
+        for endpoint in SJDResponseEndpoint.allCases {
+            let maximum = SJDResponseLimits.maximumBytes(for: endpoint)
+            XCTAssertNoThrow(try SJDResponseLimits.validate(
+                Data(repeating: 0x20, count: maximum),
+                endpoint: endpoint
+            ))
+            XCTAssertThrowsError(try SJDResponseLimits.validate(
+                Data(repeating: 0x20, count: maximum + 1),
+                endpoint: endpoint
+            ))
+        }
+    }
+
+    func testSJDRequestsRejectActualOversizedBodiesDespiteSmallDeclaredLength() async throws {
+        for endpoint in SJDResponseEndpoint.allCases {
+            let transport = StubSJDHTTPTransport(
+                data: Data(
+                    repeating: 0x20,
+                    count: SJDResponseLimits.maximumBytes(for: endpoint) + 1
+                ),
+                declaredContentLength: 1
+            )
+            let api = SJDAPIClient(transport: transport)
+
+            do {
+                switch endpoint {
+                case .login:
+                    _ = try await api.login(credentials: Credentials(account: "account", password: "password"))
+                case .curriculum:
+                    _ = try await api.curriculum(token: "token", week: "all")
+                case .classrooms:
+                    _ = try await api.classrooms(token: "token", campusID: "01")
+                }
+                XCTFail("Expected \(endpoint) to reject the oversized body.")
+            } catch {
+                XCTAssertTrue(error.localizedDescription.contains("响应过大"), String(describing: error))
+            }
+        }
     }
 
     func testExamWeeksUseSeventeenthAndEighteenthExistingWeeks() {
@@ -94,6 +164,43 @@ final class ScheduleLogicTests: XCTestCase {
         try store.save(expected)
 
         XCTAssertEqual(try store.load(), expected)
+    }
+
+    func testScheduleStoreRejectsInvalidContractDatesOnSaveAndLoad() throws {
+        let expected = try JSONDecoder().decode(
+            ScheduleSnapshot.self,
+            from: fixtureData("schedule.json")
+        )
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appendingPathComponent("schedule.json")
+        let store = FileScheduleStore(fileURL: fileURL)
+
+        for value in ["2026-02-30", "2026-13-01"] {
+            let invalid = ScheduleSnapshot(
+                termID: expected.termID,
+                termStartDate: value,
+                fetchedAt: expected.fetchedAt,
+                courses: expected.courses
+            )
+            XCTAssertThrowsError(try store.save(invalid), value) { error in
+                XCTAssertEqual(error as? ScheduleStoreError, .invalidTermStartDate)
+            }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+        }
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let invalidCache = ScheduleSnapshot(
+            termID: expected.termID,
+            termStartDate: "2026-02-30",
+            fetchedAt: expected.fetchedAt,
+            courses: expected.courses
+        )
+        try JSONEncoder().encode(invalidCache).write(to: fileURL, options: .atomic)
+        XCTAssertThrowsError(try store.load()) { error in
+            XCTAssertEqual(error as? ScheduleStoreError, .invalidTermStartDate)
+        }
     }
 
     func testSharedSJDClassroomFixturesProduceContractCache() throws {
@@ -222,6 +329,18 @@ final class ScheduleLogicTests: XCTestCase {
         ))
     }
 
+    func testHolidayResponseAccumulatorRejectsActualByteBeyondHardLimit() throws {
+        var data = Data(
+            repeating: 0x20,
+            count: HolidaySourceLimits.maximumPayloadBytes - 1
+        )
+
+        try HolidayResponseAccumulator.append(0x20, to: &data)
+        XCTAssertEqual(data.count, HolidaySourceLimits.maximumPayloadBytes)
+        XCTAssertThrowsError(try HolidayResponseAccumulator.append(0x20, to: &data))
+        XCTAssertEqual(data.count, HolidaySourceLimits.maximumPayloadBytes)
+    }
+
     func testHolidayStoreRoundTripsSharedFixture() throws {
         let expected = try JSONDecoder().decode(
             HolidaysSnapshot.self,
@@ -315,5 +434,25 @@ final class ScheduleLogicTests: XCTestCase {
             ScheduleLogic.busySlots(on: start, termStart: start, courses: [course]),
             Set([2, 3, 4])
         )
+    }
+}
+
+private struct StubSJDHTTPTransport: SJDHTTPTransport {
+    let data: Data
+    let declaredContentLength: Int
+
+    func data(
+        for request: URLRequest,
+        maximumBytes _: Int
+    ) async throws -> (Data, URLResponse) {
+        let url = try XCTUnwrap(request.url)
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Length": String(declaredContentLength)]
+        ))
+        XCTAssertEqual(response.expectedContentLength, Int64(declaredContentLength))
+        return (data, response)
     }
 }

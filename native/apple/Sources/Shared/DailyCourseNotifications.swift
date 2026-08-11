@@ -1,10 +1,66 @@
 import Foundation
 import UserNotifications
 
+enum DailyCourseNotificationSettings {
+    static let enabledKey = "dailyCourseNotificationsEnabled"
+}
+
 enum DailyCourseNotificationAuthorization: Equatable, Sendable {
     case notDetermined
     case denied
     case authorized
+}
+
+enum DailyCourseNotificationForegroundPolicy {
+    static func presentationOptions(
+        identifier: String,
+        isEnabled: Bool
+    ) -> UNNotificationPresentationOptions {
+        guard
+            isEnabled,
+            identifier.hasPrefix(DailyCourseNotificationPlanner.identifierPrefix)
+        else { return [] }
+        return [.banner, .list, .sound]
+    }
+}
+
+final class DailyCourseNotificationForegroundDelegate: NSObject,
+    UNUserNotificationCenterDelegate,
+    @unchecked Sendable
+{
+    static let shared = DailyCourseNotificationForegroundDelegate()
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    func userNotificationCenter(
+        _: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler(DailyCourseNotificationForegroundPolicy.presentationOptions(
+            identifier: notification.request.identifier,
+            isEnabled: defaults.bool(forKey: DailyCourseNotificationSettings.enabledKey)
+        ))
+    }
+}
+
+protocol UserNotificationCenterDelegateInstalling: AnyObject {
+    var delegate: (any UNUserNotificationCenterDelegate)? { get set }
+}
+
+extension UNUserNotificationCenter: UserNotificationCenterDelegateInstalling {}
+
+enum DailyCourseNotificationCenterConfiguration {
+    static func installForegroundDelegate(
+        center: any UserNotificationCenterDelegateInstalling = UNUserNotificationCenter.current(),
+        delegate: DailyCourseNotificationForegroundDelegate = .shared
+    ) {
+        center.delegate = delegate
+    }
 }
 
 struct DailyCourseNotificationRequest: Equatable, Sendable {
@@ -29,7 +85,10 @@ enum DailyCourseNotificationPlanner {
         calendar: Calendar = .shanghai
     ) -> [DailyCourseNotificationRequest] {
         guard
-            let termStart = contractDate(schedule.termStartDate, calendar: calendar),
+            let termStart = StrictContractDateParser.date(
+                from: schedule.termStartDate,
+                calendar: calendar
+            ),
             let lastCourseWeek = schedule.courses
                 .flatMap(\.weekNumbers)
                 .filter({ $0 > 0 })
@@ -78,7 +137,7 @@ enum DailyCourseNotificationPlanner {
                 let location = course.room.isEmpty ? "" : " @ \(course.room)"
                 return "\(course.timeRange) \(name)\(location)"
             }
-            let date = contractDateString(day, calendar: calendar)
+            let date = StrictContractDateParser.string(from: day, calendar: calendar)
             requests.append(DailyCourseNotificationRequest(
                 identifier: identifierPrefix + date,
                 fireDate: fireDate,
@@ -89,27 +148,6 @@ enum DailyCourseNotificationPlanner {
         return requests
     }
 
-    private static func contractDate(_ value: String, calendar: Calendar) -> Date? {
-        var components = DateComponents()
-        let parts = value.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        components.calendar = calendar
-        components.timeZone = calendar.timeZone
-        components.year = parts[0]
-        components.month = parts[1]
-        components.day = parts[2]
-        return calendar.date(from: components)
-    }
-
-    private static func contractDateString(_ date: Date, calendar: Calendar) -> String {
-        let components = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(
-            format: "%04d-%02d-%02d",
-            components.year ?? 0,
-            components.month ?? 0,
-            components.day ?? 0
-        )
-    }
 }
 
 protocol DailyCourseNotificationScheduling: Sendable {

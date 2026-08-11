@@ -74,6 +74,72 @@ class DailyClassroomRefreshLogicTest {
     }
 
     @Test
+    fun missingCredentialsCancelStartupAndForcedRescheduling() {
+        listOf(
+            null to null,
+            "" to "password",
+            "   " to "password",
+            "account" to null,
+            "account" to "",
+        ).forEach { (account, password) ->
+            listOf(false, true).forEach { hasPendingJob ->
+                listOf(false, true).forEach { forceReschedule ->
+                    assertEquals(
+                        DailyClassroomScheduleAction.CANCEL,
+                        DailyClassroomRefreshSchedulingLogic.action(
+                            account = account,
+                            password = password,
+                            hasPendingJob = hasPendingJob,
+                            forceReschedule = forceReschedule,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun startupKeepsAnExistingJobForValidSavedCredentials() {
+        assertEquals(
+            DailyClassroomScheduleAction.KEEP,
+            DailyClassroomRefreshSchedulingLogic.action(
+                account = "account",
+                password = "password",
+                hasPendingJob = true,
+                forceReschedule = false,
+            ),
+        )
+    }
+
+    @Test
+    fun startupSchedulesWhenValidCredentialsHaveNoPendingJob() {
+        assertEquals(
+            DailyClassroomScheduleAction.SCHEDULE,
+            DailyClassroomRefreshSchedulingLogic.action(
+                account = "account",
+                password = "password",
+                hasPendingJob = false,
+                forceReschedule = false,
+            ),
+        )
+    }
+
+    @Test
+    fun bootAndCompletionForceRescheduleForValidCredentials() {
+        listOf(false, true).forEach { hasPendingJob ->
+            assertEquals(
+                DailyClassroomScheduleAction.SCHEDULE,
+                DailyClassroomRefreshSchedulingLogic.action(
+                    account = "account",
+                    password = "password",
+                    hasPendingJob = hasPendingJob,
+                    forceReschedule = true,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun retriesOnlyTemporaryRefreshFailures() {
         assertEquals(false, DailyClassroomRefreshLogic.shouldRetry(null))
         assertEquals(
@@ -108,6 +174,23 @@ class DailyClassroomRefreshLogicTest {
         assertEquals(true, DailyClassroomRefreshLogic.canRequestRetry(1))
         assertEquals(false, DailyClassroomRefreshLogic.canRequestRetry(2))
         assertEquals(false, DailyClassroomRefreshLogic.canRequestRetry(3))
+    }
+
+    @Test
+    fun cancellationRequiresJobsAndRetryStateToBeCleared() {
+        assertEquals(
+            true,
+            DailyClassroomRefreshSchedulingLogic.cancellationSucceeded(
+                managedJobsCancelled = true,
+                retryStateCleared = true,
+            ),
+        )
+        listOf(false to true, true to false, false to false).forEach { (jobs, retries) ->
+            assertEquals(
+                false,
+                DailyClassroomRefreshSchedulingLogic.cancellationSucceeded(jobs, retries),
+            )
+        }
     }
 
     private fun shanghaiTime(

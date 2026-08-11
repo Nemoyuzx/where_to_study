@@ -1,5 +1,7 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URLEncoder
@@ -17,6 +19,101 @@ class ScheduleClientException(
     message: String,
     val retryable: Boolean = false,
 ) : Exception(message)
+
+internal object SjdInputLimits {
+    const val maxResponseBytes = 2 * 1024 * 1024
+}
+
+internal object SjdResponseReader {
+    fun read(stream: InputStream?, declaredLength: Long): String {
+        if (declaredLength > SjdInputLimits.maxResponseBytes) {
+            throw ScheduleClientException("移动教务返回的数据超过大小限制。")
+        }
+        if (stream == null) return ""
+
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0
+        stream.use { input ->
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                total += count
+                if (total > SjdInputLimits.maxResponseBytes) {
+                    throw ScheduleClientException("移动教务返回的数据超过大小限制。")
+                }
+                output.write(buffer, 0, count)
+            }
+        }
+
+        return String(output.toByteArray(), StandardCharsets.UTF_8)
+    }
+}
+
+internal object SjdRedirectPolicy {
+    const val maxRedirects = 5
+
+    private val allowedOrigin = URI.create(SjdApiClient.ORIGIN)
+    private val redirectStatuses = setOf(
+        HttpURLConnection.HTTP_MOVED_PERM,
+        HttpURLConnection.HTTP_MOVED_TEMP,
+        HttpURLConnection.HTTP_SEE_OTHER,
+        307,
+        308,
+    )
+
+    fun isRedirect(status: Int): Boolean = status in redirectStatuses
+
+    fun followUp(status: Int, method: String): SjdRedirectRequest {
+        val normalizedMethod = method.uppercase(Locale.ROOT)
+        return when {
+            status == HttpURLConnection.HTTP_SEE_OTHER && normalizedMethod != "HEAD" ->
+                SjdRedirectRequest("GET", preserveBody = false)
+            status in setOf(
+                HttpURLConnection.HTTP_MOVED_PERM,
+                HttpURLConnection.HTTP_MOVED_TEMP,
+            ) && normalizedMethod == "POST" ->
+                SjdRedirectRequest("GET", preserveBody = false)
+            else -> SjdRedirectRequest(normalizedMethod, preserveBody = true)
+        }
+    }
+
+    fun resolve(current: URI, location: String?, redirectsFollowed: Int): URI {
+        if (redirectsFollowed >= maxRedirects) {
+            throw ScheduleClientException("移动教务重定向次数过多。")
+        }
+        val target = runCatching {
+            current.resolve(location?.takeIf(String::isNotBlank) ?: error("missing location"))
+        }.getOrElse {
+            throw ScheduleClientException("移动教务返回了无效的重定向地址。")
+        }
+        if (!isAllowed(target)) {
+            throw ScheduleClientException("移动教务拒绝了不安全的重定向。")
+        }
+        return target
+    }
+
+    fun isAllowed(target: URI): Boolean =
+        target.scheme.equals("https", ignoreCase = true) &&
+            target.host.equals(allowedOrigin.host, ignoreCase = true) &&
+            target.userInfo == null &&
+            hasAllowedPort(target)
+
+    private fun hasAllowedPort(target: URI): Boolean = if (target.port == -1) {
+        target.rawAuthority?.equals(target.host, ignoreCase = true) == true &&
+            effectivePort(target) == effectivePort(allowedOrigin)
+    } else {
+        target.port == effectivePort(allowedOrigin)
+    }
+
+    private fun effectivePort(uri: URI): Int = if (uri.port == -1) 443 else uri.port
+}
+
+internal data class SjdRedirectRequest(
+    val method: String,
+    val preserveBody: Boolean,
+)
 
 class SjdApiClient {
     fun login(credentials: Credentials): String {
@@ -68,38 +165,56 @@ class SjdApiClient {
         form: Map<String, String>,
         token: String?,
     ): JSONObject {
-        val connection = URI.create("$ORIGIN$path").toURL().openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = method
-            connection.connectTimeout = 20_000
-            connection.readTimeout = 30_000
-            connection.instanceFollowRedirects = true
-            connection.doInput = true
-            connection.setRequestProperty("Origin", ORIGIN)
-            connection.setRequestProperty("Referer", referer)
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0")
-            token?.let { connection.setRequestProperty("token", it) }
-            if (form.isNotEmpty()) {
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-                connection.outputStream.use { stream -> stream.write(formData(form)) }
+        var target = URI.create("$ORIGIN$path")
+        var requestMethod = method
+        var requestForm = form
+        var redirectsFollowed = 0
+        while (true) {
+            val connection = target.toURL().openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = requestMethod
+                connection.connectTimeout = 20_000
+                connection.readTimeout = 30_000
+                connection.instanceFollowRedirects = false
+                connection.doInput = true
+                connection.setRequestProperty("Origin", ORIGIN)
+                connection.setRequestProperty("Referer", referer)
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0")
+                token?.let { connection.setRequestProperty("token", it) }
+                if (requestForm.isNotEmpty() && requestMethod != "GET" && requestMethod != "HEAD") {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                    connection.outputStream.use { stream -> stream.write(formData(requestForm)) }
+                }
+                val status = connection.responseCode
+                if (SjdRedirectPolicy.isRedirect(status)) {
+                    target = SjdRedirectPolicy.resolve(
+                        current = target,
+                        location = connection.getHeaderField("Location"),
+                        redirectsFollowed = redirectsFollowed,
+                    )
+                    val followUp = SjdRedirectPolicy.followUp(status, requestMethod)
+                    requestMethod = followUp.method
+                    if (!followUp.preserveBody) requestForm = emptyMap()
+                    redirectsFollowed += 1
+                    continue
+                }
+                val stream = if (status in 200..399) connection.inputStream else connection.errorStream
+                val body = SjdResponseReader.read(stream, connection.contentLengthLong)
+                if (status !in 200..399) {
+                    throw ScheduleClientException(
+                        "移动教务请求失败，HTTP $status。",
+                        retryable = status == HTTP_REQUEST_TIMEOUT ||
+                            status == HTTP_TOO_MANY_REQUESTS ||
+                            status >= HTTP_SERVER_ERROR,
+                    )
+                }
+                return runCatching { JSONObject(body) }.getOrElse {
+                    throw ScheduleClientException("移动教务返回了无法识别的数据。")
+                }
+            } finally {
+                connection.disconnect()
             }
-            val status = connection.responseCode
-            val stream = if (status in 200..399) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (status !in 200..399) {
-                throw ScheduleClientException(
-                    "移动教务请求失败，HTTP $status。",
-                    retryable = status == HTTP_REQUEST_TIMEOUT ||
-                        status == HTTP_TOO_MANY_REQUESTS ||
-                        status >= HTTP_SERVER_ERROR,
-                )
-            }
-            return runCatching { JSONObject(body) }.getOrElse {
-                throw ScheduleClientException("移动教务返回了无法识别的数据。")
-            }
-        } finally {
-            connection.disconnect()
         }
     }
 

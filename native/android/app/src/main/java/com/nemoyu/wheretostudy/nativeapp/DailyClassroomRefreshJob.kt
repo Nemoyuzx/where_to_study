@@ -43,27 +43,111 @@ object DailyClassroomRefreshScheduler {
     private const val SECONDARY_JOB_ID = 0x57545308
     private val jobIDs = setOf(PRIMARY_JOB_ID, SECONDARY_JOB_ID)
 
-    fun ensureScheduled(context: Context): Boolean = runCatching {
-        val scheduler = context.getSystemService(JobScheduler::class.java)
-        scheduler.allPendingJobs.any { it.id in jobIDs } || schedule(context, PRIMARY_JOB_ID)
-    }.getOrDefault(false)
+    fun ensureScheduled(context: Context): Boolean = synchronized(this) {
+        runCatching {
+            val scheduler = context.getSystemService(JobScheduler::class.java)
+            when (scheduleAction(context, scheduler, forceReschedule = false)) {
+                DailyClassroomScheduleAction.CANCEL -> cancelState(context, scheduler)
+                DailyClassroomScheduleAction.KEEP -> true
+                DailyClassroomScheduleAction.SCHEDULE -> schedule(context, PRIMARY_JOB_ID)
+            }
+        }.getOrDefault(false)
+    }
 
-    fun scheduleAfterCompletion(context: Context, completedJobID: Int): Boolean = runCatching {
-        val nextJobID = if (completedJobID == PRIMARY_JOB_ID) {
-            SECONDARY_JOB_ID
-        } else {
-            PRIMARY_JOB_ID
+    fun scheduleAfterCompletion(context: Context, completedJobID: Int): Boolean =
+        synchronized(this) {
+            runCatching {
+                val scheduler = context.getSystemService(JobScheduler::class.java)
+                when (scheduleAction(context, scheduler, forceReschedule = true)) {
+                    DailyClassroomScheduleAction.CANCEL -> cancelState(context, scheduler)
+                    DailyClassroomScheduleAction.KEEP -> true
+                    DailyClassroomScheduleAction.SCHEDULE -> {
+                        val nextJobID = if (completedJobID == PRIMARY_JOB_ID) {
+                            SECONDARY_JOB_ID
+                        } else {
+                            PRIMARY_JOB_ID
+                        }
+                        schedule(context, nextJobID)
+                    }
+                }
+            }.getOrDefault(false)
         }
-        schedule(context, nextJobID)
-    }.getOrDefault(false)
 
     fun isManagedJob(jobID: Int): Boolean = jobID in jobIDs
 
-    fun reschedule(context: Context): Boolean = runCatching {
-        val scheduler = context.getSystemService(JobScheduler::class.java)
-        jobIDs.forEach(scheduler::cancel)
-        schedule(context, PRIMARY_JOB_ID)
+    fun hasValidCredentials(context: Context): Boolean = runCatching {
+        val credentials = loadCredentials(context)
+        DailyClassroomRefreshLogic.refreshDecision(
+            credentials?.account,
+            credentials?.password,
+        ) == ClassroomRefreshDecision.FETCH
     }.getOrDefault(false)
+
+    fun cancel(context: Context): Boolean = synchronized(this) {
+        runCatching {
+            cancelState(
+                context,
+                context.getSystemService(JobScheduler::class.java),
+            )
+        }.getOrDefault(false)
+    }
+
+    fun reschedule(context: Context): Boolean = synchronized(this) {
+        runCatching {
+            val scheduler = context.getSystemService(JobScheduler::class.java)
+            when (scheduleAction(context, scheduler, forceReschedule = true)) {
+                DailyClassroomScheduleAction.CANCEL -> cancelState(context, scheduler)
+                DailyClassroomScheduleAction.KEEP -> true
+                DailyClassroomScheduleAction.SCHEDULE -> {
+                    cancelManagedJobs(scheduler) && schedule(context, PRIMARY_JOB_ID)
+                }
+            }
+        }.getOrDefault(false)
+    }
+
+    private fun scheduleAction(
+        context: Context,
+        scheduler: JobScheduler,
+        forceReschedule: Boolean,
+    ): DailyClassroomScheduleAction {
+        val credentials = loadCredentials(context)
+        val hasValidCredentials = DailyClassroomRefreshLogic.refreshDecision(
+            credentials?.account,
+            credentials?.password,
+        ) == ClassroomRefreshDecision.FETCH
+        return DailyClassroomRefreshSchedulingLogic.action(
+            account = credentials?.account,
+            password = credentials?.password,
+            hasPendingJob = hasValidCredentials &&
+                scheduler.allPendingJobs.any { it.id in jobIDs },
+            forceReschedule = forceReschedule,
+        )
+    }
+
+    private fun cancelManagedJobs(scheduler: JobScheduler): Boolean {
+        val cancelled = jobIDs.map { jobID ->
+            runCatching { scheduler.cancel(jobID) }.isSuccess
+        }.all { it }
+        val nonePending = runCatching {
+            scheduler.allPendingJobs.none { it.id in jobIDs }
+        }.getOrDefault(false)
+        return cancelled && nonePending
+    }
+
+    private fun cancelState(context: Context, scheduler: JobScheduler): Boolean {
+        val managedJobsCancelled = cancelManagedJobs(scheduler)
+        val retryStateCleared = runCatching {
+            DailyClassroomRetryStore(context.applicationContext).clear()
+        }.isSuccess
+        return DailyClassroomRefreshSchedulingLogic.cancellationSucceeded(
+            managedJobsCancelled,
+            retryStateCleared,
+        )
+    }
+
+    private fun loadCredentials(context: Context): Credentials? = runCatching {
+        SecureCredentialStore(context.applicationContext).load()
+    }.getOrNull()
 
     private fun schedule(
         context: Context,
@@ -97,6 +181,10 @@ class DailyClassroomRefreshJobService : JobService() {
         if (!DailyClassroomRefreshScheduler.isManagedJob(params.jobId) || activeParameters != null) {
             return false
         }
+        if (!DailyClassroomRefreshScheduler.hasValidCredentials(applicationContext)) {
+            DailyClassroomRefreshScheduler.cancel(applicationContext)
+            return false
+        }
 
         val activeRepository = ClassroomRepository(
             applicationContext,
@@ -111,10 +199,22 @@ class DailyClassroomRefreshJobService : JobService() {
             repository = null
             activeRepository.close()
             val retryStore = DailyClassroomRetryStore(applicationContext)
+            if (!DailyClassroomRefreshScheduler.hasValidCredentials(applicationContext)) {
+                runCatching(retryStore::clear)
+                DailyClassroomRefreshScheduler.cancel(applicationContext)
+                jobFinished(params, false)
+                return@refresh
+            }
             val shouldRetry = DailyClassroomRefreshLogic.shouldRetry(result.exceptionOrNull()) &&
                 retryStore.recordRetryIfAllowed(ClassroomRepository.today())
             if (shouldRetry) {
-                jobFinished(params, true)
+                val credentialsRemainValid =
+                    DailyClassroomRefreshScheduler.hasValidCredentials(applicationContext)
+                if (!credentialsRemainValid) {
+                    runCatching(retryStore::clear)
+                    DailyClassroomRefreshScheduler.cancel(applicationContext)
+                }
+                jobFinished(params, credentialsRemainValid)
                 return@refresh
             }
             runCatching(retryStore::clear)
@@ -132,7 +232,7 @@ class DailyClassroomRefreshJobService : JobService() {
         activeParameters = null
         repository?.close()
         repository = null
-        return true
+        return DailyClassroomRefreshScheduler.hasValidCredentials(applicationContext)
     }
 
     override fun onDestroy() {

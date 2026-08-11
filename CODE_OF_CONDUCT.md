@@ -51,9 +51,9 @@ platform or authority rather than investigated through a repository issue.
 
 ## License and contribution status
 
-The repository currently has no `LICENSE`, Contributor License Agreement, or
-Developer Certificate of Origin. It must not be represented as OSI-licensed open
-source until maintainers select and publish a license. Submitting a pull request
-does not itself select a project license. Contributors must have the right to
-submit every code, asset, data file, and dependency change they propose, and
-maintainers must not assume rights beyond applicable terms and explicit grants.
+The project is distributed under the GNU General Public License v3.0 only
+(`GPL-3.0-only`); see `LICENSE`. The repository has no separate Contributor
+License Agreement or Developer Certificate of Origin. Contributors must have
+the right to submit every code, asset, data file, and dependency change they
+propose, and contributions are distributed under the project's GPL-3.0-only
+terms unless an applicable third-party notice states otherwise.

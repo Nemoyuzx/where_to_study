@@ -40,6 +40,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Validate GPL-3.0-only metadata
+        run: |
+          test -s LICENSE
+          grep -q "GNU GENERAL PUBLIC LICENSE" LICENSE
+          grep -q "END OF TERMS AND CONDITIONS" LICENSE
+          node -e "const p=require('./package.json'); if(p.license!=='GPL-3.0-only') process.exit(1)"
+          grep -q '^license = "GPL-3.0-only"$' src-tauri/Cargo.toml
+
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -49,10 +57,15 @@ jobs:
       - name: Audit npm dependencies
         run: |
           npm ci
+          npm test
+          npm run build
           npm audit --audit-level=high
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
 
       - name: Install pinned cargo-audit
         run: cargo install cargo-audit --version 0.22.2 --locked

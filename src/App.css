@@ -327,6 +327,49 @@ button:disabled {
   gap: 10px;
 }
 
+.settings-toggle {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0;
+  min-height: 44px;
+}
+
+.settings-toggle input {
+  appearance: none;
+  background: #dfe4df;
+  border: 1px solid #c8d0ca;
+  border-radius: 999px;
+  cursor: pointer;
+  flex: 0 0 44px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px;
+  position: relative;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+  width: 44px;
+}
+
+.settings-toggle input::before {
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(23, 32, 27, 0.2);
+  content: '';
+  display: block;
+  height: 18px;
+  transition: transform 0.18s ease;
+  width: 18px;
+}
+
+.settings-toggle input:checked {
+  background: #166b5d;
+  border-color: #166b5d;
+}
+
+.settings-toggle input:checked::before {
+  transform: translateX(18px);
+}
+
 .settings-actions button.primary {
   background: #166b5d;
   color: #ffffff;

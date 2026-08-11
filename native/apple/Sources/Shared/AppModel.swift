@@ -5,6 +5,7 @@ enum CredentialSettingsError: LocalizedError, Equatable {
     case passwordRequiredForChangedAccount
     case accountDataResetFailed
     case calendarImportInProgress
+    case invalidTermStartDate
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ enum CredentialSettingsError: LocalizedError, Equatable {
             "无法清除原账号的课表与空教室缓存，账号未更改。"
         case .calendarImportInProgress:
             "系统日历正在同步，请完成后再更换账号。"
+        case .invalidTermStartDate:
+            "第一周周一日期格式不正确，请使用 yyyy-MM-dd。"
         }
     }
 }
@@ -230,7 +233,7 @@ final class AppModel: ObservableObject {
     func courses(on date: Date) -> [Course] {
         guard
             let schedule,
-            let termStart = Self.dateFormatter.date(from: schedule.termStartDate)
+            let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [] }
         return ScheduleLogic.courses(on: date, termStart: termStart, courses: schedule.courses)
     }
@@ -238,7 +241,7 @@ final class AppModel: ObservableObject {
     func weekNumber(on date: Date) -> Int? {
         guard
             let schedule,
-            let termStart = Self.dateFormatter.date(from: schedule.termStartDate)
+            let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return nil }
         return ScheduleLogic.weekNumber(on: date, termStart: termStart)
     }
@@ -246,7 +249,7 @@ final class AppModel: ObservableObject {
     var personalBusySlots: Set<Int> {
         guard
             let schedule,
-            let termStart = Self.dateFormatter.date(from: schedule.termStartDate)
+            let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [] }
         return ScheduleLogic.busySlots(on: .now, termStart: termStart, courses: schedule.courses)
     }
@@ -310,6 +313,15 @@ final class AppModel: ObservableObject {
     @discardableResult
     func saveSettings() -> Bool {
         do {
+            let normalizedTermID = termID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedTermStartDate = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
+            let nextTermID = normalizedTermID.isEmpty ? ScheduleDefaults.termID : normalizedTermID
+            let nextTermStartDate = normalizedTermStartDate.isEmpty
+                ? ScheduleDefaults.termStartDate : normalizedTermStartDate
+            guard StrictContractDateParser.date(from: nextTermStartDate) != nil else {
+                throw CredentialSettingsError.invalidTermStartDate
+            }
+
             let storedCredentials = try credentialStore.load()
             let credentialAction = try CredentialSettingsLogic.saveAction(
                 account: account,
@@ -346,10 +358,8 @@ final class AppModel: ObservableObject {
             }
             account = CredentialSettingsLogic.normalizedAccount(account)
             password = ""
-            termID = termID.trimmingCharacters(in: .whitespacesAndNewlines)
-            termStartDate = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
-            if termID.isEmpty { termID = ScheduleDefaults.termID }
-            if termStartDate.isEmpty { termStartDate = ScheduleDefaults.termStartDate }
+            termID = nextTermID
+            termStartDate = nextTermStartDate
             defaults.set(campusID, forKey: "campusID")
             defaults.set(termID, forKey: "termID")
             defaults.set(termStartDate, forKey: "termStartDate")
@@ -451,6 +461,11 @@ final class AppModel: ObservableObject {
             ? ScheduleDefaults.termID : termID.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackTermStart = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ScheduleDefaults.termStartDate : termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard StrictContractDateParser.date(from: fallbackTermStart) != nil else {
+            isRefreshingSchedule = false
+            statusMessage = CredentialSettingsError.invalidTermStartDate.localizedDescription
+            return
+        }
         let generation = localDataGeneration
 
         Task {
@@ -766,7 +781,7 @@ final class AppModel: ObservableObject {
     }
 
     private static var todayString: String {
-        dateFormatter.string(from: .now)
+        StrictContractDateParser.string(from: .now)
     }
 
     private static func isFreshHolidaySnapshot(_ snapshot: HolidaysSnapshot, now: Date = .now) -> Bool {
@@ -775,15 +790,7 @@ final class AppModel: ObservableObject {
         return age >= 0 && age <= HolidayDefaults.refreshInterval
     }
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    private static let dailyCourseNotificationsKey = "dailyCourseNotificationsEnabled"
+    private static let dailyCourseNotificationsKey = DailyCourseNotificationSettings.enabledKey
 }
 
 enum DailyRefreshLogic {

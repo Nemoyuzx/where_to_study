@@ -374,6 +374,11 @@ class MainActivity : Activity() {
 
         notificationPermissionRequestPending = false
         pendingNotificationPermissionCompletion = null
+        if (!DailyClassroomRefreshScheduler.cancel(this)) {
+            failures += "空教室后台刷新"
+            runCatching(::refreshCurrentPage)
+            return LocalDataClearResult(failures)
+        }
         if (!DailyCourseSummaryScheduler.revoke(this)) {
             failures += "课程提醒授权"
             runCatching(::refreshCurrentPage)
@@ -392,6 +397,9 @@ class MainActivity : Activity() {
                     HolidayStore(this).clear()
                 }
             }
+        }
+        if (!DailyClassroomRefreshScheduler.cancel(this)) {
+            failures += "空教室后台刷新"
         }
         runCatching(::refreshCurrentPage)
         return LocalDataClearResult(failures)

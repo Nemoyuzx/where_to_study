@@ -3,6 +3,7 @@ name = "where_to_study"
 version = "0.1.1"
 description = "BUPT empty classroom planner for desktop and mobile"
 authors = ["Nemoyu"]
+license = "GPL-3.0-only"
 edition = "2021"
 
 [lib]
@@ -32,6 +33,9 @@ zeroize = { version = "1", features = ["derive"] }
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 security-framework = "3.7"
 security-framework-sys = "2.17"
+
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-native-keyring-store = "1.0"

@@ -285,6 +285,8 @@ fn notify_account_scope_cleared(app: &tauri::AppHandle) {
 static LOCAL_DATA: LocalDataCoordinator = LocalDataCoordinator::new();
 #[cfg(not(mobile))]
 static DESKTOP_SCHEDULER_THREAD: Mutex<Option<std::thread::Thread>> = Mutex::new(None);
+#[cfg(not(mobile))]
+static DESKTOP_NOTIFICATIONS_ENABLED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(test)]
 mod local_data_coordination_tests {
@@ -836,7 +838,23 @@ fn save_saved_settings(
         },
     );
 
-    finalize_account_scope_update(update, || notify_account_scope_cleared(&app))
+    let result = finalize_account_scope_update(update, || notify_account_scope_cleared(&app));
+    #[cfg(not(mobile))]
+    match &result {
+        Ok(settings) => {
+            DESKTOP_NOTIFICATIONS_ENABLED.store(
+                settings.daily_course_notifications_enabled,
+                Ordering::Release,
+            );
+            wake_desktop_scheduler();
+        }
+        Err(error) if error.account_scope_cleared => {
+            DESKTOP_NOTIFICATIONS_ENABLED.store(false, Ordering::Release);
+            wake_desktop_scheduler();
+        }
+        Err(_) => {}
+    }
+    result
 }
 
 fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
@@ -880,7 +898,13 @@ fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
             }
         },
     );
-    finalize_local_data_clear(result, || notify_account_scope_cleared(&app))
+    let result = finalize_local_data_clear(result, || notify_account_scope_cleared(&app));
+    #[cfg(not(mobile))]
+    {
+        DESKTOP_NOTIFICATIONS_ENABLED.store(false, Ordering::Release);
+        wake_desktop_scheduler();
+    }
+    result
 }
 
 #[tauri::command]
@@ -1644,12 +1668,15 @@ const MAX_CLASSROOM_REFRESH_RETRIES: u8 = 2;
 fn next_desktop_schedule_boundary(
     now: NaiveDateTime,
     state: DesktopScheduleState,
+    notifications_enabled: bool,
 ) -> NaiveDateTime {
     let mut boundaries = vec![
         next_daily_trigger_after(now, 0, 0),
         next_daily_trigger_after(now, 7, 0),
-        next_daily_trigger_after(now, 7, 30),
     ];
+    if notifications_enabled {
+        boundaries.push(next_daily_trigger_after(now, 7, 30));
+    }
     if let Some(retry) = state
         .classroom_retry
         .filter(|retry| retry.next_attempt_at > now)
@@ -1780,15 +1807,19 @@ impl DesktopScheduleState {
 }
 
 #[cfg(not(mobile))]
-fn due_desktop_tasks(now: NaiveDateTime, state: DesktopScheduleState) -> Vec<DesktopScheduledTask> {
+fn due_desktop_tasks(
+    now: NaiveDateTime,
+    state: DesktopScheduleState,
+    notifications_enabled: bool,
+) -> Vec<DesktopScheduledTask> {
     let today = now.date();
     let classroom_due = state.classroom_refresh_date != Some(today)
         && match state.classroom_retry.filter(|retry| retry.date == today) {
             Some(retry) => now >= retry.next_attempt_at,
             None => now.time() >= NaiveTime::from_hms_opt(7, 0, 0).expect("valid refresh time"),
         };
-    let notification_due = now.time()
-        >= NaiveTime::from_hms_opt(7, 30, 0).expect("valid notification time")
+    let notification_due = notifications_enabled
+        && now.time() >= NaiveTime::from_hms_opt(7, 30, 0).expect("valid notification time")
         && state.notification_date != Some(today);
 
     let mut tasks = Vec::with_capacity(2);
@@ -1879,12 +1910,12 @@ fn daily_course_notification_content(
 
 #[cfg(not(mobile))]
 fn send_daily_course_notification(app: &tauri::AppHandle, today: NaiveDate) -> Result<(), String> {
+    if !DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire) {
+        return Ok(());
+    }
     let generation = LOCAL_DATA.begin();
     let (title, body) = daily_course_notification_content(app, today, generation)?;
     let notification = app.notification();
-    notification
-        .request_permission()
-        .map_err(|error| format!("无法确认系统通知权限：{error}"))?;
     LOCAL_DATA
         .with_current_account(generation, || {
             notification
@@ -1939,12 +1970,18 @@ fn schedule_desktop_background_tasks(app: tauri::AppHandle) {
 
         loop {
             let now = desktop_now();
-            for task in due_desktop_tasks(now, state) {
+            let notifications_enabled = DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire);
+            for task in due_desktop_tasks(now, state, notifications_enabled) {
                 let outcome = run_desktop_scheduled_task(&app, task, now.date());
                 state.record_result(task, now.date(), now, outcome);
             }
             let now = desktop_now();
-            sleep_until(next_desktop_schedule_boundary(now, state));
+            let notifications_enabled = DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire);
+            sleep_until(next_desktop_schedule_boundary(
+                now,
+                state,
+                notifications_enabled,
+            ));
         }
     });
 }
@@ -1976,15 +2013,15 @@ mod background_schedule_tests {
     fn scheduler_uses_daily_boundaries_when_no_retry_is_pending() {
         let state = DesktopScheduleState::after_startup(date_time(6, 0, 0));
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(6, 59, 59), state),
+            next_desktop_schedule_boundary(date_time(6, 59, 59), state, true),
             date_time(7, 0, 0)
         );
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(7, 0, 0), state),
+            next_desktop_schedule_boundary(date_time(7, 0, 0), state, true),
             date_time(7, 30, 0)
         );
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(7, 30, 0), state),
+            next_desktop_schedule_boundary(date_time(7, 30, 0), state, true),
             date_time(0, 0, 0) + ChronoDuration::days(1)
         );
     }
@@ -2000,7 +2037,7 @@ mod background_schedule_tests {
         };
 
         assert_eq!(
-            due_desktop_tasks(date_time(0, 0, 1), state),
+            due_desktop_tasks(date_time(0, 0, 1), state, true),
             vec![DesktopScheduledTask::RebuildTrayForDate]
         );
     }
@@ -2015,7 +2052,7 @@ mod background_schedule_tests {
             classroom_retry: None,
         };
         let now = date_time(8, 0, 0);
-        let tasks = due_desktop_tasks(now, state);
+        let tasks = due_desktop_tasks(now, state, true);
         assert_eq!(
             tasks,
             vec![
@@ -2027,15 +2064,15 @@ mod background_schedule_tests {
         for task in tasks {
             state.record_result(task, now.date(), now, DesktopTaskOutcome::Completed);
         }
-        assert!(due_desktop_tasks(now, state).is_empty());
+        assert!(due_desktop_tasks(now, state, true).is_empty());
     }
 
     #[test]
     fn startup_before_seven_keeps_the_seven_oclock_refresh_due() {
         let state = DesktopScheduleState::after_startup(date_time(6, 0, 0));
-        assert!(due_desktop_tasks(date_time(6, 59, 59), state).is_empty());
+        assert!(due_desktop_tasks(date_time(6, 59, 59), state, true).is_empty());
         assert_eq!(
-            due_desktop_tasks(date_time(7, 0, 0), state),
+            due_desktop_tasks(date_time(7, 0, 0), state, true),
             vec![DesktopScheduledTask::RefreshClassroomsAndTray]
         );
     }
@@ -2051,12 +2088,15 @@ mod background_schedule_tests {
             date_time(7, 0, 0),
             DesktopTaskOutcome::RetryableFailure,
         );
-        assert!(due_desktop_tasks(date_time(7, 14, 59), state).is_empty());
+        assert!(due_desktop_tasks(date_time(7, 14, 59), state, true).is_empty());
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(7, 0, 1), state),
+            next_desktop_schedule_boundary(date_time(7, 0, 1), state, true),
             date_time(7, 15, 0)
         );
-        assert_eq!(due_desktop_tasks(date_time(7, 15, 0), state), vec![task]);
+        assert_eq!(
+            due_desktop_tasks(date_time(7, 15, 0), state, true),
+            vec![task]
+        );
 
         state.record_result(
             task,
@@ -2065,7 +2105,7 @@ mod background_schedule_tests {
             DesktopTaskOutcome::RetryableFailure,
         );
         assert_eq!(state.classroom_retry.unwrap().attempts, 2);
-        assert!(due_desktop_tasks(date_time(7, 29, 59), state).is_empty());
+        assert!(due_desktop_tasks(date_time(7, 29, 59), state, true).is_empty());
 
         state.record_result(
             task,
@@ -2092,7 +2132,24 @@ mod background_schedule_tests {
         state.record_result(task, date_time(7, 0, 0).date(), date_time(7, 0, 0), outcome);
 
         assert!(state.classroom_retry.is_none());
-        assert!(!due_desktop_tasks(date_time(8, 0, 0), state).contains(&task));
+        assert!(!due_desktop_tasks(date_time(8, 0, 0), state, true).contains(&task));
+    }
+
+    #[test]
+    fn disabled_notifications_skip_the_task_and_seven_thirty_boundary() {
+        let yesterday = date_time(0, 0, 0).date() - ChronoDuration::days(1);
+        let state = DesktopScheduleState {
+            tray_date: date_time(8, 0, 0).date(),
+            classroom_refresh_date: Some(date_time(8, 0, 0).date()),
+            notification_date: Some(yesterday),
+            classroom_retry: None,
+        };
+
+        assert!(due_desktop_tasks(date_time(8, 0, 0), state, false).is_empty());
+        assert_eq!(
+            next_desktop_schedule_boundary(date_time(7, 0, 0), state, false),
+            date_time(0, 0, 0) + ChronoDuration::days(1)
+        );
     }
 
     #[test]
@@ -2115,6 +2172,11 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 
     #[cfg(not(mobile))]
     {
+        let notifications_enabled = !account_access_revoked
+            && settings_store::load(app.app_handle())
+                .map(|settings| settings.daily_course_notifications_enabled)
+                .unwrap_or(false);
+        DESKTOP_NOTIFICATIONS_ENABLED.store(notifications_enabled, Ordering::Release);
         setup_tray(app)?;
         schedule_desktop_background_tasks(app.app_handle().clone());
     }
@@ -2129,7 +2191,15 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(not(mobile))]
-    let builder = builder.plugin(tauri_plugin_notification::init());
+    let builder = builder
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_notification::init());
 
     builder
         .setup(|app| {

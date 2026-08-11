@@ -16,7 +16,7 @@ Describe changes to credentials, authentication, transport, local storage, IPC, 
 
 ## Legal status
 
-This repository currently has no `LICENSE`, Contributor License Agreement, or Developer Certificate of Origin. A pull request does not select or promise a project license. Do not include third-party code, assets, data, or generated material unless you have the right to submit it and have documented any applicable terms.
+This project is distributed under `GPL-3.0-only` and has no separate Contributor License Agreement or Developer Certificate of Origin. By submitting a change, you confirm that you have the right to contribute it under the project's license. Document the source and applicable terms for all third-party code, assets, data, and generated material.
 
 ## Checklist
 
@@ -25,4 +25,4 @@ This repository currently has no `LICENSE`, Contributor License Agreement, or De
 - [ ] Logs, fixtures, screenshots, and commits contain no credentials, tokens, cookies, personal data, signing keys, or local paths that should remain private.
 - [ ] New dependencies and third-party materials have source and license information recorded.
 - [ ] User-facing behavior and release notes are updated where necessary.
-- [ ] I understand that this repository is not currently published under an open-source license.
+- [ ] I have the right to contribute this change under `GPL-3.0-only` and have documented any third-party terms.

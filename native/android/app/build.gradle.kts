@@ -10,6 +10,15 @@ val releaseSigningValues = mapOf(
     "keyPassword" to providers.environmentVariable("ANDROID_SIGNING_KEY_PASSWORD").orNull,
 )
 val releaseSigningReady = releaseSigningValues.values.all { !it.isNullOrBlank() }
+val generatedLicenseAssets = layout.buildDirectory.dir("generated/licenseAssets")
+val syncLicenseAsset by tasks.registering(Sync::class) {
+    from(
+        rootProject.file("../../LICENSE"),
+        rootProject.file("../../THIRD_PARTY_LICENSES.html"),
+        rootProject.file("../../THIRD_PARTY_NOTICES.md"),
+    )
+    into(generatedLicenseAssets)
+}
 
 android {
     namespace = "com.nemoyu.wheretostudy.nativeapp"
@@ -19,7 +28,7 @@ android {
         applicationId = "com.nemoyu.wheretostudy.nativeapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 11
+        versionCode = 12
         versionName = "0.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -67,8 +76,13 @@ android {
     }
 
     sourceSets {
+        getByName("main").assets.srcDir(generatedLicenseAssets)
         getByName("test").resources.srcDir(rootProject.file("../../contracts/v1/fixtures"))
     }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(syncLicenseAsset)
 }
 
 dependencies {

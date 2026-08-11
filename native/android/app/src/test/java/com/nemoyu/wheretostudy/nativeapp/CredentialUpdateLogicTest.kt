@@ -62,4 +62,26 @@ class CredentialUpdateLogicTest {
             CredentialUpdateLogic.changesAccount(saved, Credentials("", "")),
         )
     }
+
+    @Test
+    fun termStartDateUsesStrictRoundTripValidation() {
+        assertEquals(
+            "2026-03-02",
+            SettingsInputLogic.resolveTermStartDate(" 2026-03-02 "),
+        )
+        assertEquals(
+            AppMetadata.defaultTermStartDate,
+            SettingsInputLogic.resolveTermStartDate("  "),
+        )
+
+        listOf("2026-02-30", "2026-13-01", "2026-2-03").forEach { invalidDate ->
+            val error = assertThrows(SettingsValidationException::class.java) {
+                SettingsInputLogic.resolveTermStartDate(invalidDate)
+            }
+            assertEquals(
+                "第一周周一日期格式不正确，请使用 YYYY-MM-DD。",
+                error.message,
+            )
+        }
+    }
 }

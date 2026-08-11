@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/package-validation.sh
 source "$ROOT_DIR/scripts/package-validation.sh"
+npm --prefix "$ROOT_DIR" run licenses:check
 APP_PATH="${MACOS_APP_PATH:-$ROOT_DIR/src-tauri/target/release/bundle/macos/Where To Study.app}"
 OUTPUT_DIR="${MACOS_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
@@ -34,6 +35,16 @@ if ! path_contains_fixed_text 'https://jwglweixin.bupt.edu.cn' "$APP_PATH"; then
   echo "macOS app bundle is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
+if ! cmp -s "$ROOT_DIR/LICENSE" "$APP_PATH/Contents/Resources/LICENSE"; then
+  echo "macOS app bundle is missing the exact project license." >&2
+  exit 1
+fi
+for notice in THIRD_PARTY_LICENSES.html THIRD_PARTY_NOTICES.md; do
+  if ! cmp -s "$ROOT_DIR/$notice" "$APP_PATH/Contents/Resources/$notice"; then
+    echo "macOS app bundle is missing the exact $notice file." >&2
+    exit 1
+  fi
+done
 
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 ACTUAL_VERSION="$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")"

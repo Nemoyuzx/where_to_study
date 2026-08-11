@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/package-validation.sh
 source "$ROOT_DIR/scripts/package-validation.sh"
+npm --prefix "$ROOT_DIR" run licenses:check
 APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-macOS"
@@ -84,6 +85,16 @@ if [[ ! -f "$PACKAGE_APP/Contents/Resources/PrivacyInfo.xcprivacy" ]]; then
   echo "Native macOS package is missing PrivacyInfo.xcprivacy." >&2
   exit 1
 fi
+if ! cmp -s "$ROOT_DIR/LICENSE" "$PACKAGE_APP/Contents/Resources/LICENSE"; then
+  echo "Native macOS package is missing the exact project license." >&2
+  exit 1
+fi
+for notice in THIRD_PARTY_LICENSES.html THIRD_PARTY_NOTICES.md; do
+  if ! cmp -s "$ROOT_DIR/$notice" "$PACKAGE_APP/Contents/Resources/$notice"; then
+    echo "Native macOS package is missing the exact $notice file." >&2
+    exit 1
+  fi
+done
 plutil -lint "$PACKAGE_APP/Contents/Resources/PrivacyInfo.xcprivacy" >/dev/null
 
 codesign --force --deep --sign - --timestamp=none "$PACKAGE_APP"

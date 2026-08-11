@@ -104,36 +104,65 @@ class SettingsPage(
         }
         addView(campus)
         addView(spacer(activity, 18))
-        fun saveSettings(): Result<Credentials> = runCatching {
-            val savedCredentials = credentialStore.load()
-            val credentials = CredentialUpdateLogic.resolve(
-                saved = savedCredentials,
-                requestedAccount = account.text.toString(),
-                enteredPassword = password.text.toString(),
-            )
-            val persist: () -> Credentials = {
-                credentials.also {
-                    credentialStore.save(credentials)
-                    preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
-                    preferences.termID = termID.text.toString().trim()
-                        .ifEmpty { AppMetadata.defaultTermID }
-                    preferences.termStartDate = termStartDate.text.toString().trim()
-                        .ifEmpty { AppMetadata.defaultTermStartDate }
+        fun saveSettings(): Result<Credentials> {
+            var credentialTransactionStarted = false
+            val result = runCatching {
+                val resolvedTermStartDate = SettingsInputLogic.resolveTermStartDate(
+                    termStartDate.text.toString(),
+                )
+                val savedCredentials = credentialStore.load()
+                val credentials = CredentialUpdateLogic.resolve(
+                    saved = savedCredentials,
+                    requestedAccount = account.text.toString(),
+                    enteredPassword = password.text.toString(),
+                )
+                val accountChanged = CredentialUpdateLogic.changesAccount(
+                    savedCredentials,
+                    credentials,
+                )
+                val persist: () -> Credentials = {
+                    credentials.also {
+                        credentialStore.save(credentials)
+                        preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
+                        preferences.termID = termID.text.toString().trim()
+                            .ifEmpty { AppMetadata.defaultTermID }
+                        preferences.termStartDate = resolvedTermStartDate
+                    }
                 }
+                if (accountChanged) {
+                    credentialTransactionStarted = true
+                    check(DailyClassroomRefreshScheduler.cancel(activity)) {
+                        "无法可靠撤销旧账号的空教室后台刷新，设置未保存。"
+                    }
+                    check(activity.clearDailyCourseNotificationsForAccountChange()) {
+                        "无法可靠撤销旧账号的课程提醒，设置未保存。"
+                    }
+                    LocalDataCoordinator.clear {
+                        scheduleRepository.clearLocalDataCoordinated()
+                        classroomRepository.clearLocalDataCoordinated()
+                        persist()
+                    }
+                } else {
+                    credentialTransactionStarted = true
+                    val generation = LocalDataCoordinator.snapshot()
+                    LocalDataCoordinator.withCurrent(generation, persist)
+                }
+                check(DailyClassroomRefreshScheduler.ensureScheduled(activity)) {
+                    "无法更新空教室后台刷新任务。"
+                }
+                credentials
             }
-            if (CredentialUpdateLogic.changesAccount(savedCredentials, credentials)) {
-                check(activity.clearDailyCourseNotificationsForAccountChange()) {
-                    "无法可靠撤销旧账号的课程提醒，设置未保存。"
-                }
-                LocalDataCoordinator.clear {
-                    scheduleRepository.clearLocalDataCoordinated()
-                    classroomRepository.clearLocalDataCoordinated()
-                    persist()
-                }
-            } else {
-                val generation = LocalDataCoordinator.snapshot()
-                LocalDataCoordinator.withCurrent(generation, persist)
+            if (result.isFailure && credentialTransactionStarted &&
+                !DailyClassroomRefreshScheduler.cancel(activity)
+            ) {
+                return Result.failure(
+                    IllegalStateException(
+                        "账号设置失败，且无法可靠撤销空教室后台刷新。",
+                        result.exceptionOrNull(),
+                    ),
+                )
             }
+            return result
         }
         fun applySavedCredentials(credentials: Credentials) {
             persistedAccount = credentials.account

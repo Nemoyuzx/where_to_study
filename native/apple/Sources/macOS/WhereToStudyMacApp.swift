@@ -2,6 +2,10 @@ import AppKit
 import SwiftUI
 
 final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_: Notification) {
+        DailyCourseNotificationCenterConfiguration.installForegroundDelegate()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         false
     }

@@ -2,9 +2,13 @@
   "name": "where-to-study",
   "private": true,
   "version": "0.1.1",
+  "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test test/planner-domain.test.js",
+    "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
+    "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -33,6 +37,7 @@
     "@tauri-apps/cli": "^2",
     "@vitejs/plugin-react": "^6.0.1",
     "esbuild": "^0.28.0",
+    "spdx-license-list": "6.12.0",
     "vite": "^8.0.12"
   }
 }

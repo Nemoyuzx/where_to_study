@@ -8,23 +8,35 @@ on:
     tags:
       - "v*"
     paths:
+      - "LICENSE"
+      - "THIRD_PARTY_LICENSES.html"
+      - "THIRD_PARTY_NOTICES.md"
       - "contracts/**"
       - "native/**"
       - "src-tauri/src/**"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
       - "src-tauri/build.rs"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/generate-third-party-licenses.mjs"
       - "scripts/native-*.sh"
       - "scripts/package-validation.sh"
       - ".github/workflows/build-native.yml"
   pull_request:
     paths:
+      - "LICENSE"
+      - "THIRD_PARTY_LICENSES.html"
+      - "THIRD_PARTY_NOTICES.md"
       - "contracts/**"
       - "native/**"
       - "src-tauri/src/**"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
       - "src-tauri/build.rs"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/generate-third-party-licenses.mjs"
       - "scripts/native-*.sh"
       - "scripts/package-validation.sh"
       - ".github/workflows/build-native.yml"
@@ -45,8 +57,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
 
       - name: Run Rust contract and unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
@@ -99,6 +123,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
+
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
@@ -138,6 +177,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
 
       - name: Require Android release signing secrets
         env:

@@ -4,6 +4,7 @@ use std::time::Duration;
 use chrono::NaiveDate;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
+use reqwest::Url;
 use serde_json::Value;
 
 use crate::auth::resolve_credentials;
@@ -16,6 +17,10 @@ use crate::models::{
     ClassroomStatus, ClassroomsCacheResponse, ClassroomsRequest, ClassroomsResponse,
     CLASSROOMS_CACHE_VERSION,
 };
+
+const MAX_SJD_REDIRECTS: usize = 10;
+pub(crate) const MAX_SJD_LOGIN_RESPONSE_BYTES: usize = 64 * 1024;
+pub(crate) const MAX_SJD_DATA_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 struct RoomAccumulator {
@@ -97,16 +102,89 @@ pub fn parse_classroom(raw: &str) -> Option<(String, String, Option<usize>)> {
     Some((building.to_string(), room.to_string(), size))
 }
 
-fn http_client(timeout_secs: u64) -> ServiceResult<reqwest::Client> {
+fn validate_sjd_redirect_target(
+    origin: &Url,
+    target: &Url,
+    previous_request_count: usize,
+) -> Result<(), &'static str> {
+    if previous_request_count > MAX_SJD_REDIRECTS {
+        return Err("SJD redirect limit exceeded");
+    }
+    if target.scheme() != "https" {
+        return Err("SJD redirect must keep HTTPS");
+    }
+    if !target.username().is_empty() || target.password().is_some() {
+        return Err("SJD redirect must not include user information");
+    }
+    if target.host_str() != origin.host_str()
+        || target.port_or_known_default() != origin.port_or_known_default()
+    {
+        return Err("SJD redirect must keep the configured origin");
+    }
+    Ok(())
+}
+
+fn sjd_redirect_policy() -> reqwest::redirect::Policy {
+    let origin = Url::parse(SJD_ORIGIN).expect("SJD origin must be a valid URL");
+    reqwest::redirect::Policy::custom(move |attempt| {
+        match validate_sjd_redirect_target(&origin, attempt.url(), attempt.previous().len()) {
+            Ok(()) => attempt.follow(),
+            Err(message) => attempt.error(message),
+        }
+    })
+}
+
+pub(crate) fn sjd_http_client(timeout_secs: u64) -> ServiceResult<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(timeout_secs))
-        .redirect(reqwest::redirect::Policy::limited(10))
+        .redirect(sjd_redirect_policy())
         .build()
         .map_err(|error| ServiceError::new(format!("无法初始化网络客户端：{error}")))
 }
 
+fn append_limited_body_chunk(
+    body: &mut Vec<u8>,
+    chunk: &[u8],
+    max_bytes: usize,
+    response_name: &str,
+) -> ServiceResult<()> {
+    if chunk.len() > max_bytes.saturating_sub(body.len()) {
+        return Err(ServiceError::new(format!("{response_name}响应过大。")));
+    }
+    body.extend_from_slice(chunk);
+    Ok(())
+}
+
+fn parse_limited_json_bytes(
+    body: &[u8],
+    max_bytes: usize,
+    response_name: &str,
+) -> ServiceResult<Value> {
+    if body.len() > max_bytes {
+        return Err(ServiceError::new(format!("{response_name}响应过大。")));
+    }
+    serde_json::from_slice(body)
+        .map_err(|error| ServiceError::new(format!("{response_name}返回了无法识别的数据：{error}")))
+}
+
+pub(crate) async fn read_sjd_json_response(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+    response_name: &str,
+) -> ServiceResult<Value> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| ServiceError::new(format!("无法读取{response_name}响应：{error}")))?
+    {
+        append_limited_body_chunk(&mut body, &chunk, max_bytes, response_name)?;
+    }
+    parse_limited_json_bytes(&body, max_bytes, response_name)
+}
+
 pub async fn login_empty_classroom(account: &str, password: &str) -> ServiceResult<String> {
-    let client = http_client(20)?;
+    let client = sjd_http_client(20)?;
     let response = client
         .post(EMPTY_CLASSROOM_LOGIN_URL)
         .headers(sjd_headers(None, SJD_LOGIN_PAGE_URL))
@@ -124,10 +202,8 @@ pub async fn login_empty_classroom(account: &str, password: &str) -> ServiceResu
         )));
     }
 
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|_| ServiceError::new("空教室服务返回了无法识别的数据。"))?;
+    let payload =
+        read_sjd_json_response(response, MAX_SJD_LOGIN_RESPONSE_BYTES, "空教室服务").await?;
     if !code_is_success(&payload) {
         let message = payload
             .get("Msg")
@@ -394,10 +470,8 @@ async fn fetch_realtime_classrooms(
             response.status().as_u16()
         )));
     }
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|_| ServiceError::new("实时教室服务返回了无法识别的数据。"))?;
+    let payload =
+        read_sjd_json_response(response, MAX_SJD_DATA_RESPONSE_BYTES, "实时教室服务").await?;
     if !code_is_success(&payload) {
         let message = payload
             .get("Msg")
@@ -484,7 +558,7 @@ pub async fn fetch_all_classrooms(
     let service_date = service_date_from_payload(payload)?;
     let (user, secret) = resolve_credentials(&payload.account, &payload.password)?;
     let token = login_empty_classroom(&user, &secret).await?;
-    let client = http_client(30)?;
+    let client = sjd_http_client(30)?;
 
     let mut campus_items = Vec::with_capacity(CAMPUSES.len());
     for campus in CAMPUSES {
@@ -520,6 +594,64 @@ pub async fn fetch_all_classrooms(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sjd_redirects_allow_same_host_and_effective_https_port() {
+        let origin = Url::parse(SJD_ORIGIN).unwrap();
+        for target in [
+            "https://jwglweixin.bupt.edu.cn/bjyddx/next",
+            "https://jwglweixin.bupt.edu.cn:443/bjyddx/next",
+        ] {
+            assert!(validate_sjd_redirect_target(&origin, &Url::parse(target).unwrap(), 1).is_ok());
+        }
+    }
+
+    #[test]
+    fn sjd_redirects_reject_cross_origin_port_and_https_downgrade() {
+        let origin = Url::parse(SJD_ORIGIN).unwrap();
+        for target in [
+            "https://example.com/bjyddx/next",
+            "https://jwglweixin.bupt.edu.cn:8443/bjyddx/next",
+            "https://user:password@jwglweixin.bupt.edu.cn/bjyddx/next",
+            "http://jwglweixin.bupt.edu.cn/bjyddx/next",
+        ] {
+            assert!(
+                validate_sjd_redirect_target(&origin, &Url::parse(target).unwrap(), 1).is_err()
+            );
+        }
+        assert!(validate_sjd_redirect_target(
+            &origin,
+            &Url::parse("https://jwglweixin.bupt.edu.cn/bjyddx/next").unwrap(),
+            MAX_SJD_REDIRECTS + 1,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn sjd_json_body_limit_accepts_boundary_and_rejects_before_parsing_oversize() {
+        let exact = br#"{"code":1}"#;
+        let parsed = parse_limited_json_bytes(exact, exact.len(), "测试服务")
+            .expect("boundary-sized JSON must be accepted");
+        assert_eq!(parsed["code"], 1);
+
+        let oversized_invalid_json = vec![b'x'; exact.len() + 1];
+        let error = parse_limited_json_bytes(&oversized_invalid_json, exact.len(), "测试服务")
+            .expect_err("oversized body must be rejected before JSON parsing");
+        assert_eq!(error.message, "测试服务响应过大。");
+    }
+
+    #[test]
+    fn sjd_streaming_body_limit_rejects_chunk_that_crosses_the_boundary() {
+        let mut body = Vec::new();
+        append_limited_body_chunk(&mut body, b"1234", 8, "测试服务").unwrap();
+        append_limited_body_chunk(&mut body, b"5678", 8, "测试服务").unwrap();
+        assert_eq!(body, b"12345678");
+
+        let error = append_limited_body_chunk(&mut body, b"9", 8, "测试服务")
+            .expect_err("chunk beyond the hard limit must be rejected");
+        assert_eq!(error.message, "测试服务响应过大。");
+        assert_eq!(body, b"12345678");
+    }
 
     #[test]
     fn parse_classroom_with_size() {

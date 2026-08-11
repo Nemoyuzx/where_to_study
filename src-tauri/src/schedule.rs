@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::time::Duration;
 
 use chrono::{Datelike, Duration as ChronoDuration, NaiveDate};
 use regex::Regex;
@@ -7,7 +6,10 @@ use serde_json::Value;
 use sha1::{Digest, Sha1};
 
 use crate::auth::resolve_credentials;
-use crate::classrooms::{login_empty_classroom, sjd_headers};
+use crate::classrooms::{
+    login_empty_classroom, read_sjd_json_response, sjd_headers, sjd_http_client,
+    MAX_SJD_DATA_RESPONSE_BYTES,
+};
 use crate::config::{
     default_term_id, default_term_start_date, now_in_app_tz, SJD_REST_CLASSROOM_PAGE_URL,
     SJD_STUDENT_CURRICULUM_URL, SLOT_TIMES,
@@ -343,11 +345,7 @@ async fn fetch_sjd_schedule(
     let (user, secret) = resolve_credentials(account, password)?;
     let token = login_empty_classroom(&user, &secret).await?;
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|error| ServiceError::new(format!("无法初始化网络客户端：{error}")))?;
+    let client = sjd_http_client(30)?;
 
     let current_response = client
         .post(SJD_STUDENT_CURRICULUM_URL)
@@ -373,14 +371,14 @@ async fn fetch_sjd_schedule(
         }
     }
 
-    let current_payload: Value = current_response
-        .json()
-        .await
-        .map_err(|error| ServiceError::new(format!("移动教务课表返回了无法识别的数据：{error}")))?;
-    let all_payload: Value = all_response
-        .json()
-        .await
-        .map_err(|error| ServiceError::new(format!("移动教务课表返回了无法识别的数据：{error}")))?;
+    let current_payload = read_sjd_json_response(
+        current_response,
+        MAX_SJD_DATA_RESPONSE_BYTES,
+        "移动教务课表",
+    )
+    .await?;
+    let all_payload =
+        read_sjd_json_response(all_response, MAX_SJD_DATA_RESPONSE_BYTES, "移动教务课表").await?;
 
     for payload in [&current_payload, &all_payload] {
         let success = payload

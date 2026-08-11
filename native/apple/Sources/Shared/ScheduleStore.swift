@@ -6,13 +6,16 @@ protocol ScheduleStoring: Sendable {
     func clear() throws
 }
 
-enum ScheduleStoreError: LocalizedError {
+enum ScheduleStoreError: LocalizedError, Equatable {
     case unavailableDirectory
+    case invalidTermStartDate
 
     var errorDescription: String? {
         switch self {
         case .unavailableDirectory:
             "无法定位本地课表目录。"
+        case .invalidTermStartDate:
+            "本地课表的第一周周一日期格式不正确。"
         }
     }
 }
@@ -29,6 +32,9 @@ struct FileScheduleStore: ScheduleStoring {
         let data = try Data(contentsOf: fileURL)
         guard !data.isEmpty else { return nil }
         let decoded = try JSONDecoder().decode(ScheduleSnapshot.self, from: data)
+        guard StrictContractDateParser.date(from: decoded.termStartDate) != nil else {
+            throw ScheduleStoreError.invalidTermStartDate
+        }
         return ScheduleSnapshot(
             termID: decoded.termID,
             termStartDate: decoded.termStartDate,
@@ -38,6 +44,9 @@ struct FileScheduleStore: ScheduleStoring {
     }
 
     func save(_ schedule: ScheduleSnapshot) throws {
+        guard StrictContractDateParser.date(from: schedule.termStartDate) != nil else {
+            throw ScheduleStoreError.invalidTermStartDate
+        }
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true

@@ -6,6 +6,24 @@ import XCTest
 #endif
 
 final class CalendarImportTests: XCTestCase {
+    func testStrictContractDateParserRejectsNormalizedAndNonCanonicalDates() throws {
+        let leapDay = try XCTUnwrap(StrictContractDateParser.date(from: "2024-02-29"))
+        XCTAssertEqual(StrictContractDateParser.string(from: leapDay), "2024-02-29")
+
+        for value in [
+            "2026-02-30",
+            "2026-13-01",
+            "2026-00-01",
+            "2025-02-29",
+            "2026-2-03",
+            "2026-02-3",
+            "2026-02-03-extra",
+            "0000-01-01",
+        ] {
+            XCTAssertNil(StrictContractDateParser.date(from: value), value)
+        }
+    }
+
     func testEventDraftsExpandActualWeeksAndUseSlotBoundaries() throws {
         let schedule = fixtureSchedule(
             weeks: [1, 3],
@@ -40,14 +58,16 @@ final class CalendarImportTests: XCTestCase {
     }
 
     func testInvalidTermDateAndSlotFailInsteadOfCreatingWrongEvents() {
-        let invalidDate = ScheduleSnapshot(
-            termID: "2025-2026-2",
-            termStartDate: "not-a-date",
-            fetchedAt: "2026-03-01T00:00:00Z",
-            courses: []
-        )
-        XCTAssertThrowsError(try CalendarImportLogic.eventDrafts(from: invalidDate)) { error in
-            XCTAssertEqual(error as? CalendarImportError, .invalidTermStartDate)
+        for value in ["not-a-date", "2026-02-30", "2026-13-01"] {
+            let invalidDate = ScheduleSnapshot(
+                termID: "2025-2026-2",
+                termStartDate: value,
+                fetchedAt: "2026-03-01T00:00:00Z",
+                courses: []
+            )
+            XCTAssertThrowsError(try CalendarImportLogic.eventDrafts(from: invalidDate), value) { error in
+                XCTAssertEqual(error as? CalendarImportError, .invalidTermStartDate)
+            }
         }
 
         let invalidSlot = fixtureSchedule(weeks: [1], examWeeks: [], startSlot: 14, endSlot: 14)
