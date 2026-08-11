@@ -136,13 +136,19 @@ Apple 测试报告：
 - Windows 工作流改为通过 .NET 文件 API 显式写入单个 LF，并在上传前逐字节拒绝 CR 和非预期内容。
 - build 11 将先通过手动 Windows 制品门禁和 Android 签名门禁，再创建 `v0.1.1-alpha.11` 标签。
 
+## Alpha 11 发布门禁
+
+候选提交 `83bab78` 的手动 [Windows 工作流 31450555455](https://github.com/Nemoyuzx/where_to_study/actions/runs/31450555455) 和 [Android 签名工作流 31450557116](https://github.com/Nemoyuzx/where_to_study/actions/runs/31450557116) 已通过。
+
+- Windows 干净 runner 完成 React 构建、Rust 测试、严格 Clippy、x86_64 Tauri/NSIS 和 artifact 上传；下载后的 sidecar 确认只有 LF，且本机 `shasum -c` 直接通过。
+- Android 完成 81 项 Release JVM 测试、Lint、APK/AAB 构建和固定证书校验；下载后再次确认 `versionName=0.1.1`、`versionCode=11`、相邻 SHA-256 与 APK/AAB 固定证书均正确。
+
 ## 发布前剩余步骤
 
-1. 完成 build 11 本地打包、安装和制品复验，并通过手动 Windows/Android 发布门禁。
-2. 创建并推送 `v0.1.1-alpha.11` 标签。
-3. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
-4. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
-5. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。
-6. 维护者选择 MIT、Apache-2.0 或 GPL-3.0 后再添加根 `LICENSE`；在此之前只能称为公开测试代码，不能声称已完成开源授权。
+1. 创建并推送 `v0.1.1-alpha.11` 标签。
+2. 等待标签触发的 Windows、Tauri macOS、Apple/Android 原生和安全工作流全部通过。
+3. 下载 CI 产物并复核相邻 SHA-256、版本和签名，再创建 GitHub prerelease。
+4. Release Notes 必须明确 Windows 未做 Authenticode、两套 macOS 未做 Developer ID 公证、iOS archive 未签名且不可直接安装。
+5. 维护者选择 MIT、Apache-2.0 或 GPL-3.0 后再添加根 `LICENSE`；在此之前只能称为公开测试代码，不能声称已完成开源授权。
 
 正式生产发布仍需要 Apple Developer ID 签名与公证、可分发的 iOS 签名以及 Windows Authenticode。Android 维护者密钥只通过本地忽略文件和 GitHub Actions secrets 提供，不进入仓库或发布日志。
