@@ -3,12 +3,12 @@
 ## 当前状态
 
 - 分支：`codex/native-platform-foundation`
-- 已发布测试版：[v0.1.1-alpha.11](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.1-alpha.11)
+- 已发布测试版：[v0.1.1-alpha.12](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.1-alpha.12)
 - 应用版本：`0.1.1`
-- 当前候选构建号：Apple `CURRENT_PROJECT_VERSION=12`；Android `versionCode=12`
+- 当前发布构建号：Apple `CURRENT_PROJECT_VERSION=12`；Android `versionCode=12`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：Tauri 主应用安装在 `/Applications/Where To Study.app`；SwiftUI 预览安装在 `/Applications/Where To Study Native Preview.app`
-- 发布边界：当前是测试版候选，不是已签名、公证的生产版本；项目已按 GPL-3.0-only 开源
+- 发布边界：当前是公开测试预发布，不是已签名、公证的生产版本；项目已按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -72,17 +72,18 @@ Apple 测试报告：
 - iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.11_12-58-19-+0800.xcresult`
 - iOS 后台清理压力测试（10 次）：`native/apple/DerivedData/stress-iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.11_09-47-45-+0800.xcresult`
 
-## Build 12 本地候选制品
+## Build 12 发布制品
 
-以下五个非 Windows 制品已完成本地打包、相邻 SHA-256 回读、版本/构建号、架构、签名边界和法律文件检查。Windows x64 NSIS 必须由干净的 GitHub Actions Windows runner 生成，发布前不会用跨平台替代物补位。
+以下文件均由 `v0.1.1-alpha.12` 标签的 GitHub Actions 生成并发布。Release 下载件与 Actions artifact 已逐字节比对，相邻 `.sha256` 已逐项回读验证；所有平台包内的 GPL、第三方许可证与第三方声明均与仓库版本一致。
 
 | 文件 | SHA-256 | 签名状态 |
 | --- | --- | --- |
-| `Where-To-Study-v0.1.1-alpha.12-macos-arm64.zip` | `421e9b4c3d46bb15c3e5fed6ad564def6cbb1e39944d9cf8798b38ea56fdbb01` | Tauri macOS arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.12-native-macos-universal.zip` | `6b715e1ee42d99c868df5c40f33e8526e56bc3e5a1ebc883fbb16ed427b376b2` | SwiftUI macOS x86_64 + arm64，adhoc |
-| `Where-To-Study-v0.1.1-alpha.12-native-ios-unsigned.xcarchive.zip` | `517b603c702fb1e357ab7dfbd33bcab3633500452dfbf736952836906f5cffc3` | iOS arm64 archive，无签名，不可直接安装 |
-| `Where-To-Study-v0.1.1-alpha.12-native-android-universal.apk` | `a19f5169e6c41a277c3e122d3b79e3a3674c606c91902a4cd4d62c3ce67ac586` | Android APK，固定 release key |
-| `Where-To-Study-v0.1.1-alpha.12-native-android.aab` | `0ac5501a1ca9c1fbdcda53bfa12c387fbc8ccd75fce71761574c32b591d6a967` | Android AAB，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.12-windows-x64-setup.exe` | `3c95daa9babb647669b76b6f4e28939d66e7fd2aa3a69f44ffcb99737213c125` | Tauri Windows x64 NSIS，无 Authenticode |
+| `Where-To-Study-v0.1.1-alpha.12-macos-arm64.zip` | `76685726d95abe562054d03e38dd549bd6f70164307c2f83baa257e9b94154ff` | Tauri macOS arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.12-native-macos-universal.zip` | `6715c89ee1a8d25b758aac97f50b0528af083e7829af78d780a9a791f0c81ee7` | SwiftUI macOS x86_64 + arm64，adhoc |
+| `Where-To-Study-v0.1.1-alpha.12-native-ios-unsigned.xcarchive.zip` | `052ffe29df2971829e8896bc85010ed8986e04283ba604b4d3dbb44857eed0dd` | iOS arm64 archive，无签名，不可直接安装 |
+| `Where-To-Study-v0.1.1-alpha.12-native-android-universal.apk` | `6ab3bbcafe1750efe9650de80c61df005564cc7df989f77c799e0850d5b79c2b` | Android APK，固定 release key |
+| `Where-To-Study-v0.1.1-alpha.12-native-android.aab` | `eb9f26b9941918558b0bcd8ab2e48232f0a485bf7a5cf19a63ca8fd9c50d8889` | Android AAB，固定 release key |
 
 ## Build 11 发布制品
 
@@ -163,6 +164,14 @@ Apple 测试报告：
 
 - GitHub prerelease 已发布 6 个二进制制品和 6 个相邻 SHA-256 sidecar，并明确 Windows/macOS/iOS 的签名限制。
 - 从 Release 重新下载的 12 个附件与 Actions artifact 逐字节一致；版本、构建号、架构、签名、固定 Android 证书、隐私清单和 HTTPS 数据源均通过复核。
+
+## Alpha 12 测试版发布
+
+标签 `v0.1.1-alpha.12` 指向提交 `17798a8`。标签触发的 [Windows 31461935957](https://github.com/Nemoyuzx/where_to_study/actions/runs/31461935957)、[Tauri macOS 31461936039](https://github.com/Nemoyuzx/where_to_study/actions/runs/31461936039)、[原生端 31461935956](https://github.com/Nemoyuzx/where_to_study/actions/runs/31461935956) 和 [安全检查 31461935959](https://github.com/Nemoyuzx/where_to_study/actions/runs/31461935959) 全部通过。
+
+- GitHub prerelease 已发布 6 个二进制制品和 6 个相邻 SHA-256 sidecar；从 Release 重新下载的 12 个附件与 Actions artifact 逐字节一致。
+- Windows 干净 runner 实际静默安装 NSIS 后逐字节检查三份法律文件；macOS、iOS 与 Android 包也完成版本、构建号、架构、签名边界和法律文件复核。
+- GPL-3.0-only 元数据、锁定依赖许可证清单、npm/Rust 依赖审计和完整 Git 历史密钥扫描均通过标签流水线。
 
 ## 后续发布步骤
 

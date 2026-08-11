@@ -25,7 +25,7 @@ Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户�
 
 ## 下载
 
-已发布测试版 [v0.1.1-alpha.11](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.1-alpha.11)，提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。原生预览现已完成功能范围内的个人课表、法定节假日、日/周/月/年日历、当前时间线、每日课程摘要、系统日历导入和当天空教室联动查询。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
+已发布测试版 [v0.1.1-alpha.12](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.1-alpha.12)，提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。原生预览现已完成功能范围内的个人课表、法定节假日、日/周/月/年日历、当前时间线、每日课程摘要、系统日历导入和当天空教室联动查询。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
 
 ## 许可证状态
 
