@@ -79,6 +79,22 @@ class MainNavigationSmokeTest {
 
             click(device, "navigation_calendar")
             assertVisible(device, "page_calendar")
+            if (navigationResource == "phone_navigation") {
+                assertVisible(device, "calendar_phone_header")
+                assertVisible(device, "calendar_mode_switch")
+                assertVisible(device, "calendar_date_strip")
+                assertVisible(device, "calendar_timeline_scroll")
+                assertVisible(device, "phone_navigation")
+
+                click(device, "calendar_mode_day")
+                assertVisible(device, "calendar_timeline")
+                click(device, "calendar_mode_month")
+                assertVisible(device, "calendar_period_label")
+                click(device, "calendar_mode_year")
+                assertVisible(device, "calendar_period_label")
+                click(device, "calendar_mode_week")
+                assertVisible(device, "calendar_date_strip")
+            }
 
             click(device, "navigation_settings")
             assertVisible(device, "page_settings")

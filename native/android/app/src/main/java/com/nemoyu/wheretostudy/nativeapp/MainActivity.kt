@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Build
@@ -28,10 +29,11 @@ class MainActivity : Activity() {
         val label: String,
         val navigationViewID: Int,
         val pageViewID: Int,
+        val iconResource: Int,
     ) {
-        PLANNER("空教室", R.id.navigation_planner, R.id.page_planner),
-        CALENDAR("教学日历", R.id.navigation_calendar, R.id.page_calendar),
-        SETTINGS("设置", R.id.navigation_settings, R.id.page_settings),
+        PLANNER("空教室", R.id.navigation_planner, R.id.page_planner, R.drawable.ic_nav_classroom),
+        CALENDAR("教学日历", R.id.navigation_calendar, R.id.page_calendar, R.drawable.ic_nav_calendar),
+        SETTINGS("设置", R.id.navigation_settings, R.id.page_settings, R.drawable.ic_nav_settings),
     }
 
     private lateinit var content: FrameLayout
@@ -116,16 +118,19 @@ class MainActivity : Activity() {
             )
         }
         addView(content)
+        addView(View(this@MainActivity).apply {
+            setBackgroundColor(Palette.border)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         addView(LinearLayout(this@MainActivity).apply {
             id = R.id.phone_navigation
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setPadding(dp(10), dp(5), dp(10), dp(5))
             setBackgroundColor(Palette.surface)
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = true))
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(62)))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
     }
 
     private fun tabletLayout(): LinearLayout = LinearLayout(this).apply {
@@ -163,14 +168,18 @@ class MainActivity : Activity() {
         TextView(this).apply {
             id = destination.navigationViewID
             text = destination.label
-            textSize = if (compact) 13f else 15f
+            textSize = if (compact) 11.5f else 15f
             gravity = Gravity.CENTER
             isClickable = true
             isFocusable = true
+            if (compact) {
+                setCompoundDrawablesRelativeWithIntrinsicBounds(0, destination.iconResource, 0, 0)
+                compoundDrawablePadding = dp(3)
+            }
             setOnClickListener { navigate(destination) }
             layoutParams = if (compact) {
-                LinearLayout.LayoutParams(0, dp(50), 1f).apply {
-                    marginEnd = dp(5)
+                LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                    marginEnd = dp(4)
                 }
             } else {
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
@@ -188,12 +197,15 @@ class MainActivity : Activity() {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
         navigationViews.forEach { (item, view) ->
-            view.setTextColor(if (item == destination) Palette.onPrimary else Palette.text)
+            val selected = item == destination
+            val contentColor = if (selected) Palette.primaryText else Palette.muted
+            view.setTextColor(contentColor)
+            view.compoundDrawableTintList = ColorStateList.valueOf(contentColor)
             view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
             view.background = roundedBackground(
                 this,
-                if (item == destination) Palette.primary else Color.TRANSPARENT,
-                radius = 6,
+                if (selected) Palette.surfaceVariant else Color.TRANSPARENT,
+                radius = 8,
             )
         }
         val page = when (destination) {

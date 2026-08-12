@@ -170,6 +170,16 @@ fun TextView.setSelectedStyle(context: Context, selected: Boolean) {
     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
 }
 
+fun TextView.setCompactSelectedStyle(context: Context, selected: Boolean) {
+    setTextColor(if (selected) Palette.onPrimary else Palette.text)
+    background = roundedBackground(
+        context,
+        if (selected) Palette.primary else Color.TRANSPARENT,
+        radius = 8,
+    )
+    setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
+}
+
 fun verticalPage(context: Context): LinearLayout = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
     setPadding(context.dp(20), context.dp(20), context.dp(20), context.dp(28))
