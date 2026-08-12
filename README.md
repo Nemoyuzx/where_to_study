@@ -25,7 +25,7 @@ Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户�
 
 ## 下载
 
-已发布测试版 [v0.1.1-alpha.12](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.1-alpha.12)，提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。原生预览现已完成功能范围内的个人课表、法定节假日、日/周/月/年日历、当前时间线、每日课程摘要、系统日历导入和当天空教室联动查询。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
+稳定版 [v0.1.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.2) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。原生客户端已完成功能范围内的个人课表、法定节假日、日/周/月/年日历、当前时间线、每日课程摘要、系统日历导入和当天空教室联动查询。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
 
 ## 许可证状态
 
@@ -98,9 +98,9 @@ npm run tauri:build:windows
 生成本地签名 Android APK/AAB、macOS Universal ZIP 和无签名 iOS 真机 archive：
 
 ```bash
-./scripts/native-android-package.sh vX.Y.Z-preview.N
-./scripts/native-macos-package.sh vX.Y.Z-preview.N
-./scripts/native-ios-package.sh vX.Y.Z-preview.N
+./scripts/native-android-package.sh vX.Y.Z
+./scripts/native-macos-package.sh vX.Y.Z
+./scripts/native-ios-package.sh vX.Y.Z
 ```
 
 Android 脚本会运行 Release 单元测试与 Lint，构建并校验签名 APK 与 AAB；macOS 脚本只构建双架构 Release 应用、进行临时签名和签名校验；iOS 脚本构建 arm64 真机 archive，并检查应用图标和隐私清单。三个脚本都会在 `release-artifacts/` 中生成产物和 SHA-256 文件。Android 脚本需要本地、已忽略的 release keystore；macOS 预览包不包含 Developer ID 公证票据；iOS archive 未签名，不能直接安装到 iPhone。发布前还应另外运行完整测试和所需的人工运行检查。

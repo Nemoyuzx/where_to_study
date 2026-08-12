@@ -1,14 +1,14 @@
-# 发布候选检查点（2026-08-11）
+# 稳定版发布检查点（2026-08-12）
 
 ## 当前状态
 
-- 分支：`codex/native-platform-foundation`
-- 已发布测试版：[v0.1.1-alpha.12](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.1-alpha.12)
-- 应用版本：`0.1.1`
-- 当前发布构建号：Apple `CURRENT_PROJECT_VERSION=12`；Android `versionCode=12`
+- 分支：`main`
+- 当前稳定版：[v0.1.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.2)
+- 应用版本：`0.1.2`
+- 当前发布构建号：Apple `CURRENT_PROJECT_VERSION=15`；Android `versionCode=15`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
-- 本地安装：Tauri 主应用安装在 `/Applications/Where To Study.app`；SwiftUI 预览安装在 `/Applications/Where To Study Native Preview.app`
-- 发布边界：当前是公开测试预发布，不是已签名、公证的生产版本；项目已按 GPL-3.0-only 开源
+- 本地安装：只保留 SwiftUI Universal 应用 `/Applications/Where To Study.app`
+- 发布边界：`v0.1.2` 使用稳定版本号；macOS 和 Windows 仍未使用商业分发签名或公证，iOS archive 未签名；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -51,26 +51,30 @@
 
 | 范围 | 结果 |
 | --- | --- |
-| React | 10/10 业务规则测试与 `npm run build` 通过；完整 `npm audit --audit-level=high` 为 0 漏洞 |
+| React | 16/16 业务规则测试与 `npm run build` 通过；完整 `npm audit --audit-level=high` 为 0 漏洞 |
 | 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
 | Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；91/91 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
-| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；68/68 XCTest 通过 |
-| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；68 项单元测试 + 1 项真实导航 UI 测试，共 69/69 通过 |
+| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；76/76 XCTest 通过 |
+| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；72 项单元测试 + 1 项真实导航 UI 测试，共 73/73 通过 |
 | Android Debug | 95/95 JVM 测试、`lintDebug`、Debug APK 构建通过 |
 | Android Release | 95/95 JVM 测试、`lintRelease`、签名 APK/AAB 构建通过 |
 | Android UI | Medium Phone 与 Pixel Tablet 各 1/1 导航冒烟测试通过 |
 | 浏览器视觉检查 | 桌面与手机空教室/设置/日历通过；节假日标题、14 节次与整点、年视图浮层、红色时间线、移动端三列摘要均无重叠；控制台 0 错误 |
-| macOS 安装检查 | Tauri arm64 与 SwiftUI universal build 12 安装包版本/架构/adhoc 签名通过；原生侧栏标题与导航文字列对齐；两端关闭窗口后均保持运行；Tauri 二次启动维持单进程并恢复窗口 |
+| macOS 安装检查 | SwiftUI Universal build 15 安装包版本、x86_64/arm64 架构、adhoc 签名和 WidgetKit 扩展通过；系统中只保留一个 `/Applications/Where To Study.app` |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
 
 Apple 测试报告：
 
-- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.11_12-58-11-+0800.xcresult`
-- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.11_12-58-19-+0800.xcresult`
-- iOS 后台清理压力测试（10 次）：`native/apple/DerivedData/stress-iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.11_09-47-45-+0800.xcresult`
+- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.12_14-24-37-+0800.xcresult`
+- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.12_14-24-54-+0800.xcresult`
+- 通知权限超时精确测试：20 轮、40/40 通过
+
+## Build 15 稳定版发布制品
+
+`v0.1.2` 通过标签工作流生成 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及固定 release key 签名的 Android APK/AAB。每个二进制制品均带相邻的 LF 行尾 SHA-256 校验文件；Release 页面是当前稳定版制品和校验值的最终来源。
 
 ## Build 12 发布制品
 
