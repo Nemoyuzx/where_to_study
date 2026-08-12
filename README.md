@@ -1,31 +1,32 @@
 # Where To Study
 
-北邮空教室与个人课表联动查询应用。当前可用客户端基于 Tauri 2、React 和
-Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户端。
+北邮空教室与个人课表联动查询应用。Windows 客户端使用 Tauri 2、React 和 Rust，
+macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android Views；macOS
+同时保留 Tauri Apple Silicon 兼容构建。
 
 - 只通过移动教务 HTTPS 接口获取并解析北邮个人课表；请求失败时不会静默切换数据源。
 - 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
 - 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
-- 按个人空闲节次、教学楼、最少座位数筛选空教室。
-- macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知，并提供课程桌面小组件。
+- 空教室查询支持按个人空闲节次和教学楼筛选；Tauri 桌面端另支持最少座位数筛选。
+- macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知；原生 macOS 提供 WidgetKit 系统小组件，Tauri 桌面端保留应用内课程浮窗。
 - SwiftUI 与 Android 原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
-- 支持课表本地缓存、教学日历、法定节假日和 Apple 日历导入。
+- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit 或 Android Calendar Provider 系统日历导入。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台迁移范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
 
 ## 平台状态
 
-| 平台 | 当前可用版本 | 原生迁移状态 |
+| 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | Tauri 2 迁移期版本 | SwiftUI 原生预览已支持个人课表、系统日历、菜单栏、每日课程摘要、含节假日和当前时间线的教学日历、当天空教室联动查询 |
-| Android | Kotlin Views 原生预览 | 已支持个人课表、系统日历、每日课程摘要、含节假日和当前时间线的教学日历、当天空教室联动查询 |
-| Windows | Tauri 2，持续维护 | 保留 Tauri，并进行安全和资源占用优化 |
-| iOS | 暂不提供签名安装包 | SwiftUI 模拟器与 arm64 真机 archive 可重复构建，已接入个人课表、每日课程摘要、含节假日和当前时间线的教学日历、当天空教室联动查询 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | 发布 Universal 原生应用与 Apple Silicon Tauri 包；支持菜单栏、WidgetKit、系统日历、课程提醒和完整业务页面 |
+| Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机/平板布局、系统日历和课程提醒 |
+| Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
+| iOS | SwiftUI 原生 | 模拟器测试与 arm64 真机 archive 可重复构建；因缺少公开分发签名，暂不提供可直接安装包 |
 
 ## 下载
 
-稳定版 [v0.1.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.2) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。原生客户端已完成功能范围内的个人课表、法定节假日、日/周/月/年日历、当前时间线、每日课程摘要、系统日历导入和当天空教室联动查询。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
+稳定版 [v0.1.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.3) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版重排了 iOS 与 Android 教学日历的手机布局，保留原有配色和日/周/月/年功能，并改善窄屏日期导航、时间轴与底部导航的可读性。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
 
 ## 许可证状态
 
@@ -35,7 +36,7 @@ Rust；仓库同时在按平台逐步迁移到 SwiftUI 和 Kotlin 原生客户�
 
 macOS 与 Windows 桌面端的课程通知默认关闭。用户在设置中显式开启后，应用运行或驻留托盘时会于每天 7:30 根据本地课表发送今日课程摘要；关闭开关或清除本地数据会立即停止后续发送。后台调度只休眠到实际需要的跨日、每天 7:00、已启用的 7:30 或明确的有界重试时间；系统恢复、设置改变或窗口重新聚焦会中断休眠并重算边界，不进行固定间隔轮询。跨日会重建托盘中的今日/明日课程，7:00 获取当天空教室后也会再次重建托盘。
 
-课程桌面小组件可以从托盘菜单的“显示课程小组件”打开，也可以在应用“设置”页点击“打开课程小组件”。小组件显示今日课程和下一节待上课程，并会在课表刷新后自动更新。
+Tauri 桌面端的课程浮窗可以从托盘菜单的“显示课程小组件”打开，也可以在应用“设置”页点击“打开课程小组件”。原生 macOS 的 WidgetKit 小组件需要从系统小组件图库添加，通过 App Group 读取应用同步的今日课程；两种展示都会在课表刷新后更新。
 
 SwiftUI 客户端会在系统待处理通知上限内安排最多 63 个未来有课日的 07:30 摘要；Android 使用持久化 `JobScheduler` 在 07:30–08:00 的有效窗口内发送当天摘要。所有平台都默认关闭，只有用户明确开启后才启用；系统权限被撤销、关闭开关或清除本地数据时会同步撤销后续任务。账号切换时，原生端会撤销旧账号的已安排摘要，桌面端则只会在新账号设置保存成功后继续使用当前开关。
 
@@ -79,7 +80,7 @@ npm run tauri:build:windows
 
 该脚本固定使用 `--bundles nsis --ci`，产物位于 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 构建建议在 Windows 机器或 Windows CI runner 上执行，需要安装 Rust MSVC toolchain、Microsoft C++ Build Tools 和 WebView2 Runtime。
 
-### 原生客户端基线
+### 原生客户端
 
 生成并验证 macOS/iOS SwiftUI 工程：
 
@@ -93,7 +94,7 @@ npm run tauri:build:windows
 ./scripts/native-android-build.sh
 ```
 
-这两个目录用于逐步迁移。当前原生预览包已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询；发布签名、公证和真机分发仍按平台分别受限。
+`native/apple` 与 `native/android` 是当前 macOS、iOS 和 Android 客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询；签名、公证和真机分发仍按平台分别受限。
 
 生成本地签名 Android APK/AAB、macOS Universal ZIP 和无签名 iOS 真机 archive：
 
@@ -103,9 +104,11 @@ npm run tauri:build:windows
 ./scripts/native-ios-package.sh vX.Y.Z
 ```
 
-Android 脚本会运行 Release 单元测试与 Lint，构建并校验签名 APK 与 AAB；macOS 脚本只构建双架构 Release 应用、进行临时签名和签名校验；iOS 脚本构建 arm64 真机 archive，并检查应用图标和隐私清单。三个脚本都会在 `release-artifacts/` 中生成产物和 SHA-256 文件。Android 脚本需要本地、已忽略的 release keystore；macOS 预览包不包含 Developer ID 公证票据；iOS archive 未签名，不能直接安装到 iPhone。发布前还应另外运行完整测试和所需的人工运行检查。
+Android 脚本会运行 Release 单元测试与 Lint，构建并校验签名 APK 与 AAB；macOS 脚本构建双架构 Release 应用、进行临时签名和签名校验；iOS 脚本构建 arm64 真机 archive，并检查应用图标和隐私清单。三个脚本都会在 `release-artifacts/` 中生成产物和 SHA-256 文件。Android 脚本需要本地、已忽略的 release keystore；macOS 包不包含 Developer ID 公证票据；iOS archive 未签名，不能直接安装到 iPhone。发布前还应另外运行完整测试和所需的人工运行检查。
 
-### Android 开发与构建
+以下两节记录仍保留的 Tauri 移动端迁移工程，仅用于开发和手动验证。正式 Android/iOS Release 使用上面的原生客户端脚本。
+
+### 旧 Tauri Android 开发与构建
 
 首次开发前初始化 Android 原生工程：
 
@@ -123,10 +126,10 @@ npm run tauri:android:build:local
 npm run tauri:android:build:signed
 ```
 
-其中 `npm run tauri:android:build:local` 会自动补齐 Android Studio JBR、NDK LLVM toolchain 和 Rust PATH，直接产出 arm64 APK。当前验证通过的输出路径为：
+其中 `npm run tauri:android:build:local` 会自动补齐 Android Studio JBR、NDK LLVM toolchain 和 Rust PATH，并以 `--target aarch64` 构建 APK。Tauri/Gradle 会按本地是否存在签名配置选择签名或 unsigned 文件名，实际产物以命令输出及以下目录为准：
 
 ```bash
-src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+src-tauri/gen/android/app/build/outputs/apk/*/release/
 ```
 
 Android Studio 调试时，工程现在只保留 `arm64Debug` 和 `universalDebug` 两个主要移动端变体，避免误选 32 位 `armDebug` 并在 64 位真机上触发 ABI 警告。
@@ -179,7 +182,7 @@ sdkmanager --sdk_root="$HOME/Library/Android/sdk" "ndk;27.2.12479018"
 
 如果 Android Gradle 仍然报 `127.0.0.1:7890` 代理错误，或在 `plugins.gradle.org` 握手失败，先检查 `~/.gradle/gradle.properties` 里是否还保留了失效的 `systemProp.http[s].proxyHost/proxyPort` 设置。
 
-### iOS 开发与构建
+### 旧 Tauri iOS 开发与构建
 
 首次开发前初始化 iOS 原生工程：
 
@@ -234,14 +237,12 @@ src-tauri/gen/apple/build/where_to_study_iOS.xcarchive
 - `.github/workflows/build-windows.yml`：在 `windows-latest` 上构建 Windows 桌面安装包。
 - `.github/workflows/build-macos.yml`：在 `macos-15` 上构建并压缩 macOS Apple Silicon 应用。
 - `.github/workflows/build-mobile.yml`：仅供手动验证旧 Tauri Android/iOS 迁移基线，不随版本标签或正式 Release 构建。
-- `.github/workflows/build-native.yml`：运行 Rust 共享契约/单元测试、macOS 与 iOS 模拟器单元测试、Apple 原生构建，生成无签名原生 iOS 真机 archive，以及运行 Android 单元测试、Lint 和构建。
+- `.github/workflows/build-native.yml`：在主分支运行 Rust/Apple 测试和 Android Debug 门禁；版本标签额外生成 SwiftUI macOS Universal、无签名 iOS archive，以及签名 Android APK/AAB。
 - `.github/workflows/security.yml`：扫描提交历史中的敏感信息，并审计完整 npm 与 Rust 锁文件依赖。
 
-移动端 workflow 使用的 secrets 名称如下：
+正式原生 Android 标签构建使用以下 secrets：`ANDROID_RELEASE_KEYSTORE_BASE64`、`ANDROID_RELEASE_STORE_PASSWORD`、`ANDROID_RELEASE_KEY_ALIAS`、`ANDROID_RELEASE_KEY_PASSWORD`。原生 iOS Release 只生成无签名 archive，不需要分发证书。
 
-- Android：`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`
-- iOS：`IOS_CERTIFICATE_P12_BASE64`、`IOS_CERTIFICATE_PASSWORD`、`IOS_MOBILEPROVISION_BASE64`、`APPLE_DEVELOPMENT_TEAM`
-- 可选：`IOS_KEYCHAIN_PASSWORD`、`IOS_EXPORT_METHOD`
+手动旧 Tauri 移动端工作流仍使用 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`，以及 iOS 的 `IOS_CERTIFICATE_P12_BASE64`、`IOS_CERTIFICATE_PASSWORD`、`IOS_MOBILEPROVISION_BASE64`、`APPLE_DEVELOPMENT_TEAM`；`IOS_KEYCHAIN_PASSWORD`、`IOS_EXPORT_METHOD` 为可选配置。
 
 如果不在界面输入学号和教务密码，也可以在启动前配置环境变量：
 

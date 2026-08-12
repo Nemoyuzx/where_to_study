@@ -3,12 +3,12 @@
 ## 当前状态
 
 - 分支：`main`
-- 当前稳定版：[v0.1.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.2)
-- 应用版本：`0.1.2`
-- 当前发布构建号：Apple `CURRENT_PROJECT_VERSION=15`；Android `versionCode=15`
+- 当前稳定版：[v0.1.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.3)
+- 应用版本：`0.1.3`
+- 当前发布构建号：Apple `CURRENT_PROJECT_VERSION=16`；Android `versionCode=16`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：只保留 SwiftUI Universal 应用 `/Applications/Where To Study.app`
-- 发布边界：`v0.1.2` 使用稳定版本号；macOS 和 Windows 仍未使用商业分发签名或公证，iOS archive 未签名；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.1.3` 使用稳定版本号；macOS 和 Windows 仍未使用商业分发签名或公证，iOS archive 未签名；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -39,6 +39,7 @@
 - 发布脚本生成 arm64 + x86_64 通用 macOS 预览包和 arm64 无签名 iOS archive，并校验版本、架构、隐私清单、HTTPS 数据源与本地路径泄漏。
 - 二进制内容校验只依赖 macOS/Linux runner 自带的 `grep`，不再要求额外安装 `ripgrep`；退役 HTTP 地址按固定字符串实际检查。
 - Apple 测试脚本按 UDID 选择 runner 上真实存在的 iPhone 模拟器，不再假设指定机型一定安装在全局最新 iOS runtime。
+- iPhone/iPad 教学日历使用独立移动布局：紧凑日期导航、可横向切换的完整周日期、日/周/月/年视图，以及不会遮挡时间轴内容的底部导航。
 
 ### Android 原生端
 
@@ -46,6 +47,7 @@
 - 可选 07:30 课程摘要使用持久化 `JobScheduler`，只在 07:30-08:00 有效窗口投递；关闭、撤销权限、切换账号和清除数据均采用持久化失效规则。
 - 手机和平板 UI 测试按屏幕宽度验证底部导航或固定侧栏，不依赖反射或生产环境测试入口。
 - Release APK/AAB 使用固定维护者密钥签名；打包时同时验证版本号、构建号、APK/AAB 证书和仓库内公开指纹。
+- Android 手机教学日历与 iOS 保持相同功能层级，窄屏下重排标题、日期带、时间轴和导航，保留原有绿白配色与深浅色适配。
 
 ## 最终本地验证
 
@@ -56,25 +58,29 @@
 | Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；91/91 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
 | macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；76/76 XCTest 通过 |
-| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；72 项单元测试 + 1 项真实导航 UI 测试，共 73/73 通过 |
-| Android Debug | 95/95 JVM 测试、`lintDebug`、Debug APK 构建通过 |
-| Android Release | 95/95 JVM 测试、`lintRelease`、签名 APK/AAB 构建通过 |
-| Android UI | Medium Phone 与 Pixel Tablet 各 1/1 导航冒烟测试通过 |
+| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；74 项单元测试 + 1 项真实导航 UI 测试，共 75/75 通过 |
+| Android Debug | 98/98 JVM 测试、`lintDebug`、Debug APK 构建通过 |
+| Android Release | 98/98 JVM 测试、`lintRelease`、签名 APK/AAB 构建通过 |
+| Android UI | Medium Phone 与 Pixel Tablet 各 4/4 导航及布局测试通过 |
 | 浏览器视觉检查 | 桌面与手机空教室/设置/日历通过；节假日标题、14 节次与整点、年视图浮层、红色时间线、移动端三列摘要均无重叠；控制台 0 错误 |
-| macOS 安装检查 | SwiftUI Universal build 15 安装包版本、x86_64/arm64 架构、adhoc 签名和 WidgetKit 扩展通过；系统中只保留一个 `/Applications/Where To Study.app` |
+| macOS 安装检查 | SwiftUI Universal build 16 安装包版本、x86_64/arm64 架构、adhoc 签名和 WidgetKit 扩展通过；系统中只保留一个 `/Applications/Where To Study.app` |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
 
 Apple 测试报告：
 
-- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.12_14-24-37-+0800.xcresult`
-- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.12_14-24-54-+0800.xcresult`
+- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.12_18-09-51-+0800.xcresult`
+- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.12_18-11-13-+0800.xcresult`
 - 通知权限超时精确测试：20 轮、40/40 通过
+
+## Build 16 稳定版发布制品
+
+`v0.1.3` 通过标签工作流生成 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及固定 release key 签名的 Android APK/AAB。每个二进制制品均带相邻的 LF 行尾 SHA-256 校验文件；Release 页面是当前稳定版制品和校验值的最终来源。
 
 ## Build 15 稳定版发布制品
 
-`v0.1.2` 通过标签工作流生成 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及固定 release key 签名的 Android APK/AAB。每个二进制制品均带相邻的 LF 行尾 SHA-256 校验文件；Release 页面是当前稳定版制品和校验值的最终来源。
+`v0.1.2` 通过标签工作流生成 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及固定 release key 签名的 Android APK/AAB。每个二进制制品均带相邻的 LF 行尾 SHA-256 校验文件。
 
 ## Build 12 发布制品
 

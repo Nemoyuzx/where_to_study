@@ -16,7 +16,7 @@ function validateReleaseLabel(label) {
 }
 
 test("release labels accept stable and unnumbered alpha versions", () => {
-  for (const label of ["v0.1.2", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
+  for (const label of ["v0.1.3", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
     assert.doesNotThrow(() => validateReleaseLabel(label), label);
   }
 });
