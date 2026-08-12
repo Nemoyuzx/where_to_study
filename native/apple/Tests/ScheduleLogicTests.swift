@@ -401,6 +401,36 @@ final class ScheduleLogicTests: XCTestCase {
         ), 700)
     }
 
+    #if os(iOS)
+    func testMobileTimelineUsesReadableDayAndScrollableWeekWidths() {
+        XCTAssertEqual(
+            MobileCalendarTimelineLayout.contentWidth(
+                availableWidth: 390,
+                dayCount: 1,
+                showsWeekColumns: false
+            ),
+            334
+        )
+        XCTAssertEqual(
+            MobileCalendarTimelineLayout.contentWidth(
+                availableWidth: 390,
+                dayCount: 7,
+                showsWeekColumns: true
+            ),
+            616
+        )
+        XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 8 * 60), 0)
+        XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 15 * 60), 504)
+        XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 22 * 60), 1_008)
+    }
+
+    func testMobileTimelineRetainsAllFourteenCoursePeriods() {
+        XCTAssertEqual(SlotMetadata.defaults.count, 14)
+        XCTAssertEqual(SlotMetadata.defaults.first?.start, "08:00")
+        XCTAssertEqual(SlotMetadata.defaults.last?.end, "20:55")
+    }
+    #endif
+
     func testYearCourseDensityContinuesIncreasingPastFourCourses() {
         let opacities = [1, 4, 5, 8, 12].map {
             TeachingCalendarLogic.yearCourseOpacity(courseCount: $0)

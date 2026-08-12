@@ -1,0 +1,301 @@
+#if os(iOS)
+import SwiftUI
+
+enum MobileCalendarTimelineLayout {
+    static let startMinute = 8 * 60
+    static let endMinute = 22 * 60
+    static let hourHeight: CGFloat = 72
+    static let axisWidth: CGFloat = 56
+    static let minimumWeekDayWidth: CGFloat = 88
+
+    static var timelineHeight: CGFloat {
+        CGFloat(endMinute - startMinute) / 60 * hourHeight
+    }
+
+    static func yPosition(minute: Int) -> CGFloat {
+        let clamped = min(max(minute, startMinute), endMinute)
+        return CGFloat(clamped - startMinute) / 60 * hourHeight
+    }
+
+    static func contentWidth(availableWidth: CGFloat, dayCount: Int, showsWeekColumns: Bool) -> CGFloat {
+        let usableWidth = max(availableWidth - axisWidth, 1)
+        guard showsWeekColumns else { return usableWidth }
+        return max(usableWidth, CGFloat(max(dayCount, 1)) * minimumWeekDayWidth)
+    }
+}
+
+struct MobileCalendarTimelineView: View {
+    let days: [CalendarTimelineDay]
+    let selectedDate: Date
+    let showsWeekColumns: Bool
+    var onSelectDay: ((Date) -> Void)?
+
+    private let calendar = Calendar.shanghai
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollViewReader { reader in
+                ScrollView(.vertical, showsIndicators: true) {
+                    HStack(alignment: .top, spacing: 0) {
+                        hourAxis
+                        ScrollView(.horizontal, showsIndicators: showsWeekColumns) {
+                            timelineGrid(
+                                width: MobileCalendarTimelineLayout.contentWidth(
+                                    availableWidth: proxy.size.width,
+                                    dayCount: days.count,
+                                    showsWeekColumns: showsWeekColumns
+                                )
+                            )
+                        }
+                        .scrollDisabled(!showsWeekColumns)
+                    }
+                    .frame(height: MobileCalendarTimelineLayout.timelineHeight)
+                }
+                .onAppear {
+                    reader.scrollTo(initialVisibleHour, anchor: .top)
+                }
+            }
+        }
+        .background(AppTheme.surface)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var hourAxis: some View {
+        ZStack(alignment: .topLeading) {
+            AppTheme.surface
+            ForEach(8 ... 22, id: \.self) { hour in
+                let y = MobileCalendarTimelineLayout.yPosition(minute: hour * 60)
+                Text(String(format: "%02d:00", hour))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .frame(width: MobileCalendarTimelineLayout.axisWidth - 8, alignment: .trailing)
+                    .position(
+                        x: (MobileCalendarTimelineLayout.axisWidth - 8) / 2,
+                        y: adjustedHourLabelY(hour: hour, rawY: y)
+                    )
+                    .id(hour)
+            }
+        }
+        .frame(
+            width: MobileCalendarTimelineLayout.axisWidth,
+            height: MobileCalendarTimelineLayout.timelineHeight
+        )
+        .overlay(alignment: .trailing) { Divider() }
+    }
+
+    private func timelineGrid(width: CGFloat) -> some View {
+        let dayCount = max(days.count, 1)
+        let dayWidth = width / CGFloat(dayCount)
+
+        return TimelineView(.periodic(from: .now, by: 60)) { context in
+            ZStack(alignment: .topLeading) {
+                AppTheme.surface
+                grid(width: width, dayWidth: dayWidth)
+                selectedColumn(dayWidth: dayWidth)
+                if !showsWeekColumns {
+                    slotGuides(width: width)
+                }
+                courseBlocks(dayWidth: dayWidth)
+                currentTimeIndicator(width: width, dayWidth: dayWidth, now: context.date)
+            }
+            .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight)
+        }
+    }
+
+    private func grid(width: CGFloat, dayWidth: CGFloat) -> some View {
+        Canvas { context, _ in
+            var hourLines = Path()
+            for hour in 8 ... 22 {
+                let y = MobileCalendarTimelineLayout.yPosition(minute: hour * 60)
+                hourLines.move(to: CGPoint(x: 0, y: y))
+                hourLines.addLine(to: CGPoint(x: width, y: y))
+            }
+            context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
+
+            guard showsWeekColumns else { return }
+            var columns = Path()
+            for index in 0 ... max(days.count, 1) {
+                let x = CGFloat(index) * dayWidth
+                columns.move(to: CGPoint(x: x, y: 0))
+                columns.addLine(to: CGPoint(x: x, y: MobileCalendarTimelineLayout.timelineHeight))
+            }
+            context.stroke(columns, with: .color(AppTheme.border.opacity(0.7)), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private func selectedColumn(dayWidth: CGFloat) -> some View {
+        if showsWeekColumns,
+           let index = days.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: selectedDate) }) {
+            Rectangle()
+                .fill(AppTheme.primary.opacity(0.045))
+                .frame(width: dayWidth, height: MobileCalendarTimelineLayout.timelineHeight)
+                .offset(x: CGFloat(index) * dayWidth)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func slotGuides(width: CGFloat) -> some View {
+        ForEach(SlotMetadata.defaults) { slot in
+            if let start = CalendarTimelineLogic.minute(of: slot.start),
+               let end = CalendarTimelineLogic.minute(of: slot.end) {
+                let y = (MobileCalendarTimelineLayout.yPosition(minute: start)
+                    + MobileCalendarTimelineLayout.yPosition(minute: end)) / 2
+                HStack(spacing: 5) {
+                    Text("第\(slot.label)节")
+                        .fontWeight(.semibold)
+                    Text("\(slot.start)-\(slot.end)")
+                        .monospacedDigit()
+                }
+                .font(.system(size: 9))
+                .foregroundStyle(AppTheme.secondaryText)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(AppTheme.surface.opacity(0.92), in: Capsule())
+                .overlay { Capsule().stroke(AppTheme.border.opacity(0.7), lineWidth: 0.5) }
+                .fixedSize()
+                .position(x: 66, y: y)
+                .accessibilityLabel("第\(slot.label)节，\(slot.start)到\(slot.end)")
+            }
+        }
+        .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight, alignment: .topLeading)
+    }
+
+    private func courseBlocks(dayWidth: CGFloat) -> some View {
+        ForEach(Array(days.enumerated()), id: \.element.id) { dayIndex, day in
+            let placements = placeCourses(day.courses)
+            let trackCount = max(placements.map(\.track).max().map { $0 + 1 } ?? 1, 1)
+            ForEach(placements) { placement in
+                if let start = SlotMetadata.defaults[safe: placement.course.startSlot]
+                    .flatMap({ CalendarTimelineLogic.minute(of: $0.start) }),
+                   let end = SlotMetadata.defaults[safe: placement.course.endSlot]
+                    .flatMap({ CalendarTimelineLogic.minute(of: $0.end) }) {
+                    let trackWidth = dayWidth / CGFloat(trackCount)
+                    let x = CGFloat(dayIndex) * dayWidth + CGFloat(placement.track) * trackWidth + 3
+                    let top = MobileCalendarTimelineLayout.yPosition(minute: start) + 2
+                    let bottom = max(top + 38, MobileCalendarTimelineLayout.yPosition(minute: end) - 2)
+                    courseBlock(
+                        placement: placement,
+                        width: max(trackWidth - 6, 24),
+                        x: x,
+                        top: top,
+                        bottom: bottom
+                    )
+                }
+            }
+        }
+    }
+
+    private func courseBlock(
+        placement: CoursePlacement,
+        width: CGFloat,
+        x: CGFloat,
+        top: CGFloat,
+        bottom: CGFloat
+    ) -> some View {
+        let height = bottom - top
+        return VStack(alignment: .leading, spacing: 2) {
+            Text(placement.course.name)
+                .font(.system(size: showsWeekColumns ? 9 : 12, weight: .semibold))
+                .lineLimit(showsWeekColumns ? 2 : 1)
+            if height >= 42 {
+                Text(placement.course.timeRange)
+                    .font(.system(size: showsWeekColumns ? 8 : 10, design: .monospaced))
+                    .lineLimit(1)
+            }
+            if !showsWeekColumns, height >= 62, !placement.course.room.isEmpty {
+                Text(placement.course.room)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+            }
+        }
+        .foregroundStyle(AppTheme.onPrimary)
+        .padding(6)
+        .frame(width: width, height: height, alignment: .topLeading)
+        .background(AppTheme.primaryFill)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(alignment: .leading) {
+            Rectangle().fill(AppTheme.accent).frame(width: 3)
+        }
+        .position(x: x + width / 2, y: (top + bottom) / 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "\(placement.course.timeRange)，\(placement.course.name)，\(placement.course.room)"
+        )
+    }
+
+    @ViewBuilder
+    private func currentTimeIndicator(width: CGFloat, dayWidth: CGFloat, now: Date) -> some View {
+        let components = calendar.dateComponents([.hour, .minute], from: now)
+        let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        if let index = days.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: now) }),
+           (MobileCalendarTimelineLayout.startMinute ... MobileCalendarTimelineLayout.endMinute)
+            .contains(minute) {
+            let y = MobileCalendarTimelineLayout.yPosition(minute: minute)
+            let left = showsWeekColumns ? CGFloat(index) * dayWidth : 0
+            let lineWidth = showsWeekColumns ? dayWidth : width
+
+            Path { path in
+                path.move(to: CGPoint(x: left, y: y))
+                path.addLine(to: CGPoint(x: min(left + lineWidth, width), y: y))
+            }
+            .stroke(AppTheme.danger, lineWidth: 2)
+
+            Circle()
+                .fill(AppTheme.danger)
+                .frame(width: 8, height: 8)
+                .position(x: left + 4, y: y)
+
+            Text(Self.timeFormatter.string(from: now))
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .foregroundStyle(AppTheme.onPrimary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(AppTheme.danger, in: Capsule())
+                .position(x: left + 30, y: y - 13)
+        }
+    }
+
+    private var initialVisibleHour: Int {
+        guard days.contains(where: { calendar.isDateInToday($0.date) }) else { return 8 }
+        let currentHour = calendar.component(.hour, from: .now)
+        return min(max(currentHour - 1, 8), 20)
+    }
+
+    private func adjustedHourLabelY(hour: Int, rawY: CGFloat) -> CGFloat {
+        if hour == 8 { return rawY + 8 }
+        if hour == 22 { return rawY - 8 }
+        return rawY
+    }
+
+    private func placeCourses(_ courses: [Course]) -> [CoursePlacement] {
+        var trackEnds = [Int]()
+        return courses.sorted {
+            ($0.startSlot, $0.endSlot, $0.name) < ($1.startSlot, $1.endSlot, $1.name)
+        }.map { course in
+            let track = trackEnds.firstIndex(where: { $0 < course.startSlot }) ?? trackEnds.count
+            if track == trackEnds.count {
+                trackEnds.append(course.endSlot)
+            } else {
+                trackEnds[track] = course.endSlot
+            }
+            return CoursePlacement(course: course, track: track)
+        }
+    }
+
+    private struct CoursePlacement: Identifiable {
+        let course: Course
+        let track: Int
+        var id: String { "\(course.id)|\(track)" }
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = .shanghai
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+}
+#endif

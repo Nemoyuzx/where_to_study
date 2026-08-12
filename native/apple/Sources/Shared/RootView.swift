@@ -42,6 +42,8 @@ struct RootView: View {
             }
         }
         .tint(AppTheme.primary)
+        .toolbarBackground(AppTheme.background, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         #endif
         }
         .onAppear {
@@ -62,7 +64,12 @@ struct RootView: View {
     private func sectionView(_ section: AppSection) -> some View {
         switch section {
         case .planner: PlannerView()
-        case .calendar: TeachingCalendarView()
+        case .calendar:
+            #if os(iOS)
+            MobileTeachingCalendarView()
+            #else
+            TeachingCalendarView()
+            #endif
         case .settings: SettingsView()
         }
     }
