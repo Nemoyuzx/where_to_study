@@ -25,7 +25,7 @@ body:
     attributes:
       label: Version or commit
       description: Use the app version, release tag, or full commit SHA.
-      placeholder: v0.1.1-alpha.5 or 0123456789abcdef...
+      placeholder: v0.1.2 or 0123456789abcdef...
     validations:
       required: true
   - type: input

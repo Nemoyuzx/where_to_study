@@ -125,7 +125,7 @@ class TeachingCalendarPage(
         text = "导入系统日历"
         textSize = 15f
         gravity = Gravity.CENTER
-        setTextColor(Color.WHITE)
+        setTextColor(Palette.onPrimary)
         setTypeface(typeface, Typeface.BOLD)
         background = roundedBackground(activity, Palette.primary, radius = 6)
         isClickable = true
@@ -245,7 +245,7 @@ class TeachingCalendarPage(
                 holidays.forEach { add("${if (it.type == "holiday") "休" else "班"} ${it.name}") }
             }.joinToString("  ·  ")
             textSize = 14f
-            setTextColor(if (holidays.any { it.type == "holiday" }) HOLIDAY_RED else Palette.muted)
+            setTextColor(if (holidays.any { it.type == "holiday" }) Palette.holiday else Palette.muted)
             setPadding(0, activity.dp(5), 0, 0)
         })
     }
@@ -328,9 +328,9 @@ class TeachingCalendarPage(
             maxLines = 3
             setPadding(activity.dp(5), activity.dp(6), activity.dp(4), activity.dp(4))
             setTextColor(when {
-                selected -> Color.WHITE
-                !inMonth -> LIGHT_MUTED
-                holidays.any { it.type == "holiday" } -> HOLIDAY_RED
+                selected -> Palette.onPrimary
+                !inMonth -> Palette.outOfMonth
+                holidays.any { it.type == "holiday" } -> Palette.holiday
                 else -> Palette.text
             })
             background = calendarCellBackground(
@@ -449,7 +449,7 @@ class TeachingCalendarPage(
                     item.name,
                 )
                 textSize = 13f
-                setTextColor(if (item.type == "holiday") HOLIDAY_RED else Palette.primaryDark)
+                setTextColor(if (item.type == "holiday") Palette.holiday else Palette.primaryText)
                 setPadding(0, 0, 0, activity.dp(5))
             })
         }
@@ -466,7 +466,7 @@ class TeachingCalendarPage(
                     text = listOf(course.timeRange, course.name, course.room)
                         .filter(String::isNotEmpty).joinToString("  ·  ")
                     textSize = 13f
-                    setTextColor(Palette.primaryDark)
+                    setTextColor(Palette.primaryText)
                     setPadding(0, activity.dp(3), 0, activity.dp(3))
                 })
             }
@@ -525,13 +525,13 @@ class TeachingCalendarPage(
             activity,
             fill,
             when {
-                today -> NOW_RED
+                today -> Palette.nowIndicator
                 selected -> Palette.primary
                 else -> Palette.border
             },
             radius = 3,
         ).apply {
-            if (today) setStroke(activity.dp(2), NOW_RED)
+            if (today) setStroke(activity.dp(2), Palette.nowIndicator)
         }
     }
 
@@ -610,8 +610,5 @@ class TeachingCalendarPage(
     )
 
     private companion object {
-        val NOW_RED: Int = Color.rgb(220, 53, 69)
-        val HOLIDAY_RED: Int = Color.rgb(184, 50, 52)
-        val LIGHT_MUTED: Int = Color.rgb(172, 181, 176)
     }
 }

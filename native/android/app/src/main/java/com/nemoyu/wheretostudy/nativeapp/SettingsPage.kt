@@ -88,12 +88,34 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, 0, 0, activity.dp(7))
         })
+        val campusLabels = AppMetadata.campuses.map(CampusMetadata::name)
+        val campusAdapter = object : ArrayAdapter<String>(
+            activity,
+            android.R.layout.simple_spinner_item,
+            campusLabels,
+        ) {
+            init {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                super.getView(position, convertView, parent).also(::styleSpinnerText)
+
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
+                super.getDropDownView(position, convertView, parent).also { view ->
+                    styleSpinnerText(view)
+                    view.setBackgroundColor(Palette.surface)
+                }
+
+            private fun styleSpinnerText(view: View) {
+                (view as? TextView)?.apply {
+                    setTextColor(Palette.text)
+                    setPadding(activity.dp(12), 0, activity.dp(12), 0)
+                }
+            }
+        }
         val campus = Spinner(activity).apply {
-            adapter = ArrayAdapter(
-                activity,
-                android.R.layout.simple_spinner_dropdown_item,
-                AppMetadata.campuses.map(CampusMetadata::name),
-            )
+            adapter = campusAdapter
             setSelection(AppMetadata.campuses.indexOfFirst { it.id == preferences.campusID }.coerceAtLeast(0))
             background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
             setPadding(activity.dp(12), 0, activity.dp(12), 0)
@@ -175,7 +197,7 @@ class SettingsPage(
             text = "保存设置"
             textSize = 16f
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(Palette.onPrimary)
             setTypeface(typeface, Typeface.BOLD)
             background = roundedBackground(activity, Palette.primary, radius = 6)
             isClickable = true
@@ -202,7 +224,7 @@ class SettingsPage(
             text = "获取/刷新个人课表"
             textSize = 16f
             gravity = Gravity.CENTER
-            setTextColor(Palette.primaryDark)
+            setTextColor(Palette.primaryText)
             setTypeface(typeface, Typeface.BOLD)
             background = roundedBackground(activity, Palette.surface, Palette.primary, radius = 6)
             isClickable = true
@@ -287,7 +309,7 @@ class SettingsPage(
             text = "隐私说明"
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(Palette.primaryDark)
+            setTextColor(Palette.primaryText)
             setTypeface(typeface, Typeface.BOLD)
             background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
             isClickable = true
@@ -305,12 +327,12 @@ class SettingsPage(
             text = "清除本地数据"
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(138, 45, 28))
+            setTextColor(Palette.danger)
             setTypeface(typeface, Typeface.BOLD)
             background = roundedBackground(
                 activity,
-                Color.rgb(255, 242, 237),
-                Color.rgb(230, 183, 170),
+                Palette.dangerSurface,
+                Palette.dangerBorder,
                 radius = 6,
             )
             isClickable = true

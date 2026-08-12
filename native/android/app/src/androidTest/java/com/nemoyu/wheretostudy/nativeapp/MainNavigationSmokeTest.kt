@@ -19,6 +19,30 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class MainNavigationSmokeTest {
     @Test
+    fun dailyClassroomRefreshCanBeScheduledWithSavedCredentials() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val scheduler = context.getSystemService(JobScheduler::class.java)
+        DailyClassroomRefreshScheduler.cancel(context)
+        SecureCredentialStore(context).save(Credentials("test-account", "test-password"))
+
+        try {
+            assertTrue(
+                "Daily classroom refresh must be accepted by JobScheduler",
+                DailyClassroomRefreshScheduler.ensureScheduled(context),
+            )
+            assertTrue(
+                "Daily classroom refresh job must remain pending after scheduling",
+                scheduler.allPendingJobs.any { job ->
+                    DailyClassroomRefreshScheduler.isManagedJob(job.id)
+                },
+            )
+        } finally {
+            DailyClassroomRefreshScheduler.cancel(context)
+            SecureCredentialStore(context).clear()
+        }
+    }
+
+    @Test
     fun primaryPagesCanBeNavigatedWithoutCredentials() {
         clearCredentialRecord()
         val instrumentation = InstrumentationRegistry.getInstrumentation()

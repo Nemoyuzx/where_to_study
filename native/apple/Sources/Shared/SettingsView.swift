@@ -31,10 +31,11 @@ struct SettingsView: View {
                             model.saveSettings()
                         } label: {
                             Label("保存设置", systemImage: "checkmark")
+                                .foregroundStyle(AppTheme.onPrimary)
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(AppTheme.primary)
+                        .tint(AppTheme.primaryFill)
                         Button {
                             if model.saveSettings() {
                                 model.refreshSchedule()

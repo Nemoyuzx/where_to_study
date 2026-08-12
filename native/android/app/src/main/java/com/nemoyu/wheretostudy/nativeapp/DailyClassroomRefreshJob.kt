@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 
 internal class DailyClassroomRetryStore(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -51,6 +52,8 @@ object DailyClassroomRefreshScheduler {
                 DailyClassroomScheduleAction.KEEP -> true
                 DailyClassroomScheduleAction.SCHEDULE -> schedule(context, PRIMARY_JOB_ID)
             }
+        }.onFailure { error ->
+            Log.e(TAG, "Unable to ensure daily classroom refresh job", error)
         }.getOrDefault(false)
     }
 
@@ -169,8 +172,14 @@ object DailyClassroomRefreshScheduler {
             )
             .setPersisted(true)
             .build()
-        return scheduler.schedule(job) == JobScheduler.RESULT_SUCCESS
+        val result = scheduler.schedule(job)
+        if (result != JobScheduler.RESULT_SUCCESS) {
+            Log.e(TAG, "JobScheduler rejected daily classroom refresh job $jobID")
+        }
+        return result == JobScheduler.RESULT_SUCCESS
     }
+
+    private const val TAG = "ClassroomRefreshJob"
 }
 
 class DailyClassroomRefreshJobService : JobService() {

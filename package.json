@@ -1,12 +1,12 @@
 {
   "name": "where-to-study",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "GPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test test/planner-domain.test.js",
+    "test": "node --test test/*.test.js",
     "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
     "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "build": "vite build",

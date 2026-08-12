@@ -316,10 +316,10 @@ private class CalendarTimelineCanvas(
 
             val badge = holidayBadge(day.holidays)
             textPaint.color = when {
-                day.holidays.any { it.type == "holiday" } -> HOLIDAY_RED
-                day.holidays.any { it.type == "workday" } -> Palette.primaryDark
+                day.holidays.any { it.type == "holiday" } -> Palette.holiday
+                day.holidays.any { it.type == "workday" } -> Palette.primaryText
                 day.courses.isEmpty() -> Palette.muted
-                else -> Palette.primaryDark
+                else -> Palette.primaryText
             }
             textPaint.textAlign = Paint.Align.CENTER
             textPaint.textSize = sp(10f)
@@ -332,7 +332,7 @@ private class CalendarTimelineCanvas(
                 textPaint,
             )
             if (sameDay(day.date, Calendar.getInstance(shanghai))) {
-                fillPaint.color = NOW_RED
+                fillPaint.color = Palette.nowIndicator
                 canvas.drawRect(left + dp(6), headerHeight - dp(3), right - dp(6), headerHeight, fillPaint)
             }
         }
@@ -358,10 +358,10 @@ private class CalendarTimelineCanvas(
 
                 canvas.save()
                 canvas.clipRect(left, top, right, bottom)
-                boldPaint.color = Color.WHITE
+                boldPaint.color = Palette.onPrimary
                 boldPaint.textAlign = Paint.Align.LEFT
                 boldPaint.textSize = sp(if (days.size == 1) 13f else 10f)
-                textPaint.color = Color.WHITE
+                textPaint.color = Palette.onPrimary
                 textPaint.textAlign = Paint.Align.LEFT
                 textPaint.textSize = sp(if (days.size == 1) 11f else 9f)
                 val availableWidth = right - left - dp(12)
@@ -404,7 +404,7 @@ private class CalendarTimelineCanvas(
             dayWidth = dayWidth,
             contentWidth = width.toFloat(),
         )
-        fillPaint.color = NOW_RED
+        fillPaint.color = Palette.nowIndicator
         canvas.drawRect(left, y - dp(1), right, y + dp(1), fillPaint)
         canvas.drawCircle(left, y, dp(4).toFloat(), fillPaint)
     }
@@ -417,7 +417,7 @@ private class CalendarTimelineCanvas(
         textPaint.textSize = sp(10f)
         val labelWidth = max(dp(38).toFloat(), textPaint.measureText(label) + dp(8))
         val halfHeight = dp(9).toFloat()
-        fillPaint.color = NOW_RED
+        fillPaint.color = Palette.nowIndicator
         canvas.drawRoundRect(
             RectF(
                 hourAxisWidth / 2f - labelWidth / 2f,
@@ -429,7 +429,7 @@ private class CalendarTimelineCanvas(
             halfHeight,
             fillPaint,
         )
-        textPaint.color = Color.WHITE
+        textPaint.color = Palette.onPrimary
         drawCenteredText(canvas, label, hourAxisWidth / 2f, y, textPaint)
     }
 
@@ -503,7 +503,5 @@ private class CalendarTimelineCanvas(
     private data class CoursePlacement(val course: Course, val track: Int)
 
     private companion object {
-        val NOW_RED: Int = Color.rgb(220, 53, 69)
-        val HOLIDAY_RED: Int = Color.rgb(184, 50, 52)
     }
 }

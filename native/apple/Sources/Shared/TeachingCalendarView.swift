@@ -299,11 +299,11 @@ struct TeachingCalendarView: View {
                 Text("\(calendar.component(.day, from: day))")
                 if let item = holidays.first {
                     Text(item.type == "holiday" ? "休" : "班")
-                        .foregroundStyle(isSelected ? Color.white : Self.holidayColor(item))
+                        .foregroundStyle(isSelected ? AppTheme.onPrimary : Self.holidayColor(item))
                 }
             }
             .font(.system(size: 9, weight: .medium))
-            .foregroundStyle(isSelected ? Color.white : AppTheme.text)
+            .foregroundStyle(isSelected ? AppTheme.onPrimary : AppTheme.text)
             .frame(maxWidth: .infinity, minHeight: 30)
             .background(yearCellColor(selected: isSelected, courseCount: dayCourses.count))
             .overlay(
@@ -525,21 +525,21 @@ struct TeachingCalendarView: View {
     }
 
     private func monthCellColor(selected: Bool, inMonth: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.primary }
+        if selected { return AppTheme.primaryFill }
         if !inMonth { return AppTheme.surface }
         guard courseCount > 0 else { return AppTheme.background }
         return AppTheme.primary.opacity(min(0.08 + Double(courseCount) * 0.10, 0.48))
     }
 
     private func monthTextColor(selected: Bool, inMonth: Bool, holidays: [HolidayItem]) -> Color {
-        if selected { return .white }
+        if selected { return AppTheme.onPrimary }
         if !inMonth { return AppTheme.secondaryText.opacity(0.55) }
         if let holiday = holidays.first { return Self.holidayColor(holiday) }
         return AppTheme.text
     }
 
     private func yearCellColor(selected: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.primary }
+        if selected { return AppTheme.primaryFill }
         guard courseCount > 0 else { return AppTheme.background }
         return AppTheme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount))
     }
@@ -561,8 +561,8 @@ struct TeachingCalendarView: View {
     }
 
     private static let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
-    private static let nowRed = Color(red: 220 / 255, green: 53 / 255, blue: 69 / 255)
-    private static let holidayRed = Color(red: 184 / 255, green: 50 / 255, blue: 52 / 255)
+    private static let nowRed = AppTheme.danger
+    private static let holidayRed = AppTheme.danger
     private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
     private static let calendarCoordinateSpace = "teaching-calendar"
     private static let fullDateFormatter = dateFormatter("yyyy年M月d日 EEEE")

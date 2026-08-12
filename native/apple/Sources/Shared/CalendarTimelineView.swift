@@ -111,7 +111,7 @@ struct CalendarTimelineView: View {
 
     private func axisContent(now: Date) -> some View {
         ZStack(alignment: .topLeading) {
-            Color.white
+            AppTheme.surface
             axisGrid
             axisHeaders
             hourLabels(now: now)
@@ -125,7 +125,7 @@ struct CalendarTimelineView: View {
     private func dayContent(width: CGFloat, now: Date) -> some View {
         let dayWidth = width / CGFloat(max(days.count, 1))
         return ZStack(alignment: .topLeading) {
-            Color.white
+            AppTheme.surface
             dayGrid(width: width, dayWidth: dayWidth)
             dayHeaders(dayWidth: dayWidth, now: now)
             courseBlocks(dayWidth: dayWidth)
@@ -308,8 +308,8 @@ struct CalendarTimelineView: View {
         let blockHeight = bottom - top
         let isSingleDay = days.count == 1
         let background = placement.track == 0
-            ? AppTheme.primary
-            : AppTheme.primary.opacity(0.86)
+            ? AppTheme.primaryFill
+            : AppTheme.primaryFill.opacity(0.86)
 
         return VStack(alignment: .leading, spacing: 2) {
             Text(placement.course.name)
@@ -326,7 +326,7 @@ struct CalendarTimelineView: View {
                     .lineLimit(1)
             }
         }
-        .foregroundStyle(Color.white)
+        .foregroundStyle(AppTheme.onPrimary)
         .padding(6)
         .frame(width: blockWidth, height: blockHeight, alignment: .topLeading)
         .background(background)
@@ -364,7 +364,7 @@ struct CalendarTimelineView: View {
         if let minute = currentMinuteIfVisible(now) {
             Text(Self.timeFormatter.string(from: now))
                 .font(.caption2.monospacedDigit())
-                .foregroundStyle(Color.white)
+                .foregroundStyle(AppTheme.onPrimary)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Self.nowRed))
@@ -434,8 +434,8 @@ struct CalendarTimelineView: View {
         var id: String { "\(course.id)|\(track)" }
     }
 
-    private static let nowRed = Color(red: 220 / 255, green: 53 / 255, blue: 69 / 255)
-    private static let holidayRed = Color(red: 184 / 255, green: 50 / 255, blue: 52 / 255)
+    private static let nowRed = AppTheme.danger
+    private static let holidayRed = AppTheme.danger
     private static let dayHeaderFormatter = formatter("M/d E")
     private static let accessibleDateFormatter = formatter("yyyy年M月d日 EEEE")
     private static let timeFormatter = formatter("HH:mm")

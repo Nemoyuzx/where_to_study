@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.1.1"
-    CURRENT_PROJECT_VERSION: "12"
+    MARKETING_VERSION: "0.1.2"
+    CURRENT_PROJECT_VERSION: "15"
     DEVELOPMENT_TEAM: ""
 targets:
   WhereToStudyMac:
@@ -17,6 +17,7 @@ targets:
     sources:
       - path: Sources/Shared
       - path: Sources/macOS
+      - path: Sources/WidgetShared
       - path: ../../src-tauri/icons/icon.icns
         buildPhase: resources
       - path: Resources/PrivacyInfo.xcprivacy
@@ -41,9 +42,35 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
         PRODUCT_NAME: WhereToStudyMac
         MACOSX_DEPLOYMENT_TARGET: "13.0"
+        CODE_SIGN_ENTITLEMENTS: Resources/WhereToStudyMac.entitlements
+    dependencies:
+      - target: WhereToStudyWidget
     scheme:
       testTargets:
         - WhereToStudyMacTests
+  WhereToStudyWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources/WidgetShared
+      - path: Sources/Widget
+      - path: Sources/Shared/Models.swift
+    info:
+      path: Generated/WhereToStudyWidget-Info.plist
+      properties:
+        CFBundleDisplayName: Where To Study
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos.widget
+        PRODUCT_NAME: WhereToStudyWidget
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_ENTITLEMENTS: Resources/WhereToStudyWidget.entitlements
+        SKIP_INSTALL: YES
   WhereToStudyiOS:
     type: application
     platform: iOS

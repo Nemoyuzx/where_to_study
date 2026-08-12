@@ -358,6 +358,55 @@ final class DailyCourseNotificationTests: XCTestCase {
     }
 
     @MainActor
+    func testAuthorizationStatusTimeoutConvergesModelState() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let scheduler = UserNotificationCourseScheduler(
+            center: NonRespondingCourseNotificationCenter(mode: .authorizationStatus),
+            defaults: defaults
+        )
+        defaults.set(true, forKey: "dailyCourseNotificationsEnabled")
+        let model = makeModel(
+            notificationScheduler: scheduler,
+            notificationAuthorizationTimeout: .milliseconds(50),
+            defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()])
+        )
+
+        try await waitUntil { !model.dailyCourseNotificationsEnabled }
+
+        XCTAssertFalse(defaults.bool(forKey: "dailyCourseNotificationsEnabled"))
+        XCTAssertEqual(
+            model.dailyCourseNotificationStatusMessage,
+            "课程摘要安排失败：通知权限状态读取超时，请在系统设置中确认通知权限。"
+        )
+    }
+
+    @MainActor
+    func testAuthorizationRequestTimeoutLeavesConfirmingState() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let scheduler = UserNotificationCourseScheduler(
+            center: NonRespondingCourseNotificationCenter(mode: .authorizationRequest),
+            defaults: defaults
+        )
+        let model = makeModel(
+            notificationScheduler: scheduler,
+            notificationAuthorizationTimeout: .milliseconds(50),
+            defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()])
+        )
+
+        model.setDailyCourseNotificationsEnabled(true)
+        try await waitUntil { !model.dailyCourseNotificationsEnabled }
+
+        XCTAssertNotEqual(model.dailyCourseNotificationStatusMessage, "正在确认通知权限…")
+        XCTAssertTrue(model.dailyCourseNotificationStatusMessage.contains("通知权限状态读取超时"))
+    }
+
+    @MainActor
     func testAccountChangeAndLocalClearSubmitCancellationBeforeReturning() {
         let scheduler = RecordingNotificationScheduler(
             authorization: .authorized,
@@ -433,6 +482,7 @@ final class DailyCourseNotificationTests: XCTestCase {
     @MainActor
     private func makeModel(
         notificationScheduler: any DailyCourseNotificationScheduling,
+        notificationAuthorizationTimeout: Duration = .seconds(8),
         defaults: UserDefaults,
         credentials: Credentials? = nil,
         storedSchedule: ScheduleSnapshot? = nil
@@ -447,6 +497,7 @@ final class DailyCourseNotificationTests: XCTestCase {
             holidayClient: NotificationTestHolidayClient(),
             calendarImporter: NotificationTestCalendarImporter(),
             dailyCourseNotificationScheduler: notificationScheduler,
+            dailyCourseNotificationAuthorizationTimeout: notificationAuthorizationTimeout,
             defaults: defaults
         )
     }
@@ -506,10 +557,10 @@ private final class RecordingNotificationScheduler: DailyCourseNotificationSched
         lock.withLock { self.authorization = authorization }
     }
 
-    func authorizationStatus() async -> DailyCourseNotificationAuthorization {
+    func authorizationStatus(timeout _: Duration) async throws -> DailyCourseNotificationAuthorization {
         lock.withLock { authorization }
     }
-    func requestAuthorization() async throws -> Bool { requestResult }
+    func requestAuthorization(timeout _: Duration) async throws -> Bool { requestResult }
 
     func replacePending(
         with requests: [DailyCourseNotificationRequest],
@@ -545,8 +596,17 @@ private final class RecordingCourseNotificationCenter: CourseNotificationCenter,
         lock.withLock { shouldFailAdd = enabled }
     }
 
-    func authorizationStatus() async -> DailyCourseNotificationAuthorization { .authorized }
-    func requestAuthorization() async throws -> Bool { true }
+    func authorizationStatus(
+        completion: @escaping @Sendable (DailyCourseNotificationAuthorization) -> Void
+    ) {
+        completion(.authorized)
+    }
+
+    func requestAuthorization(
+        completion: @escaping @Sendable (Result<Bool, any Error>) -> Void
+    ) {
+        completion(.success(true))
+    }
 
     func add(
         identifier: String,
@@ -571,6 +631,39 @@ private final class RecordingCourseNotificationCenter: CourseNotificationCenter,
     func removeDelivered(withIdentifiers identifiers: [String]) {
         lock.withLock { storedDeliveredRemovalBatches.append(identifiers) }
     }
+}
+
+private final class NonRespondingCourseNotificationCenter: CourseNotificationCenter, @unchecked Sendable {
+    enum Mode {
+        case authorizationStatus
+        case authorizationRequest
+    }
+
+    private let mode: Mode
+
+    init(mode: Mode) {
+        self.mode = mode
+    }
+
+    func authorizationStatus(
+        completion: @escaping @Sendable (DailyCourseNotificationAuthorization) -> Void
+    ) {
+        if mode == .authorizationRequest { completion(.notDetermined) }
+    }
+
+    func requestAuthorization(
+        completion _: @escaping @Sendable (Result<Bool, any Error>) -> Void
+    ) {}
+
+    func add(
+        identifier _: String,
+        title _: String,
+        body _: String,
+        fireDate _: Date
+    ) async throws {}
+
+    func removePending(withIdentifiers _: [String]) {}
+    func removeDelivered(withIdentifiers _: [String]) {}
 }
 
 private enum NotificationTestError: Error {

@@ -1,4 +1,7 @@
 import Foundation
+#if os(macOS)
+import WidgetKit
+#endif
 
 enum CredentialSettingsError: LocalizedError, Equatable {
     case accountRequired
@@ -165,6 +168,7 @@ final class AppModel: ObservableObject {
     private let holidayClient: any HolidayFetching
     private let calendarImporter: any CalendarImporting
     private let dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling
+    private let dailyCourseNotificationAuthorizationTimeout: Duration
     private let defaults: UserDefaults
     private var holidayLoads = HolidayLoadState()
     private var localDataGeneration = 0
@@ -185,6 +189,7 @@ final class AppModel: ObservableObject {
         holidayClient: any HolidayFetching = HolidayClient(),
         calendarImporter: any CalendarImporting = EventKitCalendarImporter(),
         dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling = UserNotificationCourseScheduler(),
+        dailyCourseNotificationAuthorizationTimeout: Duration = .seconds(8),
         defaults: UserDefaults = .standard
     ) {
         self.credentialStore = credentialStore
@@ -196,6 +201,7 @@ final class AppModel: ObservableObject {
         self.holidayClient = holidayClient
         self.calendarImporter = calendarImporter
         self.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler
+        self.dailyCourseNotificationAuthorizationTimeout = dailyCourseNotificationAuthorizationTimeout
         self.defaults = defaults
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
@@ -407,6 +413,7 @@ final class AppModel: ObservableObject {
         do {
             try scheduleStore.clear()
             schedule = nil
+            synchronizeWidgetSchedule()
             calendarImportStatusMessage = ""
         } catch {
             failures.append("个人课表")
@@ -481,6 +488,7 @@ final class AppModel: ObservableObject {
                 guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
                 try scheduleStore.save(fetched)
                 schedule = fetched
+                synchronizeWidgetSchedule()
                 calendarImportStatusMessage = ""
                 termID = fetched.termID
                 termStartDate = fetched.termStartDate
@@ -673,6 +681,7 @@ final class AppModel: ObservableObject {
             failed = true
         }
         schedule = nil
+        synchronizeWidgetSchedule()
         calendarImportStatusMessage = ""
         do {
             try classroomStore.clear()
@@ -707,9 +716,21 @@ final class AppModel: ObservableObject {
                 termID = schedule.termID
                 termStartDate = schedule.termStartDate
             }
+            synchronizeWidgetSchedule()
         } catch {
             statusMessage = "本地课表读取失败：\(error.localizedDescription)"
         }
+    }
+
+    private func synchronizeWidgetSchedule() {
+        #if os(macOS)
+        if let schedule {
+            try? TodayCourseWidgetData.save(schedule: schedule)
+        } else {
+            TodayCourseWidgetData.clear()
+        }
+        WidgetCenter.shared.reloadTimelines(ofKind: "TodayCourseWidget")
+        #endif
     }
 
     private func loadClassrooms() {
@@ -740,7 +761,8 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             do {
                 let outcome = try await DailyCourseNotificationCoordinator(
-                    scheduler: dailyCourseNotificationScheduler
+                    scheduler: dailyCourseNotificationScheduler,
+                    authorizationTimeout: dailyCourseNotificationAuthorizationTimeout
                 ).reconcile(
                     enabled: dailyCourseNotificationsEnabled,
                     requestPermissionIfNeeded: requestPermissionIfNeeded,

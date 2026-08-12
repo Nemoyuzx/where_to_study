@@ -11,6 +11,14 @@ enum DailyCourseNotificationAuthorization: Equatable, Sendable {
     case authorized
 }
 
+enum DailyCourseNotificationAuthorizationError: LocalizedError, Equatable, Sendable {
+    case timedOut
+
+    var errorDescription: String? {
+        "通知权限状态读取超时，请在系统设置中确认通知权限。"
+    }
+}
+
 enum DailyCourseNotificationForegroundPolicy {
     static func presentationOptions(
         identifier: String,
@@ -151,8 +159,8 @@ enum DailyCourseNotificationPlanner {
 }
 
 protocol DailyCourseNotificationScheduling: Sendable {
-    func authorizationStatus() async -> DailyCourseNotificationAuthorization
-    func requestAuthorization() async throws -> Bool
+    func authorizationStatus(timeout: Duration) async throws -> DailyCourseNotificationAuthorization
+    func requestAuthorization(timeout: Duration) async throws -> Bool
     func replacePending(
         with requests: [DailyCourseNotificationRequest],
         revision: UInt64
@@ -161,8 +169,12 @@ protocol DailyCourseNotificationScheduling: Sendable {
 }
 
 protocol CourseNotificationCenter: Sendable {
-    func authorizationStatus() async -> DailyCourseNotificationAuthorization
-    func requestAuthorization() async throws -> Bool
+    func authorizationStatus(
+        completion: @escaping @Sendable (DailyCourseNotificationAuthorization) -> Void
+    )
+    func requestAuthorization(
+        completion: @escaping @Sendable (Result<Bool, any Error>) -> Void
+    )
     func add(
         identifier: String,
         title: String,
@@ -182,6 +194,7 @@ enum DailyCourseNotificationReconcileOutcome: Equatable, Sendable {
 
 struct DailyCourseNotificationCoordinator: Sendable {
     let scheduler: any DailyCourseNotificationScheduling
+    var authorizationTimeout: Duration = .seconds(8)
 
     func reconcile(
         enabled: Bool,
@@ -196,13 +209,13 @@ struct DailyCourseNotificationCoordinator: Sendable {
             return .disabled
         }
 
-        let status = await scheduler.authorizationStatus()
+        let status = try await scheduler.authorizationStatus(timeout: authorizationTimeout)
         let authorized: Bool
         switch status {
         case .authorized:
             authorized = true
         case .notDetermined where requestPermissionIfNeeded:
-            authorized = try await scheduler.requestAuthorization()
+            authorized = try await scheduler.requestAuthorization(timeout: authorizationTimeout)
         case .notDetermined, .denied:
             authorized = false
         }
@@ -218,6 +231,46 @@ struct DailyCourseNotificationCoordinator: Sendable {
         let requests = DailyCourseNotificationPlanner.requests(for: schedule, after: now)
         try await scheduler.replacePending(with: requests, revision: revision)
         return .scheduled(requests.count)
+    }
+}
+
+private final class CallbackTimeoutResolver<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Result<Value, any Error>, Never>?
+
+    init(continuation: CheckedContinuation<Result<Value, any Error>, Never>) {
+        self.continuation = continuation
+    }
+
+    func resolve(_ result: Result<Value, any Error>) {
+        let continuation = lock.withLock {
+            let current = self.continuation
+            self.continuation = nil
+            return current
+        }
+        continuation?.resume(returning: result)
+    }
+}
+
+private func callbackValueBeforeTimeout<Value: Sendable>(
+    _ timeout: Duration,
+    operation: @escaping @Sendable (@escaping @Sendable (Result<Value, any Error>) -> Void) -> Void
+) async throws -> Value {
+    let result = await withCheckedContinuation { continuation in
+        let resolver = CallbackTimeoutResolver<Value>(continuation: continuation)
+        operation { resolver.resolve($0) }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout.timeInterval) {
+            resolver.resolve(.failure(DailyCourseNotificationAuthorizationError.timedOut))
+        }
+    }
+    return try result.get()
+}
+
+private extension Duration {
+    var timeInterval: TimeInterval {
+        let components = self.components
+        return max(0, TimeInterval(components.seconds)
+            + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000)
     }
 }
 
@@ -240,12 +293,16 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         self.now = now
     }
 
-    func authorizationStatus() async -> DailyCourseNotificationAuthorization {
-        await center.authorizationStatus()
+    func authorizationStatus(timeout: Duration) async throws -> DailyCourseNotificationAuthorization {
+        try await callbackValueBeforeTimeout(timeout) { completion in
+            self.center.authorizationStatus { completion(.success($0)) }
+        }
     }
 
-    func requestAuthorization() async throws -> Bool {
-        try await center.requestAuthorization()
+    func requestAuthorization(timeout: Duration) async throws -> Bool {
+        try await callbackValueBeforeTimeout(timeout) { completion in
+            self.center.requestAuthorization(completion: completion)
+        }
     }
 
     func replacePending(
@@ -377,21 +434,30 @@ private final class SystemCourseNotificationCenter: CourseNotificationCenter, @u
         self.center = center
     }
 
-    func authorizationStatus() async -> DailyCourseNotificationAuthorization {
-        switch await center.notificationSettings().authorizationStatus {
-        case .notDetermined:
-            .notDetermined
-        case .denied:
-            .denied
-        case .authorized, .provisional, .ephemeral:
-            .authorized
-        @unknown default:
-            .denied
+    func authorizationStatus(
+        completion: @escaping @Sendable (DailyCourseNotificationAuthorization) -> Void
+    ) {
+        center.getNotificationSettings { settings in
+            let status: DailyCourseNotificationAuthorization = switch settings.authorizationStatus {
+            case .notDetermined: .notDetermined
+            case .denied: .denied
+            case .authorized, .provisional, .ephemeral: .authorized
+            @unknown default: .denied
+            }
+            completion(status)
         }
     }
 
-    func requestAuthorization() async throws -> Bool {
-        try await center.requestAuthorization(options: [.alert, .sound])
+    func requestAuthorization(
+        completion: @escaping @Sendable (Result<Bool, any Error>) -> Void
+    ) {
+        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+            if let error {
+                completion(.failure(error))
+            } else {
+                completion(.success(granted))
+            }
+        }
     }
 
     func add(

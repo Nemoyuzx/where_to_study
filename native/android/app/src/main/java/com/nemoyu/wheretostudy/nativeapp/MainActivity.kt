@@ -3,6 +3,7 @@ package com.nemoyu.wheretostudy.nativeapp
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Build
@@ -62,6 +63,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         DailyCourseNotificationRuntimeMode.activateFrom(intent)
         super.onCreate(savedInstanceState)
+        Palette.configure(this)
         calendarPermissionRequestPending = savedInstanceState
             ?.getBoolean(CALENDAR_PERMISSION_PENDING_KEY, false)
             ?: false
@@ -186,7 +188,7 @@ class MainActivity : Activity() {
             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
         navigationViews.forEach { (item, view) ->
-            view.setTextColor(if (item == destination) Color.WHITE else Palette.text)
+            view.setTextColor(if (item == destination) Palette.onPrimary else Palette.text)
             view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
             view.background = roundedBackground(
                 this,
@@ -520,16 +522,18 @@ class MainActivity : Activity() {
     }
 
     private fun configureSystemBarIcons() {
+        val isLight = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK !=
+            Configuration.UI_MODE_NIGHT_YES
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val lightBars = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
                 WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-            window.insetsController?.setSystemBarsAppearance(lightBars, lightBars)
+            window.insetsController?.setSystemBarsAppearance(if (isLight) lightBars else 0, lightBars)
             return
         }
 
         @Suppress("DEPRECATION")
-        var flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        var flags = if (isLight) View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR else 0
+        if (isLight && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             @Suppress("DEPRECATION")
             flags = flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         }

@@ -1,6 +1,11 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+<resources>
     <style name="Theme.where_to_study" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">#F5F6F3</item>
+        <item name="android:navigationBarColor">#F5F6F3</item>
+        <item name="android:windowBackground">#F5F6F3</item>
+        <item name="android:colorAccent">#166B5D</item>
     </style>
 </resources>

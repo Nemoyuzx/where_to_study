@@ -210,16 +210,16 @@ class YearCalendarView(
         }
         canvas.drawRoundRect(rect, dp(3).toFloat(), dp(3).toFloat(), fillPaint)
 
-        borderPaint.color = if (today) NOW_RED else Palette.border
+        borderPaint.color = if (today) Palette.nowIndicator else Palette.border
         borderPaint.strokeWidth = dp(if (today) 2 else 1).toFloat()
         canvas.drawRoundRect(rect, dp(3).toFloat(), dp(3).toFloat(), borderPaint)
 
         val holiday = day.holidays.firstOrNull()
         textPaint.textAlign = Paint.Align.CENTER
         textPaint.color = when {
-            selected -> Color.WHITE
-            holiday?.type == "holiday" -> HOLIDAY_RED
-            holiday?.type == "workday" -> Palette.primaryDark
+            selected -> Palette.onPrimary
+            holiday?.type == "holiday" -> Palette.holiday
+            holiday?.type == "workday" -> Palette.primaryText
             else -> Palette.text
         }
         if (holiday == null) {
@@ -305,7 +305,5 @@ class YearCalendarView(
 
     private companion object {
         val WEEKDAYS = listOf("一", "二", "三", "四", "五", "六", "日")
-        val NOW_RED: Int = Color.rgb(220, 53, 69)
-        val HOLIDAY_RED: Int = Color.rgb(184, 50, 52)
     }
 }

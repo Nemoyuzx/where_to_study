@@ -56,7 +56,6 @@ struct RootView: View {
                 model.refreshDailyCourseNotificationAuthorization()
             }
         }
-        .preferredColorScheme(.light)
     }
 
     @ViewBuilder

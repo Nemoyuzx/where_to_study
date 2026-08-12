@@ -7,7 +7,7 @@ preview-*.png
 release-artifacts/
 .github/modernize/
 .playwright-cli/
-output/playwright/
+output/
 
 # Local environment files. Keep documented examples available to contributors.
 .env

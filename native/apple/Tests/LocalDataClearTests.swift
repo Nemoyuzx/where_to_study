@@ -297,8 +297,8 @@ private final class InMemoryCredentialStore: CredentialStoring, @unchecked Senda
 }
 
 private struct NoopNotificationScheduler: DailyCourseNotificationScheduling {
-    func authorizationStatus() async -> DailyCourseNotificationAuthorization { .denied }
-    func requestAuthorization() async throws -> Bool { false }
+    func authorizationStatus(timeout _: Duration) async throws -> DailyCourseNotificationAuthorization { .denied }
+    func requestAuthorization(timeout _: Duration) async throws -> Bool { false }
     func replacePending(
         with _: [DailyCourseNotificationRequest],
         revision _: UInt64

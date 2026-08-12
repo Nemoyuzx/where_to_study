@@ -67,10 +67,11 @@ struct PlannerView: View {
                         }
                         Text(model.isRefreshingClassrooms ? "正在获取当天空教室…" : "获取空教室信息")
                     }
+                    .foregroundStyle(AppTheme.onPrimary)
                     .frame(maxWidth: .infinity, minHeight: 28)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppTheme.primary)
+                .tint(AppTheme.primaryFill)
                 .disabled(model.isRefreshingClassrooms)
 
                 if !model.classroomStatusMessage.isEmpty {
@@ -130,13 +131,13 @@ struct PlannerView: View {
                     .font(.caption.monospacedDigit())
             }
             .frame(maxWidth: .infinity, minHeight: 54)
-            .foregroundStyle(selected ? Color.white : AppTheme.text)
+            .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
             .background(
-                selected ? AppTheme.primary : (busy ? AppTheme.accent.opacity(0.45) : AppTheme.background)
+                selected ? AppTheme.primaryFill : (busy ? AppTheme.accent.opacity(0.45) : AppTheme.background)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(selected ? AppTheme.primary : AppTheme.border, lineWidth: 1)
+                    .stroke(selected ? AppTheme.primaryFill : AppTheme.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
@@ -208,11 +209,11 @@ struct PlannerView: View {
                                     .lineLimit(2)
                                     .multilineTextAlignment(.center)
                                     .frame(maxWidth: .infinity, minHeight: 46)
-                                    .foregroundStyle(selected ? Color.white : AppTheme.text)
-                                    .background(selected ? AppTheme.primary : AppTheme.background)
+                                    .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
+                                    .background(selected ? AppTheme.primaryFill : AppTheme.background)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6)
-                                            .stroke(selected ? AppTheme.primary : AppTheme.border, lineWidth: 1)
+                                            .stroke(selected ? AppTheme.primaryFill : AppTheme.border, lineWidth: 1)
                                     )
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
                             }

@@ -7,6 +7,11 @@ validate_release_label() {
     echo "Release label contains unsupported characters: $release_label" >&2
     return 1
   fi
+
+  if [[ "$release_label" =~ [Aa][Ll][Pp][Hh][Aa]([._-]?[0-9]+) ]]; then
+    echo "Numbered alpha labels are not supported; use a stable version or an unnumbered alpha label: $release_label" >&2
+    return 1
+  fi
 }
 
 path_contains_fixed_text() {

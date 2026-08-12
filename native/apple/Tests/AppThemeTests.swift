@@ -1,0 +1,80 @@
+import XCTest
+
+#if os(macOS)
+@testable import WhereToStudyMac
+#elseif os(iOS)
+@testable import WhereToStudyiOS
+#endif
+
+final class AppThemeTests: XCTestCase {
+    func testPrimaryFillMaintainsReadableWhiteTextInBothAppearances() {
+        XCTAssertGreaterThanOrEqual(contrast(.white, AppThemePalette.light.primaryFill), 4.5)
+        XCTAssertGreaterThanOrEqual(contrast(.white, AppThemePalette.dark.primaryFill), 4.5)
+    }
+
+    func testBrandForegroundMaintainsContrastAgainstPageBackgrounds() {
+        let lightBackground = AppThemeColor(red: 244, green: 247, blue: 244)
+        let darkBackground = AppThemeColor(red: 24, green: 28, blue: 26)
+
+        XCTAssertGreaterThanOrEqual(contrast(AppThemePalette.light.primary, lightBackground), 4.5)
+        XCTAssertGreaterThanOrEqual(contrast(AppThemePalette.dark.primary, darkBackground), 4.5)
+    }
+
+    #if os(macOS)
+    func testWidgetBrandForegroundMaintainsContrastAgainstWidgetBackgrounds() {
+        XCTAssertGreaterThanOrEqual(
+            contrast(WidgetThemePalette.light.primary, WidgetThemePalette.light.background),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrast(WidgetThemePalette.dark.primary, WidgetThemePalette.dark.background),
+            4.5
+        )
+    }
+
+    func testWidgetBackgroundMaintainsSemanticTextContrast() {
+        let lightText = WidgetThemeColor(red: 23, green: 32, blue: 29)
+        let darkText = WidgetThemeColor(red: 255, green: 255, blue: 255)
+
+        XCTAssertGreaterThanOrEqual(contrast(lightText, WidgetThemePalette.light.background), 7)
+        XCTAssertGreaterThanOrEqual(contrast(darkText, WidgetThemePalette.dark.background), 7)
+    }
+    #endif
+
+    private func contrast(_ left: AppThemeColor, _ right: AppThemeColor) -> Double {
+        contrast(
+            left: (left.red, left.green, left.blue),
+            right: (right.red, right.green, right.blue)
+        )
+    }
+
+    #if os(macOS)
+    private func contrast(_ left: WidgetThemeColor, _ right: WidgetThemeColor) -> Double {
+        contrast(
+            left: (left.red, left.green, left.blue),
+            right: (right.red, right.green, right.blue)
+        )
+    }
+    #endif
+
+    private func contrast(
+        left: (Double, Double, Double),
+        right: (Double, Double, Double)
+    ) -> Double {
+        let values = [relativeLuminance(left), relativeLuminance(right)].sorted(by: >)
+        return (values[0] + 0.05) / (values[1] + 0.05)
+    }
+
+    private func relativeLuminance(_ color: (Double, Double, Double)) -> Double {
+        let channels = [color.0, color.1, color.2].map { channel in
+            channel <= 0.04045
+                ? channel / 12.92
+                : pow((channel + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+    }
+}
+
+private extension AppThemeColor {
+    static let white = AppThemeColor(red: 255, green: 255, blue: 255)
+}

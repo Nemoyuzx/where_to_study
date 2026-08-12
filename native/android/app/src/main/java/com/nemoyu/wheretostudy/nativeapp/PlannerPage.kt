@@ -128,7 +128,7 @@ class PlannerPage(
         text = if (classroomRepository.isRefreshing) "正在获取当天空教室…" else "获取空教室信息"
         textSize = 15f
         gravity = Gravity.CENTER
-        setTextColor(Color.WHITE)
+        setTextColor(Palette.onPrimary)
         setTypeface(typeface, Typeface.BOLD)
         background = roundedBackground(activity, Palette.primary, radius = 6)
         isClickable = !classroomRepository.isRefreshing
@@ -190,8 +190,8 @@ class PlannerPage(
                 cell.isEnabled = !busy
                 cell.setTextColor(
                     when {
-                        selected -> Color.WHITE
-                        busy -> Palette.text
+                        selected -> Palette.onPrimary
+                        busy -> Palette.onAccent
                         else -> Palette.text
                     },
                 )
@@ -589,7 +589,7 @@ class PlannerPage(
             heading.addView(size)
             val ranges = TextView(parent.context).apply {
                 textSize = 12f
-                setTextColor(Palette.primaryDark)
+                setTextColor(Palette.primaryText)
                 setPadding(0, activity.dp(5), 0, 0)
             }
             card.addView(ranges)
