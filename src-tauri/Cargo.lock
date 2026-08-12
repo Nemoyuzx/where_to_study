@@ -4843,7 +4843,7 @@ dependencies = [
  "android-native-keyring-store",
  "chrono",
  "chrono-tz",
- "getrandom 0.3.4",
+ "getrandom 0.4.2",
  "keyring-core",
  "regex",
  "reqwest 0.12.28",
