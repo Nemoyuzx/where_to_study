@@ -141,7 +141,7 @@ jobs:
         run: npm run licenses:check
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Setup Java
         uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
@@ -219,7 +219,7 @@ jobs:
           fi
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Setup Java
         uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
