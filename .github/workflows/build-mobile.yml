@@ -30,7 +30,7 @@ jobs:
           java-version: 21
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -38,7 +38,7 @@ jobs:
           targets: aarch64-linux-android
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: swatinem/rust-cache@a45951ff880207c249adf57334cf2e9bd81d6e1e # v2
         with:
           workspaces: ./src-tauri
 
@@ -86,7 +86,7 @@ jobs:
           ./scripts/android-build-signed.sh
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: where-to-study-android-apk
           path: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release*.apk
@@ -113,7 +113,7 @@ jobs:
           targets: aarch64-apple-ios
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        uses: swatinem/rust-cache@a45951ff880207c249adf57334cf2e9bd81d6e1e # v2
         with:
           workspaces: ./src-tauri
 
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload signed iOS IPA
         if: env.IOS_SIGNING_READY == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: where-to-study-ios-ipa
           path: src-tauri/gen/apple/build/**/*.ipa
@@ -182,7 +182,7 @@ jobs:
 
       - name: Upload iOS archive
         if: env.IOS_SIGNING_READY != 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: where-to-study-ios-xcarchive
           path: src-tauri/gen/apple/build/where_to_study_iOS.xcarchive

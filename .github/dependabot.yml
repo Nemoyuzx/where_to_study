@@ -4,18 +4,72 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 2
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      compatible-actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 2
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      compatible-npm-updates:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: cargo
     directory: /src-tauri
     schedule:
       interval: weekly
+    open-pull-requests-limit: 2
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      compatible-cargo-updates:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: getrandom
+        versions:
+          - ">=0.4.0"
 
   - package-ecosystem: gradle
     directory: /native/android
     schedule:
       interval: weekly
+    open-pull-requests-limit: 2
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-patch
+    groups:
+      compatible-android-patches:
+        patterns:
+          - "*"
+        update-types:
+          - patch

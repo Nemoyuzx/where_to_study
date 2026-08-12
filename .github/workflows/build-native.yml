@@ -98,7 +98,7 @@ jobs:
         run: ./scripts/native-ios-package.sh "$RELEASE_LABEL"
 
       - name: Upload native macOS preview
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: where-to-study-native-macos-universal
           path: |
@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload unsigned native iOS archive
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: where-to-study-native-ios-unsigned-archive
           path: |
@@ -141,7 +141,7 @@ jobs:
         run: npm run licenses:check
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Setup Java
         uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
@@ -153,7 +153,7 @@ jobs:
         uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Install Android SDK packages
         run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
@@ -162,7 +162,7 @@ jobs:
         run: ./scripts/native-android-build.sh
 
       - name: Upload Android Debug APK
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: where-to-study-native-android-debug-${{ github.sha }}
           path: native/android/app/build/outputs/apk/debug/app-debug.apk
@@ -219,7 +219,7 @@ jobs:
           fi
 
       - name: Validate Gradle wrapper
-        uses: gradle/actions/wrapper-validation@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
 
       - name: Setup Java
         uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
@@ -231,7 +231,7 @@ jobs:
         uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Install Android SDK packages
         run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
@@ -260,7 +260,7 @@ jobs:
           ./scripts/native-android-package.sh "$RELEASE_LABEL"
 
       - name: Upload signed universal native Android package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: where-to-study-native-android-signed-universal-${{ env.RELEASE_LABEL }}
           path: |
