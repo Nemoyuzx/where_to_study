@@ -402,7 +402,7 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     #if os(iOS)
-    func testMobileTimelineUsesReadableDayAndScrollableWeekWidths() {
+    func testMobileTimelineFitsDayAndWeekIntoThePhoneViewport() {
         XCTAssertEqual(
             MobileCalendarTimelineLayout.contentWidth(
                 availableWidth: 390,
@@ -417,11 +417,19 @@ final class ScheduleLogicTests: XCTestCase {
                 dayCount: 7,
                 showsWeekColumns: true
             ),
-            616
+            334
         )
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 8 * 60), 0)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 15 * 60), 504)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 22 * 60), 1_008)
+        XCTAssertEqual(
+            MobileCalendarTimelineLayout.initialVisibleHour(currentHour: 17, includesToday: true),
+            16
+        )
+        XCTAssertEqual(
+            MobileCalendarTimelineLayout.initialVisibleHour(currentHour: 17, includesToday: false),
+            8
+        )
     }
 
     func testMobileTimelineRetainsAllFourteenCoursePeriods() {

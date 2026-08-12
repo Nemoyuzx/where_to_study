@@ -131,11 +131,25 @@ struct MobileTeachingCalendarView: View {
 
     private var weekDateStrip: some View {
         let days = weekDates()
-        return HStack(spacing: 2) {
+        return HStack(spacing: 0) {
+            if mode == .week {
+                VStack(spacing: 0) {
+                    Text("\(calendar.component(.weekOfYear, from: selectedDate))")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                    Text("周")
+                        .font(.caption2)
+                }
+                .foregroundStyle(AppTheme.secondaryText)
+                .frame(width: MobileCalendarTimelineLayout.axisWidth, height: 62)
+                .accessibilityLabel(
+                    "第 \(calendar.component(.weekOfYear, from: selectedDate)) 周"
+                )
+            }
             ForEach(days, id: \.self) { day in
                 dateStripButton(day)
             }
         }
+        .padding(.horizontal, -16)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("calendar.mobile.date-strip")
     }

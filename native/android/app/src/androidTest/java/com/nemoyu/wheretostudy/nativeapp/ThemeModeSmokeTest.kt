@@ -92,7 +92,7 @@ class ThemeModeSmokeTest {
         val page = activity.findViewById<View>(pageID)
         assertNotNull("Missing page $pageID", page)
         assertEquals(colors.background, (page.background as ColorDrawable).color)
-        assertEquals(colors.onPrimary, activity.findViewById<TextView>(navigationID).currentTextColor)
+        assertEquals(colors.primaryText, activity.findViewById<TextView>(navigationID).currentTextColor)
         val titleView = findText(page, title)
         assertNotNull("Missing page title: $title", titleView)
         assertEquals(colors.text, titleView?.currentTextColor)

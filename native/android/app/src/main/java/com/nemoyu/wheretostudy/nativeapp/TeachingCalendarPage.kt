@@ -28,8 +28,11 @@ object TeachingCalendarLogic {
         return 0.12f + 0.72f * count / (count + 3f)
     }
 
-    fun phoneDateCellWidth(screenWidthDp: Int): Int =
-        ((screenWidthDp - 24 - 6 * 5) / 7).coerceIn(46, 58)
+    fun phoneDateCellWidth(screenWidthDp: Int, leadingWidthDp: Int = 0): Int =
+        ((screenWidthDp - 24 - leadingWidthDp - 6 * 2) / 7).coerceIn(
+            if (leadingWidthDp > 0) 34 else 40,
+            64,
+        )
 }
 
 class TeachingCalendarPage(
@@ -442,15 +445,32 @@ class TeachingCalendarPage(
     private fun phoneDateStrip(onDateChanged: () -> Unit): HorizontalScrollView =
         HorizontalScrollView(activity).apply {
             id = R.id.calendar_date_strip
+            isFillViewport = true
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 val today = Calendar.getInstance(shanghai)
+                val leadingWidth = if (selectedMode == Mode.WEEK) {
+                    CalendarTimelineLogic.axisWidthDp(compact = true, showCourseSlots = false)
+                } else {
+                    0
+                }
                 val cellWidth = TeachingCalendarLogic.phoneDateCellWidth(
                     activity.resources.configuration.screenWidthDp,
+                    leadingWidth,
                 )
-                weekDates().forEach { day ->
+                if (leadingWidth > 0) {
+                    addView(TextView(activity).apply {
+                        text = "${selectedDate.get(Calendar.WEEK_OF_YEAR)}\n周"
+                        textSize = 11f
+                        gravity = Gravity.CENTER
+                        setTextColor(Palette.muted)
+                        contentDescription = "第 ${selectedDate.get(Calendar.WEEK_OF_YEAR)} 周"
+                    }, LinearLayout.LayoutParams(activity.dp(leadingWidth), activity.dp(70)))
+                }
+                val days = weekDates()
+                days.forEach { day ->
                     val selected = sameDay(day, selectedDate)
                     val isToday = sameDay(day, today)
                     val holidays = holidaysOn(day)
@@ -475,13 +495,13 @@ class TeachingCalendarPage(
                         setTypeface(typeface, if (selected || isToday) Typeface.BOLD else Typeface.NORMAL)
                         background = roundedBackground(
                             activity,
-                            if (selected) Palette.primary else Palette.surface,
+                            if (selected) Palette.primary else Color.TRANSPARENT,
                             when {
                                 selected -> Palette.primary
                                 isToday -> Palette.primary
-                                else -> Palette.border
+                                else -> Color.TRANSPARENT
                             },
-                            radius = 10,
+                            radius = 18,
                         ).apply {
                             if (isToday && !selected) setStroke(activity.dp(2), Palette.primary)
                         }
@@ -495,7 +515,7 @@ class TeachingCalendarPage(
                             onDateChanged()
                         }
                         layoutParams = LinearLayout.LayoutParams(activity.dp(cellWidth), activity.dp(70)).apply {
-                            marginEnd = activity.dp(5)
+                            if (!sameDay(day, days.last())) marginEnd = activity.dp(2)
                         }
                     })
                 }

@@ -44,7 +44,50 @@ private struct UITestCredentialStore: CredentialStoring {
 }
 
 private struct UITestScheduleStore: ScheduleStoring {
-    func load() throws -> ScheduleSnapshot? { nil }
+    func load() throws -> ScheduleSnapshot? {
+        let calendar = Calendar.shanghai
+        let now = Date()
+        let weekday = ((calendar.component(.weekday, from: now) + 5) % 7) + 1
+        guard let weekStart = calendar.date(byAdding: .day, value: 1 - weekday, to: now) else {
+            return nil
+        }
+        let adjacentWeekday = weekday == 7 ? 1 : weekday + 1
+        return ScheduleSnapshot(
+            termID: "ui-test-term",
+            termStartDate: StrictContractDateParser.string(from: weekStart),
+            fetchedAt: ISO8601DateFormatter().string(from: now),
+            courses: [
+                Course(
+                    id: "ui-test-data-mining",
+                    name: "数据挖掘",
+                    teacher: "测试教师",
+                    room: "教三楼-3-335",
+                    weekText: "1-2",
+                    weekNumbers: [1, 2],
+                    examWeekNumbers: [],
+                    weekday: weekday,
+                    startSlot: 2,
+                    endSlot: 4,
+                    sectionText: "3-5节",
+                    timeRange: "09:50-12:15"
+                ),
+                Course(
+                    id: "ui-test-neural-network",
+                    name: "神经网络与深度学习",
+                    teacher: "测试教师",
+                    room: "教三楼-3-539",
+                    weekText: "1-2",
+                    weekNumbers: [1, 2],
+                    examWeekNumbers: [],
+                    weekday: adjacentWeekday,
+                    startSlot: 7,
+                    endSlot: 8,
+                    sectionText: "8-9节",
+                    timeRange: "14:45-16:25"
+                )
+            ]
+        )
+    }
     func save(_: ScheduleSnapshot) throws {}
     func clear() throws {}
 }

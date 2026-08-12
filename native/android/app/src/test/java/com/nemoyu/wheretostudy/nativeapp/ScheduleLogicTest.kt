@@ -388,6 +388,10 @@ class ScheduleLogicTest {
         assertFalse(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 47))
         assertEquals(236f to 354f, CalendarTimelineLogic.dayColumnBounds(2, 118f, 826f))
         assertEquals(112, CalendarTimelineLogic.axisWidthDp(compact = true))
+        assertEquals(
+            42,
+            CalendarTimelineLogic.axisWidthDp(compact = true, showCourseSlots = false),
+        )
         assertEquals(144, CalendarTimelineLogic.axisWidthDp(compact = false))
         assertEquals(96, CalendarTimelineLogic.dayWidthDp(compact = true))
         assertEquals(814, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
@@ -416,9 +420,12 @@ class ScheduleLogicTest {
 
     @Test
     fun phoneCalendarDateCellsStayReadableAcrossSupportedWidths() {
-        assertEquals(46, TeachingCalendarLogic.phoneDateCellWidth(320))
-        assertEquals(48, TeachingCalendarLogic.phoneDateCellWidth(390))
-        assertEquals(58, TeachingCalendarLogic.phoneDateCellWidth(480))
+        assertEquals(40, TeachingCalendarLogic.phoneDateCellWidth(320))
+        assertEquals(50, TeachingCalendarLogic.phoneDateCellWidth(390))
+        assertEquals(63, TeachingCalendarLogic.phoneDateCellWidth(480))
+        assertEquals(34, TeachingCalendarLogic.phoneDateCellWidth(320, leadingWidthDp = 42))
+        assertEquals(44, TeachingCalendarLogic.phoneDateCellWidth(390, leadingWidthDp = 42))
+        assertEquals(57, TeachingCalendarLogic.phoneDateCellWidth(480, leadingWidthDp = 42))
     }
 
     private fun parseHolidays(
