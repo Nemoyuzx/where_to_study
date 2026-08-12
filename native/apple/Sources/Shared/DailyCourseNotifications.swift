@@ -258,20 +258,20 @@ private func callbackValueBeforeTimeout<Value: Sendable>(
 ) async throws -> Value {
     let result = await withCheckedContinuation { continuation in
         let resolver = CallbackTimeoutResolver<Value>(continuation: continuation)
-        operation { resolver.resolve($0) }
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout.timeInterval) {
+        let timeoutTask = Task.detached {
+            do {
+                try await ContinuousClock().sleep(for: timeout)
+            } catch {
+                return
+            }
             resolver.resolve(.failure(DailyCourseNotificationAuthorizationError.timedOut))
+        }
+        operation {
+            timeoutTask.cancel()
+            resolver.resolve($0)
         }
     }
     return try result.get()
-}
-
-private extension Duration {
-    var timeInterval: TimeInterval {
-        let components = self.components
-        return max(0, TimeInterval(components.seconds)
-            + TimeInterval(components.attoseconds) / 1_000_000_000_000_000_000)
-    }
 }
 
 final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, @unchecked Sendable {
