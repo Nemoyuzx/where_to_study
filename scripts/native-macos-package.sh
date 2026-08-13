@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/package-validation.sh
 source "$ROOT_DIR/scripts/package-validation.sh"
+"$ROOT_DIR/scripts/sync-app-icons.sh"
 npm --prefix "$ROOT_DIR" run licenses:check
 APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"

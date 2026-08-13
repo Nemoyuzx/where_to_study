@@ -1,117 +1,74 @@
 import SwiftUI
 
 struct SettingsView: View {
+    private enum AccountField: Hashable {
+        case account
+        case password
+        case termID
+        case termStartDate
+    }
+
     @EnvironmentObject private var model: AppModel
     @State private var showingClearDataConfirmation = false
+    @State private var showingPrivacyPolicy = false
+    @FocusState private var focusedAccountField: AccountField?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                PageTitle(eyebrow: "Where To Study", title: "设置")
-                Surface {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("个人账户", systemImage: "person.crop.circle")
-                            .font(.headline)
-                        TextField("学号", text: $model.account)
-                            .textFieldStyle(.roundedBorder)
-                        SecureField(
-                            model.canPreserveSavedPassword ? "已安全保存，留空保持不变" : "教务密码",
-                            text: $model.password
-                        )
-                            .textFieldStyle(.roundedBorder)
-                        TextField("学期编号", text: $model.termID)
-                            .textFieldStyle(.roundedBorder)
-                        TextField("第一周周一（YYYY-MM-DD）", text: $model.termStartDate)
-                            .textFieldStyle(.roundedBorder)
-                        Picker("默认校区", selection: $model.campusID) {
-                            Text("西土城").tag("01")
-                            Text("沙河").tag("04")
-                        }
-                        Button {
-                            model.saveSettings()
-                        } label: {
-                            Label("保存设置", systemImage: "checkmark")
-                                .foregroundStyle(AppTheme.onPrimary)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(AppTheme.primaryFill)
-                        Button {
-                            if model.saveSettings() {
-                                model.refreshSchedule()
+        GeometryReader { proxy in
+            let columnCount = AdaptiveLayoutPolicy.contentColumnCount(width: proxy.size.width)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    PageTitle(eyebrow: "Where To Study", title: "设置")
+                    if columnCount == 2 {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 16) {
+                                aboutSurface
+                                accountSurface
                             }
-                        } label: {
-                            Label(
-                                model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
-                                systemImage: "arrow.clockwise"
-                            )
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity, alignment: .top)
+                            VStack(spacing: 16) {
+                                notificationSurface
+                                localDataSurface
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(model.isRefreshingSchedule)
-                        if !model.statusMessage.isEmpty {
-                            Text(model.statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
-                        }
-                    }
-                }
-                Surface {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("课程提醒", systemImage: "bell")
-                            .font(.headline)
-                        Toggle(
-                            "每天 07:30 发送当日课程摘要",
-                            isOn: Binding(
-                                get: { model.dailyCourseNotificationsEnabled },
-                                set: { enabled in
-                                    model.setDailyCourseNotificationsEnabled(enabled)
-                                }
-                            )
-                        )
-                        .tint(AppTheme.primary)
-                        Text("仅在当天有课时通知；课表更新或账号变更后会自动重排。")
-                            .font(.callout)
-                            .foregroundStyle(AppTheme.secondaryText)
-                        if !model.dailyCourseNotificationStatusMessage.isEmpty {
-                            Text(model.dailyCourseNotificationStatusMessage)
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                    } else {
+                        VStack(spacing: 16) {
+                            aboutSurface
+                            accountSurface
+                            notificationSurface
+                            localDataSurface
                         }
                     }
                 }
-                Surface {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("本地数据", systemImage: "externaldrive")
-                            .font(.headline)
-                        Text("清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。")
-                            .font(.callout)
-                            .foregroundStyle(AppTheme.secondaryText)
-                        Link(destination: URL(
-                            string: "https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
-                        )!) {
-                            Label("隐私说明", systemImage: "hand.raised")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel("隐私说明")
-                        .accessibilityHint("在浏览器中打开隐私说明")
-                        Button(role: .destructive) {
-                            showingClearDataConfirmation = true
-                        } label: {
-                            Label("清除本地数据", systemImage: "trash")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
+                .padding(20)
+                .frame(maxWidth: columnCount == 2 ? 1120 : 720)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: 720)
-            .frame(maxWidth: .infinity)
+            #if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dismissKeyboard()
+            }
+            #endif
         }
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.settings")
+        .sheet(isPresented: $showingPrivacyPolicy) {
+            PrivacyPolicyView()
+        }
+        #if os(iOS)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("完成") {
+                    dismissKeyboard()
+                }
+                .accessibilityIdentifier("action.dismiss-keyboard")
+            }
+        }
+        #endif
         .confirmationDialog(
             "清除本地数据？",
             isPresented: $showingClearDataConfirmation,
@@ -124,5 +81,186 @@ struct SettingsView: View {
         } message: {
             Text("此操作会删除本机保存的账户密码、个人课表、空教室和节假日缓存，且无法撤销。")
         }
+    }
+
+    private var aboutSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("关于本应用", systemImage: "info.circle")
+                    .font(.headline)
+                Text("Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+                if model.isSampleMode {
+                    Label("内置示例模式已开启，不会连接教务服务或读写真实用户数据。", systemImage: "eye")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(AppTheme.primary)
+                    if model.canExitSampleMode {
+                        Button {
+                            model.exitReviewDemo()
+                        } label: {
+                            Label("返回真实数据", systemImage: "arrow.uturn.backward")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("action.exit-sample-mode")
+                    }
+                } else {
+                    Button {
+                        model.enterReviewDemo()
+                    } label: {
+                        Label("浏览内置示例数据", systemImage: "eye")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!model.canEnterReviewDemo)
+                    .accessibilityIdentifier("action.enter-sample-mode")
+                }
+            }
+        }
+    }
+
+    private var accountSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("个人账户", systemImage: "person.crop.circle")
+                    .font(.headline)
+                TextField("学号", text: $model.account)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.isSampleMode)
+                    .focused($focusedAccountField, equals: .account)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        focusedAccountField = .password
+                    }
+                    .accessibilityIdentifier("field.account")
+                SecureField(
+                    model.canPreserveSavedPassword ? "已安全保存，留空保持不变" : "教务密码",
+                    text: $model.password
+                )
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.isSampleMode)
+                    .focused($focusedAccountField, equals: .password)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        focusedAccountField = .termID
+                    }
+                    .accessibilityIdentifier("field.password")
+                TextField("学期编号", text: $model.termID)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.isSampleMode)
+                    .focused($focusedAccountField, equals: .termID)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        focusedAccountField = .termStartDate
+                    }
+                    .accessibilityIdentifier("field.term-id")
+                TextField("第一周周一（YYYY-MM-DD）", text: $model.termStartDate)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.isSampleMode)
+                    .focused($focusedAccountField, equals: .termStartDate)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        dismissKeyboard()
+                    }
+                    .accessibilityIdentifier("field.term-start-date")
+                Picker("默认校区", selection: $model.campusID) {
+                    Text("西土城").tag("01")
+                    Text("沙河").tag("04")
+                }
+                .disabled(model.isSampleMode)
+                Button {
+                    model.saveSettings()
+                } label: {
+                    Label("保存设置", systemImage: "checkmark")
+                        .foregroundStyle(AppTheme.onPrimary)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.primaryFill)
+                .disabled(model.isSampleMode)
+                Button {
+                    if model.saveSettings() {
+                        model.refreshSchedule()
+                    }
+                } label: {
+                    Label(
+                        model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
+                        systemImage: "arrow.clockwise"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isRefreshingSchedule || model.isSampleMode)
+                if !model.statusMessage.isEmpty {
+                    Text(model.statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var notificationSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("课程提醒", systemImage: "bell")
+                    .font(.headline)
+                Toggle(
+                    "每天 07:30 发送当日课程摘要",
+                    isOn: Binding(
+                        get: { model.dailyCourseNotificationsEnabled },
+                        set: { enabled in
+                            model.setDailyCourseNotificationsEnabled(enabled)
+                        }
+                    )
+                )
+                .tint(AppTheme.primary)
+                .disabled(model.isSampleMode && !model.isReviewDemo)
+                Text("仅在当天有课时通知；课表更新或账号变更后会自动重排。")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+                if !model.dailyCourseNotificationStatusMessage.isEmpty {
+                    Text(model.dailyCourseNotificationStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var localDataSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("本地数据", systemImage: "externaldrive")
+                    .font(.headline)
+                Text("清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+                Button {
+                    dismissKeyboard()
+                    showingPrivacyPolicy = true
+                } label: {
+                    Label("隐私说明", systemImage: "hand.raised")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("隐私说明")
+                .accessibilityHint("在应用内查看隐私声明")
+                .accessibilityIdentifier("action.open-privacy-policy")
+                Button(role: .destructive) {
+                    showingClearDataConfirmation = true
+                } label: {
+                    Label("清除本地数据", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isSampleMode)
+            }
+        }
+    }
+
+    private func dismissKeyboard() {
+        focusedAccountField = nil
     }
 }

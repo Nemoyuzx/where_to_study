@@ -159,6 +159,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var dailyCourseNotificationStatusMessage = ""
 
     let slots = SlotMetadata.defaults
+    @Published private(set) var runtimeMode: AppRuntimeMode
     private let credentialStore: any CredentialStoring
     private let scheduleStore: any ScheduleStoring
     private let scheduleClient: any ScheduleFetching
@@ -170,6 +171,7 @@ final class AppModel: ObservableObject {
     private let dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling
     private let dailyCourseNotificationAuthorizationTimeout: Duration
     private let defaults: UserDefaults
+    private let supportsRuntimeModeSwitching: Bool
     private var holidayLoads = HolidayLoadState()
     private var localDataGeneration = 0
     private var scheduleRefreshToken = 0
@@ -180,6 +182,7 @@ final class AppModel: ObservableObject {
     private var savedCredentialAccount: String?
 
     init(
+        runtimeMode: AppRuntimeMode = .live,
         credentialStore: any CredentialStoring = KeychainCredentialStore(),
         scheduleStore: any ScheduleStoring = FileScheduleStore(),
         scheduleClient: any ScheduleFetching = SJDScheduleClient(),
@@ -192,6 +195,8 @@ final class AppModel: ObservableObject {
         dailyCourseNotificationAuthorizationTimeout: Duration = .seconds(8),
         defaults: UserDefaults = .standard
     ) {
+        self.runtimeMode = runtimeMode
+        supportsRuntimeModeSwitching = runtimeMode == .live
         self.credentialStore = credentialStore
         self.scheduleStore = scheduleStore
         self.scheduleClient = scheduleClient
@@ -219,6 +224,22 @@ final class AppModel: ObservableObject {
 
     var selectedCampusName: String {
         campusID == "04" ? "沙河" : "西土城"
+    }
+
+    var isSampleMode: Bool {
+        runtimeMode.isSample
+    }
+
+    var isReviewDemo: Bool {
+        runtimeMode.isReviewDemo
+    }
+
+    var canExitSampleMode: Bool {
+        isSampleMode && supportsRuntimeModeSwitching
+    }
+
+    var canEnterReviewDemo: Bool {
+        supportsRuntimeModeSwitching && !isSampleMode && !isImportingCalendar
     }
 
     var canPreserveSavedPassword: Bool {
@@ -316,8 +337,77 @@ final class AppModel: ObservableObject {
         selectedBuildings.removeAll()
     }
 
+    func enterReviewDemo() {
+        guard canEnterReviewDemo else { return }
+        invalidatePendingOperations()
+        dailyCourseNotificationRevision &+= 1
+        dailyClassroomRefreshTask?.cancel()
+        dailyClassroomRefreshTask = nil
+        runtimeMode = .sample(review: true)
+
+        account = ""
+        password = ""
+        updateSavedCredentialState(nil)
+        schedule = SampleData.schedule()
+        classroomsCache = SampleData.classrooms()
+        termID = schedule?.termID ?? "review-demo"
+        termStartDate = schedule?.termStartDate ?? ScheduleDefaults.termStartDate
+        campusID = "01"
+        selectedBuildings.removeAll()
+        usePersonalSchedule = true
+        synchronizeSelectedSlots()
+        holidaysByYear.removeAll()
+        holidayStatusByYear.removeAll()
+        holidayLoads.reset()
+        let year = Calendar.shanghai.component(.year, from: .now)
+        holidaysByYear[year] = SampleData.holidays(year: year)
+        dailyCourseNotificationsEnabled = false
+        statusMessage = "正在展示内置示例课表，未连接北邮服务"
+        classroomStatusMessage = "正在展示内置示例空教室，未连接北邮服务"
+        calendarImportStatusMessage = ""
+        dailyCourseNotificationStatusMessage = ""
+        synchronizeWidgetSchedule()
+    }
+
+    func exitReviewDemo() {
+        guard canExitSampleMode else { return }
+        invalidatePendingOperations()
+        runtimeMode = .live
+
+        account = ""
+        password = ""
+        schedule = nil
+        classroomsCache = nil
+        holidaysByYear.removeAll()
+        holidayStatusByYear.removeAll()
+        holidayLoads.reset()
+        statusMessage = ""
+        classroomStatusMessage = ""
+        calendarImportStatusMessage = ""
+        dailyCourseNotificationStatusMessage = ""
+        termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
+        termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
+        campusID = defaults.string(forKey: "campusID") ?? "01"
+        dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
+        selectedBuildings.removeAll()
+        usePersonalSchedule = true
+        loadCredentials()
+        loadSchedule()
+        loadClassrooms()
+        synchronizeSelectedSlots()
+        ensureHolidays(for: Calendar.shanghai.component(.year, from: .now))
+        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        #if os(macOS)
+        startDailyClassroomRefresh()
+        #endif
+    }
+
     @discardableResult
     func saveSettings() -> Bool {
+        guard !isSampleMode else {
+            statusMessage = "示例模式不会保存账户或设置"
+            return false
+        }
         do {
             let normalizedTermID = termID.trimmingCharacters(in: .whitespacesAndNewlines)
             let normalizedTermStartDate = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -378,6 +468,17 @@ final class AppModel: ObservableObject {
     }
 
     func setDailyCourseNotificationsEnabled(_ enabled: Bool) {
+        guard !isSampleMode else {
+            if isReviewDemo {
+                dailyCourseNotificationsEnabled = enabled
+                dailyCourseNotificationStatusMessage = enabled
+                    ? "示例模式已模拟开启每日课程摘要，未申请通知权限"
+                    : "示例模式已模拟关闭每日课程摘要"
+            } else {
+                dailyCourseNotificationStatusMessage = "示例模式不会申请通知权限"
+            }
+            return
+        }
         dailyCourseNotificationsEnabled = enabled
         if enabled {
             dailyCourseNotificationStatusMessage = "正在确认通知权限…"
@@ -394,6 +495,10 @@ final class AppModel: ObservableObject {
     }
 
     func clearLocalData() {
+        guard !isSampleMode else {
+            statusMessage = "示例模式不读写真实本地数据"
+            return
+        }
         invalidatePendingOperations()
         dailyCourseNotificationsEnabled = false
         defaults.removeObject(forKey: Self.dailyCourseNotificationsKey)
@@ -452,6 +557,10 @@ final class AppModel: ObservableObject {
     }
 
     func refreshSchedule() {
+        guard !isSampleMode else {
+            statusMessage = "正在展示内置示例课表，未连接北邮服务"
+            return
+        }
         guard !isRefreshingSchedule else { return }
         let credentials: Credentials
         do {
@@ -505,6 +614,15 @@ final class AppModel: ObservableObject {
     }
 
     func importScheduleToCalendar() {
+        guard !isSampleMode else {
+            if isReviewDemo, let schedule {
+                let count = (try? CalendarImportLogic.eventDrafts(from: schedule).count) ?? 0
+                calendarImportStatusMessage = "示例模式已模拟同步 \(count) 个课程日期，未写入系统日历"
+            } else {
+                calendarImportStatusMessage = "示例模式不会访问系统日历"
+            }
+            return
+        }
         guard !isImportingCalendar else { return }
         guard let schedule else {
             calendarImportStatusMessage = CalendarImportError.noSchedule.localizedDescription
@@ -536,11 +654,16 @@ final class AppModel: ObservableObject {
     }
 
     func refreshClassroomsIfNeeded() {
+        guard !isSampleMode else { return }
         guard classroomsCache?.targetDate != Self.todayString else { return }
         refreshClassrooms(force: false)
     }
 
     func refreshClassrooms(force: Bool = true) {
+        guard !isSampleMode else {
+            classroomStatusMessage = "正在展示内置示例空教室，未连接北邮服务"
+            return
+        }
         guard !isRefreshingClassrooms else { return }
         if !force, classroomsCache?.targetDate == Self.todayString { return }
         let credentials: Credentials
@@ -579,6 +702,7 @@ final class AppModel: ObservableObject {
     }
 
     func startDailyClassroomRefresh() {
+        guard !isSampleMode else { return }
         guard dailyClassroomRefreshTask == nil else { return }
         dailyClassroomRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -602,6 +726,12 @@ final class AppModel: ObservableObject {
 
     func ensureHolidays(for year: Int, force: Bool = false) {
         guard HolidayDefaults.supportedYears.contains(year) else { return }
+        if isSampleMode {
+            if holidaysByYear[year] == nil {
+                holidaysByYear[year] = SampleData.holidays(year: year)
+            }
+            return
+        }
         if holidaysByYear[year] == nil {
             do {
                 holidaysByYear[year] = try holidayStore.load(year: year)
@@ -724,14 +854,24 @@ final class AppModel: ObservableObject {
 
     private func synchronizeWidgetSchedule() {
         #if os(macOS)
+        let snapshot = schedule
+        Task.detached(priority: .utility) {
+            Self.writeWidgetSchedule(snapshot)
+        }
+        #endif
+    }
+
+    #if os(macOS)
+    nonisolated private static func writeWidgetSchedule(_ schedule: ScheduleSnapshot?) {
+        guard !AppLaunchConfiguration.isXCTestRunning else { return }
         if let schedule {
             try? TodayCourseWidgetData.save(schedule: schedule)
         } else {
             TodayCourseWidgetData.clear()
         }
         WidgetCenter.shared.reloadTimelines(ofKind: "TodayCourseWidget")
-        #endif
     }
+    #endif
 
     private func loadClassrooms() {
         do {
@@ -750,6 +890,10 @@ final class AppModel: ObservableObject {
     }
 
     private func reconcileDailyCourseNotifications(requestPermissionIfNeeded: Bool) {
+        guard !isSampleMode else {
+            dailyCourseNotificationsEnabled = false
+            return
+        }
         dailyCourseNotificationRevision &+= 1
         let revision = dailyCourseNotificationRevision
         guard dailyCourseNotificationsEnabled else {

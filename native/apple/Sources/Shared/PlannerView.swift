@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlannerView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var slotColumns: [GridItem] {
         [GridItem(.adaptive(minimum: 128, maximum: 190), spacing: 8)]
@@ -12,30 +13,67 @@ struct PlannerView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .bottom, spacing: 12) {
-                    PageTitle(eyebrow: "BUPT Classroom Planner", title: "空教室与个人课表联动查询")
-                    Spacer(minLength: 0)
-                    Label(Self.todayLabel, systemImage: "clock")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .fixedSize()
-                }
+        GeometryReader { proxy in
+            let columnCount = AdaptiveLayoutPolicy.contentColumnCount(width: proxy.size.width)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .bottom, spacing: 12) {
+                            plannerTitle
+                            Spacer(minLength: 0)
+                            todayLabel
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            plannerTitle
+                            todayLabel
+                        }
+                    }
 
-                querySurface
-                slotSurface
-                todayCoursesSurface
-                buildingsSurface
-                resultsSurface
-                summarySurface
+                    if columnCount == 2 {
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 16) {
+                                querySurface
+                                slotSurface
+                                buildingsSurface
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+
+                            VStack(spacing: 16) {
+                                todayCoursesSurface
+                                resultsSurface
+                                summarySurface
+                            }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                        }
+                    } else {
+                        VStack(spacing: 16) {
+                            querySurface
+                            slotSurface
+                            todayCoursesSurface
+                            buildingsSurface
+                            resultsSurface
+                            summarySurface
+                        }
+                    }
+                }
+                .padding(20)
+                .frame(maxWidth: 1200)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: 1200)
-            .frame(maxWidth: .infinity)
         }
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.planner")
+    }
+
+    private var plannerTitle: some View {
+        PageTitle(eyebrow: "BUPT Classroom Planner", title: "空教室与个人课表联动查询")
+    }
+
+    private var todayLabel: some View {
+        Label(Self.todayLabel, systemImage: "clock")
+            .font(.subheadline.monospacedDigit())
+            .foregroundStyle(AppTheme.secondaryText)
+            .fixedSize()
     }
 
     private var querySurface: some View {
@@ -79,7 +117,9 @@ struct PlannerView: View {
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
                 } else if let cache = model.classroomsCache {
-                    Text("数据源：移动教务实时接口 · \(cache.targetDate)")
+                    Text(model.isSampleMode
+                        ? "数据源：内置示例数据 · \(cache.targetDate)"
+                        : "数据源：移动教务实时接口 · \(cache.targetDate)")
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
                 }
@@ -273,10 +313,7 @@ struct PlannerView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("查询概览", systemImage: "chart.bar")
                     .font(.headline)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 0) { summaryItems }
-                    VStack(spacing: 0) { summaryItems }
-                }
+                summaryItems
             }
         }
     }
@@ -289,18 +326,49 @@ struct PlannerView: View {
             ("个人空闲节次", freeSlots),
             ("匹配教室", model.matchingRooms.count)
         ]
-        ForEach(Array(values.enumerated()), id: \.offset) { index, item in
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.0)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
-                Text("\(item.1)")
-                    .font(.title2.bold())
-                    .foregroundStyle(AppTheme.text)
+
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 0) {
+                ForEach(Array(values.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(item.0)
+                            .font(.subheadline)
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .accessibilityIdentifier("planner.summary.label.\(index)")
+                        Spacer(minLength: 12)
+                        Text("\(item.1)")
+                            .font(.title2.bold().monospacedDigit())
+                            .foregroundStyle(AppTheme.text)
+                    }
+                    .padding(.vertical, 10)
+                    if index < values.count - 1 { Divider() }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
-            if index < values.count - 1 { Divider() }
+        } else {
+            HStack(alignment: .center, spacing: 0) {
+                ForEach(Array(values.enumerated()), id: \.offset) { index, item in
+                    VStack(spacing: 4) {
+                        Text(item.0)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
+                            .accessibilityIdentifier("planner.summary.label.\(index)")
+                        Text("\(item.1)")
+                            .font(.title2.bold().monospacedDigit())
+                            .foregroundStyle(AppTheme.text)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+
+                    if index < values.count - 1 {
+                        Divider()
+                            .frame(height: 64)
+                    }
+                }
+            }
         }
     }
 

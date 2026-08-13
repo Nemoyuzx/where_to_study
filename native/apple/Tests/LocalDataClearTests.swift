@@ -79,6 +79,129 @@ final class LocalDataClearTests: XCTestCase {
         }
     }
 
+    func testLaunchArgumentsSelectOnlyExplicitSampleModes() {
+        XCTAssertFalse(AppRuntimeMode.live.isSample)
+        XCTAssertFalse(AppRuntimeMode.sample(review: false).isReviewDemo)
+        XCTAssertTrue(AppRuntimeMode.sample(review: true).isSample)
+        XCTAssertTrue(AppRuntimeMode.sample(review: true).isReviewDemo)
+    }
+
+    @MainActor
+    func testSampleModeBlocksAccountAndSystemMutations() {
+        let suiteName = "ReviewDemoTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("无法创建隔离的 UserDefaults。")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let credentialStore = InMemoryCredentialStore(credentials: nil)
+        let model = AppModel(
+            runtimeMode: .sample(review: true),
+            credentialStore: credentialStore,
+            scheduleStore: InMemoryScheduleStore(schedule: Self.schedule),
+            classroomStore: InMemoryClassroomStore(cache: Self.classrooms),
+            holidayStore: FileHolidayStore(
+                directoryURL: FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            ),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+
+        model.account = "must-not-save"
+        model.password = "must-not-save"
+        XCTAssertFalse(model.saveSettings())
+        XCTAssertNil(try credentialStore.load())
+
+        model.refreshSchedule()
+        model.refreshClassrooms()
+        model.importScheduleToCalendar()
+        model.setDailyCourseNotificationsEnabled(true)
+
+        XCTAssertEqual(model.statusMessage, "正在展示内置示例课表，未连接北邮服务")
+        XCTAssertEqual(model.classroomStatusMessage, "正在展示内置示例空教室，未连接北邮服务")
+        XCTAssertTrue(model.calendarImportStatusMessage.hasPrefix("示例模式已模拟同步 "))
+        XCTAssertTrue(model.calendarImportStatusMessage.hasSuffix(" 个课程日期，未写入系统日历"))
+        XCTAssertEqual(
+            model.dailyCourseNotificationStatusMessage,
+            "示例模式已模拟开启每日课程摘要，未申请通知权限"
+        )
+        XCTAssertTrue(model.dailyCourseNotificationsEnabled)
+    }
+
+    @MainActor
+    func testNonReviewSampleModeStillBlocksCalendarAndNotificationActions() {
+        let suiteName = "NonReviewSampleModeTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("无法创建隔离的 UserDefaults。")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = AppModel(
+            runtimeMode: .sample(review: false),
+            scheduleStore: InMemoryScheduleStore(schedule: Self.schedule),
+            classroomStore: InMemoryClassroomStore(cache: Self.classrooms),
+            holidayStore: FileHolidayStore(
+                directoryURL: FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            ),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+
+        model.importScheduleToCalendar()
+        model.setDailyCourseNotificationsEnabled(true)
+
+        XCTAssertEqual(model.calendarImportStatusMessage, "示例模式不会访问系统日历")
+        XCTAssertEqual(model.dailyCourseNotificationStatusMessage, "示例模式不会申请通知权限")
+        XCTAssertFalse(model.dailyCourseNotificationsEnabled)
+    }
+
+    @MainActor
+    func testRuntimeReviewDemoRestoresLiveDataWithoutMutatingStores() throws {
+        let suiteName = "RuntimeReviewDemoTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("无法创建隔离的 UserDefaults。")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let credentialStore = InMemoryCredentialStore(
+            credentials: Credentials(account: "fixture-account", password: "fixture-password")
+        )
+        let model = AppModel(
+            credentialStore: credentialStore,
+            scheduleStore: InMemoryScheduleStore(schedule: Self.schedule),
+            classroomStore: InMemoryClassroomStore(cache: Self.classrooms),
+            holidayStore: InMemoryHolidayStore(snapshot: Self.holidays(
+                year: Calendar.shanghai.component(.year, from: .now)
+            )),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+
+        model.enterReviewDemo()
+
+        XCTAssertTrue(model.isReviewDemo)
+        XCTAssertTrue(model.canExitSampleMode)
+        XCTAssertEqual(model.schedule?.termID, "review-demo")
+        XCTAssertTrue(model.account.isEmpty)
+        XCTAssertEqual(
+            try credentialStore.load(),
+            Credentials(account: "fixture-account", password: "fixture-password")
+        )
+
+        model.exitReviewDemo()
+
+        XCTAssertFalse(model.isSampleMode)
+        XCTAssertEqual(model.account, "fixture-account")
+        XCTAssertEqual(model.schedule, Self.schedule)
+        XCTAssertEqual(model.classroomsCache, Self.classrooms)
+        XCTAssertEqual(
+            try credentialStore.load(),
+            Credentials(account: "fixture-account", password: "fixture-password")
+        )
+    }
+
     func testFileStoresClearOwnedCachesIdempotently() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -294,6 +417,29 @@ private final class InMemoryCredentialStore: CredentialStoring, @unchecked Senda
         defer { lock.unlock() }
         credentials = nil
     }
+}
+
+private struct InMemoryScheduleStore: ScheduleStoring {
+    let schedule: ScheduleSnapshot?
+    func load() throws -> ScheduleSnapshot? { schedule }
+    func save(_: ScheduleSnapshot) throws {}
+    func clear() throws {}
+}
+
+private struct InMemoryClassroomStore: ClassroomStoring {
+    let cache: ClassroomsCache?
+    func load() throws -> ClassroomsCache? { cache }
+    func save(_: ClassroomsCache) throws {}
+    func clear() throws {}
+}
+
+private struct InMemoryHolidayStore: HolidayStoring {
+    let snapshot: HolidaysSnapshot?
+    func load(year: Int) throws -> HolidaysSnapshot? {
+        snapshot?.year == year ? snapshot : nil
+    }
+    func save(_: HolidaysSnapshot) throws {}
+    func clear() throws {}
 }
 
 private struct NoopNotificationScheduler: DailyCourseNotificationScheduling {

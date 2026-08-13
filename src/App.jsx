@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  ShieldCheck,
   Trash2,
   X,
 } from 'lucide-react'
@@ -72,6 +73,80 @@ const APP_WIDGET_MODE = typeof window === 'undefined'
   ? ''
   : new URLSearchParams(window.location.search).get('widget') || ''
 const BROWSER_PREVIEW_ENABLED = import.meta.env.DEV
+const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md'
+
+function PrivacyPolicyDialog({ onClose }) {
+  useEffect(() => {
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+
+  return (
+    <div
+      className="privacy-dialog-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        className="privacy-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="privacy-dialog-title"
+      >
+        <header className="privacy-dialog-header">
+          <div>
+            <p className="eyebrow">Where To Study</p>
+            <h2 id="privacy-dialog-title">隐私声明</h2>
+            <span>生效日期：2026 年 8 月 9 日</span>
+          </div>
+          <button type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="privacy-dialog-body">
+          <p>Where To Study 是用于查看北邮个人课表和空教室的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。</p>
+
+          <section>
+            <h3>账户与教务请求</h3>
+            <p>你输入的学号和密码保存在操作系统的受保护凭据存储中。应用在你手动获取课表或空教室时，会通过 HTTPS 将凭据发送到北邮教务服务 jwglweixin.bupt.edu.cn。保存有效凭据后，桌面端还可能在应用运行期间每日 07:00 左右自动刷新当天空教室。项目维护者无法读取这些凭据。</p>
+          </section>
+          <section>
+            <h3>本地数据</h3>
+            <p>个人课表、空教室结果、校区和学期等设置会缓存在你的设备上，以减少重复请求。你可以在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室缓存、节假日缓存和提醒任务。</p>
+          </section>
+          <section>
+            <h3>节假日数据</h3>
+            <p>应用在启动、切换日历年份或缓存需要更新时，可能通过 unpkg 自动获取 holiday-calendar 数据集中的中国法定节假日和调休信息。请求只包含 CN 地区和年份，不包含你的凭据、课表或空教室数据。</p>
+          </section>
+          <section>
+            <h3>系统日历与课程提醒</h3>
+            <p>只有在你主动操作并授予系统权限后，应用才会向系统日历写入课程或在本地安排课程摘要通知。应用只管理带有 Where To Study 标记的日历事件，相关数据不会上传给项目维护者。</p>
+          </section>
+          <section>
+            <h3>不收集的数据</h3>
+            <p>本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务和节假日数据的 CDN 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。</p>
+          </section>
+          <section>
+            <h3>保留、删除与联系</h3>
+            <p>凭据和缓存会保留在你的设备上，直到被替换、在设置中清除或随应用卸载移除。隐私问题可以在 GitHub 提交不含敏感信息的讨论或 Issue；请勿在公开内容中提供账号、密码、令牌或个人课表。</p>
+          </section>
+        </div>
+
+        <footer className="privacy-dialog-footer">
+          <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">
+            在 GitHub 查看项目与完整声明
+            <ExternalLink size={16} />
+          </a>
+        </footer>
+      </section>
+    </div>
+  )
+}
 
 function hasTauriRuntime() {
   return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__?.invoke)
@@ -435,6 +510,7 @@ function App() {
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
+  const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false)
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
   const pageContentRef = useRef(null)
@@ -1627,15 +1703,14 @@ function App() {
               {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <CalendarDays size={17} />}
               打开课程小组件
             </button>
-            <a
+            <button
+              type="button"
               className="settings-privacy-link"
-              href="https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
-              target="_blank"
-              rel="noreferrer"
+              onClick={() => setPrivacyPolicyOpen(true)}
             >
+              <ShieldCheck size={16} />
               隐私说明
-              <ExternalLink size={15} />
-            </a>
+            </button>
             <button
               type="button"
               className="danger"
@@ -1666,6 +1741,9 @@ function App() {
           ) : null}
         </section>
       </div>
+      {privacyPolicyOpen ? (
+        <PrivacyPolicyDialog onClose={() => setPrivacyPolicyOpen(false)} />
+      ) : null}
     </main>
   )
 }

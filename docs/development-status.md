@@ -1,14 +1,14 @@
-# 稳定版发布检查点（2026-08-12）
+# 稳定版发布检查点（2026-08-14）
 
 ## 当前状态
 
 - 分支：`main`
 - 当前稳定版：[v0.1.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.3)
 - 应用版本：`0.1.3`
-- 当前发布构建号：Apple `CURRENT_PROJECT_VERSION=16`；Android `versionCode=16`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=25`；已发布的 Android `versionCode=16`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：只保留 SwiftUI Universal 应用 `/Applications/Where To Study.app`
-- 发布边界：`v0.1.3` 使用稳定版本号；macOS 和 Windows 仍未使用商业分发签名或公证，iOS archive 未签名；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.1.3` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书、描述文件和双平台 App Store Connect 记录已配置，正式签名的 iOS/macOS build 25 已上传并等待处理；build 24 已被取代；公开 GitHub Release 的 macOS/iOS 制品仍分别为 ad-hoc 与无签名构建；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -36,10 +36,11 @@
 - macOS 菜单栏显示今日/明日课程；关闭主窗口后应用继续驻留。
 - macOS 侧栏品牌标题与系统导航行内容对齐，实机窗口截图确认标题、三项导航和 14 个节次均无重叠。
 - 可选 07:30 本地课程摘要会在系统上限内安排最多 63 个未来有课日；关闭提醒、撤销权限、切换账号或清除数据会立即撤销旧通知。
-- 发布脚本生成 arm64 + x86_64 通用 macOS 预览包和 arm64 无签名 iOS archive，并校验版本、架构、隐私清单、HTTPS 数据源与本地路径泄漏。
+- 发布脚本生成 arm64 + x86_64 通用 macOS 预览包和 arm64 无签名 iOS archive，并校验版本、架构、隐私清单、HTTPS 数据源与本地路径泄漏；App Store 脚本另支持双平台正式分发签名、归档、导出与上传。
 - 二进制内容校验只依赖 macOS/Linux runner 自带的 `grep`，不再要求额外安装 `ripgrep`；退役 HTTP 地址按固定字符串实际检查。
 - Apple 测试脚本按 UDID 选择 runner 上真实存在的 iPhone 模拟器，不再假设指定机型一定安装在全局最新 iOS runtime。
 - iPhone/iPad 教学日历使用独立移动布局：紧凑日期导航、可横向切换的完整周日期、日/周/月/年视图，以及不会遮挡时间轴内容的底部导航。
+- Windows/Tauri 当前使用的绿色日历课桌图标成为全平台唯一源图；同步脚本生成 Windows、Tauri macOS、原生 iOS 和 Android 图标，Apple AppIcon 同时移除透明通道以满足上传要求。
 
 ### Android 原生端
 
@@ -57,21 +58,22 @@
 | 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
 | Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；91/91 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
-| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；76/76 XCTest 通过 |
-| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；74 项单元测试 + 1 项真实导航 UI 测试，共 75/75 通过 |
-| Android Debug | 98/98 JVM 测试、`lintDebug`、Debug APK 构建通过 |
+| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；84/84 XCTest 通过 |
+| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；总计 89 项中 88 项通过，1 项 iPad 专用测试按设计跳过；另有 iPad 与 iPhone 17 Pro Max 专项 UI 验证通过 |
+| Android Debug | 106/106 JVM 测试、`lintDebug`、Debug APK 与 AndroidTest APK 构建通过 |
 | Android Release | 98/98 JVM 测试、`lintRelease`、签名 APK/AAB 构建通过 |
 | Android UI | Medium Phone 与 Pixel Tablet 各 4/4 导航及布局测试通过 |
 | 浏览器视觉检查 | 桌面与手机空教室/设置/日历通过；节假日标题、14 节次与整点、年视图浮层、红色时间线、移动端三列摘要均无重叠；控制台 0 错误 |
-| macOS 安装检查 | SwiftUI Universal build 16 安装包版本、x86_64/arm64 架构、adhoc 签名和 WidgetKit 扩展通过；系统中只保留一个 `/Applications/Where To Study.app` |
+| macOS 安装检查 | SwiftUI Universal build 25 已覆盖安装到唯一位置 `/Applications/Where To Study.app`；x86_64/arm64、ad-hoc 签名、WidgetKit 扩展、版本、统一应用图标与审核示例窗口启动均复核通过 |
+| App Store Connect | iOS 与 macOS `0.1.3 (25)` 均完成 Apple Distribution 签名、描述文件/entitlement 校验并收到 `Upload succeeded`；当前等待 App Store Connect 处理，不等同于已通过审核或正式发布 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
 
-Apple 测试报告：
+Apple 测试结果（2026-08-14 使用 `xcresulttool` 复核）：
 
-- macOS：`native/apple/DerivedData/tests/Logs/Test/Test-WhereToStudyMac-2026.08.12_18-09-51-+0800.xcresult`
-- iOS：`native/apple/DerivedData/iOS/Logs/Test/Test-WhereToStudyiOS-2026.08.12_18-11-13-+0800.xcresult`
+- macOS：84/84 通过
+- iOS：总计 89 项中 88 项通过，1 项 iPad 专用测试按设计跳过；iPad 专项 UI 验证和 iPhone 17 Pro Max 审核示例截图测试分别通过
 - 通知权限超时精确测试：20 轮、40/40 通过
 
 ## Build 16 稳定版发布制品
@@ -185,6 +187,9 @@ Apple 测试报告：
 
 ## 后续发布步骤
 
-1. 正式生产发布仍需 Apple Developer ID 签名与公证、可分发的 iOS 签名以及 Windows Authenticode。
+1. 等待 iOS/macOS build 25 处理完成，确认不再选择 build 24，将 build 25 加入内部 TestFlight 群组并完成真机安装与核心流程验证。
+2. 使用 `native/apple/AppStore/` 中的元数据、隐私问卷草案、截图方案和审核备注补齐正式提交信息。
+3. 由账号持有人确认年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，再补齐截图和审核联系人并选择构建提交审核。
+4. GitHub 公开下载版如需消除 macOS Gatekeeper 提示，仍需另行完成 Developer ID 签名与公证；Windows 可信签名链路也尚未闭环。
 
 Android 维护者密钥只通过本地忽略文件和 GitHub Actions secrets 提供，不进入仓库或发布日志。

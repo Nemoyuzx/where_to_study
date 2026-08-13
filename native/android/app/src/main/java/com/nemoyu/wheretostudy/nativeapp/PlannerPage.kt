@@ -23,6 +23,7 @@ class PlannerPage(
     private val preferences: AppPreferences,
     private val scheduleRepository: ScheduleRepository,
     private val classroomRepository: ClassroomRepository,
+    private val availableWidthDp: Int,
 ) {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val today = Calendar.getInstance(shanghai)
@@ -246,7 +247,7 @@ class PlannerPage(
         cells: MutableMap<Int, TextView>,
         refreshCells: () -> Unit,
     ): LinearLayout {
-        val columns = if (activity.resources.configuration.screenWidthDp >= 700) 7 else 2
+        val columns = AdaptiveContentLogic.plannerSlotColumns(availableWidthDp)
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             AppMetadata.slots.chunked(columns).forEach { slots ->
@@ -307,7 +308,7 @@ class PlannerPage(
             addView(emptyMessage("暂无教学楼，请先获取当天空教室"))
             return@apply
         }
-        val columns = if (activity.resources.configuration.screenWidthDp >= 700) 5 else 2
+        val columns = AdaptiveContentLogic.plannerBuildingColumns(availableWidthDp)
         val buttons = mutableMapOf<String, TextView>()
         fun refreshButtons() {
             buttons.forEach { (building, button) ->
@@ -384,7 +385,7 @@ class PlannerPage(
             "个人空闲节次" to freeCount,
             "匹配教室" to if (selectedBuildings.isEmpty() || selectedSlots.isEmpty()) 0 else matchingRooms().size,
         )
-        val columns = if (activity.resources.configuration.screenWidthDp >= 700) 3 else 1
+        val columns = AdaptiveContentLogic.plannerSummaryColumns(availableWidthDp)
         fun metric(label: String, value: Int): LinearLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))

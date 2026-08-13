@@ -54,9 +54,15 @@ class MainNavigationSmokeTest {
         ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
 
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            assertVisible(device, "adaptive_root")
             var navigationResource = ""
             scenario.onActivity { activity ->
-                navigationResource = if (activity.resources.configuration.screenWidthDp < 700) {
+                val windowWidthDp = activity.findViewById<android.view.View>(R.id.adaptive_root)
+                    .width
+                    .div(activity.resources.displayMetrics.density)
+                navigationResource = if (
+                    AdaptiveLayoutLogic.widthClass(windowWidthDp.toInt()) == WindowWidthClass.COMPACT
+                ) {
                     "phone_navigation"
                 } else {
                     "tablet_navigation"
@@ -98,6 +104,12 @@ class MainNavigationSmokeTest {
 
             click(device, "navigation_settings")
             assertVisible(device, "page_settings")
+            scrollUntilVisible(device, "privacy_policy_button")
+            click(device, "privacy_policy_button")
+            assertVisible(device, "privacy_policy_content")
+            scrollUntilVisible(device, "privacy_github_link")
+            device.pressBack()
+            assertVisible(device, "page_settings")
 
             click(device, "navigation_planner")
             assertVisible(device, "page_planner")
@@ -121,6 +133,21 @@ class MainNavigationSmokeTest {
             UI_TIMEOUT_MILLIS,
         )
         assertTrue("Missing visible view: $resourceName", visible)
+    }
+
+    private fun scrollUntilVisible(device: UiDevice, resourceName: String) {
+        repeat(8) {
+            if (device.hasObject(By.res(TARGET_PACKAGE, resourceName))) return
+            device.swipe(
+                device.displayWidth / 2,
+                device.displayHeight * 3 / 4,
+                device.displayWidth / 2,
+                device.displayHeight / 4,
+                20,
+            )
+            device.waitForIdle()
+        }
+        assertVisible(device, resourceName)
     }
 
     private fun clearCredentialRecord() {

@@ -49,11 +49,12 @@ class YearCalendarView(
     context: Context,
     private val year: Int,
     days: List<YearCalendarDay>,
+    private val availableWidthDp: Int,
     private val onDateSelected: (YearCalendarView, Calendar, Float, Float) -> Unit,
 ) : View(context) {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val dayByKey = days.associateBy { key(it.date) }
-    private val columns = YearCalendarLogic.columns(resources.configuration.screenWidthDp)
+    private val columns = YearCalendarLogic.columns(availableWidthDp)
     private val monthTitleHeight = dp(28).toFloat()
     private val weekdayHeight = dp(20).toFloat()
     private val dayCellHeight = dp(34).toFloat()
@@ -101,7 +102,7 @@ class YearCalendarView(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val preferredWidth = resources.displayMetrics.widthPixels - dp(40)
+        val preferredWidth = dp(availableWidthDp - 40)
         val measuredWidth = resolveSize(preferredWidth.coerceAtLeast(dp(280)), widthMeasureSpec)
         val rowCount = (12 + columns - 1) / columns
         val preferredHeight = (monthHeight * rowCount).toInt()

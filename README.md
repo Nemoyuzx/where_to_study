@@ -19,14 +19,14 @@ macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android V
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | 发布 Universal 原生应用与 Apple Silicon Tauri 包；支持菜单栏、WidgetKit、系统日历、课程提醒和完整业务页面 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | 正式签名的 Universal build 25 已上传 App Store Connect；公开 GitHub Release 另提供临时签名预览包 |
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机/平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
-| iOS | SwiftUI 原生 | 模拟器测试与 arm64 真机 archive 可重复构建；因缺少公开分发签名，暂不提供可直接安装包 |
+| iOS | SwiftUI 原生 | 正式签名的 build 25 已上传 App Store Connect；公开 GitHub Release 暂仍为无签名开发者 archive |
 
 ## 下载
 
-稳定版 [v0.1.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.3) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版重排了 iOS 与 Android 教学日历的手机布局，保留原有配色和日/周/月/年功能，并改善窄屏日期导航、时间轴与底部导航的可读性。原生 macOS 包同时支持 Apple Silicon 与 Intel，但目前没有 Developer ID 公证签名，首次启动需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。iOS 因缺少公开分发签名暂不提供可直接安装的公开包，Release 中的 archive 仅供开发者后续签名。
+稳定版 [v0.1.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.3) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版重排了 iOS 与 Android 教学日历的手机布局，保留原有配色和日/周/月/年功能，并改善窄屏日期导航、时间轴与底部导航的可读性。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS/macOS build 25 已上传 App Store Connect，公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
 
 ## 许可证状态
 
@@ -61,6 +61,8 @@ Tauri、SwiftUI 和 Android 客户端都保留一份仅用于首次离线展示�
 
 ## 开发与运行
 
+所有平台的应用主图标以 `src-tauri/icons/icon.png`（Windows/Tauri 当前绿色日历课桌图标）为唯一源图。修改源图后运行 `npm run icons:sync`，同步生成 Windows/macOS Tauri、原生 iOS 和 Android 启动图标；macOS 菜单栏与 Android 通知图标仍使用符合系统规范的单色模板资源。
+
 ```bash
 npm install
 npm run tauri dev
@@ -94,7 +96,7 @@ npm run tauri:build:windows
 ./scripts/native-android-build.sh
 ```
 
-`native/apple` 与 `native/android` 是当前 macOS、iOS 和 Android 客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询；签名、公证和真机分发仍按平台分别受限。
+`native/apple` 与 `native/android` 是当前 macOS、iOS 和 Android 客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。
 
 生成本地签名 Android APK/AAB、macOS Universal ZIP 和无签名 iOS 真机 archive：
 
@@ -106,16 +108,26 @@ npm run tauri:build:windows
 
 Android 脚本会运行 Release 单元测试与 Lint，构建并校验签名 APK 与 AAB；macOS 脚本构建双架构 Release 应用、进行临时签名和签名校验；iOS 脚本构建 arm64 真机 archive，并检查应用图标和隐私清单。三个脚本都会在 `release-artifacts/` 中生成产物和 SHA-256 文件。Android 脚本需要本地、已忽略的 release keystore；macOS 包不包含 Developer ID 公证票据；iOS archive 未签名，不能直接安装到 iPhone。发布前还应另外运行完整测试和所需的人工运行检查。
 
+面向 Mac App Store、iOS App Store 或 TestFlight 的正式签名归档使用：
+
+```bash
+./scripts/native-apple-app-store.sh preflight all
+APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX APPLE_BUILD_NUMBER=25 \
+  ./scripts/native-apple-app-store.sh archive all
+```
+
+脚本还支持 `export` 与 `upload` 动作，并可单独指定 `ios` 或 `macos`。本地正式构建使用已安装的 Apple Distribution、Mac Installer Distribution 证书及三个 App Store 描述文件；团队、描述文件覆盖值和 App Store Connect API 私钥只通过环境变量传入。`Build Native Clients` 工作流也提供受保护的手动上传入口。完整账户配置、CI secrets、元数据和审核步骤见 [`native/apple/AppStore/submission-checklist.md`](./native/apple/AppStore/submission-checklist.md)。
+
 ## GitHub Actions
 
 仓库内提供以下构建和安全工作流：
 
 - `.github/workflows/build-windows.yml`：在 `windows-latest` 上构建 Windows 桌面安装包。
 - `.github/workflows/build-macos.yml`：在 `macos-15` 上构建并压缩 macOS Apple Silicon 应用。
-- `.github/workflows/build-native.yml`：在主分支运行 Rust/Apple 测试和 Android Debug 门禁；版本标签额外生成 SwiftUI macOS Universal、无签名 iOS archive，以及签名 Android APK/AAB。
+- `.github/workflows/build-native.yml`：在主分支及手动触发时运行 Rust/Apple 测试，在主分支运行 Android Debug 门禁；版本标签额外生成 SwiftUI macOS Universal、无签名 iOS archive，以及签名 Android APK/AAB。
 - `.github/workflows/security.yml`：扫描提交历史中的敏感信息，并审计完整 npm 与 Rust 锁文件依赖。
 
-正式原生 Android 标签构建使用以下 secrets：`ANDROID_RELEASE_KEYSTORE_BASE64`、`ANDROID_RELEASE_STORE_PASSWORD`、`ANDROID_RELEASE_KEY_ALIAS`、`ANDROID_RELEASE_KEY_PASSWORD`。原生 iOS Release 只生成无签名 archive，不需要分发证书。
+正式原生 Android 标签构建使用以下 secrets：`ANDROID_RELEASE_KEYSTORE_BASE64`、`ANDROID_RELEASE_STORE_PASSWORD`、`ANDROID_RELEASE_KEY_ALIAS`、`ANDROID_RELEASE_KEY_PASSWORD`。公开 GitHub Release 的原生 iOS 资产仍是无签名 archive；App Store 构建使用本地、Xcode Cloud 或受保护 CI 环境中的 Apple 分发凭据，不把证书或私钥提交到仓库。
 
 如果不在界面输入学号和教务密码，也可以在启动前配置环境变量：
 

@@ -9,6 +9,7 @@
     "test": "node --test test/*.test.js",
     "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
     "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
+    "icons:sync": "./scripts/sync-app-icons.sh",
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",

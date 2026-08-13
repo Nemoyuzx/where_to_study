@@ -27,6 +27,7 @@ struct MobileTeachingCalendarView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 compactHeader
+                    .accessibilityIdentifier("layout.calendar.compact")
                 statusArea
                 content
             }

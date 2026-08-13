@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APPLE_DIR="$ROOT_DIR/native/apple"
+"$ROOT_DIR/scripts/sync-app-icons.sh"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData"
 STRICT_SWIFT_SETTINGS=(
@@ -57,6 +58,8 @@ xcodebuild \
   -destination "platform=macOS" \
   -derivedDataPath "$DERIVED_DATA/tests" \
   CODE_SIGNING_ALLOWED=NO \
+  ENABLE_APP_SANDBOX=NO \
+  CODE_SIGN_ENTITLEMENTS= \
   "${STRICT_SWIFT_SETTINGS[@]}" \
   test
 

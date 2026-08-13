@@ -44,6 +44,14 @@ enum CalendarTimelineLogic {
         if compactHeight { return 300 }
         return compactWidth ? 420 : 700
     }
+
+    static func minimumDayAreaWidth(
+        dayCount: Int,
+        minimumDayWidth: CGFloat
+    ) -> CGFloat {
+        guard dayCount > 1 else { return 160 }
+        return CGFloat(dayCount) * minimumDayWidth
+    }
 }
 
 struct CalendarTimelineView: View {
@@ -66,7 +74,11 @@ struct CalendarTimelineView: View {
     private var totalHeight: CGFloat { headerHeight + timelineHeight + 2 }
     private var contentLeft: CGFloat { hourAxisWidth + slotAxisWidth }
     private var minimumDayAreaWidth: CGFloat {
-        days.count > 1 ? max(CGFloat(days.count) * 118, 826) : 160
+        #if os(iOS)
+        CalendarTimelineLogic.minimumDayAreaWidth(dayCount: days.count, minimumDayWidth: 96)
+        #else
+        CalendarTimelineLogic.minimumDayAreaWidth(dayCount: days.count, minimumDayWidth: 118)
+        #endif
     }
 
     var body: some View {

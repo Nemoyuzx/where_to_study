@@ -86,6 +86,10 @@ tasks.named("preBuild").configure {
 }
 
 dependencies {
+    implementation("androidx.core:core:1.16.0")
+    implementation("androidx.window:window:1.5.1")
+    implementation("androidx.window:window-java:1.5.1")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20260719")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")

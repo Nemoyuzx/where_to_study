@@ -18,6 +18,14 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.util.Consumer
+import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
+import androidx.window.layout.WindowLayoutInfo
+import androidx.window.layout.WindowMetricsCalculator
+import java.util.concurrent.Executor
+import kotlin.math.ceil
 
 data class LocalDataClearResult(val failedItems: List<String>) {
     val isComplete: Boolean
@@ -37,6 +45,7 @@ class MainActivity : Activity() {
     }
 
     private lateinit var content: FrameLayout
+    private lateinit var adaptiveRoot: FrameLayout
     private val navigationViews = mutableMapOf<Destination, TextView>()
     private val credentialStore by lazy { SecureCredentialStore(this) }
     private val preferences by lazy { AppPreferences(this) }
@@ -61,6 +70,20 @@ class MainActivity : Activity() {
     private var pendingCalendarImport: PendingCalendarImport? = null
     private var notificationPermissionRequestPending = false
     private var pendingNotificationPermissionCompletion: ((Boolean) -> Unit)? = null
+    private var currentLayoutSpec: AdaptiveLayoutSpec? = null
+    private var currentFoldingFeature: FoldingFeature? = null
+    private var windowLayoutListenerRegistered = false
+    private val windowInfoTracker by lazy {
+        WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this))
+    }
+    private val windowLayoutExecutor = Executor { command -> runOnUiThread(command) }
+    private val windowLayoutInfoListener = Consumer<WindowLayoutInfo> { layoutInfo ->
+        currentFoldingFeature = layoutInfo.displayFeatures
+            .filterIsInstance<FoldingFeature>()
+            .firstOrNull(::shouldAvoidFoldingFeature)
+        scheduleAdaptiveLayout()
+    }
+    private val applyAdaptiveLayout = Runnable { updateAdaptiveLayout() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         DailyCourseNotificationRuntimeMode.activateFrom(intent)
@@ -76,16 +99,22 @@ class MainActivity : Activity() {
         notificationPermissionRequestPending = savedInstanceState
             ?.getBoolean(NOTIFICATION_PERMISSION_PENDING_KEY, false)
             ?: false
+        selectedDestination = savedInstanceState
+            ?.getString(SELECTED_DESTINATION_KEY)
+            ?.let { saved -> Destination.entries.firstOrNull { it.name == saved } }
+            ?: Destination.PLANNER
 
-        val root = if (resources.configuration.screenWidthDp >= TABLET_BREAKPOINT_DP) {
-            tabletLayout()
-        } else {
-            phoneLayout()
+        adaptiveRoot = FrameLayout(this).apply {
+            id = R.id.adaptive_root
+            setBackgroundColor(Palette.background)
+            addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+                if (right - left != oldRight - oldLeft) scheduleAdaptiveLayout()
+            }
         }
-        applySystemInsets(root)
-        setContentView(root)
+        applySystemInsets(adaptiveRoot)
+        setContentView(adaptiveRoot)
         configureSystemBarIcons()
-        navigate(Destination.PLANNER)
+        updateAdaptiveLayout(force = true)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
         DailyCourseSummaryScheduler.reconcile(this)
         refreshClassroomsAtStartup()
@@ -105,6 +134,26 @@ class MainActivity : Activity() {
         ) {
             refreshCurrentPage()
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!windowLayoutListenerRegistered) {
+            windowInfoTracker.addWindowLayoutInfoListener(
+                this,
+                windowLayoutExecutor,
+                windowLayoutInfoListener,
+            )
+            windowLayoutListenerRegistered = true
+        }
+    }
+
+    override fun onStop() {
+        if (windowLayoutListenerRegistered) {
+            windowInfoTracker.removeWindowLayoutInfoListener(windowLayoutInfoListener)
+            windowLayoutListenerRegistered = false
+        }
+        super.onStop()
     }
 
     private fun phoneLayout(): LinearLayout = LinearLayout(this).apply {
@@ -133,13 +182,15 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
     }
 
-    private fun tabletLayout(): LinearLayout = LinearLayout(this).apply {
+    private fun sideNavigationLayout(spec: AdaptiveLayoutSpec): LinearLayout =
+        LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         setBackgroundColor(Palette.background)
         addView(LinearLayout(this@MainActivity).apply {
             id = R.id.tablet_navigation
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(24), dp(18), dp(18))
+            val horizontalPadding = if (spec.widthClass == WindowWidthClass.MEDIUM) 14 else 18
+            setPadding(dp(horizontalPadding), dp(24), dp(horizontalPadding), dp(18))
             setBackgroundColor(Palette.surface)
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.brand_eyebrow)
@@ -149,7 +200,7 @@ class MainActivity : Activity() {
             })
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.brand_name)
-                textSize = 20f
+                textSize = if (spec.widthClass == WindowWidthClass.MEDIUM) 18f else 20f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
                 setPadding(0, dp(4), 0, dp(22))
@@ -157,12 +208,93 @@ class MainActivity : Activity() {
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = false))
             }
-        }, LinearLayout.LayoutParams(dp(224), ViewGroup.LayoutParams.MATCH_PARENT))
+        }, LinearLayout.LayoutParams(dp(spec.navigationWidthDp), ViewGroup.LayoutParams.MATCH_PARENT))
+        if (spec.hingeSpacerDp > 0) {
+            addView(View(this@MainActivity).apply {
+                id = R.id.folding_feature_spacer
+                setBackgroundColor(Palette.background)
+            }, LinearLayout.LayoutParams(dp(spec.hingeSpacerDp), ViewGroup.LayoutParams.MATCH_PARENT))
+        }
         content = FrameLayout(this@MainActivity).apply {
             setBackgroundColor(Palette.background)
         }
         addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
     }
+
+    private fun scheduleAdaptiveLayout() {
+        if (!::adaptiveRoot.isInitialized) return
+        adaptiveRoot.removeCallbacks(applyAdaptiveLayout)
+        adaptiveRoot.postDelayed(applyAdaptiveLayout, ADAPTIVE_LAYOUT_DEBOUNCE_MILLIS)
+    }
+
+    private fun updateAdaptiveLayout(force: Boolean = false) {
+        if (!::adaptiveRoot.isInitialized) return
+        val windowWidthDp = currentWindowWidthDp()
+        if (windowWidthDp <= 0) return
+        val spec = AdaptiveLayoutLogic.resolve(
+            windowWidthDp = windowWidthDp,
+            availableWidthDp = currentAvailableWidthDp(),
+            verticalHinge = verticalHingeBoundsDp(),
+        )
+        if (!force && spec == currentLayoutSpec) return
+
+        currentLayoutSpec = spec
+        navigationViews.clear()
+        adaptiveRoot.removeAllViews()
+        val layout = if (spec.usesBottomNavigation) {
+            phoneLayout()
+        } else {
+            sideNavigationLayout(spec)
+        }
+        adaptiveRoot.addView(
+            layout,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        navigate(selectedDestination)
+    }
+
+    private fun currentWindowWidthDp(): Int {
+        val widthPx = WindowMetricsCalculator.getOrCreate()
+            .computeCurrentWindowMetrics(this)
+            .bounds
+            .width()
+        return (widthPx.coerceAtLeast(0) / resources.displayMetrics.density).toInt()
+    }
+
+    private fun currentAvailableWidthDp(): Int {
+        val widthPx = if (adaptiveRoot.width > 0) {
+            adaptiveRoot.width - adaptiveRoot.paddingLeft - adaptiveRoot.paddingRight
+        } else {
+            WindowMetricsCalculator.getOrCreate()
+                .computeCurrentWindowMetrics(this)
+                .bounds
+                .width()
+        }
+        return (widthPx.coerceAtLeast(0) / resources.displayMetrics.density).toInt()
+    }
+
+    private fun verticalHingeBoundsDp(): VerticalHingeBoundsDp? {
+        val feature = currentFoldingFeature ?: return null
+        if (!shouldAvoidFoldingFeature(feature) || adaptiveRoot.width <= 0) return null
+        val rootLocation = IntArray(2).also(adaptiveRoot::getLocationInWindow)
+        val contentOriginX = rootLocation[0] + adaptiveRoot.paddingLeft
+        val contentWidthPx = adaptiveRoot.width - adaptiveRoot.paddingLeft - adaptiveRoot.paddingRight
+        val leftPx = (feature.bounds.left - contentOriginX).coerceIn(0, contentWidthPx)
+        val rightPx = (feature.bounds.right - contentOriginX).coerceIn(0, contentWidthPx)
+        if (rightPx < leftPx || leftPx >= contentWidthPx) return null
+        val density = resources.displayMetrics.density
+        return VerticalHingeBoundsDp(
+            left = (leftPx / density).toInt(),
+            right = ceil(rightPx / density.toDouble()).toInt(),
+        )
+    }
+
+    private fun shouldAvoidFoldingFeature(feature: FoldingFeature): Boolean =
+        feature.orientation == FoldingFeature.Orientation.VERTICAL &&
+            (feature.isSeparating || feature.occlusionType == FoldingFeature.OcclusionType.FULL)
 
     private fun navigationTab(destination: Destination, compact: Boolean): TextView =
         TextView(this).apply {
@@ -214,11 +346,13 @@ class MainActivity : Activity() {
                 preferences,
                 scheduleRepository,
                 classroomRepository,
+                currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
             ).build()
             Destination.CALENDAR -> TeachingCalendarPage(
                 this,
                 scheduleRepository,
                 holidayRepository,
+                currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
             ).build()
             Destination.SETTINGS -> SettingsPage(
                 this,
@@ -365,6 +499,7 @@ class MainActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(SELECTED_DESTINATION_KEY, selectedDestination.name)
         outState.putBoolean(
             CALENDAR_PERMISSION_PENDING_KEY,
             calendarPermissionRequestPending || pendingCalendarImport != null,
@@ -428,6 +563,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (::adaptiveRoot.isInitialized) adaptiveRoot.removeCallbacks(applyAdaptiveLayout)
         pendingCalendarImport = null
         pendingNotificationPermissionCompletion = null
         scheduleRepository.close()
@@ -529,6 +665,7 @@ class MainActivity : Activity() {
                     insets.systemWindowInsetBottom,
                 )
             }
+            scheduleAdaptiveLayout()
             insets
         }
     }
@@ -554,7 +691,8 @@ class MainActivity : Activity() {
     }
 
     private companion object {
-        const val TABLET_BREAKPOINT_DP = 700
+        const val ADAPTIVE_LAYOUT_DEBOUNCE_MILLIS = 80L
+        const val SELECTED_DESTINATION_KEY = "selected_destination"
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"
         const val CALENDAR_IMPORT_TOKEN_KEY = "calendar_import_token"

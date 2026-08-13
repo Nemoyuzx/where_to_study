@@ -39,6 +39,7 @@ class TeachingCalendarPage(
     private val activity: MainActivity,
     private val scheduleRepository: ScheduleRepository,
     private val holidayRepository: HolidayRepository,
+    private val availableWidthDp: Int,
 ) {
     private enum class Mode(val label: String) {
         DAY("日"),
@@ -53,7 +54,7 @@ class TeachingCalendarPage(
     private var activePopupAnchor: YearCalendarView? = null
     private var activePopup: PopupWindow? = null
 
-    fun build(): View = if (activity.resources.configuration.screenWidthDp < PHONE_BREAKPOINT_DP) {
+    fun build(): View = if (availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP) {
         phoneBuild()
     } else {
         expandedBuild()
@@ -457,7 +458,7 @@ class TeachingCalendarPage(
                     0
                 }
                 val cellWidth = TeachingCalendarLogic.phoneDateCellWidth(
-                    activity.resources.configuration.screenWidthDp,
+                    availableWidthDp,
                     leadingWidth,
                 )
                 if (leadingWidth > 0) {
@@ -767,6 +768,7 @@ class TeachingCalendarPage(
                 context = activity,
                 year = year,
                 days = yearCalendarDays(year),
+                availableWidthDp = availableWidthDp,
                 onDateSelected = ::showDayPopover,
             ),
             LinearLayout.LayoutParams(
@@ -1010,7 +1012,4 @@ class TeachingCalendarPage(
         (Color.blue(background) + (Color.blue(foreground) - Color.blue(background)) * amount).toInt(),
     )
 
-    private companion object {
-        const val PHONE_BREAKPOINT_DP = 700
-    }
 }

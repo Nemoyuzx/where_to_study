@@ -306,6 +306,7 @@ class SettingsPage(
         })
         addView(spacer(activity, 18))
         addView(TextView(activity).apply {
+            id = R.id.privacy_policy_button
             text = "隐私说明"
             textSize = 15f
             gravity = Gravity.CENTER
@@ -319,7 +320,7 @@ class SettingsPage(
                 activity.dp(46),
             )
             setOnClickListener {
-                activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
+                showPrivacyPolicy()
             }
         })
         addView(spacer(activity, 10))
@@ -386,6 +387,120 @@ class SettingsPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(50),
         )
+    }
+
+    private fun showPrivacyPolicy() {
+        val content = LinearLayout(activity).apply {
+            id = R.id.privacy_policy_content
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Palette.surface)
+            setPadding(
+                activity.dp(20),
+                activity.dp(18),
+                activity.dp(20),
+                activity.dp(18),
+            )
+            addView(TextView(activity).apply {
+                text = "隐私声明"
+                textSize = 24f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            addView(TextView(activity).apply {
+                text = "生效日期：2026 年 8 月 9 日"
+                textSize = 13f
+                setTextColor(Palette.muted)
+                setPadding(0, activity.dp(4), 0, activity.dp(14))
+            })
+            addView(privacyParagraph(
+                "Where To Study 是用于查看北邮个人课表和空教室的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。",
+            ))
+            addView(privacySection(
+                "账户与教务请求",
+                "你输入的学号和密码保存在操作系统的受保护凭据存储中。应用在你手动获取课表或空教室时，会通过 HTTPS 将凭据发送到北邮教务服务 jwglweixin.bupt.edu.cn。保存有效凭据后，应用还可能在启动，或系统允许的每日 07:00 左右后台任务中自动刷新当天空教室。项目维护者无法读取这些凭据。",
+            ))
+            addView(privacySection(
+                "本地数据",
+                "个人课表、空教室结果、校区和学期等设置会缓存在你的设备上，以减少重复请求。你可以在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室缓存、节假日缓存和提醒任务。",
+            ))
+            addView(privacySection(
+                "节假日数据",
+                "应用在启动、切换日历年份或缓存需要更新时，可能通过 unpkg 自动获取 holiday-calendar 数据集中的中国法定节假日和调休信息。请求只包含 CN 地区和年份，不包含你的凭据、课表或空教室数据。",
+            ))
+            addView(privacySection(
+                "系统日历与课程提醒",
+                "只有在你主动操作并授予系统权限后，应用才会向系统日历写入课程或在本地安排课程摘要通知。应用只管理带有 Where To Study 标记的日历事件，相关数据不会上传给项目维护者。",
+            ))
+            addView(privacySection(
+                "不收集的数据",
+                "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务和节假日数据的 CDN 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。",
+            ))
+            addView(privacySection(
+                "保留与删除",
+                "凭据和缓存会保留在你的设备上，直到被替换、在设置中清除或随应用卸载移除。清除本地数据不会删除北邮教务服务持有的记录。",
+            ))
+            addView(privacySection(
+                "安全与联系",
+                "隐私问题可以在 GitHub 提交不含敏感信息的讨论或 Issue。请勿在公开内容中提供账号、密码、令牌、个人课表或其他敏感数据。",
+            ))
+            addView(TextView(activity).apply {
+                id = R.id.privacy_github_link
+                text = "在 GitHub 查看项目与完整声明 ↗"
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setTextColor(Palette.primaryText)
+                setTypeface(typeface, Typeface.BOLD)
+                background = roundedBackground(
+                    activity,
+                    Palette.surface,
+                    Palette.border,
+                    radius = 6,
+                )
+                isClickable = true
+                isFocusable = true
+                contentDescription = "在 GitHub 查看完整隐私声明"
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    activity.dp(48),
+                ).apply {
+                    topMargin = activity.dp(18)
+                }
+                setOnClickListener {
+                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
+                }
+            })
+        }
+        val scroll = ScrollView(activity).apply {
+            isFillViewport = true
+            setBackgroundColor(Palette.surface)
+            addView(content)
+        }
+        AlertDialog.Builder(activity)
+            .setView(scroll)
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    private fun privacySection(title: String, body: String): LinearLayout =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, activity.dp(16), 0, 0)
+            addView(TextView(activity).apply {
+                text = title
+                textSize = 16f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            addView(privacyParagraph(body).apply {
+                setPadding(0, activity.dp(6), 0, 0)
+            })
+        }
+
+    private fun privacyParagraph(body: String): TextView = TextView(activity).apply {
+        text = body
+        textSize = 14f
+        setTextColor(Palette.muted)
+        setLineSpacing(0f, 1.15f)
     }
 
     private companion object {

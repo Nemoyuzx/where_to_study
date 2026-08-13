@@ -31,6 +31,7 @@ struct TeachingCalendarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     titleBar
+                        .accessibilityIdentifier("layout.calendar.expanded")
 
                     Surface {
                         VStack(alignment: .leading, spacing: 14) {
@@ -81,9 +82,15 @@ struct TeachingCalendarView: View {
             modePicker.frame(maxWidth: 280)
         }
         #else
-        VStack(alignment: .leading, spacing: 12) {
-            PageTitle(eyebrow: "BUPT Classroom Planner", title: "教学日历")
-            modePicker
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .bottom, spacing: 24) {
+                PageTitle(eyebrow: "BUPT Classroom Planner", title: "教学日历")
+                modePicker.frame(width: 300)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                PageTitle(eyebrow: "BUPT Classroom Planner", title: "教学日历")
+                modePicker
+            }
         }
         #endif
     }
@@ -254,7 +261,7 @@ struct TeachingCalendarView: View {
         let months = (1 ... 12).compactMap {
             calendar.date(from: DateComponents(year: year, month: $0, day: 1))
         }
-        let columns = [GridItem(.adaptive(minimum: 220, maximum: 300), spacing: 14)]
+        let columns = [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 14)]
         return VStack(alignment: .leading, spacing: 12) {
             Text(verbatim: "\(year) 年课程分布").font(.title2.bold())
             Text("颜色越深表示当天课程越多；点击日期查看日程")

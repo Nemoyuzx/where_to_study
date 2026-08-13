@@ -98,20 +98,21 @@ enum TodayCourseWidgetData {
     }
 
     private static func writableFileURLs() -> [URL] {
-        var urls = [URL]()
+        #if APP_STORE_BUILD
         if let groupURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupIdentifier
         ) {
-            urls.append(groupURL.appendingPathComponent(archiveFileName, isDirectory: false))
+            return [groupURL.appendingPathComponent(archiveFileName, isDirectory: false)]
         }
-
-        // Ad-hoc local builds have no provisioning profile. Keep a second copy
-        // in the containing app's established support directory so a locally
-        // launched, non-sandboxed extension can still read the snapshot.
+        return []
+        #else
+        // Ad-hoc local packages have no registered App Group container. Keep a
+        // compatibility copy for those preview builds only; App Store archives
+        // define APP_STORE_BUILD and use the signed group container exclusively.
         let supportURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/WhereToStudyNative", isDirectory: true)
             .appendingPathComponent(archiveFileName, isDirectory: false)
-        if !urls.contains(supportURL) { urls.append(supportURL) }
-        return urls
+        return [supportURL]
+        #endif
     }
 }

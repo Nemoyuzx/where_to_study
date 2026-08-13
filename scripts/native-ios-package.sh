@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/package-validation.sh
 source "$ROOT_DIR/scripts/package-validation.sh"
+"$ROOT_DIR/scripts/sync-app-icons.sh"
 npm --prefix "$ROOT_DIR" run licenses:check
 APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
@@ -20,6 +21,7 @@ else
   EXPECTED_VERSION=""
 fi
 CONFIGURED_BUILD="$(sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION: "\([^"]*\)"/\1/p' "$APPLE_DIR/project.yml" | head -n 1)"
+EXPECTED_BUNDLE_IDENTIFIER="com.nemoyu.wheretostudy.native.macos"
 
 "$ROOT_DIR/scripts/native-apple-generate.sh"
 rm -rf "$ARCHIVE_PATH"
@@ -71,6 +73,11 @@ done
 plutil -lint "$APP/Info.plist" "$APP/PrivacyInfo.xcprivacy" >/dev/null
 ACTUAL_VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Info.plist")"
 ACTUAL_BUILD="$(plutil -extract CFBundleVersion raw "$APP/Info.plist")"
+ACTUAL_BUNDLE_IDENTIFIER="$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist")"
+if [[ "$ACTUAL_BUNDLE_IDENTIFIER" != "$EXPECTED_BUNDLE_IDENTIFIER" ]]; then
+  echo "Native iOS archive bundle identifier $ACTUAL_BUNDLE_IDENTIFIER does not match $EXPECTED_BUNDLE_IDENTIFIER." >&2
+  exit 1
+fi
 if [[ -n "$EXPECTED_VERSION" && "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
   echo "Native iOS archive version $ACTUAL_VERSION does not match release label $RELEASE_LABEL." >&2
   exit 1

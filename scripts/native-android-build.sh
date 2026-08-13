@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+"$ROOT_DIR/scripts/sync-app-icons.sh"
 ANDROID_DIR="$ROOT_DIR/native/android"
 GRADLEW="$ANDROID_DIR/gradlew"
 

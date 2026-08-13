@@ -401,6 +401,50 @@ final class ScheduleLogicTests: XCTestCase {
         ), 700)
     }
 
+    func testCalendarTimelineMinimumWidthKeepsSevenDayWeekReadableOnIPad() {
+        XCTAssertEqual(
+            CalendarTimelineLogic.minimumDayAreaWidth(dayCount: 7, minimumDayWidth: 96),
+            672
+        )
+        XCTAssertEqual(
+            CalendarTimelineLogic.minimumDayAreaWidth(dayCount: 1, minimumDayWidth: 96),
+            160
+        )
+    }
+
+    func testAdaptiveLayoutPolicyKeepsCompactIPhoneTabs() {
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.primaryNavigation(width: 430, horizontalClass: .compact),
+            .tabs
+        )
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.primaryNavigation(width: 900, horizontalClass: .compact),
+            .tabs
+        )
+    }
+
+    func testAdaptiveLayoutPolicyUsesSidebarOnlyForRegularUsableWidth() {
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.primaryNavigation(width: 1_024, horizontalClass: .regular),
+            .sidebar
+        )
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.primaryNavigation(width: 699, horizontalClass: .regular),
+            .tabs
+        )
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.primaryNavigation(width: 700, horizontalClass: .regular),
+            .sidebar
+        )
+    }
+
+    func testAdaptiveCalendarAndContentColumnsFollowAvailableDetailWidth() {
+        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 899), .compact)
+        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 900), .expanded)
+        XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 759), 1)
+        XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 760), 2)
+    }
+
     #if os(iOS)
     func testMobileTimelineFitsDayAndWeekIntoThePhoneViewport() {
         XCTAssertEqual(
