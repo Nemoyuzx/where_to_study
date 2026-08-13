@@ -366,7 +366,7 @@ final class LocalDataClearTests: XCTestCase {
     private static var classrooms: ClassroomsCache {
         ClassroomsCache(
             cacheVersion: ClassroomDefaults.cacheVersion,
-            targetDate: dateFormatter.string(from: .now),
+            targetDate: StrictContractDateParser.string(from: .now),
             fetchedAt: "2026-03-01T00:00:00+08:00",
             realtime: true,
             provider: "fixture",
@@ -383,13 +383,6 @@ final class LocalDataClearTests: XCTestCase {
         )
     }
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
 }
 
 private final class InMemoryCredentialStore: CredentialStoring, @unchecked Sendable {
