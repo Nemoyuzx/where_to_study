@@ -402,16 +402,17 @@ class ScheduleLogicTest {
         assertEquals(9 * 60 + 50, CalendarTimelineLogic.minuteOfDay("09:50"))
         assertTrue(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 51))
         assertFalse(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 47))
-        assertEquals(236f to 354f, CalendarTimelineLogic.dayColumnBounds(2, 118f, 826f))
+        assertEquals(312f to 468f, CalendarTimelineLogic.dayColumnBounds(2, 156f, 1_092f))
         assertEquals(112, CalendarTimelineLogic.axisWidthDp(compact = true))
         assertEquals(
             42,
             CalendarTimelineLogic.axisWidthDp(compact = true, showCourseSlots = false),
         )
         assertEquals(144, CalendarTimelineLogic.axisWidthDp(compact = false))
-        assertEquals(96, CalendarTimelineLogic.dayWidthDp(compact = true))
-        assertEquals(814, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
-        assertEquals(970, CalendarTimelineLogic.totalHeightDp(compact = false, showDayHeader = true))
+        assertEquals(132, CalendarTimelineLogic.dayWidthDp(compact = true))
+        assertEquals(156, CalendarTimelineLogic.dayWidthDp(compact = false))
+        assertEquals(898, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
+        assertEquals(1_026, CalendarTimelineLogic.totalHeightDp(compact = false, showDayHeader = true))
     }
 
     @Test
@@ -442,6 +443,27 @@ class ScheduleLogicTest {
         assertEquals(34, TeachingCalendarLogic.phoneDateCellWidth(320, leadingWidthDp = 42))
         assertEquals(44, TeachingCalendarLogic.phoneDateCellWidth(390, leadingWidthDp = 42))
         assertEquals(57, TeachingCalendarLogic.phoneDateCellWidth(480, leadingWidthDp = 42))
+    }
+
+    @Test
+    fun calendarSwipeRequiresACommittedHorizontalGesture() {
+        assertEquals(1, TeachingCalendarLogic.swipePageDirection(-96f, 12f))
+        assertEquals(-1, TeachingCalendarLogic.swipePageDirection(96f, -12f))
+        assertEquals(0, TeachingCalendarLogic.swipePageDirection(-60f, 2f))
+        assertEquals(0, TeachingCalendarLogic.swipePageDirection(-96f, 80f))
+        assertEquals(0, TeachingCalendarLogic.swipePageDirection(0f, 120f))
+    }
+
+    @Test
+    fun monthExpansionUsesDistinctReadableCellHeights() {
+        assertEquals(52, TeachingCalendarLogic.monthCellHeightDp(expanded = false))
+        assertEquals(88, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
+    }
+
+    @Test
+    fun expandedTimelinePagingIsLimitedToItsHeader() {
+        assertEquals(64, TeachingCalendarLogic.expandedSwipeRegionHeightDp(true))
+        assertEquals(null, TeachingCalendarLogic.expandedSwipeRegionHeightDp(false))
     }
 
     private fun parseHolidays(

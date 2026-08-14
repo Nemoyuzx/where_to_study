@@ -6,7 +6,10 @@ import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.transition.AutoTransition
+import android.transition.TransitionManager
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -20,8 +23,11 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.abs
 
 object TeachingCalendarLogic {
+    const val swipeThresholdDp = 72
+
     fun yearCourseOpacity(courseCount: Int): Float {
         if (courseCount <= 0) return 0f
         val count = courseCount.toFloat()
@@ -33,6 +39,66 @@ object TeachingCalendarLogic {
             if (leadingWidthDp > 0) 34 else 40,
             64,
         )
+
+    fun swipePageDirection(
+        deltaXDp: Float,
+        deltaYDp: Float,
+        thresholdDp: Int = swipeThresholdDp,
+    ): Int {
+        val horizontalDistance = abs(deltaXDp)
+        val verticalDistance = abs(deltaYDp)
+        if (horizontalDistance < thresholdDp || horizontalDistance <= verticalDistance * 1.4f) {
+            return 0
+        }
+        return if (deltaXDp < 0f) 1 else -1
+    }
+
+    fun monthCellHeightDp(expanded: Boolean): Int = if (expanded) 88 else 52
+
+    fun expandedSwipeRegionHeightDp(hasHorizontallyScrollableContent: Boolean): Int? =
+        if (hasHorizontallyScrollableContent) 64 else null
+}
+
+private class CalendarSwipeContainer(
+    context: MainActivity,
+) : FrameLayout(context) {
+    var onPageSwipe: ((Int) -> Unit)? = null
+    var swipeEnabled: Boolean = true
+    var swipeRegionHeightDp: Int? = null
+    private var downX = 0f
+    private var downY = 0f
+    private var gestureEligible = false
+    private val density = resources.displayMetrics.density
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                val regionHeight = swipeRegionHeightDp?.let { it * density }
+                gestureEligible = swipeEnabled && (regionHeight == null || downY <= regionHeight)
+            }
+            MotionEvent.ACTION_UP -> {
+                val direction = TeachingCalendarLogic.swipePageDirection(
+                    deltaXDp = (event.x - downX) / density,
+                    deltaYDp = (event.y - downY) / density,
+                )
+                if (gestureEligible && direction != 0) {
+                    val cancelEvent = MotionEvent.obtain(event).apply {
+                        action = MotionEvent.ACTION_CANCEL
+                    }
+                    super.dispatchTouchEvent(cancelEvent)
+                    cancelEvent.recycle()
+                    gestureEligible = false
+                    post { onPageSwipe?.invoke(direction) }
+                    return true
+                }
+                gestureEligible = false
+            }
+            MotionEvent.ACTION_CANCEL -> gestureEligible = false
+        }
+        return super.dispatchTouchEvent(event)
+    }
 }
 
 class TeachingCalendarPage(
@@ -51,6 +117,8 @@ class TeachingCalendarPage(
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val selectedDate = Calendar.getInstance(shanghai)
     private var selectedMode = Mode.WEEK
+    private var monthExpanded = true
+    private var animateNextRender = false
     private var activePopupAnchor: YearCalendarView? = null
     private var activePopup: PopupWindow? = null
 
@@ -72,6 +140,12 @@ class TeachingCalendarPage(
 
         fun render() {
             dismissYearPopover()
+            if (animateNextRender) {
+                TransitionManager.beginDelayedTransition(content, AutoTransition().apply {
+                    duration = 220L
+                })
+                animateNextRender = false
+            }
             tabs.forEach { (mode, view) -> view.setSelectedStyle(activity, mode == selectedMode) }
             content.removeAllViews()
             content.addView(dateNavigation(::render))
@@ -86,12 +160,21 @@ class TeachingCalendarPage(
                     setPadding(activity.dp(4), 0, activity.dp(4), activity.dp(10))
                 })
             }
-            content.addView(
-                when (selectedMode) {
+            val calendarView = when (selectedMode) {
                     Mode.DAY -> dayView()
                     Mode.WEEK -> weekView(::render)
                     Mode.MONTH -> monthView(::render)
-                    Mode.YEAR -> yearView()
+                    Mode.YEAR -> yearView(::render)
+                }
+            content.addView(
+                if (selectedMode == Mode.YEAR) {
+                    calendarView
+                } else {
+                    swipeContainer(
+                        calendarView,
+                        ::render,
+                        limitSwipeToHeader = selectedMode == Mode.DAY || selectedMode == Mode.WEEK,
+                    )
                 },
             )
             visibleYears().forEach { year ->
@@ -141,7 +224,7 @@ class TeachingCalendarPage(
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.background)
         }
-        val content = FrameLayout(activity).apply {
+        val content = CalendarSwipeContainer(activity).apply {
             setBackgroundColor(Palette.background)
         }
         val tabs = mutableMapOf<Mode, TextView>()
@@ -157,8 +240,20 @@ class TeachingCalendarPage(
 
         fun render() {
             dismissYearPopover()
+            if (animateNextRender) {
+                TransitionManager.beginDelayedTransition(content, AutoTransition().apply {
+                    duration = 220L
+                })
+                animateNextRender = false
+            }
             tabs.forEach { (mode, view) ->
                 view.setCompactSelectedStyle(activity, mode == selectedMode)
+            }
+            content.swipeEnabled = selectedMode != Mode.YEAR
+            content.swipeRegionHeightDp = if (selectedMode == Mode.DAY || selectedMode == Mode.WEEK) {
+                176
+            } else {
+                null
             }
             periodLabel.text = periodTitle()
             content.removeAllViews()
@@ -197,7 +292,7 @@ class TeachingCalendarPage(
                 when (selectedMode) {
                     Mode.DAY, Mode.WEEK -> error("Day and week use a fixed phone timeline layout")
                     Mode.MONTH -> monthView(::render)
-                    Mode.YEAR -> yearView()
+                    Mode.YEAR -> yearView(::render)
                 },
             )
             scroll.addView(body)
@@ -209,6 +304,14 @@ class TeachingCalendarPage(
                 ),
             )
             visibleYears().forEach(holidayRepository::ensure)
+        }
+
+        content.onPageSwipe = { direction ->
+            if (selectedMode != Mode.YEAR) {
+                stepDate(direction)
+                animateNextRender = true
+                render()
+            }
         }
 
         root.addView(LinearLayout(activity).apply {
@@ -686,16 +789,45 @@ class TeachingCalendarPage(
 
     private fun monthView(onDateChanged: () -> Unit): LinearLayout = surface(activity).apply {
         val monthTitle = SimpleDateFormat("yyyy年M月", Locale.CHINA).apply { timeZone = shanghai }
-        addView(sectionTitle(activity, monthTitle.format(selectedDate.time)))
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(sectionTitle(activity, monthTitle.format(selectedDate.time)), LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f,
+            ))
+            addView(TextView(activity).apply {
+                text = if (monthExpanded) "折叠日程" else "展开日程"
+                textSize = 13f
+                gravity = Gravity.CENTER
+                setTextColor(Palette.primaryText)
+                setTypeface(typeface, Typeface.BOLD)
+                background = roundedBackground(activity, Palette.surfaceVariant, Palette.border, radius = 6)
+                isClickable = true
+                isFocusable = true
+                contentDescription = if (monthExpanded) "折叠月日程" else "展开月日程"
+                setOnClickListener {
+                    monthExpanded = !monthExpanded
+                    animateNextRender = true
+                    onDateChanged()
+                }
+                layoutParams = LinearLayout.LayoutParams(activity.dp(88), activity.dp(36)).apply {
+                    bottomMargin = activity.dp(8)
+                }
+            })
+        })
         addView(weekdayHeader())
         monthGridDates().chunked(7).forEach { week ->
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
-                week.forEach { day -> addView(monthDayCell(day, onDateChanged)) }
+                week.forEach { day -> addView(monthDayCell(day, onDateChanged, monthExpanded)) }
             })
         }
-        addView(spacer(activity, 12))
-        addView(selectedDayDetails(selectedDate))
+        if (!monthExpanded) {
+            addView(spacer(activity, 12))
+            addView(selectedDayDetails(selectedDate))
+        }
     }
 
     private fun weekdayHeader(): LinearLayout = LinearLayout(activity).apply {
@@ -712,7 +844,11 @@ class TeachingCalendarPage(
         }
     }
 
-    private fun monthDayCell(day: Calendar, onDateChanged: () -> Unit): TextView {
+    private fun monthDayCell(
+        day: Calendar,
+        onDateChanged: () -> Unit,
+        expanded: Boolean,
+    ): TextView {
         val courses = coursesOn(day)
         val holidays = holidaysOn(day)
         val inMonth = day.get(Calendar.MONTH) == selectedDate.get(Calendar.MONTH) &&
@@ -720,15 +856,24 @@ class TeachingCalendarPage(
         val selected = sameDay(day, selectedDate)
         val today = sameDay(day, Calendar.getInstance(shanghai))
         return TextView(activity).apply {
-            text = buildList {
-                add(if (today) "今天 ${day.get(Calendar.DAY_OF_MONTH)}" else day.get(Calendar.DAY_OF_MONTH).toString())
-                holidays.firstOrNull()?.let { add("${if (it.type == "holiday") "休" else "班"} ${it.name}") }
-                if (holidays.isEmpty()) add(if (courses.isEmpty()) "无课" else "${courses.size} 门课")
-            }.joinToString("\n")
-            textSize = 11f
+            text = if (expanded) {
+                buildList {
+                    add(if (today) "今天 ${day.get(Calendar.DAY_OF_MONTH)}" else day.get(Calendar.DAY_OF_MONTH).toString())
+                    holidays.firstOrNull()?.let { add("${if (it.type == "holiday") "休" else "班"} ${it.name}") }
+                    courses.take(2).forEach { add(it.name) }
+                    if (holidays.isEmpty() && courses.isEmpty()) add("无课")
+                }.joinToString("\n")
+            } else {
+                buildList {
+                    add(if (today) "今天 ${day.get(Calendar.DAY_OF_MONTH)}" else day.get(Calendar.DAY_OF_MONTH).toString())
+                    holidays.firstOrNull()?.let { add(if (it.type == "holiday") "休 ${it.name}" else "班 ${it.name}") }
+                    if (holidays.isEmpty() && courses.isNotEmpty()) add("• ${courses.size} 门课")
+                }.joinToString("\n")
+            }
+            textSize = if (expanded) 11f else 10.5f
             gravity = Gravity.TOP or Gravity.START
-            maxLines = 3
-            setPadding(activity.dp(5), activity.dp(6), activity.dp(4), activity.dp(4))
+            maxLines = if (expanded) 4 else 2
+            setPadding(activity.dp(4), activity.dp(5), activity.dp(3), activity.dp(3))
             setTextColor(when {
                 selected -> Palette.onPrimary
                 !inMonth -> Palette.outOfMonth
@@ -747,14 +892,18 @@ class TeachingCalendarPage(
                 selectedDate.timeInMillis = day.timeInMillis
                 onDateChanged()
             }
-            layoutParams = LinearLayout.LayoutParams(0, activity.dp(80), 1f).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                activity.dp(TeachingCalendarLogic.monthCellHeightDp(expanded)),
+                1f,
+            ).apply {
                 marginEnd = activity.dp(2)
                 bottomMargin = activity.dp(2)
             }
         }
     }
 
-    private fun yearView(): LinearLayout = surface(activity).apply {
+    private fun yearView(onDateChanged: () -> Unit): LinearLayout = surface(activity).apply {
         val year = selectedDate.get(Calendar.YEAR)
         addView(sectionTitle(activity, "$year 年课程分布"))
         addView(TextView(activity).apply {
@@ -769,7 +918,9 @@ class TeachingCalendarPage(
                 year = year,
                 days = yearCalendarDays(year),
                 availableWidthDp = availableWidthDp,
-                onDateSelected = ::showDayPopover,
+                onDateSelected = { anchor, day, tapX, tapY ->
+                    showDayPopover(anchor, day, tapX, tapY, onDateChanged)
+                },
             ),
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -783,6 +934,7 @@ class TeachingCalendarPage(
         day: Calendar,
         tapX: Float,
         tapY: Float,
+        onDateChanged: () -> Unit,
     ) {
         dismissYearPopover()
         anchor.selectDate(day)
@@ -794,7 +946,33 @@ class TeachingCalendarPage(
         val panel = ScrollView(activity).apply {
             background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
             setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
-            addView(selectedDayDetails(day))
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(selectedDayDetails(day))
+                addView(spacer(activity, 12))
+                addView(TextView(activity).apply {
+                    text = "跳转到"
+                    textSize = 12f
+                    setTextColor(Palette.muted)
+                    setPadding(0, 0, 0, activity.dp(6))
+                })
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    listOf(Mode.DAY, Mode.WEEK, Mode.MONTH).forEach { mode ->
+                        addView(fixedTab(activity, mode.label) {
+                            selectedDate.timeInMillis = day.timeInMillis
+                            selectedMode = mode
+                            dismissYearPopover()
+                            animateNextRender = true
+                            onDateChanged()
+                        }.apply {
+                            setSelectedStyle(activity, false)
+                        }, LinearLayout.LayoutParams(0, activity.dp(38), 1f).apply {
+                            marginEnd = activity.dp(6)
+                        })
+                    }
+                })
+            })
             measure(
                 View.MeasureSpec.makeMeasureSpec(panelWidth, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(maximumHeight, View.MeasureSpec.AT_MOST),
@@ -995,6 +1173,26 @@ class TeachingCalendarPage(
             Mode.YEAR -> selectedDate.add(Calendar.YEAR, direction)
         }
     }
+
+    private fun swipeContainer(
+        view: View,
+        onChanged: () -> Unit,
+        limitSwipeToHeader: Boolean = false,
+    ): CalendarSwipeContainer =
+        CalendarSwipeContainer(activity).apply {
+            swipeRegionHeightDp = TeachingCalendarLogic.expandedSwipeRegionHeightDp(
+                hasHorizontallyScrollableContent = limitSwipeToHeader,
+            )
+            addView(view, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+            onPageSwipe = { direction ->
+                stepDate(direction)
+                animateNextRender = true
+                onChanged()
+            }
+        }
 
     private fun sameDay(left: Calendar, right: Calendar): Boolean =
         left.get(Calendar.ERA) == right.get(Calendar.ERA) &&

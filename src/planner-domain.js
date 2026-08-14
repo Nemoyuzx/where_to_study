@@ -159,6 +159,13 @@ export function shiftDate(dateString, view, direction) {
   return localDateString(date)
 }
 
+export function calendarSwipeDirection(deltaX, deltaY, threshold = 56) {
+  if (Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) {
+    return 0
+  }
+  return deltaX < 0 ? 1 : -1
+}
+
 export function startOfWeekSunday(dateString) {
   const date = dateFromString(dateString)
   date.setDate(date.getDate() - date.getDay())

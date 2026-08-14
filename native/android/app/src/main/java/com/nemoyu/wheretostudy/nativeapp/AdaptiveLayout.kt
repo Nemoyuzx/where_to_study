@@ -82,9 +82,9 @@ object AdaptiveLayoutLogic {
 object AdaptiveContentLogic {
     fun plannerSlotColumns(contentWidthDp: Int): Int = when {
         contentWidthDp >= AdaptiveLayoutLogic.EXPANDED_BREAKPOINT_DP -> 7
-        contentWidthDp >= AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP -> 5
-        contentWidthDp >= 480 -> 3
-        else -> 2
+        contentWidthDp >= AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP -> 6
+        contentWidthDp >= 480 -> 4
+        else -> 3
     }
 
     fun plannerBuildingColumns(contentWidthDp: Int): Int = when {

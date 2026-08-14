@@ -23,4 +23,5 @@
     <item name="calendar_date_strip" type="id" />
     <item name="calendar_timeline" type="id" />
     <item name="calendar_timeline_scroll" type="id" />
+    <item name="calendar_timeline_day_scroll" type="id" />
 </resources>

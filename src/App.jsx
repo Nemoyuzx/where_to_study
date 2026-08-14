@@ -9,6 +9,8 @@ import {
   CalendarPlus,
   CalendarRange,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   ExternalLink,
   Home,
@@ -29,6 +31,7 @@ import {
   buildMiniMonthDays,
   buildMonthDays,
   buildingsForCampus,
+  calendarSwipeDirection,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
   CALENDAR_VIEWS,
@@ -485,8 +488,11 @@ function App() {
     supports_calendar_import: false,
   })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
+  const [queryCampusId, setQueryCampusId] = useState(DEFAULT_SETTINGS.campusId)
   const [calendarDate, setCalendarDate] = useState(localDateString())
   const [calendarView, setCalendarView] = useState('week')
+  const [calendarMotion, setCalendarMotion] = useState('')
+  const [monthExpanded, setMonthExpanded] = useState(true)
   const [schedule, setSchedule] = useState(null)
   const [classroomsCache, setClassroomsCache] = useState(null)
   const [classroomsCacheLoaded, setClassroomsCacheLoaded] = useState(false)
@@ -514,6 +520,9 @@ function App() {
   const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false)
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
+  const calendarGestureRef = useRef(null)
+  const calendarMotionTimerRef = useRef(null)
+  const suppressCalendarClickUntilRef = useRef(0)
   const pageContentRef = useRef(null)
   const requestedHolidayYears = useRef(new Set())
   const savedCredentialState = useRef({ account: '', hasSavedPassword: false })
@@ -562,6 +571,7 @@ function App() {
         savedCredentialState.current = savedCredential
         if (revision === credentialStateRevision.current) {
           setSettings(nextSettings)
+          setQueryCampusId(nextSettings.campusId)
           setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
         } else {
           setSettings((current) => ({
@@ -581,6 +591,10 @@ function App() {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    return () => window.clearTimeout(calendarMotionTimerRef.current)
   }, [])
 
   useEffect(() => {
@@ -696,8 +710,8 @@ function App() {
     [courses, activeTermStartDate, todayDate],
   )
   const classrooms = useMemo(
-    () => getCampusClassrooms(classroomsCache, settings.campusId),
-    [classroomsCache, settings.campusId],
+    () => getCampusClassrooms(classroomsCache, queryCampusId),
+    [classroomsCache, queryCampusId],
   )
   const calendarWeekState = useMemo(
     () => getWeekState(courses, activeTermStartDate, calendarDate),
@@ -712,11 +726,11 @@ function App() {
     [busySlots, slotMeta],
   )
   const buildings = useMemo(() => {
-    const configuredBuildings = buildingsForCampus(settings.campusId)
+    const configuredBuildings = buildingsForCampus(queryCampusId)
     if (configuredBuildings.length) return configuredBuildings
     const names = [...new Set((classrooms?.rooms || []).map((room) => room.building))]
     return names.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
-  }, [classrooms, settings.campusId])
+  }, [classrooms, queryCampusId])
   const filteredRooms = useMemo(() => {
     return (classrooms?.rooms || [])
       .filter((room) => !selectedBuildings.length || selectedBuildings.includes(room.building))
@@ -950,18 +964,58 @@ function App() {
   }
 
   function chooseCalendarDate(dateString) {
+    if (Date.now() < suppressCalendarClickUntilRef.current) return
     setCalendarDate(dateString)
     setCalendarPopover(null)
   }
 
   function moveCalendar(direction) {
     setCalendarPopover(null)
+    setCalendarMotion(direction > 0 ? 'next' : 'previous')
     setCalendarDate((current) => shiftDate(current, calendarView, direction))
+    window.clearTimeout(calendarMotionTimerRef.current)
+    calendarMotionTimerRef.current = window.setTimeout(() => setCalendarMotion(''), 240)
+  }
+
+  function beginCalendarSwipe(event) {
+    if (calendarView === 'year' || event.touches.length !== 1) return
+    const touch = event.touches[0]
+    calendarGestureRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      blocked: Boolean(event.target.closest('.time-course-block, input, select, textarea, a')),
+    }
+  }
+
+  function finishCalendarSwipe(event) {
+    const start = calendarGestureRef.current
+    calendarGestureRef.current = null
+    if (!start || start.blocked || event.changedTouches.length !== 1) return
+    const touch = event.changedTouches[0]
+    const direction = calendarSwipeDirection(touch.clientX - start.x, touch.clientY - start.y)
+    if (!direction) return
+    suppressCalendarClickUntilRef.current = Date.now() + 400
+    moveCalendar(direction)
+  }
+
+  function cancelCalendarSwipe() {
+    calendarGestureRef.current = null
+  }
+
+  function jumpFromYearPopover(view) {
+    const date = calendarPopover?.date
+    if (!date) return
+    setCalendarDate(date)
+    setCalendarView(view)
+    setCalendarPopover(null)
+    setCalendarMotion('view')
+    window.clearTimeout(calendarMotionTimerRef.current)
+    calendarMotionTimerRef.current = window.setTimeout(() => setCalendarMotion(''), 240)
   }
 
   function openYearDayPopover(event, dateString) {
     const popoverWidth = 300
-    const popoverHeight = 220
+    const popoverHeight = 340
     const x = Math.min(event.clientX + 12, window.innerWidth - popoverWidth - 12)
     const y = Math.min(event.clientY + 12, window.innerHeight - popoverHeight - 12)
     setCalendarDate(dateString)
@@ -1007,6 +1061,7 @@ function App() {
     await runTask('classrooms', async () => {
       const accountDataRevision = localDataClearRevision.current
       const data = await command('fetch_classrooms', requestBody(settings, {
+        campus_id: queryCampusId,
         target_date: todayDate,
       }))
       if (accountDataRevision !== localDataClearRevision.current) return
@@ -1046,6 +1101,7 @@ function App() {
         termStartDate: metadata.default_term_start_date || DEFAULT_SETTINGS.termStartDate,
         campusId: metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId,
       })
+      setQueryCampusId(metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId)
       clearAccountScopedViewState()
       setMinSeats(0)
       setSettingsSaved(false)
@@ -1151,9 +1207,9 @@ function App() {
                     <button
                       key={campus.id}
                       type="button"
-                      className={settings.campusId === campus.id ? 'active' : ''}
+                      className={queryCampusId === campus.id ? 'active' : ''}
                       onClick={() => {
-                        updateSetting('campusId', campus.id)
+                        setQueryCampusId(campus.id)
                         setSelectedBuildings([])
                       }}
                     >
@@ -1355,8 +1411,19 @@ function App() {
               ) : null}
 
                 {calendarView === 'day' || calendarView === 'week' ? (
-                  <div className={`time-calendar ${calendarView === 'day' ? 'single-day' : ''}`} style={{ '--day-count': visibleCalendarDays.length }}>
-                    <div className="time-corner" />
+                  <div
+                    className={`time-calendar ${calendarView === 'day' ? 'single-day calendar-swipe-surface' : 'week-calendar-scroll'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                    style={{ '--day-count': visibleCalendarDays.length }}
+                    onTouchStart={calendarView === 'day' ? beginCalendarSwipe : undefined}
+                    onTouchEnd={calendarView === 'day' ? finishCalendarSwipe : undefined}
+                    onTouchCancel={calendarView === 'day' ? cancelCalendarSwipe : undefined}
+                  >
+                    <div
+                      className="time-corner calendar-week-swipe-handle"
+                      onTouchStart={calendarView === 'week' ? beginCalendarSwipe : undefined}
+                      onTouchEnd={calendarView === 'week' ? finishCalendarSwipe : undefined}
+                      onTouchCancel={calendarView === 'week' ? cancelCalendarSwipe : undefined}
+                    />
                     {visibleCalendarDays.map((dateString) => {
                       const date = dateFromString(dateString)
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
@@ -1365,8 +1432,11 @@ function App() {
                         <button
                           key={`head-${dateString}`}
                           type="button"
-                          className={`time-day-head ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                          className={`time-day-head calendar-week-swipe-handle ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
                           onClick={() => chooseCalendarDate(dateString)}
+                          onTouchStart={calendarView === 'week' ? beginCalendarSwipe : undefined}
+                          onTouchEnd={calendarView === 'week' ? finishCalendarSwipe : undefined}
+                          onTouchCancel={calendarView === 'week' ? cancelCalendarSwipe : undefined}
                         >
                           <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
                           <strong>{date.getMonth() + 1}/{date.getDate()}</strong>
@@ -1437,8 +1507,10 @@ function App() {
                                   onClick={() => chooseCalendarDate(dateString)}
                                 >
                                   <strong><CourseName course={course} /></strong>
-                                  <span>{bounds.start}-{bounds.end}</span>
-                                  <small>{course.room || '地点未标注'}</small>
+                                  <span className="course-block-time">{bounds.start}-{bounds.end}</span>
+                                  <small className="course-block-place">
+                                    {course.room || '地点未标注'} · {course.teacher || '教师未标注'}
+                                  </small>
                                 </button>
                               )
                             })}
@@ -1450,42 +1522,64 @@ function App() {
                 ) : null}
 
                 {calendarView === 'month' ? (
-                  <div className="month-calendar">
-                    {CALENDAR_WEEKDAYS.map((label) => <span key={label} className="month-weekday">{label}</span>)}
-                    {visibleCalendarDays.map((dateString) => {
-                      const date = dateFromString(dateString)
-                      const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()
-                      const dayState = getWeekState(courses, activeTermStartDate, dateString)
-                      const calendarItems = calendarItemsFor(dateString)
-                      return (
-                        <button
-                          key={dateString}
-                          type="button"
-                          className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length ? 'has-calendar-item' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
-                          onClick={() => chooseCalendarDate(dateString)}
-                        >
-                          <span>{date.getDate()}</span>
-                          <div>
-                            {calendarItems.map((item) => (
-                              <small key={`${dateString}-${item.type}-${item.name}`} className={`calendar-item ${item.type}`}>
-                                <strong>{item.type === 'holiday' ? '休' : '班'}</strong>
-                                <span>{item.name}</span>
-                              </small>
-                            ))}
-                            {dayState.dayCourses.slice(0, 3).map((course) => {
-                              const bounds = courseTimeBounds(course, slotMeta)
-                              return (
-                                <small key={`${dateString}-${course.id}`}>
-                                  <strong>{bounds.start}-{bounds.end}</strong>
-                                  <span><CourseName course={course} /></span>
+                  <div className={`month-view ${monthExpanded ? 'expanded' : 'compact'}`}>
+                    <div className="month-view-controls">
+                      <button
+                        type="button"
+                        className="month-density-button"
+                        aria-expanded={monthExpanded}
+                        onClick={() => setMonthExpanded((current) => !current)}
+                      >
+                        {monthExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+                        {monthExpanded ? '折叠月历' : '展开月历'}
+                      </button>
+                    </div>
+                    <div
+                      className={`calendar-swipe-surface month-calendar ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                      onTouchStart={beginCalendarSwipe}
+                      onTouchEnd={finishCalendarSwipe}
+                      onTouchCancel={cancelCalendarSwipe}
+                    >
+                      {CALENDAR_WEEKDAYS.map((label) => <span key={label} className="month-weekday">{label}</span>)}
+                      {visibleCalendarDays.map((dateString) => {
+                        const date = dateFromString(dateString)
+                        const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()
+                        const dayState = getWeekState(courses, activeTermStartDate, dateString)
+                        const calendarItems = calendarItemsFor(dateString)
+                        const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length, 3)
+                        return (
+                          <button
+                            key={dateString}
+                            type="button"
+                            className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length ? 'has-calendar-item' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                            onClick={() => chooseCalendarDate(dateString)}
+                          >
+                            <span>{date.getDate()}</span>
+                            <div className="month-compact-markers" aria-hidden="true">
+                              {Array.from({ length: compactMarkers }, (_, index) => <i key={index} />)}
+                            </div>
+                            <div className="month-cell-details">
+                              {calendarItems.map((item) => (
+                                <small key={`${dateString}-${item.type}-${item.name}`} className={`calendar-item ${item.type}`}>
+                                  <strong>{item.type === 'holiday' ? '休' : '班'}</strong>
+                                  <span>{item.name}</span>
                                 </small>
-                              )
-                            })}
-                            {dayState.dayCourses.length > 3 ? <em>+{dayState.dayCourses.length - 3}</em> : null}
-                          </div>
-                        </button>
-                      )
-                    })}
+                              ))}
+                              {dayState.dayCourses.slice(0, 3).map((course) => {
+                                const bounds = courseTimeBounds(course, slotMeta)
+                                return (
+                                  <small key={`${dateString}-${course.id}`}>
+                                    <strong>{bounds.start}-{bounds.end}</strong>
+                                    <span><CourseName course={course} /></span>
+                                  </small>
+                                )
+                              })}
+                              {dayState.dayCourses.length > 3 ? <em>+{dayState.dayCourses.length - 3}</em> : null}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 ) : null}
 
@@ -1560,6 +1654,11 @@ function App() {
                       }) : (
                         <p>当天没有课程</p>
                       )}
+                    </div>
+                    <div className="popover-view-actions" aria-label="打开所选日期">
+                      <button type="button" onClick={() => jumpFromYearPopover('day')}>查看日</button>
+                      <button type="button" onClick={() => jumpFromYearPopover('week')}>查看周</button>
+                      <button type="button" onClick={() => jumpFromYearPopover('month')}>查看月</button>
                     </div>
                   </div>
                 ) : null}

@@ -10,10 +10,57 @@ private enum CalendarMode: String, CaseIterable, Identifiable {
 }
 
 enum TeachingCalendarLogic {
+    enum NavigationUnit {
+        case day
+        case week
+        case month
+        case year
+    }
+
     static func yearCourseOpacity(courseCount: Int) -> Double {
         guard courseCount > 0 else { return 0 }
         let count = Double(courseCount)
         return 0.12 + 0.72 * count / (count + 3)
+    }
+
+    static func movedDate(
+        from date: Date,
+        unit: NavigationUnit,
+        direction: Int,
+        calendar: Calendar = .shanghai
+    ) -> Date? {
+        let component: Calendar.Component
+        let amount: Int
+        switch unit {
+        case .day:
+            component = .day
+            amount = direction
+        case .week:
+            component = .day
+            amount = direction * 7
+        case .month:
+            component = .month
+            amount = direction
+        case .year:
+            component = .year
+            amount = direction
+        }
+        return calendar.date(byAdding: component, value: amount, to: date)
+    }
+
+    static func swipeDirection(
+        horizontalTranslation: CGFloat,
+        verticalTranslation: CGFloat,
+        predictedHorizontalTranslation: CGFloat
+    ) -> Int? {
+        let projected = abs(predictedHorizontalTranslation) > abs(horizontalTranslation)
+            ? predictedHorizontalTranslation
+            : horizontalTranslation
+        guard abs(horizontalTranslation) >= 36,
+              abs(projected) >= 80,
+              abs(horizontalTranslation) >= abs(verticalTranslation) * 1.35
+        else { return nil }
+        return projected < 0 ? 1 : -1
     }
 }
 
@@ -24,6 +71,7 @@ struct TeachingCalendarView: View {
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
     @State private var showingDatePicker = false
+    @State private var isMonthExpanded = true
 
     private let calendar = Calendar.shanghai
 
@@ -222,6 +270,8 @@ struct TeachingCalendarView: View {
                 selectedDate: selectedDate
             )
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(periodSwipeGesture)
     }
 
     private var weekView: some View {
@@ -232,6 +282,8 @@ struct TeachingCalendarView: View {
                 title: "\(Self.monthDayFormatter.string(from: weekStart)) 起的一周",
                 count: days.reduce(0) { $0 + courses(on: $1).count }
             )
+            .contentShape(Rectangle())
+            .simultaneousGesture(periodSwipeGesture)
             CalendarTimelineView(
                 days: days.map(timelineDay),
                 selectedDate: selectedDate,
@@ -250,6 +302,17 @@ struct TeachingCalendarView: View {
             HStack {
                 Text(Self.yearMonthFormatter.string(from: first)).font(.title2.bold())
                 Spacer()
+                Button {
+                    withAnimation(Self.monthExpansionAnimation) {
+                        isMonthExpanded.toggle()
+                    }
+                } label: {
+                    Label(
+                        isMonthExpanded ? "折叠月历" : "展开日程",
+                        systemImage: isMonthExpanded ? "chevron.up" : "chevron.down"
+                    )
+                }
+                .buttonStyle(.bordered)
                 Button("今天") { selectedDate = .now }
             }
             LazyVGrid(columns: columns, spacing: 4) {
@@ -265,6 +328,9 @@ struct TeachingCalendarView: View {
             }
             selectedDaySummary(selectedDate)
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(periodSwipeGesture)
+        .animation(Self.monthExpansionAnimation, value: isMonthExpanded)
     }
 
     private func monthDayButton(_ day: Date, month: Date) -> some View {
@@ -284,14 +350,32 @@ struct TeachingCalendarView: View {
                     .font(.caption.bold())
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                Text(detail)
-                    .font(.system(size: 10, weight: holidays.isEmpty ? .regular : .semibold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
+                if isMonthExpanded {
+                    Text(detail)
+                        .font(.system(size: 10, weight: holidays.isEmpty ? .regular : .semibold))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    HStack(spacing: 3) {
+                        if !holidays.isEmpty {
+                            Circle().frame(width: 4, height: 4)
+                        }
+                        ForEach(0 ..< min(dayCourses.count, 3), id: \.self) { _ in
+                            Circle().frame(width: 4, height: 4)
+                        }
+                    }
+                    .frame(height: 8)
+                    .transition(.opacity)
+                }
             }
             .foregroundStyle(monthTextColor(selected: isSelected, inMonth: inMonth, holidays: holidays))
             .padding(6)
-            .frame(maxWidth: .infinity, minHeight: 76, alignment: .topLeading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: isMonthExpanded ? 76 : 46,
+                alignment: .topLeading
+            )
             .background(monthCellColor(selected: isSelected, inMonth: inMonth, courseCount: dayCourses.count))
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
@@ -456,7 +540,29 @@ struct TeachingCalendarView: View {
                     }
                 }
             }
+            Divider()
+            HStack(spacing: 8) {
+                yearPopoverNavigationButton("日", mode: .day, day: day)
+                yearPopoverNavigationButton("周", mode: .week, day: day)
+                yearPopoverNavigationButton("月", mode: .month, day: day)
+            }
         }
+    }
+
+    private func yearPopoverNavigationButton(
+        _ title: String,
+        mode targetMode: CalendarMode,
+        day: Date
+    ) -> some View {
+        Button("\(title)视图") {
+            withAnimation(Self.viewAnimation) {
+                selectedDate = day
+                mode = targetMode
+            }
+            dismissYearPopover()
+        }
+        .buttonStyle(.bordered)
+        .frame(maxWidth: .infinity)
     }
 
     private func selectedDaySummary(_ day: Date) -> some View {
@@ -559,25 +665,37 @@ struct TeachingCalendarView: View {
     }
 
     private func moveDate(_ direction: Int) {
-        let component: Calendar.Component
-        let amount: Int
-        switch mode {
-        case .day:
-            component = .day
-            amount = direction
-        case .week:
-            component = .day
-            amount = direction * 7
-        case .month:
-            component = .month
-            amount = direction
-        case .year:
-            component = .year
-            amount = direction
-        }
-        if let moved = calendar.date(byAdding: component, value: amount, to: selectedDate) {
+        if let moved = TeachingCalendarLogic.movedDate(
+            from: selectedDate,
+            unit: navigationUnit,
+            direction: direction,
+            calendar: calendar
+        ) {
             withAnimation(Self.viewAnimation) { selectedDate = moved }
         }
+    }
+
+    private var navigationUnit: TeachingCalendarLogic.NavigationUnit {
+        switch mode {
+        case .day: .day
+        case .week: .week
+        case .month: .month
+        case .year: .year
+        }
+    }
+
+    private var periodSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 18, coordinateSpace: .local)
+            .onEnded { value in
+                guard mode != .year,
+                      let direction = TeachingCalendarLogic.swipeDirection(
+                          horizontalTranslation: value.translation.width,
+                          verticalTranslation: value.translation.height,
+                          predictedHorizontalTranslation: value.predictedEndTranslation.width
+                      )
+                else { return }
+                moveDate(direction)
+            }
     }
 
     private var modeSelection: Binding<CalendarMode> {
@@ -606,7 +724,7 @@ struct TeachingCalendarView: View {
 
     private func estimatedYearPopoverHeight(_ day: Date, availableHeight: CGFloat) -> CGFloat {
         let rows = max(1, holidayItems(on: day).count + courses(on: day).count)
-        return min(max(112, CGFloat(rows * 48 + 72)), min(320, max(112, availableHeight - 32)))
+        return min(max(160, CGFloat(rows * 48 + 124)), min(380, max(160, availableHeight - 32)))
     }
 
     private func monthCellColor(selected: Bool, inMonth: Bool, courseCount: Int) -> Color {
@@ -651,6 +769,7 @@ struct TeachingCalendarView: View {
     private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
     private static let calendarCoordinateSpace = "teaching-calendar"
     private static let viewAnimation = Animation.easeInOut(duration: 0.24)
+    private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
     private static let fullDateFormatter = dateFormatter("yyyy年M月d日 EEEE")
     private static let controlDateFormatter = dateFormatter("yyyy-MM-dd")
     private static let monthDayFormatter = dateFormatter("yyyy年M月d日")

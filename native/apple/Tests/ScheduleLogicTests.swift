@@ -504,7 +504,7 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     #if os(iOS)
-    func testMobileTimelineFitsDayAndWeekIntoThePhoneViewport() {
+    func testMobileTimelineKeepsDayInViewportAndWeekColumnsReadable() {
         XCTAssertEqual(
             MobileCalendarTimelineLayout.contentWidth(
                 availableWidth: 390,
@@ -519,8 +519,9 @@ final class ScheduleLogicTests: XCTestCase {
                 dayCount: 7,
                 showsWeekColumns: true
             ),
-            334
+            784
         )
+        XCTAssertGreaterThanOrEqual(MobileCalendarTimelineLayout.minimumWeekDayWidth, 112)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 8 * 60), 0)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 15 * 60), 504)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 22 * 60), 1_008)
@@ -550,6 +551,68 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(opacities, opacities.sorted())
         XCTAssertEqual(Set(opacities).count, opacities.count)
         XCTAssertLessThan(opacities.last!, 1)
+    }
+
+    func testCalendarNavigationMovesByVisiblePeriod() throws {
+        let calendar = Calendar.shanghai
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 15)))
+
+        XCTAssertEqual(
+            calendar.component(.day, from: try XCTUnwrap(TeachingCalendarLogic.movedDate(
+                from: date,
+                unit: .day,
+                direction: 1,
+                calendar: calendar
+            ))),
+            16
+        )
+        XCTAssertEqual(
+            calendar.component(.day, from: try XCTUnwrap(TeachingCalendarLogic.movedDate(
+                from: date,
+                unit: .week,
+                direction: 1,
+                calendar: calendar
+            ))),
+            22
+        )
+        XCTAssertEqual(
+            calendar.component(.month, from: try XCTUnwrap(TeachingCalendarLogic.movedDate(
+                from: date,
+                unit: .month,
+                direction: 1,
+                calendar: calendar
+            ))),
+            7
+        )
+    }
+
+    func testCalendarSwipeRequiresDeliberateHorizontalGesture() {
+        XCTAssertEqual(TeachingCalendarLogic.swipeDirection(
+            horizontalTranslation: -72,
+            verticalTranslation: 12,
+            predictedHorizontalTranslation: -118
+        ), 1)
+        XCTAssertEqual(TeachingCalendarLogic.swipeDirection(
+            horizontalTranslation: 72,
+            verticalTranslation: 12,
+            predictedHorizontalTranslation: 118
+        ), -1)
+        XCTAssertNil(TeachingCalendarLogic.swipeDirection(
+            horizontalTranslation: 30,
+            verticalTranslation: 2,
+            predictedHorizontalTranslation: 120
+        ))
+        XCTAssertNil(TeachingCalendarLogic.swipeDirection(
+            horizontalTranslation: 80,
+            verticalTranslation: 70,
+            predictedHorizontalTranslation: 120
+        ))
+    }
+
+    func testPlannerSlotColumnsUseCompactReadableWidths() {
+        XCTAssertEqual(PlannerLayoutMetrics.slotMinimumWidth, 104)
+        XCTAssertEqual(PlannerLayoutMetrics.slotMaximumWidth, 156)
+        XCTAssertEqual(PlannerLayoutMetrics.slotSpacing, 6)
     }
 
     func testBusySlotsIncludeEverySlotCoveredByTodaysCourses() {

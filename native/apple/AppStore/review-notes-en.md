@@ -1,6 +1,6 @@
 # App Review Notes (English)
 
-Submitted builds: iOS and macOS `0.1.3 (25)`. Build 24 is superseded; please review build 25.
+Submitted builds: iOS and macOS `0.1.4 (28)`. Please review build 28.
 
 Where To Study is an independent, unofficial schedule and empty-classroom client for students of Beijing University of Posts and Telecommunications. It is not operated by or affiliated with the university. The app has no purchases, subscriptions, advertising, analytics, or tracking SDKs.
 

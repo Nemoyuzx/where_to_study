@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     private val navigationViews = mutableMapOf<Destination, TextView>()
     private val credentialStore by lazy { SecureCredentialStore(this) }
     private val preferences by lazy { AppPreferences(this) }
+    private val plannerQueryState by lazy { PlannerQueryState(preferences.campusID) }
     private val scheduleRepository by lazy {
         ScheduleRepository(this, credentialStore, preferences)
     }
@@ -343,7 +344,7 @@ class MainActivity : Activity() {
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(
                 this,
-                preferences,
+                plannerQueryState,
                 scheduleRepository,
                 classroomRepository,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),

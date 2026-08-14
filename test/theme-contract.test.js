@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 const appCss = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
+const appSource = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 const tauriAndroidLightTheme = readFileSync(
   new URL(
@@ -70,6 +71,14 @@ test('component styles use semantic theme tokens instead of fixed colors', () =>
     .replace(/rgb\(var\(--primary-rgb\) \/ var\(--course-load-opacity, 0\.12\)\)/g, '')
     .match(/#[0-9a-f]{3,8}|rgba?\(/gi)
   assert.equal(fixedColors, null)
+})
+
+test('week calendar reserves horizontal pan for its scrollable timeline', () => {
+  assert.match(appCss, /\.time-calendar\s*\{[^}]*touch-action:\s*pan-x pan-y/s)
+  assert.match(appCss, /\.calendar-week-swipe-handle\s*\{[^}]*touch-action:\s*pan-y/s)
+  assert.match(appSource, /'single-day calendar-swipe-surface'\s*:\s*'week-calendar-scroll'/)
+  assert.match(appSource, /className="time-corner calendar-week-swipe-handle"/)
+  assert.match(appSource, /className=\{`time-day-head calendar-week-swipe-handle/)
 })
 
 test('Tauri Android chrome follows the active system theme', () => {

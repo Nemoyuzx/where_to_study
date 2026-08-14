@@ -65,9 +65,9 @@ object CalendarTimelineLogic {
         return hourWidth + if (showCourseSlots) slotWidth else 0
     }
 
-    fun dayWidthDp(compact: Boolean): Int = if (compact) 96 else 118
+    fun dayWidthDp(compact: Boolean): Int = if (compact) 132 else 156
 
-    fun hourHeightDp(compact: Boolean): Int = if (compact) 58 else 64
+    fun hourHeightDp(compact: Boolean): Int = if (compact) 64 else 68
 
     fun totalHeightDp(compact: Boolean, showDayHeader: Boolean): Int =
         (if (showDayHeader) 72 else 0) + hourHeightDp(compact) * 14 + 2
@@ -115,18 +115,17 @@ class CalendarTimelineView(
             showDayHeader = showDayHeader,
             showCourseSlots = showCourseSlots,
         )
-        if (compact) {
+        if (compact && days.size == 1) {
             addView(dayCanvas, LayoutParams(0, totalHeight, 1f))
         } else {
-            val preferredDayWidth = if (days.size > 1) {
-                context.dp(days.size * CalendarTimelineLogic.dayWidthDp(compact))
-            } else {
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            }
+            val preferredDayWidth = context.dp(
+                days.size.coerceAtLeast(1) * CalendarTimelineLogic.dayWidthDp(compact),
+            )
             addView(
                 HorizontalScrollView(context).apply {
+                    id = R.id.calendar_timeline_day_scroll
                     isFillViewport = true
-                    isHorizontalScrollBarEnabled = days.size > 1
+                    isHorizontalScrollBarEnabled = false
                     overScrollMode = OVER_SCROLL_IF_CONTENT_SCROLLS
                     addView(
                         dayCanvas,
@@ -415,30 +414,62 @@ private class CalendarTimelineCanvas(
                 canvas.clipRect(left, top, right, bottom)
                 boldPaint.color = Palette.onPrimary
                 boldPaint.textAlign = Paint.Align.LEFT
-                boldPaint.textSize = sp(if (days.size == 1) 13f else 8f)
+                val singleDay = days.size == 1
+                val blockHeight = bottom - top
+                boldPaint.textSize = sp(if (singleDay) 13f else 11f)
                 textPaint.color = Palette.onPrimary
                 textPaint.textAlign = Paint.Align.LEFT
-                textPaint.textSize = sp(if (days.size == 1) 11f else 8f)
+                textPaint.textSize = sp(if (singleDay) 11f else 9.5f)
                 val availableWidth = right - left - contentInset * 2
                 canvas.drawText(
                     ellipsize(placement.course.name, availableWidth, boldPaint),
                     left + contentInset,
-                    top + dp(if (days.size == 1) 17 else 13),
+                    top + dp(if (singleDay) 17 else 14),
                     boldPaint,
                 )
-                if (days.size == 1 && bottom - top >= dp(42)) {
+                if (blockHeight >= dp(if (singleDay) 42 else 30)) {
                     canvas.drawText(
                         ellipsize(placement.course.timeRange, availableWidth, textPaint),
                         left + contentInset,
-                        top + dp(33),
+                        top + dp(if (singleDay) 33 else 28),
                         textPaint,
                     )
                 }
-                if (days.size == 1 && bottom - top >= dp(60) && placement.course.room.isNotEmpty()) {
+                if (blockHeight >= dp(if (singleDay) 60 else 43)) {
+                    val metadataY = top + dp(if (singleDay) 49 else 41)
+                    val room = placement.course.room
+                    val teacher = placement.course.teacher
+                    if (singleDay) {
+                        canvas.drawText(
+                            ellipsize(room, availableWidth, textPaint),
+                            left + contentInset,
+                            metadataY,
+                            textPaint,
+                        )
+                    } else {
+                        val roomWidth = availableWidth * 0.56f
+                        val teacherWidth = availableWidth - roomWidth - dp(3)
+                        canvas.drawText(
+                            ellipsize(room, roomWidth, textPaint),
+                            left + contentInset,
+                            metadataY,
+                            textPaint,
+                        )
+                        textPaint.textAlign = Paint.Align.RIGHT
+                        canvas.drawText(
+                            ellipsize(teacher, teacherWidth, textPaint),
+                            right - contentInset,
+                            metadataY,
+                            textPaint,
+                        )
+                        textPaint.textAlign = Paint.Align.LEFT
+                    }
+                }
+                if (singleDay && blockHeight >= dp(76) && placement.course.teacher.isNotEmpty()) {
                     canvas.drawText(
-                        ellipsize(placement.course.room, availableWidth, textPaint),
+                        ellipsize(placement.course.teacher, availableWidth, textPaint),
                         left + contentInset,
-                        top + dp(49),
+                        top + dp(65),
                         textPaint,
                     )
                 }

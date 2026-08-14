@@ -18,9 +18,18 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+class PlannerQueryState(defaultCampusID: String) {
+    var campusID: String = defaultCampusID
+        private set
+
+    fun selectCampus(campusID: String) {
+        this.campusID = campusID
+    }
+}
+
 class PlannerPage(
     private val activity: MainActivity,
-    private val preferences: AppPreferences,
+    private val queryState: PlannerQueryState,
     private val scheduleRepository: ScheduleRepository,
     private val classroomRepository: ClassroomRepository,
     private val availableWidthDp: Int,
@@ -109,7 +118,7 @@ class PlannerPage(
         AppMetadata.campuses.forEach { campus ->
             lateinit var tab: TextView
             tab = fixedTab(activity, campus.name) {
-                preferences.campusID = campus.id
+                queryState.selectCampus(campus.id)
                 selectedBuildings.clear()
                 activity.refreshCurrentPage()
             }
@@ -120,7 +129,7 @@ class PlannerPage(
             row.addView(tab)
         }
         tabs.forEach { (campus, view) ->
-            view.setSelectedStyle(activity, campus.id == preferences.campusID)
+            view.setSelectedStyle(activity, campus.id == queryState.campusID)
         }
         return row
     }
@@ -263,6 +272,7 @@ class PlannerPage(
                             )
                             textSize = 13f
                             gravity = Gravity.CENTER
+                            setPadding(activity.dp(2), 0, activity.dp(2), 0)
                             isClickable = true
                             isFocusable = true
                             setOnClickListener {
@@ -272,8 +282,8 @@ class PlannerPage(
                                 renderResultsAndSummary()
                             }
                             layoutParams = LinearLayout.LayoutParams(0, activity.dp(58), 1f).apply {
-                                marginEnd = activity.dp(7)
-                                bottomMargin = activity.dp(7)
+                                marginEnd = activity.dp(4)
+                                bottomMargin = activity.dp(6)
                             }
                         }
                         cells[slot.index] = cell
@@ -282,7 +292,7 @@ class PlannerPage(
                     repeat(columns - slots.size) {
                         addView(TextView(activity).apply {
                             layoutParams = LinearLayout.LayoutParams(0, activity.dp(58), 1f).apply {
-                                marginEnd = activity.dp(7)
+                                marginEnd = activity.dp(4)
                             }
                         })
                     }
@@ -303,7 +313,7 @@ class PlannerPage(
 
     private fun buildingsSurface(): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "教学楼"))
-        val buildings = AppMetadata.buildings(preferences.campusID).ifEmpty {
+        val buildings = AppMetadata.buildings(queryState.campusID).ifEmpty {
             campusRooms().map(Classroom::building).distinct().sorted()
         }
         if (buildings.isEmpty()) {
@@ -434,7 +444,7 @@ class PlannerPage(
     }
 
     private fun campusRooms(): List<Classroom> = classroomRepository
-        .campus(preferences.campusID)?.rooms.orEmpty()
+        .campus(queryState.campusID)?.rooms.orEmpty()
 
     private fun matchingRooms(): List<Classroom> = campusRooms()
         .asSequence()

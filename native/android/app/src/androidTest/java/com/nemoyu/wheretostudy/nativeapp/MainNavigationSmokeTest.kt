@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
+import android.widget.HorizontalScrollView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -100,6 +101,29 @@ class MainNavigationSmokeTest {
                 assertVisible(device, "calendar_period_label")
                 click(device, "calendar_mode_week")
                 assertVisible(device, "calendar_date_strip")
+            } else {
+                assertVisible(device, "calendar_timeline_day_scroll")
+                val timelineScroller = device.findObject(
+                    By.res(TARGET_PACKAGE, "calendar_timeline_day_scroll"),
+                )
+                val bounds = timelineScroller.visibleBounds
+                device.swipe(
+                    bounds.right - bounds.width() / 8,
+                    bounds.centerY(),
+                    bounds.left + bounds.width() / 8,
+                    bounds.centerY(),
+                    24,
+                )
+                device.waitForIdle()
+                scenario.onActivity { activity ->
+                    val scrollView = activity.findViewById<HorizontalScrollView>(
+                        R.id.calendar_timeline_day_scroll,
+                    )
+                    assertTrue(
+                        "Expanded week timeline must scroll without triggering page navigation",
+                        scrollView.scrollX > 0,
+                    )
+                }
             }
 
             click(device, "navigation_settings")

@@ -142,6 +142,7 @@ final class AppModel: ObservableObject {
     @Published var termID: String
     @Published var termStartDate: String
     @Published var campusID: String
+    @Published private(set) var queryCampusID: String
     @Published var selectedSlots = Set(SlotMetadata.defaults.indices)
     @Published var selectedBuildings = Set<String>()
     @Published var usePersonalSchedule = true
@@ -215,7 +216,9 @@ final class AppModel: ObservableObject {
         self.defaults = defaults
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
-        campusID = defaults.string(forKey: "campusID") ?? "01"
+        let savedCampusID = defaults.string(forKey: "campusID") ?? "01"
+        campusID = savedCampusID
+        queryCampusID = savedCampusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
         loadCredentials()
         loadSchedule()
@@ -228,7 +231,7 @@ final class AppModel: ObservableObject {
     }
 
     var selectedCampusName: String {
-        campusID == "04" ? "沙河" : "西土城"
+        queryCampusID == "04" ? "沙河" : "西土城"
     }
 
     var isSampleMode: Bool {
@@ -287,11 +290,11 @@ final class AppModel: ObservableObject {
     }
 
     var campusRooms: [Classroom] {
-        classroomsCache?.campuses.first(where: { $0.campusID == campusID })?.rooms ?? []
+        classroomsCache?.campuses.first(where: { $0.campusID == queryCampusID })?.rooms ?? []
     }
 
     var campusBuildings: [String] {
-        let configuredBuildings = ClassroomDefaults.buildings(for: campusID)
+        let configuredBuildings = ClassroomDefaults.buildings(for: queryCampusID)
         return configuredBuildings.isEmpty
             ? Array(Set(campusRooms.map(\.building))).sorted()
             : configuredBuildings
@@ -338,10 +341,9 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func selectCampus(_ id: String) {
-        guard campusID != id else { return }
-        campusID = id
-        defaults.set(id, forKey: "campusID")
+    func selectQueryCampus(_ id: String) {
+        guard queryCampusID != id else { return }
+        queryCampusID = id
         selectedBuildings.removeAll()
     }
 
@@ -361,6 +363,7 @@ final class AppModel: ObservableObject {
         termID = schedule?.termID ?? "review-demo"
         termStartDate = schedule?.termStartDate ?? ScheduleDefaults.termStartDate
         campusID = "01"
+        queryCampusID = "01"
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         synchronizeSelectedSlots()
@@ -396,6 +399,7 @@ final class AppModel: ObservableObject {
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
         campusID = defaults.string(forKey: "campusID") ?? "01"
+        queryCampusID = campusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
         selectedBuildings.removeAll()
         usePersonalSchedule = true
@@ -553,6 +557,7 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: "termID")
         defaults.removeObject(forKey: "termStartDate")
         campusID = "01"
+        queryCampusID = "01"
         termID = ScheduleDefaults.termID
         termStartDate = ScheduleDefaults.termStartDate
         selectedBuildings.removeAll()

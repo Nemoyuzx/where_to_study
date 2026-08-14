@@ -6,6 +6,7 @@ enum MobileCalendarTimelineLayout {
     static let endMinute = 22 * 60
     static let hourHeight: CGFloat = 72
     static let axisWidth: CGFloat = 56
+    static let minimumWeekDayWidth: CGFloat = 112
     static let bottomContentInset: CGFloat = 104
 
     static var timelineHeight: CGFloat {
@@ -19,10 +20,12 @@ enum MobileCalendarTimelineLayout {
 
     static func contentWidth(
         availableWidth: CGFloat,
-        dayCount _: Int,
-        showsWeekColumns _: Bool
+        dayCount: Int,
+        showsWeekColumns: Bool
     ) -> CGFloat {
-        max(availableWidth - axisWidth, 1)
+        let viewportWidth = max(availableWidth - axisWidth, 1)
+        guard showsWeekColumns else { return viewportWidth }
+        return max(viewportWidth, CGFloat(max(dayCount, 1)) * minimumWeekDayWidth)
     }
 
     static func initialVisibleHour(currentHour: Int, includesToday: Bool) -> Int {
@@ -47,13 +50,7 @@ struct MobileCalendarTimelineView: View {
                         ZStack(alignment: .topLeading) {
                             HStack(alignment: .top, spacing: 0) {
                                 hourAxis
-                                timelineGrid(
-                                    width: MobileCalendarTimelineLayout.contentWidth(
-                                        availableWidth: proxy.size.width,
-                                        dayCount: days.count,
-                                        showsWeekColumns: showsWeekColumns
-                                    )
-                                )
+                                timelineGridViewport(availableWidth: proxy.size.width)
                             }
 
                             scrollAnchors
@@ -124,6 +121,25 @@ struct MobileCalendarTimelineView: View {
             height: MobileCalendarTimelineLayout.timelineHeight
         )
         .overlay(alignment: .trailing) { Divider() }
+    }
+
+    @ViewBuilder
+    private func timelineGridViewport(availableWidth: CGFloat) -> some View {
+        let viewportWidth = max(availableWidth - MobileCalendarTimelineLayout.axisWidth, 1)
+        let contentWidth = MobileCalendarTimelineLayout.contentWidth(
+            availableWidth: availableWidth,
+            dayCount: days.count,
+            showsWeekColumns: showsWeekColumns
+        )
+        if showsWeekColumns {
+            ScrollView(.horizontal, showsIndicators: true) {
+                timelineGrid(width: contentWidth)
+            }
+            .frame(width: viewportWidth, height: MobileCalendarTimelineLayout.timelineHeight)
+        } else {
+            timelineGrid(width: contentWidth)
+                .frame(width: viewportWidth, height: MobileCalendarTimelineLayout.timelineHeight)
+        }
     }
 
     private func timelineGrid(width: CGFloat) -> some View {
@@ -255,24 +271,33 @@ struct MobileCalendarTimelineView: View {
         let metadata = CalendarTimelineLogic.courseMetadata(placement.course)
         return VStack(alignment: .leading, spacing: showsWeekColumns ? 1 : 2) {
             Text(placement.course.name)
-                .font(.system(size: showsWeekColumns ? 8 : 12, weight: .semibold))
-                .lineLimit(showsWeekColumns ? 3 : 1)
-                .minimumScaleFactor(0.75)
+                .font(.system(size: showsWeekColumns ? 11 : 12, weight: .semibold))
+                .lineLimit(showsWeekColumns ? 2 : 1)
+                .minimumScaleFactor(0.9)
             if height >= 38 {
                 Text(placement.course.timeRange)
-                    .font(.system(size: showsWeekColumns ? 7 : 10, design: .monospaced))
+                    .font(.system(size: showsWeekColumns ? 9 : 10, design: .monospaced))
                     .lineLimit(1)
-                    .minimumScaleFactor(showsWeekColumns ? 0.45 : 0.75)
+                    .minimumScaleFactor(showsWeekColumns ? 0.8 : 0.75)
             }
-            if height >= 44, !metadata.isEmpty {
-                Text(metadata)
-                    .font(.system(size: showsWeekColumns ? 7 : 10))
+            if showsWeekColumns, height >= 48 {
+                Text(placement.course.room.isEmpty ? "地点未标注" : placement.course.room)
+                    .font(.system(size: 9))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                Text(placement.course.teacher.isEmpty ? "教师未标注" : "教师：\(placement.course.teacher)")
+                    .font(.system(size: 9))
                     .lineLimit(1)
-                    .minimumScaleFactor(showsWeekColumns ? 0.45 : 0.75)
+                    .minimumScaleFactor(0.85)
+            } else if height >= 44, !metadata.isEmpty {
+                Text(metadata)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
         }
         .foregroundStyle(AppTheme.onPrimary)
-        .padding(showsWeekColumns ? 3 : 6)
+        .padding(showsWeekColumns ? 5 : 6)
         .frame(width: width, height: height, alignment: .topLeading)
         .background(AppTheme.primaryFill)
         .clipShape(RoundedRectangle(cornerRadius: 6))

@@ -3,6 +3,8 @@ import test from 'node:test'
 import {
   accountHasSavedPassword,
   buildingsForCampus,
+  calendarSwipeDirection,
+  DEFAULT_SETTINGS,
   FALLBACK_SLOTS,
   fallbackHolidayItems,
   getCampusClassrooms,
@@ -10,6 +12,7 @@ import {
   getWeekState,
   isValidAccountScope,
   normalizeClassroomsCache,
+  requestBody,
   savedSettingsToState,
   settingsToPayload,
   shiftDate,
@@ -43,6 +46,13 @@ test('year navigation clamps leap day without changing the month', () => {
 test('day and week navigation preserve their existing increments', () => {
   assert.equal(shiftDate('2026-06-01', 'day', 1), '2026-06-02')
   assert.equal(shiftDate('2026-06-01', 'week', -1), '2026-05-25')
+})
+
+test('calendar swipe navigation requires an intentional horizontal gesture', () => {
+  assert.equal(calendarSwipeDirection(-80, 12), 1)
+  assert.equal(calendarSwipeDirection(80, -8), -1)
+  assert.equal(calendarSwipeDirection(42, 2), 0)
+  assert.equal(calendarSwipeDirection(-90, 80), 0)
 })
 
 test('teaching week calculation uses calendar days and reports busy slots', () => {
@@ -103,6 +113,15 @@ test('saved settings never hydrate a password into web state', () => {
   assert.equal(state.dailyCourseNotificationsEnabled, true)
   assert.equal(settingsToPayload(state).daily_course_notifications_enabled, true)
   assert.equal(accountHasSavedPassword(' student ', { account: 'student', hasSavedPassword: true }), true)
+})
+
+test('a classroom query can override campus without changing the saved default', () => {
+  const settings = { ...DEFAULT_SETTINGS, campusId: '01' }
+  const queryPayload = requestBody(settings, { campus_id: '04', target_date: '2026-06-01' })
+
+  assert.equal(queryPayload.campus_id, '04')
+  assert.equal(settings.campusId, '01')
+  assert.equal(settingsToPayload(settings).campus_id, '01')
 })
 
 test('legacy single-campus classroom data is normalized without changing rooms', () => {

@@ -54,6 +54,68 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             .waitForExistence(timeout: 5))
     }
 
+    func testMobileCalendarPagingMonthExpansionAndYearJump() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "教学日历", in: app)
+        let periodLabel = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^第 [0-9]+ 周$")
+        ).firstMatch
+        XCTAssertTrue(periodLabel.waitForExistence(timeout: 5))
+        let initialWeek = periodLabel.label
+        horizontalSwipe(in: app, atY: 0.29, toLeft: true)
+        XCTAssertTrue(waitForLabelChange(of: periodLabel, from: initialWeek))
+        horizontalSwipe(in: app, atY: 0.29, toLeft: false)
+        XCTAssertEqual(periodLabel.label, initialWeek)
+
+        app.segmentedControls.buttons["月"].tap()
+        let monthHeading = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
+        ).firstMatch
+        let collapse = app.buttons["折叠"]
+        XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
+        XCTAssertTrue(collapse.waitForExistence(timeout: 5))
+        attachScreenshot(named: "calendar-month-expanded")
+        collapse.tap()
+        let expand = app.buttons["展开"]
+        XCTAssertTrue(expand.waitForExistence(timeout: 3))
+        attachScreenshot(named: "calendar-month-collapsed")
+        expand.tap()
+        XCTAssertTrue(collapse.waitForExistence(timeout: 3))
+
+        let initialMonth = monthHeading.label
+        horizontalSwipe(in: app, atY: 0.56, toLeft: true)
+        XCTAssertTrue(waitForLabelChange(of: monthHeading, from: initialMonth))
+        horizontalSwipe(in: app, atY: 0.56, toLeft: false)
+        XCTAssertEqual(monthHeading.label, initialMonth)
+
+        for mode in ["日", "周", "月"] {
+            app.segmentedControls.buttons["年"].tap()
+            let yearDay = app.buttons["calendar.mobile.year-day.\(currentShanghaiDateString())"]
+            for _ in 0..<8 where !yearDay.exists {
+                app.swipeUp()
+            }
+            XCTAssertTrue(yearDay.waitForExistence(timeout: 3))
+            XCTAssertTrue(yearDay.isHittable)
+            yearDay.tap()
+
+            for target in ["日", "周", "月"] {
+                XCTAssertTrue(app.buttons["\(target)视图"].waitForExistence(timeout: 5))
+            }
+            if mode == "日" {
+                attachScreenshot(named: "calendar-year-date-actions")
+            }
+            app.buttons["\(mode)视图"].tap()
+            XCTAssertTrue(app.segmentedControls.buttons[mode].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.segmentedControls.buttons[mode].isSelected)
+        }
+    }
+
     func testSettingsCanEnterAndExitBuiltInSampleMode() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -209,6 +271,33 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func waitForLabelChange(of element: XCUIElement, from label: String) -> Bool {
+        let predicate = NSPredicate(format: "label != %@", label)
+        return XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
+            timeout: 3
+        ) == .completed
+    }
+
+    private func horizontalSwipe(in app: XCUIApplication, atY y: CGFloat, toLeft: Bool) {
+        let startX: CGFloat = toLeft ? 0.82 : 0.18
+        let endX: CGFloat = toLeft ? 0.18 : 0.82
+        app.coordinate(withNormalizedOffset: CGVector(dx: startX, dy: y))
+            .press(
+                forDuration: 0.05,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: endX, dy: y))
+            )
+    }
+
+    private func currentShanghaiDateString() -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: Date())
     }
 
     private func navigate(to title: String, in app: XCUIApplication) {

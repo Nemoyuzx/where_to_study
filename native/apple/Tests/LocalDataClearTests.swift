@@ -231,6 +231,35 @@ final class LocalDataClearTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testClassroomQueryCampusDoesNotChangeSavedDefaultCampus() throws {
+        let suiteName = "ClassroomQueryCampusTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("04", forKey: "campusID")
+        let model = AppModel(
+            scheduleStore: InMemoryScheduleStore(schedule: Self.schedule),
+            classroomStore: InMemoryClassroomStore(cache: Self.classrooms),
+            holidayStore: InMemoryHolidayStore(snapshot: Self.holidays(
+                year: Calendar.shanghai.component(.year, from: .now)
+            )),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+
+        XCTAssertEqual(model.campusID, "04")
+        XCTAssertEqual(model.queryCampusID, "04")
+        model.selectedBuildings = ["智慧教学楼"]
+
+        model.selectQueryCampus("01")
+
+        XCTAssertEqual(model.queryCampusID, "01")
+        XCTAssertEqual(model.campusID, "04")
+        XCTAssertEqual(defaults.string(forKey: "campusID"), "04")
+        XCTAssertTrue(model.selectedBuildings.isEmpty)
+        XCTAssertEqual(model.campusBuildings, ClassroomDefaults.buildings(for: "01"))
+    }
+
     func testFileStoresClearOwnedCachesIdempotently() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -377,6 +406,7 @@ final class LocalDataClearTests: XCTestCase {
         XCTAssertTrue(model.holidaysByYear.isEmpty)
         XCTAssertTrue(model.holidayStatusByYear.isEmpty)
         XCTAssertEqual(model.campusID, "01")
+        XCTAssertEqual(model.queryCampusID, "01")
         XCTAssertEqual(model.termID, ScheduleDefaults.termID)
         XCTAssertEqual(model.termStartDate, ScheduleDefaults.termStartDate)
         XCTAssertTrue(model.selectedBuildings.isEmpty)

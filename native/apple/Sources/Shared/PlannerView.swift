@@ -5,7 +5,13 @@ struct PlannerView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var slotColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 128, maximum: 190), spacing: 8)]
+        [GridItem(
+            .adaptive(
+                minimum: PlannerLayoutMetrics.slotMinimumWidth,
+                maximum: PlannerLayoutMetrics.slotMaximumWidth
+            ),
+            spacing: PlannerLayoutMetrics.slotSpacing
+        )]
     }
 
     private var buildingColumns: [GridItem] {
@@ -84,8 +90,8 @@ struct PlannerView: View {
                 Picker(
                     "校区",
                     selection: Binding(
-                        get: { model.campusID },
-                        set: { model.selectCampus($0) }
+                        get: { model.queryCampusID },
+                        set: { model.selectQueryCampus($0) }
                     )
                 ) {
                     Text("西土城").tag("01")
@@ -149,7 +155,7 @@ struct PlannerView: View {
                         .buttonStyle(.bordered)
                 }
 
-                LazyVGrid(columns: slotColumns, spacing: 8) {
+                LazyVGrid(columns: slotColumns, spacing: PlannerLayoutMetrics.slotSpacing) {
                     ForEach(model.slots) { slot in
                         slotButton(slot)
                     }
@@ -413,4 +419,10 @@ struct PlannerView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: .now)
     }
+}
+
+enum PlannerLayoutMetrics {
+    static let slotMinimumWidth: CGFloat = 104
+    static let slotMaximumWidth: CGFloat = 156
+    static let slotSpacing: CGFloat = 6
 }

@@ -114,9 +114,10 @@ class AdaptiveLayoutLogicTest {
 
     @Test
     fun plannerColumnsUseContentPaneWidthRatherThanWholeDeviceWidth() {
-        assertEquals(2, AdaptiveContentLogic.plannerSlotColumns(479))
-        assertEquals(3, AdaptiveContentLogic.plannerSlotColumns(480))
-        assertEquals(5, AdaptiveContentLogic.plannerSlotColumns(600))
+        assertEquals(3, AdaptiveContentLogic.plannerSlotColumns(320))
+        assertEquals(3, AdaptiveContentLogic.plannerSlotColumns(479))
+        assertEquals(4, AdaptiveContentLogic.plannerSlotColumns(480))
+        assertEquals(6, AdaptiveContentLogic.plannerSlotColumns(600))
         assertEquals(7, AdaptiveContentLogic.plannerSlotColumns(840))
 
         assertEquals(2, AdaptiveContentLogic.plannerBuildingColumns(479))
@@ -126,5 +127,16 @@ class AdaptiveLayoutLogicTest {
 
         assertEquals(1, AdaptiveContentLogic.plannerSummaryColumns(479))
         assertEquals(3, AdaptiveContentLogic.plannerSummaryColumns(480))
+    }
+
+    @Test
+    fun classroomQueryCampusIsIndependentFromTheDefaultCampusValue() {
+        val defaultCampusID = "01"
+        val queryState = PlannerQueryState(defaultCampusID)
+
+        queryState.selectCampus("04")
+
+        assertEquals("01", defaultCampusID)
+        assertEquals("04", queryState.campusID)
     }
 }

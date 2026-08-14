@@ -45,9 +45,13 @@
 - 不添加设备外框、价格、排名、竞品名称或未经授权的学校标志。
 - 用 `sips -g pixelWidth -g pixelHeight -g hasAlpha <file>` 复核尺寸和 `hasAlpha: no`。
 
-## Build 25 已生成素材
+## Build 28 待提交素材
 
-本机目录：`release-artifacts/app-store/0.1.3-25/screenshots/final/`。该目录被 Git 忽略，避免把商店二进制素材加入源码历史；文件名、尺寸和 SHA-256 见 `screenshot-manifest.md`。
+当前 App Store Connect 构建为 `0.1.4 (28)`。正式提交前必须按本方案重新生成并检查 iPhone、iPad 与 macOS 截图，随后用 Build 28 文件替换 `screenshot-manifest.md` 中的历史清单。不得复用 Build 25 截图作为 Build 28 的商店素材。
+
+## 历史 Build 25 素材（不可用于当前提交）
+
+历史本机目录：`release-artifacts/app-store/0.1.3-25/screenshots/final/`。该目录被 Git 忽略，避免把商店二进制素材加入源码历史；文件名、尺寸和 SHA-256 见 `screenshot-manifest.md`。这些文件只用于追溯，不得上传到当前 App Store 版本。
 
 - iPhone 17 Pro Max：空教室、教学日历周视图、设置，均为 `1320 × 2868` 竖屏。
 - iPad Pro 13-inch：空教室和教学日历为 `2752 × 2064` 横屏，设置为 `2064 × 2752` 竖屏。

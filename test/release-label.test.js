@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import test from "node:test";
@@ -16,7 +17,7 @@ function validateReleaseLabel(label) {
 }
 
 test("release labels accept stable and unnumbered alpha versions", () => {
-  for (const label of ["v0.1.3", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
+  for (const label of ["v0.1.4", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
     assert.doesNotThrow(() => validateReleaseLabel(label), label);
   }
 });
@@ -25,4 +26,35 @@ test("release labels reject numeric suffixes after alpha", () => {
   for (const label of ["v0.2.0-alpha.1", "v0.2.0-alpha2", "v0.2.0-Alpha-4"]) {
     assert.throws(() => validateReleaseLabel(label), label);
   }
+});
+
+test("all tracked client projects use the stable 0.1.4 release version", () => {
+  const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
+  const tauriMetadata = JSON.parse(
+    readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
+  );
+  const cargoManifest = readFileSync(path.join(root, "src-tauri", "Cargo.toml"), "utf8");
+  const nativeAndroid = readFileSync(
+    path.join(root, "native", "android", "app", "build.gradle.kts"),
+    "utf8",
+  );
+  const nativeApple = readFileSync(path.join(root, "native", "apple", "project.yml"), "utf8");
+  const tauriApple = readFileSync(path.join(root, "src-tauri", "gen", "apple", "project.yml"), "utf8");
+  const tauriAppleInfo = readFileSync(
+    path.join(root, "src-tauri", "gen", "apple", "where_to_study_iOS", "Info.plist"),
+    "utf8",
+  );
+
+  assert.equal(packageMetadata.version, "0.1.4");
+  assert.equal(tauriMetadata.version, "0.1.4");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 1004);
+  assert.match(cargoManifest, /^version = "0\.1\.4"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.1\.4"/);
+  assert.match(nativeAndroid, /versionCode = 17/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.4"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "28"/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.4/);
+  assert.match(tauriApple, /CFBundleVersion: "28"/);
+  assert.match(tauriAppleInfo, /<string>0\.1\.4<\/string>/);
+  assert.match(tauriAppleInfo, /<string>28<\/string>/);
 });
