@@ -190,6 +190,35 @@ struct SJDScheduleClient: ScheduleFetching {
     }
 }
 
+enum SJDFormURLEncoder {
+    static func data(_ values: [String: String]) -> Data {
+        values.sorted { $0.key < $1.key }
+            .map { "\(encodeComponent($0.key))=\(encodeComponent($0.value))" }
+            .joined(separator: "&")
+            .data(using: .utf8) ?? Data()
+    }
+
+    private static func encodeComponent(_ value: String) -> String {
+        let hex = Array("0123456789ABCDEF".utf8)
+        var encoded = [UInt8]()
+        encoded.reserveCapacity(value.utf8.count)
+
+        for byte in value.utf8 {
+            switch byte {
+            case 0x41 ... 0x5A, 0x61 ... 0x7A, 0x30 ... 0x39, 0x2A, 0x2D, 0x2E, 0x5F:
+                encoded.append(byte)
+            case 0x20:
+                encoded.append(0x2B)
+            default:
+                encoded.append(0x25)
+                encoded.append(hex[Int(byte >> 4)])
+                encoded.append(hex[Int(byte & 0x0F)])
+            }
+        }
+        return String(decoding: encoded, as: UTF8.self)
+    }
+}
+
 struct SJDAPIClient: Sendable {
     static let origin = "https://jwglweixin.bupt.edu.cn"
     static let loginReferer = "\(origin)/sjd/#/login"
@@ -216,7 +245,7 @@ struct SJDAPIClient: Sendable {
         var request = URLRequest(url: Self.loginURL)
         request.httpMethod = "POST"
         request.timeoutInterval = 20
-        request.httpBody = formData(["userNo": account, "pwd": credentials.password])
+        request.httpBody = SJDFormURLEncoder.data(["userNo": account, "pwd": credentials.password])
         applyHeaders(to: &request, referer: Self.loginReferer, token: nil)
 
         let payload = try await responseObject(for: request, failureMessage: "无法连接移动教务服务。")
@@ -318,13 +347,6 @@ struct SJDAPIClient: Sendable {
         request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         if let token { request.setValue(token, forHTTPHeaderField: "token") }
-    }
-
-    private func formData(_ values: [String: String]) -> Data? {
-        var components = URLComponents()
-        components.queryItems = values.sorted { $0.key < $1.key }
-            .map { URLQueryItem(name: $0.key, value: $0.value) }
-        return components.percentEncodedQuery?.data(using: .utf8)
     }
 
     static func isSuccessful(_ payload: [String: Any]) -> Bool {

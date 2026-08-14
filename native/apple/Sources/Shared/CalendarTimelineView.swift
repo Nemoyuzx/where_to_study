@@ -52,6 +52,26 @@ enum CalendarTimelineLogic {
         guard dayCount > 1 else { return 160 }
         return CGFloat(dayCount) * minimumDayWidth
     }
+
+    static var wholeHourMinutes: [Int] {
+        Array(stride(from: startMinute, through: endMinute, by: 60))
+    }
+
+    static var courseBoundaryMinutes: [Int] {
+        Array(Set(SlotMetadata.defaults.flatMap { slot in
+            [minute(of: slot.start), minute(of: slot.end)].compactMap { $0 }
+        })).sorted()
+    }
+
+    static var nonHourlyCourseBoundaryMinutes: [Int] {
+        courseBoundaryMinutes.filter { $0 % 60 != 0 }
+    }
+
+    static func courseMetadata(_ course: Course) -> String {
+        [course.room, course.teacher.isEmpty ? "" : "教师：\(course.teacher)"]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
 }
 
 struct CalendarTimelineView: View {
@@ -153,19 +173,34 @@ struct CalendarTimelineView: View {
                 Path(CGRect(x: 0, y: 0, width: contentLeft, height: headerHeight)),
                 with: .color(AppTheme.background)
             )
-            var lines = Path()
-            lines.move(to: CGPoint(x: 0, y: headerHeight))
-            lines.addLine(to: CGPoint(x: contentLeft, y: headerHeight))
-            lines.move(to: CGPoint(x: hourAxisWidth, y: 0))
-            lines.addLine(to: CGPoint(x: hourAxisWidth, y: totalHeight))
-            lines.move(to: CGPoint(x: contentLeft, y: 0))
-            lines.addLine(to: CGPoint(x: contentLeft, y: totalHeight))
-            for hour in 8 ... 22 {
-                let y = yPosition(minute: hour * 60)
-                lines.move(to: CGPoint(x: 0, y: y))
-                lines.addLine(to: CGPoint(x: contentLeft, y: y))
+            var structure = Path()
+            structure.move(to: CGPoint(x: 0, y: headerHeight))
+            structure.addLine(to: CGPoint(x: contentLeft, y: headerHeight))
+            structure.move(to: CGPoint(x: hourAxisWidth, y: 0))
+            structure.addLine(to: CGPoint(x: hourAxisWidth, y: totalHeight))
+            structure.move(to: CGPoint(x: contentLeft, y: 0))
+            structure.addLine(to: CGPoint(x: contentLeft, y: totalHeight))
+            context.stroke(structure, with: .color(AppTheme.border), lineWidth: 1)
+
+            var hourLines = Path()
+            for minute in CalendarTimelineLogic.wholeHourMinutes {
+                let y = yPosition(minute: minute)
+                hourLines.move(to: CGPoint(x: 0, y: y))
+                hourLines.addLine(to: CGPoint(x: hourAxisWidth, y: y))
             }
-            context.stroke(lines, with: .color(AppTheme.border), lineWidth: 1)
+            context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
+
+            var slotLines = Path()
+            for minute in CalendarTimelineLogic.courseBoundaryMinutes {
+                let y = yPosition(minute: minute)
+                slotLines.move(to: CGPoint(x: hourAxisWidth, y: y))
+                slotLines.addLine(to: CGPoint(x: contentLeft, y: y))
+            }
+            context.stroke(
+                slotLines,
+                with: .color(AppTheme.secondaryText.opacity(0.45)),
+                style: StrokeStyle(lineWidth: 0.8, dash: [4, 4])
+            )
         }
     }
 
@@ -175,20 +210,35 @@ struct CalendarTimelineView: View {
                 Path(CGRect(x: 0, y: 0, width: width, height: headerHeight)),
                 with: .color(AppTheme.background)
             )
-            var lines = Path()
-            lines.move(to: CGPoint(x: 0, y: headerHeight))
-            lines.addLine(to: CGPoint(x: width, y: headerHeight))
-            for hour in 8 ... 22 {
-                let y = yPosition(minute: hour * 60)
-                lines.move(to: CGPoint(x: 0, y: y))
-                lines.addLine(to: CGPoint(x: width, y: y))
-            }
+            var structure = Path()
+            structure.move(to: CGPoint(x: 0, y: headerHeight))
+            structure.addLine(to: CGPoint(x: width, y: headerHeight))
             for index in 0 ... max(days.count, 1) {
                 let x = CGFloat(index) * dayWidth
-                lines.move(to: CGPoint(x: x, y: 0))
-                lines.addLine(to: CGPoint(x: x, y: totalHeight))
+                structure.move(to: CGPoint(x: x, y: 0))
+                structure.addLine(to: CGPoint(x: x, y: totalHeight))
             }
-            context.stroke(lines, with: .color(AppTheme.border), lineWidth: 1)
+            context.stroke(structure, with: .color(AppTheme.border), lineWidth: 1)
+
+            var hourLines = Path()
+            for minute in CalendarTimelineLogic.wholeHourMinutes {
+                let y = yPosition(minute: minute)
+                hourLines.move(to: CGPoint(x: 0, y: y))
+                hourLines.addLine(to: CGPoint(x: width, y: y))
+            }
+            context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
+
+            var slotLines = Path()
+            for minute in CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes {
+                let y = yPosition(minute: minute)
+                slotLines.move(to: CGPoint(x: 0, y: y))
+                slotLines.addLine(to: CGPoint(x: width, y: y))
+            }
+            context.stroke(
+                slotLines,
+                with: .color(AppTheme.secondaryText.opacity(0.30)),
+                style: StrokeStyle(lineWidth: 0.7, dash: [4, 4])
+            )
         }
     }
 
@@ -319,34 +369,38 @@ struct CalendarTimelineView: View {
         let blockWidth = max(trackWidth - 6, 20)
         let blockHeight = bottom - top
         let isSingleDay = days.count == 1
+        let metadata = CalendarTimelineLogic.courseMetadata(placement.course)
         let background = placement.track == 0
             ? AppTheme.primaryFill
             : AppTheme.primaryFill.opacity(0.86)
 
-        return VStack(alignment: .leading, spacing: 2) {
+        return VStack(alignment: .leading, spacing: 1) {
             Text(placement.course.name)
-                .font(.system(size: isSingleDay ? 12 : 9, weight: .semibold))
+                .font(.system(size: isSingleDay ? 11 : 9, weight: .semibold))
                 .lineLimit(1)
-            if blockHeight >= 42 {
+                .minimumScaleFactor(0.75)
+            if blockHeight >= 38 {
                 Text(placement.course.timeRange)
-                    .font(.system(size: isSingleDay ? 10 : 8, design: .monospaced))
+                    .font(.system(size: isSingleDay ? 9 : 8, design: .monospaced))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            if isSingleDay, blockHeight >= 60, !placement.course.room.isEmpty {
-                Text(placement.course.room)
-                    .font(.system(size: 10))
+            if blockHeight >= 42, !metadata.isEmpty {
+                Text(metadata)
+                    .font(.system(size: isSingleDay ? 9 : 8))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.65)
             }
         }
         .foregroundStyle(AppTheme.onPrimary)
-        .padding(6)
+        .padding(isSingleDay ? 5 : 4)
         .frame(width: blockWidth, height: blockHeight, alignment: .topLeading)
         .background(background)
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .position(x: x + blockWidth / 2, y: (top + bottom) / 2)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(placement.course.timeRange)，\(placement.course.name)，\(placement.course.room)"
+            "\(placement.course.timeRange)，\(placement.course.name)，\(metadata)"
         )
     }
 

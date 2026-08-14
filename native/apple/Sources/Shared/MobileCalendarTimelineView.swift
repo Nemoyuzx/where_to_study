@@ -155,6 +155,18 @@ struct MobileCalendarTimelineView: View {
             }
             context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
 
+            var slotLines = Path()
+            for minute in CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes {
+                let y = MobileCalendarTimelineLayout.yPosition(minute: minute)
+                slotLines.move(to: CGPoint(x: 0, y: y))
+                slotLines.addLine(to: CGPoint(x: width, y: y))
+            }
+            context.stroke(
+                slotLines,
+                with: .color(AppTheme.secondaryText.opacity(0.24)),
+                style: StrokeStyle(lineWidth: 0.7, dash: [4, 4])
+            )
+
             guard showsWeekColumns else { return }
             var columns = Path()
             for index in 0 ... max(days.count, 1) {
@@ -240,20 +252,23 @@ struct MobileCalendarTimelineView: View {
         bottom: CGFloat
     ) -> some View {
         let height = bottom - top
+        let metadata = CalendarTimelineLogic.courseMetadata(placement.course)
         return VStack(alignment: .leading, spacing: showsWeekColumns ? 1 : 2) {
             Text(placement.course.name)
                 .font(.system(size: showsWeekColumns ? 8 : 12, weight: .semibold))
                 .lineLimit(showsWeekColumns ? 3 : 1)
                 .minimumScaleFactor(0.75)
-            if !showsWeekColumns, height >= 42 {
+            if height >= 38 {
                 Text(placement.course.timeRange)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: showsWeekColumns ? 7 : 10, design: .monospaced))
                     .lineLimit(1)
+                    .minimumScaleFactor(showsWeekColumns ? 0.45 : 0.75)
             }
-            if !showsWeekColumns, height >= 62, !placement.course.room.isEmpty {
-                Text(placement.course.room)
-                    .font(.system(size: 10))
+            if height >= 44, !metadata.isEmpty {
+                Text(metadata)
+                    .font(.system(size: showsWeekColumns ? 7 : 10))
                     .lineLimit(1)
+                    .minimumScaleFactor(showsWeekColumns ? 0.45 : 0.75)
             }
         }
         .foregroundStyle(AppTheme.onPrimary)
@@ -267,7 +282,7 @@ struct MobileCalendarTimelineView: View {
         .position(x: x + width / 2, y: (top + bottom) / 2)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "\(placement.course.timeRange)，\(placement.course.name)，\(placement.course.room)"
+            "\(placement.course.timeRange)，\(placement.course.name)，\(metadata)"
         )
     }
 

@@ -30,6 +30,9 @@ struct MobileTeachingCalendarView: View {
                     .accessibilityIdentifier("layout.calendar.compact")
                 statusArea
                 content
+                    .id(mode)
+                    .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                    .animation(Self.viewAnimation, value: mode)
             }
             .background(AppTheme.background)
             .accessibilityIdentifier("screen.calendar")
@@ -60,7 +63,9 @@ struct MobileTeachingCalendarView: View {
 
                 Spacer(minLength: 8)
 
-                Button("今天") { selectedDate = .now }
+                Button("今天") {
+                    withAnimation(Self.viewAnimation) { selectedDate = .now }
+                }
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(AppTheme.primary)
                     .accessibilityIdentifier("calendar.mobile.today")
@@ -80,7 +85,7 @@ struct MobileTeachingCalendarView: View {
                 actionMenu
             }
 
-            Picker("日历视图", selection: $mode) {
+            Picker("日历视图", selection: modeSelection) {
                 ForEach(MobileCalendarMode.allCases) { item in
                     Text(item.rawValue).tag(item)
                 }
@@ -162,7 +167,7 @@ struct MobileTeachingCalendarView: View {
         let holiday = holidayItems(on: day).first
 
         return Button {
-            selectedDate = day
+            withAnimation(Self.viewAnimation) { selectedDate = day }
         } label: {
             VStack(spacing: 3) {
                 Text(Self.weekdayFormatter.string(from: day))
@@ -240,7 +245,9 @@ struct MobileTeachingCalendarView: View {
                 days: days.map(timelineDay),
                 selectedDate: selectedDate,
                 showsWeekColumns: mode == .week,
-                onSelectDay: { selectedDate = $0 }
+                onSelectDay: { date in
+                    withAnimation(Self.viewAnimation) { selectedDate = date }
+                }
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("calendar.mobile.timeline")
@@ -248,14 +255,32 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var selectedDateSummary: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(Self.fullDateFormatter.string(from: selectedDate))
-                .font(.subheadline.weight(.semibold))
-            Spacer(minLength: 8)
-            let count = courses(on: selectedDate).count
-            Text(count == 0 ? "暂无课程" : "\(count) 门课")
-                .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+        let dayCourses = courses(on: selectedDate)
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(Self.fullDateFormatter.string(from: selectedDate))
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 8)
+                Text(dayCourses.isEmpty ? "暂无课程" : "\(dayCourses.count) 门课")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+            ForEach(dayCourses) { course in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(course.name)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    Text(
+                        [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
+                            .filter { !$0.isEmpty }
+                            .joined(separator: " · ")
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -455,7 +480,11 @@ struct MobileTeachingCalendarView: View {
                             .frame(width: 4, height: 38)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(course.name).font(.subheadline.weight(.semibold))
-                            Text([course.timeRange, course.room].filter { !$0.isEmpty }.joined(separator: " · "))
+                            Text(
+                                [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
+                                    .filter { !$0.isEmpty }
+                                    .joined(separator: " · ")
+                            )
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.secondaryText)
                         }
@@ -571,8 +600,17 @@ struct MobileTeachingCalendarView: View {
             amount = direction
         }
         if let date = calendar.date(byAdding: component, value: amount, to: selectedDate) {
-            selectedDate = date
+            withAnimation(Self.viewAnimation) { selectedDate = date }
         }
+    }
+
+    private var modeSelection: Binding<MobileCalendarMode> {
+        Binding(
+            get: { mode },
+            set: { newMode in
+                withAnimation(Self.viewAnimation) { mode = newMode }
+            }
+        )
     }
 
     private func dateStripForeground(holiday: HolidayItem?) -> Color {
@@ -605,6 +643,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private static let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
+    private static let viewAnimation = Animation.easeInOut(duration: 0.24)
     private static let fullDateFormatter = formatter("yyyy年M月d日 EEEE")
     private static let yearMonthFormatter = formatter("yyyy年M月")
     private static let monthFormatter = formatter("M月")

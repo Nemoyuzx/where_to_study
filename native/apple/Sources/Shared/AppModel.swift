@@ -170,6 +170,7 @@ final class AppModel: ObservableObject {
     private let calendarImporter: any CalendarImporting
     private let dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling
     private let dailyCourseNotificationAuthorizationTimeout: Duration
+    private let statusMessageAutoDismissDelay: Duration
     private let defaults: UserDefaults
     private let supportsRuntimeModeSwitching: Bool
     private var holidayLoads = HolidayLoadState()
@@ -179,6 +180,8 @@ final class AppModel: ObservableObject {
     private var calendarImportToken = 0
     private var dailyCourseNotificationRevision: UInt64 = 0
     private var dailyClassroomRefreshTask: Task<Void, Never>?
+    private var statusMessageDismissTask: Task<Void, Never>?
+    private var statusMessageRevision: UInt64 = 0
     private var savedCredentialAccount: String?
 
     init(
@@ -193,6 +196,7 @@ final class AppModel: ObservableObject {
         calendarImporter: any CalendarImporting = EventKitCalendarImporter(),
         dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling = UserNotificationCourseScheduler(),
         dailyCourseNotificationAuthorizationTimeout: Duration = .seconds(8),
+        statusMessageAutoDismissDelay: Duration = .seconds(4),
         defaults: UserDefaults = .standard
     ) {
         self.runtimeMode = runtimeMode
@@ -207,6 +211,7 @@ final class AppModel: ObservableObject {
         self.calendarImporter = calendarImporter
         self.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler
         self.dailyCourseNotificationAuthorizationTimeout = dailyCourseNotificationAuthorizationTimeout
+        self.statusMessageAutoDismissDelay = statusMessageAutoDismissDelay
         self.defaults = defaults
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
@@ -566,20 +571,20 @@ final class AppModel: ObservableObject {
         do {
             credentials = try credentialsForRequest()
         } catch {
-            statusMessage = error.localizedDescription
+            setStatusMessage(error.localizedDescription)
             return
         }
         isRefreshingSchedule = true
         scheduleRefreshToken &+= 1
         let refreshToken = scheduleRefreshToken
-        statusMessage = "正在获取个人课表…"
+        setStatusMessage("正在获取个人课表…")
         let fallbackTermID = termID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ScheduleDefaults.termID : termID.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackTermStart = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? ScheduleDefaults.termStartDate : termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
         guard StrictContractDateParser.date(from: fallbackTermStart) != nil else {
             isRefreshingSchedule = false
-            statusMessage = CredentialSettingsError.invalidTermStartDate.localizedDescription
+            setStatusMessage(CredentialSettingsError.invalidTermStartDate.localizedDescription)
             return
         }
         let generation = localDataGeneration
@@ -605,11 +610,38 @@ final class AppModel: ObservableObject {
                 defaults.set(termStartDate, forKey: "termStartDate")
                 synchronizeSelectedSlots()
                 reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
-                statusMessage = "个人课表已更新，共 \(fetched.courses.count) 门课程"
+                setStatusMessage(
+                    "个人课表已更新，共 \(fetched.courses.count) 门课程",
+                    autoDismiss: true
+                )
             } catch {
                 guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
-                statusMessage = error.localizedDescription
+                setStatusMessage(error.localizedDescription)
             }
+        }
+    }
+
+    private func setStatusMessage(_ message: String, autoDismiss: Bool = false) {
+        statusMessageRevision &+= 1
+        let revision = statusMessageRevision
+        statusMessageDismissTask?.cancel()
+        statusMessageDismissTask = nil
+        statusMessage = message
+
+        guard autoDismiss, !message.isEmpty else { return }
+        statusMessageDismissTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: self?.statusMessageAutoDismissDelay ?? .seconds(4))
+            } catch {
+                return
+            }
+            guard
+                let self,
+                self.statusMessageRevision == revision,
+                self.statusMessage == message
+            else { return }
+            self.statusMessage = ""
+            self.statusMessageDismissTask = nil
         }
     }
 

@@ -23,6 +23,19 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertTrue(SJDURLSession.shared.delegate is SJDURLSessionRedirectDelegate)
     }
 
+    func testSJDLoginFormUsesStandardEncodingForReservedAndUnicodeCharacters() throws {
+        let data = SJDFormURLEncoder.data([
+            "userNo": "2026+test",
+            "pwd": "A+B C&=中文*._-",
+        ])
+        let body = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertEqual(
+            body,
+            "pwd=A%2BB+C%26%3D%E4%B8%AD%E6%96%87*._-&userNo=2026%2Btest"
+        )
+    }
+
     func testSJDRedirectPolicyAllowsOnlySameSecureOriginAndEffectivePort() throws {
         let source = try XCTUnwrap(URL(string: "https://jwglweixin.bupt.edu.cn/bjyddx/login"))
         let explicitDefaultPort = try XCTUnwrap(URL(
@@ -384,6 +397,35 @@ final class ScheduleLogicTests: XCTestCase {
             hourMinute: 17 * 60,
             currentMinute: 16 * 60 + 47
         ))
+        XCTAssertEqual(CalendarTimelineLogic.wholeHourMinutes.first, 8 * 60)
+        XCTAssertEqual(CalendarTimelineLogic.wholeHourMinutes.last, 22 * 60)
+        XCTAssertEqual(CalendarTimelineLogic.wholeHourMinutes.count, 15)
+        XCTAssertTrue(CalendarTimelineLogic.courseBoundaryMinutes.contains(8 * 60 + 45))
+        XCTAssertTrue(CalendarTimelineLogic.courseBoundaryMinutes.contains(13 * 60))
+        XCTAssertFalse(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes.contains(13 * 60))
+        XCTAssertTrue(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes.contains(13 * 60 + 45))
+    }
+
+    func testTimelineCourseMetadataIncludesLocationAndTeacher() {
+        let course = Course(
+            id: "metadata",
+            name: "数据挖掘",
+            teacher: "徐思雅",
+            room: "教三楼-3-335",
+            weekText: "1-16",
+            weekNumbers: Array(1 ... 16),
+            examWeekNumbers: [],
+            weekday: 1,
+            startSlot: 2,
+            endSlot: 4,
+            sectionText: "3-5节",
+            timeRange: "09:50-12:15"
+        )
+
+        XCTAssertEqual(
+            CalendarTimelineLogic.courseMetadata(course),
+            "教三楼-3-335 · 教师：徐思雅"
+        )
     }
 
     func testMobileTimelineViewportAdaptsToPhoneAndTabletSizeClasses() {

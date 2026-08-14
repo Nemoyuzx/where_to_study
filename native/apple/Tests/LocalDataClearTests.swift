@@ -158,6 +158,35 @@ final class LocalDataClearTests: XCTestCase {
     }
 
     @MainActor
+    func testSuccessfulScheduleRefreshMessageAutomaticallyDismisses() async throws {
+        let suiteName = "ScheduleStatusDismissTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let year = Calendar.shanghai.component(.year, from: .now)
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(
+                credentials: Credentials(account: "fixture-account", password: "fixture-password")
+            ),
+            scheduleStore: InMemoryScheduleStore(schedule: nil),
+            scheduleClient: ImmediateScheduleClient(snapshot: Self.schedule),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: Self.holidays(year: year)),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            statusMessageAutoDismissDelay: .milliseconds(200),
+            defaults: defaults
+        )
+
+        model.refreshSchedule()
+        for _ in 0 ..< 50 where !model.statusMessage.hasPrefix("个人课表已更新") {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(model.statusMessage, "个人课表已更新，共 0 门课程")
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(model.statusMessage.isEmpty)
+    }
+
+    @MainActor
     func testRuntimeReviewDemoRestoresLiveDataWithoutMutatingStores() throws {
         let suiteName = "RuntimeReviewDemoTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
@@ -417,6 +446,18 @@ private struct InMemoryScheduleStore: ScheduleStoring {
     func load() throws -> ScheduleSnapshot? { schedule }
     func save(_: ScheduleSnapshot) throws {}
     func clear() throws {}
+}
+
+private struct ImmediateScheduleClient: ScheduleFetching {
+    let snapshot: ScheduleSnapshot
+
+    func fetch(
+        credentials _: Credentials,
+        fallbackTermID _: String,
+        fallbackTermStartDate _: String
+    ) async throws -> ScheduleSnapshot {
+        snapshot
+    }
 }
 
 private struct InMemoryClassroomStore: ClassroomStoring {

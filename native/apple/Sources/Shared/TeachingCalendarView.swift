@@ -23,6 +23,7 @@ struct TeachingCalendarView: View {
     @State private var mode: CalendarMode = .week
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
+    @State private var showingDatePicker = false
 
     private let calendar = Calendar.shanghai
 
@@ -53,6 +54,9 @@ struct TeachingCalendarView: View {
                             }
                             Divider()
                             calendarContent
+                                .id(mode)
+                                .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                                .animation(Self.viewAnimation, value: mode)
                         }
                     }
                 }
@@ -96,7 +100,7 @@ struct TeachingCalendarView: View {
     }
 
     private var modePicker: some View {
-        Picker("视图", selection: $mode) {
+        Picker("视图", selection: modeSelection) {
             ForEach(CalendarMode.allCases) { item in
                 Text(item.rawValue).tag(item)
             }
@@ -121,18 +125,59 @@ struct TeachingCalendarView: View {
 
     private var dateNavigation: some View {
         HStack(spacing: 8) {
-            Button { moveDate(-1) } label: { Image(systemName: "chevron.left") }
-                .help("上一时间段")
-            DatePicker("日期", selection: $selectedDate, displayedComponents: .date)
-                .labelsHidden()
-                .datePickerStyle(.compact)
-                .environment(\.locale, Locale(identifier: "zh_CN"))
-                .environment(\.timeZone, Self.shanghaiTimeZone)
-            Button("今天") { selectedDate = .now }
-            Button { moveDate(1) } label: { Image(systemName: "chevron.right") }
-                .help("下一时间段")
+            dateStepButton(systemName: "chevron.left", help: "上一时间段") { moveDate(-1) }
+            Button {
+                showingDatePicker.toggle()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "calendar")
+                    Text(Self.controlDateFormatter.string(from: selectedDate))
+                        .monospacedDigit()
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppTheme.text)
+                .frame(width: 148, height: 32)
+                .background(AppTheme.background)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(AppTheme.border, lineWidth: 1)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showingDatePicker, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("选择日期")
+                        .font(.headline)
+                    DatePicker("日期", selection: datePickerSelection, displayedComponents: .date)
+                        .labelsHidden()
+                        .datePickerStyle(.graphical)
+                        .environment(\.locale, Locale(identifier: "zh_CN"))
+                        .environment(\.timeZone, Self.shanghaiTimeZone)
+                }
+                .padding(14)
+                .frame(width: 310)
+            }
+            Button("今天") {
+                withAnimation(Self.viewAnimation) { selectedDate = .now }
+            }
+            .frame(minWidth: 48)
+            dateStepButton(systemName: "chevron.right", help: "下一时间段") { moveDate(1) }
         }
         .controlSize(.regular)
+    }
+
+    private func dateStepButton(
+        systemName: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .frame(width: 16, height: 18)
+        }
+        .buttonStyle(.bordered)
+        .help(help)
     }
 
     private var calendarActions: some View {
@@ -190,7 +235,9 @@ struct TeachingCalendarView: View {
             CalendarTimelineView(
                 days: days.map(timelineDay),
                 selectedDate: selectedDate,
-                onSelectDay: { selectedDate = $0 }
+                onSelectDay: { date in
+                    withAnimation(Self.viewAnimation) { selectedDate = date }
+                }
             )
         }
     }
@@ -399,7 +446,11 @@ struct TeachingCalendarView: View {
                 ForEach(dayCourses) { course in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(course.name).font(.subheadline.weight(.semibold))
-                        Text([course.timeRange, course.room].filter { !$0.isEmpty }.joined(separator: "  ·  "))
+                        Text(
+                            [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
+                                .filter { !$0.isEmpty }
+                                .joined(separator: "  ·  ")
+                        )
                             .font(.caption)
                             .foregroundStyle(AppTheme.secondaryText)
                     }
@@ -422,10 +473,18 @@ struct TeachingCalendarView: View {
                 Text("暂无课程").foregroundStyle(AppTheme.secondaryText)
             } else {
                 ForEach(dayCourses) { course in
-                    HStack {
-                        Text(course.name).font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Text(course.timeRange).font(.caption.monospacedDigit())
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(course.name).font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Text(course.timeRange).font(.caption.monospacedDigit())
+                        }
+                        let metadata = CalendarTimelineLogic.courseMetadata(course)
+                        if !metadata.isEmpty {
+                            Text(metadata)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.secondaryText)
+                        }
                     }
                 }
             }
@@ -517,8 +576,27 @@ struct TeachingCalendarView: View {
             amount = direction
         }
         if let moved = calendar.date(byAdding: component, value: amount, to: selectedDate) {
-            selectedDate = moved
+            withAnimation(Self.viewAnimation) { selectedDate = moved }
         }
+    }
+
+    private var modeSelection: Binding<CalendarMode> {
+        Binding(
+            get: { mode },
+            set: { newMode in
+                withAnimation(Self.viewAnimation) { mode = newMode }
+            }
+        )
+    }
+
+    private var datePickerSelection: Binding<Date> {
+        Binding(
+            get: { selectedDate },
+            set: { newDate in
+                withAnimation(Self.viewAnimation) { selectedDate = newDate }
+                showingDatePicker = false
+            }
+        )
     }
 
     private func dismissYearPopover() {
@@ -572,7 +650,9 @@ struct TeachingCalendarView: View {
     private static let holidayRed = AppTheme.danger
     private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
     private static let calendarCoordinateSpace = "teaching-calendar"
+    private static let viewAnimation = Animation.easeInOut(duration: 0.24)
     private static let fullDateFormatter = dateFormatter("yyyy年M月d日 EEEE")
+    private static let controlDateFormatter = dateFormatter("yyyy-MM-dd")
     private static let monthDayFormatter = dateFormatter("yyyy年M月d日")
     private static let yearMonthFormatter = dateFormatter("yyyy年M月")
     private static let monthFormatter = dateFormatter("M月")
