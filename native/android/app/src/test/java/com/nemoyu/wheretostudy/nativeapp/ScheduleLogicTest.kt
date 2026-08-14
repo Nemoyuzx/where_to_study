@@ -14,6 +14,22 @@ import org.junit.Test
 
 class ScheduleLogicTest {
     @Test
+    fun campusBuildingCatalogKeepsEveryOriginalBuildingVisible() {
+        assertEquals(listOf("教1", "教2", "教3", "教4", "主楼"), AppMetadata.buildings("01"))
+        assertEquals(
+            listOf(
+                "综合教学楼N",
+                "综合教学楼S",
+                "教学实验综合楼N",
+                "教学实验综合楼S",
+                "智慧教学楼",
+            ),
+            AppMetadata.buildings("04"),
+        )
+        assertTrue(AppMetadata.buildings("unknown").isEmpty())
+    }
+
+    @Test
     fun sjdTransportUsesHttps() {
         assertEquals("https://jwglweixin.bupt.edu.cn", SjdApiClient.ORIGIN)
         assertTrue(SjdApiClient.ORIGIN.startsWith("https://"))

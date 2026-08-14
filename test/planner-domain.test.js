@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   accountHasSavedPassword,
+  buildingsForCampus,
   FALLBACK_SLOTS,
   fallbackHolidayItems,
   getCampusClassrooms,
@@ -15,6 +16,18 @@ import {
   slotsToRanges,
   yearCourseOpacity,
 } from '../src/planner-domain.js'
+
+test('campus building catalog keeps every original building visible', () => {
+  assert.deepEqual(buildingsForCampus('1'), ['教1', '教2', '教3', '教4', '主楼'])
+  assert.deepEqual(buildingsForCampus('04'), [
+    '综合教学楼N',
+    '综合教学楼S',
+    '教学实验综合楼N',
+    '教学实验综合楼S',
+    '智慧教学楼',
+  ])
+  assert.deepEqual(buildingsForCampus('unknown'), [])
+})
 
 test('month navigation clamps dates at the destination month boundary', () => {
   assert.equal(shiftDate('2026-01-31', 'month', 1), '2026-02-28')

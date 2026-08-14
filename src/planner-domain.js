@@ -37,6 +37,11 @@ export const DEFAULT_SETTINGS = {
   dailyCourseNotificationsEnabled: false,
 }
 
+export const CAMPUS_BUILDINGS = Object.freeze({
+  '01': Object.freeze(['教1', '教2', '教3', '教4', '主楼']),
+  '04': Object.freeze(['综合教学楼N', '综合教学楼S', '教学实验综合楼N', '教学实验综合楼S', '智慧教学楼']),
+})
+
 const FALLBACK_HOLIDAY_PERIODS_2026 = [
   { name: '元旦', start: '2026-01-01', end: '2026-01-03' },
   { name: '春节', start: '2026-02-15', end: '2026-02-23' },
@@ -254,6 +259,10 @@ export function normalizeCampusId(campusId) {
   const value = String(campusId || DEFAULT_SETTINGS.campusId).trim()
   if (/^\d+$/.test(value)) return value.padStart(2, '0')
   return value
+}
+
+export function buildingsForCampus(campusId) {
+  return [...(CAMPUS_BUILDINGS[normalizeCampusId(campusId)] || [])]
 }
 
 export function normalizeClassroomsCache(data) {

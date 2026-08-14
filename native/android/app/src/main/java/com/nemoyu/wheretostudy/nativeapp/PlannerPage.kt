@@ -303,7 +303,9 @@ class PlannerPage(
 
     private fun buildingsSurface(): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "教学楼"))
-        val buildings = campusRooms().map(Classroom::building).distinct().sorted()
+        val buildings = AppMetadata.buildings(preferences.campusID).ifEmpty {
+            campusRooms().map(Classroom::building).distinct().sorted()
+        }
         if (buildings.isEmpty()) {
             addView(emptyMessage("暂无教学楼，请先获取当天空教室"))
             return@apply

@@ -28,6 +28,7 @@ import {
   buildCalendarDayMap,
   buildMiniMonthDays,
   buildMonthDays,
+  buildingsForCampus,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
   CALENDAR_VIEWS,
@@ -711,9 +712,11 @@ function App() {
     [busySlots, slotMeta],
   )
   const buildings = useMemo(() => {
+    const configuredBuildings = buildingsForCampus(settings.campusId)
+    if (configuredBuildings.length) return configuredBuildings
     const names = [...new Set((classrooms?.rooms || []).map((room) => room.building))]
     return names.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
-  }, [classrooms])
+  }, [classrooms, settings.campusId])
   const filteredRooms = useMemo(() => {
     return (classrooms?.rooms || [])
       .filter((room) => !selectedBuildings.length || selectedBuildings.includes(room.building))

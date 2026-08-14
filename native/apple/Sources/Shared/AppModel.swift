@@ -291,7 +291,10 @@ final class AppModel: ObservableObject {
     }
 
     var campusBuildings: [String] {
-        Array(Set(campusRooms.map(\.building))).sorted()
+        let configuredBuildings = ClassroomDefaults.buildings(for: campusID)
+        return configuredBuildings.isEmpty
+            ? Array(Set(campusRooms.map(\.building))).sorted()
+            : configuredBuildings
     }
 
     var matchingRooms: [Classroom] {

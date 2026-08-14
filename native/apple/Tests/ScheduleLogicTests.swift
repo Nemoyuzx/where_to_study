@@ -17,6 +17,18 @@ final class ScheduleLogicTests: XCTestCase {
             .appendingPathComponent(name))
     }
 
+    func testClassroomDefaultsExposeEveryOriginalBuildingForEachCampus() {
+        XCTAssertEqual(
+            ClassroomDefaults.buildings(for: "01"),
+            ["教1", "教2", "教3", "教4", "主楼"]
+        )
+        XCTAssertEqual(
+            ClassroomDefaults.buildings(for: "04"),
+            ["综合教学楼N", "综合教学楼S", "教学实验综合楼N", "教学实验综合楼S", "智慧教学楼"]
+        )
+        XCTAssertTrue(ClassroomDefaults.buildings(for: "unknown").isEmpty)
+    }
+
     func testSJDTransportUsesHTTPS() {
         XCTAssertEqual(SJDAPIClient.origin, "https://jwglweixin.bupt.edu.cn")
         XCTAssertEqual(URL(string: SJDAPIClient.origin)?.scheme, "https")
@@ -404,6 +416,10 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertTrue(CalendarTimelineLogic.courseBoundaryMinutes.contains(13 * 60))
         XCTAssertFalse(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes.contains(13 * 60))
         XCTAssertTrue(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes.contains(13 * 60 + 45))
+        XCTAssertTrue(
+            Set(CalendarTimelineLogic.wholeHourMinutes)
+                .isDisjoint(with: CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes)
+        )
     }
 
     func testTimelineCourseMetadataIncludesLocationAndTeacher() {

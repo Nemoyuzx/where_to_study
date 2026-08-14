@@ -197,6 +197,15 @@ enum ClassroomDefaults {
         (id: "01", name: "西土城"),
         (id: "04", name: "沙河")
     ]
+
+    private static let buildingsByCampusID = [
+        "01": ["教1", "教2", "教3", "教4", "主楼"],
+        "04": ["综合教学楼N", "综合教学楼S", "教学实验综合楼N", "教学实验综合楼S", "智慧教学楼"]
+    ]
+
+    static func buildings(for campusID: String) -> [String] {
+        buildingsByCampusID[campusID] ?? []
+    }
 }
 
 enum ScheduleLogic {

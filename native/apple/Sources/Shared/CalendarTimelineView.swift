@@ -117,7 +117,7 @@ struct CalendarTimelineView: View {
     private var timelineContent: some View {
         GeometryReader { proxy in
             TimelineView(.periodic(from: .now, by: 60)) { timeline in
-                HStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
                     axisContent(now: timeline.date)
                     ScrollView(.horizontal, showsIndicators: days.count > 1) {
                         dayContent(
@@ -186,20 +186,20 @@ struct CalendarTimelineView: View {
             for minute in CalendarTimelineLogic.wholeHourMinutes {
                 let y = yPosition(minute: minute)
                 hourLines.move(to: CGPoint(x: 0, y: y))
-                hourLines.addLine(to: CGPoint(x: hourAxisWidth, y: y))
+                hourLines.addLine(to: CGPoint(x: contentLeft, y: y))
             }
             context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
 
             var slotLines = Path()
-            for minute in CalendarTimelineLogic.courseBoundaryMinutes {
+            for minute in CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes {
                 let y = yPosition(minute: minute)
                 slotLines.move(to: CGPoint(x: hourAxisWidth, y: y))
                 slotLines.addLine(to: CGPoint(x: contentLeft, y: y))
             }
             context.stroke(
                 slotLines,
-                with: .color(AppTheme.secondaryText.opacity(0.45)),
-                style: StrokeStyle(lineWidth: 0.8, dash: [4, 4])
+                with: .color(AppTheme.secondaryText.opacity(0.30)),
+                style: StrokeStyle(lineWidth: 0.7, dash: [4, 4])
             )
         }
     }

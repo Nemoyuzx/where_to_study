@@ -90,6 +90,19 @@ object AppMetadata {
         CampusMetadata(id = "04", name = "沙河"),
     )
 
+    private val buildingsByCampusID = mapOf(
+        "01" to listOf("教1", "教2", "教3", "教4", "主楼"),
+        "04" to listOf(
+            "综合教学楼N",
+            "综合教学楼S",
+            "教学实验综合楼N",
+            "教学实验综合楼S",
+            "智慧教学楼",
+        ),
+    )
+
+    fun buildings(campusID: String): List<String> = buildingsByCampusID[campusID].orEmpty()
+
     val slots = listOf(
         SlotMetadata(0, "1", "08:00", "08:45"),
         SlotMetadata(1, "2", "08:50", "09:35"),
