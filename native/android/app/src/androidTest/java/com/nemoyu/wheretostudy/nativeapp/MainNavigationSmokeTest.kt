@@ -4,15 +4,21 @@ import android.app.NotificationManager
 import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
+import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.HorizontalScrollView
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -95,8 +101,46 @@ class MainNavigationSmokeTest {
 
                 click(device, "calendar_mode_day")
                 assertVisible(device, "calendar_timeline")
+                val dayBeforeSwipe = objectText(device, "calendar_period_label")
+                swipeResource(device, "calendar_timeline_scroll", horizontalDirection = 1)
+                assertTextChanged(device, "calendar_period_label", dayBeforeSwipe)
+                swipeResource(device, "calendar_timeline_scroll", horizontalDirection = 0)
+                scenario.onActivity { activity ->
+                    assertTrue(
+                        "Vertical timeline gestures must continue scrolling after page-swipe handling",
+                        activity.findViewById<ScrollView>(R.id.calendar_timeline_scroll).scrollY > 0,
+                    )
+                }
+
+                click(device, "calendar_mode_week")
+                assertVisible(device, "calendar_timeline")
+                scenario.onActivity { activity ->
+                    val timeline = activity.findViewById<View>(R.id.calendar_timeline)
+                    assertTrue(
+                        "Compact week timeline must fit within its phone viewport",
+                        timeline.width <= (timeline.parent as View).width,
+                    )
+                    assertTrue(
+                        "Compact week date strip must use fixed columns instead of horizontal scrolling",
+                        activity.findViewById<View>(R.id.calendar_date_strip) !is HorizontalScrollView,
+                    )
+                    assertTrue(
+                        "Compact week timeline must not create a horizontal scroller",
+                        activity.findViewById<View?>(R.id.calendar_timeline_day_scroll) == null,
+                    )
+                }
+
                 click(device, "calendar_mode_month")
                 assertVisible(device, "calendar_period_label")
+                assertVisible(device, "calendar_month_grid")
+                assertGone(device, "calendar_month_selected_details")
+                swipeResource(device, "calendar_month_grid", horizontalDirection = 0, reverseVertical = true)
+                assertVisible(device, "calendar_month_selected_details")
+                swipeResource(device, "calendar_month_grid", horizontalDirection = 0)
+                assertGone(device, "calendar_month_selected_details")
+                val monthBeforeSwipe = objectText(device, "calendar_period_label")
+                swipeResource(device, "calendar_month_grid", horizontalDirection = 1)
+                assertTextChanged(device, "calendar_period_label", monthBeforeSwipe)
                 click(device, "calendar_mode_year")
                 assertVisible(device, "calendar_period_label")
                 click(device, "calendar_mode_week")
@@ -124,7 +168,85 @@ class MainNavigationSmokeTest {
                         scrollView.scrollX > 0,
                     )
                 }
+
+                click(device, "calendar_mode_month")
+                assertVisible(device, "calendar_month_grid")
+                assertGone(device, "calendar_month_selected_details")
+                swipeResource(device, "calendar_month_grid", horizontalDirection = 0)
+                scenario.onActivity { activity ->
+                    assertTrue(
+                        "Expanded month content must remain vertically scrollable",
+                        activity.findViewById<ScrollView>(R.id.page_calendar).scrollY > 0,
+                    )
+                    assertNull(
+                        "Normal expanded-month scrolling must not mount selected-day details",
+                        activity.findViewById<View>(R.id.calendar_month_selected_details),
+                    )
+                }
+                swipeResource(device, "calendar_month_grid", horizontalDirection = 0, reverseVertical = true)
+                assertActivityViewMounted(
+                    scenario,
+                    R.id.calendar_month_selected_details,
+                    expected = false,
+                )
+                scenario.onActivity { activity ->
+                    activity.findViewById<ScrollView>(R.id.page_calendar).scrollTo(0, 0)
+                }
+                swipeResource(device, "calendar_month_grid", horizontalDirection = 0, reverseVertical = true)
+                assertActivityViewMounted(
+                    scenario,
+                    R.id.calendar_month_selected_details,
+                    expected = true,
+                )
+                swipeResource(device, "calendar_month_grid", horizontalDirection = 0)
+                assertActivityViewMounted(
+                    scenario,
+                    R.id.calendar_month_selected_details,
+                    expected = false,
+                )
             }
+
+            click(device, "calendar_mode_month")
+            assertVisible(device, "calendar_month_grid")
+            scenario.onActivity { activity ->
+                var candidate: View? = activity.findViewById(R.id.calendar_month_grid)
+                var collapsed = false
+                while (candidate != null && !collapsed) {
+                    collapsed = candidate.performAccessibilityAction(
+                        AccessibilityNodeInfo.ACTION_COLLAPSE,
+                        null,
+                    )
+                    candidate = candidate.parent as? View
+                }
+                assertTrue(
+                    "The month gesture surface must expose an accessibility collapse action",
+                    collapsed,
+                )
+            }
+            device.waitForIdle()
+            assertActivityViewMounted(
+                scenario,
+                R.id.calendar_month_selected_details,
+                expected = true,
+            )
+            val monthBeforeRecreation = activityText(
+                scenario,
+                R.id.calendar_period_label,
+            )
+            scenario.recreate()
+            device.waitForIdle()
+            assertVisible(device, "page_calendar")
+            assertVisible(device, "calendar_month_grid")
+            assertActivityViewMounted(
+                scenario,
+                R.id.calendar_month_selected_details,
+                expected = true,
+            )
+            assertEquals(
+                "Activity recreation must preserve the selected month",
+                monthBeforeRecreation,
+                activityText(scenario, R.id.calendar_period_label),
+            )
 
             click(device, "navigation_settings")
             assertVisible(device, "page_settings")
@@ -157,6 +279,92 @@ class MainNavigationSmokeTest {
             UI_TIMEOUT_MILLIS,
         )
         assertTrue("Missing visible view: $resourceName", visible)
+    }
+
+    private fun assertGone(device: UiDevice, resourceName: String) {
+        val gone = device.wait(
+            Until.gone(By.res(TARGET_PACKAGE, resourceName)),
+            UI_TIMEOUT_MILLIS,
+        )
+        assertTrue("View should not be visible: $resourceName", gone)
+    }
+
+    private fun assertActivityViewMounted(
+        scenario: ActivityScenario<MainActivity>,
+        viewId: Int,
+        expected: Boolean,
+    ) {
+        val deadline = System.currentTimeMillis() + UI_TIMEOUT_MILLIS
+        var mounted = false
+        while (System.currentTimeMillis() < deadline) {
+            scenario.onActivity { activity ->
+                mounted = activity.findViewById<View?>(viewId) != null
+            }
+            if (mounted == expected) return
+            Thread.sleep(100L)
+        }
+        assertEquals("Unexpected mounted state for view id $viewId", expected, mounted)
+    }
+
+    private fun activityText(
+        scenario: ActivityScenario<MainActivity>,
+        viewId: Int,
+    ): String {
+        var text = ""
+        scenario.onActivity { activity ->
+            text = activity.findViewById<TextView>(viewId).text.toString()
+        }
+        return text
+    }
+
+    private fun objectText(device: UiDevice, resourceName: String): String {
+        val view = device.wait(
+            Until.findObject(By.res(TARGET_PACKAGE, resourceName)),
+            UI_TIMEOUT_MILLIS,
+        )
+        assertNotNull("Missing text view: $resourceName", view)
+        return view.text
+    }
+
+    private fun assertTextChanged(device: UiDevice, resourceName: String, previous: String) {
+        val deadline = System.currentTimeMillis() + UI_TIMEOUT_MILLIS
+        while (System.currentTimeMillis() < deadline) {
+            val current = device.findObject(By.res(TARGET_PACKAGE, resourceName))?.text
+            if (current != null && current != previous) return
+            Thread.sleep(100L)
+        }
+        assertTrue("Text did not change for $resourceName", false)
+    }
+
+    private fun swipeResource(
+        device: UiDevice,
+        resourceName: String,
+        horizontalDirection: Int,
+        reverseVertical: Boolean = false,
+    ) {
+        val view = device.wait(
+            Until.findObject(By.res(TARGET_PACKAGE, resourceName)),
+            UI_TIMEOUT_MILLIS,
+        )
+        assertNotNull("Missing swipe view: $resourceName", view)
+        val bounds = view.visibleBounds
+        if (horizontalDirection != 0) {
+            val startX = if (horizontalDirection > 0) bounds.right - bounds.width() / 6 else bounds.left + bounds.width() / 6
+            val endX = if (horizontalDirection > 0) bounds.left + bounds.width() / 6 else bounds.right - bounds.width() / 6
+            device.swipe(startX, bounds.centerY(), endX, bounds.centerY(), 24)
+        } else {
+            val screenMargin = (device.displayHeight / 50).coerceAtLeast(12)
+            val edgeInset = (bounds.height() / 6).coerceIn(4, 32)
+            val travel = maxOf(bounds.height() / 2, device.displayHeight / 5)
+            val startY = if (reverseVertical) bounds.top + edgeInset else bounds.bottom - edgeInset
+            val endY = if (reverseVertical) {
+                (startY + travel).coerceAtMost(device.displayHeight - screenMargin)
+            } else {
+                (startY - travel).coerceAtLeast(screenMargin)
+            }
+            device.swipe(bounds.centerX(), startY, bounds.centerX(), endY, 24)
+        }
+        device.waitForIdle()
     }
 
     private fun scrollUntilVisible(device: UiDevice, resourceName: String) {

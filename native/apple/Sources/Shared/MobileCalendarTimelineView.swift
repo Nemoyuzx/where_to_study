@@ -1,12 +1,12 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 
 enum MobileCalendarTimelineLayout {
     static let startMinute = 8 * 60
     static let endMinute = 22 * 60
     static let hourHeight: CGFloat = 72
     static let axisWidth: CGFloat = 56
-    static let minimumWeekDayWidth: CGFloat = 112
     static let bottomContentInset: CGFloat = 104
 
     static var timelineHeight: CGFloat {
@@ -24,8 +24,7 @@ enum MobileCalendarTimelineLayout {
         showsWeekColumns: Bool
     ) -> CGFloat {
         let viewportWidth = max(availableWidth - axisWidth, 1)
-        guard showsWeekColumns else { return viewportWidth }
-        return max(viewportWidth, CGFloat(max(dayCount, 1)) * minimumWeekDayWidth)
+        return viewportWidth
     }
 
     static func initialVisibleHour(currentHour: Int, includesToday: Bool) -> Int {
@@ -62,6 +61,7 @@ struct MobileCalendarTimelineView: View {
                             .accessibilityHidden(true)
                     }
                 }
+                .background(MobileDirectionalScrollLock())
                 .task(id: scrollRequestID) {
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     reader.scrollTo(scrollAnchorID(initialVisibleHour), anchor: .center)
@@ -109,6 +109,7 @@ struct MobileCalendarTimelineView: View {
                 Text(String(format: "%02d:00", hour))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(AppTheme.secondaryText)
+                    .accessibilityIdentifier(String(format: "calendar.mobile.hour.%02d", hour))
                     .frame(width: MobileCalendarTimelineLayout.axisWidth - 8, alignment: .trailing)
                     .position(
                         x: (MobileCalendarTimelineLayout.axisWidth - 8) / 2,
@@ -131,15 +132,8 @@ struct MobileCalendarTimelineView: View {
             dayCount: days.count,
             showsWeekColumns: showsWeekColumns
         )
-        if showsWeekColumns {
-            ScrollView(.horizontal, showsIndicators: true) {
-                timelineGrid(width: contentWidth)
-            }
+        timelineGrid(width: contentWidth)
             .frame(width: viewportWidth, height: MobileCalendarTimelineLayout.timelineHeight)
-        } else {
-            timelineGrid(width: contentWidth)
-                .frame(width: viewportWidth, height: MobileCalendarTimelineLayout.timelineHeight)
-        }
     }
 
     private func timelineGrid(width: CGFloat) -> some View {
@@ -271,24 +265,24 @@ struct MobileCalendarTimelineView: View {
         let metadata = CalendarTimelineLogic.courseMetadata(placement.course)
         return VStack(alignment: .leading, spacing: showsWeekColumns ? 1 : 2) {
             Text(placement.course.name)
-                .font(.system(size: showsWeekColumns ? 11 : 12, weight: .semibold))
-                .lineLimit(showsWeekColumns ? 2 : 1)
-                .minimumScaleFactor(0.9)
+                .font(.system(size: showsWeekColumns ? 10 : 12, weight: .semibold))
+                .lineLimit(showsWeekColumns ? 3 : 1)
+                .fixedSize(horizontal: false, vertical: true)
             if height >= 38 {
                 Text(placement.course.timeRange)
-                    .font(.system(size: showsWeekColumns ? 9 : 10, design: .monospaced))
-                    .lineLimit(1)
-                    .minimumScaleFactor(showsWeekColumns ? 0.8 : 0.75)
+                    .font(.system(size: showsWeekColumns ? 8 : 10, design: .monospaced))
+                    .lineLimit(showsWeekColumns ? 2 : 1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if showsWeekColumns, height >= 48 {
                 Text(placement.course.room.isEmpty ? "地点未标注" : placement.course.room)
-                    .font(.system(size: 9))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(placement.course.teacher.isEmpty ? "教师未标注" : "教师：\(placement.course.teacher)")
-                    .font(.system(size: 9))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if height >= 44, !metadata.isEmpty {
                 Text(metadata)
                     .font(.system(size: 10))
@@ -387,5 +381,31 @@ struct MobileCalendarTimelineView: View {
         formatter.dateFormat = "HH:mm"
         return formatter
     }()
+}
+
+struct MobileDirectionalScrollLock: UIViewRepresentable {
+    func makeUIView(context _: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        configureNearestScrollView(from: view)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context _: Context) {
+        configureNearestScrollView(from: uiView)
+    }
+
+    private func configureNearestScrollView(from view: UIView) {
+        DispatchQueue.main.async {
+            var ancestor = view.superview
+            while let current = ancestor {
+                if let scrollView = current as? UIScrollView {
+                    scrollView.isDirectionalLockEnabled = true
+                    scrollView.alwaysBounceHorizontal = false
+                    return
+                }
+                ancestor = current.superview
+            }
+        }
+    }
 }
 #endif

@@ -1,5 +1,11 @@
 import SwiftUI
 
+final class TeachingCalendarSessionState: ObservableObject {
+    @Published var selectedDate = Date()
+    @Published var modeRawValue = "周"
+    @Published var isMonthExpanded = true
+}
+
 private enum CalendarMode: String, CaseIterable, Identifiable {
     case day = "日"
     case week = "周"
@@ -10,6 +16,11 @@ private enum CalendarMode: String, CaseIterable, Identifiable {
 }
 
 enum TeachingCalendarLogic {
+    enum MonthExpansionAction: Equatable {
+        case expand
+        case collapse
+    }
+
     enum NavigationUnit {
         case day
         case week
@@ -62,18 +73,41 @@ enum TeachingCalendarLogic {
         else { return nil }
         return projected < 0 ? 1 : -1
     }
+
+    static func monthExpansionAction(
+        horizontalTranslation: CGFloat,
+        verticalTranslation: CGFloat
+    ) -> MonthExpansionAction? {
+        guard abs(verticalTranslation) >= 44,
+              abs(verticalTranslation) >= abs(horizontalTranslation) * 1.25
+        else { return nil }
+        return verticalTranslation < 0 ? .expand : .collapse
+    }
 }
 
 struct TeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var selectedDate = Date()
-    @State private var mode: CalendarMode = .week
+    @ObservedObject var session: TeachingCalendarSessionState
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
     @State private var showingDatePicker = false
-    @State private var isMonthExpanded = true
 
     private let calendar = Calendar.shanghai
+
+    private var selectedDate: Date {
+        get { session.selectedDate }
+        nonmutating set { session.selectedDate = newValue }
+    }
+
+    private var mode: CalendarMode {
+        get { CalendarMode(rawValue: session.modeRawValue) ?? .week }
+        nonmutating set { session.modeRawValue = newValue.rawValue }
+    }
+
+    private var isMonthExpanded: Bool {
+        get { session.isMonthExpanded }
+        nonmutating set { session.isMonthExpanded = newValue }
+    }
 
     var body: some View {
         ZStack {

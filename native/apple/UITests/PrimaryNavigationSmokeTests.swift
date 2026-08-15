@@ -67,26 +67,61 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             NSPredicate(format: "label MATCHES %@", "^第 [0-9]+ 周$")
         ).firstMatch
         XCTAssertTrue(periodLabel.waitForExistence(timeout: 5))
+        attachScreenshot(named: "calendar-week-single-viewport")
         let initialWeek = periodLabel.label
         horizontalSwipe(in: app, atY: 0.29, toLeft: true)
         XCTAssertTrue(waitForLabelChange(of: periodLabel, from: initialWeek))
         horizontalSwipe(in: app, atY: 0.29, toLeft: false)
         XCTAssertEqual(periodLabel.label, initialWeek)
 
+        app.segmentedControls.buttons["日"].tap()
+        let dayHeader = app.staticTexts["calendar.mobile.period-label"].firstMatch
+        XCTAssertTrue(dayHeader.waitForExistence(timeout: 5))
+        let initialDay = dayHeader.label
+        horizontalSwipe(in: app, atY: 0.72, toLeft: true)
+        XCTAssertTrue(waitForLabelChange(of: dayHeader, from: initialDay))
+        let firstHour = app.staticTexts["calendar.mobile.hour.08"].firstMatch
+        XCTAssertTrue(firstHour.waitForExistence(timeout: 5))
+        let initialHourY = firstHour.frame.minY
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.72))
+            .press(
+                forDuration: 0.05,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.42))
+            )
+        XCTAssertLessThan(firstHour.frame.minY, initialHourY)
+
         app.segmentedControls.buttons["月"].tap()
-        let monthHeading = app.staticTexts.matching(
-            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
-        ).firstMatch
-        let collapse = app.buttons["折叠"]
+        let monthHeading = app.staticTexts["calendar.mobile.month-heading"].firstMatch
+        let month = app.descendants(matching: .any)["calendar.mobile.month-state"].firstMatch
         XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
-        XCTAssertTrue(collapse.waitForExistence(timeout: 5))
+        XCTAssertTrue(month.waitForExistence(timeout: 5))
+        XCTAssertEqual(month.value as? String, "已展开")
         attachScreenshot(named: "calendar-month-expanded")
-        collapse.tap()
-        let expand = app.buttons["展开"]
-        XCTAssertTrue(expand.waitForExistence(timeout: 3))
+        let initialMonthHeadingY = monthHeading.frame.minY
+        verticalSwipe(in: app, atX: 0.5, upward: true)
+        XCTAssertTrue(waitForValue("已展开", of: month))
+        let monthDidScroll = monthHeading.frame.minY < initialMonthHeadingY - 2
+        if app.frame.height < 750 {
+            XCTAssertTrue(monthDidScroll, "紧凑高度设备上的展开月历应产生真实的纵向滚动")
+        }
+        if monthDidScroll {
+            verticalSwipe(in: app, atX: 0.5, upward: false)
+            XCTAssertTrue(
+                waitForValue("已展开", of: month),
+                "滚离顶部后的第一次下滑应先滚回顶部，而不是折叠月历"
+            )
+            for _ in 0 ..< 3 where monthHeading.frame.minY < initialMonthHeadingY - 2 {
+                verticalSwipe(in: app, atX: 0.5, upward: false)
+                XCTAssertTrue(waitForValue("已展开", of: month))
+            }
+        }
+        verticalSwipe(in: app, atX: 0.5, upward: false)
+        XCTAssertTrue(waitForValue("已收起", of: month))
+        XCTAssertFalse(app.buttons["折叠"].exists)
+        XCTAssertFalse(app.buttons["展开"].exists)
         attachScreenshot(named: "calendar-month-collapsed")
-        expand.tap()
-        XCTAssertTrue(collapse.waitForExistence(timeout: 3))
+        verticalSwipe(in: app, atX: 0.5, upward: true)
+        XCTAssertTrue(waitForValue("已展开", of: month))
 
         let initialMonth = monthHeading.label
         horizontalSwipe(in: app, atY: 0.56, toLeft: true)
@@ -236,10 +271,34 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         assertScreen("screen.calendar", in: app)
         XCTAssertTrue(app.descendants(matching: .any)["layout.calendar.expanded"]
             .waitForExistence(timeout: 5))
+        let monthMode = app.segmentedControls.buttons["月"]
+        XCTAssertTrue(monthMode.waitForExistence(timeout: 5))
+        monthMode.tap()
+        let monthHeading = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
+        ).firstMatch
+        XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
+        let initialMonth = monthHeading.label
+        let collapseMonth = app.buttons["折叠月历"]
+        XCTAssertTrue(collapseMonth.waitForExistence(timeout: 5))
+        collapseMonth.tap()
+        XCTAssertTrue(app.buttons["展开日程"].waitForExistence(timeout: 5))
+        horizontalSwipe(in: app, atY: 0.52, toLeft: true)
+        XCTAssertTrue(waitForLabelChange(of: monthHeading, from: initialMonth))
+        let pagedMonth = monthHeading.label
         attachScreenshot(named: "ipad-calendar-landscape")
 
         XCUIDevice.shared.orientation = .portrait
         assertRegularSidebar(in: app)
+        let compactPeriod = app.staticTexts["calendar.mobile.period-label"]
+        XCTAssertTrue(compactPeriod.waitForExistence(timeout: 5))
+        XCTAssertEqual(compactPeriod.label, "月视图")
+        XCTAssertTrue(app.segmentedControls.buttons["月"].isSelected)
+        XCTAssertEqual(monthHeading.label, pagedMonth)
+        let compactMonthState = app.descendants(matching: .any)["calendar.mobile.month-state"]
+        XCTAssertTrue(compactMonthState.waitForExistence(timeout: 5))
+        XCTAssertEqual(compactMonthState.value as? String, "已收起")
+        attachScreenshot(named: "ipad-calendar-portrait-state-preserved")
         navigateFromSidebar(to: "设置", in: app)
         assertScreen("screen.settings", in: app)
         attachScreenshot(named: "ipad-settings-portrait")
@@ -289,6 +348,24 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
                 forDuration: 0.05,
                 thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: endX, dy: y))
             )
+    }
+
+    private func verticalSwipe(in app: XCUIApplication, atX x: CGFloat, upward: Bool) {
+        let startY: CGFloat = upward ? 0.72 : 0.42
+        let endY: CGFloat = upward ? 0.42 : 0.72
+        app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: startY))
+            .press(
+                forDuration: 0.05,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: endY))
+            )
+    }
+
+    private func waitForValue(_ value: String, of element: XCUIElement) -> Bool {
+        let predicate = NSPredicate(format: "value == %@", value)
+        return XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
+            timeout: 3
+        ) == .completed
     }
 
     private func currentShanghaiDateString() -> String {

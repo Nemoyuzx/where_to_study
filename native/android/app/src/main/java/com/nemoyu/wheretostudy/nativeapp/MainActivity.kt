@@ -50,6 +50,7 @@ class MainActivity : Activity() {
     private val credentialStore by lazy { SecureCredentialStore(this) }
     private val preferences by lazy { AppPreferences(this) }
     private val plannerQueryState by lazy { PlannerQueryState(preferences.campusID) }
+    private lateinit var teachingCalendarSessionState: TeachingCalendarSessionState
     private val scheduleRepository by lazy {
         ScheduleRepository(this, credentialStore, preferences)
     }
@@ -104,6 +105,17 @@ class MainActivity : Activity() {
             ?.getString(SELECTED_DESTINATION_KEY)
             ?.let { saved -> Destination.entries.firstOrNull { it.name == saved } }
             ?: Destination.PLANNER
+        teachingCalendarSessionState = TeachingCalendarSessionState(
+            selectedDateMillis = savedInstanceState
+                ?.getLong(TEACHING_CALENDAR_DATE_KEY, System.currentTimeMillis())
+                ?: System.currentTimeMillis(),
+            selectedModeName = savedInstanceState
+                ?.getString(TEACHING_CALENDAR_MODE_KEY)
+                ?: TeachingCalendarMode.WEEK.name,
+            monthExpanded = savedInstanceState
+                ?.getBoolean(TEACHING_CALENDAR_MONTH_EXPANDED_KEY, true)
+                ?: true,
+        )
 
         adaptiveRoot = FrameLayout(this).apply {
             id = R.id.adaptive_root
@@ -354,6 +366,7 @@ class MainActivity : Activity() {
                 scheduleRepository,
                 holidayRepository,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
+                teachingCalendarSessionState,
             ).build()
             Destination.SETTINGS -> SettingsPage(
                 this,
@@ -512,6 +525,18 @@ class MainActivity : Activity() {
         outState.putBoolean(
             NOTIFICATION_PERMISSION_PENDING_KEY,
             notificationPermissionRequestPending,
+        )
+        outState.putLong(
+            TEACHING_CALENDAR_DATE_KEY,
+            teachingCalendarSessionState.selectedDate.timeInMillis,
+        )
+        outState.putString(
+            TEACHING_CALENDAR_MODE_KEY,
+            teachingCalendarSessionState.selectedMode.name,
+        )
+        outState.putBoolean(
+            TEACHING_CALENDAR_MONTH_EXPANDED_KEY,
+            teachingCalendarSessionState.monthExpanded,
         )
         super.onSaveInstanceState(outState)
     }
@@ -700,6 +725,9 @@ class MainActivity : Activity() {
         const val NO_CALENDAR_IMPORT_TOKEN = 0L
         const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4108
         const val NOTIFICATION_PERMISSION_PENDING_KEY = "notification_permission_request_pending"
+        const val TEACHING_CALENDAR_DATE_KEY = "teaching_calendar_date"
+        const val TEACHING_CALENDAR_MODE_KEY = "teaching_calendar_mode"
+        const val TEACHING_CALENDAR_MONTH_EXPANDED_KEY = "teaching_calendar_month_expanded"
         val CALENDAR_PERMISSIONS = arrayOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,

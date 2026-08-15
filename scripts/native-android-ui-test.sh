@@ -12,6 +12,7 @@ ADB="$ANDROID_HOME/platform-tools/adb"
 EMULATOR="$ANDROID_HOME/emulator/emulator"
 AVD_NAME="${ANDROID_UI_TEST_AVD:-Medium_Phone_API_36.1}"
 EMULATOR_PORT="${ANDROID_UI_TEST_PORT:-5580}"
+EMULATOR_GPU="${ANDROID_UI_TEST_GPU:-host}"
 SERIAL="emulator-$EMULATOR_PORT"
 ADB_WAS_RUNNING=false
 EMULATOR_PID=""
@@ -54,7 +55,7 @@ fi
   -no-window \
   -no-audio \
   -no-boot-anim \
-  -gpu swiftshader_indirect \
+  -gpu "$EMULATOR_GPU" \
   >/tmp/where-to-study-android-ui-test.log 2>&1 &
 EMULATOR_PID=$!
 

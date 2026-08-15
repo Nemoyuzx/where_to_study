@@ -73,12 +73,31 @@ test('component styles use semantic theme tokens instead of fixed colors', () =>
   assert.equal(fixedColors, null)
 })
 
-test('week calendar reserves horizontal pan for its scrollable timeline', () => {
-  assert.match(appCss, /\.time-calendar\s*\{[^}]*touch-action:\s*pan-x pan-y/s)
-  assert.match(appCss, /\.calendar-week-swipe-handle\s*\{[^}]*touch-action:\s*pan-y/s)
-  assert.match(appSource, /'single-day calendar-swipe-surface'\s*:\s*'week-calendar-scroll'/)
-  assert.match(appSource, /className="time-corner calendar-week-swipe-handle"/)
-  assert.match(appSource, /className=\{`time-day-head calendar-week-swipe-handle/)
+test('mobile week calendar stays in one viewport and pages from the full timeline', () => {
+  assert.match(appCss, /\.calendar-swipe-surface\s*\{[^}]*touch-action:\s*pan-y/s)
+  assert.match(appCss, /\.time-calendar:not\(\.single-day\)\s*\{[^}]*repeat\(var\(--day-count\), minmax\(0, 1fr\)\)/s)
+  assert.match(appSource, /'single-day'\s*:\s*'week-calendar'/)
+  assert.match(appSource, /addEventListener\('touchmove', updateCalendarSwipe, \{ passive: false \}\)/)
+  assert.doesNotMatch(appSource, /week-calendar-scroll|calendar-week-swipe-handle/)
+})
+
+test('calendar paging keeps an outgoing page while the new page slides in', () => {
+  assert.match(appSource, /cloneNode\(true\)/)
+  assert.match(appSource, /calendar-motion-outgoing/)
+  assert.match(appSource, /calendarTransitionHostRef/)
+  assert.match(appCss, /@keyframes calendar-slide-exit-next\s*\{[^}]*translateX\(0\)[\s\S]*translateX\(-100%\)/)
+  assert.match(appCss, /@keyframes calendar-slide-exit-previous\s*\{[^}]*translateX\(0\)[\s\S]*translateX\(100%\)/)
+  assert.doesNotMatch(appCss, /calendar-view-enter/)
+})
+
+test('month expansion keeps gestures and an assistive action without a visible toggle', () => {
+  assert.match(appSource, /calendarMonthExpansion\(deltaX, deltaY\)/)
+  assert.match(appSource, /month-expanded-hidden/)
+  assert.match(appSource, /handleMonthCalendarKeyDown/)
+  assert.match(appSource, /month-expansion-accessibility-action/)
+  assert.match(appSource, /month-expansion-accessibility-action[\s\S]*tabIndex=\{-1\}/)
+  assert.match(appCss, /\.assistive-only\s*\{[^}]*clip-path:\s*inset\(50%\)/s)
+  assert.doesNotMatch(appSource, /month-density-button/)
 })
 
 test('Tauri Android chrome follows the active system theme', () => {

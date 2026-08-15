@@ -166,6 +166,13 @@ export function calendarSwipeDirection(deltaX, deltaY, threshold = 56) {
   return deltaX < 0 ? 1 : -1
 }
 
+export function calendarMonthExpansion(deltaX, deltaY, threshold = 48) {
+  if (Math.abs(deltaY) < threshold || Math.abs(deltaY) <= Math.abs(deltaX) * 1.2) {
+    return null
+  }
+  return deltaY < 0
+}
+
 export function startOfWeekSunday(dateString) {
   const date = dateFromString(dateString)
   date.setDate(date.getDate() - date.getDay())

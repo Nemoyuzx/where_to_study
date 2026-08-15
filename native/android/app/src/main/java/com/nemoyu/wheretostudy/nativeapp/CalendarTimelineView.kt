@@ -67,7 +67,9 @@ object CalendarTimelineLogic {
 
     fun dayWidthDp(compact: Boolean): Int = if (compact) 132 else 156
 
-    fun hourHeightDp(compact: Boolean): Int = if (compact) 64 else 68
+    // Compact week columns stay fixed to the phone viewport; the extra vertical room keeps
+    // course metadata readable after it is split into separate lines.
+    fun hourHeightDp(compact: Boolean): Int = if (compact) 84 else 68
 
     fun totalHeightDp(compact: Boolean, showDayHeader: Boolean): Int =
         (if (showDayHeader) 72 else 0) + hourHeightDp(compact) * 14 + 2
@@ -115,7 +117,7 @@ class CalendarTimelineView(
             showDayHeader = showDayHeader,
             showCourseSlots = showCourseSlots,
         )
-        if (compact && days.size == 1) {
+        if (compact) {
             addView(dayCanvas, LayoutParams(0, totalHeight, 1f))
         } else {
             val preferredDayWidth = context.dp(
@@ -416,62 +418,59 @@ private class CalendarTimelineCanvas(
                 boldPaint.textAlign = Paint.Align.LEFT
                 val singleDay = days.size == 1
                 val blockHeight = bottom - top
-                boldPaint.textSize = sp(if (singleDay) 13f else 11f)
+                boldPaint.textSize = sp(if (singleDay) 13f else 10.5f)
                 textPaint.color = Palette.onPrimary
                 textPaint.textAlign = Paint.Align.LEFT
                 textPaint.textSize = sp(if (singleDay) 11f else 9.5f)
                 val availableWidth = right - left - contentInset * 2
-                canvas.drawText(
-                    ellipsize(placement.course.name, availableWidth, boldPaint),
-                    left + contentInset,
-                    top + dp(if (singleDay) 17 else 14),
-                    boldPaint,
-                )
-                if (blockHeight >= dp(if (singleDay) 42 else 30)) {
+                if (singleDay) {
                     canvas.drawText(
-                        ellipsize(placement.course.timeRange, availableWidth, textPaint),
+                        ellipsize(placement.course.name, availableWidth, boldPaint),
                         left + contentInset,
-                        top + dp(if (singleDay) 33 else 28),
-                        textPaint,
+                        top + dp(17),
+                        boldPaint,
                     )
-                }
-                if (blockHeight >= dp(if (singleDay) 60 else 43)) {
-                    val metadataY = top + dp(if (singleDay) 49 else 41)
-                    val room = placement.course.room
-                    val teacher = placement.course.teacher
-                    if (singleDay) {
+                    if (blockHeight >= dp(42)) {
                         canvas.drawText(
-                            ellipsize(room, availableWidth, textPaint),
+                            ellipsize(placement.course.timeRange, availableWidth, textPaint),
                             left + contentInset,
-                            metadataY,
+                            top + dp(33),
                             textPaint,
                         )
-                    } else {
-                        val roomWidth = availableWidth * 0.56f
-                        val teacherWidth = availableWidth - roomWidth - dp(3)
-                        canvas.drawText(
-                            ellipsize(room, roomWidth, textPaint),
-                            left + contentInset,
-                            metadataY,
-                            textPaint,
-                        )
-                        textPaint.textAlign = Paint.Align.RIGHT
-                        canvas.drawText(
-                            ellipsize(teacher, teacherWidth, textPaint),
-                            right - contentInset,
-                            metadataY,
-                            textPaint,
-                        )
-                        textPaint.textAlign = Paint.Align.LEFT
                     }
-                }
-                if (singleDay && blockHeight >= dp(76) && placement.course.teacher.isNotEmpty()) {
-                    canvas.drawText(
-                        ellipsize(placement.course.teacher, availableWidth, textPaint),
-                        left + contentInset,
-                        top + dp(65),
-                        textPaint,
-                    )
+                    if (blockHeight >= dp(60)) {
+                        canvas.drawText(
+                            ellipsize(placement.course.room, availableWidth, textPaint),
+                            left + contentInset,
+                            top + dp(49),
+                            textPaint,
+                        )
+                    }
+                    if (blockHeight >= dp(76) && placement.course.teacher.isNotEmpty()) {
+                        canvas.drawText(
+                            ellipsize(placement.course.teacher, availableWidth, textPaint),
+                            left + contentInset,
+                            top + dp(65),
+                            textPaint,
+                        )
+                    }
+                } else {
+                    var baseline = top + dp(12)
+                    val lineStep = dp(11).toFloat()
+                    val maximumBaseline = bottom - dp(2)
+                    fun drawLines(value: String, paint: Paint, maximumLines: Int) {
+                        if (value.isEmpty() || baseline > maximumBaseline) return
+                        wrapText(value, availableWidth, paint, maximumLines).forEach { line ->
+                            if (baseline <= maximumBaseline) {
+                                canvas.drawText(line, left + contentInset, baseline, paint)
+                                baseline += lineStep
+                            }
+                        }
+                    }
+                    drawLines(placement.course.name, boldPaint, 1)
+                    drawLines(placement.course.timeRange, textPaint, 1)
+                    drawLines(placement.course.room, textPaint, 2)
+                    drawLines(placement.course.teacher, textPaint, 2)
                 }
                 canvas.restore()
             }
@@ -531,6 +530,27 @@ private class CalendarTimelineCanvas(
 
     private fun holidayBadge(items: List<HolidayItem>): String = items.joinToString(" · ") {
         "${if (it.type == "holiday") "休" else "班"} ${it.name}"
+    }
+
+    private fun wrapText(text: String, maxWidth: Float, paint: Paint, maximumLines: Int): List<String> {
+        if (text.isEmpty() || maximumLines <= 0 || maxWidth <= 0f) return emptyList()
+        val lines = mutableListOf<String>()
+        var start = 0
+        while (start < text.length && lines.size < maximumLines) {
+            var end = start + 1
+            var fittingEnd = end
+            while (end <= text.length && paint.measureText(text, start, end) <= maxWidth) {
+                fittingEnd = end
+                end += 1
+            }
+            if (lines.size == maximumLines - 1 && fittingEnd < text.length) {
+                lines += ellipsize(text.substring(start), maxWidth, paint)
+                break
+            }
+            lines += text.substring(start, fittingEnd)
+            start = fittingEnd
+        }
+        return lines
     }
 
     private fun buildAxisContentDescription(): String = buildString {

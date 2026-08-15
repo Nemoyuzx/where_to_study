@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   accountHasSavedPassword,
   buildingsForCampus,
+  calendarMonthExpansion,
   calendarSwipeDirection,
   DEFAULT_SETTINGS,
   FALLBACK_SLOTS,
@@ -53,6 +54,13 @@ test('calendar swipe navigation requires an intentional horizontal gesture', () 
   assert.equal(calendarSwipeDirection(80, -8), -1)
   assert.equal(calendarSwipeDirection(42, 2), 0)
   assert.equal(calendarSwipeDirection(-90, 80), 0)
+})
+
+test('month expansion only follows deliberate vertical gestures', () => {
+  assert.equal(calendarMonthExpansion(8, -72), true)
+  assert.equal(calendarMonthExpansion(-10, 72), false)
+  assert.equal(calendarMonthExpansion(8, 32), null)
+  assert.equal(calendarMonthExpansion(70, 72), null)
 })
 
 test('teaching week calculation uses calendar days and reports busy slots', () => {

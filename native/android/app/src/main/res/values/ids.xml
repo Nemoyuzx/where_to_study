@@ -24,4 +24,8 @@
     <item name="calendar_timeline" type="id" />
     <item name="calendar_timeline_scroll" type="id" />
     <item name="calendar_timeline_day_scroll" type="id" />
+    <item name="calendar_month_view" type="id" />
+    <item name="calendar_month_grid" type="id" />
+    <item name="calendar_month_entry" type="id" />
+    <item name="calendar_month_selected_details" type="id" />
 </resources>

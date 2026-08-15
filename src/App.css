@@ -822,43 +822,83 @@ button:disabled {
   min-width: 0;
 }
 
+.assistive-only {
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
 .calendar-swipe-surface {
   touch-action: pan-y;
 }
 
-.time-calendar {
-  touch-action: pan-x pan-y;
-}
-
-.calendar-week-swipe-handle {
+.month-gesture-surface {
+  overscroll-behavior: contain;
   touch-action: pan-y;
 }
 
+.calendar-transition-host {
+  isolation: isolate;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.calendar-transition-host > :not(.calendar-motion-outgoing) {
+  position: relative;
+  z-index: 2;
+}
+
 .calendar-motion-next {
-  animation: calendar-slide-next 220ms ease-out;
+  animation: calendar-slide-next 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .calendar-motion-previous {
-  animation: calendar-slide-previous 220ms ease-out;
+  animation: calendar-slide-previous 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-.calendar-motion-view {
-  animation: calendar-view-enter 220ms ease-out;
+.calendar-motion-outgoing {
+  left: 0;
+  pointer-events: none;
+  position: absolute !important;
+  top: 0;
+  width: 100%;
+  z-index: 1;
+}
+
+.calendar-motion-exit-next {
+  animation: calendar-slide-exit-next 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.calendar-motion-exit-previous {
+  animation: calendar-slide-exit-previous 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 @keyframes calendar-slide-next {
-  from { opacity: 0.72; transform: translateX(18px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
 
 @keyframes calendar-slide-previous {
-  from { opacity: 0.72; transform: translateX(-18px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
 }
 
-@keyframes calendar-view-enter {
-  from { opacity: 0.7; transform: scale(0.992); }
-  to { opacity: 1; transform: scale(1); }
+@keyframes calendar-slide-exit-next {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+@keyframes calendar-slide-exit-previous {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
 }
 
 .calendar-export-note {
@@ -925,13 +965,19 @@ button:disabled {
   min-height: 680px;
 }
 
+.month-gesture-surface:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
 .teaching-calendar-main {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow-soft);
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 14px;
 }
 
@@ -1197,23 +1243,26 @@ button:disabled {
 }
 
 .time-course-block .course-block-place {
+  display: grid;
+  gap: 2px;
   overflow: visible;
   overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
 }
 
+.time-course-block .course-block-place > span {
+  color: inherit;
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .month-view {
   display: grid;
-  gap: 8px;
+  overflow: hidden;
 }
 
-.month-view-controls {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.month-density-button,
 .popover-view-actions button {
   align-items: center;
   background: var(--surface-cool);
@@ -1233,6 +1282,7 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 .month-weekday {
@@ -1254,12 +1304,14 @@ button:disabled {
   display: grid;
   gap: 8px;
   min-height: 118px;
-  padding: 8px;
+  padding: 12px 8px 8px;
   text-align: left;
   transition: min-height 240ms ease, padding 240ms ease, background-color 180ms ease, box-shadow 180ms ease;
 }
 
 .month-cell-details {
+  display: grid;
+  gap: 3px;
   max-height: 180px;
   opacity: 1;
   overflow: hidden;
@@ -1271,8 +1323,11 @@ button:disabled {
 }
 
 .month-view.compact .month-cell {
+  align-content: center;
+  justify-items: center;
   min-height: 62px;
-  padding: 7px;
+  padding: 9px 7px;
+  text-align: center;
 }
 
 .month-view.compact .month-cell-details {
@@ -1287,6 +1342,10 @@ button:disabled {
   display: flex;
   gap: 3px;
   min-height: 5px;
+}
+
+.month-view.compact .month-cell > span {
+  justify-self: center;
 }
 
 .month-compact-markers i {
@@ -1801,8 +1860,9 @@ button:disabled {
   }
 
   .time-calendar:not(.single-day) {
-    grid-template-columns: 54px 100px repeat(var(--day-count), minmax(132px, 1fr));
+    grid-template-columns: 54px 100px repeat(var(--day-count), minmax(0, 1fr));
     grid-template-rows: auto 900px;
+    overflow-x: hidden;
   }
 
   .time-course-block {
@@ -2097,9 +2157,12 @@ button:disabled {
     width: 100%;
   }
 
-  .time-calendar {
-    grid-template-columns: 50px 92px repeat(var(--day-count), minmax(138px, 1fr));
+  .time-calendar,
+  .time-calendar:not(.single-day) {
+    grid-template-columns: 42px 76px repeat(var(--day-count), minmax(0, 1fr));
     grid-template-rows: auto 1200px;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .time-corner,
@@ -2108,7 +2171,97 @@ button:disabled {
   }
 
   .time-calendar.single-day {
-    grid-template-columns: 50px 96px minmax(320px, 1fr);
+    grid-template-columns: 42px 82px minmax(0, 1fr);
+  }
+
+  .week-calendar .time-day-head {
+    min-width: 0;
+    overflow: hidden;
+    padding: 7px 1px;
+  }
+
+  .week-calendar .time-day-head span,
+  .week-calendar .time-day-head small {
+    font-size: 9px;
+  }
+
+  .week-calendar .time-day-head strong {
+    font-size: 12px;
+    min-width: 0;
+    padding: 2px;
+  }
+
+  .week-calendar .calendar-day-tags em {
+    font-size: 8px;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 2px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .week-calendar .time-course-block {
+    gap: 2px;
+    left: 2px;
+    padding: 5px 2px;
+    right: 2px;
+  }
+
+  .week-calendar .time-course-block strong {
+    font-size: 11px;
+    line-height: 1.16;
+    overflow-wrap: anywhere;
+  }
+
+  .week-calendar .time-course-block > *,
+  .week-calendar .course-name-with-badge,
+  .week-calendar .course-name-with-badge > span,
+  .week-calendar .time-course-block .course-block-place > span {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .week-calendar .course-name-with-badge,
+  .week-calendar .course-name-with-badge > span {
+    display: block;
+    word-break: break-all;
+  }
+
+  .week-calendar .time-course-block .course-block-time {
+    font-size: 9.5px;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    word-break: break-all;
+  }
+
+  .week-calendar .time-course-block .course-block-place,
+  .week-calendar .time-course-block .course-block-place > span {
+    font-size: 10px;
+    line-height: 1.16;
+    word-break: break-all;
+  }
+
+  .time-labels {
+    font-size: 10.5px;
+  }
+
+  .time-labels span {
+    padding-right: 4px;
+  }
+
+  .slot-time-labels span {
+    overflow: hidden;
+    padding-inline: 4px;
+  }
+
+  .slot-time-labels strong {
+    font-size: 10.5px;
+  }
+
+  .slot-time-labels small {
+    font-size: 9px;
   }
 
   .month-calendar {
@@ -2117,13 +2270,13 @@ button:disabled {
 
   .month-cell {
     gap: 5px;
-    min-height: 92px;
-    padding: 5px;
+    min-height: 104px;
+    padding: 10px 4px 6px;
   }
 
   .month-view.compact .month-cell {
-    min-height: 54px;
-    padding: 5px;
+    min-height: 60px;
+    padding: 9px 4px;
   }
 
   .month-cell > span {
@@ -2133,7 +2286,8 @@ button:disabled {
   .month-cell small,
   .month-cell em {
     font-size: 10px;
-    padding: 2px 3px;
+    margin-top: 0;
+    padding: 3px;
   }
 
   .month-cell small strong {
@@ -2143,6 +2297,10 @@ button:disabled {
   .month-weekday {
     padding: 8px 3px;
     text-align: center;
+  }
+
+  .calendar-inspector.month-expanded-hidden {
+    display: none;
   }
 
   .year-calendar {
@@ -2264,7 +2422,8 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .calendar-motion-next,
   .calendar-motion-previous,
-  .calendar-motion-view {
+  .calendar-motion-exit-next,
+  .calendar-motion-exit-previous {
     animation: none;
   }
 

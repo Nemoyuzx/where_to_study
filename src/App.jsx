@@ -9,8 +9,6 @@ import {
   CalendarPlus,
   CalendarRange,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Clock3,
   ExternalLink,
   Home,
@@ -31,6 +29,7 @@ import {
   buildMiniMonthDays,
   buildMonthDays,
   buildingsForCampus,
+  calendarMonthExpansion,
   calendarSwipeDirection,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
@@ -521,6 +520,9 @@ function App() {
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
   const calendarGestureRef = useRef(null)
+  const calendarTransitionHostRef = useRef(null)
+  const calendarAnimatedSurfaceRef = useRef(null)
+  const calendarOutgoingSurfaceRef = useRef(null)
   const calendarMotionTimerRef = useRef(null)
   const suppressCalendarClickUntilRef = useRef(0)
   const pageContentRef = useRef(null)
@@ -528,6 +530,13 @@ function App() {
   const savedCredentialState = useRef({ account: '', hasSavedPassword: false })
   const credentialStateRevision = useRef(0)
   const localDataClearRevision = useRef(0)
+
+  useEffect(() => {
+    const page = pageContentRef.current
+    if (!page) return undefined
+    page.addEventListener('touchmove', updateCalendarSwipe, { passive: false })
+    return () => page.removeEventListener('touchmove', updateCalendarSwipe)
+  }, [])
   const todayDate = localDateString(now)
 
   useEffect(() => {
@@ -594,7 +603,10 @@ function App() {
   }, [])
 
   useEffect(() => {
-    return () => window.clearTimeout(calendarMotionTimerRef.current)
+    return () => {
+      window.clearTimeout(calendarMotionTimerRef.current)
+      calendarOutgoingSurfaceRef.current?.remove()
+    }
   }, [])
 
   useEffect(() => {
@@ -969,12 +981,44 @@ function App() {
     setCalendarPopover(null)
   }
 
+  function stageCalendarTransition(motion) {
+    const host = calendarTransitionHostRef.current
+    const source = calendarAnimatedSurfaceRef.current
+    calendarOutgoingSurfaceRef.current?.remove()
+    calendarOutgoingSurfaceRef.current = null
+    if (!host || !source || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const outgoing = source.cloneNode(true)
+    outgoing.classList.remove('calendar-motion-next', 'calendar-motion-previous')
+    outgoing.classList.add('calendar-motion-outgoing', `calendar-motion-exit-${motion}`)
+    outgoing.setAttribute('aria-hidden', 'true')
+    outgoing.inert = true
+    outgoing.querySelectorAll('[id]').forEach((element) => element.removeAttribute('id'))
+    outgoing.querySelectorAll('button, input, select, textarea, a').forEach((element) => {
+      element.tabIndex = -1
+    })
+    outgoing.style.height = `${source.offsetHeight}px`
+    host.append(outgoing)
+    outgoing.scrollTop = source.scrollTop
+    outgoing.scrollLeft = source.scrollLeft
+    calendarOutgoingSurfaceRef.current = outgoing
+  }
+
+  function startCalendarMotion(motion) {
+    stageCalendarTransition(motion)
+    setCalendarMotion(motion)
+    window.clearTimeout(calendarMotionTimerRef.current)
+    calendarMotionTimerRef.current = window.setTimeout(() => {
+      setCalendarMotion('')
+      calendarOutgoingSurfaceRef.current?.remove()
+      calendarOutgoingSurfaceRef.current = null
+    }, 300)
+  }
+
   function moveCalendar(direction) {
     setCalendarPopover(null)
-    setCalendarMotion(direction > 0 ? 'next' : 'previous')
+    startCalendarMotion(direction > 0 ? 'next' : 'previous')
     setCalendarDate((current) => shiftDate(current, calendarView, direction))
-    window.clearTimeout(calendarMotionTimerRef.current)
-    calendarMotionTimerRef.current = window.setTimeout(() => setCalendarMotion(''), 240)
   }
 
   function beginCalendarSwipe(event) {
@@ -983,7 +1027,31 @@ function App() {
     calendarGestureRef.current = {
       x: touch.clientX,
       y: touch.clientY,
-      blocked: Boolean(event.target.closest('.time-course-block, input, select, textarea, a')),
+      axis: null,
+      view: calendarView,
+      monthExpanded,
+      scrollTop: pageContentRef.current?.scrollTop || 0,
+      blocked: Boolean(event.target.closest('input, select, textarea, a')),
+    }
+  }
+
+  function updateCalendarSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.blocked || event.touches.length !== 1) return
+    const touch = event.touches[0]
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+    if (!start.axis && Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= 10) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) * 1.12) start.axis = 'horizontal'
+      else if (Math.abs(deltaY) > Math.abs(deltaX) * 1.12) start.axis = 'vertical'
+    }
+    if (start.axis === 'horizontal' && event.cancelable) event.preventDefault()
+    if (start.axis === 'vertical' && start.view === 'month') {
+      const expanded = calendarMonthExpansion(deltaX, deltaY)
+      const canToggle = expanded !== null
+        && expanded !== start.monthExpanded
+        && (expanded || start.scrollTop <= 1)
+      if (canToggle && event.cancelable) event.preventDefault()
     }
   }
 
@@ -992,7 +1060,17 @@ function App() {
     calendarGestureRef.current = null
     if (!start || start.blocked || event.changedTouches.length !== 1) return
     const touch = event.changedTouches[0]
-    const direction = calendarSwipeDirection(touch.clientX - start.x, touch.clientY - start.y)
+    const deltaX = touch.clientX - start.x
+    const deltaY = touch.clientY - start.y
+    const direction = calendarSwipeDirection(deltaX, deltaY)
+    if (!direction && calendarView === 'month') {
+      const expanded = calendarMonthExpansion(deltaX, deltaY)
+      if (expanded === null || expanded === monthExpanded) return
+      if (!expanded && start.scrollTop > 1) return
+      suppressCalendarClickUntilRef.current = Date.now() + 400
+      setMonthExpanded(expanded)
+      return
+    }
     if (!direction) return
     suppressCalendarClickUntilRef.current = Date.now() + 400
     moveCalendar(direction)
@@ -1002,15 +1080,32 @@ function App() {
     calendarGestureRef.current = null
   }
 
+  function handleMonthCalendarKeyDown(event) {
+    if (calendarView !== 'month') return
+    const expanded = event.key === 'ArrowUp' ? true : event.key === 'ArrowDown' ? false : null
+    if (expanded === null || expanded === monthExpanded) return
+    event.preventDefault()
+    setMonthExpanded(expanded)
+  }
+
   function jumpFromYearPopover(view) {
     const date = calendarPopover?.date
     if (!date) return
+    const currentIndex = CALENDAR_VIEWS.findIndex((item) => item.id === calendarView)
+    const nextIndex = CALENDAR_VIEWS.findIndex((item) => item.id === view)
+    startCalendarMotion(nextIndex >= currentIndex ? 'next' : 'previous')
     setCalendarDate(date)
     setCalendarView(view)
     setCalendarPopover(null)
-    setCalendarMotion('view')
-    window.clearTimeout(calendarMotionTimerRef.current)
-    calendarMotionTimerRef.current = window.setTimeout(() => setCalendarMotion(''), 240)
+  }
+
+  function chooseCalendarView(view) {
+    if (view === calendarView) return
+    const currentIndex = CALENDAR_VIEWS.findIndex((item) => item.id === calendarView)
+    const nextIndex = CALENDAR_VIEWS.findIndex((item) => item.id === view)
+    startCalendarMotion(nextIndex >= currentIndex ? 'next' : 'previous')
+    setCalendarPopover(null)
+    setCalendarView(view)
   }
 
   function openYearDayPopover(event, dateString) {
@@ -1164,17 +1259,14 @@ function App() {
                       key={view.id}
                       type="button"
                       className={calendarView === view.id ? 'active' : ''}
-                      onClick={() => {
-                        setCalendarPopover(null)
-                        setCalendarView(view.id)
-                      }}
+                      onClick={() => chooseCalendarView(view.id)}
                     >
                       {view.label}
                     </button>
                   ))}
                 </div>
                 <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
-                <button type="button" className="calendar-today-button" onClick={() => setCalendarDate(todayDate)}>今天</button>
+                <button type="button" className="calendar-today-button" onClick={() => chooseCalendarDate(todayDate)}>今天</button>
                 <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
               </div>
             ) : (
@@ -1387,7 +1479,29 @@ function App() {
 
           {activePage === 'calendar' ? (
         <section className="calendar-page">
-          <div className="teaching-calendar-layout">
+          <div
+            className={`teaching-calendar-layout ${calendarView === 'month' ? 'month-gesture-surface' : ''}`}
+            role={calendarView === 'month' ? 'region' : undefined}
+            tabIndex={calendarView === 'month' ? 0 : undefined}
+            aria-label={calendarView === 'month' ? '月历，上滑或按上方向键展开，下滑或按下方向键收起' : undefined}
+            aria-expanded={calendarView === 'month' ? monthExpanded : undefined}
+            onTouchStart={calendarView === 'month' ? beginCalendarSwipe : undefined}
+            onTouchEnd={calendarView === 'month' ? finishCalendarSwipe : undefined}
+            onTouchCancel={calendarView === 'month' ? cancelCalendarSwipe : undefined}
+            onKeyDown={calendarView === 'month' ? handleMonthCalendarKeyDown : undefined}
+          >
+            {calendarView === 'month' ? (
+              <button
+                type="button"
+                className="assistive-only month-expansion-accessibility-action"
+                tabIndex={-1}
+                aria-controls="teaching-month-calendar"
+                aria-expanded={monthExpanded}
+                onClick={() => setMonthExpanded((current) => !current)}
+              >
+                {monthExpanded ? '收起月历' : '展开月历'}
+              </button>
+            ) : null}
             <section className="teaching-calendar-main">
               <div className="calendar-action-strip">
                 <input
@@ -1410,20 +1524,18 @@ function App() {
                 <p className="calendar-export-note">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
               ) : null}
 
+              <div ref={calendarTransitionHostRef} className="calendar-transition-host">
                 {calendarView === 'day' || calendarView === 'week' ? (
                   <div
-                    className={`time-calendar ${calendarView === 'day' ? 'single-day calendar-swipe-surface' : 'week-calendar-scroll'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                    ref={calendarAnimatedSurfaceRef}
+                    key={`${calendarView}-${calendarDate}`}
+                    className={`time-calendar calendar-swipe-surface ${calendarView === 'day' ? 'single-day' : 'week-calendar'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
                     style={{ '--day-count': visibleCalendarDays.length }}
-                    onTouchStart={calendarView === 'day' ? beginCalendarSwipe : undefined}
-                    onTouchEnd={calendarView === 'day' ? finishCalendarSwipe : undefined}
-                    onTouchCancel={calendarView === 'day' ? cancelCalendarSwipe : undefined}
+                    onTouchStart={beginCalendarSwipe}
+                    onTouchEnd={finishCalendarSwipe}
+                    onTouchCancel={cancelCalendarSwipe}
                   >
-                    <div
-                      className="time-corner calendar-week-swipe-handle"
-                      onTouchStart={calendarView === 'week' ? beginCalendarSwipe : undefined}
-                      onTouchEnd={calendarView === 'week' ? finishCalendarSwipe : undefined}
-                      onTouchCancel={calendarView === 'week' ? cancelCalendarSwipe : undefined}
-                    />
+                    <div className="time-corner" />
                     {visibleCalendarDays.map((dateString) => {
                       const date = dateFromString(dateString)
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
@@ -1432,11 +1544,8 @@ function App() {
                         <button
                           key={`head-${dateString}`}
                           type="button"
-                          className={`time-day-head calendar-week-swipe-handle ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                          className={`time-day-head ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
                           onClick={() => chooseCalendarDate(dateString)}
-                          onTouchStart={calendarView === 'week' ? beginCalendarSwipe : undefined}
-                          onTouchEnd={calendarView === 'week' ? finishCalendarSwipe : undefined}
-                          onTouchCancel={calendarView === 'week' ? cancelCalendarSwipe : undefined}
                         >
                           <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
                           <strong>{date.getMonth() + 1}/{date.getDate()}</strong>
@@ -1509,7 +1618,8 @@ function App() {
                                   <strong><CourseName course={course} /></strong>
                                   <span className="course-block-time">{bounds.start}-{bounds.end}</span>
                                   <small className="course-block-place">
-                                    {course.room || '地点未标注'} · {course.teacher || '教师未标注'}
+                                    <span>{course.room || '地点未标注'}</span>
+                                    <span>{course.teacher || '教师未标注'}</span>
                                   </small>
                                 </button>
                               )
@@ -1522,23 +1632,16 @@ function App() {
                 ) : null}
 
                 {calendarView === 'month' ? (
-                  <div className={`month-view ${monthExpanded ? 'expanded' : 'compact'}`}>
-                    <div className="month-view-controls">
-                      <button
-                        type="button"
-                        className="month-density-button"
-                        aria-expanded={monthExpanded}
-                        onClick={() => setMonthExpanded((current) => !current)}
-                      >
-                        {monthExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
-                        {monthExpanded ? '折叠月历' : '展开月历'}
-                      </button>
-                    </div>
+                  <div
+                    ref={calendarAnimatedSurfaceRef}
+                    key={`month-${calendarDate}`}
+                    className={`month-view ${monthExpanded ? 'expanded' : 'compact'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                  >
                     <div
-                      className={`calendar-swipe-surface month-calendar ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
-                      onTouchStart={beginCalendarSwipe}
-                      onTouchEnd={finishCalendarSwipe}
-                      onTouchCancel={cancelCalendarSwipe}
+                      id="teaching-month-calendar"
+                      className="calendar-swipe-surface month-calendar"
+                      aria-label={`${monthExpanded ? '展开' : '收起'}的月历，上滑展开，下滑收起`}
+                      aria-expanded={monthExpanded}
                     >
                       {CALENDAR_WEEKDAYS.map((label) => <span key={label} className="month-weekday">{label}</span>)}
                       {visibleCalendarDays.map((dateString) => {
@@ -1584,7 +1687,11 @@ function App() {
                 ) : null}
 
                 {calendarView === 'year' ? (
-                  <div className="year-calendar">
+                  <div
+                    ref={calendarAnimatedSurfaceRef}
+                    key={`year-${calendarDate}`}
+                    className={`year-calendar ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                  >
                     {calendarYearMonths.map((month) => (
                       <section key={month.monthIndex} className="year-month">
                         <h3>{month.label}</h3>
@@ -1621,6 +1728,7 @@ function App() {
                     ))}
                   </div>
                 ) : null}
+              </div>
                 {calendarView === 'year' && calendarPopover && calendarPopoverState ? (
                   <div
                     ref={calendarPopoverRef}
@@ -1664,7 +1772,7 @@ function App() {
                 ) : null}
               </section>
 
-              <aside className="calendar-inspector">
+              <aside className={`calendar-inspector ${calendarView === 'month' && monthExpanded ? 'month-expanded-hidden' : ''}`}>
                 <div className="inspector-card primary">
                   <span>{formatCourseDate(calendarDate)}</span>
                   <strong>{calendarWeekState.dayCourses.length} 门课</strong>

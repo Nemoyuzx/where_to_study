@@ -14,6 +14,27 @@ import org.junit.Test
 
 class ScheduleLogicTest {
     @Test
+    fun teachingCalendarSessionStateKeepsDateModeAndExpansionAcrossPageRebuilds() {
+        val date = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
+            set(2026, Calendar.SEPTEMBER, 18, 12, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val state = TeachingCalendarSessionState(
+            selectedDateMillis = date.timeInMillis,
+            selectedModeName = TeachingCalendarMode.MONTH.name,
+            monthExpanded = false,
+        )
+
+        assertEquals(date.timeInMillis, state.selectedDate.timeInMillis)
+        assertEquals(TeachingCalendarMode.MONTH, state.selectedMode)
+        assertFalse(state.monthExpanded)
+        assertEquals(
+            TeachingCalendarMode.WEEK,
+            TeachingCalendarSessionState(selectedModeName = "unknown").selectedMode,
+        )
+    }
+
+    @Test
     fun campusBuildingCatalogKeepsEveryOriginalBuildingVisible() {
         assertEquals(listOf("教1", "教2", "教3", "教4", "主楼"), AppMetadata.buildings("01"))
         assertEquals(
@@ -411,7 +432,7 @@ class ScheduleLogicTest {
         assertEquals(144, CalendarTimelineLogic.axisWidthDp(compact = false))
         assertEquals(132, CalendarTimelineLogic.dayWidthDp(compact = true))
         assertEquals(156, CalendarTimelineLogic.dayWidthDp(compact = false))
-        assertEquals(898, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
+        assertEquals(1_178, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
         assertEquals(1_026, CalendarTimelineLogic.totalHeightDp(compact = false, showDayHeader = true))
     }
 
@@ -456,8 +477,33 @@ class ScheduleLogicTest {
 
     @Test
     fun monthExpansionUsesDistinctReadableCellHeights() {
-        assertEquals(52, TeachingCalendarLogic.monthCellHeightDp(expanded = false))
-        assertEquals(88, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
+        assertEquals(58, TeachingCalendarLogic.monthCellHeightDp(expanded = false))
+        assertEquals(74, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
+        assertEquals(130, TeachingCalendarLogic.monthCellHeightDp(expanded = true, entryCount = 3))
+    }
+
+    @Test
+    fun monthExpansionOnlyAcceptsTheApplicableDominantVerticalDirection() {
+        assertEquals(
+            true,
+            TeachingCalendarLogic.monthExpansionTarget(8f, -72f, currentlyExpanded = false),
+        )
+        assertEquals(
+            false,
+            TeachingCalendarLogic.monthExpansionTarget(-8f, 72f, currentlyExpanded = true),
+        )
+        assertEquals(
+            null,
+            TeachingCalendarLogic.monthExpansionTarget(8f, 72f, currentlyExpanded = false),
+        )
+        assertEquals(
+            null,
+            TeachingCalendarLogic.monthExpansionTarget(64f, 72f, currentlyExpanded = false),
+        )
+        assertEquals(
+            null,
+            TeachingCalendarLogic.monthExpansionTarget(8f, 32f, currentlyExpanded = false),
+        )
     }
 
     @Test

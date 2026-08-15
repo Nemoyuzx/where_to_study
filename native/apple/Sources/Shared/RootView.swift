@@ -17,7 +17,7 @@ enum CalendarPresentationLayout: Equatable {
 
 enum AdaptiveLayoutPolicy {
     static let minimumSidebarWidth: CGFloat = 700
-    static let minimumExpandedCalendarWidth: CGFloat = 900
+    static let minimumExpandedCalendarWidth: CGFloat = 760
     static let minimumTwoColumnWidth: CGFloat = 760
 
     static func primaryNavigation(
@@ -39,6 +39,7 @@ enum AdaptiveLayoutPolicy {
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -183,9 +184,9 @@ struct RootView: View {
         case .planner: PlannerView()
         case .calendar:
             #if os(iOS)
-            AdaptiveTeachingCalendarView()
+            AdaptiveTeachingCalendarView(session: teachingCalendarSession)
             #else
-            TeachingCalendarView()
+            TeachingCalendarView(session: teachingCalendarSession)
             #endif
         case .settings: SettingsView()
         }
@@ -200,13 +201,15 @@ private extension AdaptiveHorizontalClass {
 }
 
 private struct AdaptiveTeachingCalendarView: View {
+    @ObservedObject var session: TeachingCalendarSessionState
+
     var body: some View {
         GeometryReader { proxy in
             switch AdaptiveLayoutPolicy.calendarPresentation(width: proxy.size.width) {
             case .compact:
-                MobileTeachingCalendarView()
+                MobileTeachingCalendarView(session: session)
             case .expanded:
-                TeachingCalendarView()
+                TeachingCalendarView(session: session)
             }
         }
     }

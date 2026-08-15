@@ -497,14 +497,14 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     func testAdaptiveCalendarAndContentColumnsFollowAvailableDetailWidth() {
-        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 899), .compact)
-        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 900), .expanded)
+        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 759), .compact)
+        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 760), .expanded)
         XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 759), 1)
         XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 760), 2)
     }
 
     #if os(iOS)
-    func testMobileTimelineKeepsDayInViewportAndWeekColumnsReadable() {
+    func testMobileTimelineKeepsDayAndWeekInsideViewport() {
         XCTAssertEqual(
             MobileCalendarTimelineLayout.contentWidth(
                 availableWidth: 390,
@@ -519,9 +519,8 @@ final class ScheduleLogicTests: XCTestCase {
                 dayCount: 7,
                 showsWeekColumns: true
             ),
-            784
+            334
         )
-        XCTAssertGreaterThanOrEqual(MobileCalendarTimelineLayout.minimumWeekDayWidth, 112)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 8 * 60), 0)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 15 * 60), 504)
         XCTAssertEqual(MobileCalendarTimelineLayout.yPosition(minute: 22 * 60), 1_008)
@@ -606,6 +605,31 @@ final class ScheduleLogicTests: XCTestCase {
             horizontalTranslation: 80,
             verticalTranslation: 70,
             predictedHorizontalTranslation: 120
+        ))
+    }
+
+    func testMonthExpansionSwipeRequiresDeliberateVerticalGesture() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthExpansionAction(
+                horizontalTranslation: 8,
+                verticalTranslation: -72
+            ),
+            .expand
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthExpansionAction(
+                horizontalTranslation: 8,
+                verticalTranslation: 72
+            ),
+            .collapse
+        )
+        XCTAssertNil(TeachingCalendarLogic.monthExpansionAction(
+            horizontalTranslation: 72,
+            verticalTranslation: 42
+        ))
+        XCTAssertNil(TeachingCalendarLogic.monthExpansionAction(
+            horizontalTranslation: 12,
+            verticalTranslation: 30
         ))
     }
 
