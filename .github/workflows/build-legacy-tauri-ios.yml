@@ -1,4 +1,4 @@
-name: Build Legacy Tauri Mobile (Manual)
+name: Build Legacy Tauri iOS (Manual)
 
 on:
   workflow_dispatch:
@@ -7,91 +7,6 @@ permissions:
   contents: read
 
 jobs:
-  android:
-    runs-on: ubuntu-latest
-    env:
-      ANDROID_NDK_VERSION: 27.2.12479018
-      ANDROID_SIGNING_READY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Setup Java
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-        with:
-          targets: aarch64-linux-android
-
-      - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@a45951ff880207c249adf57334cf2e9bd81d6e1e # v2
-        with:
-          workspaces: ./src-tauri
-
-      - name: Install Android SDK packages
-        run: sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;${ANDROID_NDK_VERSION}"
-
-      - name: Install npm dependencies
-        run: npm ci
-
-      - name: Verify third-party license bundle
-        run: npm run licenses:check
-
-      - name: Expose Android toolchain
-        run: |
-          {
-            echo "ANDROID_HOME=$ANDROID_SDK_ROOT"
-            echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}"
-            echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}"
-          } >> "$GITHUB_ENV"
-          echo "$ANDROID_SDK_ROOT/ndk/${ANDROID_NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
-
-      - name: Build Android APK
-        if: env.ANDROID_SIGNING_READY != 'true'
-        run: ./scripts/android-build-local.sh
-
-      - name: Build signed Android APK
-        if: env.ANDROID_SIGNING_READY == 'true'
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          umask 077
-          keystore_path="$RUNNER_TEMP/android-release.keystore"
-          trap 'rm -f "$keystore_path"' EXIT
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
-          test -s "$keystore_path"
-
-          export ANDROID_SIGNING_STORE_FILE="$keystore_path"
-          export ANDROID_SIGNING_STORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
-          export ANDROID_SIGNING_KEY_ALIAS="$ANDROID_KEY_ALIAS"
-          export ANDROID_SIGNING_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
-          ./scripts/android-build-signed.sh
-
-      - name: Upload Android artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: where-to-study-android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release*.apk
-          if-no-files-found: error
-
   ios:
     runs-on: macos-latest
     env:

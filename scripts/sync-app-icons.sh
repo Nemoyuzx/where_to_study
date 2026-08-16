@@ -9,7 +9,6 @@ APPLE_ICONSET_DIR="$ROOT_DIR/native/apple/Resources/Assets.xcassets/AppIcon.appi
 TAURI_APPLE_ICONSET_DIR="$ROOT_DIR/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset"
 ALPHA_STRIPPER="$ROOT_DIR/scripts/strip-png-alpha.swift"
 ANDROID_RES_DIR="$ROOT_DIR/native/android/app/src/main/res"
-TAURI_ANDROID_RES_DIR="$ROOT_DIR/src-tauri/gen/android/app/src/main/res"
 ANDROID_ADAPTIVE_ICON_DIR="$ROOT_DIR/scripts/icon-resources/android"
 
 [[ -s "$SOURCE_ICON" ]] || {
@@ -112,23 +111,6 @@ for filename in ic_launcher.xml ic_launcher_round.xml; do
 done
 sync_file "$tmp_dir/generated/android/values/ic_launcher_background.xml" \
   "$ANDROID_RES_DIR/values/ic_launcher_background.xml"
-
-for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-  destination="$TAURI_ANDROID_RES_DIR/mipmap-$density"
-  mkdir -p "$destination"
-  for source in "$tmp_dir/generated/android/mipmap-$density/"*.png; do
-    sync_file "$source" "$destination/$(basename "$source")"
-  done
-done
-mkdir -p "$TAURI_ANDROID_RES_DIR/drawable" "$TAURI_ANDROID_RES_DIR/mipmap-anydpi-v26" "$TAURI_ANDROID_RES_DIR/values"
-sync_file "$ANDROID_ADAPTIVE_ICON_DIR/ic_launcher_foreground_safe.xml" \
-  "$TAURI_ANDROID_RES_DIR/drawable/ic_launcher_foreground_safe.xml"
-for filename in ic_launcher.xml ic_launcher_round.xml; do
-  sync_file "$ANDROID_ADAPTIVE_ICON_DIR/$filename" \
-    "$TAURI_ANDROID_RES_DIR/mipmap-anydpi-v26/$filename"
-done
-sync_file "$tmp_dir/generated/android/values/ic_launcher_background.xml" \
-  "$TAURI_ANDROID_RES_DIR/values/ic_launcher_background.xml"
 
 printf 'Synchronized app icons from %s (%sx%s).\n' \
   "$SOURCE_ICON" "$width" "$height"

@@ -1,7 +1,7 @@
 # Android 原生客户端
 
-该目录是独立的 Kotlin + Android Framework Views 工程，不依赖 Tauri、WebView 或 Compose。迁移期使用
-`com.nemoyu.wheretostudy.nativeapp` 包名，以便和现有 Tauri Android 测试包并存。
+该目录是唯一的 Android 客户端源码，使用 Kotlin + Android Framework Views，
+不依赖 Tauri、WebView 或 Compose。应用包名为 `com.nemoyu.wheretostudy.nativeapp`。
 
 构建、单元测试和 Lint：
 
@@ -19,7 +19,8 @@
 生成经过测试和签名校验的通用 APK 与 Play 发布 AAB：
 
 ```bash
-./scripts/native-android-package.sh vX.Y.Z-preview.N
+./scripts/native-android-signing-init.sh
+./scripts/native-android-package.sh vX.Y.Z
 ```
 
-脚本从 `ANDROID_SIGNING_*` 环境变量读取签名配置；未设置时也可以复用仓库已忽略的 `src-tauri/gen/android/keystore.properties`。脚本运行 Release 单元测试与 Lint，验证 APK 签名和 ZIP 对齐，并验证 AAB 的 JAR 签名与 ZIP 完整性。APK、AAB 及各自 SHA-256 文件会写入 `release-artifacts/`，签名文件和密码不会进入仓库或安装包目录。APK/AAB 还会携带并逐字节校验根 `LICENSE`、`THIRD_PARTY_LICENSES.html` 与 `THIRD_PARTY_NOTICES.md`。
+签名初始化脚本将本地 keystore 和 `keystore.properties` 写入已忽略的 `native/android/keystore/` 与 `native/android/keystore.properties`。打包脚本优先从 `ANDROID_SIGNING_*` 环境变量读取签名配置，未设置时使用上述本地配置。脚本运行 Release 单元测试与 Lint，验证 APK 签名和 ZIP 对齐，并验证 AAB 的 JAR 签名与 ZIP 完整性。APK、AAB 及各自 SHA-256 文件会写入 `release-artifacts/`，签名文件和密码不会进入仓库或安装包目录。APK/AAB 还会携带并逐字节校验根 `LICENSE`、`THIRD_PARTY_LICENSES.html` 与 `THIRD_PARTY_NOTICES.md`。

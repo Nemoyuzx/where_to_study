@@ -52,7 +52,7 @@ test("all tracked client projects use the stable 0.1.4 release version", () => {
   assert.match(nativeAndroid, /versionName = "0\.1\.4"/);
   assert.match(nativeAndroid, /versionCode = 18/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.4"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "31"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "32"/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.4/);
   assert.match(tauriApple, /CFBundleVersion: "31"/);
   assert.match(tauriAppleInfo, /<string>0\.1\.4<\/string>/);
@@ -60,26 +60,29 @@ test("all tracked client projects use the stable 0.1.4 release version", () => {
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {
-  const iconRoots = [
-    path.join(root, "native", "android", "app", "src", "main", "res"),
-    path.join(root, "src-tauri", "gen", "android", "app", "src", "main", "res"),
-  ];
+  const iconRoot = path.join(
+    root,
+    "native",
+    "android",
+    "app",
+    "src",
+    "main",
+    "res",
+  );
 
-  for (const iconRoot of iconRoots) {
-    const safeForeground = readFileSync(
-      path.join(iconRoot, "drawable", "ic_launcher_foreground_safe.xml"),
+  const safeForeground = readFileSync(
+    path.join(iconRoot, "drawable", "ic_launcher_foreground_safe.xml"),
+    "utf8",
+  );
+  assert.match(safeForeground, /android:drawable="@mipmap\/ic_launcher_foreground"/);
+  assert.match(safeForeground, /android:inset="18dp"/);
+
+  for (const filename of ["ic_launcher.xml", "ic_launcher_round.xml"]) {
+    const adaptiveIcon = readFileSync(
+      path.join(iconRoot, "mipmap-anydpi-v26", filename),
       "utf8",
     );
-    assert.match(safeForeground, /android:drawable="@mipmap\/ic_launcher_foreground"/);
-    assert.match(safeForeground, /android:inset="18dp"/);
-
-    for (const filename of ["ic_launcher.xml", "ic_launcher_round.xml"]) {
-      const adaptiveIcon = readFileSync(
-        path.join(iconRoot, "mipmap-anydpi-v26", filename),
-        "utf8",
-      );
-      assert.match(adaptiveIcon, /@drawable\/ic_launcher_foreground_safe/);
-      assert.match(adaptiveIcon, /@color\/ic_launcher_background/);
-    }
+    assert.match(adaptiveIcon, /@drawable\/ic_launcher_foreground_safe/);
+    assert.match(adaptiveIcon, /@color\/ic_launcher_background/);
   }
 });

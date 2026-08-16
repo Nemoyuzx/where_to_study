@@ -7,7 +7,7 @@ source "$ROOT_DIR/scripts/package-validation.sh"
 "$ROOT_DIR/scripts/sync-app-icons.sh"
 npm --prefix "$ROOT_DIR" run licenses:check
 ANDROID_DIR="$ROOT_DIR/native/android"
-PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ROOT_DIR/src-tauri/gen/android/keystore.properties}"
+PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ANDROID_DIR/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 RELEASE_LABEL="${1:-v0.1.4}"
 APK_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"

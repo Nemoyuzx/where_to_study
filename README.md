@@ -98,9 +98,12 @@ npm run tauri:build:windows
 
 `native/apple` 与 `native/android` 是当前 macOS、iOS 和 Android 客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。
 
+Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri 或 WebView。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
+
 生成本地签名 Android APK/AAB、macOS Universal ZIP 和无签名 iOS 真机 archive：
 
 ```bash
+./scripts/native-android-signing-init.sh
 ./scripts/native-android-package.sh vX.Y.Z
 ./scripts/native-macos-package.sh vX.Y.Z
 ./scripts/native-ios-package.sh vX.Y.Z

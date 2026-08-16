@@ -9,7 +9,7 @@
 | iOS | SwiftUI | 共享 Rust 核心或等价原生适配层 | TestFlight / App Store |
 | Android | Kotlin + Android Views | 共享 Rust 核心或等价原生适配层 | signed AAB/APK |
 
-现有根目录 Tauri 工程在迁移期继续可用，最终只承担 Windows 客户端。`src-tauri/gen/apple` 与 `src-tauri/gen/android` 是 Tauri 生成目录，不作为原生客户端源码。
+现有根目录 Tauri 工程只承担 Windows 客户端。Android 的 Tauri 生成工程与构建链已删除，唯一 Android 源码和发布入口是 `native/android`；`src-tauri/gen/apple` 仅保留为待下线的旧 Tauri iOS 生成目录，不作为当前原生客户端源码。
 
 ## 不变量
 

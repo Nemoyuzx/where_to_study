@@ -17,16 +17,16 @@ const androidPlannerSource = readFileSync(
   'utf8',
 )
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
-const tauriAndroidLightTheme = readFileSync(
+const nativeAndroidLightTheme = readFileSync(
   new URL(
-    '../src-tauri/gen/android/app/src/main/res/values/themes.xml',
+    '../native/android/app/src/main/res/values/themes.xml',
     import.meta.url,
   ),
   'utf8',
 )
-const tauriAndroidDarkTheme = readFileSync(
+const nativeAndroidDarkTheme = readFileSync(
   new URL(
-    '../src-tauri/gen/android/app/src/main/res/values-night/themes.xml',
+    '../native/android/app/src/main/res/values-night/themes.xml',
     import.meta.url,
   ),
   'utf8',
@@ -180,20 +180,18 @@ test('about this app is the final settings panel', () => {
   assert.match(appSource, /<h2>关于本应用<\/h2>/)
 })
 
-test('Tauri Android chrome follows the active system theme', () => {
-  assert.match(tauriAndroidLightTheme, /MaterialComponents\.DayNight\.NoActionBar/)
-  assert.match(tauriAndroidLightTheme, /windowLightStatusBar">true/)
-  assert.match(tauriAndroidLightTheme, /windowLightNavigationBar">true/)
-  assert.match(tauriAndroidLightTheme, /statusBarColor">#F5F6F3/)
-  assert.match(tauriAndroidLightTheme, /navigationBarColor">#F5F6F3/)
-  assert.match(tauriAndroidLightTheme, /windowBackground">#F5F6F3/)
+test('native Android chrome follows the active system theme', () => {
+  assert.match(nativeAndroidLightTheme, /Theme\.Material\.Light\.NoActionBar/)
+  assert.match(nativeAndroidLightTheme, /windowLightStatusBar">true/)
+  assert.match(nativeAndroidLightTheme, /statusBarColor">@color\/background/)
+  assert.match(nativeAndroidLightTheme, /navigationBarColor">@color\/surface/)
+  assert.match(nativeAndroidLightTheme, /windowBackground">@color\/background/)
 
-  assert.match(tauriAndroidDarkTheme, /MaterialComponents\.DayNight\.NoActionBar/)
-  assert.match(tauriAndroidDarkTheme, /windowLightStatusBar">false/)
-  assert.match(tauriAndroidDarkTheme, /windowLightNavigationBar">false/)
-  assert.match(tauriAndroidDarkTheme, /statusBarColor">#101412/)
-  assert.match(tauriAndroidDarkTheme, /navigationBarColor">#101412/)
-  assert.match(tauriAndroidDarkTheme, /windowBackground">#101412/)
+  assert.match(nativeAndroidDarkTheme, /Theme\.Material\.NoActionBar/)
+  assert.match(nativeAndroidDarkTheme, /windowLightStatusBar">false/)
+  assert.match(nativeAndroidDarkTheme, /statusBarColor">@color\/background/)
+  assert.match(nativeAndroidDarkTheme, /navigationBarColor">@color\/surface/)
+  assert.match(nativeAndroidDarkTheme, /windowBackground">@color\/background/)
 })
 
 test('light and dark text combinations meet WCAG AA contrast', () => {

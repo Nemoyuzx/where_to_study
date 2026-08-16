@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ANDROID_PROJECT_DIR="$ROOT_DIR/src-tauri/gen/android"
+ANDROID_PROJECT_DIR="$ROOT_DIR/native/android"
 KEYSTORE_DIR="$ANDROID_PROJECT_DIR/keystore"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ANDROID_PROJECT_DIR/keystore.properties}"
 KEY_ALIAS="${ANDROID_SIGNING_KEY_ALIAS:-upload}"
@@ -25,7 +25,7 @@ STORE_PASSWORD="${ANDROID_SIGNING_STORE_PASSWORD:-$(generate_password)}"
 KEY_PASSWORD="${ANDROID_SIGNING_KEY_PASSWORD:-$STORE_PASSWORD}"
 
 if [ -f "$STORE_FILE" ] && [ -f "$PROPERTIES_PATH" ]; then
-  echo "Android signing assets already exist:"
+  echo "Native Android signing assets already exist:"
   echo "  keystore: $STORE_FILE"
   echo "  properties: $PROPERTIES_PATH"
   exit 0
@@ -67,7 +67,7 @@ EOF
 
 chmod 600 "$PROPERTIES_PATH" "$STORE_FILE"
 
-echo "Android signing initialized."
+echo "Native Android signing initialized."
 echo "  keystore: $STORE_FILE"
 echo "  properties: $PROPERTIES_PATH"
 echo "Back up both files before moving to another machine or CI."

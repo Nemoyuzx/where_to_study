@@ -88,8 +88,8 @@
 5. 如果改动涉及移动端，按需在对应平台上验证：
 
    ```bash
-   npm run tauri:android:dev
-   npm run tauri:ios:dev
+   ./scripts/native-android-build.sh
+   ./scripts/native-apple-build.sh
    ```
 
 运行前若不想在界面输入学号和教务密码，可通过环境变量配置（仅用于本地调试，切勿提交）：
