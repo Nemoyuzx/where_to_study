@@ -23,7 +23,7 @@ pub fn expand_week_numbers(week_text: &str) -> Vec<i64> {
     let mut raw = week_text.replace('，', ",").replace(' ', "");
     let odd_only = raw.contains('单');
     let even_only = raw.contains('双');
-    raw = raw.replace('周', "");
+    raw = raw.replace(['周', '单', '双'], "");
     raw = Regex::new(r"\[.*?\]")
         .expect("valid regex")
         .replace_all(&raw, "")
@@ -452,6 +452,21 @@ mod tests {
         assert_eq!(expand_week_numbers("1-5[周]"), vec![1, 2, 3, 4, 5]);
         assert_eq!(expand_week_numbers("1-5[周](单)"), vec![1, 3, 5]);
         assert_eq!(expand_week_numbers("2,4,6[周]"), vec![2, 4, 6]);
+    }
+
+    #[test]
+    fn parse_sjd_week_numbers_falls_back_to_bare_odd_even_suffixes() {
+        let odd_course = serde_json::json!({ "classWeek": "1-17单" });
+        let even_course = serde_json::json!({ "classWeek": "2-18双" });
+
+        assert_eq!(
+            parse_sjd_week_numbers(&odd_course),
+            (1..=17).step_by(2).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            parse_sjd_week_numbers(&even_course),
+            (2..=18).step_by(2).collect::<Vec<_>>()
+        );
     }
 
     #[test]
