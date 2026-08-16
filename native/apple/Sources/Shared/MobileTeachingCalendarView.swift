@@ -356,41 +356,31 @@ struct MobileTeachingCalendarView: View {
         let days = monthGridDates(containing: first)
 
         return GeometryReader { proxy in
-            Group {
-                if isMonthExpanded {
-                    VStack(spacing: 10) {
-                        monthHeading(first)
-                        monthGrid(
-                            days: days,
-                            month: first,
-                            expanded: true,
-                            dayCellHeight: expandedMonthCellHeight(availableHeight: proxy.size.height)
-                        )
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .clipped()
-                } else {
-                    ScrollView(.vertical, showsIndicators: true) {
-                        VStack(spacing: 12) {
-                            monthHeading(first)
-                            monthGrid(
-                                days: days,
-                                month: first,
-                                expanded: false,
-                                dayCellHeight: 46
-                            )
-                            daySummaryCard(selectedDate)
-                                .accessibilityIdentifier("calendar.mobile.month-day-summary")
-                                .transition(.move(edge: .bottom))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                    }
-                    .background(MobileDirectionalScrollLock())
+            VStack(spacing: 0) {
+                monthHeading(first)
+                    .padding(.bottom, 8)
+                monthWeekdayHeader
+                    .padding(.bottom, 8)
+                monthDateGrid(
+                    days: days,
+                    month: first,
+                    expanded: isMonthExpanded,
+                    dayCellHeight: isMonthExpanded
+                        ? expandedMonthCellHeight(availableHeight: proxy.size.height)
+                        : 46
+                )
+                monthExpansionHandle
+                if !isMonthExpanded {
+                    daySummaryCard(selectedDate)
+                        .accessibilityIdentifier("calendar.mobile.month-day-summary")
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                Spacer(minLength: 0)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .clipped()
             .contentShape(Rectangle())
             .simultaneousGesture(monthNavigationGesture)
             .animation(Self.monthExpansionAnimation, value: isMonthExpanded)
@@ -411,43 +401,58 @@ struct MobileTeachingCalendarView: View {
                 .font(.headline)
                 .accessibilityIdentifier("calendar.mobile.month-heading")
             Spacer()
-            Image(systemName: isMonthExpanded ? "chevron.up" : "chevron.down")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryText)
-                .accessibilityLabel("月历状态")
-                .accessibilityValue(isMonthExpanded ? "已展开" : "已收起")
-                .accessibilityIdentifier("calendar.mobile.month-state")
         }
         .frame(height: 24)
     }
 
-    private func monthGrid(
+    private var monthWeekdayHeader: some View {
+        let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
+        return LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(Self.weekdayLabels, id: \.self) { label in
+                Text(label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .frame(maxWidth: .infinity, minHeight: 18)
+                    .accessibilityIdentifier("calendar.mobile.month-weekday.\(label)")
+            }
+        }
+    }
+
+    private func monthDateGrid(
         days: [Date],
         month: Date,
         expanded: Bool,
         dayCellHeight: CGFloat
     ) -> some View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
-        return VStack(spacing: 8) {
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(Self.weekdayLabels, id: \.self) { label in
-                    Text(label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .frame(maxWidth: .infinity, minHeight: 18)
-                }
-            }
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(days, id: \.self) { day in
-                    monthDayButton(
-                        day,
-                        month: month,
-                        expanded: expanded,
-                        cellHeight: dayCellHeight
-                    )
-                }
+        return LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(days, id: \.self) { day in
+                monthDayButton(
+                    day,
+                    month: month,
+                    expanded: expanded,
+                    cellHeight: dayCellHeight
+                )
             }
         }
+    }
+
+    private var monthExpansionHandle: some View {
+        Button {
+            withAnimation(Self.monthExpansionAnimation) {
+                isMonthExpanded.toggle()
+            }
+        } label: {
+            Capsule()
+                .fill(AppTheme.secondaryText.opacity(0.55))
+                .frame(width: 40, height: 5)
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isMonthExpanded ? "收起月历" : "展开月历")
+        .accessibilityValue(isMonthExpanded ? "已展开" : "已收起")
+        .accessibilityIdentifier("calendar.mobile.month-state")
     }
 
     private func monthDayButton(

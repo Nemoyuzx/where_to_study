@@ -52,11 +52,11 @@ test("all tracked client projects use the stable 0.1.4 release version", () => {
   assert.match(nativeAndroid, /versionName = "0\.1\.4"/);
   assert.match(nativeAndroid, /versionCode = 18/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.4"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "30"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "31"/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.4/);
-  assert.match(tauriApple, /CFBundleVersion: "30"/);
+  assert.match(tauriApple, /CFBundleVersion: "31"/);
   assert.match(tauriAppleInfo, /<string>0\.1\.4<\/string>/);
-  assert.match(tauriAppleInfo, /<string>30<\/string>/);
+  assert.match(tauriAppleInfo, /<string>31<\/string>/);
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {

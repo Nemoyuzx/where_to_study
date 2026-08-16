@@ -116,6 +116,18 @@ struct SettingsView: View {
                     .disabled(!model.canEnterReviewDemo)
                     .accessibilityIdentifier("action.enter-sample-mode")
                 }
+                Divider()
+                Button {
+                    dismissKeyboard()
+                    showingPrivacyPolicy = true
+                } label: {
+                    Label("隐私说明", systemImage: "hand.raised")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("隐私说明")
+                .accessibilityHint("在应用内查看隐私声明")
+                .accessibilityIdentifier("action.open-privacy-policy")
             }
         }
     }
@@ -237,17 +249,6 @@ struct SettingsView: View {
                 Text("清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。")
                     .font(.callout)
                     .foregroundStyle(AppTheme.secondaryText)
-                Button {
-                    dismissKeyboard()
-                    showingPrivacyPolicy = true
-                } label: {
-                    Label("隐私说明", systemImage: "hand.raised")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityLabel("隐私说明")
-                .accessibilityHint("在应用内查看隐私声明")
-                .accessibilityIdentifier("action.open-privacy-policy")
                 Button(role: .destructive) {
                     showingClearDataConfirmation = true
                 } label: {

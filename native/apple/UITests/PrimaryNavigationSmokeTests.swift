@@ -92,18 +92,23 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         app.segmentedControls.buttons["月"].tap()
         let monthHeading = app.staticTexts["calendar.mobile.month-heading"].firstMatch
+        let mondayHeading = app.staticTexts["calendar.mobile.month-weekday.一"].firstMatch
         let month = app.descendants(matching: .any)["calendar.mobile.month-state"].firstMatch
         XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
+        XCTAssertTrue(mondayHeading.waitForExistence(timeout: 5))
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         XCTAssertEqual(month.value as? String, "已展开")
         XCTAssertFalse(app.descendants(matching: .any)["calendar.mobile.month-day-summary"].exists)
         attachScreenshot(named: "calendar-month-expanded")
         let initialMonthHeadingY = monthHeading.frame.minY
+        let initialMondayHeadingY = mondayHeading.frame.minY
         verticalSwipe(in: app, atX: 0.5, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
         XCTAssertEqual(monthHeading.frame.minY, initialMonthHeadingY, accuracy: 2)
         verticalSwipe(in: app, atX: 0.5, upward: true)
         XCTAssertTrue(waitForValue("已收起", of: month))
+        XCTAssertEqual(monthHeading.frame.minY, initialMonthHeadingY, accuracy: 2)
+        XCTAssertEqual(mondayHeading.frame.minY, initialMondayHeadingY, accuracy: 2)
         XCTAssertFalse(app.buttons["折叠"].exists)
         XCTAssertFalse(app.buttons["展开"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]

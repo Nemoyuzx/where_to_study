@@ -26,8 +26,13 @@
     <item name="calendar_timeline_scroll" type="id" />
     <item name="calendar_timeline_day_scroll" type="id" />
     <item name="calendar_month_view" type="id" />
+    <item name="calendar_month_weekday_header" type="id" />
     <item name="calendar_month_grid" type="id" />
     <item name="calendar_swipe_surface" type="id" />
     <item name="calendar_month_entry" type="id" />
+    <item name="calendar_month_day_label" type="id" />
+    <item name="calendar_month_expanded_entries" type="id" />
+    <item name="calendar_month_compact_marker" type="id" />
+    <item name="calendar_month_drag_handle" type="id" />
     <item name="calendar_month_selected_details" type="id" />
 </resources>

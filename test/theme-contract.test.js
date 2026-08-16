@@ -96,7 +96,7 @@ test('calendar paging keeps an outgoing page while the new page slides in', () =
   assert.doesNotMatch(appCss, /calendar-view-enter/)
 })
 
-test('month expansion keeps gestures and an assistive action without a visible toggle', () => {
+test('month expansion keeps gestures, a drag handle, and an assistive action', () => {
   assert.match(appSource, /calendarMonthExpansion\(deltaX, deltaY\)/)
   assert.match(appSource, /month-expanded-hidden/)
   assert.match(appSource, /handleMonthCalendarKeyDown/)
@@ -106,7 +106,24 @@ test('month expansion keeps gestures and an assistive action without a visible t
   assert.match(appSource, /下拉展开，上拉收起/)
   assert.match(appCss, /\.page-content\.calendar-gesture-locked\s*\{[^}]*overflow-y:\s*hidden/s)
   assert.match(appSource, /month-entry-overflow/)
+  assert.match(appSource, /className="month-expansion-handle"/)
+  assert.match(appCss, /\.month-expansion-handle\s*\{[^}]*height:\s*28px/s)
+  assert.match(appCss, /\.month-view\s*\{[^}]*grid-template-rows:\s*auto 28px/s)
+  assert.match(appSource, /calendarView === 'month' \? 'calendar-month-page' : ''/)
+  assert.match(appCss, /\.page-content\.calendar-month-page\s*\{[^}]*overflow:\s*hidden/s)
+  assert.match(appCss, /\.month-view\s*\{[^}]*transition:\s*height 280ms/s)
   assert.doesNotMatch(appSource, /month-density-button/)
+})
+
+test('expanded month height clipping is limited to the mobile layout', () => {
+  const baseMonthRule = appCss.match(/\.month-view\s*\{([^}]*)\}/)?.[1] ?? ''
+  assert.doesNotMatch(baseMonthRule, /max-height|overflow/)
+  assert.match(
+    appCss,
+    /@media \(max-width: 720px\)[\s\S]*\.month-view\.expanded\s*\{[^}]*max-height:[^}]*overflow:\s*hidden/s,
+  )
+  assert.match(appSource, /matchMedia\('\(max-width: 720px\)'\)/)
+  assert.match(appSource, /removeProperty\('--month-expanded-height'\)/)
 })
 
 test('about this app is the final settings panel', () => {

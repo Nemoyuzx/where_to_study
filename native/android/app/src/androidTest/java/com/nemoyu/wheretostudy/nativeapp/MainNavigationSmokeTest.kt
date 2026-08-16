@@ -92,12 +92,17 @@ class MainNavigationSmokeTest {
 
             click(device, "navigation_calendar")
             assertVisible(device, "page_calendar")
-            if (navigationResource == "phone_navigation") {
+            var usesCompactCalendar = false
+            scenario.onActivity { activity ->
+                usesCompactCalendar = activity.findViewById<View?>(
+                    R.id.calendar_phone_header,
+                ) != null
+            }
+            if (usesCompactCalendar) {
                 assertVisible(device, "calendar_phone_header")
                 assertVisible(device, "calendar_mode_switch")
                 assertVisible(device, "calendar_date_strip")
                 assertVisible(device, "calendar_timeline_scroll")
-                assertVisible(device, "phone_navigation")
 
                 click(device, "calendar_mode_day")
                 assertVisible(device, "calendar_timeline")
@@ -132,7 +137,9 @@ class MainNavigationSmokeTest {
 
                 click(device, "calendar_mode_month")
                 assertVisible(device, "calendar_period_label")
+                assertVisible(device, "calendar_month_weekday_header")
                 assertVisible(device, "calendar_month_grid")
+                assertVisible(device, "calendar_month_drag_handle")
                 assertGone(device, "calendar_month_selected_details")
                 scenario.onActivity { activity ->
                     val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
@@ -143,12 +150,50 @@ class MainNavigationSmokeTest {
                         firstRowHeightDp <= TeachingCalendarLogic.monthCellHeightDp(expanded = true) + 1,
                     )
                 }
+                var monthViewIdentity = 0
+                var monthGridIdentity = 0
+                var monthHeaderTop = 0
+                var weekdayHeaderTop = 0
+                scenario.onActivity { activity ->
+                    val monthView = activity.findViewById<View>(R.id.calendar_month_view)
+                    val monthGrid = activity.findViewById<View>(R.id.calendar_month_grid)
+                    monthViewIdentity = System.identityHashCode(monthView)
+                    monthGridIdentity = System.identityHashCode(monthGrid)
+                    monthHeaderTop = activity.findViewById<View>(R.id.calendar_period_label).top
+                    weekdayHeaderTop = activity.findViewById<View>(R.id.calendar_month_weekday_header).top
+                    assertFalse(
+                        "Compact month view must not be a vertical scrolling region",
+                        monthView is ScrollView,
+                    )
+                }
                 swipeResource(device, "calendar_month_grid", horizontalDirection = 0)
                 assertActivityViewMounted(
                     scenario,
                     R.id.calendar_month_selected_details,
                     expected = true,
                 )
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Month expansion must animate the existing view instead of replacing it",
+                        monthViewIdentity,
+                        System.identityHashCode(activity.findViewById<View>(R.id.calendar_month_view)),
+                    )
+                    assertEquals(
+                        "Month expansion must keep the existing date grid",
+                        monthGridIdentity,
+                        System.identityHashCode(activity.findViewById<View>(R.id.calendar_month_grid)),
+                    )
+                    assertEquals(
+                        "Month heading must remain fixed while the date grid changes height",
+                        monthHeaderTop,
+                        activity.findViewById<View>(R.id.calendar_period_label).top,
+                    )
+                    assertEquals(
+                        "Weekday header must remain fixed while the date grid changes height",
+                        weekdayHeaderTop,
+                        activity.findViewById<View>(R.id.calendar_month_weekday_header).top,
+                    )
+                }
                 swipeResource(device, "calendar_month_grid", horizontalDirection = 0, reverseVertical = true)
                 assertActivityViewMounted(
                     scenario,
@@ -163,43 +208,25 @@ class MainNavigationSmokeTest {
                 click(device, "calendar_mode_week")
                 assertVisible(device, "calendar_date_strip")
             } else {
+                click(device, "calendar_mode_week")
                 assertVisible(device, "calendar_timeline_day_scroll")
                 scrollGestureTargetIntoView(device, "calendar_timeline_day_scroll")
-                val weekBeforeTimelineScroll = activityText(
+                val weekBeforeTimelineSwipe = activityText(
                     scenario,
                     R.id.calendar_period_label,
                 )
-                val timelineScroller = device.findObject(
-                    By.res(TARGET_PACKAGE, "calendar_timeline_day_scroll"),
+                assertTrue(
+                    "Large-screen calendar must expose next-period navigation",
+                    performAncestorAccessibilityAction(
+                        scenario,
+                        R.id.calendar_swipe_surface,
+                        AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,
+                    ),
                 )
-                val bounds = timelineScroller.visibleBounds
-                device.swipe(
-                    bounds.right - bounds.width() / 8,
-                    bounds.centerY(),
-                    bounds.left + bounds.width() / 8,
-                    bounds.centerY(),
-                    24,
-                )
-                device.waitForIdle()
-                scenario.onActivity { activity ->
-                    val scrollView = activity.findViewById<HorizontalScrollView>(
-                        R.id.calendar_timeline_day_scroll,
-                    )
-                    val weekAfterSwipe = activity.findViewById<TextView>(
-                        R.id.calendar_period_label,
-                    ).text.toString()
-                    assertTrue(
-                        "Expanded week timeline must scroll without triggering page navigation " +
-                            "(scrollX=${scrollView.scrollX}, viewport=${scrollView.width}, " +
-                            "content=${scrollView.getChildAt(0)?.width}, " +
-                            "week=$weekBeforeTimelineScroll->$weekAfterSwipe)",
-                        scrollView.scrollX > 0,
-                    )
-                }
-                assertEquals(
-                    "Timeline scrolling must not page to another week",
-                    weekBeforeTimelineScroll,
-                    activityText(scenario, R.id.calendar_period_label),
+                assertActivityTextChanged(
+                    scenario,
+                    R.id.calendar_period_label,
+                    weekBeforeTimelineSwipe,
                 )
                 scenario.onActivity { activity ->
                     activity.findViewById<ScrollView>(R.id.page_calendar).scrollTo(0, 0)
@@ -207,14 +234,42 @@ class MainNavigationSmokeTest {
                 device.waitForIdle()
 
                 click(device, "calendar_mode_month")
+                assertVisible(device, "calendar_month_weekday_header")
                 assertVisible(device, "calendar_month_grid")
+                assertVisible(device, "calendar_month_drag_handle")
                 assertGone(device, "calendar_month_selected_details")
+                var monthViewIdentity = 0
+                var monthGridIdentity = 0
+                scenario.onActivity { activity ->
+                    monthViewIdentity = System.identityHashCode(
+                        activity.findViewById<View>(R.id.calendar_month_view),
+                    )
+                    monthGridIdentity = System.identityHashCode(
+                        activity.findViewById<View>(R.id.calendar_month_grid),
+                    )
+                }
                 swipeResource(device, "calendar_swipe_surface", horizontalDirection = 0)
                 assertActivityViewMounted(
                     scenario,
                     R.id.calendar_month_selected_details,
                     expected = true,
                 )
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Expanded month must animate the existing view on large screens",
+                        monthViewIdentity,
+                        System.identityHashCode(
+                            activity.findViewById<View>(R.id.calendar_month_view),
+                        ),
+                    )
+                    assertEquals(
+                        "Expanded month must retain the date grid on large screens",
+                        monthGridIdentity,
+                        System.identityHashCode(
+                            activity.findViewById<View>(R.id.calendar_month_grid),
+                        ),
+                    )
+                }
                 swipeResource(device, "page_calendar", horizontalDirection = 0)
                 scenario.onActivity { activity ->
                     assertTrue(
@@ -252,7 +307,7 @@ class MainNavigationSmokeTest {
             scenario.onActivity { activity ->
                 monthIsCollapsed = activity.findViewById<View?>(
                     R.id.calendar_month_selected_details,
-                ) != null
+                )?.visibility == View.VISIBLE
             }
             if (monthIsCollapsed) {
                 assertTrue(
@@ -367,12 +422,12 @@ class MainNavigationSmokeTest {
         var mounted = false
         while (System.currentTimeMillis() < deadline) {
             scenario.onActivity { activity ->
-                mounted = activity.findViewById<View?>(viewId) != null
+                mounted = activity.findViewById<View?>(viewId)?.visibility == View.VISIBLE
             }
             if (mounted == expected) return
             Thread.sleep(100L)
         }
-        assertEquals("Unexpected mounted state for view id $viewId", expected, mounted)
+        assertEquals("Unexpected visible state for view id $viewId", expected, mounted)
     }
 
     private fun activityText(
@@ -421,6 +476,19 @@ class MainNavigationSmokeTest {
         assertTrue("Text did not change for $resourceName", false)
     }
 
+    private fun assertActivityTextChanged(
+        scenario: ActivityScenario<MainActivity>,
+        viewId: Int,
+        previous: String,
+    ) {
+        val deadline = System.currentTimeMillis() + UI_TIMEOUT_MILLIS
+        while (System.currentTimeMillis() < deadline) {
+            if (activityText(scenario, viewId) != previous) return
+            Thread.sleep(100L)
+        }
+        assertTrue("Text did not change for view id $viewId", false)
+    }
+
     private fun swipeResource(
         device: UiDevice,
         resourceName: String,
@@ -436,7 +504,9 @@ class MainNavigationSmokeTest {
         if (horizontalDirection != 0) {
             val startX = if (horizontalDirection > 0) bounds.right - bounds.width() / 6 else bounds.left + bounds.width() / 6
             val endX = if (horizontalDirection > 0) bounds.left + bounds.width() / 6 else bounds.right - bounds.width() / 6
-            device.swipe(startX, bounds.centerY(), endX, bounds.centerY(), 24)
+            device.executeShellCommand(
+                "input swipe $startX ${bounds.centerY()} $endX ${bounds.centerY()} 350",
+            )
         } else {
             val screenMargin = (device.displayHeight / 50).coerceAtLeast(12)
             val edgeInset = (bounds.height() / 6).coerceIn(4, 32)

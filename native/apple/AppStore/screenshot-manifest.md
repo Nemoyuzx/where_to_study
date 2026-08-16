@@ -1,6 +1,6 @@
 # 历史 App Store Build 25 截图清单（已停用）
 
-来源版本：`0.1.3 (25)`。本清单只追踪历史截图规格和完整性校验值；PNG 文件保存在被 Git 忽略的本地目录 `release-artifacts/app-store/0.1.3-25/screenshots/final/`。这些截图不得用于当前 `0.1.4 (30)` 提交；Build 30 新截图完成后必须替换本清单。
+来源版本：`0.1.3 (25)`。本清单只追踪历史截图规格和完整性校验值；PNG 文件保存在被 Git 忽略的本地目录 `release-artifacts/app-store/0.1.3-25/screenshots/final/`。这些截图不得用于当前 `0.1.4 (31)` 提交；Build 31 新截图完成后必须替换本清单。
 
 | 平台 | 文件 | 像素尺寸 | Alpha | SHA-256 |
 | --- | --- | --- | --- | --- |

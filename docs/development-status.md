@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前稳定版：[v0.1.4](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.4)
 - 应用版本：`0.1.4`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=30`；Android `versionCode=18`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=31`；Android `versionCode=18`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：最新 SwiftUI Universal 应用为 `/Applications/Where To Study.app`；root 权限的旧 App Store build 28 `/Applications/WhereToStudyMac.app` 仍待管理员移除
-- 发布边界：`v0.1.4` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书、描述文件和双平台 App Store Connect 记录已配置，正式签名的 iOS/macOS build 30 已上传并等待处理；公开 GitHub Release 的 macOS/iOS 制品仍分别为 ad-hoc 与无签名构建；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.1.4` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书、描述文件和双平台 App Store Connect 记录已配置，正式签名的 iOS/macOS build 31 已上传并等待处理；公开 GitHub Release 的 macOS/iOS 制品仍分别为 ad-hoc 与无签名构建；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -57,7 +57,7 @@
 
 | 范围 | 结果 |
 | --- | --- |
-| React | 28/28 业务规则、主题契约、图标安全区与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
+| React | 29/29 业务规则、主题契约、图标安全区与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
 | 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
 | Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；91/91 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
@@ -67,8 +67,8 @@
 | Android Release | 113/113 JVM 测试、`lintRelease`、固定证书签名 APK/AAB 构建通过 |
 | Android UI | Medium Phone、WhereToStudy Fold 与 Pixel Tablet 各 4/4 导航及布局测试通过，共 12/12 |
 | 浏览器视觉检查 | 日/周/月真实触摸翻页、年视图日/周/月跳转、校区状态隔离通过；手机、折叠屏、平板、桌面深浅色均无横向溢出或文本裁切，控制台 0 错误 |
-| macOS 安装检查 | SwiftUI Universal `0.1.4 (30)` 已覆盖安装到 `/Applications/Where To Study.app`；x86_64/arm64、ad-hoc 签名、WidgetKit 扩展、版本与统一应用图标均复核通过；旧 App Store 副本仍需管理员授权移除 |
-| App Store Connect | iOS 与 macOS `0.1.4 (30)` 均完成 Apple Distribution 签名、描述文件/entitlement 校验并收到 `Upload succeeded`；当前等待 App Store Connect 处理，不等同于已通过审核或正式发布 |
+| macOS 安装检查 | SwiftUI Universal `0.1.4 (31)` 已覆盖安装到 `/Applications/Where To Study.app`；x86_64/arm64、ad-hoc 签名、WidgetKit 扩展、版本与统一应用图标均复核通过；旧 App Store 副本仍需管理员授权移除 |
+| App Store Connect | iOS 与 macOS `0.1.4 (31)` 均完成 Apple Distribution 签名、描述文件/entitlement 校验并收到 `Upload succeeded`；当前等待 App Store Connect 处理，不等同于已通过审核或正式发布 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
@@ -190,7 +190,7 @@ Apple 测试结果（2026-08-16 使用 `xcresulttool` 复核）：
 
 ## 后续发布步骤
 
-1. 等待 iOS/macOS build 30 处理完成，将 build 30 加入内部 TestFlight 群组并完成真机安装与核心流程验证。
+1. 等待 iOS/macOS build 31 处理完成，将 build 31 加入内部 TestFlight 群组并完成真机安装与核心流程验证。
 2. 使用 `native/apple/AppStore/` 中的元数据、隐私问卷草案、截图方案和审核备注补齐正式提交信息。
 3. 由账号持有人确认年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，再补齐截图和审核联系人并选择构建提交审核。
 4. GitHub 公开下载版如需消除 macOS Gatekeeper 提示，仍需另行完成 Developer ID 签名与公证；Windows 可信签名链路也尚未闭环。

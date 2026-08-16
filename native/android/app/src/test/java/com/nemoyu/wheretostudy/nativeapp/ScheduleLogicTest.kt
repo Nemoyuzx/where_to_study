@@ -540,12 +540,6 @@ class ScheduleLogicTest {
         )
     }
 
-    @Test
-    fun expandedTimelinePagingIsLimitedToItsHeader() {
-        assertEquals(64, TeachingCalendarLogic.expandedSwipeRegionHeightDp(true))
-        assertEquals(null, TeachingCalendarLogic.expandedSwipeRegionHeightDp(false))
-    }
-
     private fun parseHolidays(
         dates: JSONArray,
         year: Int = 2026,

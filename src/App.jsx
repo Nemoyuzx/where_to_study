@@ -552,7 +552,17 @@ function App() {
 
   useLayoutEffect(() => {
     if (activePage !== 'calendar' || calendarView !== 'month' || !monthExpanded) return undefined
+    const mobileMonthQuery = window.matchMedia('(max-width: 720px)')
+    const clearAvailableHeight = () => {
+      const page = pageContentRef.current
+      page?.style.removeProperty('--month-expanded-height')
+      page?.style.removeProperty('--month-expanded-row-height')
+    }
     const updateAvailableHeight = () => {
+      if (!mobileMonthQuery.matches) {
+        clearAvailableHeight()
+        return
+      }
       const page = pageContentRef.current
       const surface = calendarAnimatedSurfaceRef.current
       if (!page || !surface) return
@@ -568,13 +578,19 @@ function App() {
           pageBounds.bottom - pageBottomPadding - surfaceBounds.top - trailingSpace,
         ),
       )
-      const monthMetrics = expandedMonthGridMetrics(available)
-      page.style.setProperty('--month-expanded-height', `${monthMetrics.height}px`)
+      const handleHeight = 28
+      const monthMetrics = expandedMonthGridMetrics(Math.max(0, available - handleHeight))
+      page.style.setProperty('--month-expanded-height', `${monthMetrics.height + handleHeight}px`)
       page.style.setProperty('--month-expanded-row-height', `${monthMetrics.rowHeight}px`)
     }
     updateAvailableHeight()
     window.addEventListener('resize', updateAvailableHeight)
-    return () => window.removeEventListener('resize', updateAvailableHeight)
+    mobileMonthQuery.addEventListener('change', updateAvailableHeight)
+    return () => {
+      window.removeEventListener('resize', updateAvailableHeight)
+      mobileMonthQuery.removeEventListener('change', updateAvailableHeight)
+      clearAvailableHeight()
+    }
   }, [activePage, calendarDate, calendarMotion, calendarView, monthExpanded])
 
   useEffect(() => {
@@ -1295,7 +1311,10 @@ function App() {
           </nav>
         </aside>
 
-        <section ref={pageContentRef} className="page-content">
+        <section
+          ref={pageContentRef}
+          className={`page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
+        >
           <header className={`topbar ${activePage === 'calendar' ? 'calendar-topbar' : ''}`}>
             <div>
               <p className="eyebrow">BUPT Classroom Planner</p>
@@ -1749,6 +1768,16 @@ function App() {
                         )
                       })}
                     </div>
+                    <button
+                      type="button"
+                      className="month-expansion-handle"
+                      aria-label={monthExpanded ? '收起月历' : '展开月历'}
+                      aria-controls="teaching-month-calendar"
+                      aria-expanded={monthExpanded}
+                      onClick={() => setMonthExpanded((current) => !current)}
+                    >
+                      <span aria-hidden="true" />
+                    </button>
                   </div>
                 ) : null}
 
