@@ -472,16 +472,11 @@ struct CalendarTimelineView: View {
     }
 
     private func headerDetail(for day: CalendarTimelineDay) -> String {
-        let holidays = day.holidays.map {
-            "\($0.type == "holiday" ? "休" : "班") \($0.name)"
-        }.joined(separator: " · ")
-        if !holidays.isEmpty { return holidays }
         return day.courses.isEmpty ? "无课" : "\(day.courses.count) 门课"
     }
 
     private func headerDetailColor(for day: CalendarTimelineDay) -> Color {
-        if day.holidays.contains(where: { $0.type == "holiday" }) { return Self.holidayRed }
-        if !day.holidays.isEmpty || !day.courses.isEmpty { return AppTheme.primary }
+        if !day.courses.isEmpty { return AppTheme.primary }
         return AppTheme.secondaryText
     }
 
@@ -501,7 +496,6 @@ struct CalendarTimelineView: View {
     }
 
     private static let nowRed = AppTheme.danger
-    private static let holidayRed = AppTheme.danger
     private static let dayHeaderFormatter = formatter("M/d E")
     private static let accessibleDateFormatter = formatter("yyyy年M月d日 EEEE")
     private static let timeFormatter = formatter("HH:mm")

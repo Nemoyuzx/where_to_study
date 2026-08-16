@@ -10,8 +10,11 @@
     <item name="page_planner" type="id" />
     <item name="page_calendar" type="id" />
     <item name="page_settings" type="id" />
+    <item name="planner_fetch_button" type="id" />
+    <item name="planner_fetch_icon" type="id" />
     <item name="privacy_policy_button" type="id" />
     <item name="settings_about_section" type="id" />
+    <item name="settings_github_link" type="id" />
     <item name="privacy_policy_content" type="id" />
     <item name="privacy_github_link" type="id" />
     <item name="calendar_phone_header" type="id" />
@@ -23,6 +26,7 @@
     <item name="calendar_period_label" type="id" />
     <item name="calendar_date_strip" type="id" />
     <item name="calendar_timeline" type="id" />
+    <item name="calendar_all_day_strip" type="id" />
     <item name="calendar_timeline_scroll" type="id" />
     <item name="calendar_timeline_day_scroll" type="id" />
     <item name="calendar_month_view" type="id" />

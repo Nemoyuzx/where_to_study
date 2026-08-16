@@ -585,6 +585,28 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testCalendarPeriodTitlesKeepWeekInPrimaryTitle() throws {
+        let calendar = Calendar.shanghai
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 14)))
+
+        XCTAssertEqual(
+            TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "日", calendar: calendar),
+            "2026年8月14日"
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "周", calendar: calendar),
+            "2026年8月 第 33 周"
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "月", calendar: calendar),
+            "2026年8月"
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "年", calendar: calendar),
+            "2026年"
+        )
+    }
+
     func testCalendarSwipeRequiresDeliberateHorizontalGesture() {
         XCTAssertEqual(TeachingCalendarLogic.swipeDirection(
             horizontalTranslation: -72,

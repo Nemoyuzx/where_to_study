@@ -172,7 +172,6 @@ class MainActivity : Activity() {
     private fun phoneLayout(): FrameLayout = FrameLayout(this).apply {
         setBackgroundColor(Palette.background)
         content = FrameLayout(this@MainActivity).apply {
-            setPadding(0, 0, 0, dp(76))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -184,6 +183,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(3), dp(10), dp(3))
+            clipToOutline = false
             background = roundedBackground(
                 this@MainActivity,
                 Palette.surfaceVariant,
@@ -321,11 +321,13 @@ class MainActivity : Activity() {
             text = destination.label
             textSize = if (compact) 11f else 15f
             gravity = Gravity.CENTER
+            includeFontPadding = false
             isClickable = true
             isFocusable = true
             if (compact) {
                 setCompoundDrawablesRelativeWithIntrinsicBounds(0, destination.iconResource, 0, 0)
-                compoundDrawablePadding = dp(3)
+                compoundDrawablePadding = dp(2)
+                setPadding(0, dp(3), 0, dp(2))
             }
             setOnClickListener { navigate(destination) }
             layoutParams = if (compact) {
@@ -371,6 +373,7 @@ class MainActivity : Activity() {
                 scheduleRepository,
                 classroomRepository,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
+                currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
             Destination.CALENDAR -> TeachingCalendarPage(
                 this,
@@ -378,6 +381,7 @@ class MainActivity : Activity() {
                 holidayRepository,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
                 teachingCalendarSessionState,
+                currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
             Destination.SETTINGS -> SettingsPage(
                 this,
@@ -386,6 +390,7 @@ class MainActivity : Activity() {
                 scheduleRepository,
                 classroomRepository,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
+                currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
         }
         page.id = destination.pageViewID

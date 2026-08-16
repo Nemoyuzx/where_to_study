@@ -78,5 +78,5 @@
 - macOS/iOS 原生：共享 SwiftUI 已接入移动教务个人课表、Keychain、本地缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知取消、权限撤销、账号切换和 63 条系统上限已有自动化测试，主导航已通过 iOS UI 测试。
 - Android 原生：Kotlin + Android Views 已接入移动教务个人课表、Android Keystore、`AtomicFile` 缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知持久撤销、有效送达窗口、后台中断和主导航已有自动化测试。
 - 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift 和 Kotlin 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
-- 原生分发限制：每日课程摘要已迁移；Android 使用固定维护者密钥签名发布；Apple 已完成正式签名归档并上传 iOS/macOS `0.1.4 (31)`，等待 App Store Connect 处理和正式提交，但公开 GitHub Release 的 macOS/iOS 资产仍分别为 ad-hoc 与无签名构建；Windows 可信签名链路尚未闭环。
+- 原生分发限制：每日课程摘要已迁移；Android 使用固定维护者密钥签名发布；Apple 已完成正式签名归档并上传 iOS/macOS `0.1.4 (33)`，等待 App Store Connect 处理和正式提交，但公开 GitHub Release 的 macOS/iOS 资产仍分别为 ad-hoc 与无签名构建；Windows 可信签名链路尚未闭环。
 - 开源授权：根目录已加入 GPL-3.0-only 标准许可证文本，项目元数据、贡献指南和发布文档使用同一 SPDX 标识。

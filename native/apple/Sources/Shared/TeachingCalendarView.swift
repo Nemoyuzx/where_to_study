@@ -39,6 +39,25 @@ enum TeachingCalendarLogic {
         return 0.12 + 0.72 * count / (count + 3)
     }
 
+    static func periodTitle(
+        for date: Date,
+        modeRawValue: String,
+        calendar: Calendar = .shanghai
+    ) -> String {
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        switch modeRawValue {
+        case CalendarMode.day.rawValue:
+            return "\(year)年\(month)月\(calendar.component(.day, from: date))日"
+        case CalendarMode.week.rawValue:
+            return "\(year)年\(month)月 第 \(calendar.component(.weekOfYear, from: date)) 周"
+        case CalendarMode.year.rawValue:
+            return "\(year)年"
+        default:
+            return "\(year)年\(month)月"
+        }
+    }
+
     static func movedDate(
         from date: Date,
         unit: NavigationUnit,
@@ -184,17 +203,17 @@ struct TeachingCalendarView: View {
     private var titleBar: some View {
         #if os(macOS)
         HStack(alignment: .bottom) {
-            PageTitle(eyebrow: "BUPT Classroom Planner", title: "教学日历")
+            PageTitle(eyebrow: "BUPT Classroom Planner", title: periodTitle)
             modePicker.frame(maxWidth: 280)
         }
         #else
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .bottom, spacing: 24) {
-                PageTitle(eyebrow: "BUPT Classroom Planner", title: "教学日历")
+                PageTitle(eyebrow: "BUPT Classroom Planner", title: periodTitle)
                 modePicker.frame(width: 300)
             }
             VStack(alignment: .leading, spacing: 12) {
-                PageTitle(eyebrow: "BUPT Classroom Planner", title: "教学日历")
+                PageTitle(eyebrow: "BUPT Classroom Planner", title: periodTitle)
                 modePicker
             }
         }
@@ -316,9 +335,8 @@ struct TeachingCalendarView: View {
     }
 
     private var dayView: some View {
-        let courses = courses(on: selectedDate)
         return VStack(alignment: .leading, spacing: 12) {
-            calendarHeading(title: Self.fullDateFormatter.string(from: selectedDate), count: courses.count)
+            allDayItems(days: [selectedDate])
             CalendarTimelineView(
                 days: [timelineDay(selectedDate)],
                 selectedDate: selectedDate
@@ -330,14 +348,8 @@ struct TeachingCalendarView: View {
 
     private var weekView: some View {
         let days = weekDates()
-        let weekStart = days.first ?? selectedDate
         return VStack(alignment: .leading, spacing: 12) {
-            calendarHeading(
-                title: "\(Self.monthDayFormatter.string(from: weekStart)) 起的一周",
-                count: days.reduce(0) { $0 + courses(on: $1).count }
-            )
-            .contentShape(Rectangle())
-            .simultaneousGesture(periodSwipeGesture)
+            allDayItems(days: days)
             CalendarTimelineView(
                 days: days.map(timelineDay),
                 selectedDate: selectedDate,
@@ -354,7 +366,6 @@ struct TeachingCalendarView: View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(Self.yearMonthFormatter.string(from: first)).font(.title2.bold())
                 Spacer()
                 Button {
                     withAnimation(Self.monthExpansionAnimation) {
@@ -367,7 +378,6 @@ struct TeachingCalendarView: View {
                     )
                 }
                 .buttonStyle(.bordered)
-                Button("今天") { selectedDate = .now }
             }
             LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(Self.weekdayLabels, id: \.self) { label in
@@ -448,10 +458,6 @@ struct TeachingCalendarView: View {
         }
         let columns = [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 14)]
         return VStack(alignment: .leading, spacing: 12) {
-            Text(verbatim: "\(year) 年课程分布").font(.title2.bold())
-            Text("颜色越深表示当天课程越多；点击日期查看日程")
-                .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
             LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
                 ForEach(months, id: \.self) { month in
                     miniMonth(month)
@@ -652,15 +658,43 @@ struct TeachingCalendarView: View {
         .padding(.top, 4)
     }
 
-    private func calendarHeading(title: String, count: Int) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.title2.bold())
-            Spacer()
-            Text(count == 0 ? "暂无课程" : "\(count) 门课")
-                .font(.subheadline)
-                .foregroundStyle(AppTheme.secondaryText)
+    @ViewBuilder
+    private func allDayItems(days: [Date]) -> some View {
+        let items = days.flatMap { day in
+            holidayItems(on: day).map { (day, $0) }
         }
-        .padding(.bottom, 2)
+        if !items.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Text("全天")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                    ForEach(items, id: \.1.id) { day, item in
+                        Button {
+                            selectedDate = day
+                        } label: {
+                            Text("\(Self.monthDayCompactFormatter.string(from: day)) · \(item.name)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Self.holidayColor(item))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(AppTheme.primary.opacity(0.08), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .accessibilityIdentifier("calendar.regular.all-day")
+        }
+    }
+
+    private var periodTitle: String {
+        TeachingCalendarLogic.periodTitle(
+            for: selectedDate,
+            modeRawValue: mode.rawValue,
+            calendar: calendar
+        )
     }
 
     private func timelineDay(_ date: Date) -> CalendarTimelineDay {
@@ -826,8 +860,7 @@ struct TeachingCalendarView: View {
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
     private static let fullDateFormatter = dateFormatter("yyyy年M月d日 EEEE")
     private static let controlDateFormatter = dateFormatter("yyyy-MM-dd")
-    private static let monthDayFormatter = dateFormatter("yyyy年M月d日")
-    private static let yearMonthFormatter = dateFormatter("yyyy年M月")
+    private static let monthDayCompactFormatter = dateFormatter("M月d日")
     private static let monthFormatter = dateFormatter("M月")
 
     private static func dateFormatter(_ format: String) -> DateFormatter {

@@ -164,8 +164,6 @@ struct RootView: View {
             }
         }
         .tint(AppTheme.primary)
-        .toolbarBackground(AppTheme.background, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
         .accessibilityIdentifier("layout.compact-tabs")
     }
     #endif

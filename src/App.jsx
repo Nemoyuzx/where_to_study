@@ -12,6 +12,7 @@ import {
   Clock3,
   ExternalLink,
   Home,
+  HardDrive,
   Info,
   KeyRound,
   Loader2,
@@ -767,7 +768,6 @@ function App() {
 
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
-  const activeTermId = schedule?.term_id || settings.termId
   const activeTermStartDate = schedule?.term_start_date || settings.termStartDate
   const calendarHolidayItems = useMemo(
     () => Object.values(holidayDataByYear).flatMap((data) => data.items || []),
@@ -840,6 +840,16 @@ function App() {
     }))
   }, [calendarDate])
   const calendarDetailCourse = calendarWeekState.dayCourses[0] || null
+  const calendarHeaderTitle = calendarView === 'week'
+    ? `${formatCalendarTitle(calendarDate, calendarView)} · ${formatTeachingWeek(calendarWeekState.weekNumber)}`
+    : formatCalendarTitle(calendarDate, calendarView)
+  const visibleAllDayItems = useMemo(
+    () => visibleCalendarDays.reduce(
+      (count, dateString) => count + (calendarDayMap.get(dateString) || []).length,
+      0,
+    ),
+    [calendarDayMap, visibleCalendarDays],
+  )
   const calendarPopoverState = useMemo(() => (
     calendarPopover
       ? getWeekState(courses, activeTermStartDate, calendarPopover.date)
@@ -1522,15 +1532,10 @@ function App() {
           ref={pageContentRef}
           className={`page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
         >
-          <header className={`topbar ${activePage === 'calendar' ? 'calendar-topbar' : ''}`}>
+          <header className={`topbar ${activePage}-topbar`}>
             <div>
               <p className="eyebrow">BUPT Classroom Planner</p>
-              <h1>{activePage === 'calendar' ? '教学日历' : activePage === 'settings' ? '设置' : '联动查询'}</h1>
-              {activePage === 'calendar' ? (
-                <p className="topbar-subtitle">
-                  {formatCalendarTitle(calendarDate, calendarView)} · {formatTeachingWeek(calendarWeekState.weekNumber)} · {activeTermId} · {courses.length} 门已载入
-                </p>
-              ) : null}
+              <h1>{activePage === 'calendar' ? calendarHeaderTitle : activePage === 'settings' ? '设置' : '联动查询'}</h1>
             </div>
             {activePage === 'calendar' ? (
               <div className="calendar-toolbar-actions">
@@ -1614,7 +1619,7 @@ function App() {
           </aside>
 
           <section className="main-grid">
-            <section className="panel wide">
+            <section className="panel wide planner-slot-panel">
               <div className="panel-title">
                 <Clock3 size={18} />
                 <h2>节次筛选</h2>
@@ -1803,7 +1808,7 @@ function App() {
                   <div
                     ref={calendarAnimatedSurfaceRef}
                     key={`${calendarView}-${calendarDate}`}
-                    className={`time-calendar calendar-swipe-surface ${calendarView === 'day' ? 'single-day' : 'week-calendar'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                    className={`time-calendar calendar-swipe-surface ${calendarView === 'day' ? 'single-day' : 'week-calendar'} ${visibleAllDayItems ? 'has-all-day' : ''} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
                     style={{ '--day-count': visibleCalendarDays.length }}
                     onTouchStart={beginCalendarSwipe}
                     onTouchEnd={finishCalendarSwipe}
@@ -1813,7 +1818,6 @@ function App() {
                     {visibleCalendarDays.map((dateString) => {
                       const date = dateFromString(dateString)
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
-                      const calendarItems = calendarItemsFor(dateString)
                       return (
                         <button
                           key={`head-${dateString}`}
@@ -1825,19 +1829,28 @@ function App() {
                           <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
                           <strong data-mobile-day={date.getDate()}>{date.getMonth() + 1}/{date.getDate()}</strong>
                           <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}</small>
-                          {calendarItems.length || dayState.dayCourses.length ? (
+                          {dayState.dayCourses.length ? (
                             <div className="calendar-day-tags">
-                              {calendarItems.map((item) => (
-                                <em key={`${dateString}-${item.type}-${item.name}`} className={item.type}>
-                                  {item.type === 'holiday' ? '休' : '班'} {item.name}
-                                </em>
-                              ))}
-                              {dayState.dayCourses.length ? <i aria-hidden="true" /> : null}
+                              <i aria-hidden="true" />
                             </div>
                           ) : null}
                         </button>
                       )
                     })}
+                    {visibleAllDayItems ? (
+                      <>
+                        <div className="time-all-day-label">全天</div>
+                        {visibleCalendarDays.map((dateString) => (
+                          <div key={`all-day-${dateString}`} className="time-all-day-cell">
+                            {calendarItemsFor(dateString).map((item) => (
+                              <span key={`${dateString}-${item.type}-${item.name}`} className={item.type}>
+                                {item.type === 'holiday' ? '休' : '班'} {item.name}
+                              </span>
+                            ))}
+                          </div>
+                        ))}
+                      </>
+                    ) : null}
                     <div className="time-labels">
                       {calendarHours.map((hour) => {
                         const top = (((hour * 60) - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
@@ -2079,15 +2092,6 @@ function App() {
                   <span>{formatCourseDate(calendarDate)}</span>
                   <strong>{calendarWeekState.dayCourses.length} 门课</strong>
                   <small>{formatTeachingWeek(calendarWeekState.weekNumber)}</small>
-                  {calendarItemsFor(calendarDate).length ? (
-                    <div className="inspector-calendar-items">
-                      {calendarItemsFor(calendarDate).map((item) => (
-                        <span key={`${calendarDate}-${item.type}-${item.name}`} className={item.type}>
-                          {item.type === 'holiday' ? '休' : '班'} {item.name}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
                 {calendarDetailCourse ? (
                   <div className="inspector-card">
@@ -2215,6 +2219,15 @@ function App() {
               {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <CalendarDays size={17} />}
               打开课程小组件
             </button>
+            {settingsSaved ? <span>已保存</span> : null}
+          </section>
+
+          <section className="panel settings-actions settings-local-data">
+            <div className="panel-title">
+              <HardDrive size={18} />
+              <h2>本地数据</h2>
+            </div>
+            <p className="settings-local-data-note">清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。</p>
             <button
               type="button"
               className="danger"
@@ -2239,7 +2252,6 @@ function App() {
                 </div>
               </div>
             ) : null}
-            {settingsSaved ? <span>已保存</span> : null}
           </section>
 
           <section className="panel settings-about">

@@ -72,19 +72,18 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var compactHeader: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Self.yearMonthFormatter.string(from: selectedDate))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(periodTitle)
                         .font(.title2.bold())
                         .foregroundStyle(AppTheme.text)
-                    Text(headerSubtitle)
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .accessibilityIdentifier("calendar.mobile.period-label")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("calendar.mobile.header")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(periodTitle)
+                .accessibilityIdentifier("calendar.mobile.period-label")
 
                 Spacer(minLength: 8)
 
@@ -123,12 +122,9 @@ struct MobileTeachingCalendarView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.top, 8)
+        .padding(.bottom, mode == .day || mode == .week ? 8 : 6)
         .background(AppTheme.surface)
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
     }
 
     private var actionMenu: some View {
@@ -171,7 +167,7 @@ struct MobileTeachingCalendarView: View {
                         .font(.caption2)
                 }
                 .foregroundStyle(AppTheme.secondaryText)
-                .frame(width: MobileCalendarTimelineLayout.axisWidth, height: 62)
+                .frame(width: MobileCalendarTimelineLayout.axisWidth, height: 56)
                 .accessibilityLabel(
                     "第 \(calendar.component(.weekOfYear, from: selectedDate)) 周"
                 )
@@ -213,7 +209,7 @@ struct MobileTeachingCalendarView: View {
                 .frame(height: 8)
             }
             .foregroundStyle(selected ? AppTheme.onPrimary : dateStripForeground(holiday: holiday))
-            .frame(maxWidth: .infinity, minHeight: 62)
+            .frame(maxWidth: .infinity, minHeight: 56)
             .background(selected ? AppTheme.primaryFill : Color.clear)
             .overlay {
                 RoundedRectangle(cornerRadius: 10)
@@ -357,8 +353,6 @@ struct MobileTeachingCalendarView: View {
 
         return GeometryReader { proxy in
             VStack(spacing: 0) {
-                monthHeading(first)
-                    .padding(.bottom, 8)
                 monthWeekdayHeader
                     .padding(.bottom, 8)
                 monthDateGrid(
@@ -393,16 +387,6 @@ struct MobileTeachingCalendarView: View {
                 }
             }
         }
-    }
-
-    private func monthHeading(_ month: Date) -> some View {
-        HStack {
-            Text(Self.yearMonthFormatter.string(from: month))
-                .font(.headline)
-                .accessibilityIdentifier("calendar.mobile.month-heading")
-            Spacer()
-        }
-        .frame(height: 24)
     }
 
     private var monthWeekdayHeader: some View {
@@ -566,7 +550,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func expandedMonthCellHeight(availableHeight: CGFloat) -> CGFloat {
-        let reservedHeight: CGFloat = 24 + 10 + 18 + 8 + 20 + 16
+        let reservedHeight: CGFloat = 18 + 8 + 20 + 16
         return max(44, min(82, floor((availableHeight - reservedHeight) / 6)))
     }
 
@@ -738,17 +722,12 @@ struct MobileTeachingCalendarView: View {
         .accessibilityIdentifier("calendar.mobile.year-jump.\(targetMode.rawValue)")
     }
 
-    private var headerSubtitle: String {
-        switch mode {
-        case .day:
-            return Self.fullDateFormatter.string(from: selectedDate)
-        case .week:
-            return "第 \(calendar.component(.weekOfYear, from: selectedDate)) 周"
-        case .month:
-            return "月视图"
-        case .year:
-            return "\(calendar.component(.year, from: selectedDate)) 年课程分布"
-        }
+    private var periodTitle: String {
+        TeachingCalendarLogic.periodTitle(
+            for: selectedDate,
+            modeRawValue: mode.rawValue,
+            calendar: calendar
+        )
     }
 
     private func timelineDay(_ date: Date) -> CalendarTimelineDay {

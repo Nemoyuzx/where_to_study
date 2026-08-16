@@ -128,6 +128,20 @@ test('mobile week calendar stays in one viewport and pages from the full timelin
   assert.doesNotMatch(appSource, /week-calendar-scroll|calendar-week-swipe-handle/)
 })
 
+test('calendar chrome is compact and all-day events stay above the timeline', () => {
+  assert.match(appSource, /calendarHeaderTitle = calendarView === 'week'/)
+  assert.match(appSource, /formatTeachingWeek\(calendarWeekState\.weekNumber\)/)
+  assert.doesNotMatch(appSource, /className="topbar-subtitle"/)
+  assert.match(appSource, /className="time-all-day-label">全天</)
+  assert.match(appSource, /className="time-all-day-cell"/)
+  assert.match(appCss, /\.calendar-view-switch\s*\{[^}]*border:\s*0/s)
+  assert.match(appCss, /\.teaching-calendar-main\s*\{[^}]*border:\s*0/s)
+  assert.match(
+    appCss,
+    /@media \(max-width: 720px\)[\s\S]*\.year-calendar\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
+  )
+})
+
 test('calendar paging keeps an outgoing page while the new page slides in', () => {
   assert.match(appSource, /cloneNode\(true\)/)
   assert.match(appSource, /calendar-motion-outgoing/)

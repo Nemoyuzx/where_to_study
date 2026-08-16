@@ -64,9 +64,11 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         navigate(to: "教学日历", in: app)
         let periodLabel = app.staticTexts.matching(
-            NSPredicate(format: "label MATCHES %@", "^第 [0-9]+ 周$")
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月 第 [0-9]+ 周$")
         ).firstMatch
         XCTAssertTrue(periodLabel.waitForExistence(timeout: 5))
+        XCTAssertTrue(periodLabel.label.contains("第 "))
+        XCTAssertTrue(periodLabel.label.hasSuffix(" 周"))
         attachScreenshot(named: "calendar-week-single-viewport")
         let initialWeek = periodLabel.label
         horizontalSwipe(in: app, atY: 0.29, toLeft: true)
@@ -75,7 +77,9 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertEqual(periodLabel.label, initialWeek)
 
         app.segmentedControls.buttons["日"].tap()
-        let dayHeader = app.staticTexts["calendar.mobile.period-label"].firstMatch
+        let dayHeader = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月[0-9]+日$")
+        ).firstMatch
         XCTAssertTrue(dayHeader.waitForExistence(timeout: 5))
         let initialDay = dayHeader.label
         horizontalSwipe(in: app, atY: 0.72, toLeft: true)
@@ -91,10 +95,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertLessThan(firstHour.frame.minY, initialHourY)
 
         app.segmentedControls.buttons["月"].tap()
-        let monthHeading = app.staticTexts["calendar.mobile.month-heading"].firstMatch
+        let monthHeadings = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
+        )
+        let monthHeading = monthHeadings.firstMatch
         let mondayHeading = app.staticTexts["calendar.mobile.month-weekday.一"].firstMatch
         let month = app.descendants(matching: .any)["calendar.mobile.month-state"].firstMatch
         XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
+        XCTAssertEqual(monthHeadings.count, 1)
         XCTAssertTrue(mondayHeading.waitForExistence(timeout: 5))
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         XCTAssertEqual(month.value as? String, "已展开")
@@ -286,9 +294,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         XCUIDevice.shared.orientation = .portrait
         assertRegularSidebar(in: app)
-        let compactPeriod = app.staticTexts["calendar.mobile.period-label"]
+        let compactPeriod = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
+        ).firstMatch
         if compactPeriod.waitForExistence(timeout: 2) {
-            XCTAssertEqual(compactPeriod.label, "月视图")
+            XCTAssertTrue(compactPeriod.label.range(
+                of: "^[0-9]{4}年[0-9]+月$",
+                options: .regularExpression
+            ) != nil)
             XCTAssertTrue(app.segmentedControls.buttons["月"].isSelected)
             XCTAssertEqual(monthHeading.label, pagedMonth)
             let compactMonthState = app.descendants(matching: .any)["calendar.mobile.month-state"]

@@ -88,6 +88,24 @@ class MainNavigationSmokeTest {
 
             assertVisible(device, navigationResource)
             assertVisible(device, "page_planner")
+            scenario.onActivity { activity ->
+                activity.findViewById<View?>(R.id.phone_navigation)?.let { navigation ->
+                    val page = activity.findViewById<View>(R.id.page_planner)
+                    assertTrue(
+                        "Phone content must continue behind the floating navigation pill",
+                        page.bottom > navigation.top,
+                    )
+                    val button = activity.findViewById<ViewGroup>(R.id.planner_fetch_button)
+                    val icon = activity.findViewById<View>(R.id.planner_fetch_icon)
+                    val label = button.getChildAt(1)
+                    val groupLeft = icon.left
+                    val groupRight = label.right
+                    assertTrue(
+                        "Planner refresh icon and label must be centered as one group",
+                        kotlin.math.abs(groupLeft - (button.width - groupRight)) <= activity.dp(2),
+                    )
+                }
+            }
 
             click(device, "navigation_calendar")
             assertVisible(device, "page_calendar")
@@ -105,6 +123,7 @@ class MainNavigationSmokeTest {
 
                 click(device, "calendar_mode_day")
                 assertVisible(device, "calendar_timeline")
+                assertVisible(device, "calendar_all_day_strip")
                 val dayBeforeSwipe = objectText(device, "calendar_period_label")
                 swipeResource(device, "calendar_timeline_scroll", horizontalDirection = 1)
                 assertTextChanged(device, "calendar_period_label", dayBeforeSwipe)
@@ -361,6 +380,7 @@ class MainNavigationSmokeTest {
             click(device, "navigation_settings")
             assertVisible(device, "page_settings")
             scrollUntilVisible(device, "privacy_policy_button")
+            assertVisible(device, "settings_github_link")
             scenario.onActivity { activity ->
                 val about = activity.findViewById<View>(R.id.settings_about_section)
                 val settingsPage = activity.findViewById<ScrollView>(R.id.page_settings)

@@ -139,4 +139,12 @@ class AdaptiveLayoutLogicTest {
         assertEquals("01", defaultCampusID)
         assertEquals("04", queryState.campusID)
     }
+
+    @Test
+    fun compactYearCalendarAlwaysUsesTwoMonthColumns() {
+        assertEquals(2, YearCalendarLogic.columns(320))
+        assertEquals(2, YearCalendarLogic.columns(699))
+        assertEquals(3, YearCalendarLogic.columns(700))
+        assertEquals(4, YearCalendarLogic.columns(1_100))
+    }
 }

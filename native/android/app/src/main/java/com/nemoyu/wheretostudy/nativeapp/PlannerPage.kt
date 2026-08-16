@@ -3,12 +3,16 @@ package com.nemoyu.wheretostudy.nativeapp
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AbsListView
 import android.widget.BaseAdapter
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.Switch
@@ -35,6 +39,7 @@ class PlannerPage(
     private val scheduleRepository: ScheduleRepository,
     private val classroomRepository: ClassroomRepository,
     private val availableWidthDp: Int,
+    private val usesBottomNavigation: Boolean,
 ) {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val today = Calendar.getInstance(shanghai)
@@ -60,12 +65,11 @@ class PlannerPage(
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
                 timeZone = shanghai
             }.format(Date())
-            addView(pageTitle(
-                activity,
-                "联动查询",
-                date,
-                R.drawable.ic_section_clock,
-            ))
+            addView(if (availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP) {
+                compactPlannerTitle(date)
+            } else {
+                pageTitle(activity, "联动查询", date, R.drawable.ic_section_clock)
+            })
             addSection(querySurface())
             addSection(slotSurface())
             addSection(todayCoursesSurface())
@@ -86,6 +90,9 @@ class PlannerPage(
             addView(spacer(activity, 8))
             summaryContainer = surface(activity)
             addView(summaryContainer)
+            if (usesBottomNavigation) {
+                addView(spacer(activity, 72))
+            }
         }, null, false)
         resultsAdapter = ClassroomResultsAdapter()
         adapter = resultsAdapter
@@ -158,34 +165,55 @@ class PlannerPage(
         return row
     }
 
-    private fun fetchButton(): TextView = TextView(activity).apply {
-        text = if (classroomRepository.isRefreshing) "正在获取当天空教室…" else "获取空教室信息"
-        textSize = 15f
+    private fun fetchButton(): LinearLayout = LinearLayout(activity).apply {
+        id = R.id.planner_fetch_button
+        orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
-        setTextColor(Palette.onPrimary)
-        setTypeface(typeface, Typeface.BOLD)
-        setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_refresh, 0, 0, 0)
-        compoundDrawablePadding = activity.dp(8)
-        compoundDrawableTintList = ColorStateList.valueOf(Palette.onPrimary)
         background = roundedBackground(activity, Palette.primaryFill, radius = 8)
         isClickable = !classroomRepository.isRefreshing
         isFocusable = true
         isEnabled = !classroomRepository.isRefreshing
+        contentDescription = if (classroomRepository.isRefreshing) {
+            "正在获取当天空教室"
+        } else {
+            "获取空教室信息"
+        }
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(UiMetrics.controlHeightDp),
         )
+        addView(ImageView(activity).apply {
+            id = R.id.planner_fetch_icon
+            setImageResource(R.drawable.ic_refresh)
+            imageTintList = ColorStateList.valueOf(Palette.onPrimary)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply {
+            marginEnd = activity.dp(8)
+        })
+        val label = TextView(activity).apply {
+            text = if (classroomRepository.isRefreshing) {
+                "正在获取当天空教室…"
+            } else {
+                "获取空教室信息"
+            }
+            textSize = 15f
+            setTextColor(Palette.onPrimary)
+            setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+        }
+        addView(label)
         setOnClickListener {
-            val button = it as TextView
-            button.text = "正在获取当天空教室…"
-            button.isEnabled = false
+            label.text = "正在获取当天空教室…"
+            contentDescription = "正在获取当天空教室"
+            isEnabled = false
             classroomRepository.refresh(force = true) { result ->
                 result.onSuccess {
                     Toast.makeText(activity, "当天空教室已更新", Toast.LENGTH_SHORT).show()
                     activity.refreshCurrentPage()
                 }.onFailure { error ->
-                    button.text = "获取空教室信息"
-                    button.isEnabled = true
+                    label.text = "获取空教室信息"
+                    contentDescription = "获取空教室信息"
+                    isEnabled = true
                     Toast.makeText(
                         activity,
                         error.message ?: "当天空教室获取失败",
@@ -225,7 +253,7 @@ class PlannerPage(
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(40),
-            ).apply { bottomMargin = activity.dp(10) }
+            ).apply { bottomMargin = activity.dp(4) }
         }
         addView(personalToggle)
         val actions = LinearLayout(activity).apply {
@@ -269,10 +297,10 @@ class PlannerPage(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 activity.dp(UiMetrics.compactControlHeightDp),
             ).apply {
-                marginEnd = activity.dp(8)
-                bottomMargin = activity.dp(10)
+                marginEnd = activity.dp(6)
+                bottomMargin = activity.dp(6)
             }
-            setPadding(activity.dp(16), 0, activity.dp(16), 0)
+            setPadding(activity.dp(12), 0, activity.dp(12), 0)
             background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
         }
 
@@ -309,12 +337,23 @@ class PlannerPage(
                     orientation = LinearLayout.HORIZONTAL
                     slots.forEach { slot ->
                         val cell = TextView(activity).apply {
-                            text = activity.getString(
+                            val value = activity.getString(
                                 R.string.slot_format,
                                 slot.label,
                                 slot.start,
                                 slot.end,
                             )
+                            text = SpannableString(value).apply {
+                                val timeStart = value.indexOf('\n').takeIf { it >= 0 }?.plus(1)
+                                if (timeStart != null) {
+                                    setSpan(
+                                        RelativeSizeSpan(0.84f),
+                                        timeStart,
+                                        value.length,
+                                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                                    )
+                                }
+                            }
                             textSize = 13f
                             gravity = Gravity.CENTER
                             setPadding(activity.dp(2), 0, activity.dp(2), 0)
@@ -326,9 +365,10 @@ class PlannerPage(
                                 refreshCells()
                                 renderResultsAndSummary()
                             }
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
+                            minHeight = activity.dp(48)
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
                                 marginEnd = activity.dp(4)
-                                bottomMargin = activity.dp(6)
+                                bottomMargin = activity.dp(4)
                             }
                         }
                         cells[slot.index] = cell
@@ -336,7 +376,7 @@ class PlannerPage(
                     }
                     repeat(columns - slots.size) {
                         addView(TextView(activity).apply {
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
                                 marginEnd = activity.dp(4)
                             }
                         })
@@ -369,7 +409,11 @@ class PlannerPage(
         val buttons = mutableMapOf<String, TextView>()
         fun refreshButtons() {
             buttons.forEach { (building, button) ->
-                button.setSelectedStyle(activity, building in selectedBuildings)
+                val selected = building in selectedBuildings
+                button.setSelectedStyle(activity, selected)
+                button.compoundDrawableTintList = ColorStateList.valueOf(
+                    if (selected) Palette.onPrimary else Palette.text,
+                )
             }
         }
         buildings.chunked(columns).forEach { rowBuildings ->
@@ -381,6 +425,13 @@ class PlannerPage(
                         refreshButtons()
                         renderResultsAndSummary()
                     }.apply {
+                        setCompoundDrawablesRelativeWithIntrinsicBounds(
+                            R.drawable.ic_location_pin,
+                            0,
+                            0,
+                            0,
+                        )
+                        compoundDrawablePadding = activity.dp(6)
                         layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
                             marginEnd = activity.dp(7)
                             bottomMargin = activity.dp(7)
@@ -539,6 +590,45 @@ class PlannerPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(92),
         )
+    }
+
+    private fun compactPlannerTitle(date: String): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, 0, 0, activity.dp(12))
+        addView(TextView(activity).apply {
+            text = activity.getString(R.string.planner_eyebrow)
+            textSize = 11f
+            setTextColor(Palette.muted)
+            setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+        })
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, activity.dp(3), 0, 0)
+            addView(TextView(activity).apply {
+                text = "联动查询"
+                textSize = 27f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+                includeFontPadding = false
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(activity).apply {
+                text = date
+                textSize = 13f
+                gravity = Gravity.CENTER_VERTICAL
+                setTextColor(Palette.muted)
+                includeFontPadding = false
+                setCompoundDrawablesRelativeWithIntrinsicBounds(
+                    R.drawable.ic_section_clock,
+                    0,
+                    0,
+                    0,
+                )
+                compoundDrawablePadding = activity.dp(5)
+                compoundDrawableTintList = ColorStateList.valueOf(Palette.muted)
+            })
+        })
     }
 
     private fun courseRow(course: Course): LinearLayout = LinearLayout(activity).apply {

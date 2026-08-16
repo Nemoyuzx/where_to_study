@@ -28,12 +28,24 @@ class SettingsPage(
     private val scheduleRepository: ScheduleRepository,
     private val classroomRepository: ClassroomRepository,
     private val availableWidthDp: Int,
+    private val usesBottomNavigation: Boolean,
 ) {
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
+        clipToPadding = false
         setBackgroundColor(Palette.background)
         addView(verticalPage(activity).apply {
-            addView(pageTitle(activity, "设置", "个人账户与本地偏好"))
+            if (isCompact) {
+                setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(88))
+                if (!usesBottomNavigation) {
+                    setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(28))
+                }
+            }
+            addView(pageTitle(
+                activity,
+                "设置",
+                if (isCompact) null else "个人账户与本地偏好",
+            ))
             if (availableWidthDp >= 760) {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -67,6 +79,7 @@ class SettingsPage(
     }
 
     private fun accountSurface(): LinearLayout = surface(activity).apply {
+        applyCompactSurfacePadding()
         val savedIdentity = credentialStore.load()?.let { it.account to it.password.isNotEmpty() }
         var persistedAccount = savedIdentity?.first.orEmpty()
         var hasPersistedPassword = savedIdentity?.second == true
@@ -103,19 +116,19 @@ class SettingsPage(
         })
         updatePasswordStatus()
         addView(account)
-        addView(spacer(activity, 10))
+        addView(spacer(activity, compactGap))
         addView(password)
         addView(passwordStatus)
-        addView(spacer(activity, 10))
+        addView(spacer(activity, compactGap))
         addView(termID)
-        addView(spacer(activity, 10))
+        addView(spacer(activity, compactGap))
         addView(termStartDate)
-        addView(spacer(activity, 16))
+        addView(spacer(activity, if (isCompact) 10 else 16))
         addView(TextView(activity).apply {
             text = "默认校区"
             textSize = 13f
             setTextColor(Palette.muted)
-            setPadding(0, 0, 0, activity.dp(7))
+            setPadding(0, 0, 0, activity.dp(if (isCompact) 5 else 7))
         })
         val campusLabels = AppMetadata.campuses.map(CampusMetadata::name)
         val campusAdapter = object : ArrayAdapter<String>(
@@ -159,7 +172,7 @@ class SettingsPage(
             )
         }
         addView(campus)
-        addView(spacer(activity, 18))
+        addView(spacer(activity, if (isCompact) 12 else 18))
         fun saveSettings(): Result<Credentials> {
             var credentialTransactionStarted = false
             val result = runCatching {
@@ -229,7 +242,7 @@ class SettingsPage(
 
         addView(TextView(activity).apply {
             text = "保存设置"
-            textSize = 16f
+            textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(Palette.onPrimary)
             setTypeface(typeface, Typeface.BOLD)
@@ -257,10 +270,10 @@ class SettingsPage(
                 }
             }
         })
-        addView(spacer(activity, 10))
+        addView(spacer(activity, compactGap))
         addView(TextView(activity).apply {
             text = "获取/刷新个人课表"
-            textSize = 16f
+            textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(Palette.primaryText)
             setTypeface(typeface, Typeface.BOLD)
@@ -315,18 +328,19 @@ class SettingsPage(
             text = activity.getString(R.string.credential_security_note)
             textSize = 12f
             setTextColor(Palette.muted)
-            setPadding(0, activity.dp(12), 0, 0)
+            setPadding(0, activity.dp(if (isCompact) 8 else 12), 0, 0)
         })
     }
 
     private fun notificationSurface(): LinearLayout = surface(activity).apply {
+        applyCompactSurfacePadding()
         addView(sectionTitle(activity, "课程提醒"))
         addView(Switch(activity).apply {
             text = activity.getString(R.string.daily_course_notification_toggle)
             textSize = 15f
             setTextColor(Palette.text)
             isChecked = preferences.dailyCourseNotificationsEnabled
-            minHeight = activity.dp(48)
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
             setOnClickListener {
                 val requested = isChecked
@@ -352,7 +366,15 @@ class SettingsPage(
     }
 
     private fun localDataSurface(): LinearLayout = surface(activity).apply {
+        applyCompactSurfacePadding()
         addView(sectionTitle(activity, "本地数据"))
+        addView(TextView(activity).apply {
+            text = "个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。"
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setLineSpacing(0f, 1.1f)
+            setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
+        })
         addView(TextView(activity).apply {
             text = "清除本地数据"
             textSize = 15f
@@ -395,14 +417,20 @@ class SettingsPage(
     }
 
     private fun aboutSurface(): LinearLayout = surface(activity).apply {
+        applyCompactSurfacePadding()
         id = R.id.settings_about_section
         addView(sectionTitle(activity, "关于本应用"))
         addView(TextView(activity).apply {
-            text = "Where To Study  ${BuildConfig.VERSION_NAME}"
+            text = "Where To Study  ${BuildConfig.VERSION_NAME}\n北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。"
             textSize = 13f
             setTextColor(Palette.muted)
-            setPadding(0, 0, 0, activity.dp(12))
+            setLineSpacing(0f, 1.12f)
+            setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
         })
+        addView(settingsLinkButton("GitHub 项目主页") {
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PROJECT_URL)))
+        }.apply { id = R.id.settings_github_link })
+        addView(spacer(activity, compactGap))
         addView(TextView(activity).apply {
             id = R.id.privacy_policy_button
             text = "隐私说明"
@@ -455,6 +483,35 @@ class SettingsPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(UiMetrics.controlHeightDp),
         )
+    }
+
+    private fun settingsLinkButton(label: String, onClick: () -> Unit): TextView =
+        TextView(activity).apply {
+            text = label
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.primaryText)
+            setTypeface(typeface, Typeface.BOLD)
+            background = roundedBackground(
+                activity,
+                Palette.surface,
+                Palette.border,
+                radius = UiMetrics.controlRadiusDp,
+            )
+            isClickable = true
+            isFocusable = true
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(UiMetrics.controlHeightDp),
+            )
+            setOnClickListener { onClick() }
+        }
+
+    private fun LinearLayout.applyCompactSurfacePadding() {
+        if (!isCompact) return
+        val padding = activity.dp(14)
+        setPadding(padding, padding, padding, padding)
     }
 
     private fun showPrivacyPolicy() {
@@ -572,6 +629,13 @@ class SettingsPage(
     }
 
     private companion object {
+        const val PROJECT_URL = "https://github.com/Nemoyuzx/where_to_study"
         const val PRIVACY_URL = "https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
     }
+
+    private val isCompact: Boolean
+        get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
+
+    private val compactGap: Int
+        get() = if (isCompact) 7 else 10
 }

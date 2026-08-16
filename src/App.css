@@ -84,6 +84,10 @@
   align-items: center;
 }
 
+.calendar-topbar .eyebrow {
+  display: none;
+}
+
 .app-nav {
   align-content: start;
   display: grid;
@@ -354,7 +358,18 @@ button:disabled {
 
 .settings-actions {
   align-content: start;
+  display: grid;
   gap: 10px;
+}
+
+.settings-local-data-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-local-data .panel-title {
+  margin-bottom: 0;
 }
 
 .settings-about {
@@ -686,8 +701,8 @@ button:disabled {
   border-radius: 6px;
   color: var(--slot-text);
   display: grid;
-  min-height: 54px;
-  padding: 6px 4px;
+  min-height: 46px;
+  padding: 4px;
   text-align: left;
 }
 
@@ -698,7 +713,7 @@ button:disabled {
 
 .slot-cell small {
   color: var(--secondary-alt);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .slot-cell.busy {
@@ -722,7 +737,19 @@ button:disabled {
 }
 
 .planner-slot-actions {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+}
+
+.planner-slot-panel .panel-title {
+  margin-bottom: 10px;
+}
+
+.planner-slot-panel .planner-switch-row {
+  margin-bottom: 8px;
+}
+
+.planner-slot-panel .muted {
+  margin-top: 8px;
 }
 
 .planner-switch-row {
@@ -1063,7 +1090,7 @@ button:disabled {
 
 .calendar-view-switch {
   background: var(--surface-muted);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 7px;
   display: grid;
   grid-template-columns: repeat(4, 44px);
@@ -1116,14 +1143,14 @@ button:disabled {
 }
 
 .teaching-calendar-main {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 16px;
+  padding: 0;
 }
 
 .calendar-action-strip {
@@ -1135,7 +1162,7 @@ button:disabled {
   background: var(--surface-subtle);
   border-color: var(--input-border);
   color: var(--text-primary);
-  height: 36px;
+  height: 32px;
   max-width: 178px;
 }
 
@@ -1148,13 +1175,17 @@ button:disabled {
 }
 
 .time-calendar {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
   display: grid;
   grid-template-columns: 58px 108px repeat(var(--day-count), minmax(92px, 1fr));
   grid-template-rows: auto 760px;
   min-width: 0;
   overflow: auto;
+}
+
+.time-calendar.has-all-day {
+  grid-template-rows: auto auto 760px;
 }
 
 .time-calendar.single-day {
@@ -1250,7 +1281,55 @@ button:disabled {
 }
 
 .calendar-day-tags i {
-  display: none;
+  background: var(--primary);
+  border-radius: 999px;
+  display: block;
+  height: 4px;
+  width: 4px;
+}
+
+.time-all-day-label,
+.time-all-day-cell {
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  min-height: 34px;
+  padding: 4px 6px;
+}
+
+.time-all-day-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  grid-column: span 2;
+  justify-content: center;
+}
+
+.time-all-day-cell {
+  border-left: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+}
+
+.time-all-day-cell span {
+  background: var(--primary-surface-holiday-badge);
+  border-radius: 4px;
+  color: var(--primary-text-strong);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time-all-day-cell span.workday {
+  background: var(--gold-surface);
+  color: var(--gold-text-muted);
 }
 
 .time-labels,
@@ -1468,8 +1547,8 @@ button:disabled {
 }
 
 .month-calendar {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 0;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   overflow: hidden;
@@ -1848,14 +1927,14 @@ button:disabled {
 }
 
 .calendar-inspector {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-soft);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   display: grid;
   gap: 12px;
   align-content: start;
-  padding: 14px;
+  padding: 0;
 }
 
 .inspector-card,
@@ -2161,7 +2240,13 @@ button:disabled {
 
   .page-content {
     grid-row: 1;
-    padding: 12px 12px calc(86px + env(safe-area-inset-bottom, 0px));
+    padding: 12px;
+  }
+
+  .workspace,
+  .calendar-page,
+  .settings-layout {
+    padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
   }
 
   .page-content.calendar-month-page {
@@ -2176,6 +2261,7 @@ button:disabled {
   }
 
   .calendar-month-page > .calendar-page {
+    box-sizing: border-box;
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
@@ -2190,7 +2276,7 @@ button:disabled {
 
   .calendar-month-page .teaching-calendar-main {
     overflow: hidden;
-    padding: 10px;
+    padding: 0;
   }
 
   .calendar-month-page .calendar-action-strip {
@@ -2249,8 +2335,24 @@ button:disabled {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
-    gap: 10px;
-    margin-bottom: 10px;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .planner-topbar,
+  .settings-topbar {
+    align-items: flex-end;
+    flex-direction: row;
+  }
+
+  .planner-topbar > div,
+  .settings-topbar > div {
+    min-width: 0;
+  }
+
+  .planner-topbar .status-pill,
+  .settings-topbar .status-pill {
+    margin-left: auto;
   }
 
   .app-nav button {
@@ -2307,8 +2409,12 @@ button:disabled {
   }
 
   h1 {
-    font-size: 32px;
+    font-size: 28px;
     line-height: 1.14;
+  }
+
+  .calendar-topbar h1 {
+    font-size: 24px;
   }
 
   h2 {
@@ -2349,7 +2455,7 @@ button:disabled {
 
   .panel {
     border-radius: 8px;
-    padding: 16px;
+    padding: 14px;
   }
 
   .panel-title {
@@ -2420,6 +2526,7 @@ button:disabled {
 
   .calendar-view-switch {
     grid-template-columns: repeat(4, minmax(38px, 1fr));
+    padding: 2px;
     width: 100%;
   }
 
@@ -2433,6 +2540,11 @@ button:disabled {
     grid-template-rows: auto 1200px;
     overflow-x: hidden;
     overflow-y: auto;
+  }
+
+  .time-calendar.has-all-day,
+  .time-calendar.has-all-day:not(.single-day) {
+    grid-template-rows: auto auto 1200px;
   }
 
   .time-corner,
@@ -2484,6 +2596,21 @@ button:disabled {
     display: block;
     flex: 0 0 4px;
     height: 4px;
+  }
+
+  .time-all-day-label,
+  .time-all-day-cell {
+    min-height: 28px;
+    padding: 3px 2px;
+  }
+
+  .time-all-day-label {
+    font-size: 9px;
+  }
+
+  .time-all-day-cell span {
+    font-size: 8px;
+    padding: 2px;
   }
 
   .week-calendar .calendar-day-tags em {
@@ -2657,7 +2784,23 @@ button:disabled {
   }
 
   .year-calendar {
-    grid-template-columns: 1fr;
+    gap: 18px 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 2px;
+  }
+
+  .year-month h3 {
+    font-size: 15px;
+    margin-bottom: 8px;
+  }
+
+  .mini-month-head span {
+    font-size: 9px;
+  }
+
+  .mini-month-grid button {
+    font-size: 9px;
+    height: 23px;
   }
 
   .filter-toggles {
@@ -2700,12 +2843,12 @@ button:disabled {
   }
 
   .slot-cell {
-    min-height: 54px;
-    padding: 6px 4px;
+    min-height: 46px;
+    padding: 4px;
   }
 
   .slot-cell span {
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .slot-cell small {

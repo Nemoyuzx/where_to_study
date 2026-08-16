@@ -28,8 +28,7 @@ object YearCalendarLogic {
     fun columns(screenWidthDp: Int): Int = when {
         screenWidthDp >= 1100 -> 4
         screenWidthDp >= 700 -> 3
-        screenWidthDp >= 480 -> 2
-        else -> 1
+        else -> 2
     }
 
     fun dayNumber(year: Int, month: Int, row: Int, column: Int): Int? {

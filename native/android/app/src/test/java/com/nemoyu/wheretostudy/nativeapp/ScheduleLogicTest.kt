@@ -447,7 +447,7 @@ class ScheduleLogicTest {
 
     @Test
     fun yearCalendarMapsAdaptiveColumnsAndJuneGridDates() {
-        assertEquals(1, YearCalendarLogic.columns(390))
+        assertEquals(2, YearCalendarLogic.columns(390))
         assertEquals(2, YearCalendarLogic.columns(480))
         assertEquals(3, YearCalendarLogic.columns(700))
         assertEquals(4, YearCalendarLogic.columns(1100))

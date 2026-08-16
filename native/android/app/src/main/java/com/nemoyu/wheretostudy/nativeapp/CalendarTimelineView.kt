@@ -367,16 +367,10 @@ private class CalendarTimelineCanvas(
                     boldPaint,
                 )
 
-                val badge = holidayBadge(day.holidays)
-                textPaint.color = when {
-                    day.holidays.any { it.type == "holiday" } -> Palette.holiday
-                    day.holidays.any { it.type == "workday" } -> Palette.primaryText
-                    day.courses.isEmpty() -> Palette.muted
-                    else -> Palette.primaryText
-                }
+                textPaint.color = if (day.courses.isEmpty()) Palette.muted else Palette.primaryText
                 textPaint.textAlign = Paint.Align.CENTER
                 textPaint.textSize = sp(10f)
-                val detail = badge.ifEmpty { if (day.courses.isEmpty()) "无课" else "${day.courses.size} 门课" }
+                val detail = if (day.courses.isEmpty()) "无课" else "${day.courses.size} 门课"
                 drawCenteredText(
                     canvas,
                     ellipsize(detail, dayWidth - dp(8), textPaint),

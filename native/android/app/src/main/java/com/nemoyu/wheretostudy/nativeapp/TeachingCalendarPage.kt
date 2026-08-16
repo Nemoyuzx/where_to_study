@@ -362,6 +362,7 @@ internal class TeachingCalendarPage(
     private val holidayRepository: HolidayRepository,
     private val availableWidthDp: Int,
     private val sessionState: TeachingCalendarSessionState,
+    private val usesBottomNavigation: Boolean,
 ) {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val selectedDate = sessionState.selectedDate
@@ -529,12 +530,6 @@ internal class TeachingCalendarPage(
             isClickable = true
             isFocusable = true
         }
-        val headerSubtitle = TextView(activity).apply {
-            textSize = 12f
-            setTextColor(Palette.muted)
-            setPadding(0, activity.dp(1), 0, 0)
-        }
-
         fun updateMonthExpansionProgress(progress: Float) {
             monthExpansionAnimator?.cancel()
             monthExpansionProgress = progress.coerceIn(0f, 1f)
@@ -569,14 +564,6 @@ internal class TeachingCalendarPage(
                 null
             }
             periodLabel.text = periodTitle()
-            headerSubtitle.text = when (selectedMode) {
-                Mode.DAY -> SimpleDateFormat("M月d日 EEEE", Locale.CHINA).apply {
-                    timeZone = shanghai
-                }.format(selectedDate.time)
-                Mode.WEEK -> "第 ${selectedDate.get(Calendar.WEEK_OF_YEAR)} 周"
-                Mode.MONTH -> "月视图"
-                Mode.YEAR -> "全年课程分布"
-            }
             val pageView: View = if (selectedMode == Mode.DAY || selectedMode == Mode.WEEK) {
                 visibleYears().forEach(holidayRepository::ensure)
                 phoneDayWeekContent(::render)
@@ -584,7 +571,12 @@ internal class TeachingCalendarPage(
                 val fixedMonth = selectedMode == Mode.MONTH
                 val body = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    setPadding(activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(16))
+                    setPadding(
+                        activity.dp(12),
+                        activity.dp(8),
+                        activity.dp(12),
+                        activity.dp(if (usesBottomNavigation) 84 else 16),
+                    )
                     holidayStatus()?.let { message ->
                         addView(TextView(activity).apply {
                             text = message
@@ -642,12 +634,12 @@ internal class TeachingCalendarPage(
             id = R.id.calendar_phone_header
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(activity.dp(16), activity.dp(10), activity.dp(12), activity.dp(6))
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(periodLabel)
-                addView(headerSubtitle)
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            setPadding(activity.dp(16), activity.dp(7), activity.dp(12), activity.dp(3))
+            addView(periodLabel, LinearLayout.LayoutParams(
+                0,
+                activity.dp(TeachingCalendarLogic.phoneNavigationHeightDp),
+                1f,
+            ))
             periodLabel.setOnClickListener { showDatePicker(::render) }
             addView(phoneNavigationButton("今天", 52) {
                 selectedDate.timeInMillis = Calendar.getInstance(shanghai).timeInMillis
@@ -699,8 +691,6 @@ internal class TeachingCalendarPage(
             marginEnd = activity.dp(12)
             topMargin = activity.dp(4)
         })
-        root.addView(View(activity).apply { setBackgroundColor(Palette.border) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)))
         root.addView(content, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0,
@@ -812,24 +802,25 @@ internal class TeachingCalendarPage(
                 })
             }
             addView(spacer(activity, 6))
+            val timelineDays = if (selectedMode == Mode.DAY) {
+                listOf(timelineDay(selectedDate))
+            } else {
+                weekDates().map(::timelineDay)
+            }
+            val callback: ((Calendar) -> Unit)? = if (selectedMode == Mode.WEEK) {
+                { day ->
+                    selectedDate.timeInMillis = day.timeInMillis
+                    onDateChanged()
+                }
+            } else {
+                null
+            }
+            addView(allDayStrip(timelineDays, compact = true, onDaySelected = callback))
             addView(ScrollView(activity).apply {
                 id = R.id.calendar_timeline_scroll
                 isFillViewport = false
                 clipToPadding = false
-                setPadding(0, 0, 0, activity.dp(14))
-                val timelineDays = if (selectedMode == Mode.DAY) {
-                    listOf(timelineDay(selectedDate))
-                } else {
-                    weekDates().map(::timelineDay)
-                }
-                val callback: ((Calendar) -> Unit)? = if (selectedMode == Mode.WEEK) {
-                    { day ->
-                        selectedDate.timeInMillis = day.timeInMillis
-                        onDateChanged()
-                    }
-                } else {
-                    null
-                }
+                setPadding(0, 0, 0, activity.dp(if (usesBottomNavigation) 84 else 14))
                 addView(phoneTimelineView(timelineDays, callback))
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -933,13 +924,22 @@ internal class TeachingCalendarPage(
     }
 
     private fun periodTitle(): String {
-        val pattern = when (selectedMode) {
-            Mode.DAY -> "yyyy年M月d日"
-            Mode.WEEK, Mode.MONTH -> "yyyy年M月"
-            Mode.YEAR -> "yyyy年"
+        val date = when (selectedMode) {
+            Mode.DAY -> SimpleDateFormat("M月d日", Locale.CHINA).apply {
+                timeZone = shanghai
+            }.format(selectedDate.time)
+            Mode.WEEK, Mode.MONTH -> SimpleDateFormat("yyyy年M月", Locale.CHINA).apply {
+                timeZone = shanghai
+            }.format(selectedDate.time)
+            Mode.YEAR -> SimpleDateFormat("yyyy年", Locale.CHINA).apply {
+                timeZone = shanghai
+            }.format(selectedDate.time)
         }
-        return SimpleDateFormat(pattern, Locale.CHINA).apply { timeZone = shanghai }
-            .format(selectedDate.time)
+        return if (selectedMode == Mode.WEEK) {
+            "$date · 第 ${selectedDate.get(Calendar.WEEK_OF_YEAR)} 周"
+        } else {
+            date
+        }
     }
 
     private fun phoneDateStrip(onDateChanged: () -> Unit): LinearLayout =
@@ -953,13 +953,7 @@ internal class TeachingCalendarPage(
                 0
             }
             if (leadingWidth > 0) {
-                addView(TextView(activity).apply {
-                    text = "${selectedDate.get(Calendar.WEEK_OF_YEAR)}\n周"
-                    textSize = 11f
-                    gravity = Gravity.CENTER
-                    setTextColor(Palette.muted)
-                    contentDescription = "第 ${selectedDate.get(Calendar.WEEK_OF_YEAR)} 周"
-                }, LinearLayout.LayoutParams(
+                addView(View(activity), LinearLayout.LayoutParams(
                     activity.dp(leadingWidth),
                     activity.dp(TeachingCalendarLogic.phoneDateStripHeightDp),
                 ))
@@ -1032,15 +1026,11 @@ internal class TeachingCalendarPage(
             setTypeface(typeface, Typeface.BOLD)
         })
         val courses = coursesOn(selectedDate)
-        val holidays = holidaysOn(selectedDate)
         addView(TextView(activity).apply {
-            text = buildList {
-                add(if (courses.isEmpty()) "暂无课程" else "${courses.size} 门课")
-                holidays.forEach { add("${if (it.type == "holiday") "休" else "班"} ${it.name}") }
-            }.joinToString("  ·  ")
+            text = if (courses.isEmpty()) "暂无课程" else "${courses.size} 门课"
             textSize = 12f
             gravity = Gravity.CENTER
-            setTextColor(if (holidays.any { it.type == "holiday" }) Palette.holiday else Palette.muted)
+            setTextColor(Palette.muted)
             setPadding(0, activity.dp(2), 0, 0)
         })
     }
@@ -1152,9 +1142,11 @@ internal class TeachingCalendarPage(
 
     private fun dayView(): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "当日时间轴"))
+        val days = listOf(timelineDay(selectedDate))
+        addView(allDayStrip(days, compact = false, onDaySelected = null))
         val timeline = CalendarTimelineView(
             activity,
-            listOf(timelineDay(selectedDate)),
+            days,
             selectedDate,
         )
         addView(timeline, LinearLayout.LayoutParams(
@@ -1166,15 +1158,18 @@ internal class TeachingCalendarPage(
     private fun weekView(onDateChanged: () -> Unit): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "本周时间轴"))
         val days = weekDates()
+        val timelineDays = days.map(::timelineDay)
+        val selectDay: (Calendar) -> Unit = { day ->
+            selectedDate.timeInMillis = day.timeInMillis
+            onDateChanged()
+        }
+        addView(allDayStrip(timelineDays, compact = false, onDaySelected = selectDay))
         addView(
             CalendarTimelineView(
                 context = activity,
-                days = days.map(::timelineDay),
+                days = timelineDays,
                 selectedDate = selectedDate,
-                onDaySelected = { day ->
-                    selectedDate.timeInMillis = day.timeInMillis
-                    onDateChanged()
-                },
+                onDaySelected = selectDay,
             ),
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1512,6 +1507,72 @@ internal class TeachingCalendarPage(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ),
         )
+    }
+
+    private fun allDayStrip(
+        days: List<TimelineDay>,
+        compact: Boolean,
+        onDaySelected: ((Calendar) -> Unit)?,
+    ): LinearLayout = LinearLayout(activity).apply {
+        id = R.id.calendar_all_day_strip
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setBackgroundColor(Palette.surface)
+        val showCourseSlots = !compact || days.size == 1
+        addView(TextView(activity).apply {
+            text = "全天"
+            textSize = if (compact) 11f else 12f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.muted)
+            setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+        }, LinearLayout.LayoutParams(
+            activity.dp(CalendarTimelineLogic.axisWidthDp(compact, showCourseSlots)),
+            activity.dp(40),
+        ))
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            days.forEach { day ->
+                val hasHoliday = day.holidays.isNotEmpty()
+                addView(TextView(activity).apply {
+                    text = day.holidays.joinToString(" · ") { holiday ->
+                        "${if (holiday.type == "holiday") "休" else "班"} ${holiday.name}"
+                    }
+                    textSize = if (compact && days.size > 1) 9.5f else 11f
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    includeFontPadding = false
+                    setPadding(activity.dp(3), 0, activity.dp(3), 0)
+                    setTextColor(if (day.holidays.any { it.type == "holiday" }) {
+                        Palette.holiday
+                    } else {
+                        Palette.primaryText
+                    })
+                    background = if (hasHoliday) {
+                        roundedBackground(activity, Palette.selectionSurface, radius = 4)
+                    } else {
+                        null
+                    }
+                    isClickable = onDaySelected != null && hasHoliday
+                    isFocusable = onDaySelected != null && hasHoliday
+                    contentDescription = if (hasHoliday) {
+                        val date = SimpleDateFormat("M月d日", Locale.CHINA).apply {
+                            timeZone = shanghai
+                        }.format(day.date.time)
+                        "$date，全天，$text"
+                    } else {
+                        null
+                    }
+                    setOnClickListener {
+                        if (hasHoliday) onDaySelected?.invoke(day.date.clone() as Calendar)
+                    }
+                }, LinearLayout.LayoutParams(0, activity.dp(36), 1f).apply {
+                    marginStart = activity.dp(2)
+                    marginEnd = activity.dp(2)
+                })
+            }
+        }, LinearLayout.LayoutParams(0, activity.dp(40), 1f))
     }
 
     private fun showDayPopover(
