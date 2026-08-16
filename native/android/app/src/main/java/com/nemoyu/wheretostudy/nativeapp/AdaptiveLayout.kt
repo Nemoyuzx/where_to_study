@@ -94,6 +94,5 @@ object AdaptiveContentLogic {
         else -> 2
     }
 
-    fun plannerSummaryColumns(contentWidthDp: Int): Int =
-        if (contentWidthDp >= 480) 3 else 1
+    fun plannerSummaryColumns(@Suppress("UNUSED_PARAMETER") contentWidthDp: Int): Int = 3
 }

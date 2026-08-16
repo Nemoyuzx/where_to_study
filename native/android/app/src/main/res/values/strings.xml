@@ -3,7 +3,7 @@
     <string name="app_name">Where To Study</string>
     <string name="brand_eyebrow">BUPT</string>
     <string name="brand_name">Where To Study</string>
-    <string name="planner_eyebrow">BUPT CLASSROOM PLANNER</string>
+    <string name="planner_eyebrow">Where To Study</string>
     <string name="slot_format">第 %1$s 节\n%2$s-%3$s</string>
     <string name="classroom_source_format">数据源：移动教务实时接口 · %1$s</string>
     <string name="personal_schedule_state_format">个人课表 %1$s</string>

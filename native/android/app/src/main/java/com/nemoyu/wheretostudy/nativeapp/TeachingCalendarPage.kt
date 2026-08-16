@@ -1,5 +1,6 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.animation.ValueAnimator
 import android.graphics.Color
@@ -19,6 +20,7 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.FrameLayout
+import android.widget.PopupMenu
 import android.widget.PopupWindow
 import android.widget.ScrollView
 import android.widget.TextView
@@ -67,7 +69,7 @@ object TeachingCalendarLogic {
     const val phoneModeSwitchHeightDp = 38
     const val phoneModeTabHeightDp = 32
     const val phoneNavigationHeightDp = 36
-    const val phoneDateStripHeightDp = 62
+    const val phoneDateStripHeightDp = 50
     const val compactCalendarBreakpointDp = 1200
 
     fun yearCourseOpacity(courseCount: Int): Float {
@@ -523,10 +525,12 @@ internal class TeachingCalendarPage(
         val tabs = mutableMapOf<Mode, TextView>()
         val periodLabel = TextView(activity).apply {
             id = R.id.calendar_period_label
-            textSize = 22f
+            textSize = 18f
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setTextColor(Palette.text)
             setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+            maxLines = 1
             isClickable = true
             isFocusable = true
         }
@@ -636,7 +640,7 @@ internal class TeachingCalendarPage(
             id = R.id.calendar_phone_header
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(activity.dp(16), activity.dp(7), activity.dp(12), activity.dp(3))
+            setPadding(activity.dp(16), activity.dp(5), activity.dp(12), activity.dp(5))
             addView(periodLabel, LinearLayout.LayoutParams(
                 0,
                 activity.dp(TeachingCalendarLogic.phoneNavigationHeightDp),
@@ -832,12 +836,15 @@ internal class TeachingCalendarPage(
         }
 
     private fun calendarImportButton(compact: Boolean = false): TextView = TextView(activity).apply {
-        val defaultLabel = if (compact) "⋯" else "导入系统日历"
+        id = R.id.calendar_overflow_button
+        val defaultLabel = if (compact) "•••" else "导入手机日历"
         text = defaultLabel
-        textSize = if (compact) 22f else 15f
+        textSize = if (compact) 12f else 15f
         gravity = Gravity.CENTER
         setTextColor(if (compact) Palette.text else Palette.onPrimary)
         setTypeface(typeface, Typeface.BOLD)
+        includeFontPadding = false
+        if (compact) letterSpacing = 0.08f
         background = roundedBackground(
             activity,
             if (compact) Color.TRANSPARENT else Palette.primaryFill,
@@ -845,7 +852,7 @@ internal class TeachingCalendarPage(
         )
         isClickable = true
         isFocusable = true
-        contentDescription = if (compact) "导入系统日历" else null
+        contentDescription = if (compact) "更多日历操作" else "导入手机日历"
         layoutParams = if (compact) {
             LinearLayout.LayoutParams(
                 activity.dp(36),
@@ -854,7 +861,7 @@ internal class TeachingCalendarPage(
         } else {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(48))
         }
-        setOnClickListener {
+        fun beginImport() {
             text = if (compact) "…" else "正在导入…"
             isEnabled = false
             activity.importCachedScheduleToSystemCalendar { result ->
@@ -887,6 +894,33 @@ internal class TeachingCalendarPage(
                         Toast.LENGTH_LONG,
                     ).show()
                 }
+            }
+        }
+
+        fun confirmImport() {
+            AlertDialog.Builder(activity)
+                .setTitle("导入手机日历")
+                .setMessage("将把本地个人课表写入手机系统日历；再次导入会更新已有课程。是否继续？")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确认导入") { _, _ -> beginImport() }
+                .show()
+        }
+
+        setOnClickListener { anchor ->
+            if (compact) {
+                PopupMenu(activity, anchor).apply {
+                    menu.add(0, R.id.calendar_import_menu_item, 0, "导入手机日历")
+                    setOnMenuItemClickListener { item ->
+                        if (item.itemId == R.id.calendar_import_menu_item) {
+                            confirmImport()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }.show()
+            } else {
+                confirmImport()
             }
         }
     }
@@ -938,7 +972,7 @@ internal class TeachingCalendarPage(
             }.format(selectedDate.time)
         }
         return if (selectedMode == Mode.WEEK) {
-            "$date · 第 ${selectedDate.get(Calendar.WEEK_OF_YEAR)} 周"
+            "$date 第${selectedDate.get(Calendar.WEEK_OF_YEAR)}周"
         } else {
             date
         }
@@ -955,7 +989,14 @@ internal class TeachingCalendarPage(
                 0
             }
             if (leadingWidth > 0) {
-                addView(View(activity), LinearLayout.LayoutParams(
+                addView(TextView(activity).apply {
+                    id = R.id.calendar_week_number
+                    text = "${selectedDate.get(Calendar.WEEK_OF_YEAR)}\n周"
+                    textSize = 9.5f
+                    gravity = Gravity.CENTER
+                    setTextColor(Palette.muted)
+                    includeFontPadding = false
+                }, LinearLayout.LayoutParams(
                     activity.dp(leadingWidth),
                     activity.dp(TeachingCalendarLogic.phoneDateStripHeightDp),
                 ))
@@ -975,9 +1016,11 @@ internal class TeachingCalendarPage(
                             append(if (it.type == "holiday") "休" else "班")
                         }
                     }
-                    textSize = 12f
+                    textSize = 11f
                     gravity = Gravity.CENTER
                     maxLines = 3
+                    includeFontPadding = false
+                    setPadding(0, activity.dp(2), 0, activity.dp(2))
                     setTextColor(when {
                         selected -> Palette.onPrimary
                         holidays.any { it.type == "holiday" } -> Palette.holiday
@@ -1389,9 +1432,10 @@ internal class TeachingCalendarPage(
         cell.findViewById<TextView>(R.id.calendar_month_compact_marker).apply {
             visibility = if (resolved >= 0.99f || text.isEmpty()) View.GONE else View.VISIBLE
             alpha = 1f - resolved
+            includeFontPadding = false
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(TeachingCalendarLogic.interpolateMonthMetric(8, 0, resolved)),
+                activity.dp(TeachingCalendarLogic.interpolateMonthMetric(12, 0, resolved)),
             )
         }
     }

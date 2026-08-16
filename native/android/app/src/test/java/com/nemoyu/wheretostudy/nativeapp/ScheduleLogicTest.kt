@@ -432,6 +432,9 @@ class ScheduleLogicTest {
         assertEquals(144, CalendarTimelineLogic.axisWidthDp(compact = false))
         assertEquals(132, CalendarTimelineLogic.dayWidthDp(compact = true))
         assertEquals(156, CalendarTimelineLogic.dayWidthDp(compact = false))
+        assertEquals(28, CalendarTimelineLogic.courseSlotBoundaryMinutes().size)
+        assertTrue(8 * 60 in CalendarTimelineLogic.courseSlotBoundaryMinutes())
+        assertTrue(20 * 60 + 55 in CalendarTimelineLogic.courseSlotBoundaryMinutes())
         assertEquals(1_178, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
         assertEquals(1_026, CalendarTimelineLogic.totalHeightDp(compact = false, showDayHeader = true))
     }
@@ -482,7 +485,7 @@ class ScheduleLogicTest {
         assertEquals(38, TeachingCalendarLogic.phoneModeSwitchHeightDp)
         assertEquals(32, TeachingCalendarLogic.phoneModeTabHeightDp)
         assertEquals(36, TeachingCalendarLogic.phoneNavigationHeightDp)
-        assertEquals(62, TeachingCalendarLogic.phoneDateStripHeightDp)
+        assertEquals(50, TeachingCalendarLogic.phoneDateStripHeightDp)
         assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(2))
         assertEquals(1, TeachingCalendarLogic.visibleMonthEntryCount(5))
         assertEquals(4, TeachingCalendarLogic.hiddenMonthEntryCount(5))

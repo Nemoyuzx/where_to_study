@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
@@ -104,6 +105,31 @@ class MainNavigationSmokeTest {
                         "Planner refresh icon and label must be centered as one group",
                         kotlin.math.abs(groupLeft - (button.width - groupRight)) <= activity.dp(2),
                     )
+                    assertTrue(
+                        "Planner refresh icon must keep inset space so its stroke is not clipped",
+                        icon.paddingLeft >= activity.dp(1) && icon.paddingTop >= activity.dp(1),
+                    )
+                    val query = activity.findViewById<View>(R.id.planner_query_surface)
+                    assertTrue(
+                        "Compact query conditions must not consume excessive vertical space",
+                        query.height <= activity.dp(180),
+                    )
+                    val summary = activity.findViewById<ViewGroup>(R.id.planner_summary)
+                    val metrics = summary.getChildAt(1) as LinearLayout
+                    assertEquals(
+                        "Planner summary metrics must remain in one horizontal row on phones",
+                        LinearLayout.HORIZONTAL,
+                        metrics.orientation,
+                    )
+                    val buildings = activity.findViewById<ViewGroup>(R.id.planner_buildings_surface)
+                    val firstRow = buildings.getChildAt(1) as LinearLayout
+                    val firstButton = firstRow.getChildAt(0) as LinearLayout
+                    val buildingIcon = firstButton.getChildAt(0)
+                    val buildingLabel = firstButton.getChildAt(1)
+                    assertTrue(
+                        "Building icon must remain adjacent to its label",
+                        buildingLabel.left - buildingIcon.right <= activity.dp(4),
+                    )
                 }
             }
 
@@ -120,6 +146,40 @@ class MainNavigationSmokeTest {
                 assertVisible(device, "calendar_mode_switch")
                 assertVisible(device, "calendar_date_strip")
                 assertVisible(device, "calendar_timeline_scroll")
+                assertVisible(device, "calendar_week_number")
+                scenario.onActivity { activity ->
+                    val header = activity.findViewById<View>(R.id.calendar_phone_header)
+                    val overflow = activity.findViewById<View>(R.id.calendar_overflow_button)
+                    val period = activity.findViewById<TextView>(R.id.calendar_period_label)
+                    val strip = activity.findViewById<View>(R.id.calendar_date_strip)
+                    assertTrue(
+                        "Calendar overflow control must be vertically centered in the phone header",
+                        kotlin.math.abs(
+                            (overflow.top + overflow.bottom) - (header.height),
+                        ) <= activity.dp(2),
+                    )
+                    assertEquals(
+                        activity.dp(TeachingCalendarLogic.phoneDateStripHeightDp),
+                        strip.height,
+                    )
+                    assertEquals(
+                        "Compact week heading must remain fully visible",
+                        0,
+                        period.layout?.getEllipsisCount(0) ?: 0,
+                    )
+                }
+                click(device, "calendar_overflow_button")
+                assertTrue(
+                    "Calendar overflow menu must expose an explicit phone-calendar import action",
+                    device.wait(Until.hasObject(By.text("导入手机日历")), UI_TIMEOUT_MILLIS),
+                )
+                device.findObject(By.text("导入手机日历")).click()
+                assertTrue(
+                    "Calendar import must require a second confirmation",
+                    device.wait(Until.hasObject(By.text("确认导入")), UI_TIMEOUT_MILLIS),
+                )
+                device.findObject(By.text("取消")).click()
+                device.waitForIdle()
 
                 click(device, "calendar_mode_day")
                 assertVisible(device, "calendar_timeline")

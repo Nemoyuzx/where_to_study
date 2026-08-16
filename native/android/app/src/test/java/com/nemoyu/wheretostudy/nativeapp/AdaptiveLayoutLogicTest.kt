@@ -125,7 +125,8 @@ class AdaptiveLayoutLogicTest {
         assertEquals(4, AdaptiveContentLogic.plannerBuildingColumns(600))
         assertEquals(5, AdaptiveContentLogic.plannerBuildingColumns(840))
 
-        assertEquals(1, AdaptiveContentLogic.plannerSummaryColumns(479))
+        assertEquals(3, AdaptiveContentLogic.plannerSummaryColumns(320))
+        assertEquals(3, AdaptiveContentLogic.plannerSummaryColumns(479))
         assertEquals(3, AdaptiveContentLogic.plannerSummaryColumns(480))
     }
 

@@ -6,6 +6,7 @@ import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -88,7 +89,7 @@ class PlannerPage(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
             addView(spacer(activity, 8))
-            summaryContainer = surface(activity)
+            summaryContainer = surface(activity).apply { id = R.id.planner_summary }
             addView(summaryContainer)
             if (usesBottomNavigation) {
                 addView(spacer(activity, 72))
@@ -105,20 +106,25 @@ class PlannerPage(
     }
 
     private fun querySurface(): LinearLayout = surface(activity).apply {
+        id = R.id.planner_query_surface
+        setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
         addView(sectionTitle(
             activity,
             "查询条件",
             R.drawable.ic_section_query,
-        ))
+        ).apply {
+            textSize = 17f
+            setPadding(0, 0, 0, activity.dp(8))
+        })
         addView(campusControl())
-        addView(spacer(activity, 14))
+        addView(spacer(activity, 8))
         addView(fetchButton())
         classroomRepository.cache?.let { cache ->
             addView(TextView(activity).apply {
                 text = activity.getString(R.string.classroom_source_format, cache.targetDate)
                 textSize = 12f
                 setTextColor(Palette.muted)
-                setPadding(0, activity.dp(10), 0, 0)
+                setPadding(0, activity.dp(6), 0, 0)
             })
         }
     }
@@ -180,15 +186,17 @@ class PlannerPage(
         }
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(UiMetrics.controlHeightDp),
+            activity.dp(40),
         )
         addView(ImageView(activity).apply {
             id = R.id.planner_fetch_icon
             setImageResource(R.drawable.ic_refresh)
             imageTintList = ColorStateList.valueOf(Palette.onPrimary)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply {
-            marginEnd = activity.dp(8)
+        }, LinearLayout.LayoutParams(activity.dp(20), activity.dp(20)).apply {
+            marginEnd = activity.dp(6)
         })
         val label = TextView(activity).apply {
             text = if (classroomRepository.isRefreshing) {
@@ -196,7 +204,7 @@ class PlannerPage(
             } else {
                 "获取空教室信息"
             }
-            textSize = 15f
+            textSize = 14f
             setTextColor(Palette.onPrimary)
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
@@ -284,7 +292,7 @@ class PlannerPage(
                     if (selected) Palette.primaryFill else Palette.border,
                     radius = 6,
                 )
-                cell.setTypeface(cell.typeface, Typeface.BOLD)
+                cell.setTypeface(Typeface.DEFAULT, Typeface.NORMAL)
             }
         }
 
@@ -344,11 +352,17 @@ class PlannerPage(
                                 slot.end,
                             )
                             text = SpannableString(value).apply {
-                                val timeStart = value.indexOf('\n').takeIf { it >= 0 }?.plus(1)
-                                if (timeStart != null) {
+                                val lineBreak = value.indexOf('\n').takeIf { it >= 0 }
+                                if (lineBreak != null) {
                                     setSpan(
-                                        RelativeSizeSpan(0.84f),
-                                        timeStart,
+                                        StyleSpan(Typeface.BOLD),
+                                        0,
+                                        lineBreak,
+                                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                                    )
+                                    setSpan(
+                                        RelativeSizeSpan(0.74f),
+                                        lineBreak + 1,
                                         value.length,
                                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                                     )
@@ -397,6 +411,7 @@ class PlannerPage(
     }
 
     private fun buildingsSurface(): LinearLayout = surface(activity).apply {
+        id = R.id.planner_buildings_surface
         addView(sectionTitle(activity, "教学楼", R.drawable.ic_section_building))
         val buildings = AppMetadata.buildings(queryState.campusID).ifEmpty {
             campusRooms().map(Classroom::building).distinct().sorted()
@@ -406,38 +421,65 @@ class PlannerPage(
             return@apply
         }
         val columns = AdaptiveContentLogic.plannerBuildingColumns(availableWidthDp)
-        val buttons = mutableMapOf<String, TextView>()
+        val buttons = mutableMapOf<String, Triple<LinearLayout, ImageView, TextView>>()
         fun refreshButtons() {
-            buttons.forEach { (building, button) ->
+            buttons.forEach { (building, views) ->
+                val (button, icon, label) = views
                 val selected = building in selectedBuildings
-                button.setSelectedStyle(activity, selected)
-                button.compoundDrawableTintList = ColorStateList.valueOf(
+                button.background = roundedBackground(
+                    activity,
+                    if (selected) Palette.primaryFill else Palette.surface,
+                    if (selected) Palette.primaryFill else Palette.border,
+                    radius = UiMetrics.controlRadiusDp,
+                )
+                icon.imageTintList = ColorStateList.valueOf(
                     if (selected) Palette.onPrimary else Palette.text,
                 )
+                label.setTextColor(if (selected) Palette.onPrimary else Palette.text)
+                label.setTypeface(label.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
             }
         }
         buildings.chunked(columns).forEach { rowBuildings ->
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 rowBuildings.forEach { building ->
-                    val button = fixedTab(activity, building) {
-                        if (!selectedBuildings.add(building)) selectedBuildings.remove(building)
-                        refreshButtons()
-                        renderResultsAndSummary()
-                    }.apply {
-                        setCompoundDrawablesRelativeWithIntrinsicBounds(
-                            R.drawable.ic_location_pin,
-                            0,
-                            0,
-                            0,
-                        )
-                        compoundDrawablePadding = activity.dp(6)
+                    lateinit var buttonIcon: ImageView
+                    lateinit var buttonLabel: TextView
+                    val button = LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER
+                        isClickable = true
+                        isFocusable = true
+                        contentDescription = building
                         layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
                             marginEnd = activity.dp(7)
                             bottomMargin = activity.dp(7)
                         }
+                        buttonIcon = ImageView(activity).apply {
+                            setImageResource(R.drawable.ic_location_pin)
+                            scaleType = ImageView.ScaleType.CENTER_INSIDE
+                        }
+                        addView(
+                            buttonIcon,
+                            LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply {
+                                marginEnd = activity.dp(3)
+                            },
+                        )
+                        buttonLabel = TextView(activity).apply {
+                            text = building
+                            textSize = 15f
+                            includeFontPadding = false
+                            gravity = Gravity.CENTER_VERTICAL
+                            maxLines = 1
+                        }
+                        addView(buttonLabel)
+                        setOnClickListener {
+                            if (!selectedBuildings.add(building)) selectedBuildings.remove(building)
+                            refreshButtons()
+                            renderResultsAndSummary()
+                        }
                     }
-                    buttons[building] = button
+                    buttons[building] = Triple(button, buttonIcon, buttonLabel)
                     addView(button)
                 }
                 repeat(columns - rowBuildings.size) {

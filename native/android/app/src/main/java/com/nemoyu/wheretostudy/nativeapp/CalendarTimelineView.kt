@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -73,6 +74,11 @@ object CalendarTimelineLogic {
 
     fun totalHeightDp(compact: Boolean, showDayHeader: Boolean): Int =
         (if (showDayHeader) 72 else 0) + hourHeightDp(compact) * 14 + 2
+
+    fun courseSlotBoundaryMinutes(): List<Int> = AppMetadata.slots
+        .flatMap { slot -> listOfNotNull(minuteOfDay(slot.start), minuteOfDay(slot.end)) }
+        .distinct()
+        .sorted()
 }
 
 @SuppressLint("ViewConstructor")
@@ -160,6 +166,11 @@ private class CalendarTimelineCanvas(
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Palette.border
         strokeWidth = dp(1).toFloat()
+    }
+    private val slotLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Palette.border
+        strokeWidth = dp(1).toFloat()
+        pathEffect = DashPathEffect(floatArrayOf(dp(4).toFloat(), dp(3).toFloat()), 0f)
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Palette.muted
@@ -291,6 +302,10 @@ private class CalendarTimelineCanvas(
         }
 
         if (showCourseSlots) {
+            CalendarTimelineLogic.courseSlotBoundaryMinutes().forEach { minute ->
+                val y = yForMinute(minute)
+                canvas.drawLine(hourAxisWidth, y, width.toFloat(), y, slotLinePaint)
+            }
             AppMetadata.slots.forEach { slot ->
                 val start = CalendarTimelineLogic.minuteOfDay(slot.start) ?: return@forEach
                 val end = CalendarTimelineLogic.minuteOfDay(slot.end) ?: return@forEach
@@ -344,6 +359,12 @@ private class CalendarTimelineCanvas(
         for (hour in 8..22) {
             val y = yForMinute(hour * 60)
             canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
+        }
+        if (showCourseSlots) {
+            CalendarTimelineLogic.courseSlotBoundaryMinutes().forEach { minute ->
+                val y = yForMinute(minute)
+                canvas.drawLine(0f, y, width.toFloat(), y, slotLinePaint)
+            }
         }
         for (index in 0..days.size) {
             val x = dayWidth * index
