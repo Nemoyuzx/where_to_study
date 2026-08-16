@@ -477,7 +477,7 @@ class ScheduleLogicTest {
 
     @Test
     fun monthExpansionUsesDistinctReadableCellHeights() {
-        assertEquals(58, TeachingCalendarLogic.monthCellHeightDp(expanded = false))
+        assertEquals(46, TeachingCalendarLogic.monthCellHeightDp(expanded = false))
         assertEquals(68, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
         assertEquals(38, TeachingCalendarLogic.phoneModeSwitchHeightDp)
         assertEquals(32, TeachingCalendarLogic.phoneModeTabHeightDp)
@@ -486,6 +486,27 @@ class ScheduleLogicTest {
         assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(2))
         assertEquals(1, TeachingCalendarLogic.visibleMonthEntryCount(5))
         assertEquals(4, TeachingCalendarLogic.hiddenMonthEntryCount(5))
+    }
+
+    @Test
+    fun monthExpansionProgressTracksTheFingerBetweenBothEndpoints() {
+        assertEquals(0f, TeachingCalendarLogic.monthExpansionProgress(-40f, false), 0.001f)
+        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(66f, false), 0.001f)
+        assertEquals(1f, TeachingCalendarLogic.monthExpansionProgress(132f, false), 0.001f)
+        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(-66f, true), 0.001f)
+        assertEquals(0f, TeachingCalendarLogic.monthExpansionProgress(-132f, true), 0.001f)
+        assertEquals(
+            57,
+            TeachingCalendarLogic.interpolateMonthMetric(46, 68, progress = 0.5f),
+        )
+    }
+
+    @Test
+    fun monthExpansionSettlesByVelocityBeforeDistanceThreshold() {
+        assertTrue(TeachingCalendarLogic.settledMonthExpansion(0.2f, 900f))
+        assertFalse(TeachingCalendarLogic.settledMonthExpansion(0.8f, -900f))
+        assertTrue(TeachingCalendarLogic.settledMonthExpansion(0.51f, 0f))
+        assertFalse(TeachingCalendarLogic.settledMonthExpansion(0.49f, 0f))
     }
 
     @Test

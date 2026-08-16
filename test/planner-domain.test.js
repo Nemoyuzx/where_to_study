@@ -4,6 +4,8 @@ import {
   accountHasSavedPassword,
   buildingsForCampus,
   calendarMonthExpansion,
+  calendarMonthDragProgress,
+  calendarMonthExpansionTarget,
   calendarSwipeDirection,
   DEFAULT_SETTINGS,
   expandedMonthGridMetrics,
@@ -63,6 +65,20 @@ test('month expansion only follows deliberate vertical gestures', () => {
   assert.equal(calendarMonthExpansion(-10, -72), false)
   assert.equal(calendarMonthExpansion(8, 32), null)
   assert.equal(calendarMonthExpansion(70, 72), null)
+})
+
+test('month expansion follows drag progress before snapping to an endpoint', () => {
+  assert.equal(calendarMonthDragProgress(false, 0, 120), 0)
+  assert.equal(calendarMonthDragProgress(false, 60, 120), 0.5)
+  assert.equal(calendarMonthDragProgress(0.25, 30, 120), 0.5)
+  assert.equal(calendarMonthDragProgress(true, -30, 120), 0.75)
+  assert.equal(calendarMonthDragProgress(false, 240, 120), 1)
+  assert.equal(calendarMonthDragProgress(true, -240, 120), 0)
+
+  assert.equal(calendarMonthExpansionTarget(0.49), false)
+  assert.equal(calendarMonthExpansionTarget(0.5), true)
+  assert.equal(calendarMonthExpansionTarget(0.2, 0.6), true)
+  assert.equal(calendarMonthExpansionTarget(0.8, -0.6), false)
 })
 
 test('expanded month cells reserve the last row for a hidden-entry count', () => {

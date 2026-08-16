@@ -27,14 +27,41 @@ class SettingsPage(
     private val preferences: AppPreferences,
     private val scheduleRepository: ScheduleRepository,
     private val classroomRepository: ClassroomRepository,
+    private val availableWidthDp: Int,
 ) {
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
         setBackgroundColor(Palette.background)
         addView(verticalPage(activity).apply {
             addView(pageTitle(activity, "设置", "个人账户与本地偏好"))
-            addView(accountSurface())
-            addView(spacer(activity, 16))
+            if (availableWidthDp >= 760) {
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.TOP
+                    addView(accountSurface(), LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f,
+                    ).apply { marginEnd = activity.dp(8) })
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(notificationSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(localDataSurface())
+                    }, LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f,
+                    ).apply { marginStart = activity.dp(8) })
+                })
+            } else {
+                addView(accountSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(notificationSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(localDataSurface())
+            }
+            addView(spacer(activity, UiMetrics.sectionSpacingDp))
             addView(aboutSurface())
         })
     }
@@ -119,11 +146,16 @@ class SettingsPage(
         val campus = Spinner(activity).apply {
             adapter = campusAdapter
             setSelection(AppMetadata.campuses.indexOfFirst { it.id == preferences.campusID }.coerceAtLeast(0))
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            background = roundedBackground(
+                activity,
+                Palette.surface,
+                Palette.border,
+                radius = UiMetrics.controlRadiusDp,
+            )
             setPadding(activity.dp(12), 0, activity.dp(12), 0)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(50),
+                activity.dp(UiMetrics.controlHeightDp),
             )
         }
         addView(campus)
@@ -201,12 +233,16 @@ class SettingsPage(
             gravity = Gravity.CENTER
             setTextColor(Palette.onPrimary)
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(activity, Palette.primary, radius = 6)
+            background = roundedBackground(
+                activity,
+                Palette.primaryFill,
+                radius = UiMetrics.controlRadiusDp,
+            )
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(48),
+                activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
                 saveSettings().onSuccess { credentials ->
@@ -228,12 +264,17 @@ class SettingsPage(
             gravity = Gravity.CENTER
             setTextColor(Palette.primaryText)
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(activity, Palette.surface, Palette.primary, radius = 6)
+            background = roundedBackground(
+                activity,
+                Palette.surface,
+                Palette.primary,
+                radius = UiMetrics.controlRadiusDp,
+            )
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(48),
+                activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
                 val button = it as TextView
@@ -276,7 +317,9 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(12), 0, 0)
         })
-        addView(spacer(activity, 20))
+    }
+
+    private fun notificationSurface(): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "课程提醒"))
         addView(Switch(activity).apply {
             text = activity.getString(R.string.daily_course_notification_toggle)
@@ -306,7 +349,10 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(4), 0, 0)
         })
-        addView(spacer(activity, 18))
+    }
+
+    private fun localDataSurface(): LinearLayout = surface(activity).apply {
+        addView(sectionTitle(activity, "本地数据"))
         addView(TextView(activity).apply {
             text = "清除本地数据"
             textSize = 15f
@@ -317,13 +363,13 @@ class SettingsPage(
                 activity,
                 Palette.dangerSurface,
                 Palette.dangerBorder,
-                radius = 6,
+                radius = UiMetrics.controlRadiusDp,
             )
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(46),
+                activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
                 AlertDialog.Builder(activity)
@@ -364,12 +410,17 @@ class SettingsPage(
             gravity = Gravity.CENTER
             setTextColor(Palette.primaryText)
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            background = roundedBackground(
+                activity,
+                Palette.surface,
+                Palette.border,
+                radius = UiMetrics.controlRadiusDp,
+            )
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(46),
+                activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
                 showPrivacyPolicy()
@@ -393,11 +444,16 @@ class SettingsPage(
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             setAutofillHints(null)
         }
-        background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+        background = roundedBackground(
+            activity,
+            Palette.surface,
+            Palette.border,
+            radius = UiMetrics.controlRadiusDp,
+        )
         setPadding(activity.dp(13), 0, activity.dp(13), 0)
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(50),
+            activity.dp(UiMetrics.controlHeightDp),
         )
     }
 
@@ -466,14 +522,14 @@ class SettingsPage(
                     activity,
                     Palette.surface,
                     Palette.border,
-                    radius = 6,
+                    radius = UiMetrics.controlRadiusDp,
                 )
                 isClickable = true
                 isFocusable = true
                 contentDescription = "在 GitHub 查看完整隐私声明"
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    activity.dp(48),
+                    activity.dp(UiMetrics.controlHeightDp),
                 ).apply {
                     topMargin = activity.dp(18)
                 }

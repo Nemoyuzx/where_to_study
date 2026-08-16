@@ -201,7 +201,7 @@ class YearCalendarView(
         val selected = selectedDate?.let { sameDay(it, day.date) } == true
         val today = sameDay(day.date, Calendar.getInstance(shanghai))
         fillPaint.color = when {
-            selected -> Palette.primary
+            selected -> Palette.primaryFill
             day.courseCount <= 0 -> Palette.background
             else -> blend(
                 foreground = Palette.primary,

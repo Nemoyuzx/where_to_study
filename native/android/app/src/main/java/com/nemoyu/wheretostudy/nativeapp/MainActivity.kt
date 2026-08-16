@@ -169,30 +169,36 @@ class MainActivity : Activity() {
         super.onStop()
     }
 
-    private fun phoneLayout(): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
+    private fun phoneLayout(): FrameLayout = FrameLayout(this).apply {
         setBackgroundColor(Palette.background)
         content = FrameLayout(this@MainActivity).apply {
-            layoutParams = LinearLayout.LayoutParams(
+            setPadding(0, 0, 0, dp(76))
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f,
+                ViewGroup.LayoutParams.MATCH_PARENT,
             )
         }
         addView(content)
-        addView(View(this@MainActivity).apply {
-            setBackgroundColor(Palette.border)
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         addView(LinearLayout(this@MainActivity).apply {
             id = R.id.phone_navigation
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(10), dp(5), dp(10), dp(5))
-            setBackgroundColor(Palette.surface)
+            setPadding(dp(10), dp(3), dp(10), dp(3))
+            background = roundedBackground(
+                this@MainActivity,
+                Palette.surfaceVariant,
+                Palette.border,
+                radius = 30,
+            )
+            elevation = dp(8).toFloat()
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = true))
             }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60), Gravity.BOTTOM).apply {
+            marginStart = dp(44)
+            marginEnd = dp(44)
+            bottomMargin = dp(10)
+        })
     }
 
     private fun sideNavigationLayout(spec: AdaptiveLayoutSpec): LinearLayout =
@@ -202,8 +208,8 @@ class MainActivity : Activity() {
         addView(LinearLayout(this@MainActivity).apply {
             id = R.id.tablet_navigation
             orientation = LinearLayout.VERTICAL
-            val horizontalPadding = if (spec.widthClass == WindowWidthClass.MEDIUM) 14 else 18
-            setPadding(dp(horizontalPadding), dp(24), dp(horizontalPadding), dp(18))
+            val horizontalPadding = if (spec.widthClass == WindowWidthClass.MEDIUM) 16 else 20
+            setPadding(dp(horizontalPadding), dp(16), dp(horizontalPadding), dp(16))
             setBackgroundColor(Palette.surface)
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.brand_eyebrow)
@@ -213,10 +219,10 @@ class MainActivity : Activity() {
             })
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.brand_name)
-                textSize = if (spec.widthClass == WindowWidthClass.MEDIUM) 18f else 20f
+                textSize = 17f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
-                setPadding(0, dp(4), 0, dp(22))
+                setPadding(0, dp(4), 0, dp(16))
             })
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = false))
@@ -313,7 +319,7 @@ class MainActivity : Activity() {
         TextView(this).apply {
             id = destination.navigationViewID
             text = destination.label
-            textSize = if (compact) 11.5f else 15f
+            textSize = if (compact) 11f else 15f
             gravity = Gravity.CENTER
             isClickable = true
             isFocusable = true
@@ -323,12 +329,12 @@ class MainActivity : Activity() {
             }
             setOnClickListener { navigate(destination) }
             layoutParams = if (compact) {
-                LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                LinearLayout.LayoutParams(0, dp(50), 1f).apply {
                     marginEnd = dp(4)
                 }
             } else {
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
-                    bottomMargin = dp(8)
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)).apply {
+                    bottomMargin = dp(4)
                 }
             }
             navigationViews[destination] = this
@@ -349,8 +355,13 @@ class MainActivity : Activity() {
             view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
             view.background = roundedBackground(
                 this,
-                if (selected) Palette.surfaceVariant else Color.TRANSPARENT,
-                radius = 8,
+                when {
+                    currentLayoutSpec?.usesBottomNavigation == true && selected -> Palette.background
+                    currentLayoutSpec?.usesBottomNavigation == true -> Color.TRANSPARENT
+                    selected -> Palette.selectionSurface
+                    else -> Color.TRANSPARENT
+                },
+                radius = if (currentLayoutSpec?.usesBottomNavigation == true) 26 else UiMetrics.controlRadiusDp,
             )
         }
         val page = when (destination) {
@@ -374,6 +385,7 @@ class MainActivity : Activity() {
                 preferences,
                 scheduleRepository,
                 classroomRepository,
+                currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
             ).build()
         }
         page.id = destination.pageViewID

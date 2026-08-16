@@ -11,7 +11,8 @@ import org.junit.Test
 class ThemePaletteTest {
     @Test
     fun lightAndDarkThemesKeepBrandColorsAndUseDistinctSurfaces() {
-        assertEquals(ThemePalettes.light.primary, ThemePalettes.dark.primary)
+        assertNotEquals(ThemePalettes.light.primary, ThemePalettes.dark.primary)
+        assertNotEquals(ThemePalettes.light.primaryFill, ThemePalettes.dark.primaryFill)
         assertNotEquals(ThemePalettes.light.background, ThemePalettes.dark.background)
         assertNotEquals(ThemePalettes.light.surface, ThemePalettes.dark.surface)
         assertNotEquals(ThemePalettes.light.text, ThemePalettes.dark.text)
@@ -24,7 +25,7 @@ class ThemePaletteTest {
             assertContrast("text on surface", colors.text, colors.surface)
             assertContrast("muted on surface", colors.muted, colors.surface)
             assertContrast("brand text on surface", colors.primaryText, colors.surface)
-            assertContrast("selected text on primary", colors.onPrimary, colors.primary)
+            assertContrast("selected text on primary fill", colors.onPrimary, colors.primaryFill)
             assertContrast("busy-slot text on accent", colors.onAccent, colors.accent)
             assertContrast("danger text on danger surface", colors.danger, colors.dangerSurface)
             assertContrast("holiday text on surface", colors.holiday, colors.surface)

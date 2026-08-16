@@ -4,6 +4,8 @@ import android.app.NotificationManager
 import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
@@ -64,11 +66,8 @@ class MainNavigationSmokeTest {
             assertVisible(device, "adaptive_root")
             var navigationResource = ""
             scenario.onActivity { activity ->
-                val windowWidthDp = activity.findViewById<android.view.View>(R.id.adaptive_root)
-                    .width
-                    .div(activity.resources.displayMetrics.density)
                 navigationResource = if (
-                    AdaptiveLayoutLogic.widthClass(windowWidthDp.toInt()) == WindowWidthClass.COMPACT
+                    activity.findViewById<View?>(R.id.phone_navigation) != null
                 ) {
                     "phone_navigation"
                 } else {
@@ -303,6 +302,7 @@ class MainNavigationSmokeTest {
 
             click(device, "calendar_mode_month")
             assertVisible(device, "calendar_month_grid")
+            assertMonthExpansionFollowsFinger(scenario)
             var monthIsCollapsed = false
             scenario.onActivity { activity ->
                 monthIsCollapsed = activity.findViewById<View?>(
@@ -527,6 +527,51 @@ class MainNavigationSmokeTest {
             device.swipe(bounds.centerX(), startY, bounds.centerX(), endY, 24)
         }
         device.waitForIdle()
+    }
+
+    private fun assertMonthExpansionFollowsFinger(
+        scenario: ActivityScenario<MainActivity>,
+    ) {
+        scenario.onActivity { activity ->
+            val swipeSurface = activity.findViewById<View>(R.id.calendar_swipe_surface)
+            val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+            val firstRow = grid.getChildAt(0)
+            val details = activity.findViewById<View>(R.id.calendar_month_selected_details)
+            val initiallyExpanded = details.visibility != View.VISIBLE
+            val density = activity.resources.displayMetrics.density
+            val collapsedHeight = activity.dp(TeachingCalendarLogic.monthCellHeightDp(false))
+            val expandedHeight = activity.dp(TeachingCalendarLogic.monthCellHeightDp(true))
+            val direction = if (initiallyExpanded) -1f else 1f
+            val startedAt = SystemClock.uptimeMillis()
+            val x = swipeSurface.width / 2f
+            val y = swipeSurface.height / 2f
+
+            fun dispatch(action: Int, offsetDp: Float, elapsedMillis: Long) {
+                MotionEvent.obtain(
+                    startedAt,
+                    startedAt + elapsedMillis,
+                    action,
+                    x,
+                    y + offsetDp * density,
+                    0,
+                ).also { event ->
+                    swipeSurface.dispatchTouchEvent(event)
+                    event.recycle()
+                }
+            }
+
+            dispatch(MotionEvent.ACTION_DOWN, 0f, 0L)
+            dispatch(MotionEvent.ACTION_MOVE, direction * 16f, 32L)
+            dispatch(MotionEvent.ACTION_MOVE, direction * 66f, 96L)
+
+            assertTrue(
+                "Month row height must follow an in-progress drag instead of waiting for release",
+                firstRow.layoutParams.height in (collapsedHeight + 1) until expandedHeight,
+            )
+            dispatch(MotionEvent.ACTION_CANCEL, direction * 66f, 112L)
+        }
+        Thread.sleep(360L)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
 
     private fun scrollUntilVisible(device: UiDevice, resourceName: String) {

@@ -409,7 +409,7 @@ private class CalendarTimelineCanvas(
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@forEach
                 val top = yForMinute(start) + dp(2)
                 val bottom = max(top + dp(34), yForMinute(end) - dp(2))
-                fillPaint.color = if (placement.track == 0) Palette.primary else Palette.primaryDark
+                fillPaint.color = if (placement.track == 0) Palette.primaryFill else Palette.primaryDark
                 canvas.drawRoundRect(RectF(left, top, right, bottom), dp(5).toFloat(), dp(5).toFloat(), fillPaint)
 
                 canvas.save()

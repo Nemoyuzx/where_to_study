@@ -29,9 +29,11 @@ import {
   buildCalendarDayMap,
   buildMiniMonthDays,
   buildMonthDays,
-  buildingsForCampus,
-  calendarMonthExpansion,
-  calendarSwipeDirection,
+    buildingsForCampus,
+    calendarMonthExpansion,
+    calendarMonthDragProgress,
+    calendarMonthExpansionTarget,
+    calendarSwipeDirection,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
   CALENDAR_VIEWS,
@@ -528,6 +530,7 @@ function App() {
   const calendarAnimatedSurfaceRef = useRef(null)
   const calendarOutgoingSurfaceRef = useRef(null)
   const calendarMotionTimerRef = useRef(null)
+  const monthExpansionTimerRef = useRef(null)
   const suppressCalendarClickUntilRef = useRef(0)
   const pageContentRef = useRef(null)
   const requestedHolidayYears = useRef(new Set())
@@ -551,7 +554,7 @@ function App() {
   }, [activePage])
 
   useLayoutEffect(() => {
-    if (activePage !== 'calendar' || calendarView !== 'month' || !monthExpanded) return undefined
+    if (activePage !== 'calendar' || calendarView !== 'month') return undefined
     const mobileMonthQuery = window.matchMedia('(max-width: 720px)')
     const clearAvailableHeight = () => {
       const page = pageContentRef.current
@@ -580,7 +583,11 @@ function App() {
       )
       const handleHeight = 28
       const monthMetrics = expandedMonthGridMetrics(Math.max(0, available - handleHeight))
-      page.style.setProperty('--month-expanded-height', `${monthMetrics.height + handleHeight}px`)
+      const collapsedHeight = 368
+      page.style.setProperty(
+        '--month-expanded-height',
+        `${Math.max(collapsedHeight, monthMetrics.height + handleHeight)}px`,
+      )
       page.style.setProperty('--month-expanded-row-height', `${monthMetrics.rowHeight}px`)
     }
     updateAvailableHeight()
@@ -591,7 +598,11 @@ function App() {
       mobileMonthQuery.removeEventListener('change', updateAvailableHeight)
       clearAvailableHeight()
     }
-  }, [activePage, calendarDate, calendarMotion, calendarView, monthExpanded])
+  }, [activePage, calendarDate, calendarMotion, calendarView])
+
+  useEffect(() => () => {
+    window.clearTimeout(monthExpansionTimerRef.current)
+  }, [])
 
   useEffect(() => {
     command('get_metadata')
@@ -1098,6 +1109,202 @@ function App() {
     start.scrollLocked = false
   }
 
+  function monthLength(styles, property, fallback) {
+    const value = Number.parseFloat(styles.getPropertyValue(property))
+    return Number.isFinite(value) && value > 0 ? value : fallback
+  }
+
+  function monthDragGeometry(surface) {
+    const styles = window.getComputedStyle(surface)
+    const collapsedHeight = monthLength(styles, '--month-collapsed-height', 440)
+    const expandedHeight = Math.max(
+      collapsedHeight,
+      monthLength(styles, '--month-expanded-height', 776),
+    )
+    const collapsedRowHeight = monthLength(styles, '--month-collapsed-row-height', 62)
+    const expandedRowHeight = Math.max(
+      collapsedRowHeight,
+      monthLength(styles, '--month-expanded-row-height', 118),
+    )
+    const travelDistance = Math.max(1, expandedHeight - collapsedHeight)
+    const currentHeight = surface.getBoundingClientRect().height
+    const currentProgress = Math.max(
+      0,
+      Math.min(1, (currentHeight - collapsedHeight) / travelDistance),
+    )
+    return {
+      surface,
+      collapsedHeight,
+      expandedHeight,
+      collapsedRowHeight,
+      expandedRowHeight,
+      travelDistance,
+      currentProgress,
+    }
+  }
+
+  function applyMonthDragVisual(geometry, progress) {
+    const normalized = Math.max(0, Math.min(1, progress))
+    const height = geometry.collapsedHeight
+      + (geometry.expandedHeight - geometry.collapsedHeight) * normalized
+    const rowHeight = geometry.collapsedRowHeight
+      + (geometry.expandedRowHeight - geometry.collapsedRowHeight) * normalized
+    const { surface } = geometry
+    surface.classList.remove('month-settling')
+    surface.classList.add('month-dragging')
+    surface.style.height = `${height}px`
+    surface.style.maxHeight = `${height}px`
+    surface.style.setProperty('--month-live-row-height', `${rowHeight}px`)
+    surface.style.setProperty('--month-drag-progress', String(normalized))
+  }
+
+  function clearMonthDragVisual(surface) {
+    if (!surface) return
+    surface.classList.remove('month-dragging', 'month-settling')
+    surface.style.removeProperty('height')
+    surface.style.removeProperty('max-height')
+    surface.style.removeProperty('--month-live-row-height')
+    surface.style.removeProperty('--month-drag-progress')
+  }
+
+  function settleMonthDrag(geometry, progress, expanded) {
+    const normalized = Math.max(0, Math.min(1, progress))
+    const targetProgress = expanded ? 1 : 0
+    const currentHeight = geometry.collapsedHeight
+      + (geometry.expandedHeight - geometry.collapsedHeight) * normalized
+    const targetHeight = expanded ? geometry.expandedHeight : geometry.collapsedHeight
+    const currentRowHeight = geometry.collapsedRowHeight
+      + (geometry.expandedRowHeight - geometry.collapsedRowHeight) * normalized
+    const targetRowHeight = expanded
+      ? geometry.expandedRowHeight
+      : geometry.collapsedRowHeight
+    const { surface } = geometry
+
+    window.clearTimeout(monthExpansionTimerRef.current)
+    surface.classList.remove('month-dragging')
+    surface.classList.add('month-settling')
+    surface.style.height = `${currentHeight}px`
+    surface.style.maxHeight = `${currentHeight}px`
+    surface.style.setProperty('--month-live-row-height', `${currentRowHeight}px`)
+    surface.style.setProperty('--month-drag-progress', String(normalized))
+    void surface.offsetHeight
+    setMonthExpanded(expanded)
+
+    window.requestAnimationFrame(() => {
+      if (!surface.isConnected) return
+      surface.style.height = `${targetHeight}px`
+      surface.style.maxHeight = `${targetHeight}px`
+      surface.style.setProperty('--month-live-row-height', `${targetRowHeight}px`)
+      surface.style.setProperty('--month-drag-progress', String(targetProgress))
+      monthExpansionTimerRef.current = window.setTimeout(() => {
+        clearMonthDragVisual(surface)
+      }, 300)
+    })
+  }
+
+  function beginMonthPointerSwipe(event) {
+    if (calendarView !== 'month' || event.isPrimary === false) return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('input, select, textarea, a')) return
+
+    const surface = event.currentTarget
+    window.clearTimeout(monthExpansionTimerRef.current)
+    const geometry = monthDragGeometry(surface)
+    applyMonthDragVisual(geometry, geometry.currentProgress)
+    calendarGestureRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      axis: null,
+      view: 'month',
+      monthExpanded,
+      geometry,
+      progress: geometry.currentProgress,
+      velocityY: 0,
+      lastY: event.clientY,
+      lastTime: event.timeStamp,
+      scrollLocked: false,
+      pointerId: event.pointerId,
+      pointerTarget: surface,
+    }
+    try {
+      surface.setPointerCapture(event.pointerId)
+    } catch {
+      // Pointer capture is optional in older embedded WebViews.
+    }
+  }
+
+  function updateMonthPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view !== 'month' || start.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    if (!start.axis && Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= 8) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) * 1.12) start.axis = 'horizontal'
+      else if (Math.abs(deltaY) > Math.abs(deltaX) * 1.12) start.axis = 'vertical'
+    }
+
+    if (start.axis === 'horizontal') {
+      lockCalendarVerticalScroll(start)
+      event.preventDefault()
+      return
+    }
+    if (start.axis !== 'vertical') return
+
+    const elapsed = event.timeStamp - start.lastTime
+    if (elapsed > 0) start.velocityY = (event.clientY - start.lastY) / elapsed
+    start.lastY = event.clientY
+    start.lastTime = event.timeStamp
+    start.progress = calendarMonthDragProgress(
+      start.geometry.currentProgress,
+      deltaY,
+      start.geometry.travelDistance,
+    )
+    applyMonthDragVisual(start.geometry, start.progress)
+    lockCalendarVerticalScroll(start)
+    event.preventDefault()
+  }
+
+  function finishMonthPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view !== 'month' || start.pointerId !== event.pointerId) return
+    calendarGestureRef.current = null
+    unlockCalendarVerticalScroll(start)
+    try {
+      start.pointerTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // The browser may release capture before pointerup.
+    }
+
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    if (start.axis === 'horizontal') {
+      clearMonthDragVisual(start.geometry.surface)
+      const direction = calendarSwipeDirection(deltaX, deltaY)
+      if (!direction) return
+      suppressCalendarClickUntilRef.current = Date.now() + 400
+      moveCalendar(direction)
+      return
+    }
+    if (start.axis !== 'vertical') {
+      clearMonthDragVisual(start.geometry.surface)
+      return
+    }
+
+    const releaseVelocity = event.timeStamp - start.lastTime > 80 ? 0 : start.velocityY
+    const expanded = calendarMonthExpansionTarget(start.progress, releaseVelocity)
+    suppressCalendarClickUntilRef.current = Date.now() + 400
+    settleMonthDrag(start.geometry, start.progress, expanded)
+  }
+
+  function cancelMonthPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view !== 'month' || start.pointerId !== event.pointerId) return
+    calendarGestureRef.current = null
+    unlockCalendarVerticalScroll(start)
+    settleMonthDrag(start.geometry, start.progress, start.monthExpanded)
+  }
+
   function updateCalendarSwipe(event) {
     const start = calendarGestureRef.current
     if (!start || start.blocked || event.touches.length !== 1) return
@@ -1318,7 +1525,7 @@ function App() {
           <header className={`topbar ${activePage === 'calendar' ? 'calendar-topbar' : ''}`}>
             <div>
               <p className="eyebrow">BUPT Classroom Planner</p>
-              <h1>{activePage === 'calendar' ? '教学日历' : activePage === 'settings' ? '设置' : '空教室与个人课表联动查询'}</h1>
+              <h1>{activePage === 'calendar' ? '教学日历' : activePage === 'settings' ? '设置' : '联动查询'}</h1>
               {activePage === 'calendar' ? (
                 <p className="topbar-subtitle">
                   {formatCalendarTitle(calendarDate, calendarView)} · {formatTeachingWeek(calendarWeekState.weekNumber)} · {activeTermId} · {courses.length} 门已载入
@@ -1361,30 +1568,40 @@ function App() {
           {activePage === 'planner' ? (
         <div className="workspace planner-workspace">
           <aside className="control-panel">
-            <section className="panel">
+            <section className="panel planner-query-panel">
               <div className="panel-title">
                 <CalendarDays size={18} />
                 <h2>查询条件</h2>
               </div>
-              <div className="field-group">
-                校区
-                <div className="campus-options">
-                  {(metadata.campuses || []).map((campus) => (
-                    <button
-                      key={campus.id}
-                      type="button"
-                      className={queryCampusId === campus.id ? 'active' : ''}
-                      onClick={() => {
-                        setQueryCampusId(campus.id)
-                        setSelectedBuildings([])
-                      }}
-                    >
-                      <MapPin size={15} />
-                      {campus.name}
-                    </button>
-                  ))}
-                </div>
+              <div className="campus-options" aria-label="查询校区">
+                {(metadata.campuses || []).map((campus) => (
+                  <button
+                    key={campus.id}
+                    type="button"
+                    className={queryCampusId === campus.id ? 'active' : ''}
+                    onClick={() => {
+                      setQueryCampusId(campus.id)
+                      setSelectedBuildings([])
+                    }}
+                  >
+                    {campus.name}
+                  </button>
+                ))}
               </div>
+              <button
+                type="button"
+                className="planner-refresh-button"
+                onClick={loadClassrooms}
+                disabled={settingsSaving || !!loading}
+              >
+                {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+                {loading === 'classrooms' ? '正在获取当天空教室…' : '获取空教室信息'}
+              </button>
+              {classrooms?.provider ? (
+                <p className="planner-source-note">
+                  数据源：{classrooms.provider === 'sjd' ? '移动教务实时接口' : classrooms.provider === 'jray_public' ? 'Jraaay 公共实时数据' : '微信教务实时接口'} · {classroomsCache?.target_date || todayDate}
+                </p>
+              ) : null}
             </section>
 
             <PlannerSummary
@@ -1394,51 +1611,39 @@ function App() {
               matchingRoomsCount={needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}
             />
 
-            <section className="panel action-panel">
-              <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
-                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-                获取/刷新个人课表
-              </button>
-              <button type="button" onClick={loadClassrooms} disabled={settingsSaving || !!loading}>
-                {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <Search size={17} />}
-                获取空教室信息
-              </button>
-            </section>
           </aside>
 
           <section className="main-grid">
             <section className="panel wide">
-              <div className="panel-heading">
-                <div className="panel-title">
-                  <Clock3 size={18} />
-                  <h2>节次筛选</h2>
-                </div>
-                <div className="mini-actions">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSlots(freeSlots)
-                    }}
-                  >
-                    选中空闲
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSlots([])
-                    }}
-                  >
-                    清空
-                  </button>
-                </div>
+              <div className="panel-title">
+                <Clock3 size={18} />
+                <h2>节次筛选</h2>
               </div>
-              <div className="filter-toggles">
+              <label className="planner-switch-row">
+                <span>使用个人课表排除已有课程</span>
+                <input
+                  type="checkbox"
+                  checked={usePersonalSchedule}
+                  onChange={togglePersonalSchedule}
+                />
+                <i aria-hidden="true" />
+              </label>
+              <div className="mini-actions planner-slot-actions">
                 <button
                   type="button"
-                  className={usePersonalSchedule ? 'active' : ''}
-                  onClick={togglePersonalSchedule}
+                  onClick={() => {
+                    setSelectedSlots(freeSlots)
+                  }}
                 >
-                  个人课表 {usePersonalSchedule ? '开' : '关'}
+                  选中空闲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedSlots([])
+                  }}
+                >
+                  清空
                 </button>
               </div>
               <div className="slot-grid">
@@ -1455,7 +1660,7 @@ function App() {
                       disabled={busy}
                       title={busy ? '个人课表占用' : personalCourseSlot ? '个人课程时间，已纳入筛选' : '个人空闲，可筛选教室'}
                     >
-                      <span>{slot.label}</span>
+                      <span>第 {slot.label} 节</span>
                       <small>{slot.start}-{slot.end}</small>
                     </button>
                   )
@@ -1515,11 +1720,6 @@ function App() {
                 <CheckCircle2 size={18} />
                 <h2>空教室结果</h2>
               </div>
-              {classrooms?.provider ? (
-                <p className="muted source-note">
-                  数据源：{classrooms.provider === 'sjd' ? '移动教务实时接口' : classrooms.provider === 'jray_public' ? 'Jraaay 公共实时数据' : '微信教务实时接口'}
-                </p>
-              ) : null}
               <div className="room-list">
                 {needsBuildingSelection ? (
                   <div className="empty-state">未选择教学楼</div>
@@ -1559,9 +1759,6 @@ function App() {
             tabIndex={calendarView === 'month' ? 0 : undefined}
             aria-label={calendarView === 'month' ? '月历，下拉或按下方向键展开，上拉或按上方向键收起' : undefined}
             aria-expanded={calendarView === 'month' ? monthExpanded : undefined}
-            onTouchStart={calendarView === 'month' ? beginCalendarSwipe : undefined}
-            onTouchEnd={calendarView === 'month' ? finishCalendarSwipe : undefined}
-            onTouchCancel={calendarView === 'month' ? cancelCalendarSwipe : undefined}
             onKeyDown={calendarView === 'month' ? handleMonthCalendarKeyDown : undefined}
           >
             {calendarView === 'month' ? (
@@ -1571,7 +1768,10 @@ function App() {
                 tabIndex={-1}
                 aria-controls="teaching-month-calendar"
                 aria-expanded={monthExpanded}
-                onClick={() => setMonthExpanded((current) => !current)}
+                onClick={() => {
+                  if (Date.now() < suppressCalendarClickUntilRef.current) return
+                  setMonthExpanded((current) => !current)
+                }}
               >
                 {monthExpanded ? '收起月历' : '展开月历'}
               </button>
@@ -1712,6 +1912,10 @@ function App() {
                     ref={calendarAnimatedSurfaceRef}
                     key={`month-${calendarDate}`}
                     className={`month-view ${monthExpanded ? 'expanded' : 'compact'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                    onPointerDown={beginMonthPointerSwipe}
+                    onPointerMove={updateMonthPointerSwipe}
+                    onPointerUp={finishMonthPointerSwipe}
+                    onPointerCancel={cancelMonthPointerSwipe}
                   >
                     <div
                       id="teaching-month-calendar"
@@ -1774,7 +1978,10 @@ function App() {
                       aria-label={monthExpanded ? '收起月历' : '展开月历'}
                       aria-controls="teaching-month-calendar"
                       aria-expanded={monthExpanded}
-                      onClick={() => setMonthExpanded((current) => !current)}
+                      onClick={() => {
+                        if (Date.now() < suppressCalendarClickUntilRef.current) return
+                        setMonthExpanded((current) => !current)
+                      }}
                     >
                       <span aria-hidden="true" />
                     </button>

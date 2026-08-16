@@ -173,6 +173,28 @@ export function calendarMonthExpansion(deltaX, deltaY, threshold = 48) {
   return deltaY > 0
 }
 
+export function calendarMonthDragProgress(startExpanded, deltaY, travelDistance) {
+  const distance = Math.max(1, Math.abs(Number(travelDistance) || 0))
+  const startProgress = typeof startExpanded === 'number'
+    ? Math.max(0, Math.min(1, startExpanded))
+    : startExpanded ? 1 : 0
+  const progress = startProgress + (Number(deltaY) || 0) / distance
+  return Math.max(0, Math.min(1, progress))
+}
+
+export function calendarMonthExpansionTarget(
+  progress,
+  velocityY = 0,
+  velocityThreshold = 0.45,
+) {
+  const normalizedProgress = Math.max(0, Math.min(1, Number(progress) || 0))
+  const normalizedVelocity = Number(velocityY) || 0
+  const threshold = Math.max(0, Number(velocityThreshold) || 0)
+  if (normalizedVelocity > threshold) return true
+  if (normalizedVelocity < -threshold) return false
+  return normalizedProgress >= 0.5
+}
+
 export function summarizeMonthEntries(entries, maxRows = 2) {
   const rowLimit = Math.max(1, Math.trunc(maxRows))
   const visibleCount = entries.length > rowLimit ? rowLimit - 1 : entries.length

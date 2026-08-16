@@ -5,6 +5,17 @@ import test from 'node:test'
 const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 const appCss = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
 const appSource = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
+const applePlannerSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/PlannerView.swift', import.meta.url),
+  'utf8',
+)
+const androidPlannerSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/PlannerPage.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 const tauriAndroidLightTheme = readFileSync(
   new URL(
@@ -73,6 +84,36 @@ test('component styles use semantic theme tokens instead of fixed colors', () =>
   assert.equal(fixedColors, null)
 })
 
+test('Windows workspace follows the native Apple layout metrics', () => {
+  assert.match(appCss, /\.app-frame\s*\{[^}]*grid-template-columns:\s*230px minmax\(0, 1fr\)/s)
+  assert.match(appCss, /\.topbar\s*\{[^}]*max-width:\s*1200px/s)
+  assert.match(appCss, /\.panel\s*\{[^}]*padding:\s*16px/s)
+  assert.match(appCss, /\.panel,\s*\.summary-band\s*\{[^}]*border-radius:\s*8px/s)
+  assert.match(appCss, /\.app-nav\s*\{[^}]*grid-auto-rows:\s*36px/s)
+  assert.match(appCss, /h1\s*\{[^}]*font-size:\s*34px/s)
+  assert.match(appCss, /\.settings-layout\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
+})
+
+test('mobile navigation keeps the same icon and label hierarchy as iOS tabs', () => {
+  assert.match(
+    appCss,
+    /@media \(max-width: 720px\)[\s\S]*\.app-nav \.nav-label\s*\{[^}]*display:\s*block/s,
+  )
+  assert.match(
+    appCss,
+    /@media \(max-width: 720px\)[\s\S]*\.app-nav button\s*\{[^}]*flex-direction:\s*column/s,
+  )
+})
+
+test('every client uses the concise linked-query page title', () => {
+  assert.match(appSource, /activePage === 'settings' \? '设置' : '联动查询'/)
+  assert.match(applePlannerSource, /title: "联动查询"/)
+  assert.match(androidPlannerSource, /"联动查询"/)
+  for (const source of [appSource, applePlannerSource, androidPlannerSource]) {
+    assert.doesNotMatch(source, /空教室与个人课表联动查询/)
+  }
+})
+
 test('mobile week calendar stays in one viewport and pages from the full timeline', () => {
   assert.match(appCss, /\.calendar-swipe-surface\s*\{[^}]*touch-action:\s*pan-y/s)
   assert.match(appCss, /\.time-calendar:not\(\.single-day\)\s*\{[^}]*repeat\(var\(--day-count\), minmax\(0, 1fr\)\)/s)
@@ -98,6 +139,9 @@ test('calendar paging keeps an outgoing page while the new page slides in', () =
 
 test('month expansion keeps gestures, a drag handle, and an assistive action', () => {
   assert.match(appSource, /calendarMonthExpansion\(deltaX, deltaY\)/)
+  assert.match(appSource, /calendarMonthDragProgress\(/)
+  assert.match(appSource, /calendarMonthExpansionTarget\(/)
+  assert.match(appSource, /onPointerMove=\{updateMonthPointerSwipe\}/)
   assert.match(appSource, /month-expanded-hidden/)
   assert.match(appSource, /handleMonthCalendarKeyDown/)
   assert.match(appSource, /month-expansion-accessibility-action/)
@@ -108,16 +152,21 @@ test('month expansion keeps gestures, a drag handle, and an assistive action', (
   assert.match(appSource, /month-entry-overflow/)
   assert.match(appSource, /className="month-expansion-handle"/)
   assert.match(appCss, /\.month-expansion-handle\s*\{[^}]*height:\s*28px/s)
-  assert.match(appCss, /\.month-view\s*\{[^}]*grid-template-rows:\s*auto 28px/s)
+  assert.match(appCss, /\.month-view\s*\{[^}]*grid-template-rows:\s*minmax\(0, 1fr\) 28px/s)
   assert.match(appSource, /calendarView === 'month' \? 'calendar-month-page' : ''/)
   assert.match(appCss, /\.page-content\.calendar-month-page\s*\{[^}]*overflow:\s*hidden/s)
   assert.match(appCss, /\.month-view\s*\{[^}]*transition:\s*height 280ms/s)
+  assert.match(appCss, /\.month-view\.month-dragging[\s\S]*transition:\s*none/s)
+  assert.match(appCss, /--month-live-row-height/)
   assert.doesNotMatch(appSource, /month-density-button/)
 })
 
-test('expanded month height clipping is limited to the mobile layout', () => {
+test('month expansion reserves all six rows on desktop and mobile', () => {
   const baseMonthRule = appCss.match(/\.month-view\s*\{([^}]*)\}/)?.[1] ?? ''
-  assert.doesNotMatch(baseMonthRule, /max-height|overflow/)
+  assert.match(baseMonthRule, /--month-collapsed-height:\s*440px/)
+  assert.match(baseMonthRule, /height:\s*var\(--month-expanded-height, 776px\)/)
+  assert.match(baseMonthRule, /overflow:\s*hidden/)
+  assert.match(appCss, /repeat\(6, minmax\(0, var\(--month-expanded-row-height, 118px\)\)\)/)
   assert.match(
     appCss,
     /@media \(max-width: 720px\)[\s\S]*\.month-view\.expanded\s*\{[^}]*max-height:[^}]*overflow:\s*hidden/s,

@@ -64,10 +64,16 @@ class ThemeModeSmokeTest {
                 val actualNight = activity.resources.configuration.uiMode and
                     Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
                 assertEquals(night, actualNight)
-                assertPageTheme(activity, R.id.page_planner, R.id.navigation_planner, "空教室与个人课表联动查询", colors)
+                assertPageTheme(activity, R.id.page_planner, R.id.navigation_planner, "联动查询", colors)
 
                 activity.findViewById<View>(R.id.navigation_calendar).performClick()
-                assertPageTheme(activity, R.id.page_calendar, R.id.navigation_calendar, "教学日历", colors)
+                assertPageTheme(
+                    activity,
+                    R.id.page_calendar,
+                    R.id.navigation_calendar,
+                    title = null,
+                    colors = colors,
+                )
 
                 activity.findViewById<View>(R.id.navigation_settings).performClick()
                 assertPageTheme(activity, R.id.page_settings, R.id.navigation_settings, "设置", colors)
@@ -86,15 +92,16 @@ class ThemeModeSmokeTest {
         activity: MainActivity,
         pageID: Int,
         navigationID: Int,
-        title: String,
+        title: String?,
         colors: ThemeColors,
     ) {
         val page = activity.findViewById<View>(pageID)
         assertNotNull("Missing page $pageID", page)
         assertEquals(colors.background, (page.background as ColorDrawable).color)
         assertEquals(colors.primaryText, activity.findViewById<TextView>(navigationID).currentTextColor)
-        val titleView = findText(page, title)
-        assertNotNull("Missing page title: $title", titleView)
+        val titleView = title?.let { findText(page, it) }
+            ?: page.findViewById(R.id.calendar_period_label)
+        assertNotNull("Missing page title: ${title ?: "calendar period"}", titleView)
         assertEquals(colors.text, titleView?.currentTextColor)
     }
 

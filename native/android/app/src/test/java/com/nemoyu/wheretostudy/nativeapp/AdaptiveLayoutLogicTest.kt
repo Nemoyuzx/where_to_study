@@ -9,39 +9,39 @@ class AdaptiveLayoutLogicTest {
     @Test
     fun widthClassesUseActualWindowBreakpoints() {
         assertEquals(WindowWidthClass.COMPACT, AdaptiveLayoutLogic.widthClass(0))
-        assertEquals(WindowWidthClass.COMPACT, AdaptiveLayoutLogic.widthClass(599))
-        assertEquals(WindowWidthClass.MEDIUM, AdaptiveLayoutLogic.widthClass(600))
-        assertEquals(WindowWidthClass.MEDIUM, AdaptiveLayoutLogic.widthClass(839))
-        assertEquals(WindowWidthClass.EXPANDED, AdaptiveLayoutLogic.widthClass(840))
+        assertEquals(WindowWidthClass.COMPACT, AdaptiveLayoutLogic.widthClass(699))
+        assertEquals(WindowWidthClass.MEDIUM, AdaptiveLayoutLogic.widthClass(700))
+        assertEquals(WindowWidthClass.MEDIUM, AdaptiveLayoutLogic.widthClass(999))
+        assertEquals(WindowWidthClass.EXPANDED, AdaptiveLayoutLogic.widthClass(1_000))
         assertEquals(WindowWidthClass.EXPANDED, AdaptiveLayoutLogic.widthClass(1_600))
     }
 
     @Test
     fun navigationChangesAtWindowBreakpointsWithoutAFeature() {
-        val compact = AdaptiveLayoutLogic.resolve(599)
-        val medium = AdaptiveLayoutLogic.resolve(600)
-        val expanded = AdaptiveLayoutLogic.resolve(840)
+        val compact = AdaptiveLayoutLogic.resolve(699)
+        val medium = AdaptiveLayoutLogic.resolve(700)
+        val expanded = AdaptiveLayoutLogic.resolve(1_000)
 
         assertTrue(compact.usesBottomNavigation)
         assertEquals(0, compact.navigationWidthDp)
-        assertEquals(599, compact.contentWidthDp)
+        assertEquals(699, compact.contentWidthDp)
         assertFalse(medium.usesBottomNavigation)
-        assertEquals(176, medium.navigationWidthDp)
-        assertEquals(424, medium.contentWidthDp)
-        assertEquals(224, expanded.navigationWidthDp)
-        assertEquals(616, expanded.contentWidthDp)
+        assertEquals(210, medium.navigationWidthDp)
+        assertEquals(490, medium.contentWidthDp)
+        assertEquals(230, expanded.navigationWidthDp)
+        assertEquals(770, expanded.contentWidthDp)
     }
 
     @Test
     fun classificationUsesWindowWidthWhileContentUsesAvailableWidth() {
         val spec = AdaptiveLayoutLogic.resolve(
-            windowWidthDp = 600,
-            availableWidthDp = 576,
+            windowWidthDp = 700,
+            availableWidthDp = 676,
         )
 
         assertEquals(WindowWidthClass.MEDIUM, spec.widthClass)
-        assertEquals(176, spec.navigationWidthDp)
-        assertEquals(400, spec.contentWidthDp)
+        assertEquals(210, spec.navigationWidthDp)
+        assertEquals(466, spec.contentWidthDp)
     }
 
     @Test
@@ -53,8 +53,8 @@ class AdaptiveLayoutLogicTest {
         )
 
         assertEquals(WindowWidthClass.EXPANDED, spec.widthClass)
-        assertEquals(224, spec.navigationWidthDp)
-        assertEquals(386, spec.hingeSpacerDp)
+        assertEquals(230, spec.navigationWidthDp)
+        assertEquals(380, spec.hingeSpacerDp)
         assertEquals(590, spec.contentWidthDp)
         assertEquals(610, spec.navigationWidthDp + spec.hingeSpacerDp)
     }

@@ -1,6 +1,7 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -13,6 +14,7 @@ import android.widget.TextView
 
 data class ThemeColors(
     val primary: Int,
+    val primaryFill: Int,
     val primaryDark: Int,
     val primaryText: Int,
     val onPrimary: Int,
@@ -30,31 +32,37 @@ data class ThemeColors(
     val nowIndicator: Int,
     val holiday: Int,
     val outOfMonth: Int,
+    val selectionSurface: Int,
+    val segmentedSelection: Int,
 )
 
 object ThemePalettes {
     val light = ThemeColors(
-        primary = 0xFF176B5D.toInt(), primaryDark = 0xFF0C4A42.toInt(),
-        primaryText = 0xFF0C4A42.toInt(), onPrimary = 0xFFFFFFFF.toInt(),
-        accent = 0xFFD1A845.toInt(), onAccent = 0xFF15201D.toInt(),
-        background = 0xFFF4F7F4.toInt(), surface = 0xFFFFFFFF.toInt(),
-        surfaceVariant = 0xFFEDF2EE.toInt(), text = 0xFF15201D.toInt(),
-        muted = 0xFF65716D.toInt(), border = 0xFFDCE3DE.toInt(),
-        danger = 0xFF8A2D1C.toInt(), dangerSurface = 0xFFFFF2ED.toInt(),
-        dangerBorder = 0xFFE6B7AA.toInt(), nowIndicator = 0xFFC62835.toInt(),
-        holiday = 0xFFA92F36.toInt(), outOfMonth = 0xFF6A7670.toInt(),
+        primary = 0xFF166B5D.toInt(), primaryFill = 0xFF166B5D.toInt(),
+        primaryDark = 0xFF0C4A42.toInt(), primaryText = 0xFF166B5D.toInt(),
+        onPrimary = 0xFFFFFFFF.toInt(), accent = 0xFFE2BC62.toInt(),
+        onAccent = 0xFF151515.toInt(), background = 0xFFF2F2F7.toInt(),
+        surface = 0xFFFFFFFF.toInt(), surfaceVariant = 0xFFE5E5EA.toInt(),
+        text = 0xFF111111.toInt(), muted = 0xFF6E6E73.toInt(),
+        border = 0xFFC6C6C8.toInt(), danger = 0xFF8A2D1C.toInt(),
+        dangerSurface = 0xFFFFF2F1.toInt(), dangerBorder = 0xFFFFB8B3.toInt(),
+        nowIndicator = 0xFFFF3B30.toInt(), holiday = 0xFFC62835.toInt(),
+        outOfMonth = 0xFF6E6E73.toInt(), selectionSurface = 0xFFDDECE8.toInt(),
+        segmentedSelection = 0xFFFFFFFF.toInt(),
     )
 
     val dark = ThemeColors(
-        primary = 0xFF176B5D.toInt(), primaryDark = 0xFF0C4A42.toInt(),
-        primaryText = 0xFF78CDBD.toInt(), onPrimary = 0xFFFFFFFF.toInt(),
-        accent = 0xFFD8AE4E.toInt(), onAccent = 0xFF211A08.toInt(),
-        background = 0xFF101512.toInt(), surface = 0xFF181E1B.toInt(),
-        surfaceVariant = 0xFF222A26.toInt(), text = 0xFFEDF5F1.toInt(),
-        muted = 0xFFAAB8B2.toInt(), border = 0xFF3A4741.toInt(),
-        danger = 0xFFFFB4A2.toInt(), dangerSurface = 0xFF40221D.toInt(),
-        dangerBorder = 0xFF8C4A3D.toInt(), nowIndicator = 0xFFC62835.toInt(),
-        holiday = 0xFFFF9A9D.toInt(), outOfMonth = 0xFF7C8A83.toInt(),
+        primary = 0xFF5AD2B8.toInt(), primaryFill = 0xFF197565.toInt(),
+        primaryDark = 0xFF0C4A42.toInt(), primaryText = 0xFF5AD2B8.toInt(),
+        onPrimary = 0xFFFFFFFF.toInt(), accent = 0xFF876622.toInt(),
+        onAccent = 0xFFFFFFFF.toInt(), background = 0xFF000000.toInt(),
+        surface = 0xFF1C1C1E.toInt(), surfaceVariant = 0xFF2C2C2E.toInt(),
+        text = 0xFFFFFFFF.toInt(), muted = 0xFF98989D.toInt(),
+        border = 0xFF38383A.toInt(), danger = 0xFFFFB4A2.toInt(),
+        dangerSurface = 0xFF3B1715.toInt(), dangerBorder = 0xFF7D312C.toInt(),
+        nowIndicator = 0xFFFF453A.toInt(), holiday = 0xFFFF9A9D.toInt(),
+        outOfMonth = 0xFF98989D.toInt(), selectionSurface = 0xFF233A35.toInt(),
+        segmentedSelection = 0xFF636366.toInt(),
     )
 
     fun forConfiguration(configuration: Configuration): ThemeColors =
@@ -67,6 +75,7 @@ object Palette {
     private var colors = ThemePalettes.light
 
     val primary get() = colors.primary
+    val primaryFill get() = colors.primaryFill
     val primaryDark get() = colors.primaryDark
     val primaryText get() = colors.primaryText
     val onPrimary get() = colors.onPrimary
@@ -84,10 +93,22 @@ object Palette {
     val nowIndicator get() = colors.nowIndicator
     val holiday get() = colors.holiday
     val outOfMonth get() = colors.outOfMonth
+    val selectionSurface get() = colors.selectionSurface
+    val segmentedSelection get() = colors.segmentedSelection
 
     fun configure(context: Context) {
         colors = ThemePalettes.forConfiguration(context.resources.configuration)
     }
+}
+
+object UiMetrics {
+    const val pagePaddingDp = 20
+    const val surfacePaddingDp = 16
+    const val surfaceRadiusDp = 8
+    const val controlRadiusDp = 8
+    const val controlHeightDp = 44
+    const val compactControlHeightDp = 36
+    const val sectionSpacingDp = 16
 }
 
 fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -96,7 +117,7 @@ fun roundedBackground(
     context: Context,
     color: Int,
     borderColor: Int = Color.TRANSPARENT,
-    radius: Int = 6,
+    radius: Int = UiMetrics.controlRadiusDp,
 ): GradientDrawable = GradientDrawable().apply {
     shape = GradientDrawable.RECTANGLE
     setColor(color)
@@ -106,7 +127,12 @@ fun roundedBackground(
     }
 }
 
-fun pageTitle(context: Context, title: String, subtitle: String? = null): LinearLayout =
+fun pageTitle(
+    context: Context,
+    title: String,
+    subtitle: String? = null,
+    subtitleIconResource: Int = 0,
+): LinearLayout =
     LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(0, context.dp(4), 0, context.dp(18))
@@ -129,22 +155,51 @@ fun pageTitle(context: Context, title: String, subtitle: String? = null): Linear
                 textSize = 14f
                 setTextColor(Palette.muted)
                 setPadding(0, context.dp(5), 0, 0)
+                if (subtitleIconResource != 0) {
+                    setCompoundDrawablesRelativeWithIntrinsicBounds(
+                        subtitleIconResource,
+                        0,
+                        0,
+                        0,
+                    )
+                    compoundDrawablePadding = context.dp(7)
+                    compoundDrawableTintList = ColorStateList.valueOf(Palette.muted)
+                }
             })
         }
     }
 
-fun sectionTitle(context: Context, title: String): TextView = TextView(context).apply {
+fun sectionTitle(
+    context: Context,
+    title: String,
+    iconResource: Int = 0,
+): TextView = TextView(context).apply {
     text = title
     textSize = 18f
     setTextColor(Palette.text)
     setTypeface(typeface, Typeface.BOLD)
     setPadding(0, 0, 0, context.dp(12))
+    if (iconResource != 0) {
+        setCompoundDrawablesRelativeWithIntrinsicBounds(iconResource, 0, 0, 0)
+        compoundDrawablePadding = context.dp(8)
+        compoundDrawableTintList = ColorStateList.valueOf(Palette.text)
+    }
 }
 
 fun surface(context: Context): LinearLayout = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
-    background = roundedBackground(context, Palette.surface, Palette.border, radius = 6)
-    setPadding(context.dp(16), context.dp(16), context.dp(16), context.dp(16))
+    background = roundedBackground(
+        context,
+        Palette.surface,
+        Palette.border,
+        radius = UiMetrics.surfaceRadiusDp,
+    )
+    setPadding(
+        context.dp(UiMetrics.surfacePaddingDp),
+        context.dp(UiMetrics.surfacePaddingDp),
+        context.dp(UiMetrics.surfacePaddingDp),
+        context.dp(UiMetrics.surfacePaddingDp),
+    )
 }
 
 fun fixedTab(context: Context, label: String, onClick: () -> Unit): TextView =
@@ -155,7 +210,7 @@ fun fixedTab(context: Context, label: String, onClick: () -> Unit): TextView =
         setTextColor(Palette.text)
         isClickable = true
         isFocusable = true
-        minHeight = context.dp(44)
+        minHeight = context.dp(UiMetrics.controlHeightDp)
         setOnClickListener { onClick() }
     }
 
@@ -163,9 +218,9 @@ fun TextView.setSelectedStyle(context: Context, selected: Boolean) {
     setTextColor(if (selected) Palette.onPrimary else Palette.text)
     background = roundedBackground(
         context,
-        if (selected) Palette.primary else Palette.surface,
-        if (selected) Palette.primary else Palette.border,
-        radius = 6,
+        if (selected) Palette.primaryFill else Palette.surface,
+        if (selected) Palette.primaryFill else Palette.border,
+        radius = UiMetrics.controlRadiusDp,
     )
     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
 }
@@ -174,15 +229,20 @@ fun TextView.setCompactSelectedStyle(context: Context, selected: Boolean) {
     setTextColor(if (selected) Palette.onPrimary else Palette.text)
     background = roundedBackground(
         context,
-        if (selected) Palette.primary else Color.TRANSPARENT,
-        radius = 8,
+        if (selected) Palette.primaryFill else Color.TRANSPARENT,
+        radius = UiMetrics.controlRadiusDp,
     )
     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
 }
 
 fun verticalPage(context: Context): LinearLayout = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
-    setPadding(context.dp(20), context.dp(20), context.dp(20), context.dp(28))
+    setPadding(
+        context.dp(UiMetrics.pagePaddingDp),
+        context.dp(UiMetrics.pagePaddingDp),
+        context.dp(UiMetrics.pagePaddingDp),
+        context.dp(28),
+    )
     layoutParams = ViewGroup.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,
         ViewGroup.LayoutParams.WRAP_CONTENT,

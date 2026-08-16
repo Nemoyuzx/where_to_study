@@ -1,5 +1,6 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
@@ -10,6 +11,7 @@ import android.widget.BaseAdapter
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import java.text.SimpleDateFormat
@@ -58,13 +60,22 @@ class PlannerPage(
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
                 timeZone = shanghai
             }.format(Date())
-            addView(pageTitle(activity, "空教室与个人课表联动查询", date))
+            addView(pageTitle(
+                activity,
+                "联动查询",
+                date,
+                R.drawable.ic_section_clock,
+            ))
             addSection(querySurface())
             addSection(slotSurface())
             addSection(todayCoursesSurface())
             addSection(buildingsSurface())
             addView(surface(activity).apply {
-                addView(sectionTitle(activity, "空教室结果"))
+                addView(sectionTitle(
+                    activity,
+                    "空教室结果",
+                    R.drawable.ic_section_check,
+                ))
             })
         }, null, false)
         addFooterView(verticalPage(activity).apply {
@@ -83,12 +94,15 @@ class PlannerPage(
 
     private fun LinearLayout.addSection(view: LinearLayout) {
         addView(view)
-        addView(spacer(activity, 16))
+        addView(spacer(activity, UiMetrics.sectionSpacingDp))
     }
 
     private fun querySurface(): LinearLayout = surface(activity).apply {
-        addView(sectionTitle(activity, "查询条件"))
-        addView(label("校区"))
+        addView(sectionTitle(
+            activity,
+            "查询条件",
+            R.drawable.ic_section_query,
+        ))
         addView(campusControl())
         addView(spacer(activity, 14))
         addView(fetchButton())
@@ -102,17 +116,16 @@ class PlannerPage(
         }
     }
 
-    private fun label(value: String): TextView = TextView(activity).apply {
-        text = value
-        textSize = 13f
-        setTextColor(Palette.muted)
-        setPadding(0, 0, 0, activity.dp(8))
-    }
-
     private fun campusControl(): LinearLayout {
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(activity.dp(3), activity.dp(3), activity.dp(3), activity.dp(3))
+            background = roundedBackground(
+                activity,
+                Palette.surfaceVariant,
+                radius = UiMetrics.controlRadiusDp,
+            )
         }
         val tabs = mutableListOf<Pair<CampusMetadata, TextView>>()
         AppMetadata.campuses.forEach { campus ->
@@ -122,14 +135,25 @@ class PlannerPage(
                 selectedBuildings.clear()
                 activity.refreshCurrentPage()
             }
-            tab.layoutParams = LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
-                marginEnd = activity.dp(8)
+            tab.layoutParams = LinearLayout.LayoutParams(
+                0,
+                activity.dp(UiMetrics.compactControlHeightDp - 6),
+                1f,
+            ).apply {
+                marginEnd = activity.dp(2)
             }
             tabs += campus to tab
             row.addView(tab)
         }
         tabs.forEach { (campus, view) ->
-            view.setSelectedStyle(activity, campus.id == queryState.campusID)
+            val selected = campus.id == queryState.campusID
+            view.setTextColor(Palette.text)
+            view.setTypeface(view.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
+            view.background = roundedBackground(
+                activity,
+                if (selected) Palette.segmentedSelection else Color.TRANSPARENT,
+                radius = UiMetrics.controlRadiusDp - 2,
+            )
         }
         return row
     }
@@ -140,13 +164,16 @@ class PlannerPage(
         gravity = Gravity.CENTER
         setTextColor(Palette.onPrimary)
         setTypeface(typeface, Typeface.BOLD)
-        background = roundedBackground(activity, Palette.primary, radius = 6)
+        setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_refresh, 0, 0, 0)
+        compoundDrawablePadding = activity.dp(8)
+        compoundDrawableTintList = ColorStateList.valueOf(Palette.onPrimary)
+        background = roundedBackground(activity, Palette.primaryFill, radius = 8)
         isClickable = !classroomRepository.isRefreshing
         isFocusable = true
         isEnabled = !classroomRepository.isRefreshing
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(46),
+            activity.dp(UiMetrics.controlHeightDp),
         )
         setOnClickListener {
             val button = it as TextView
@@ -170,15 +197,34 @@ class PlannerPage(
     }
 
     private fun slotSurface(): LinearLayout = surface(activity).apply {
-        addView(sectionTitle(activity, "节次筛选"))
-        val personalToggle = TextView(activity).apply {
+        addView(sectionTitle(
+            activity,
+            "节次筛选",
+            R.drawable.ic_section_clock,
+        ))
+        val personalToggle = Switch(activity).apply {
+            text = "使用个人课表排除已有课程"
             textSize = 14f
-            gravity = Gravity.CENTER
+            setTextColor(Palette.text)
+            gravity = Gravity.CENTER_VERTICAL
             isClickable = true
             isFocusable = true
+            isChecked = usePersonalSchedule
+            val states = arrayOf(
+                intArrayOf(android.R.attr.state_checked),
+                intArrayOf(),
+            )
+            trackTintList = ColorStateList(
+                states,
+                intArrayOf(Palette.primaryFill, Palette.surfaceVariant),
+            )
+            thumbTintList = ColorStateList(
+                states,
+                intArrayOf(Palette.onPrimary, Palette.muted),
+            )
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(42),
+                activity.dp(40),
             ).apply { bottomMargin = activity.dp(10) }
         }
         addView(personalToggle)
@@ -189,11 +235,6 @@ class PlannerPage(
         val cells = mutableMapOf<Int, TextView>()
 
         fun refreshCells() {
-            personalToggle.text = activity.getString(
-                R.string.personal_schedule_state_format,
-                activity.getString(if (usePersonalSchedule) R.string.state_on else R.string.state_off),
-            )
-            personalToggle.setSelectedStyle(activity, usePersonalSchedule)
             cells.forEach { (index, cell) ->
                 val busy = usePersonalSchedule && index in personalBusySlots
                 val selected = index in selectedSlots
@@ -208,11 +249,11 @@ class PlannerPage(
                 cell.background = roundedBackground(
                     activity,
                     when {
-                        selected -> Palette.primary
+                        selected -> Palette.primaryFill
                         busy -> Palette.accent
                         else -> Palette.surface
                     },
-                    if (selected) Palette.primary else Palette.border,
+                    if (selected) Palette.primaryFill else Palette.border,
                     radius = 6,
                 )
                 cell.setTypeface(cell.typeface, Typeface.BOLD)
@@ -224,10 +265,14 @@ class PlannerPage(
             refreshCells()
             renderResultsAndSummary()
         }.apply {
-            layoutParams = LinearLayout.LayoutParams(0, activity.dp(40), 1f).apply {
-                marginEnd = activity.dp(7)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                activity.dp(UiMetrics.compactControlHeightDp),
+            ).apply {
+                marginEnd = activity.dp(8)
                 bottomMargin = activity.dp(10)
             }
+            setPadding(activity.dp(16), 0, activity.dp(16), 0)
             background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
         }
 
@@ -239,8 +284,8 @@ class PlannerPage(
         actions.addView(action("清空") { selectedSlots.clear() })
         addView(slotControl(cells) { refreshCells() })
 
-        personalToggle.setOnClickListener {
-            usePersonalSchedule = !usePersonalSchedule
+        personalToggle.setOnCheckedChangeListener { _, checked ->
+            usePersonalSchedule = checked
             if (usePersonalSchedule) {
                 selectedSlots.removeAll(personalBusySlots)
             } else {
@@ -281,7 +326,7 @@ class PlannerPage(
                                 refreshCells()
                                 renderResultsAndSummary()
                             }
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(58), 1f).apply {
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
                                 marginEnd = activity.dp(4)
                                 bottomMargin = activity.dp(6)
                             }
@@ -291,7 +336,7 @@ class PlannerPage(
                     }
                     repeat(columns - slots.size) {
                         addView(TextView(activity).apply {
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(58), 1f).apply {
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
                                 marginEnd = activity.dp(4)
                             }
                         })
@@ -302,7 +347,7 @@ class PlannerPage(
     }
 
     private fun todayCoursesSurface(): LinearLayout = surface(activity).apply {
-        addView(sectionTitle(activity, "当天课程"))
+        addView(sectionTitle(activity, "当天课程", R.drawable.ic_nav_calendar))
         val courses = ScheduleLogic.courses(scheduleRepository.schedule, today)
         if (courses.isEmpty()) {
             addView(emptyMessage("暂无本地课程，请在设置中获取/刷新个人课表"))
@@ -312,7 +357,7 @@ class PlannerPage(
     }
 
     private fun buildingsSurface(): LinearLayout = surface(activity).apply {
-        addView(sectionTitle(activity, "教学楼"))
+        addView(sectionTitle(activity, "教学楼", R.drawable.ic_section_building))
         val buildings = AppMetadata.buildings(queryState.campusID).ifEmpty {
             campusRooms().map(Classroom::building).distinct().sorted()
         }
@@ -386,7 +431,11 @@ class PlannerPage(
 
     private fun renderSummary() {
         summaryContainer.removeAllViews()
-        summaryContainer.addView(sectionTitle(activity, "查询概览"))
+        summaryContainer.addView(sectionTitle(
+            activity,
+            "查询概览",
+            R.drawable.ic_section_summary,
+        ))
         val freeCount = if (usePersonalSchedule) {
             AppMetadata.slots.size - personalBusySlots.size
         } else {

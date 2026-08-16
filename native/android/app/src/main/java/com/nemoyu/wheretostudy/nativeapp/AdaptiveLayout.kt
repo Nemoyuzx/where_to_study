@@ -23,10 +23,10 @@ data class AdaptiveLayoutSpec(
 }
 
 object AdaptiveLayoutLogic {
-    const val MEDIUM_BREAKPOINT_DP = 600
-    const val EXPANDED_BREAKPOINT_DP = 840
-    const val MEDIUM_NAVIGATION_WIDTH_DP = 176
-    const val EXPANDED_NAVIGATION_WIDTH_DP = 224
+    const val MEDIUM_BREAKPOINT_DP = 700
+    const val EXPANDED_BREAKPOINT_DP = 1000
+    const val MEDIUM_NAVIGATION_WIDTH_DP = 210
+    const val EXPANDED_NAVIGATION_WIDTH_DP = 230
 
     fun widthClass(windowWidthDp: Int): WindowWidthClass = when {
         windowWidthDp < MEDIUM_BREAKPOINT_DP -> WindowWidthClass.COMPACT
@@ -81,15 +81,15 @@ object AdaptiveLayoutLogic {
 
 object AdaptiveContentLogic {
     fun plannerSlotColumns(contentWidthDp: Int): Int = when {
-        contentWidthDp >= AdaptiveLayoutLogic.EXPANDED_BREAKPOINT_DP -> 7
-        contentWidthDp >= AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP -> 6
+        contentWidthDp >= 840 -> 7
+        contentWidthDp >= 600 -> 6
         contentWidthDp >= 480 -> 4
         else -> 3
     }
 
     fun plannerBuildingColumns(contentWidthDp: Int): Int = when {
-        contentWidthDp >= AdaptiveLayoutLogic.EXPANDED_BREAKPOINT_DP -> 5
-        contentWidthDp >= AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP -> 4
+        contentWidthDp >= 840 -> 5
+        contentWidthDp >= 600 -> 4
         contentWidthDp >= 480 -> 3
         else -> 2
     }
