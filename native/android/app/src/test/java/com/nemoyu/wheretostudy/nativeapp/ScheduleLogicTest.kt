@@ -478,23 +478,29 @@ class ScheduleLogicTest {
     @Test
     fun monthExpansionUsesDistinctReadableCellHeights() {
         assertEquals(58, TeachingCalendarLogic.monthCellHeightDp(expanded = false))
-        assertEquals(74, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
-        assertEquals(130, TeachingCalendarLogic.monthCellHeightDp(expanded = true, entryCount = 3))
+        assertEquals(68, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
+        assertEquals(38, TeachingCalendarLogic.phoneModeSwitchHeightDp)
+        assertEquals(32, TeachingCalendarLogic.phoneModeTabHeightDp)
+        assertEquals(36, TeachingCalendarLogic.phoneNavigationHeightDp)
+        assertEquals(62, TeachingCalendarLogic.phoneDateStripHeightDp)
+        assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(2))
+        assertEquals(1, TeachingCalendarLogic.visibleMonthEntryCount(5))
+        assertEquals(4, TeachingCalendarLogic.hiddenMonthEntryCount(5))
     }
 
     @Test
     fun monthExpansionOnlyAcceptsTheApplicableDominantVerticalDirection() {
         assertEquals(
             true,
-            TeachingCalendarLogic.monthExpansionTarget(8f, -72f, currentlyExpanded = false),
+            TeachingCalendarLogic.monthExpansionTarget(8f, 72f, currentlyExpanded = false),
         )
         assertEquals(
             false,
-            TeachingCalendarLogic.monthExpansionTarget(-8f, 72f, currentlyExpanded = true),
+            TeachingCalendarLogic.monthExpansionTarget(-8f, -72f, currentlyExpanded = true),
         )
         assertEquals(
             null,
-            TeachingCalendarLogic.monthExpansionTarget(8f, 72f, currentlyExpanded = false),
+            TeachingCalendarLogic.monthExpansionTarget(8f, -72f, currentlyExpanded = false),
         )
         assertEquals(
             null,
@@ -503,6 +509,34 @@ class ScheduleLogicTest {
         assertEquals(
             null,
             TeachingCalendarLogic.monthExpansionTarget(8f, 32f, currentlyExpanded = false),
+        )
+    }
+
+    @Test
+    fun monthGestureClaimsOnlyStateChangesAndLeavesCollapsedContentScrolling() {
+        assertTrue(
+            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
+                targetExpanded = false,
+                scrollCouldMoveUpAtGestureStart = true,
+            ),
+        )
+        assertTrue(
+            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
+                targetExpanded = true,
+                scrollCouldMoveUpAtGestureStart = false,
+            ),
+        )
+        assertFalse(
+            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
+                targetExpanded = true,
+                scrollCouldMoveUpAtGestureStart = true,
+            ),
+        )
+        assertFalse(
+            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
+                targetExpanded = null,
+                scrollCouldMoveUpAtGestureStart = false,
+            ),
         )
     }
 

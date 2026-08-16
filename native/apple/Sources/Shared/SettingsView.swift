@@ -22,7 +22,6 @@ struct SettingsView: View {
                     if columnCount == 2 {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
-                                aboutSurface
                                 accountSurface
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
@@ -32,12 +31,13 @@ struct SettingsView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
                         }
+                        aboutSurface
                     } else {
                         VStack(spacing: 16) {
-                            aboutSurface
                             accountSurface
                             notificationSurface
                             localDataSurface
+                            aboutSurface
                         }
                     }
                 }

@@ -96,31 +96,22 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         XCTAssertEqual(month.value as? String, "已展开")
+        XCTAssertFalse(app.descendants(matching: .any)["calendar.mobile.month-day-summary"].exists)
         attachScreenshot(named: "calendar-month-expanded")
         let initialMonthHeadingY = monthHeading.frame.minY
-        verticalSwipe(in: app, atX: 0.5, upward: true)
-        XCTAssertTrue(waitForValue("已展开", of: month))
-        let monthDidScroll = monthHeading.frame.minY < initialMonthHeadingY - 2
-        if app.frame.height < 750 {
-            XCTAssertTrue(monthDidScroll, "紧凑高度设备上的展开月历应产生真实的纵向滚动")
-        }
-        if monthDidScroll {
-            verticalSwipe(in: app, atX: 0.5, upward: false)
-            XCTAssertTrue(
-                waitForValue("已展开", of: month),
-                "滚离顶部后的第一次下滑应先滚回顶部，而不是折叠月历"
-            )
-            for _ in 0 ..< 3 where monthHeading.frame.minY < initialMonthHeadingY - 2 {
-                verticalSwipe(in: app, atX: 0.5, upward: false)
-                XCTAssertTrue(waitForValue("已展开", of: month))
-            }
-        }
         verticalSwipe(in: app, atX: 0.5, upward: false)
+        XCTAssertTrue(waitForValue("已展开", of: month))
+        XCTAssertEqual(monthHeading.frame.minY, initialMonthHeadingY, accuracy: 2)
+        verticalSwipe(in: app, atX: 0.5, upward: true)
         XCTAssertTrue(waitForValue("已收起", of: month))
         XCTAssertFalse(app.buttons["折叠"].exists)
         XCTAssertFalse(app.buttons["展开"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]
+            .waitForExistence(timeout: 5))
         attachScreenshot(named: "calendar-month-collapsed")
         verticalSwipe(in: app, atX: 0.5, upward: true)
+        XCTAssertTrue(waitForValue("已收起", of: month))
+        verticalSwipe(in: app, atX: 0.5, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
 
         let initialMonth = monthHeading.label
@@ -291,14 +282,22 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         assertRegularSidebar(in: app)
         let compactPeriod = app.staticTexts["calendar.mobile.period-label"]
-        XCTAssertTrue(compactPeriod.waitForExistence(timeout: 5))
-        XCTAssertEqual(compactPeriod.label, "月视图")
-        XCTAssertTrue(app.segmentedControls.buttons["月"].isSelected)
-        XCTAssertEqual(monthHeading.label, pagedMonth)
-        let compactMonthState = app.descendants(matching: .any)["calendar.mobile.month-state"]
-        XCTAssertTrue(compactMonthState.waitForExistence(timeout: 5))
-        XCTAssertEqual(compactMonthState.value as? String, "已收起")
-        attachScreenshot(named: "ipad-calendar-portrait-state-preserved")
+        if compactPeriod.waitForExistence(timeout: 2) {
+            XCTAssertEqual(compactPeriod.label, "月视图")
+            XCTAssertTrue(app.segmentedControls.buttons["月"].isSelected)
+            XCTAssertEqual(monthHeading.label, pagedMonth)
+            let compactMonthState = app.descendants(matching: .any)["calendar.mobile.month-state"]
+            XCTAssertTrue(compactMonthState.waitForExistence(timeout: 5))
+            XCTAssertEqual(compactMonthState.value as? String, "已收起")
+            attachScreenshot(named: "ipad-calendar-portrait-compact-state-preserved")
+        } else {
+            XCTAssertTrue(app.descendants(matching: .any)["layout.calendar.expanded"]
+                .waitForExistence(timeout: 5))
+            XCTAssertTrue(app.segmentedControls.buttons["月"].isSelected)
+            XCTAssertEqual(monthHeading.label, pagedMonth)
+            XCTAssertTrue(app.buttons["展开日程"].waitForExistence(timeout: 5))
+            attachScreenshot(named: "ipad-calendar-portrait-expanded-state-preserved")
+        }
         navigateFromSidebar(to: "设置", in: app)
         assertScreen("screen.settings", in: app)
         attachScreenshot(named: "ipad-settings-portrait")

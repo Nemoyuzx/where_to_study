@@ -10,6 +10,7 @@ TAURI_APPLE_ICONSET_DIR="$ROOT_DIR/src-tauri/gen/apple/Assets.xcassets/AppIcon.a
 ALPHA_STRIPPER="$ROOT_DIR/scripts/strip-png-alpha.swift"
 ANDROID_RES_DIR="$ROOT_DIR/native/android/app/src/main/res"
 TAURI_ANDROID_RES_DIR="$ROOT_DIR/src-tauri/gen/android/app/src/main/res"
+ANDROID_ADAPTIVE_ICON_DIR="$ROOT_DIR/scripts/icon-resources/android"
 
 [[ -s "$SOURCE_ICON" ]] || {
   printf 'Missing canonical app icon: %s\n' "$SOURCE_ICON" >&2
@@ -102,9 +103,13 @@ for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
     sync_file "$source" "$destination/$(basename "$source")"
   done
 done
-mkdir -p "$ANDROID_RES_DIR/mipmap-anydpi-v26" "$ANDROID_RES_DIR/values"
-sync_file "$tmp_dir/generated/android/mipmap-anydpi-v26/ic_launcher.xml" \
-  "$ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher.xml"
+mkdir -p "$ANDROID_RES_DIR/drawable" "$ANDROID_RES_DIR/mipmap-anydpi-v26" "$ANDROID_RES_DIR/values"
+sync_file "$ANDROID_ADAPTIVE_ICON_DIR/ic_launcher_foreground_safe.xml" \
+  "$ANDROID_RES_DIR/drawable/ic_launcher_foreground_safe.xml"
+for filename in ic_launcher.xml ic_launcher_round.xml; do
+  sync_file "$ANDROID_ADAPTIVE_ICON_DIR/$filename" \
+    "$ANDROID_RES_DIR/mipmap-anydpi-v26/$filename"
+done
 sync_file "$tmp_dir/generated/android/values/ic_launcher_background.xml" \
   "$ANDROID_RES_DIR/values/ic_launcher_background.xml"
 
@@ -115,9 +120,13 @@ for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
     sync_file "$source" "$destination/$(basename "$source")"
   done
 done
-mkdir -p "$TAURI_ANDROID_RES_DIR/mipmap-anydpi-v26" "$TAURI_ANDROID_RES_DIR/values"
-sync_file "$tmp_dir/generated/android/mipmap-anydpi-v26/ic_launcher.xml" \
-  "$TAURI_ANDROID_RES_DIR/mipmap-anydpi-v26/ic_launcher.xml"
+mkdir -p "$TAURI_ANDROID_RES_DIR/drawable" "$TAURI_ANDROID_RES_DIR/mipmap-anydpi-v26" "$TAURI_ANDROID_RES_DIR/values"
+sync_file "$ANDROID_ADAPTIVE_ICON_DIR/ic_launcher_foreground_safe.xml" \
+  "$TAURI_ANDROID_RES_DIR/drawable/ic_launcher_foreground_safe.xml"
+for filename in ic_launcher.xml ic_launcher_round.xml; do
+  sync_file "$ANDROID_ADAPTIVE_ICON_DIR/$filename" \
+    "$TAURI_ANDROID_RES_DIR/mipmap-anydpi-v26/$filename"
+done
 sync_file "$tmp_dir/generated/android/values/ic_launcher_background.xml" \
   "$TAURI_ANDROID_RES_DIR/values/ic_launcher_background.xml"
 

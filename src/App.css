@@ -60,6 +60,11 @@
   padding: 22px;
 }
 
+.page-content.calendar-gesture-locked {
+  overflow-y: hidden;
+  overscroll-behavior: none;
+}
+
 .topbar {
   align-items: flex-end;
   display: flex;
@@ -323,6 +328,42 @@ button:disabled {
 .settings-actions {
   align-content: start;
   gap: 10px;
+}
+
+.settings-about {
+  grid-column: 1 / -1;
+}
+
+.settings-about > p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.settings-about-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settings-about-actions > * {
+  flex: 1 1 180px;
+}
+
+.settings-about-actions a {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--control-text-blue);
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 650;
+  gap: 6px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 12px;
+  text-decoration: none;
 }
 
 .settings-toggle {
@@ -1104,6 +1145,10 @@ button:disabled {
   color: var(--gold-text-muted);
 }
 
+.calendar-day-tags i {
+  display: none;
+}
+
 .time-labels,
 .slot-time-labels,
 .time-grid-lines {
@@ -1260,6 +1305,7 @@ button:disabled {
 
 .month-view {
   display: grid;
+  max-height: var(--month-expanded-height, none);
   overflow: hidden;
 }
 
@@ -1303,6 +1349,8 @@ button:disabled {
   color: var(--text-primary);
   display: grid;
   gap: 8px;
+  grid-template-rows: auto minmax(0, 1fr);
+  justify-items: stretch;
   min-height: 118px;
   padding: 12px 8px 8px;
   text-align: left;
@@ -1310,6 +1358,7 @@ button:disabled {
 }
 
 .month-cell-details {
+  align-content: start;
   display: grid;
   gap: 3px;
   max-height: 180px;
@@ -1375,7 +1424,7 @@ button:disabled {
   color: var(--text-primary);
   font-size: 17px;
   font-weight: 760;
-  justify-self: end;
+  justify-self: center;
 }
 
 .month-cell.selected > span {
@@ -1421,7 +1470,7 @@ button:disabled {
   border: 1px solid var(--primary-border);
   border-radius: 4px;
   color: var(--primary-text);
-  display: grid;
+  display: block;
   font-size: 12px;
   font-style: normal;
   gap: 1px;
@@ -1430,49 +1479,27 @@ button:disabled {
   overflow: hidden;
   padding: 3px 6px;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.month-cell small.calendar-item {
-  align-items: center;
-  display: flex;
-  grid-template-columns: none;
-}
-
-.month-cell small.calendar-item.holiday {
+.month-cell small.month-entry.holiday {
   background: var(--primary-surface-holiday-badge);
   border-color: var(--holiday-border);
   color: var(--primary-text-strong);
 }
 
-.month-cell small.calendar-item.workday {
+.month-cell small.month-entry.workday {
   background: var(--gold-surface);
   border-color: var(--gold);
   color: var(--gold-text-muted);
 }
 
-.month-cell small.calendar-item strong {
-  color: inherit;
-  flex: 0 0 auto;
-  font-size: 11px;
-}
-
-.month-cell small strong {
-  color: var(--text-secondary-strong);
-  font-size: 10px;
-  font-weight: 760;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.month-cell small span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.month-cell small.month-entry.course {
+  background: var(--primary-surface);
+  border-color: var(--primary-border);
 }
 
 .month-cell em {
-  display: block;
   white-space: nowrap;
 }
 
@@ -1853,6 +1880,7 @@ button:disabled {
 
   .teaching-calendar-layout {
     grid-template-columns: 1fr;
+    min-height: 0;
   }
 
   .year-calendar {
@@ -2157,6 +2185,10 @@ button:disabled {
     width: 100%;
   }
 
+  .calendar-view-switch button {
+    height: 30px;
+  }
+
   .time-calendar,
   .time-calendar:not(.single-day) {
     grid-template-columns: 42px 76px repeat(var(--day-count), minmax(0, 1fr));
@@ -2167,7 +2199,7 @@ button:disabled {
 
   .time-corner,
   .time-day-head {
-    min-height: 66px;
+    min-height: 62px;
   }
 
   .time-calendar.single-day {
@@ -2175,20 +2207,45 @@ button:disabled {
   }
 
   .week-calendar .time-day-head {
+    grid-template-rows: auto auto 8px;
     min-width: 0;
     overflow: hidden;
-    padding: 7px 1px;
+    padding: 4px 1px;
   }
 
-  .week-calendar .time-day-head span,
-  .week-calendar .time-day-head small {
+  .week-calendar .time-day-head span {
     font-size: 9px;
   }
 
+  .week-calendar .time-day-head > small {
+    display: none;
+  }
+
   .week-calendar .time-day-head strong {
-    font-size: 12px;
+    font-size: 0;
     min-width: 0;
-    padding: 2px;
+    padding: 1px 0;
+  }
+
+  .week-calendar .time-day-head strong::after {
+    content: attr(data-mobile-day);
+    font-size: 12px;
+  }
+
+  .week-calendar .calendar-day-tags {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 2px;
+    min-height: 8px;
+    overflow: hidden;
+  }
+
+  .week-calendar .calendar-day-tags i {
+    background: var(--primary);
+    border-radius: 999px;
+    display: block;
+    flex: 0 0 4px;
+    height: 4px;
   }
 
   .week-calendar .calendar-day-tags em {
@@ -2268,10 +2325,20 @@ button:disabled {
     grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
+  .month-view.expanded {
+    height: var(--month-expanded-height, calc(100dvh - 250px));
+    max-height: var(--month-expanded-height, calc(100dvh - 250px));
+  }
+
+  .month-view.expanded .month-calendar {
+    grid-template-rows: 28px repeat(6, minmax(0, var(--month-expanded-row-height, 68px)));
+    height: 100%;
+  }
+
   .month-cell {
-    gap: 5px;
-    min-height: 104px;
-    padding: 10px 4px 6px;
+    gap: 2px;
+    min-height: 0;
+    padding: 2px;
   }
 
   .month-view.compact .month-cell {
@@ -2285,17 +2352,20 @@ button:disabled {
 
   .month-cell small,
   .month-cell em {
+    align-items: center;
+    display: flex;
     font-size: 10px;
+    height: 14px;
+    justify-content: flex-start;
+    line-height: 1.1;
     margin-top: 0;
-    padding: 3px;
-  }
-
-  .month-cell small strong {
-    display: none;
+    padding: 0 3px;
   }
 
   .month-weekday {
-    padding: 8px 3px;
+    align-items: center;
+    display: grid;
+    padding: 0 3px;
     text-align: center;
   }
 

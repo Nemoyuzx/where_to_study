@@ -614,14 +614,14 @@ final class ScheduleLogicTests: XCTestCase {
                 horizontalTranslation: 8,
                 verticalTranslation: -72
             ),
-            .expand
+            .collapse
         )
         XCTAssertEqual(
             TeachingCalendarLogic.monthExpansionAction(
                 horizontalTranslation: 8,
                 verticalTranslation: 72
             ),
-            .collapse
+            .expand
         )
         XCTAssertNil(TeachingCalendarLogic.monthExpansionAction(
             horizontalTranslation: 72,
@@ -631,6 +631,21 @@ final class ScheduleLogicTests: XCTestCase {
             horizontalTranslation: 12,
             verticalTranslation: 30
         ))
+    }
+
+    func testExpandedMonthEventsReserveLastRowForOverflowCount() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthEventLayout(totalCount: 2, maximumRows: 2),
+            .init(visibleEventCount: 2, hiddenEventCount: 0)
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthEventLayout(totalCount: 5, maximumRows: 2),
+            .init(visibleEventCount: 1, hiddenEventCount: 4)
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthEventLayout(totalCount: 3, maximumRows: 0),
+            .init(visibleEventCount: 0, hiddenEventCount: 3)
+        )
     }
 
     func testPlannerSlotColumnsUseCompactReadableWidths() {

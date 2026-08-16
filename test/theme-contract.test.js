@@ -76,6 +76,12 @@ test('component styles use semantic theme tokens instead of fixed colors', () =>
 test('mobile week calendar stays in one viewport and pages from the full timeline', () => {
   assert.match(appCss, /\.calendar-swipe-surface\s*\{[^}]*touch-action:\s*pan-y/s)
   assert.match(appCss, /\.time-calendar:not\(\.single-day\)\s*\{[^}]*repeat\(var\(--day-count\), minmax\(0, 1fr\)\)/s)
+  assert.match(appCss, /\.calendar-view-switch button\s*\{\s*height:\s*30px/s)
+  assert.match(appCss, /\.time-corner,\s*\.time-day-head\s*\{\s*min-height:\s*62px/s)
+  assert.match(appCss, /\.week-calendar \.time-day-head > small\s*\{\s*display:\s*none/s)
+  assert.match(appCss, /content:\s*attr\(data-mobile-day\)/)
+  assert.match(appSource, /calendar-day-tags[\s\S]*<i aria-hidden="true"/)
+  assert.match(appSource, /data-mobile-day=\{date\.getDate\(\)\}/)
   assert.match(appSource, /'single-day'\s*:\s*'week-calendar'/)
   assert.match(appSource, /addEventListener\('touchmove', updateCalendarSwipe, \{ passive: false \}\)/)
   assert.doesNotMatch(appSource, /week-calendar-scroll|calendar-week-swipe-handle/)
@@ -97,7 +103,15 @@ test('month expansion keeps gestures and an assistive action without a visible t
   assert.match(appSource, /month-expansion-accessibility-action/)
   assert.match(appSource, /month-expansion-accessibility-action[\s\S]*tabIndex=\{-1\}/)
   assert.match(appCss, /\.assistive-only\s*\{[^}]*clip-path:\s*inset\(50%\)/s)
+  assert.match(appSource, /下拉展开，上拉收起/)
+  assert.match(appCss, /\.page-content\.calendar-gesture-locked\s*\{[^}]*overflow-y:\s*hidden/s)
+  assert.match(appSource, /month-entry-overflow/)
   assert.doesNotMatch(appSource, /month-density-button/)
+})
+
+test('about this app is the final settings panel', () => {
+  assert.ok(appSource.indexOf('className="panel settings-about"') > appSource.indexOf('className="panel settings-actions"'))
+  assert.match(appSource, /<h2>关于本应用<\/h2>/)
 })
 
 test('Tauri Android chrome follows the active system theme', () => {

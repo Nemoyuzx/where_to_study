@@ -170,7 +170,33 @@ export function calendarMonthExpansion(deltaX, deltaY, threshold = 48) {
   if (Math.abs(deltaY) < threshold || Math.abs(deltaY) <= Math.abs(deltaX) * 1.2) {
     return null
   }
-  return deltaY < 0
+  return deltaY > 0
+}
+
+export function summarizeMonthEntries(entries, maxRows = 2) {
+  const rowLimit = Math.max(1, Math.trunc(maxRows))
+  const visibleCount = entries.length > rowLimit ? rowLimit - 1 : entries.length
+  return {
+    visible: entries.slice(0, visibleCount),
+    hiddenCount: entries.length - visibleCount,
+  }
+}
+
+export function expandedMonthGridMetrics(
+  availableHeight,
+  maximumRowHeight = 68,
+  minimumRowHeight = 44,
+  headerHeight = 30,
+) {
+  const usableHeight = Math.max(0, Number(availableHeight) || 0)
+  const rowHeight = Math.max(
+    minimumRowHeight,
+    Math.min(maximumRowHeight, Math.floor((usableHeight - headerHeight) / 6)),
+  )
+  return {
+    rowHeight,
+    height: headerHeight + rowHeight * 6,
+  }
 }
 
 export function startOfWeekSunday(dateString) {

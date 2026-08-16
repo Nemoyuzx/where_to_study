@@ -11,6 +11,7 @@
     <item name="page_calendar" type="id" />
     <item name="page_settings" type="id" />
     <item name="privacy_policy_button" type="id" />
+    <item name="settings_about_section" type="id" />
     <item name="privacy_policy_content" type="id" />
     <item name="privacy_github_link" type="id" />
     <item name="calendar_phone_header" type="id" />
@@ -26,6 +27,7 @@
     <item name="calendar_timeline_day_scroll" type="id" />
     <item name="calendar_month_view" type="id" />
     <item name="calendar_month_grid" type="id" />
+    <item name="calendar_swipe_surface" type="id" />
     <item name="calendar_month_entry" type="id" />
     <item name="calendar_month_selected_details" type="id" />
 </resources>

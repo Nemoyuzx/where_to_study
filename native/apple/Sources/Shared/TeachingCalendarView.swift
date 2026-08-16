@@ -28,6 +28,11 @@ enum TeachingCalendarLogic {
         case year
     }
 
+    struct MonthEventLayout: Equatable {
+        let visibleEventCount: Int
+        let hiddenEventCount: Int
+    }
+
     static func yearCourseOpacity(courseCount: Int) -> Double {
         guard courseCount > 0 else { return 0 }
         let count = Double(courseCount)
@@ -81,7 +86,22 @@ enum TeachingCalendarLogic {
         guard abs(verticalTranslation) >= 44,
               abs(verticalTranslation) >= abs(horizontalTranslation) * 1.25
         else { return nil }
-        return verticalTranslation < 0 ? .expand : .collapse
+        return verticalTranslation > 0 ? .expand : .collapse
+    }
+
+    static func monthEventLayout(totalCount: Int, maximumRows: Int) -> MonthEventLayout {
+        let total = max(totalCount, 0)
+        let rows = max(maximumRows, 0)
+        guard total > rows else {
+            return MonthEventLayout(visibleEventCount: total, hiddenEventCount: 0)
+        }
+        guard rows > 0 else {
+            return MonthEventLayout(visibleEventCount: 0, hiddenEventCount: total)
+        }
+        return MonthEventLayout(
+            visibleEventCount: rows - 1,
+            hiddenEventCount: total - rows + 1
+        )
     }
 }
 

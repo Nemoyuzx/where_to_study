@@ -34,6 +34,8 @@ class SettingsPage(
         addView(verticalPage(activity).apply {
             addView(pageTitle(activity, "设置", "个人账户与本地偏好"))
             addView(accountSurface())
+            addView(spacer(activity, 16))
+            addView(aboutSurface())
         })
     }
 
@@ -306,25 +308,6 @@ class SettingsPage(
         })
         addView(spacer(activity, 18))
         addView(TextView(activity).apply {
-            id = R.id.privacy_policy_button
-            text = "隐私说明"
-            textSize = 15f
-            gravity = Gravity.CENTER
-            setTextColor(Palette.primaryText)
-            setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
-            isClickable = true
-            isFocusable = true
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(46),
-            )
-            setOnClickListener {
-                showPrivacyPolicy()
-            }
-        })
-        addView(spacer(activity, 10))
-        addView(TextView(activity).apply {
             text = "清除本地数据"
             textSize = 15f
             gravity = Gravity.CENTER
@@ -361,6 +344,35 @@ class SettingsPage(
                         ).show()
                     }
                     .show()
+            }
+        })
+    }
+
+    private fun aboutSurface(): LinearLayout = surface(activity).apply {
+        id = R.id.settings_about_section
+        addView(sectionTitle(activity, "关于本应用"))
+        addView(TextView(activity).apply {
+            text = "Where To Study  ${BuildConfig.VERSION_NAME}"
+            textSize = 13f
+            setTextColor(Palette.muted)
+            setPadding(0, 0, 0, activity.dp(12))
+        })
+        addView(TextView(activity).apply {
+            id = R.id.privacy_policy_button
+            text = "隐私说明"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.primaryText)
+            setTypeface(typeface, Typeface.BOLD)
+            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(46),
+            )
+            setOnClickListener {
+                showPrivacyPolicy()
             }
         })
     }

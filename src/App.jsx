@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import {
@@ -12,6 +12,7 @@ import {
   Clock3,
   ExternalLink,
   Home,
+  Info,
   KeyRound,
   Loader2,
   MapPin,
@@ -47,6 +48,7 @@ import {
   formatCourseDate,
   formatShortDate,
   formatTeachingWeek,
+  expandedMonthGridMetrics,
   getCampusClassrooms,
   getWeekState,
   hasCalendarItemType,
@@ -62,6 +64,7 @@ import {
   shiftDate,
   slotsToRanges,
   startOfWeekSunday,
+  summarizeMonthEntries,
   yearCourseOpacity,
 } from './planner-domain.js'
 import './App.css'
@@ -76,6 +79,7 @@ const APP_WIDGET_MODE = typeof window === 'undefined'
   ? ''
   : new URLSearchParams(window.location.search).get('widget') || ''
 const BROWSER_PREVIEW_ENABLED = import.meta.env.DEV
+const PROJECT_URL = 'https://github.com/Nemoyuzx/where_to_study'
 const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md'
 
 function PrivacyPolicyDialog({ onClose }) {
@@ -535,13 +539,43 @@ function App() {
     const page = pageContentRef.current
     if (!page) return undefined
     page.addEventListener('touchmove', updateCalendarSwipe, { passive: false })
-    return () => page.removeEventListener('touchmove', updateCalendarSwipe)
+    return () => {
+      page.removeEventListener('touchmove', updateCalendarSwipe)
+      page.classList.remove('calendar-gesture-locked')
+    }
   }, [])
   const todayDate = localDateString(now)
 
   useEffect(() => {
     pageContentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   }, [activePage])
+
+  useLayoutEffect(() => {
+    if (activePage !== 'calendar' || calendarView !== 'month' || !monthExpanded) return undefined
+    const updateAvailableHeight = () => {
+      const page = pageContentRef.current
+      const surface = calendarAnimatedSurfaceRef.current
+      if (!page || !surface) return
+      const pageBounds = page.getBoundingClientRect()
+      const surfaceBounds = surface.getBoundingClientRect()
+      const mainBounds = surface.closest('.teaching-calendar-main')?.getBoundingClientRect()
+      const trailingSpace = Math.max(0, (mainBounds?.bottom || surfaceBounds.bottom) - surfaceBounds.bottom)
+      const pageBottomPadding = Number.parseFloat(getComputedStyle(page).paddingBottom) || 0
+      const available = Math.max(
+        320,
+        Math.min(
+          page.clientHeight - pageBottomPadding,
+          pageBounds.bottom - pageBottomPadding - surfaceBounds.top - trailingSpace,
+        ),
+      )
+      const monthMetrics = expandedMonthGridMetrics(available)
+      page.style.setProperty('--month-expanded-height', `${monthMetrics.height}px`)
+      page.style.setProperty('--month-expanded-row-height', `${monthMetrics.rowHeight}px`)
+    }
+    updateAvailableHeight()
+    window.addEventListener('resize', updateAvailableHeight)
+    return () => window.removeEventListener('resize', updateAvailableHeight)
+  }, [activePage, calendarDate, calendarMotion, calendarView, monthExpanded])
 
   useEffect(() => {
     command('get_metadata')
@@ -1031,8 +1065,21 @@ function App() {
       view: calendarView,
       monthExpanded,
       scrollTop: pageContentRef.current?.scrollTop || 0,
+      scrollLocked: false,
       blocked: Boolean(event.target.closest('input, select, textarea, a')),
     }
+  }
+
+  function lockCalendarVerticalScroll(start) {
+    if (!start || start.scrollLocked) return
+    start.scrollLocked = true
+    pageContentRef.current?.classList.add('calendar-gesture-locked')
+  }
+
+  function unlockCalendarVerticalScroll(start) {
+    if (!start?.scrollLocked) return
+    pageContentRef.current?.classList.remove('calendar-gesture-locked')
+    start.scrollLocked = false
   }
 
   function updateCalendarSwipe(event) {
@@ -1045,19 +1092,26 @@ function App() {
       if (Math.abs(deltaX) > Math.abs(deltaY) * 1.12) start.axis = 'horizontal'
       else if (Math.abs(deltaY) > Math.abs(deltaX) * 1.12) start.axis = 'vertical'
     }
-    if (start.axis === 'horizontal' && event.cancelable) event.preventDefault()
+    if (start.axis === 'horizontal') {
+      lockCalendarVerticalScroll(start)
+      if (event.cancelable) event.preventDefault()
+    }
     if (start.axis === 'vertical' && start.view === 'month') {
       const expanded = calendarMonthExpansion(deltaX, deltaY)
       const canToggle = expanded !== null
         && expanded !== start.monthExpanded
-        && (expanded || start.scrollTop <= 1)
-      if (canToggle && event.cancelable) event.preventDefault()
+        && (!expanded || start.scrollTop <= 1)
+      if (canToggle) {
+        lockCalendarVerticalScroll(start)
+        if (event.cancelable) event.preventDefault()
+      }
     }
   }
 
   function finishCalendarSwipe(event) {
     const start = calendarGestureRef.current
     calendarGestureRef.current = null
+    unlockCalendarVerticalScroll(start)
     if (!start || start.blocked || event.changedTouches.length !== 1) return
     const touch = event.changedTouches[0]
     const deltaX = touch.clientX - start.x
@@ -1066,7 +1120,7 @@ function App() {
     if (!direction && calendarView === 'month') {
       const expanded = calendarMonthExpansion(deltaX, deltaY)
       if (expanded === null || expanded === monthExpanded) return
-      if (!expanded && start.scrollTop > 1) return
+      if (expanded && start.scrollTop > 1) return
       suppressCalendarClickUntilRef.current = Date.now() + 400
       setMonthExpanded(expanded)
       return
@@ -1077,12 +1131,13 @@ function App() {
   }
 
   function cancelCalendarSwipe() {
+    unlockCalendarVerticalScroll(calendarGestureRef.current)
     calendarGestureRef.current = null
   }
 
   function handleMonthCalendarKeyDown(event) {
     if (calendarView !== 'month') return
-    const expanded = event.key === 'ArrowUp' ? true : event.key === 'ArrowDown' ? false : null
+    const expanded = event.key === 'ArrowDown' ? true : event.key === 'ArrowUp' ? false : null
     if (expanded === null || expanded === monthExpanded) return
     event.preventDefault()
     setMonthExpanded(expanded)
@@ -1483,7 +1538,7 @@ function App() {
             className={`teaching-calendar-layout ${calendarView === 'month' ? 'month-gesture-surface' : ''}`}
             role={calendarView === 'month' ? 'region' : undefined}
             tabIndex={calendarView === 'month' ? 0 : undefined}
-            aria-label={calendarView === 'month' ? '月历，上滑或按上方向键展开，下滑或按下方向键收起' : undefined}
+            aria-label={calendarView === 'month' ? '月历，下拉或按下方向键展开，上拉或按上方向键收起' : undefined}
             aria-expanded={calendarView === 'month' ? monthExpanded : undefined}
             onTouchStart={calendarView === 'month' ? beginCalendarSwipe : undefined}
             onTouchEnd={calendarView === 'month' ? finishCalendarSwipe : undefined}
@@ -1545,18 +1600,20 @@ function App() {
                           key={`head-${dateString}`}
                           type="button"
                           className={`time-day-head ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                          aria-label={`${date.getMonth() + 1}月${date.getDate()}日，${dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}`}
                           onClick={() => chooseCalendarDate(dateString)}
                         >
                           <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
-                          <strong>{date.getMonth() + 1}/{date.getDate()}</strong>
+                          <strong data-mobile-day={date.getDate()}>{date.getMonth() + 1}/{date.getDate()}</strong>
                           <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}</small>
-                          {calendarItems.length ? (
+                          {calendarItems.length || dayState.dayCourses.length ? (
                             <div className="calendar-day-tags">
                               {calendarItems.map((item) => (
                                 <em key={`${dateString}-${item.type}-${item.name}`} className={item.type}>
                                   {item.type === 'holiday' ? '休' : '班'} {item.name}
                                 </em>
                               ))}
+                              {dayState.dayCourses.length ? <i aria-hidden="true" /> : null}
                             </div>
                           ) : null}
                         </button>
@@ -1640,7 +1697,7 @@ function App() {
                     <div
                       id="teaching-month-calendar"
                       className="calendar-swipe-surface month-calendar"
-                      aria-label={`${monthExpanded ? '展开' : '收起'}的月历，上滑展开，下滑收起`}
+                      aria-label={`${monthExpanded ? '展开' : '收起'}的月历，下拉展开，上拉收起`}
                       aria-expanded={monthExpanded}
                     >
                       {CALENDAR_WEEKDAYS.map((label) => <span key={label} className="month-weekday">{label}</span>)}
@@ -1650,6 +1707,19 @@ function App() {
                         const dayState = getWeekState(courses, activeTermStartDate, dateString)
                         const calendarItems = calendarItemsFor(dateString)
                         const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length, 3)
+                        const monthEntries = [
+                          ...calendarItems.map((item) => ({
+                            key: `${dateString}-${item.type}-${item.name}`,
+                            label: `${item.type === 'holiday' ? '休' : '班'} ${item.name}`,
+                            type: item.type,
+                          })),
+                          ...dayState.dayCourses.map((course) => ({
+                            key: `${dateString}-${course.id}`,
+                            label: `${course.is_exam ? '试 ' : ''}${course.name}`,
+                            type: 'course',
+                          })),
+                        ]
+                        const monthEntrySummary = summarizeMonthEntries(monthEntries)
                         return (
                           <button
                             key={dateString}
@@ -1662,22 +1732,18 @@ function App() {
                               {Array.from({ length: compactMarkers }, (_, index) => <i key={index} />)}
                             </div>
                             <div className="month-cell-details">
-                              {calendarItems.map((item) => (
-                                <small key={`${dateString}-${item.type}-${item.name}`} className={`calendar-item ${item.type}`}>
-                                  <strong>{item.type === 'holiday' ? '休' : '班'}</strong>
-                                  <span>{item.name}</span>
+                              {monthEntrySummary.visible.map((entry) => (
+                                <small
+                                  key={entry.key}
+                                  className={`month-entry ${entry.type}`}
+                                  title={entry.label}
+                                >
+                                  {entry.label}
                                 </small>
                               ))}
-                              {dayState.dayCourses.slice(0, 3).map((course) => {
-                                const bounds = courseTimeBounds(course, slotMeta)
-                                return (
-                                  <small key={`${dateString}-${course.id}`}>
-                                    <strong>{bounds.start}-{bounds.end}</strong>
-                                    <span><CourseName course={course} /></span>
-                                  </small>
-                                )
-                              })}
-                              {dayState.dayCourses.length > 3 ? <em>+{dayState.dayCourses.length - 3}</em> : null}
+                              {monthEntrySummary.hiddenCount ? (
+                                <em className="month-entry-overflow">+{monthEntrySummary.hiddenCount}</em>
+                              ) : null}
                             </div>
                           </button>
                         )
@@ -1915,14 +1981,6 @@ function App() {
             </button>
             <button
               type="button"
-              className="settings-privacy-link"
-              onClick={() => setPrivacyPolicyOpen(true)}
-            >
-              <ShieldCheck size={16} />
-              隐私说明
-            </button>
-            <button
-              type="button"
               className="danger"
               onClick={() => setClearConfirmationOpen(true)}
               disabled={settingsSaving || !!loading}
@@ -1946,6 +2004,28 @@ function App() {
               </div>
             ) : null}
             {settingsSaved ? <span>已保存</span> : null}
+          </section>
+
+          <section className="panel settings-about">
+            <div className="panel-title">
+              <Info size={18} />
+              <h2>关于本应用</h2>
+            </div>
+            <p>Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。</p>
+            <div className="settings-about-actions">
+              <button
+                type="button"
+                className="settings-privacy-link"
+                onClick={() => setPrivacyPolicyOpen(true)}
+              >
+                <ShieldCheck size={16} />
+                隐私说明
+              </button>
+              <a href={PROJECT_URL} target="_blank" rel="noreferrer">
+                <ExternalLink size={16} />
+                GitHub 项目
+              </a>
+            </div>
           </section>
         </section>
           ) : null}

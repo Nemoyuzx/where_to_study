@@ -6,6 +6,7 @@ import {
   calendarMonthExpansion,
   calendarSwipeDirection,
   DEFAULT_SETTINGS,
+  expandedMonthGridMetrics,
   FALLBACK_SLOTS,
   fallbackHolidayItems,
   getCampusClassrooms,
@@ -18,6 +19,7 @@ import {
   settingsToPayload,
   shiftDate,
   slotsToRanges,
+  summarizeMonthEntries,
   yearCourseOpacity,
 } from '../src/planner-domain.js'
 
@@ -57,10 +59,26 @@ test('calendar swipe navigation requires an intentional horizontal gesture', () 
 })
 
 test('month expansion only follows deliberate vertical gestures', () => {
-  assert.equal(calendarMonthExpansion(8, -72), true)
-  assert.equal(calendarMonthExpansion(-10, 72), false)
+  assert.equal(calendarMonthExpansion(8, 72), true)
+  assert.equal(calendarMonthExpansion(-10, -72), false)
   assert.equal(calendarMonthExpansion(8, 32), null)
   assert.equal(calendarMonthExpansion(70, 72), null)
+})
+
+test('expanded month cells reserve the last row for a hidden-entry count', () => {
+  assert.deepEqual(summarizeMonthEntries(['a', 'b'], 2), {
+    visible: ['a', 'b'],
+    hiddenCount: 0,
+  })
+  assert.deepEqual(summarizeMonthEntries(['a', 'b', 'c', 'd'], 2), {
+    visible: ['a'],
+    hiddenCount: 3,
+  })
+})
+
+test('expanded month grid caps web rows at the native mobile height', () => {
+  assert.deepEqual(expandedMonthGridMetrics(900), { rowHeight: 68, height: 438 })
+  assert.deepEqual(expandedMonthGridMetrics(320), { rowHeight: 48, height: 318 })
 })
 
 test('teaching week calculation uses calendar days and reports busy slots', () => {
