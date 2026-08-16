@@ -226,10 +226,10 @@ fun TextView.setSelectedStyle(context: Context, selected: Boolean) {
 }
 
 fun TextView.setCompactSelectedStyle(context: Context, selected: Boolean) {
-    setTextColor(if (selected) Palette.onPrimary else Palette.text)
+    setTextColor(Palette.text)
     background = roundedBackground(
         context,
-        if (selected) Palette.primaryFill else Color.TRANSPARENT,
+        if (selected) Palette.segmentedSelection else Color.TRANSPARENT,
         radius = UiMetrics.controlRadiusDp,
     )
     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)

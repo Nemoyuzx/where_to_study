@@ -571,10 +571,12 @@ internal class TeachingCalendarPage(
                 val fixedMonth = selectedMode == Mode.MONTH
                 val body = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
+                    val horizontalPadding = if (selectedMode == Mode.YEAR) 16 else 12
+                    val topPadding = if (selectedMode == Mode.YEAR) 16 else 8
                     setPadding(
-                        activity.dp(12),
-                        activity.dp(8),
-                        activity.dp(12),
+                        activity.dp(horizontalPadding),
+                        activity.dp(topPadding),
+                        activity.dp(horizontalPadding),
                         activity.dp(if (usesBottomNavigation) 84 else 16),
                     )
                     holidayStatus()?.let { message ->
@@ -1483,13 +1485,15 @@ internal class TeachingCalendarPage(
         )
     }
 
-    private fun yearView(onDateChanged: () -> Unit): LinearLayout = surface(activity).apply {
+    private fun yearView(onDateChanged: () -> Unit): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundColor(Palette.background)
         val year = selectedDate.get(Calendar.YEAR)
-        addView(sectionTitle(activity, "$year 年课程分布"))
         addView(TextView(activity).apply {
-            text = "颜色越深表示当天课程越多；点击日期查看日程"
+            text = "颜色越深表示当天课程越多"
             textSize = 12f
             setTextColor(Palette.muted)
+            includeFontPadding = false
             setPadding(0, 0, 0, activity.dp(12))
         })
         addView(

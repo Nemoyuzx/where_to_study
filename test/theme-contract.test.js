@@ -16,6 +16,34 @@ const androidPlannerSource = readFileSync(
   ),
   'utf8',
 )
+const androidCalendarSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/TeachingCalendarPage.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const androidYearCalendarSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/YearCalendarView.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const androidSettingsIcon = readFileSync(
+  new URL(
+    '../native/android/app/src/main/res/drawable/ic_nav_settings.xml',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const androidUiSupportSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/UiSupport.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 const nativeAndroidLightTheme = readFileSync(
   new URL(
@@ -139,6 +167,28 @@ test('calendar chrome is compact and all-day events stay above the timeline', ()
   assert.match(
     appCss,
     /@media \(max-width: 720px\)[\s\S]*\.year-calendar\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
+  )
+})
+
+test('native Android year calendar follows the compact iOS mini-month layout', () => {
+  assert.match(
+    androidCalendarSource,
+    /private fun yearView\(onDateChanged: \(\) -> Unit\): LinearLayout = LinearLayout\(activity\)\.apply/,
+  )
+  assert.match(androidCalendarSource, /text = "颜色越深表示当天课程越多"/)
+  assert.doesNotMatch(androidCalendarSource, /\$year 年课程分布/)
+  assert.doesNotMatch(androidCalendarSource, /颜色越深表示当天课程越多；点击日期查看日程/)
+  assert.match(androidYearCalendarSource, /weekdayHeight = dp\(14\)/)
+  assert.match(androidYearCalendarSource, /dayCellHeight = dp\(26\)/)
+  assert.match(androidYearCalendarSource, /monthGap = dp\(16\)/)
+  assert.match(androidYearCalendarSource, /boldPaint\.textSize = sp\(17f\)/)
+  assert.match(androidYearCalendarSource, /textPaint\.textSize = sp\(8f\)/)
+  assert.match(androidYearCalendarSource, /background = Palette\.background/)
+  assert.match(androidSettingsIcon, /android:fillType="evenOdd"/)
+  assert.doesNotMatch(androidSettingsIcon, /android:strokeWidth=/)
+  assert.match(
+    androidUiSupportSource,
+    /fun TextView\.setCompactSelectedStyle[\s\S]*Palette\.segmentedSelection/,
   )
 })
 

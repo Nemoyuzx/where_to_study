@@ -55,10 +55,10 @@ class YearCalendarView(
     private val dayByKey = days.associateBy { key(it.date) }
     private val columns = YearCalendarLogic.columns(availableWidthDp)
     private val monthTitleHeight = dp(28).toFloat()
-    private val weekdayHeight = dp(20).toFloat()
-    private val dayCellHeight = dp(34).toFloat()
-    private val monthGap = dp(12).toFloat()
-    private val monthBottomGap = dp(16).toFloat()
+    private val weekdayHeight = dp(14).toFloat()
+    private val dayCellHeight = dp(26).toFloat()
+    private val monthGap = dp(16).toFloat()
+    private val monthBottomGap = dp(18).toFloat()
     private val monthHeight = monthTitleHeight + weekdayHeight + dayCellHeight * 6 + monthBottomGap
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -110,15 +110,14 @@ class YearCalendarView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val monthStride = width.toFloat() / columns
-        val monthWidth = monthStride - monthGap
+        val monthWidth = monthWidth()
         repeat(12) { monthIndex ->
             val column = monthIndex % columns
             val row = monthIndex / columns
             drawMonth(
                 canvas = canvas,
                 month = monthIndex + 1,
-                left = column * monthStride,
+                left = column * (monthWidth + monthGap),
                 top = row * monthHeight,
                 monthWidth = monthWidth,
             )
@@ -160,12 +159,12 @@ class YearCalendarView(
         top: Float,
         monthWidth: Float,
     ) {
-        boldPaint.textSize = sp(15f)
+        boldPaint.textSize = sp(17f)
         boldPaint.color = Palette.text
         boldPaint.textAlign = Paint.Align.LEFT
-        drawCenteredText(canvas, "$month 月", left + dp(3), top + monthTitleHeight / 2f, boldPaint)
+        drawCenteredText(canvas, "$month 月", left, top + monthTitleHeight / 2f, boldPaint)
 
-        textPaint.textSize = sp(9f)
+        textPaint.textSize = sp(8f)
         textPaint.color = Palette.muted
         textPaint.textAlign = Paint.Align.CENTER
         val cellWidth = monthWidth / 7f
@@ -204,59 +203,38 @@ class YearCalendarView(
             day.courseCount <= 0 -> Palette.background
             else -> blend(
                 foreground = Palette.primary,
-                background = Palette.surface,
+                background = Palette.background,
                 amount = TeachingCalendarLogic.yearCourseOpacity(day.courseCount),
             )
         }
-        canvas.drawRoundRect(rect, dp(3).toFloat(), dp(3).toFloat(), fillPaint)
+        canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), fillPaint)
 
-        borderPaint.color = if (today) Palette.nowIndicator else Palette.border
-        borderPaint.strokeWidth = dp(if (today) 2 else 1).toFloat()
-        canvas.drawRoundRect(rect, dp(3).toFloat(), dp(3).toFloat(), borderPaint)
+        borderPaint.color = if (today) Palette.primary else Palette.border
+        borderPaint.strokeWidth = resources.displayMetrics.density * if (today) 2f else 0.5f
+        canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), borderPaint)
 
-        val holiday = day.holidays.firstOrNull()
         textPaint.textAlign = Paint.Align.CENTER
-        textPaint.color = when {
-            selected -> Palette.onPrimary
-            holiday?.type == "holiday" -> Palette.holiday
-            holiday?.type == "workday" -> Palette.primaryText
-            else -> Palette.text
-        }
-        if (holiday == null) {
-            textPaint.textSize = sp(9f)
-            drawCenteredText(canvas, day.date.get(Calendar.DAY_OF_MONTH).toString(), rect.centerX(), rect.centerY(), textPaint)
-            return
-        }
-
-        textPaint.textSize = sp(9f)
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textPaint.color = if (selected) Palette.onPrimary else Palette.text
+        textPaint.textSize = sp(8f)
+        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         drawCenteredText(
             canvas,
             day.date.get(Calendar.DAY_OF_MONTH).toString(),
             rect.centerX(),
-            rect.centerY() - dp(6),
+            rect.centerY(),
             textPaint,
         )
-        textPaint.textSize = sp(8f)
-        drawCenteredText(
-            canvas,
-            if (holiday.type == "holiday") "休" else "班",
-            rect.centerX(),
-            rect.centerY() + dp(7),
-            textPaint,
-        )
-        textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
     }
 
     private fun dateAt(x: Float, y: Float): Calendar? {
         if (x !in 0f..width.toFloat() || y !in 0f..height.toFloat()) return null
-        val monthStride = width.toFloat() / columns
+        val monthWidth = monthWidth()
+        val monthStride = monthWidth + monthGap
         val monthColumn = (x / monthStride).toInt().coerceAtMost(columns - 1)
         val monthRow = (y / monthHeight).toInt()
         val monthIndex = monthRow * columns + monthColumn
         if (monthIndex !in 0..11) return null
 
-        val monthWidth = monthStride - monthGap
         val localX = x - monthColumn * monthStride
         if (localX < 0f || localX >= monthWidth) return null
         val localY = y - monthRow * monthHeight - monthTitleHeight - weekdayHeight
@@ -266,6 +244,9 @@ class YearCalendarView(
         val day = YearCalendarLogic.dayNumber(year, monthIndex + 1, row, column) ?: return null
         return calendar(monthIndex + 1, day)
     }
+
+    private fun monthWidth(): Float =
+        (width.toFloat() - monthGap * (columns - 1)) / columns
 
     private fun calendar(month: Int, day: Int): Calendar = Calendar.getInstance(shanghai).apply {
         set(year, month - 1, day, 12, 0, 0)
