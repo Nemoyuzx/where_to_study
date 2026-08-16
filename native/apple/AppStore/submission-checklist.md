@@ -31,7 +31,7 @@
 ./scripts/native-apple-app-store.sh preflight all
 
 export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
-export APPLE_BUILD_NUMBER=31
+export APPLE_BUILD_NUMBER=34
 
 # 本机需安装 Apple Distribution、Mac Installer Distribution 证书，以及以下
 # 三个默认名称的 App Store 描述文件。名称不同时可用对应环境变量覆盖：
@@ -71,15 +71,16 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - macOS 检查沙盒网络、Keychain、日历、菜单栏、关闭窗口驻留、Widget App Group 和深浅色。
 - 在正式归档中确认没有 `get-task-allow`，签名不是 ad-hoc，隐私清单与许可证已内嵌。
 - 每次上传使用递增的整数构建号；稳定版本号使用 `X.Y.Z`，不添加 `alpha.1234` 一类后缀。
+- 每个完成版本必须同步 GitHub Release，并将同一份已验证源码的 iOS 与 macOS 构建上传 TestFlight；发布记录写明实际构建号和处理状态。
 
 ## 当前本机状态（2026-08-15）
 
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Distribution、Mac Installer Distribution 证书及 iOS 主应用、macOS 主应用、macOS Widget 三个 App Store 描述文件；证书私钥和团队标识不写入仓库。
-- `preflight all`、macOS/iOS `APP_STORE_BUILD` Release 编译、Apple 逻辑测试、iPhone/iPad 专项 UI 验证和 Universal macOS `0.1.4 (33)` 正式签名归档均已通过；两个主应用归档均核对为 `com.nemoyu.wheretostudy.native.macos`，应用图标统一为 Windows/Tauri 当前使用的绿色日历课桌图标。
-- iOS 与 macOS `0.1.4 (33)` 均已收到 App Store Connect 的 `Upload succeeded`；当前等待 Apple 处理。TestFlight 和正式提交只选择 build 33。
-- Build 25 的旧审核截图清单保留作历史校验，不再用于提交；build 33 应按 `screenshot-plan.md` 重新生成 iPhone、iPad 与 macOS 商店截图并更新 `screenshot-manifest.md`。
+- `preflight all`、macOS/iOS `APP_STORE_BUILD` Release 编译、Apple 逻辑测试、iPhone/iPad 专项 UI 验证和 Universal macOS `0.1.4 (34)` 正式签名归档均已通过；两个主应用归档均核对为 `com.nemoyu.wheretostudy.native.macos`，应用图标统一为 Windows/Tauri 当前使用的绿色日历课桌图标。
+- iOS 与 macOS `0.1.4 (34)` 均已收到 App Store Connect 的 `Upload succeeded`；当前等待 Apple 处理。TestFlight 和正式提交只选择 build 34。
+- Build 25 的旧审核截图清单保留作历史校验，不再用于提交；build 34 应按 `screenshot-plan.md` 重新生成 iPhone、iPad 与 macOS 商店截图并更新 `screenshot-manifest.md`。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
 
 ## 正式提交前的账号持有人确认
@@ -89,8 +90,8 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 核实北邮服务对账号、密码、课程和教室请求的实际保留行为，再决定 App Privacy 是否可以回答“不收集数据”。
 - 填写真实版权主体、App Review 联系人姓名/电话/邮箱，并确认支持 URL 提供用户可用的联系方式。
 - 完成年龄分级、欧盟 DSA 身份、价格、税务类别、销售地区和中国大陆 ICP 状态；没有有效 ICP 时不要勾选中国大陆销售地区。
-- App Store Connect 处理完成后，将 build 33 加入内部 TestFlight 群组并在真机验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
-- 重新生成并上传 build 33 的商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择 build 33 提交审核。
+- App Store Connect 处理完成后，将 build 34 加入内部 TestFlight 群组并在真机验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
+- 重新生成并上传 build 34 的商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择 build 34 提交审核。
 
 ## Apple 官方核对入口
 

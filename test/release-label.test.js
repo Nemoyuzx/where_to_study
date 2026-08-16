@@ -52,7 +52,7 @@ test("all tracked client projects use the stable 0.1.4 release version", () => {
   assert.match(nativeAndroid, /versionName = "0\.1\.4"/);
   assert.match(nativeAndroid, /versionCode = 18/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.4"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "33"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "34"/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.4/);
   assert.match(tauriApple, /CFBundleVersion: "31"/);
   assert.match(tauriAppleInfo, /<string>0\.1\.4<\/string>/);

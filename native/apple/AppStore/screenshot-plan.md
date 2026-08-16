@@ -45,9 +45,9 @@
 - 不添加设备外框、价格、排名、竞品名称或未经授权的学校标志。
 - 用 `sips -g pixelWidth -g pixelHeight -g hasAlpha <file>` 复核尺寸和 `hasAlpha: no`。
 
-## Build 33 待提交素材
+## Build 34 待提交素材
 
-当前 App Store Connect 构建为 `0.1.4 (33)`。正式提交前必须按本方案重新生成并检查 iPhone、iPad 与 macOS 截图，随后用 Build 33 文件替换 `screenshot-manifest.md` 中的历史清单。不得复用 Build 25 截图作为 Build 33 的商店素材。
+当前 App Store Connect 构建为 `0.1.4 (34)`。正式提交前必须按本方案重新生成并检查 iPhone、iPad 与 macOS 截图，随后用 Build 34 文件替换 `screenshot-manifest.md` 中的历史清单。不得复用 Build 25 截图作为 Build 34 的商店素材。
 
 ## 历史 Build 25 素材（不可用于当前提交）
 
