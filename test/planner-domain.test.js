@@ -141,6 +141,28 @@ test('saved settings never hydrate a password into web state', () => {
   assert.equal(accountHasSavedPassword(' student ', { account: 'student', hasSavedPassword: true }), true)
 })
 
+test('minimum seat settings remain finite non-negative integers', () => {
+  for (const value of [
+    -1,
+    Number.NEGATIVE_INFINITY,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_VALUE,
+    'invalid',
+  ]) {
+    assert.equal(savedSettingsToState({ default_min_seats: value }).defaultMinSeats, 0)
+    assert.equal(
+      settingsToPayload({ ...DEFAULT_SETTINGS, defaultMinSeats: value }).default_min_seats,
+      0,
+    )
+  }
+
+  assert.equal(savedSettingsToState({ default_min_seats: 12.9 }).defaultMinSeats, 12)
+  assert.equal(
+    settingsToPayload({ ...DEFAULT_SETTINGS, defaultMinSeats: 24.8 }).default_min_seats,
+    24,
+  )
+})
+
 test('a classroom query can override campus without changing the saved default', () => {
   const settings = { ...DEFAULT_SETTINGS, campusId: '01' }
   const queryPayload = requestBody(settings, { campus_id: '04', target_date: '2026-06-01' })
