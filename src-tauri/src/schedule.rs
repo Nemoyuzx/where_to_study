@@ -154,7 +154,20 @@ pub fn parse_sjd_slots(course: &Value) -> Option<(usize, usize)> {
     Some((start_slot, end_slot))
 }
 
+const MAX_SJD_COURSE_NESTING_DEPTH: usize = 64;
+
 fn collect_sjd_course_items<'a>(value: &'a Value, output: &mut Vec<&'a Value>) {
+    collect_sjd_course_items_with_depth(value, output, 0)
+}
+
+fn collect_sjd_course_items_with_depth<'a>(
+    value: &'a Value,
+    output: &mut Vec<&'a Value>,
+    depth: usize,
+) {
+    if depth > MAX_SJD_COURSE_NESTING_DEPTH {
+        return;
+    }
     match value {
         Value::Object(map) => {
             if map.contains_key("courseName") || map.contains_key("jx0408id") {
@@ -162,12 +175,12 @@ fn collect_sjd_course_items<'a>(value: &'a Value, output: &mut Vec<&'a Value>) {
                 return;
             }
             for child in map.values() {
-                collect_sjd_course_items(child, output);
+                collect_sjd_course_items_with_depth(child, output, depth + 1);
             }
         }
         Value::Array(items) => {
             for child in items {
-                collect_sjd_course_items(child, output);
+                collect_sjd_course_items_with_depth(child, output, depth + 1);
             }
         }
         _ => {}
@@ -532,6 +545,25 @@ mod tests {
 
         assert_eq!(courses[0].exam_week_numbers, vec![18, 19]);
         assert!(courses[1].exam_week_numbers.is_empty());
+    }
+
+    #[test]
+    fn course_collector_stops_at_the_nesting_depth_limit() {
+        let mut nested = serde_json::json!({ "courseName": "深层课程", "jx0408id": "deep" });
+        for _ in 0..100 {
+            nested = serde_json::json!([nested]);
+        }
+        let mut found = Vec::new();
+        collect_sjd_course_items(&nested, &mut found);
+        assert!(found.is_empty(), "courses beyond the depth limit must be ignored");
+
+        let mut shallow = serde_json::json!({ "courseName": "浅层课程" });
+        for _ in 0..8 {
+            shallow = serde_json::json!({ "wrapper": shallow });
+        }
+        let mut found = Vec::new();
+        collect_sjd_course_items(&shallow, &mut found);
+        assert_eq!(found.len(), 1, "courses within the depth limit must be collected");
     }
 
     #[test]
