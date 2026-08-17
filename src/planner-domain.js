@@ -268,6 +268,13 @@ export function courseTimeBounds(course, slotMeta) {
   }
 }
 
+function normalizeMinSeats(value) {
+  const seats = Number(value)
+  if (!Number.isFinite(seats)) return 0
+  const integerSeats = Math.trunc(seats)
+  return Number.isSafeInteger(integerSeats) ? Math.max(0, integerSeats) : 0
+}
+
 export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
   return {
     account: data.account ?? fallback.account ?? '',
@@ -276,7 +283,7 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
     termId: data.term_id || fallback.termId || DEFAULT_SETTINGS.termId,
     termStartDate: data.term_start_date || fallback.termStartDate || DEFAULT_SETTINGS.termStartDate,
     campusId: data.campus_id || fallback.campusId || DEFAULT_SETTINGS.campusId,
-    defaultMinSeats: Number(data.default_min_seats ?? fallback.defaultMinSeats ?? 0) || 0,
+    defaultMinSeats: normalizeMinSeats(data.default_min_seats ?? fallback.defaultMinSeats ?? 0),
     dailyCourseNotificationsEnabled: Boolean(
       data.daily_course_notifications_enabled
       ?? fallback.dailyCourseNotificationsEnabled
@@ -304,7 +311,7 @@ export function settingsToPayload(settings) {
     term_id: settings.termId,
     term_start_date: settings.termStartDate,
     campus_id: settings.campusId,
-    default_min_seats: Number(settings.defaultMinSeats) || 0,
+    default_min_seats: normalizeMinSeats(settings.defaultMinSeats),
     daily_course_notifications_enabled: Boolean(settings.dailyCourseNotificationsEnabled),
   }
 }
