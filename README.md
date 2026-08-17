@@ -1,16 +1,17 @@
 # Where To Study
 
 北邮空教室与个人课表联动查询应用。Windows 客户端使用 Tauri 2、React 和 Rust，
-macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android Views；macOS
-同时保留 Tauri Apple Silicon 兼容构建。
+macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android Views，
+鸿蒙（HarmonyOS NEXT）客户端使用 ArkTS 与 ArkUI；macOS 同时保留 Tauri Apple
+Silicon 兼容构建。
 
 - 只通过移动教务 HTTPS 接口获取并解析北邮个人课表；请求失败时不会静默切换数据源。
 - 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
 - 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
 - 空教室查询支持按个人空闲节次和教学楼筛选；Tauri 桌面端另支持最少座位数筛选。
 - macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知；原生 macOS 提供 WidgetKit 系统小组件，Tauri 桌面端保留应用内课程浮窗。
-- SwiftUI 与 Android 原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
-- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit 或 Android Calendar Provider 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
+- SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
+- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
@@ -23,6 +24,7 @@ macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android V
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | iOS | SwiftUI 原生 | 正式签名的 build 37 已上传 App Store Connect；公开 GitHub Release 暂仍为无签名开发者 archive |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 开发中（feature/harmonyos 分支）：空教室、教学日历、设置、每日课程摘要、系统日历导入与服务卡片已移植，构建与 41 个契约单元测试已通过 |
 
 ## 下载
 
@@ -96,7 +98,13 @@ npm run tauri:build:windows
 ./scripts/native-android-build.sh
 ```
 
-`native/apple` 与 `native/android` 是当前 macOS、iOS 和 Android 客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。
+验证鸿蒙（HarmonyOS NEXT）ArkTS 工程（需要 DevEco Studio 6.1.1+ 与已连接的设备/模拟器）：
+
+```bash
+./scripts/native-harmony-build.sh
+```
+
+`native/apple`、`native/android` 与 `native/harmony` 是当前 macOS、iOS、Android 和鸿蒙客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。鸿蒙客户端当前在 `feature/harmonyos` 分支开发，尚未合入发布流程。
 
 Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri 或 WebView。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
