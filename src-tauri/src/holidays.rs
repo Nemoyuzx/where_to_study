@@ -25,6 +25,8 @@ const MAX_HOLIDAY_FETCHED_AT_LENGTH: usize = 64;
 const MAX_HOLIDAY_RECORDS: usize = 128;
 const MAX_HOLIDAY_NAME_LENGTH: usize = 80;
 const MAX_EXPANDED_HOLIDAY_ITEMS: usize = 512;
+const MAX_HOLIDAY_REDIRECTS: usize = 10;
+const HOLIDAY_HOST: &str = "unpkg.com";
 
 #[derive(Debug, Deserialize)]
 struct SourceHolidaysResponse {
@@ -403,11 +405,37 @@ pub(super) fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
     Ok(response)
 }
 
+fn validate_holiday_redirect_target(url: &reqwest::Url, previous_request_count: usize) -> ServiceResult<()> {
+    if previous_request_count > MAX_HOLIDAY_REDIRECTS {
+        return Err(ServiceError::new("节假日数据源重定向次数过多。"));
+    }
+    if url.scheme() != "https" {
+        return Err(ServiceError::new("节假日数据源不得降级为明文传输。"));
+    }
+    if url.host_str() != Some(HOLIDAY_HOST) {
+        return Err(ServiceError::new("节假日数据源重定向目标不受信任。"));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(ServiceError::new("节假日数据源重定向不得携带用户信息。"));
+    }
+    Ok(())
+}
+
+fn holiday_redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        match validate_holiday_redirect_target(attempt.url(), attempt.previous().len()) {
+            Ok(()) => attempt.follow(),
+            Err(message) => attempt.error(message),
+        }
+    })
+}
+
 pub(super) async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
     let url = format!("{HOLIDAY_DATA_SOURCE}/{year}.json");
     let client = reqwest::Client::builder()
         .connect_timeout(StdDuration::from_secs(15))
         .timeout(StdDuration::from_secs(20))
+        .redirect(holiday_redirect_policy())
         .build()
         .map_err(|error| ServiceError::new(format!("无法创建节假日请求：{error}")))?;
     let mut response = client
@@ -642,6 +670,32 @@ mod tests {
             "https://unpkg.com/holiday-calendar@1.3.3/data/CN"
         );
         assert_eq!(HOLIDAY_USER_AGENT, "WhereToStudyNative/0.1.4");
+    }
+
+    #[test]
+    fn holiday_redirects_allow_same_host_https_and_reject_downgrades() {
+        for target in [
+            "https://unpkg.com/holiday-calendar@1.3.3/data/CN/2026.json",
+            "https://unpkg.com:443/other",
+        ] {
+            assert!(
+                validate_holiday_redirect_target(&reqwest::Url::parse(target).unwrap(), 1).is_ok()
+            );
+        }
+        for target in [
+            "http://unpkg.com/holiday-calendar@1.3.3/data/CN/2026.json",
+            "https://evil.example.com/2026.json",
+            "https://user:password@unpkg.com/2026.json",
+        ] {
+            assert!(
+                validate_holiday_redirect_target(&reqwest::Url::parse(target).unwrap(), 1).is_err()
+            );
+        }
+        assert!(validate_holiday_redirect_target(
+            &reqwest::Url::parse("https://unpkg.com/loop").unwrap(),
+            MAX_HOLIDAY_REDIRECTS + 1,
+        )
+        .is_err());
     }
 
     #[test]
