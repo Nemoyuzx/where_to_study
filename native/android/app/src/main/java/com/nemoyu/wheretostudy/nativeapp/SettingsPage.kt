@@ -36,9 +36,9 @@ class SettingsPage(
         setBackgroundColor(Palette.background)
         addView(verticalPage(activity).apply {
             if (isCompact) {
-                setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(88))
+                setPadding(activity.dp(20), activity.dp(16), activity.dp(20), activity.dp(88))
                 if (!usesBottomNavigation) {
-                    setPadding(activity.dp(16), activity.dp(14), activity.dp(16), activity.dp(28))
+                    setPadding(activity.dp(20), activity.dp(16), activity.dp(20), activity.dp(28))
                 }
             }
             addView(pageTitle(
@@ -163,7 +163,7 @@ class SettingsPage(
                 activity,
                 Palette.surface,
                 Palette.border,
-                radius = UiMetrics.controlRadiusDp,
+                radius = 6,
             )
             setPadding(activity.dp(12), 0, activity.dp(12), 0)
             layoutParams = LinearLayout.LayoutParams(
@@ -249,7 +249,7 @@ class SettingsPage(
             background = roundedBackground(
                 activity,
                 Palette.primaryFill,
-                radius = UiMetrics.controlRadiusDp,
+                radius = 6,
             )
             isClickable = true
             isFocusable = true
@@ -281,7 +281,7 @@ class SettingsPage(
                 activity,
                 Palette.surface,
                 Palette.primary,
-                radius = UiMetrics.controlRadiusDp,
+                radius = 6,
             )
             isClickable = true
             isFocusable = true
@@ -385,7 +385,7 @@ class SettingsPage(
                 activity,
                 Palette.dangerSurface,
                 Palette.dangerBorder,
-                radius = UiMetrics.controlRadiusDp,
+                radius = 6,
             )
             isClickable = true
             isFocusable = true
@@ -442,7 +442,7 @@ class SettingsPage(
                 activity,
                 Palette.surface,
                 Palette.border,
-                radius = UiMetrics.controlRadiusDp,
+                radius = 6,
             )
             isClickable = true
             isFocusable = true
@@ -476,7 +476,7 @@ class SettingsPage(
             activity,
             Palette.surface,
             Palette.border,
-            radius = UiMetrics.controlRadiusDp,
+            radius = 6,
         )
         setPadding(activity.dp(13), 0, activity.dp(13), 0)
         layoutParams = LinearLayout.LayoutParams(
@@ -496,7 +496,7 @@ class SettingsPage(
                 activity,
                 Palette.surface,
                 Palette.border,
-                radius = UiMetrics.controlRadiusDp,
+                radius = 6,
             )
             isClickable = true
             isFocusable = true
@@ -509,9 +509,7 @@ class SettingsPage(
         }
 
     private fun LinearLayout.applyCompactSurfacePadding() {
-        if (!isCompact) return
-        val padding = activity.dp(14)
-        setPadding(padding, padding, padding, padding)
+        // Keep the shared 16dp surface inset on every width, matching SwiftUI Surface.
     }
 
     private fun showPrivacyPolicy() {
@@ -579,7 +577,7 @@ class SettingsPage(
                     activity,
                     Palette.surface,
                     Palette.border,
-                    radius = UiMetrics.controlRadiusDp,
+                    radius = 6,
                 )
                 isClickable = true
                 isFocusable = true

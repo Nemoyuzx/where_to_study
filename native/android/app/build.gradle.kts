@@ -28,8 +28,8 @@ android {
         applicationId = "com.nemoyu.wheretostudy.nativeapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.1.4"
+        versionCode = 19
+        versionName = "0.1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["disableAnalytics"] = "true"

@@ -14,6 +14,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -101,7 +102,7 @@ object TeachingCalendarLogic {
     const val phoneModeSwitchHeightDp = 38
     const val phoneModeTabHeightDp = 32
     const val phoneNavigationHeightDp = 36
-    const val phoneDateStripHeightDp = 50
+    const val phoneDateStripHeightDp = 56
     const val compactCalendarBreakpointDp = 1200
 
     fun yearCourseOpacity(courseCount: Int): Float {
@@ -153,7 +154,7 @@ object TeachingCalendarLogic {
         null -> false
     }
 
-    fun monthCellHeightDp(expanded: Boolean): Int = if (expanded) 68 else 46
+    fun monthCellHeightDp(expanded: Boolean): Int = if (expanded) 82 else 46
 
     fun monthExpansionProgress(
         deltaYDp: Float,
@@ -443,6 +444,11 @@ internal class TeachingCalendarPage(
 
         fun updateMonthExpansion(expanded: Boolean) {
             val monthView = content.findViewById<ViewGroup?>(R.id.calendar_month_view) ?: return
+            val stateChanged = expanded != monthExpanded
+            if (expanded == monthExpanded &&
+                abs(monthExpansionProgress - if (expanded) 1f else 0f) <= 0.001f
+            ) return
+            if (stateChanged) performCalendarHaptic()
             animateMonthExpansion(monthView, expanded) {
                 monthExpanded = expanded
                 content.findViewById<CalendarSwipeContainer?>(R.id.calendar_swipe_surface)
@@ -557,7 +563,7 @@ internal class TeachingCalendarPage(
         val tabs = mutableMapOf<Mode, TextView>()
         val periodLabel = TextView(activity).apply {
             id = R.id.calendar_period_label
-            textSize = 18f
+            textSize = 22f
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setTextColor(Palette.text)
             setTypeface(typeface, Typeface.BOLD)
@@ -576,6 +582,8 @@ internal class TeachingCalendarPage(
 
         fun updateMonthExpansion(expanded: Boolean) {
             val monthView = content.findViewById<ViewGroup?>(R.id.calendar_month_view) ?: return
+            val stateChanged = expanded != monthExpanded
+            if (stateChanged) performCalendarHaptic()
             animateMonthExpansion(monthView, expanded) {
                 monthExpanded = expanded
                 content.monthExpanded = expanded
@@ -662,6 +670,7 @@ internal class TeachingCalendarPage(
 
         content.onPageSwipe = { direction ->
             if (selectedMode != Mode.YEAR) {
+                performCalendarHaptic()
                 stepDate(direction)
                 pendingPageDirection = direction
                 render()
@@ -680,15 +689,18 @@ internal class TeachingCalendarPage(
             ))
             periodLabel.setOnClickListener { showDatePicker(::render) }
             addView(phoneNavigationButton("今天", 52) {
+                performCalendarHaptic()
                 selectedDate.timeInMillis = Calendar.getInstance(shanghai).timeInMillis
                 render()
             })
             addView(phoneNavigationButton("‹", 34) {
+                performCalendarHaptic()
                 stepDate(-1)
                 pendingPageDirection = -1
                 render()
             })
             addView(phoneNavigationButton("›", 34) {
+                performCalendarHaptic()
                 stepDate(1)
                 pendingPageDirection = 1
                 render()
@@ -702,6 +714,8 @@ internal class TeachingCalendarPage(
             background = roundedBackground(activity, Palette.surfaceVariant, radius = 10)
             Mode.entries.forEach { mode ->
                 val tab = fixedTab(activity, mode.label) {
+                    if (selectedMode == mode) return@fixedTab
+                    performCalendarHaptic()
                     selectedMode = mode
                     render()
                 }.apply {
@@ -847,13 +861,16 @@ internal class TeachingCalendarPage(
             }
             val callback: ((Calendar) -> Unit)? = if (selectedMode == Mode.WEEK) {
                 { day ->
+                    if (!sameDay(selectedDate, day)) performCalendarHaptic()
                     selectedDate.timeInMillis = day.timeInMillis
                     onDateChanged()
                 }
             } else {
                 null
             }
-            addView(allDayStrip(timelineDays, compact = true, onDaySelected = callback))
+            if (timelineDays.any { it.holidays.isNotEmpty() }) {
+                addView(allDayStrip(timelineDays, compact = true, onDaySelected = callback))
+            }
             addView(ScrollView(activity).apply {
                 id = R.id.calendar_timeline_scroll
                 isFillViewport = false
@@ -981,6 +998,7 @@ internal class TeachingCalendarPage(
         DatePickerDialog(
             activity,
             { _, year, month, day ->
+                performCalendarHaptic()
                 selectedDate.set(year, month, day, 12, 0, 0)
                 selectedDate.set(Calendar.MILLISECOND, 0)
                 onChanged()
@@ -993,7 +1011,7 @@ internal class TeachingCalendarPage(
 
     private fun periodTitle(): String {
         val date = when (selectedMode) {
-            Mode.DAY -> SimpleDateFormat("M月d日", Locale.CHINA).apply {
+            Mode.DAY -> SimpleDateFormat("yyyy年M月d日", Locale.CHINA).apply {
                 timeZone = shanghai
             }.format(selectedDate.time)
             Mode.WEEK, Mode.MONTH -> SimpleDateFormat("yyyy年M月", Locale.CHINA).apply {
@@ -1067,7 +1085,7 @@ internal class TeachingCalendarPage(
                             isToday -> Palette.primary
                             else -> Color.TRANSPARENT
                         },
-                        radius = 18,
+                        radius = 10,
                     ).apply {
                         if (isToday && !selected) setStroke(activity.dp(2), Palette.primary)
                     }
@@ -1077,6 +1095,7 @@ internal class TeachingCalendarPage(
                         timeZone = shanghai
                     }.format(day.time)
                     setOnClickListener {
+                        if (!sameDay(selectedDate, day)) performCalendarHaptic()
                         selectedDate.timeInMillis = day.timeInMillis
                         onDateChanged()
                     }
@@ -1118,7 +1137,7 @@ internal class TeachingCalendarPage(
     ): LinearLayout = LinearLayout(activity).apply {
         id = R.id.calendar_timeline
         orientation = LinearLayout.VERTICAL
-        background = roundedBackground(activity, Palette.surface, Palette.border, radius = 8)
+        setBackgroundColor(Palette.surface)
         addView(
             CalendarTimelineView(
                 context = activity,
@@ -1220,7 +1239,9 @@ internal class TeachingCalendarPage(
     private fun dayView(): LinearLayout = surface(activity).apply {
         addView(sectionTitle(activity, "当日时间轴"))
         val days = listOf(timelineDay(selectedDate))
-        addView(allDayStrip(days, compact = false, onDaySelected = null))
+        if (days.any { it.holidays.isNotEmpty() }) {
+            addView(allDayStrip(days, compact = false, onDaySelected = null))
+        }
         val timeline = CalendarTimelineView(
             activity,
             days,
@@ -1240,7 +1261,9 @@ internal class TeachingCalendarPage(
             selectedDate.timeInMillis = day.timeInMillis
             onDateChanged()
         }
-        addView(allDayStrip(timelineDays, compact = false, onDaySelected = selectDay))
+        if (timelineDays.any { it.holidays.isNotEmpty() }) {
+            addView(allDayStrip(timelineDays, compact = false, onDaySelected = selectDay))
+        }
         addView(
             CalendarTimelineView(
                 context = activity,
@@ -1266,21 +1289,9 @@ internal class TeachingCalendarPage(
             setPadding(activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(8))
         }
         val monthTitle = SimpleDateFormat("yyyy年M月", Locale.CHINA).apply { timeZone = shanghai }
-        addView(if (compactMonth) {
-            TextView(activity).apply {
-                text = monthTitle.format(selectedDate.time)
-                textSize = 17f
-                setTextColor(Palette.text)
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.CENTER_VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    activity.dp(24),
-                )
-            }
-        } else {
-            sectionTitle(activity, monthTitle.format(selectedDate.time))
-        })
+        if (!compactMonth) {
+            addView(sectionTitle(activity, monthTitle.format(selectedDate.time)))
+        }
         addView(weekdayHeader())
         val grid = LinearLayout(activity).apply {
             id = R.id.calendar_month_grid
@@ -1329,6 +1340,11 @@ internal class TeachingCalendarPage(
     private fun weekdayHeader(): LinearLayout = LinearLayout(activity).apply {
         id = R.id.calendar_month_weekday_header
         orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            activity.dp(26),
+        ).apply { bottomMargin = activity.dp(8) }
         listOf("一", "二", "三", "四", "五", "六", "日").forEach { label ->
             addView(TextView(activity).apply {
                 text = label
@@ -1336,7 +1352,7 @@ internal class TeachingCalendarPage(
                 gravity = Gravity.CENTER
                 setTextColor(Palette.muted)
                 setTypeface(typeface, Typeface.BOLD)
-                layoutParams = LinearLayout.LayoutParams(0, activity.dp(28), 1f)
+                layoutParams = LinearLayout.LayoutParams(0, activity.dp(18), 1f)
             })
         }
     }
@@ -1368,12 +1384,13 @@ internal class TeachingCalendarPage(
                 courses.forEach { add("${it.name} ${it.timeRange} ${it.room} ${it.teacher}") }
             }.joinToString("，")
             setOnClickListener {
+                if (!sameDay(selectedDate, day)) performCalendarHaptic()
                 selectedDate.timeInMillis = day.timeInMillis
                 onDateChanged()
             }
             addView(TextView(activity).apply {
                 id = R.id.calendar_month_day_label
-                text = if (today) "今天 ${day.get(Calendar.DAY_OF_MONTH)}" else day.get(Calendar.DAY_OF_MONTH).toString()
+                text = day.get(Calendar.DAY_OF_MONTH).toString()
                 gravity = Gravity.CENTER
                 maxLines = 1
                 setTypeface(typeface, if (selected || today) Typeface.BOLD else Typeface.NORMAL)
@@ -1444,7 +1461,7 @@ internal class TeachingCalendarPage(
             activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 2, resolved)),
         )
         cell.findViewById<TextView>(R.id.calendar_month_day_label).apply {
-            textSize = 13f - resolved
+            textSize = 15f
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(TeachingCalendarLogic.interpolateMonthMetric(24, 22, resolved)),
@@ -1556,6 +1573,7 @@ internal class TeachingCalendarPage(
             if (selected) Palette.surface else Palette.surfaceVariant,
             Palette.border,
             radius = 4,
+            borderWidthDp = 0.75f,
         )
     }
 
@@ -1577,6 +1595,7 @@ internal class TeachingCalendarPage(
                 days = yearCalendarDays(year),
                 availableWidthDp = availableWidthDp,
                 onDateSelected = { anchor, day, tapX, tapY ->
+                    performCalendarHaptic()
                     showDayPopover(anchor, day, tapX, tapY, onDateChanged)
                 },
             ),
@@ -1684,6 +1703,7 @@ internal class TeachingCalendarPage(
                     orientation = LinearLayout.HORIZONTAL
                     listOf(Mode.DAY, Mode.WEEK, Mode.MONTH).forEach { mode ->
                         addView(fixedTab(activity, mode.label) {
+                            performCalendarHaptic()
                             selectedDate.timeInMillis = day.timeInMillis
                             selectedMode = mode
                             dismissYearPopover()
@@ -1829,12 +1849,12 @@ internal class TeachingCalendarPage(
             activity,
             fill,
             when {
-                today -> Palette.nowIndicator
+                today && !selected -> Palette.nowIndicator
                 else -> Color.TRANSPARENT
             },
             radius = 9,
         ).apply {
-            if (today) setStroke(activity.dp(2), Palette.nowIndicator)
+            if (today && !selected) setStroke(activity.dp(2), Palette.nowIndicator)
         }
     }
 
@@ -1894,6 +1914,11 @@ internal class TeachingCalendarPage(
             Mode.MONTH -> selectedDate.add(Calendar.MONTH, direction)
             Mode.YEAR -> selectedDate.add(Calendar.YEAR, direction)
         }
+    }
+
+    private fun performCalendarHaptic() {
+        if (availableWidthDp >= TeachingCalendarLogic.compactCalendarBreakpointDp) return
+        activity.window.decorView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
     }
 
     private fun swipeContainer(
