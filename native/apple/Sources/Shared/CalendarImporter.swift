@@ -141,13 +141,16 @@ enum CalendarImportLogic {
         existingEvents: [CalendarExistingEvent],
         destinationCalendarIdentifier: String
     ) -> CalendarSyncPlan {
-        let ownedEvents = existingEvents.filter { event in
-            event.marker?.hasPrefix(markerPrefix) ?? false
+        // Only in-scope owned events take part in matching or duplicate
+        // cleanup: copies the user moved or duplicated outside the import
+        // window are their deliberate edits and must never be reverted or
+        // deleted by a sync.
+        let scopedOwnedEvents = existingEvents.filter { event in
+            (event.marker?.hasPrefix(markerPrefix) ?? false) && scope.contains($0.startDate)
         }
-        let scopedOwnedEvents = ownedEvents.filter { scope.contains($0.startDate) }
         let desiredMarkers = Set(drafts.map(\.marker))
         var eventsByMarker = [String: [CalendarExistingEvent]]()
-        for event in ownedEvents {
+        for event in scopedOwnedEvents {
             guard let marker = event.marker else { continue }
             eventsByMarker[marker, default: []].append(event)
         }
