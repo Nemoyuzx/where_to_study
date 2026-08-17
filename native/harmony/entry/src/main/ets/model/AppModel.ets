@@ -23,6 +23,7 @@ import {
 } from '../notify/DailyCourseNotifications';
 import { AppRuntimeMode } from './AppRuntimeMode';
 import { SampleData } from './SampleData';
+import { WidgetSync } from '../widget/WidgetSync';
 
 export class CredentialSettingsError extends Error {
   constructor(message: string) {
@@ -455,6 +456,7 @@ export class AppModel {
     this.updateSavedCredentialState(null);
     const sampleSchedule: ScheduleSnapshot = SampleData.schedule();
     this.schedule = sampleSchedule;
+    this.synchronizeWidgetSchedule();
     this.classroomsCache = SampleData.classrooms();
     this.termID = sampleSchedule.termID;
     this.termStartDate = sampleSchedule.termStartDate;
@@ -691,6 +693,7 @@ export class AppModel {
     try {
       await this.scheduleStore.clear();
       this.schedule = null;
+      this.synchronizeWidgetSchedule();
       this.calendarImportStatusMessage = '';
     } catch (e) {
       failures.push('个人课表');
@@ -770,6 +773,7 @@ export class AppModel {
         }
         await this.scheduleStore.save(fetched);
         this.schedule = fetched;
+        this.synchronizeWidgetSchedule();
         this.calendarImportStatusMessage = '';
         this.termID = fetched.termID;
         this.termStartDate = fetched.termStartDate;
@@ -1048,6 +1052,7 @@ export class AppModel {
       failed = true;
     }
     this.schedule = null;
+    this.synchronizeWidgetSchedule();
     this.calendarImportStatusMessage = '';
     try {
       await this.classroomStore.clear();
@@ -1081,6 +1086,7 @@ export class AppModel {
     try {
       const loaded: ScheduleSnapshot | null = await this.scheduleStore.load();
       this.schedule = loaded;
+      this.synchronizeWidgetSchedule();
       if (loaded !== null) {
         this.termID = loaded.termID;
         this.termStartDate = loaded.termStartDate;
@@ -1132,6 +1138,11 @@ export class AppModel {
         this.statusMessageDismissTimer = null;
       }
     }, this.statusMessageAutoDismissMs);
+  }
+
+  // 对应 iOS 端 synchronizeWidgetSchedule：课表变化后同步“今日课程”卡片。
+  private synchronizeWidgetSchedule(): void {
+    WidgetSync.refresh(this.schedule);
   }
 
   private static todayString(): string {

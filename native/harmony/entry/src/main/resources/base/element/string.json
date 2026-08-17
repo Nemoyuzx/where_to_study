@@ -13,6 +13,14 @@
       "value": "Where To Study"
     },
     {
+      "name": "widget_label",
+      "value": "今日课程"
+    },
+    {
+      "name": "widget_desc",
+      "value": "查看今天的课程时间与教室"
+    },
+    {
       "name": "calendar_read_reason",
       "value": "用于读取并同步导入的个人课程日历事件"
     },

@@ -34,6 +34,22 @@
         ]
       }
     ],
+    "extensionAbilities": [
+      {
+        "name": "TodayCourseWidgetAbility",
+        "srcEntry": "./ets/widget/TodayCourseWidgetAbility.ets",
+        "label": "$string:widget_label",
+        "description": "$string:widget_desc",
+        "type": "form",
+        "exported": true,
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:form_config"
+          }
+        ]
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"
