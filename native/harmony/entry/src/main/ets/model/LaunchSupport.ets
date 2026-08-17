@@ -8,11 +8,13 @@ import { ClassroomStoring } from '../store/ClassroomStore';
 import { HolidayStoring } from '../store/HolidayStore';
 import { ScheduleFetching } from '../net/SjdScheduleClient';
 import { ClassroomFetching } from '../net/SjdClassroomClient';
-import { HolidayFetching, HolidayOfflineFallback } from '../net/HolidayClient';
-import { CalendarImporting, CalendarImportResult } from '../calendar/CalendarImporter';
+import { HolidayFetching } from '../net/HolidayClient';
+import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
+import { CalendarImporting } from '../calendar/CalendarImporter';
+import { CalendarImportResult } from '../calendar/CalendarImportLogic';
 import {
   DailyCourseNotificationAuthorization, DailyCourseNotificationRequest, DailyCourseNotificationScheduling
-} from '../notify/DailyCourseNotifications';
+} from '../notify/DailyCoursePlanning';
 import { SampleData } from './SampleData';
 import { AppModel } from './AppModel';
 import { AppRuntimeMode } from './AppRuntimeMode';

@@ -13,14 +13,15 @@ import { FileHolidayStore, HolidayStoring } from '../store/HolidayStore';
 import { PreferencesStore } from '../store/PreferencesStore';
 import { ScheduleFetching, SJDScheduleClient } from '../net/SjdScheduleClient';
 import { ClassroomFetching, SJDClassroomClient } from '../net/SjdClassroomClient';
-import { HolidayFetching, HolidayClient, HolidayOfflineFallback } from '../net/HolidayClient';
-import { CalendarImportError, CalendarImportLogic, CalendarImportResult, CalendarImporting,
-  HarmonyCalendarImporter } from '../calendar/CalendarImporter';
+import { HolidayFetching, HolidayClient } from '../net/HolidayClient';
+import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
+import { CalendarImporting, HarmonyCalendarImporter } from '../calendar/CalendarImporter';
+import { CalendarImportError, CalendarImportLogic, CalendarImportResult } from '../calendar/CalendarImportLogic';
+import { HarmonyReminderScheduler } from '../notify/DailyCourseNotifications';
 import {
   DailyCourseNotificationCoordinator, DailyCourseNotificationReconcileOutcome,
-  DailyCourseNotificationScheduling, DailyCourseNotificationSettings,
-  HarmonyReminderScheduler
-} from '../notify/DailyCourseNotifications';
+  DailyCourseNotificationScheduling, DailyCourseNotificationSettings
+} from '../notify/DailyCoursePlanning';
 import { AppRuntimeMode } from './AppRuntimeMode';
 import { SampleData } from './SampleData';
 import { WidgetSync } from '../widget/WidgetSync';

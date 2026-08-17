@@ -4,6 +4,7 @@
 // 2. 响应体按上限截断检查（对应 .responseTooLarge）；
 // 3. 传输失败统一转为可读错误信息。
 import { http } from '@kit.NetworkKit';
+import { UrlPolicy } from './UrlPolicy';
 
 export class HttpTooLargeError extends Error {
   constructor() {
@@ -39,7 +40,7 @@ export class HttpUtil {
   static async perform(url: string, spec: HttpRequestSpec, allowedHost: string): Promise<HttpResult> {
     let currentUrl: string = url;
     for (let redirect = 0; redirect <= HttpUtil.maximumRedirects; redirect++) {
-      if (!HttpUtil.allows(currentUrl, allowedHost)) {
+      if (!UrlPolicy.allows(currentUrl, allowedHost)) {
         throw new Error('请求地址不符合安全策略。');
       }
       const client: http.HttpRequest = http.createHttp();
@@ -59,7 +60,7 @@ export class HttpUtil {
           if (location === null) {
             throw new Error('请求被重定向但没有目标地址。');
           }
-          currentUrl = HttpUtil.resolveRedirect(currentUrl, location);
+          currentUrl = UrlPolicy.resolveRedirect(currentUrl, location);
           continue;
         }
         const body: string = typeof response.result === 'string' ? response.result as string : '';
@@ -84,48 +85,6 @@ export class HttpUtil {
       }
     }
     throw new Error('请求重定向次数过多。');
-  }
-
-  // 与 SJDNetworkPolicy.allows 一致的安全策略检查。
-  static allows(url: string, allowedHost: string): boolean {
-    const schemeEnd: number = url.indexOf('://');
-    if (schemeEnd < 0) {
-      return false;
-    }
-    const scheme: string = url.substring(0, schemeEnd).toLowerCase();
-    if (scheme !== 'https') {
-      return false;
-    }
-    const rest: string = url.substring(schemeEnd + 3);
-    const slash: number = rest.indexOf('/');
-    const authority: string = slash < 0 ? rest : rest.substring(0, slash);
-    if (authority.indexOf('@') >= 0) {
-      return false;
-    }
-    const colon: number = authority.indexOf(':');
-    const host: string = (colon < 0 ? authority : authority.substring(0, colon)).toLowerCase();
-    if (host !== allowedHost) {
-      return false;
-    }
-    const port: number = colon < 0 ? 443 : Number(authority.substring(colon + 1));
-    return port === 443;
-  }
-
-  // 相对重定向地址解析：绝对地址直接使用，其余按基础地址解析。
-  static resolveRedirect(base: string, location: string): string {
-    if (location.startsWith('https://') || location.startsWith('http://')) {
-      return location;
-    }
-    const schemeEnd: number = base.indexOf('://');
-    const scheme: string = base.substring(0, schemeEnd);
-    const rest: string = base.substring(schemeEnd + 3);
-    const slash: number = rest.indexOf('/');
-    const authority: string = slash < 0 ? rest : rest.substring(0, slash);
-    if (location.startsWith('/')) {
-      return scheme + '://' + authority + location;
-    }
-    const basePath: string = slash < 0 ? '/' : rest.substring(slash, rest.lastIndexOf('/') + 1);
-    return scheme + '://' + authority + basePath + location;
   }
 
   private static headerValue(header: Object, name: string): string | null {

@@ -3,7 +3,7 @@
 // 数据源与时间戳格式、条目数量、日期/名称/类型逐项核对。
 import { HolidaysSnapshot } from '../common/Models';
 import { StrictDates } from '../common/StrictDates';
-import { HolidaySourceLimits } from '../net/HolidayClient';
+import { HolidaySourceLimits } from '../net/SjdErrors';
 import { AppContext } from './AppContext';
 import { JsonFile } from './JsonFile';
 

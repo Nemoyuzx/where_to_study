@@ -1,0 +1,18 @@
+// 本地测试聚合入口（模板默认入口），串行运行全部测试套件。
+import strictDatesTest from './StrictDates.test';
+import scheduleLogicTest from './ScheduleLogic.test';
+import sjdEncodingTest from './SjdEncoding.test';
+import parsersContractTest from './ParsersContract.test';
+import teachingCalendarLogicTest from './TeachingCalendarLogic.test';
+import calendarImportLogicTest from './CalendarImportLogic.test';
+import dailyCoursePlanningTest from './DailyCoursePlanning.test';
+
+export default function testsuite() {
+  strictDatesTest();
+  scheduleLogicTest();
+  sjdEncodingTest();
+  parsersContractTest();
+  teachingCalendarLogicTest();
+  calendarImportLogicTest();
+  dailyCoursePlanningTest();
+}

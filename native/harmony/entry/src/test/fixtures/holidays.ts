@@ -1,0 +1,2 @@
+// 由 contracts/v1/fixtures/holidays.json 生成的文本常量（本地单元测试用）。
+export const holidaysText: string = "{\n  \"year\": 2026,\n  \"source\": \"https://unpkg.com/holiday-calendar@1.3.3/data/CN\",\n  \"fetched_at\": \"2026-01-05T08:00:00+08:00\",\n  \"items\": [\n    {\n      \"date\": \"2026-01-01\",\n      \"name\": \"\u793a\u4f8b\u5047\u671f\",\n      \"type\": \"holiday\"\n    },\n    {\n      \"date\": \"2026-01-04\",\n      \"name\": \"\u793a\u4f8b\u8c03\u4f11\",\n      \"type\": \"workday\"\n    }\n  ]\n}\n";

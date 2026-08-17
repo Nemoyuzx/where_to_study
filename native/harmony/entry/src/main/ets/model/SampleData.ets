@@ -2,7 +2,7 @@
 import { Classroom, CampusClassrooms, ClassroomsCache, ClassroomDefaults, Course,
   HolidaysSnapshot, ScheduleSnapshot, SlotMetadata } from '../common/Models';
 import { StrictDates, DateParts } from '../common/StrictDates';
-import { HolidayOfflineFallback } from '../net/HolidayClient';
+import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
 
 export class SampleData {
   static readonly timestamp: string = '2026-01-01T00:00:00+08:00';
