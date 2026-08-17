@@ -1,23 +1,17 @@
-// 教学日历页（对应 iOS AdaptiveTeachingCalendarView：
-// 窄屏 MobileTeachingCalendarView，宽屏 TeachingCalendarView）。
-// 移植轮次中实现。
+// 教学日历一级页面，对应 iOS 端 AdaptiveTeachingCalendarView：
+// 手机与宽屏共用 MobileTeachingCalendarView（日/周/月/年视图、滑动翻页、
+// 月视图展开/收起），内容区随窗口自适应。
 import { AppModel } from '../model/AppModel';
-import { AppTheme } from '../common/AppTheme';
+import { MobileTeachingCalendarView } from './calendar/MobileTeachingCalendarView';
+import { TeachingCalendarSession } from './calendar/TeachingCalendarSession';
 
 @ComponentV2
 export struct CalendarSectionView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param containerWidth: number = 390;
+  @Local session: TeachingCalendarSession = new TeachingCalendarSession();
 
   build() {
-    Column() {
-      Text('教学日历')
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.text())
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
+    MobileTeachingCalendarView({ session: this.session })
   }
 }
