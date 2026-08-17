@@ -114,14 +114,16 @@ fn normalize_course_room(value: &str) -> String {
 }
 
 pub fn parse_sjd_week_numbers(course: &Value) -> Vec<i64> {
-    let details = json_string(course.get("classWeekDetails"));
-    let mut weeks: Vec<i64> = Regex::new(r"\d+")
-        .expect("valid regex")
-        .find_iter(&details)
-        .filter_map(|item| item.as_str().parse::<i64>().ok())
-        .collect();
+    let mut weeks = expand_week_numbers(&json_string(course.get("classWeek")));
     if weeks.is_empty() {
-        weeks = expand_week_numbers(&json_string(course.get("classWeek")));
+        weeks = expand_week_numbers(&json_string(course.get("classWeekDetails")));
+    }
+    if weeks.is_empty() {
+        weeks = Regex::new(r"\d+")
+            .expect("valid regex")
+            .find_iter(&json_string(course.get("classWeekDetails")))
+            .filter_map(|item| item.as_str().parse::<i64>().ok())
+            .collect();
     }
     weeks.sort_unstable();
     weeks.dedup();
@@ -467,6 +469,30 @@ mod tests {
             parse_sjd_week_numbers(&even_course),
             (2..=18).step_by(2).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn parse_sjd_week_numbers_prefers_class_week_over_details() {
+        let course = serde_json::json!({ "classWeek": "2-18双", "classWeekDetails": "1,3,5" });
+        assert_eq!(
+            parse_sjd_week_numbers(&course),
+            (2..=18).step_by(2).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn parse_sjd_week_numbers_expands_details_ranges_and_suffixes() {
+        let ranged = serde_json::json!({ "classWeekDetails": "1-16" });
+        assert_eq!(parse_sjd_week_numbers(&ranged), (1..=16).collect::<Vec<_>>());
+
+        let odd = serde_json::json!({ "classWeekDetails": "1-17单" });
+        assert_eq!(
+            parse_sjd_week_numbers(&odd),
+            (1..=17).step_by(2).collect::<Vec<_>>()
+        );
+
+        let prefixed = serde_json::json!({ "classWeekDetails": "第1周,第3周" });
+        assert_eq!(parse_sjd_week_numbers(&prefixed), vec![1, 3]);
     }
 
     #[test]
