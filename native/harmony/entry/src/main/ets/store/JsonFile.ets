@@ -2,26 +2,28 @@
 // 读取带大小上限，防止异常膨胀的缓存文件拖垮启动；
 // 写入采用“临时文件 + rename”与 iOS 端 .atomic 写入对齐。
 import { fileIo as fs } from '@kit.CoreFileKit';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+// fs 的“文件不存在”错误码。
+const FS_NO_SUCH_FILE: number = 13900002;
 
 export class JsonFile {
   // 与 security-logic-review 的 RST-5 一致：本地课表与空教室缓存读取上限 8 MiB。
   static readonly defaultMaxBytes: number = 8 * 1024 * 1024;
 
   static async readText(path: string, maxBytes: number = JsonFile.defaultMaxBytes): Promise<string | null> {
-    let exists: boolean = false;
-    try {
-      fs.accessSync(path);
-      exists = true;
-    } catch (e) {
-      exists = false;
-    }
-    if (!exists) {
-      return null;
-    }
+    // 注意：模拟器上 fs.accessSync 对缺失文件不抛异常，因此统一用 statSync 判断存在性。
     let stat: fs.Stat;
     try {
       stat = fs.statSync(path);
     } catch (e) {
+      const err: BusinessError = e as BusinessError;
+      if (err.code === FS_NO_SUCH_FILE) {
+        return null;
+      }
+      hilog.error(0x0000, 'JsonFile', 'statSync failed for %{public}s code=%{public}d msg=%{public}s',
+        path, err.code, err.message);
       throw new Error('无法读取本地缓存。');
     }
     if (stat.size > maxBytes) {
@@ -73,14 +75,7 @@ export class JsonFile {
   }
 
   static async removeFile(path: string): Promise<void> {
-    let exists: boolean = false;
-    try {
-      fs.accessSync(path);
-      exists = true;
-    } catch (e) {
-      exists = false;
-    }
-    if (!exists) {
+    if (!JsonFile.existsSync(path)) {
       return;
     }
     try {
@@ -91,14 +86,7 @@ export class JsonFile {
   }
 
   static async removeDirectory(path: string): Promise<void> {
-    let exists: boolean = false;
-    try {
-      fs.accessSync(path);
-      exists = true;
-    } catch (e) {
-      exists = false;
-    }
-    if (!exists) {
+    if (!JsonFile.existsSync(path)) {
       return;
     }
     try {
@@ -116,6 +104,15 @@ export class JsonFile {
       fs.rmdirSync(path);
     } catch (e) {
       throw new Error('无法清除本地缓存。');
+    }
+  }
+
+  private static existsSync(path: string): boolean {
+    try {
+      fs.statSync(path);
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 

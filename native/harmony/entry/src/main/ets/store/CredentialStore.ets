@@ -39,8 +39,8 @@ export interface CredentialStoring {
   clear(): Promise<void>;
 }
 
-// ASSET 在条目不存在时报错码 201。
-const ASSET_NOT_FOUND: number = 201;
+// ASSET 在条目不存在时报错码 24000002（201 表示调用方无权限）。
+const ASSET_NOT_FOUND: number = 24000002;
 
 export class AssetCredentialStore implements CredentialStoring {
   private static readonly alias: string = 'bupt-jwgl';
