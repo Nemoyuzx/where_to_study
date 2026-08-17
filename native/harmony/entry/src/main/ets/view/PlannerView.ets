@@ -2,9 +2,9 @@
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 
-@Component
+@ComponentV2
 export struct PlannerView {
-  @Consumer('appModel') model: AppModel;
+  @Consumer('appModel') model: AppModel = new AppModel();
 
   build() {
     Column() {

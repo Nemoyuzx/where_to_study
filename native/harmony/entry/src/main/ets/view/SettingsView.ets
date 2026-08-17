@@ -2,9 +2,9 @@
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 
-@Component
+@ComponentV2
 export struct SettingsView {
-  @Consume('appModel') model: AppModel;
+  @Consumer('appModel') model: AppModel = new AppModel();
 
   build() {
     Column() {

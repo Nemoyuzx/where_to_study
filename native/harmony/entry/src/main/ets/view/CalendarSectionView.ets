@@ -4,10 +4,10 @@
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 
-@Component
+@ComponentV2
 export struct CalendarSectionView {
-  @Consume('appModel') model: AppModel;
-  @Prop containerWidth: number = 390;
+  @Consumer('appModel') model: AppModel = new AppModel();
+  @Param containerWidth: number = 390;
 
   build() {
     Column() {

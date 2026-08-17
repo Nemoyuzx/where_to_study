@@ -20,11 +20,11 @@ export class AdaptiveLayoutPolicy {
   }
 }
 
-@Component
+@ComponentV2
 export struct RootView {
-  @Consumer('appModel') model: AppModel;
-  @State currentSection: AppSection = AppSection.planner;
-  @State containerWidth: number = 390;
+  @Consumer('appModel') model: AppModel = new AppModel();
+  @Local currentSection: AppSection = AppSection.planner;
+  @Local containerWidth: number = 390;
 
   aboutToAppear(): void {
     this.model.launch();
