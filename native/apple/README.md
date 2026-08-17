@@ -53,4 +53,4 @@ APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX \
   ./scripts/native-apple-app-store.sh upload all
 ```
 
-本地正式构建默认使用手动分发签名和已安装的三个 App Store 描述文件，校验非 ad-hoc 签名、版本/构建号、`get-task-allow`、macOS App Sandbox、网络/日历 entitlement、主应用与 Widget App Group、隐私清单及三份许可证文件。macOS 导出会自动按团队查找 Installer Distribution 身份，也可通过 `APPLE_INSTALLER_SIGNING_CERTIFICATE` 覆盖；CI 可另外传入 `APPLE_AUTH_KEY_PATH`、`APPLE_AUTH_KEY_ID`、`APPLE_AUTH_KEY_ISSUER_ID`。`0.1.4 (34)` 的 iOS 与 macOS 正式构建已于 2026-08-16 上传 App Store Connect 并等待处理；TestFlight 与正式提交只选择 build 34。账户侧配置、商店元数据、隐私问卷草案、截图方案、App Review 说明和 GPL 发布确认见 [`AppStore/`](./AppStore/)。
+本地正式构建默认使用手动分发签名和已安装的三个 App Store 描述文件，校验非 ad-hoc 签名、版本/构建号、`get-task-allow`、macOS App Sandbox、网络/日历 entitlement、主应用与 Widget App Group、隐私清单及三份许可证文件。macOS 导出会自动按团队查找 Installer Distribution 身份，也可通过 `APPLE_INSTALLER_SIGNING_CERTIFICATE` 覆盖；CI 可另外传入 `APPLE_AUTH_KEY_PATH`、`APPLE_AUTH_KEY_ID`、`APPLE_AUTH_KEY_ISSUER_ID`。iOS `0.1.4 (35)` 已于 2026-08-17、macOS `0.1.4 (34)` 已于 2026-08-16 上传 App Store Connect 并等待处理；TestFlight 与正式提交分别选择对应平台的最新构建。账户侧配置、商店元数据、隐私问卷草案、截图方案、App Review 说明和 GPL 发布确认见 [`AppStore/`](./AppStore/)。
