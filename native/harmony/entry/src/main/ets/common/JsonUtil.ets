@@ -2,6 +2,19 @@
 // 所有缓存读写都必须经过这里，保证缺失字段、错误类型不会静默污染内存模型。
 
 export class JsonUtil {
+  // 解析 JSON 文本为对象；非对象（数组、标量、非法文本）返回 null。
+  static parseObject(text: string): Record<string, Object> | null {
+    try {
+      const value: Object = JSON.parse(text) as Object;
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+      }
+      return value as Record<string, Object>;
+    } catch (e) {
+      return null;
+    }
+  }
+
   static record(value: Object | undefined | null): Record<string, Object> {
     if (value === undefined || value === null || typeof value !== 'object') {
       return {};

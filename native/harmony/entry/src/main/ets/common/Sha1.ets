@@ -1,28 +1,11 @@
 // 纯 ArkTS 的 SHA-1 实现，与 iOS 端 CryptoKit Insecure.SHA1 输出一致，
 // 用于从课表字段生成稳定的课程 ID（取十六进制摘要前 12 位）。
 // 输入按 UTF-8 编码后计算，含代理对与多字节字符处理。
+import { Utf8 } from './Utf8';
+
 export class Sha1 {
   static hexOfUtf8(data: string): string {
-    const bytes: number[] = [];
-    for (let i = 0; i < data.length; i++) {
-      const code: number = data.charCodeAt(i);
-      if (code < 0x80) {
-        bytes.push(code);
-      } else if (code < 0x800) {
-        bytes.push(0xC0 | (code >> 6), 0x80 | (code & 0x3F));
-      } else if (code >= 0xD800 && code <= 0xDBFF && i + 1 < data.length &&
-        data.charCodeAt(i + 1) >= 0xDC00 && data.charCodeAt(i + 1) <= 0xDFFF) {
-        const hi: number = code - 0xD800;
-        const lo: number = data.charCodeAt(i + 1) - 0xDC00;
-        const cp: number = 0x10000 + (hi << 10) + lo;
-        bytes.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F),
-          0x80 | (cp & 0x3F));
-        i++;
-      } else {
-        bytes.push(0xE0 | (code >> 12), 0x80 | ((code >> 6) & 0x3F), 0x80 | (code & 0x3F));
-      }
-    }
-    return Sha1.hexOfBytes(bytes);
+    return Sha1.hexOfBytes(Utf8.bytes(data));
   }
 
   private static hexOfBytes(msg: number[]): string {

@@ -5,7 +5,7 @@
 
 ## 技术栈
 
-- DevEco Studio 5.x（API 12，HarmonyOS NEXT，Stage 模型）
+- DevEco Studio 6.1.1（API 24，HarmonyOS NEXT 6.1.1，Stage 模型；SDK 6.1.1.125）
 - ArkTS + ArkUI 声明式 UI（状态管理使用 V2 的 @ObservedV2/@Trace 与 @Provider/@Consumer）
 - 网络：@ohos.net.http；安全凭据：@ohos.security.asset（对应 Keychain/Keystore）
 - 缓存：@ohos.data.preferences + 沙箱 JSON 文件；测试：hypium
@@ -27,7 +27,7 @@
 
 ## 构建
 
-1. 安装 DevEco Studio 5.0+（含 HarmonyOS NEXT SDK，API 12）。
+1. 安装 DevEco Studio 6.1.1（含 HarmonyOS NEXT SDK，API 24）。
 2. 打开 native/harmony，等待 hvigor 依赖自动安装后直接运行 entry 模块。
 3. 命令行构建（安装 hvigor 后）：hvigorw assembleHap。
 
@@ -50,5 +50,6 @@
 与仓库其他平台一致：账号密码只进系统安全存储；缓存不含凭据；不嵌入 WebView；
 默认不常驻高频轮询；保持空教室、教学日历、设置三个一级页面的颜色、术语与状态语义一致。
 
-> 注意：本目录尚未经过 DevEco Studio 编译验证；移植完成后会在真实设备/模拟器上
-> 执行与 native/apple/Tests 对等的单元测试与 UI 冒烟测试。
+> 构建验证：本目录已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
+> 的 assembleHap 编译（debug 产物 entry-default-unsigned.hap）。移植完成后还会在
+> 真实设备/模拟器上执行与 native/apple/Tests 对等的单元测试与 UI 冒烟测试。

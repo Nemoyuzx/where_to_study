@@ -3,15 +3,9 @@
 // 数据源与时间戳格式、条目数量、日期/名称/类型逐项核对。
 import { HolidaysSnapshot } from '../common/Models';
 import { StrictDates } from '../common/StrictDates';
+import { HolidaySourceLimits } from '../net/HolidayClient';
 import { AppContext } from './AppContext';
 import { JsonFile } from './JsonFile';
-
-export class HolidaySourceLimits {
-  static readonly maximumPayloadBytes: number = 256 * 1024;
-  static readonly maximumRecords: number = 128;
-  static readonly maximumNameLength: number = 80;
-  static readonly maximumExpandedItems: number = 512;
-}
 
 export interface HolidayStoring {
   load(year: number): Promise<HolidaysSnapshot | null>;
