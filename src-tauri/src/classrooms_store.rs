@@ -19,6 +19,17 @@ fn classrooms_path(app: &AppHandle) -> ServiceResult<PathBuf> {
     Ok(directory.join(CLASSROOMS_FILE_NAME))
 }
 
+const MAX_CLASSROOMS_CACHE_BYTES: u64 = 8 * 1024 * 1024;
+
+fn read_limited_cache_bytes(path: &Path, description: &str, max_bytes: u64) -> ServiceResult<Vec<u8>> {
+    let metadata = fs::metadata(path)
+        .map_err(|error| ServiceError::new(format!("无法读取{description}：{error}")))?;
+    if metadata.len() > max_bytes {
+        return Err(ServiceError::new(format!("{description}缓存过大。")));
+    }
+    fs::read(path).map_err(|error| ServiceError::new(format!("无法读取{description}：{error}")))
+}
+
 pub fn load(
     app: &AppHandle,
     account_scope: &str,
@@ -28,8 +39,7 @@ pub fn load(
         return Ok(None);
     }
 
-    let bytes = fs::read(&path)
-        .map_err(|error| ServiceError::new(format!("无法读取本地空教室信息：{error}")))?;
+    let bytes = read_limited_cache_bytes(&path, "本地空教室信息", MAX_CLASSROOMS_CACHE_BYTES)?;
     if bytes.is_empty() {
         return Ok(None);
     }
@@ -154,5 +164,16 @@ mod tests {
             serde_json::to_value(actual).unwrap(),
             serde_json::to_value(expected).unwrap()
         );
+    }
+
+    #[test]
+    fn oversized_classrooms_cache_is_rejected_before_reading() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let path = directory.path().join(CLASSROOMS_FILE_NAME);
+        fs::write(&path, vec![b' '; MAX_CLASSROOMS_CACHE_BYTES as usize + 1])
+            .expect("write oversized classrooms cache");
+        let error = read_limited_cache_bytes(&path, "本地空教室信息", MAX_CLASSROOMS_CACHE_BYTES)
+            .expect_err("oversized classrooms cache must be rejected");
+        assert_eq!(error.message, "本地空教室信息缓存过大。");
     }
 }
