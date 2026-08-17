@@ -156,6 +156,7 @@ struct RootView: View {
         TabView(selection: $model.selectedSection) {
             ForEach(AppSection.allCases) { section in
                 sectionView(section)
+                    .ignoresSafeArea(.container, edges: .bottom)
                     .tabItem {
                         Label(section.title, systemImage: section.systemImage)
                             .accessibilityIdentifier(section.accessibilityIdentifier)
