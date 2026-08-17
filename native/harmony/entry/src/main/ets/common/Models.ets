@@ -180,8 +180,10 @@ export class Classroom {
     );
   }
 
-  toJson(): Record<string, Object> {
-    const out: Record<string, Object> = {};
+  // size 为契约中的可空字段：缺失座位数必须序列化为 null，
+  // 因此该记录允许 null 值（JSON.stringify 会原样输出 null）。
+  toJson(): Record<string, Object | null> {
+    const out: Record<string, Object | null> = {};
     out['id'] = this.id;
     out['building'] = this.building;
     out['room'] = this.room;
@@ -240,7 +242,7 @@ export class CampusClassrooms {
     out['fetched_at'] = this.fetchedAt;
     out['realtime'] = this.realtime;
     out['provider'] = this.provider;
-    const roomList: Record<string, Object>[] = [];
+    const roomList: Record<string, Object | null>[] = [];
     for (const r of this.rooms) {
       roomList.push(r.toJson());
     }

@@ -148,9 +148,7 @@ export class SJDClassroomParser {
           continue;
         }
         const inferredBuilding: string = SJDClassroomParser.normalizeBuildingName(parsed.building);
-        const inferredRoom: string = SJDClassroomParser.inferTeachingExperimentSideRoom(
-          inferredBuilding, parsed.room);
-        const side: string[] = SJDClassroomParser.inferTeachingExperimentSide(inferredBuilding, inferredRoom);
+        const side: string[] = SJDClassroomParser.inferTeachingExperimentSide(inferredBuilding, parsed.room);
         const building: string = side[0];
         const room: string = side[1];
         if (!SJDClassroomParser.originalBuildings.includes(building)) {

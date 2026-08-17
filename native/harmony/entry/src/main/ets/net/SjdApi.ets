@@ -249,7 +249,10 @@ export class SJDAPIClient {
       if (e instanceof HttpTooLargeError) {
         throw ScheduleClientError.invalidResponse(SJDResponseLimits.oversizedMessage(endpoint));
       }
-      throw e;
+      if (e instanceof Error) {
+        throw e;
+      }
+      throw new Error('网络请求失败。');
     }
   }
 

@@ -2,12 +2,15 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { AppContext } from '../store/AppContext';
+import { AppLaunchConfiguration } from '../model/LaunchSupport';
 
 const DOMAIN: number = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     AppContext.init(this.context);
+    // 与 iOS 端进程参数对应的 UI 测试/演示模式标记。
+    AppLaunchConfiguration.applyFromWant(want);
     hilog.info(DOMAIN, 'WhereToStudy', 'EntryAbility onCreate');
   }
 

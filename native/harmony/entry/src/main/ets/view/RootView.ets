@@ -27,7 +27,9 @@ export struct RootView {
   @Local containerWidth: number = 390;
 
   aboutToAppear(): void {
+    // 与 iOS 端 AppModel.init + RootView.onAppear 对应：引导加载后按需刷新当天教室。
     this.model.launch();
+    this.model.refreshClassroomsIfNeeded();
   }
 
   onPageShow(): void {
@@ -38,7 +40,7 @@ export struct RootView {
 
   build() {
     Column() {
-      if (this.model.isSampleMode) {
+      if (this.model.isSampleMode()) {
         this.sampleModeBanner()
       }
       if (AdaptiveLayoutPolicy.useSidebar(this.containerWidth)) {

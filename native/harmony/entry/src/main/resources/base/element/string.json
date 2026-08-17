@@ -11,6 +11,14 @@
     {
       "name": "EntryAbility_label",
       "value": "Where To Study"
+    },
+    {
+      "name": "calendar_read_reason",
+      "value": "用于读取并同步导入的个人课程日历事件"
+    },
+    {
+      "name": "calendar_write_reason",
+      "value": "用于将个人课表导入系统日历"
     }
   ]
 }
