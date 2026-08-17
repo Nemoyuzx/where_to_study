@@ -126,7 +126,11 @@ class HolidayRepository(
     context: Context,
     private val client: HolidayClient = HolidayClient(),
     private val store: HolidayStore = HolidayStore(context.applicationContext),
+    private val deviceCalendarClient: DeviceCalendarHolidayClient = DeviceCalendarHolidayClient(
+        context.applicationContext,
+    ),
 ) {
+    private val applicationContext = context.applicationContext
     private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val snapshots = ConcurrentHashMap<Int, HolidaysSnapshot>()
@@ -178,7 +182,7 @@ class HolidayRepository(
         try {
             worker.execute {
                 val result = runCatching {
-                    client.fetch(year).also { fetched ->
+                    fetchSnapshot(year).also { fetched ->
                         LocalDataCoordinator.withCurrent(refreshGeneration) {
                             store.save(fetched)
                             snapshots[year] = fetched
@@ -247,6 +251,25 @@ class HolidayRepository(
         observers.clear()
         inFlightYears.clear()
         worker.shutdownNow()
+    }
+
+    private fun fetchSnapshot(year: Int): HolidaysSnapshot {
+        // Prefer the device calendar when calendar access is already granted
+        // (never prompts). The device calendar marks rest days but not makeup
+        // workdays, so supplement those from the remote/offline source.
+        if (DeviceCalendarHolidayClient.hasCalendarPermission(applicationContext)) {
+            val device = runCatching { deviceCalendarClient.fetch(year) }.getOrNull()
+            if (device != null) {
+                return DeviceCalendarHolidayLogic.mergingWorkdays(device, workdays(year))
+            }
+        }
+        return client.fetch(year)
+    }
+
+    private fun workdays(year: Int): List<HolidayItem> {
+        val remote = runCatching { client.fetch(year) }.getOrNull()
+        if (remote != null) return remote.items.filter { it.type == "workday" }
+        return HolidayOfflineFallback.snapshot(year)?.items?.filter { it.type == "workday" }.orEmpty()
     }
 
     private fun isFresh(snapshot: HolidaysSnapshot, now: Date = Date()): Boolean {
