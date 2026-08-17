@@ -59,6 +59,7 @@ struct MobileTeachingCalendarView: View {
                 .animation(Self.pageAnimation, value: contentIdentity)
             }
             .background(AppTheme.background)
+            .ignoresSafeArea(.container, edges: .bottom)
             .accessibilityIdentifier("screen.calendar")
             .navigationBarHidden(true)
         }

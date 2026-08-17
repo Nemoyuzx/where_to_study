@@ -155,8 +155,7 @@ struct RootView: View {
     private var tabNavigation: some View {
         TabView(selection: $model.selectedSection) {
             ForEach(AppSection.allCases) { section in
-                sectionView(section)
-                    .ignoresSafeArea(.container, edges: .bottom)
+                compactTabSectionView(section)
                     .tabItem {
                         Label(section.title, systemImage: section.systemImage)
                             .accessibilityIdentifier(section.accessibilityIdentifier)
@@ -166,6 +165,16 @@ struct RootView: View {
         }
         .tint(AppTheme.primary)
         .accessibilityIdentifier("layout.compact-tabs")
+    }
+
+    @ViewBuilder
+    private func compactTabSectionView(_ section: AppSection) -> some View {
+        if section == .calendar {
+            sectionView(section)
+                .ignoresSafeArea(.container, edges: .bottom)
+        } else {
+            sectionView(section)
+        }
     }
     #endif
 

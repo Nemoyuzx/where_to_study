@@ -256,6 +256,43 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertLessThan(labels[1].frame.maxX, labels[2].frame.minX)
     }
 
+    func testCompactTabBottomSafeAreaPolicyIsSectionSpecific() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing"]
+        app.launch()
+        defer { app.terminate() }
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
+
+        let plannerSummary = app.staticTexts["查询概览"]
+        scrollToBottom(visibleElement: plannerSummary, in: app)
+        XCTAssertLessThan(plannerSummary.frame.maxY, tabBar.frame.minY)
+        attachScreenshot(named: "planner-bottom-safe-area")
+
+        navigate(to: "教学日历", in: app)
+        let weekMode = app.segmentedControls.buttons["周"]
+        XCTAssertTrue(weekMode.waitForExistence(timeout: 5))
+        weekMode.tap()
+        let firstHour = app.staticTexts["calendar.mobile.hour.08"].firstMatch
+        XCTAssertTrue(firstHour.waitForExistence(timeout: 5))
+        let timeline = app.scrollViews.containing(
+            .staticText,
+            identifier: "calendar.mobile.hour.08"
+        ).firstMatch
+        XCTAssertTrue(timeline.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(timeline.frame.maxY, tabBar.frame.minY)
+        attachScreenshot(named: "calendar-under-tab-bar")
+
+        navigate(to: "设置", in: app)
+        let privacyButton = app.descendants(matching: .any)["action.open-privacy-policy"]
+        scrollToBottom(visibleElement: privacyButton, in: app)
+        XCTAssertLessThan(privacyButton.frame.maxY, tabBar.frame.minY)
+        attachScreenshot(named: "settings-bottom-safe-area")
+    }
+
     func testIPadUsesPersistentSidebarAndExpandedLayoutsAcrossRotation() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "仅在 iPad 模拟器验证")
         continueAfterFailure = false
@@ -375,6 +412,15 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
                 forDuration: 0.05,
                 thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: endY))
             )
+    }
+
+    private func scrollToBottom(visibleElement: XCUIElement, in app: XCUIApplication) {
+        XCTAssertTrue(visibleElement.waitForExistence(timeout: 5))
+        for _ in 0..<24 where !visibleElement.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(visibleElement.isHittable)
+        app.swipeUp()
     }
 
     private func waitForValue(_ value: String, of element: XCUIElement) -> Bool {
