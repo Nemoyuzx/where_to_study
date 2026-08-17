@@ -1491,6 +1491,9 @@ button:disabled {
   --month-collapsed-row-height: 62px;
   --month-weekday-height: 40px;
   --month-drag-progress: 1;
+  --month-handle-left-angle: -24deg;
+  --month-handle-offset-y: 2px;
+  --month-handle-right-angle: 24deg;
   display: grid;
   grid-template-rows: minmax(0, 1fr) 28px;
   height: var(--month-expanded-height, 776px);
@@ -1502,6 +1505,9 @@ button:disabled {
 
 .month-view.compact {
   --month-drag-progress: 0;
+  --month-handle-left-angle: 0deg;
+  --month-handle-offset-y: 0px;
+  --month-handle-right-angle: 0deg;
   height: var(--month-collapsed-height);
   max-height: var(--month-collapsed-height);
 }
@@ -1520,12 +1526,40 @@ button:disabled {
 }
 
 .month-expansion-handle > span {
+  display: block;
+  height: 10px;
+  position: relative;
+  width: 40px;
+}
+
+.month-expansion-handle > span::before,
+.month-expansion-handle > span::after {
   background: var(--text-secondary);
   border-radius: 999px;
-  display: block;
-  height: 5px;
+  content: '';
+  height: 4px;
   opacity: 0.55;
-  width: 40px;
+  position: absolute;
+  top: 50%;
+  transition: transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  width: 20px;
+}
+
+.month-expansion-handle > span::before {
+  right: 50%;
+  transform: translateY(var(--month-handle-offset-y)) rotate(var(--month-handle-left-angle));
+  transform-origin: right center;
+}
+
+.month-expansion-handle > span::after {
+  left: 50%;
+  transform: translateY(var(--month-handle-offset-y)) rotate(var(--month-handle-right-angle));
+  transform-origin: left center;
+}
+
+.month-view.month-dragging .month-expansion-handle > span::before,
+.month-view.month-dragging .month-expansion-handle > span::after {
+  transition: none;
 }
 
 .month-expansion-handle:focus-visible {
@@ -2200,6 +2234,55 @@ button:disabled {
   .workspace,
   .settings-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 721px) {
+  .page-content.planner-page-content,
+  .page-content.calendar-page-content {
+    padding: 0;
+  }
+
+  .planner-page-content > .topbar,
+  .calendar-page-content > .topbar {
+    border-bottom: 1px solid var(--border-subtle);
+    box-sizing: border-box;
+    margin: 0 0 14px;
+    max-width: none;
+    padding: 18px 20px;
+    width: 100%;
+  }
+
+  .planner-page-content > .notice,
+  .calendar-page-content > .notice {
+    margin-inline: 20px;
+    max-width: none;
+  }
+
+  .planner-page-content .planner-workspace,
+  .calendar-page-content .calendar-page {
+    margin: 0 16px 16px;
+    max-width: none;
+    width: calc(100% - 32px);
+  }
+
+  .month-view.desktop-month-view {
+    display: block;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    touch-action: pan-y;
+    transition: none;
+  }
+
+  .month-view.desktop-month-view .month-calendar {
+    grid-template-rows: 40px repeat(6, minmax(118px, auto));
+    height: auto;
+    transition: none;
+  }
+
+  .month-view.desktop-month-view .month-cell {
+    min-height: 118px;
   }
 }
 

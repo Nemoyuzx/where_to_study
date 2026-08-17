@@ -3,7 +3,10 @@ package com.nemoyu.wheretostudy.nativeapp
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.animation.ValueAnimator
+import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -33,7 +36,9 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 internal enum class TeachingCalendarMode(val label: String) {
     DAY("日"),
@@ -60,6 +65,33 @@ internal class TeachingCalendarSessionState(
 }
 
 private typealias Mode = TeachingCalendarMode
+
+private class MonthExpansionIndicatorView(context: Context) : View(context) {
+    private val indicatorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeCap = Paint.Cap.ROUND
+        strokeWidth = context.dp(4).toFloat()
+    }
+    private var expansionProgress = 0f
+
+    fun setExpansionProgress(progress: Float) {
+        expansionProgress = progress.coerceIn(0f, 1f)
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        indicatorPaint.color = Palette.muted
+        indicatorPaint.alpha = 140
+        val angle = Math.toRadians((24f * expansionProgress).toDouble())
+        val segmentLength = context.dp(20).toFloat()
+        val horizontal = (cos(angle) * segmentLength).toFloat()
+        val vertical = (sin(angle) * segmentLength).toFloat()
+        val centerX = width / 2f
+        val centerY = height / 2f - context.dp(1)
+        canvas.drawLine(centerX - horizontal, centerY + vertical, centerX, centerY, indicatorPaint)
+        canvas.drawLine(centerX, centerY, centerX + horizontal, centerY + vertical, indicatorPaint)
+    }
+}
 
 object TeachingCalendarLogic {
     const val swipeThresholdDp = 72
@@ -1283,14 +1315,10 @@ internal class TeachingCalendarPage(
             isFocusable = true
             contentDescription = if (monthExpanded) "收起月历" else "展开月历"
             setOnClickListener { onExpansionChanged(!monthExpanded) }
-            addView(View(activity).apply {
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.RECTANGLE
-                    cornerRadius = activity.dp(999).toFloat()
-                    setColor(Palette.muted)
-                    alpha = 140
-                }
-            }, FrameLayout.LayoutParams(activity.dp(40), activity.dp(5), Gravity.CENTER))
+            addView(MonthExpansionIndicatorView(activity).apply {
+                id = R.id.calendar_month_drag_indicator
+                setExpansionProgress(monthExpansionProgress)
+            }, FrameLayout.LayoutParams(activity.dp(44), activity.dp(14), Gravity.CENTER))
         }.also {
             it.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1465,6 +1493,8 @@ internal class TeachingCalendarPage(
         }
         monthView.findViewById<View>(R.id.calendar_month_drag_handle).contentDescription =
             if (resolved >= 0.5f) "收起月历" else "展开月历"
+        monthView.findViewById<MonthExpansionIndicatorView>(R.id.calendar_month_drag_indicator)
+            .setExpansionProgress(resolved)
         monthView.requestLayout()
     }
 

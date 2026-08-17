@@ -428,9 +428,19 @@ struct MobileTeachingCalendarView: View {
                 isMonthExpanded.toggle()
             }
         } label: {
-            Capsule()
-                .fill(AppTheme.secondaryText.opacity(0.55))
-                .frame(width: 40, height: 5)
+            ZStack {
+                Capsule()
+                    .fill(AppTheme.secondaryText.opacity(0.55))
+                    .frame(width: 21, height: 4)
+                    .rotationEffect(.degrees(isMonthExpanded ? -24 : 0))
+                    .offset(x: -9, y: isMonthExpanded ? 2 : 0)
+                Capsule()
+                    .fill(AppTheme.secondaryText.opacity(0.55))
+                    .frame(width: 21, height: 4)
+                    .rotationEffect(.degrees(isMonthExpanded ? 24 : 0))
+                    .offset(x: 9, y: isMonthExpanded ? 2 : 0)
+            }
+                .frame(width: 42, height: 12)
                 .frame(maxWidth: .infinity, minHeight: 28)
                 .contentShape(Rectangle())
         }

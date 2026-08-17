@@ -9,6 +9,14 @@ const applePlannerSource = readFileSync(
   new URL('../native/apple/Sources/Shared/PlannerView.swift', import.meta.url),
   'utf8',
 )
+const appleCalendarSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/TeachingCalendarView.swift', import.meta.url),
+  'utf8',
+)
+const appleMobileCalendarSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/MobileTeachingCalendarView.swift', import.meta.url),
+  'utf8',
+)
 const androidPlannerSource = readFileSync(
   new URL(
     '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/PlannerPage.kt',
@@ -201,11 +209,17 @@ test('calendar paging keeps an outgoing page while the new page slides in', () =
   assert.doesNotMatch(appCss, /calendar-view-enter/)
 })
 
-test('month expansion keeps gestures, a drag handle, and an assistive action', () => {
+test('month expansion stays mobile-only and morphs its drag handle with progress', () => {
   assert.match(appSource, /calendarMonthExpansion\(deltaX, deltaY\)/)
   assert.match(appSource, /calendarMonthDragProgress\(/)
   assert.match(appSource, /calendarMonthExpansionTarget\(/)
-  assert.match(appSource, /onPointerMove=\{updateMonthPointerSwipe\}/)
+  assert.match(appSource, /onPointerMove=\{compactCalendarLayout \? updateMonthPointerSwipe : undefined\}/)
+  assert.match(appSource, /desktop-month-view/)
+  assert.match(appSource, /compactCalendarLayout \? \(\s*<button[\s\S]*className="month-expansion-handle"/)
+  assert.match(
+    appSource,
+    /target\?\.closest\('\.month-expansion-handle, \.month-expansion-accessibility-action'\)/,
+  )
   assert.match(appSource, /month-expanded-hidden/)
   assert.match(appSource, /handleMonthCalendarKeyDown/)
   assert.match(appSource, /month-expansion-accessibility-action/)
@@ -216,13 +230,34 @@ test('month expansion keeps gestures, a drag handle, and an assistive action', (
   assert.match(appSource, /month-entry-overflow/)
   assert.match(appSource, /className="month-expansion-handle"/)
   assert.match(appCss, /\.month-expansion-handle\s*\{[^}]*height:\s*28px/s)
+  assert.match(appCss, /\.month-expansion-handle > span::before,[\s\S]*\.month-expansion-handle > span::after/)
+  assert.match(appCss, /--month-handle-left-angle/)
+  assert.match(appCss, /\.month-view\.desktop-month-view\s*\{[^}]*height:\s*auto/s)
   assert.match(appCss, /\.month-view\s*\{[^}]*grid-template-rows:\s*minmax\(0, 1fr\) 28px/s)
   assert.match(appSource, /calendarView === 'month' \? 'calendar-month-page' : ''/)
   assert.match(appCss, /\.page-content\.calendar-month-page\s*\{[^}]*overflow:\s*hidden/s)
   assert.match(appCss, /\.month-view\s*\{[^}]*transition:\s*height 280ms/s)
   assert.match(appCss, /\.month-view\.month-dragging[\s\S]*transition:\s*none/s)
   assert.match(appCss, /--month-live-row-height/)
+  assert.match(
+    appleMobileCalendarSource,
+    /Capsule\(\)[\s\S]*rotationEffect\(\.degrees\(isMonthExpanded \? -24 : 0\)\)/,
+  )
+  assert.match(androidCalendarSource, /class MonthExpansionIndicatorView/)
+  assert.match(androidCalendarSource, /setExpansionProgress\(progress: Float\)/)
   assert.doesNotMatch(appSource, /month-density-button/)
+})
+
+test('desktop calendar keeps full month and single-select double-open year behavior', () => {
+  assert.match(appSource, /className=\{`month-view \$\{[\s\S]*desktop-month-view/)
+  assert.match(
+    appSource,
+    /onDoubleClick=\{\(event\) => currentMonth && openDesktopYearMonth\(event, dateString\)\}/,
+  )
+  assert.match(appleCalendarSource, /count: 2[\s\S]*mode = \.month/)
+  assert.match(appleCalendarSource, /#if !os\(macOS\)[\s\S]*isMonthExpanded\.toggle\(\)/)
+  assert.match(appCss, /\.planner-page-content \.planner-workspace,[\s\S]*margin:\s*0 16px 16px/)
+  assert.match(applePlannerSource, /#if os\(macOS\)[\s\S]*page[\s\S]*\.padding\(16\)/)
 })
 
 test('month expansion reserves all six rows on desktop and mobile', () => {
