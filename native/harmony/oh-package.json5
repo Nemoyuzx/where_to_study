@@ -1,0 +1,8 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "Where To Study 鸿蒙（HarmonyOS NEXT）原生客户端。北邮空教室与个人课表联动查询。",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19"
+  }
+}
