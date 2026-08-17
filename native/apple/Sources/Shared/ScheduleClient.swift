@@ -509,8 +509,11 @@ enum SJDScheduleParser {
         for item in text.replacingOccurrences(of: "，", with: ",").split(separator: ",") {
             let numbers = integerMatches(in: String(item))
             if numbers.count >= 2 {
-                weeks.append(contentsOf: numbers[0]...numbers[1])
-            } else if let number = numbers.first {
+                let lower = min(numbers[0], numbers[1])
+                let upper = max(numbers[0], numbers[1])
+                guard lower >= 1, upper <= 53 else { continue }
+                weeks.append(contentsOf: lower...upper)
+            } else if let number = numbers.first, (1...53).contains(number) {
                 weeks.append(number)
             }
         }
