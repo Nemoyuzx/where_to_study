@@ -1,15 +1,15 @@
-mod auth;
+pub mod auth;
 mod calendar_export;
-mod classrooms;
+pub mod classrooms;
 mod classrooms_store;
-mod config;
-mod credential_store;
-mod error;
-mod holidays;
-mod models;
+pub mod config;
+pub mod credential_store;
+pub mod error;
+pub mod holidays;
+pub mod models;
 #[cfg(not(mobile))]
 mod recommender;
-mod schedule;
+pub mod schedule;
 mod schedule_store;
 mod scoped_cache;
 mod settings_store;

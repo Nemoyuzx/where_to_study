@@ -1,0 +1,64 @@
+name: Build CLI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - "wts-cli/**"
+      - "src-tauri/src/**"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - ".github/workflows/build-cli.yml"
+  pull_request:
+    paths:
+      - "wts-cli/**"
+      - "src-tauri/src/**"
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - ".github/workflows/build-cli.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
+        with:
+          workspaces: |
+            ./src-tauri
+            ./wts-cli
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path wts-cli/Cargo.toml --all -- --check
+
+      - name: Run strict Clippy checks
+        run: cargo clippy --manifest-path wts-cli/Cargo.toml --locked --all-targets -- -D warnings
+
+      - name: Test CLI
+        run: cargo test --manifest-path wts-cli/Cargo.toml --locked
+
+      - name: Build CLI release
+        run: cargo build --manifest-path wts-cli/Cargo.toml --release --locked
+
+      - name: Upload CLI binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wts-cli-macos-arm64
+          path: wts-cli/target/release/wts-cli
+          if-no-files-found: error
