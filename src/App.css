@@ -3012,3 +3012,47 @@ button:disabled {
     transition: none;
   }
 }
+
+.term-detect-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.term-detect-actions button {
+  background: var(--surface-cool);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--control-text-blue);
+  display: inline-flex;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.term-detect-actions button:hover {
+  background: var(--primary-surface-soft);
+  border-color: var(--primary-border-soft);
+}
+
+.term-detect-ok {
+  color: var(--primary-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.term-detect-hint {
+  color: var(--gold-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.term-detect-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 8px;
+}

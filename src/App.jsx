@@ -56,7 +56,11 @@ import {
   getWeekState,
   hasCalendarItemType,
   isValidAccountScope,
+  isValidTermId,
+  isValidTermStartDate,
   localDateString,
+  suggestTermForDate,
+  termMatchesCurrentPeriod,
   msUntilNextShanghaiMidnight,
   normalizeClassroomsCache,
   normalizeError,
@@ -1479,6 +1483,20 @@ function App() {
       setSchedule(data)
       setCalendarImportedPath('')
       setUsePersonalSchedule(true)
+      // Auto-apply the authoritative term info returned by the backend so
+      // users never need to hand-enter the semester id or start date.
+      if (isValidTermId(data.term_id) && isValidTermStartDate(data.term_start_date)) {
+        setSettings((current) => {
+          const termChanged = current.termId !== data.term_id
+            || current.termStartDate !== data.term_start_date
+          if (!termChanged) return current
+          setSettingsSaved(false)
+          // Persist the authoritative term so future launches start with it.
+          const next = { ...current, termId: data.term_id, termStartDate: data.term_start_date }
+          command('save_saved_settings', settingsToPayload(next)).catch(() => {})
+          return next
+        })
+      }
       const nextState = getWeekState(data.courses, data.term_start_date, todayDate)
       const nextFreeSlots = slotMeta.map((slot) => slot.index).filter((slot) => !nextState.busySlots.includes(slot))
       setSelectedSlots(nextFreeSlots)
@@ -2210,6 +2228,29 @@ function App() {
               第一周周一
               <input type="date" value={settings.termStartDate} onChange={(event) => updateSetting('termStartDate', event.target.value)} />
             </label>
+            <div className="mini-actions term-detect-actions">
+              <button
+                type="button"
+                className="secondary compact-button"
+                onClick={() => {
+                  const suggested = suggestTermForDate()
+                  updateSetting('termId', suggested.termId)
+                  updateSetting('termStartDate', suggested.termStartDate)
+                  setError('')
+                }}
+              >
+                <CalendarDays size={15} />
+                按当前日期自动检测
+              </button>
+              {termMatchesCurrentPeriod(settings.termId, settings.termStartDate) ? (
+                <span className="term-detect-ok">✓ 与当前学期一致</span>
+              ) : isValidTermId(settings.termId) && isValidTermStartDate(settings.termStartDate) ? (
+                <span className="term-detect-hint">当前设置与检测结果不同</span>
+              ) : null}
+            </div>
+            <p className="term-detect-note">
+              获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。
+            </p>
           </section>
 
           <section className="panel">
