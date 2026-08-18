@@ -53,12 +53,25 @@
 }
 
 .page-content {
+  animation: page-fade-in 0.2s ease;
   height: 100%;
   min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 20px;
   scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+}
+
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-content {
+    animation: none;
+  }
 }
 
 .page-content.calendar-gesture-locked {
@@ -115,6 +128,25 @@
   min-height: 0;
   padding: 0 12px;
   width: 100%;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.compact-button:hover {
+  background: var(--surface-muted);
+  border-color: var(--primary-border-soft);
+}
+
+.compact-button:active {
+  background: var(--primary-surface-soft);
+}
+
+.app-nav button:hover:not(.active) {
+  background: var(--surface-muted);
+  border-color: var(--primary-border-soft);
+}
+
+.app-nav button:active:not(.active) {
+  background: var(--primary-surface-soft);
 }
 
 .app-nav button.active {
@@ -272,6 +304,16 @@ h2 {
   justify-content: center;
   min-height: 44px;
   width: 100%;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.planner-refresh-button:hover {
+  background: var(--primary);
+}
+
+.planner-refresh-button:active {
+  background: var(--primary-focus);
+  transform: scale(0.98);
 }
 
 .planner-source-note {
@@ -350,11 +392,29 @@ button:disabled {
   justify-content: center;
   min-height: 36px;
   width: 100%;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.action-panel button:hover {
+  background: var(--primary-surface-soft);
+  color: var(--primary-text);
+}
+
+.action-panel button:active {
+  background: var(--primary-surface);
 }
 
 .action-panel .primary {
   background: var(--primary);
   color: var(--on-primary);
+}
+
+.action-panel .primary:hover {
+  background: var(--primary-strong);
+}
+
+.action-panel .primary:active {
+  background: var(--primary-focus);
 }
 
 .settings-actions {
@@ -407,6 +467,17 @@ button:disabled {
   min-height: 38px;
   padding: 0 12px;
   text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-about-actions a:hover {
+  background: var(--primary-surface-soft);
+  border-color: var(--primary-border-soft);
+  color: var(--primary-text);
+}
+
+.settings-about-actions a:active {
+  background: var(--primary-surface);
 }
 
 .settings-toggle {
@@ -456,6 +527,15 @@ button:disabled {
   background: var(--primary);
   color: var(--on-primary);
   width: 100%;
+  transition: background-color 0.15s ease;
+}
+
+.settings-actions button.primary:hover {
+  background: var(--primary-strong);
+}
+
+.settings-actions button.primary:active {
+  background: var(--primary-focus);
 }
 
 .settings-actions button.secondary {
@@ -464,6 +544,16 @@ button:disabled {
   color: var(--control-text-blue);
   justify-content: center;
   width: 100%;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-actions button.secondary:hover {
+  background: var(--primary-surface-soft);
+  border-color: var(--primary-border-soft);
+}
+
+.settings-actions button.secondary:active {
+  background: var(--primary-surface);
 }
 
 .settings-actions button.danger {
@@ -472,12 +562,23 @@ button:disabled {
   color: var(--error-text);
   justify-content: center;
   width: 100%;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-actions button.danger:hover {
+  background: var(--error-border);
+  border-color: var(--error-text);
+}
+
+.settings-actions button.danger:active {
+  background: var(--error-border-strong);
 }
 
 .settings-privacy-link {
   align-items: center;
   background: transparent;
   border: 0;
+  border-radius: 6px;
   color: var(--control-text-blue);
   display: inline-flex;
   font-size: 14px;
@@ -487,13 +588,20 @@ button:disabled {
   justify-content: center;
   min-height: 38px;
   width: 100%;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .settings-privacy-link:hover {
+  background: var(--primary-surface-soft);
   color: var(--primary);
 }
 
+.settings-privacy-link:active {
+  background: var(--primary-surface);
+}
+
 .privacy-dialog-backdrop {
+  animation: privacy-backdrop-in 0.2s ease;
   background: var(--modal-backdrop);
   display: grid;
   inset: 0;
@@ -503,7 +611,13 @@ button:disabled {
   z-index: 100;
 }
 
+@keyframes privacy-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .privacy-dialog {
+  animation: privacy-dialog-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -513,6 +627,17 @@ button:disabled {
   max-height: min(780px, calc(100dvh - 36px));
   overflow: hidden;
   width: min(720px, 100%);
+}
+
+@keyframes privacy-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .privacy-dialog-header {
@@ -540,6 +665,7 @@ button:disabled {
   align-items: center;
   background: transparent;
   border: 0;
+  border-radius: 6px;
   color: var(--text-control);
   display: inline-flex;
   flex: 0 0 40px;
@@ -547,6 +673,16 @@ button:disabled {
   justify-content: center;
   padding: 0;
   width: 40px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.privacy-dialog-header button:hover {
+  background: var(--surface-muted);
+  color: var(--text-primary);
+}
+
+.privacy-dialog-header button:active {
+  background: var(--border-subtle);
 }
 
 .privacy-dialog-body {
@@ -701,10 +837,26 @@ button:disabled {
   border: 1px solid var(--primary-border-soft);
   border-radius: 6px;
   color: var(--slot-text);
+  cursor: pointer;
   display: grid;
   min-height: 46px;
   padding: 4px;
   text-align: left;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.slot-cell:hover:not(.busy):not(.selected) {
+  background: var(--primary-surface);
+  border-color: var(--primary-border);
+}
+
+.slot-cell:active:not(.busy):not(.selected) {
+  background: var(--primary-surface-selected);
+}
+
+.slot-cell.selected:hover {
+  background: var(--primary);
+  border-color: var(--primary-outline);
 }
 
 .slot-cell span {
@@ -779,10 +931,15 @@ button:disabled {
   background: var(--switch-track);
   border: 1px solid var(--switch-border);
   border-radius: 999px;
+  cursor: pointer;
   flex: 0 0 44px;
   height: 26px;
   padding: 2px;
   transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.planner-switch-row:hover i {
+  border-color: var(--primary-border-soft);
 }
 
 .planner-switch-row i::after {
@@ -826,6 +983,21 @@ button:disabled {
   color: var(--text-control);
   min-height: 34px;
   padding: 0 10px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.mini-actions button:hover,
+.filter-toggles button:hover:not(.active):not(:disabled),
+.building-list button:hover:not(.active),
+.campus-options button:hover:not(.active) {
+  background: var(--surface);
+  border-color: var(--primary-border-soft);
+}
+
+.mini-actions button:active,
+.filter-toggles button:active:not(.active):not(:disabled),
+.building-list button:active:not(.active) {
+  background: var(--primary-surface-soft);
 }
 
 .filter-toggles button.active {
@@ -863,6 +1035,13 @@ button:disabled {
   display: grid;
   gap: 8px;
   padding: 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.course-row:hover,
+.room-card:hover {
+  background: var(--surface);
+  border-color: var(--primary-border-soft);
 }
 
 .course-row div,
@@ -995,6 +1174,21 @@ button:disabled {
   min-width: 0;
 }
 
+.calendar-view-surface {
+  animation: calendar-view-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes calendar-view-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-view-surface {
+    animation: none;
+  }
+}
+
 .assistive-only {
   border: 0;
   clip: rect(0 0 0 0);
@@ -1010,11 +1204,20 @@ button:disabled {
 
 .calendar-swipe-surface {
   touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .month-gesture-surface {
   overscroll-behavior: contain;
   touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.month-expansion-handle {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .calendar-transition-host {
@@ -1113,10 +1316,27 @@ button:disabled {
   justify-content: center;
 }
 
+.calendar-view-switch button:hover:not(.active) {
+  background: var(--surface-muted);
+  color: var(--text-primary);
+}
+
+.calendar-view-switch button:active:not(.active) {
+  background: var(--primary-surface-soft);
+}
+
 .calendar-view-switch button.active,
 .calendar-today-button {
   background: var(--primary);
   color: var(--on-primary);
+}
+
+.calendar-today-button:hover {
+  background: var(--primary-strong);
+}
+
+.calendar-today-button:active {
+  background: var(--primary-focus);
 }
 
 .calendar-icon-button {
@@ -1125,6 +1345,18 @@ button:disabled {
   color: var(--control-text-blue);
   font-size: 23px;
   width: 32px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.calendar-icon-button:hover {
+  background: var(--primary-surface-soft);
+  border-color: var(--primary-border-soft);
+  color: var(--primary-text);
+}
+
+.calendar-icon-button:active {
+  background: var(--primary-surface);
+  border-color: var(--primary-border);
 }
 
 .calendar-today-button {
@@ -1214,10 +1446,20 @@ button:disabled {
 .time-day-head {
   border-left: 1px solid var(--border-subtle);
   color: var(--text-primary);
+  cursor: pointer;
   display: grid;
   gap: 2px;
   justify-items: center;
   padding: 8px 6px;
+  transition: background-color 0.15s ease;
+}
+
+.time-day-head:hover:not(.selected) {
+  background: var(--primary-surface-soft);
+}
+
+.time-day-head:active:not(.selected) {
+  background: var(--primary-surface);
 }
 
 .time-day-head span,
@@ -1454,6 +1696,17 @@ button:disabled {
   position: absolute;
   right: 6px;
   text-align: left;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.time-course-block:hover {
+  background: var(--primary);
+  transform: scale(1.01);
+}
+
+.time-course-block:active {
+  background: var(--primary-focus);
+  transform: scale(0.99);
 }
 
 .time-course-block strong {
@@ -1524,6 +1777,12 @@ button:disabled {
   justify-content: center;
   padding: 0;
   width: 100%;
+}
+
+.month-expansion-handle:hover > span::before,
+.month-expansion-handle:hover > span::after {
+  opacity: 0.8;
+  background: var(--primary);
 }
 
 .month-expansion-handle > span {
@@ -1707,14 +1966,34 @@ button:disabled {
   width: 4px;
 }
 
+.month-cell {
+  cursor: pointer;
+}
+
+.month-cell:hover:not(.selected) {
+  background: var(--primary-surface-soft);
+}
+
+.month-cell:active:not(.selected) {
+  background: var(--primary-surface);
+}
+
 .month-cell.today {
   background: var(--gold-surface-soft);
   box-shadow: inset 0 0 0 2px var(--gold);
 }
 
+.month-cell.today:hover:not(.selected) {
+  background: var(--gold-surface);
+}
+
 .month-cell.selected {
   background: var(--primary-surface-selected);
   box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.month-cell.selected:hover {
+  background: var(--primary-surface-selected-strong);
 }
 
 .month-cell.today.selected {
@@ -1844,6 +2123,16 @@ button:disabled {
   font-weight: 700;
   height: 28px;
   position: relative;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.mini-month-grid button:hover:not(.selected):not(.today) {
+  background: var(--primary-surface-soft);
+  color: var(--primary-text);
+}
+
+.mini-month-grid button:active:not(.selected) {
+  background: var(--primary-surface);
 }
 
 .mini-month-grid button.has-course {
@@ -1905,6 +2194,7 @@ button:disabled {
 }
 
 .year-day-popover {
+  animation: popover-in 0.18s cubic-bezier(0.22, 0.61, 0.36, 1);
   background: var(--surface);
   border: 1px solid var(--primary-border);
   border-radius: 8px;
@@ -1917,6 +2207,17 @@ button:disabled {
   position: fixed;
   width: 288px;
   z-index: 50;
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .year-day-popover > span,
@@ -1959,6 +2260,16 @@ button:disabled {
 .popover-view-actions button {
   justify-content: center;
   padding: 0 6px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.popover-view-actions button:hover {
+  background: var(--primary-surface-soft);
+  border-color: var(--primary-border-soft);
+}
+
+.popover-view-actions button:active {
+  background: var(--primary-surface);
 }
 
 .calendar-inspector {
@@ -2079,6 +2390,17 @@ button:disabled {
   height: 30px;
   justify-content: center;
   width: 30px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.course-widget-actions button:hover {
+  background: var(--surface);
+  border-color: var(--primary-border-soft);
+  color: var(--text-primary);
+}
+
+.course-widget-actions button:active {
+  background: var(--primary-surface-soft);
 }
 
 .course-widget-overview {

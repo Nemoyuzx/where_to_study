@@ -553,6 +553,50 @@ function App() {
       page.classList.remove('calendar-gesture-locked')
     }
   }, [])
+
+  // macOS trackpad wheel-based calendar navigation
+  useEffect(() => {
+    const page = pageContentRef.current
+    if (!page) return undefined
+
+    let wheelAccumulator = 0
+    let wheelTimer = null
+    const WHEEL_THRESHOLD = 120
+    const WHEEL_RESET_MS = 400
+
+    function handleCalendarWheel(event) {
+      // Only handle horizontal wheel events (trackpad horizontal swipe)
+      if (Math.abs(event.deltaX) < Math.abs(event.deltaY) * 1.5) return
+      // Don't intercept when interacting with form elements
+      if (event.target.closest('input, select, textarea, a')) return
+      // Don't intercept when popover is open
+      if (calendarPopover) return
+
+      wheelAccumulator += event.deltaX
+      window.clearTimeout(wheelTimer)
+
+      if (Math.abs(wheelAccumulator) >= WHEEL_THRESHOLD) {
+        const direction = wheelAccumulator > 0 ? 1 : -1
+        wheelAccumulator = 0
+        suppressCalendarClickUntilRef.current = Date.now() + 400
+        moveCalendar(direction)
+      }
+
+      wheelTimer = window.setTimeout(() => {
+        wheelAccumulator = 0
+      }, WHEEL_RESET_MS)
+    }
+
+    // Only add wheel listener when on calendar page
+    if (activePage === 'calendar') {
+      page.addEventListener('wheel', handleCalendarWheel, { passive: true })
+    }
+
+    return () => {
+      page.removeEventListener('wheel', handleCalendarWheel)
+      window.clearTimeout(wheelTimer)
+    }
+  }, [activePage, calendarView, calendarPopover])
   const todayDate = shanghaiDateString(now)
   const loading = loadingTasks[loadingTasks.length - 1] || ''
 
@@ -1122,6 +1166,74 @@ function App() {
     }
   }
 
+  function beginCalendarPointerSwipe(event) {
+    if (calendarView === 'year' || event.isPrimary === false) return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    if (event.target.closest('input, select, textarea, a')) return
+    if (event.target.closest('.time-course-block')) return
+
+    calendarGestureRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      axis: null,
+      view: calendarView,
+      monthExpanded,
+      scrollTop: pageContentRef.current?.scrollTop || 0,
+      scrollLocked: false,
+      blocked: false,
+      pointerId: event.pointerId,
+      pointerTarget: event.currentTarget,
+    }
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Pointer capture is optional in older embedded WebViews.
+    }
+  }
+
+  function updateCalendarPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view === 'month' || start.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    if (!start.axis && Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= 8) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) * 1.12) start.axis = 'horizontal'
+      else if (Math.abs(deltaY) > Math.abs(deltaX) * 1.12) start.axis = 'vertical'
+    }
+
+    if (start.axis === 'horizontal') {
+      lockCalendarVerticalScroll(start)
+      event.preventDefault()
+    }
+  }
+
+  function finishCalendarPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view === 'month' || start.pointerId !== event.pointerId) return
+    calendarGestureRef.current = null
+    unlockCalendarVerticalScroll(start)
+    try {
+      start.pointerTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // The browser may release capture before pointerup.
+    }
+
+    if (start.axis !== 'horizontal') return
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    const direction = calendarSwipeDirection(deltaX, deltaY)
+    if (!direction) return
+    suppressCalendarClickUntilRef.current = Date.now() + 400
+    moveCalendar(direction)
+  }
+
+  function cancelCalendarPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view === 'month' || start.pointerId !== event.pointerId) return
+    calendarGestureRef.current = null
+    unlockCalendarVerticalScroll(start)
+  }
+
   function lockCalendarVerticalScroll(start) {
     if (!start || start.scrollLocked) return
     start.scrollLocked = true
@@ -1576,6 +1688,7 @@ function App() {
 
         <section
           ref={pageContentRef}
+          key={activePage}
           className={`page-content ${activePage}-page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
         >
           <header className={`topbar ${activePage}-topbar`}>
@@ -1859,6 +1972,10 @@ function App() {
                     onTouchStart={beginCalendarSwipe}
                     onTouchEnd={finishCalendarSwipe}
                     onTouchCancel={cancelCalendarSwipe}
+                    onPointerDown={beginCalendarPointerSwipe}
+                    onPointerMove={updateCalendarPointerSwipe}
+                    onPointerUp={finishCalendarPointerSwipe}
+                    onPointerCancel={cancelCalendarPointerSwipe}
                   >
                     <div className="time-corner" />
                     {visibleCalendarDays.map((dateString) => {
