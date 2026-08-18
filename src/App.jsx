@@ -1558,10 +1558,30 @@ function App() {
 
   function handleMonthCalendarKeyDown(event) {
     if (!compactCalendarLayout || calendarView !== 'month') return
-    const expanded = event.key === 'ArrowDown' ? true : event.key === 'ArrowUp' ? false : null
-    if (expanded === null || expanded === monthExpanded) return
+    // Left/right move the selected date by one day (Windows keyboard
+    // navigation). Up/down keep their collapse/expand meaning and move by
+    // a week when the month is already expanded.
+    const horizontalOffset = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+    }[event.key]
+    if (horizontalOffset !== undefined) {
+      event.preventDefault()
+      suppressCalendarClickUntilRef.current = Date.now() + 400
+      setCalendarDate((current) => addDays(current, horizontalOffset))
+      return
+    }
+    const wantsExpanded = event.key === 'ArrowDown' ? true : event.key === 'ArrowUp' ? false : null
+    if (wantsExpanded === null) return
     event.preventDefault()
-    setMonthExpanded(expanded)
+    if (wantsExpanded === monthExpanded) {
+      // Already in the target state: move by a week instead.
+      const weekOffset = wantsExpanded ? 7 : -7
+      suppressCalendarClickUntilRef.current = Date.now() + 400
+      setCalendarDate((current) => addDays(current, weekOffset))
+      return
+    }
+    setMonthExpanded(wantsExpanded)
   }
 
   function jumpFromYearPopover(view) {
