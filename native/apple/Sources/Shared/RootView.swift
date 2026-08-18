@@ -40,6 +40,7 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
+    @State private var columnVisibility = NavigationSplitViewVisibility.all
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -48,6 +49,7 @@ struct RootView: View {
         VStack(spacing: 0) {
             if model.isSampleMode {
                 sampleModeBanner
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             Group {
@@ -72,6 +74,7 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .animation(.easeInOut(duration: 0.24), value: model.isSampleMode)
         .onAppear {
             model.refreshClassroomsIfNeeded()
             #if os(macOS)
@@ -100,13 +103,16 @@ struct RootView: View {
     }
 
     private var splitNavigation: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 250)
         } detail: {
             sectionView(model.selectedSection)
+                .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                .id(model.selectedSection)
         }
         .navigationSplitViewStyle(.balanced)
+        .animation(.easeInOut(duration: 0.22), value: model.selectedSection)
     }
 
     private var sidebar: some View {

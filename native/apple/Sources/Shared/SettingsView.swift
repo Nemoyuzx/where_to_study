@@ -87,6 +87,8 @@ struct SettingsView: View {
         }
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.settings")
+        .animation(.easeInOut(duration: 0.22), value: model.statusMessage)
+        .animation(.easeInOut(duration: 0.22), value: model.dailyCourseNotificationStatusMessage)
         .sheet(isPresented: $showingPrivacyPolicy) {
             PrivacyPolicyView()
         }
@@ -240,6 +242,7 @@ struct SettingsView: View {
                     Text(model.statusMessage)
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
@@ -268,6 +271,7 @@ struct SettingsView: View {
                     Text(model.dailyCourseNotificationStatusMessage)
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }

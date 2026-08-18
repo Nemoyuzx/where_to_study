@@ -470,7 +470,7 @@ struct TeachingCalendarView: View {
             "\($0.type == "holiday" ? "休" : "班") \($0.name)"
         } ?? (dayCourses.isEmpty ? "无课" : "\(dayCourses.count) 门课")
         return Button {
-            selectedDate = day
+            withAnimation(Self.viewAnimation) { selectedDate = day }
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(isToday ? "今天 \(calendar.component(.day, from: day))" : "\(calendar.component(.day, from: day))")
@@ -583,11 +583,13 @@ struct TeachingCalendarView: View {
             #if os(macOS)
             cell
                 .accessibilityAction {
-                    selectedDate = day
+                    withAnimation(Self.viewAnimation) { selectedDate = day }
                 }
                 .accessibilityAction(named: Text("查看月份")) {
-                    selectedDate = day
-                    withAnimation(Self.viewAnimation) { mode = .month }
+                    withAnimation(Self.viewAnimation) {
+                        selectedDate = day
+                        mode = .month
+                    }
                 }
                 .gesture(
                     SpatialTapGesture(
@@ -603,10 +605,12 @@ struct TeachingCalendarView: View {
                     .onEnded { value in
                         switch value {
                         case .first:
-                            selectedDate = day
-                            withAnimation(Self.viewAnimation) { mode = .month }
+                            withAnimation(Self.viewAnimation) {
+                                selectedDate = day
+                                mode = .month
+                            }
                         case .second:
-                            selectedDate = day
+                            withAnimation(Self.viewAnimation) { selectedDate = day }
                         }
                     }
                 )
@@ -771,7 +775,7 @@ struct TeachingCalendarView: View {
                         .foregroundStyle(AppTheme.secondaryText)
                     ForEach(items, id: \.1.id) { day, item in
                         Button {
-                            selectedDate = day
+                            withAnimation(Self.viewAnimation) { selectedDate = day }
                         } label: {
                             Text("\(Self.monthDayCompactFormatter.string(from: day)) · \(item.name)")
                                 .font(.caption.weight(.semibold))

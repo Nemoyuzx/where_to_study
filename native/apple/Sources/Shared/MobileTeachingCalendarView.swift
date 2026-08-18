@@ -697,8 +697,10 @@ struct MobileTeachingCalendarView: View {
             let today = sameDay(day, .now)
             Button {
                 MobileCalendarHaptics.selection()
-                selectedDate = day
-                presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
+                withAnimation(Self.pageAnimation) {
+                    selectedDate = day
+                    presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
+                }
             } label: {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8, weight: .medium))
