@@ -234,6 +234,7 @@ struct SettingsView: View {
                         model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
                         systemImage: "arrow.clockwise"
                     )
+                    .contentTransition(.opacity)
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)

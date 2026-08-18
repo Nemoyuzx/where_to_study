@@ -131,7 +131,9 @@ struct RootView: View {
 
             List(AppSection.allCases) { section in
                 Button {
-                    model.selectedSection = section
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        model.selectedSection = section
+                    }
                 } label: {
                     Label(section.title, systemImage: section.systemImage)
                         .font(.body.weight(model.selectedSection == section ? .semibold : .regular))
@@ -145,6 +147,7 @@ struct RootView: View {
                         ? AppTheme.primary.opacity(0.14)
                         : Color.clear
                 )
+                .animation(.easeInOut(duration: 0.18), value: model.selectedSection)
                 .accessibilityIdentifier(section.accessibilityIdentifier)
                 .accessibilityAddTraits(model.selectedSection == section ? .isSelected : [])
             }

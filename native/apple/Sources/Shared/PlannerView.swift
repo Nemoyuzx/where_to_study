@@ -145,6 +145,7 @@ struct PlannerView: View {
                         }
                         Text(model.isRefreshingClassrooms ? "正在获取当天空教室…" : "获取空教室信息")
                     }
+                    .contentTransition(.opacity)
                     .foregroundStyle(AppTheme.onPrimary)
                     .frame(maxWidth: .infinity, minHeight: 28)
                 }

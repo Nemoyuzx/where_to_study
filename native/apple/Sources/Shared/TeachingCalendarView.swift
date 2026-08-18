@@ -366,6 +366,7 @@ struct TeachingCalendarView: View {
                     model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
                     systemImage: "arrow.clockwise"
                 )
+                .contentTransition(.opacity)
             }
             .disabled(model.isRefreshingSchedule || model.isImportingCalendar)
             Button {
@@ -375,6 +376,7 @@ struct TeachingCalendarView: View {
                     model.isImportingCalendar ? "正在导入…" : "导入系统日历",
                     systemImage: "calendar.badge.plus"
                 )
+                .contentTransition(.opacity)
             }
             .disabled(model.schedule == nil || model.isRefreshingSchedule || model.isImportingCalendar)
         }
