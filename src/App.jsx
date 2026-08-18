@@ -2002,6 +2002,8 @@ function App() {
                 <input
                   type="date"
                   value={calendarDate}
+                  min="2024-01-01"
+                  max="2030-12-31"
                   onChange={chooseCalendarDateFromInput}
                 />
                 <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
@@ -2394,7 +2396,13 @@ function App() {
             </label>
             <label>
               第一周周一
-              <input type="date" value={settings.termStartDate} onChange={(event) => updateSetting('termStartDate', event.target.value)} />
+              <input
+                type="date"
+                value={settings.termStartDate}
+                min="2020-01-01"
+                max="2035-12-31"
+                onChange={(event) => updateSetting('termStartDate', event.target.value)}
+              />
             </label>
           </section>
 
