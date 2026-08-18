@@ -269,7 +269,11 @@ struct MobileTeachingCalendarView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(AppTheme.primary.opacity(0.08))
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
+        .animation(Self.viewAnimation, value: holidayStatus)
+        .animation(Self.viewAnimation, value: model.statusMessage)
+        .animation(Self.viewAnimation, value: model.calendarImportStatusMessage)
     }
 
     @ViewBuilder

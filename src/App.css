@@ -203,12 +203,30 @@ h2 {
 
 .notice {
   align-items: center;
+  animation: notice-in 0.2s ease;
   border-radius: 8px;
   display: flex;
   gap: 10px;
   margin: 0 auto 16px;
   max-width: 1200px;
   padding: 12px 14px;
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice {
+    animation: none;
+  }
 }
 
 .notice.error {
@@ -359,7 +377,13 @@ select {
   min-width: 0;
   max-width: 100%;
   padding: 0 10px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
   width: 100%;
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: var(--primary-border-soft);
 }
 
 input:focus,
@@ -735,11 +759,29 @@ button:disabled {
 }
 
 .clear-data-confirmation {
+  animation: clear-confirmation-in 0.2s ease;
   border-top: 1px solid var(--border);
   display: grid;
   gap: 10px;
   margin-top: 2px;
   padding-top: 12px;
+}
+
+@keyframes clear-confirmation-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clear-data-confirmation {
+    animation: none;
+  }
 }
 
 .clear-data-confirmation p {
@@ -756,9 +798,27 @@ button:disabled {
 }
 
 .settings-actions span {
+  animation: saved-indicator-in 0.2s ease;
   color: var(--primary-text);
   font-size: 13px;
   font-weight: 650;
+}
+
+@keyframes saved-indicator-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-actions span {
+    animation: none;
+  }
 }
 
 .summary-band {
@@ -1174,21 +1234,6 @@ button:disabled {
   min-width: 0;
 }
 
-.calendar-view-surface {
-  animation: calendar-view-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-@keyframes calendar-view-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .calendar-view-surface {
-    animation: none;
-  }
-}
-
 .assistive-only {
   border: 0;
   clip: rect(0 0 0 0);
@@ -1278,9 +1323,27 @@ button:disabled {
 }
 
 .calendar-export-note {
+  animation: export-note-in 0.2s ease;
   color: var(--text-muted);
   font-size: 13px;
   margin-top: 8px;
+}
+
+@keyframes export-note-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-export-note {
+    animation: none;
+  }
 }
 
 .calendar-toolbar-actions,
@@ -1405,6 +1468,17 @@ button:disabled {
   border-radius: 7px;
   gap: 7px;
   padding: 0 12px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.calendar-action-strip button:hover:not(:disabled) {
+  background: var(--primary-surface-soft);
+  border-color: var(--primary-border-soft);
+  color: var(--primary-text);
+}
+
+.calendar-action-strip button:active:not(:disabled) {
+  background: var(--primary-surface);
 }
 
 .time-calendar {

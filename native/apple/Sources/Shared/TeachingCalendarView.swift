@@ -235,16 +235,19 @@ struct TeachingCalendarView: View {
                 Text(status)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
+                    .transition(.opacity)
             }
             if !model.statusMessage.isEmpty {
                 Text(model.statusMessage)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
+                    .transition(.opacity)
             }
             if !model.calendarImportStatusMessage.isEmpty {
                 Text(model.calendarImportStatusMessage)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
+                    .transition(.opacity)
             }
             Divider()
             calendarContent
@@ -253,6 +256,9 @@ struct TeachingCalendarView: View {
                 .animation(Self.viewAnimation, value: mode)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .animation(Self.viewAnimation, value: holidayStatus)
+        .animation(Self.viewAnimation, value: model.statusMessage)
+        .animation(Self.viewAnimation, value: model.calendarImportStatusMessage)
     }
 
     @ViewBuilder
@@ -619,14 +625,18 @@ struct TeachingCalendarView: View {
             #else
             cell
             .accessibilityAction {
-                yearPopoverDate = day
-                yearPopoverLocation = nil
+                withAnimation(Self.viewAnimation) {
+                    yearPopoverDate = day
+                    yearPopoverLocation = nil
+                }
             }
             .gesture(
                 SpatialTapGesture(coordinateSpace: .named(Self.calendarCoordinateSpace))
                     .onEnded { value in
-                        yearPopoverDate = day
-                        yearPopoverLocation = value.location
+                        withAnimation(Self.viewAnimation) {
+                            yearPopoverDate = day
+                            yearPopoverLocation = value.location
+                        }
                     }
             )
             #endif
@@ -674,8 +684,10 @@ struct TeachingCalendarView: View {
                     .offset(x: originX, y: originY)
                     .contentShape(Rectangle())
                     .onTapGesture { }
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
             }
+            .animation(Self.viewAnimation, value: yearPopoverDate)
             .zIndex(20)
         }
     }
@@ -912,8 +924,10 @@ struct TeachingCalendarView: View {
     }
 
     private func dismissYearPopover() {
-        yearPopoverDate = nil
-        yearPopoverLocation = nil
+        withAnimation(Self.viewAnimation) {
+            yearPopoverDate = nil
+            yearPopoverLocation = nil
+        }
     }
 
     private func estimatedYearPopoverHeight(_ day: Date, availableHeight: CGFloat) -> CGFloat {
