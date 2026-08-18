@@ -1,0 +1,28 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#197565"
+    },
+    {
+      "name": "app_primary",
+      "value": "#5AD2B8"
+    },
+    {
+      "name": "app_primary_fill",
+      "value": "#197565"
+    },
+    {
+      "name": "app_accent",
+      "value": "#876622"
+    },
+    {
+      "name": "app_on_primary",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "app_danger",
+      "value": "#FF6B5E"
+    }
+  ]
+}

@@ -1,0 +1,209 @@
+{
+  "cache_version": 2,
+  "target_date": "2026-08-03",
+  "fetched_at": "2026-08-03T00:00:00+08:00",
+  "realtime": true,
+  "provider": "sjd",
+  "campuses": [
+    {
+      "campus_id": "01",
+      "campus_name": "西土城",
+      "target_date": "2026-08-03",
+      "fetched_at": "2026-08-03T00:00:00+08:00",
+      "realtime": true,
+      "provider": "sjd",
+      "rooms": [
+        {
+          "id": "主楼-105",
+          "building": "主楼",
+          "room": "105",
+          "name": "主楼-105",
+          "size": 36,
+          "type": "",
+          "available_slots": [9],
+          "source": "sjd"
+        },
+        {
+          "id": "主楼-202-203",
+          "building": "主楼",
+          "room": "202-203",
+          "name": "主楼-202-203",
+          "size": 60,
+          "type": "",
+          "available_slots": [0, 2],
+          "source": "sjd"
+        },
+        {
+          "id": "主楼-217-218",
+          "building": "主楼",
+          "room": "217-218",
+          "name": "主楼-217-218",
+          "size": 60,
+          "type": "",
+          "available_slots": [9],
+          "source": "sjd"
+        },
+        {
+          "id": "教1-101",
+          "building": "教1",
+          "room": "101",
+          "name": "教1-101",
+          "size": 80,
+          "type": "",
+          "available_slots": [0, 2],
+          "source": "sjd"
+        },
+        {
+          "id": "教2-101",
+          "building": "教2",
+          "room": "101",
+          "name": "教2-101",
+          "size": 60,
+          "type": "",
+          "available_slots": [2],
+          "source": "sjd"
+        }
+      ]
+    },
+    {
+      "campus_id": "04",
+      "campus_name": "沙河",
+      "target_date": "2026-08-03",
+      "fetched_at": "2026-08-03T00:00:00+08:00",
+      "realtime": true,
+      "provider": "sjd",
+      "rooms": [
+        {
+          "id": "教学实验综合楼N-101",
+          "building": "教学实验综合楼N",
+          "room": "101",
+          "name": "教学实验综合楼N-101",
+          "size": 90,
+          "type": "",
+          "available_slots": [5],
+          "source": "sjd"
+        },
+        {
+          "id": "教学实验综合楼N-110",
+          "building": "教学实验综合楼N",
+          "room": "110",
+          "name": "教学实验综合楼N-110",
+          "size": 117,
+          "type": "",
+          "available_slots": [5],
+          "source": "sjd"
+        },
+        {
+          "id": "教学实验综合楼N-202",
+          "building": "教学实验综合楼N",
+          "room": "202",
+          "name": "教学实验综合楼N-202",
+          "size": 80,
+          "type": "",
+          "available_slots": [7],
+          "source": "sjd"
+        },
+        {
+          "id": "教学实验综合楼N-305-306",
+          "building": "教学实验综合楼N",
+          "room": "305-306",
+          "name": "教学实验综合楼N-305-306",
+          "size": 60,
+          "type": "",
+          "available_slots": [7],
+          "source": "sjd"
+        },
+        {
+          "id": "教学实验综合楼S-101",
+          "building": "教学实验综合楼S",
+          "room": "101",
+          "name": "教学实验综合楼S-101",
+          "size": 90,
+          "type": "",
+          "available_slots": [5],
+          "source": "sjd"
+        },
+        {
+          "id": "教学实验综合楼S-202",
+          "building": "教学实验综合楼S",
+          "room": "202",
+          "name": "教学实验综合楼S-202",
+          "size": 208,
+          "type": "",
+          "available_slots": [5, 7],
+          "source": "sjd"
+        },
+        {
+          "id": "教学实验综合楼S-305-306",
+          "building": "教学实验综合楼S",
+          "room": "305-306",
+          "name": "教学实验综合楼S-305-306",
+          "size": 60,
+          "type": "",
+          "available_slots": [7],
+          "source": "sjd"
+        },
+        {
+          "id": "智慧教学楼-101",
+          "building": "智慧教学楼",
+          "room": "101",
+          "name": "智慧教学楼-101",
+          "size": 64,
+          "type": "",
+          "available_slots": [3],
+          "source": "sjd"
+        },
+        {
+          "id": "智慧教学楼-305-306",
+          "building": "智慧教学楼",
+          "room": "305-306",
+          "name": "智慧教学楼-305-306",
+          "size": 60,
+          "type": "",
+          "available_slots": [1],
+          "source": "sjd"
+        },
+        {
+          "id": "综合教学楼N-101",
+          "building": "综合教学楼N",
+          "room": "101",
+          "name": "综合教学楼N-101",
+          "size": 90,
+          "type": "",
+          "available_slots": [1],
+          "source": "sjd"
+        },
+        {
+          "id": "综合教学楼N-120",
+          "building": "综合教学楼N",
+          "room": "120",
+          "name": "综合教学楼N-120",
+          "size": 90,
+          "type": "",
+          "available_slots": [3],
+          "source": "sjd"
+        },
+        {
+          "id": "综合教学楼S-202",
+          "building": "综合教学楼S",
+          "room": "202",
+          "name": "综合教学楼S-202",
+          "size": 80,
+          "type": "",
+          "available_slots": [1],
+          "source": "sjd"
+        },
+        {
+          "id": "综合教学楼S-211",
+          "building": "综合教学楼S",
+          "room": "211",
+          "name": "综合教学楼S-211",
+          "size": 80,
+          "type": "",
+          "available_slots": [3],
+          "source": "sjd"
+        }
+      ]
+    }
+  ]
+}
