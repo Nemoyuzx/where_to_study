@@ -655,6 +655,71 @@ final class ScheduleLogicTests: XCTestCase {
         ))
     }
 
+    func testCalendarGestureAxisLocksAfterDeliberateMovement() {
+        XCTAssertNil(TeachingCalendarLogic.gestureAxis(
+            horizontalTranslation: 4,
+            verticalTranslation: 5
+        ))
+        XCTAssertEqual(TeachingCalendarLogic.gestureAxis(
+            horizontalTranslation: 24,
+            verticalTranslation: 8
+        ), .horizontal)
+        XCTAssertEqual(TeachingCalendarLogic.gestureAxis(
+            horizontalTranslation: 8,
+            verticalTranslation: -24
+        ), .vertical)
+    }
+
+    func testMonthExpansionProgressTracksFingerAndClamps() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthExpansionProgress(
+                isExpanded: false,
+                verticalTranslation: 75,
+                travelDistance: 150
+            ),
+            0.5
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthExpansionProgress(
+                isExpanded: true,
+                verticalTranslation: -75,
+                travelDistance: 150
+            ),
+            0.5
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthExpansionProgress(
+                isExpanded: false,
+                verticalTranslation: -40,
+                travelDistance: 150
+            ),
+            0
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthExpansionProgress(
+                isExpanded: true,
+                verticalTranslation: 40,
+                travelDistance: 150
+            ),
+            1
+        )
+    }
+
+    func testExpandedMonthHeightReservesWeekdayGridSpacingAndHandle() {
+        let availableHeight: CGFloat = 620
+        let cellHeight = TeachingCalendarLogic.expandedMonthCellHeight(
+            availableHeight: availableHeight
+        )
+        let reservedHeight: CGFloat = 18 + 8 + 20 + 28 + 16
+
+        XCTAssertEqual(cellHeight, 88)
+        XCTAssertLessThanOrEqual(cellHeight * 6 + reservedHeight, availableHeight)
+        XCTAssertEqual(
+            TeachingCalendarLogic.expandedMonthCellHeight(availableHeight: 300),
+            35
+        )
+    }
+
     func testExpandedMonthEventsReserveLastRowForOverflowCount() {
         XCTAssertEqual(
             TeachingCalendarLogic.monthEventLayout(totalCount: 2, maximumRows: 2),

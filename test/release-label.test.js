@@ -17,7 +17,7 @@ function validateReleaseLabel(label) {
 }
 
 test("release labels accept stable and unnumbered alpha versions", () => {
-  for (const label of ["v0.1.5", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
+  for (const label of ["v0.1.6", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
     assert.doesNotThrow(() => validateReleaseLabel(label), label);
   }
 });
@@ -28,7 +28,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the stable 0.1.5 release version", () => {
+test("all tracked client projects use the stable 0.1.6 release version", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -49,20 +49,20 @@ test("all tracked client projects use the stable 0.1.5 release version", () => {
     "utf8",
   );
 
-  assert.equal(packageMetadata.version, "0.1.5");
-  assert.equal(tauriMetadata.version, "0.1.5");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 1005);
-  assert.match(cargoManifest, /^version = "0\.1\.5"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.1\.5"/);
-  assert.match(nativeAndroid, /versionCode = 20/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.5"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "39"/);
-  assert.match(nativeHarmony, /"versionName": "0\.1\.5"/);
-  assert.match(nativeHarmony, /"versionCode": 1000005/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.5/);
-  assert.match(tauriApple, /CFBundleVersion: "32"/);
-  assert.match(tauriAppleInfo, /<string>0\.1\.5<\/string>/);
-  assert.match(tauriAppleInfo, /<string>32<\/string>/);
+  assert.equal(packageMetadata.version, "0.1.6");
+  assert.equal(tauriMetadata.version, "0.1.6");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 1006);
+  assert.match(cargoManifest, /^version = "0\.1\.6"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.1\.6"/);
+  assert.match(nativeAndroid, /versionCode = 21/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.6"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "40"/);
+  assert.match(nativeHarmony, /"versionName": "0\.1\.6"/);
+  assert.match(nativeHarmony, /"versionCode": 1000006/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.6/);
+  assert.match(tauriApple, /CFBundleVersion: "40"/);
+  assert.match(tauriAppleInfo, /<string>0\.1\.6<\/string>/);
+  assert.match(tauriAppleInfo, /<string>40<\/string>/);
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {
@@ -118,4 +118,25 @@ test("native Apple targets keep the App Store Connect bundle identifiers", () =>
     iosPackageScript,
     /EXPECTED_BUNDLE_IDENTIFIER="com\.nemoyu\.wheretostudy\.native\.macos"/,
   );
+});
+
+test("Linux releases build and validate both deb and AppImage artifacts", () => {
+  const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
+  const workflow = readFileSync(
+    path.join(root, ".github", "workflows", "build-linux.yml"),
+    "utf8",
+  );
+  const packagingScript = readFileSync(
+    path.join(root, "scripts", "linux-package.sh"),
+    "utf8",
+  );
+
+  assert.match(packageMetadata.scripts["tauri:build:linux"], /--bundles deb,appimage/);
+  assert.match(workflow, /runs-on: ubuntu-22\.04/);
+  assert.match(workflow, /libwebkit2gtk-4\.1-dev/);
+  assert.match(workflow, /\.\/scripts\/linux-package\.sh "\$RELEASE_LABEL"/);
+  assert.match(packagingScript, /dpkg-deb -f "\$DEB_PATH" Version/);
+  assert.match(packagingScript, /--appimage-extract/);
+  assert.match(packagingScript, /linux-x86_64\.deb/);
+  assert.match(packagingScript, /linux-x86_64\.AppImage/);
 });

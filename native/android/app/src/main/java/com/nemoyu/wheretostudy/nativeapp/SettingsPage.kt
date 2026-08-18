@@ -6,6 +6,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -30,6 +32,22 @@ class SettingsPage(
     private val availableWidthDp: Int,
     private val usesBottomNavigation: Boolean,
 ) {
+    private val toastHandler = Handler(Looper.getMainLooper())
+    private var transientToast: Toast? = null
+
+    private fun showSavedToast() {
+        transientToast?.cancel()
+        val toast = Toast.makeText(activity, "设置已保存", Toast.LENGTH_SHORT)
+        transientToast = toast
+        toast.show()
+        toastHandler.postDelayed({
+            if (transientToast === toast) {
+                toast.cancel()
+                transientToast = null
+            }
+        }, 1_800L)
+    }
+
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
         clipToPadding = false
@@ -262,7 +280,7 @@ class SettingsPage(
             setOnClickListener {
                 saveSettings().onSuccess { credentials ->
                     applySavedCredentials(credentials)
-                    Toast.makeText(activity, "设置已保存", Toast.LENGTH_SHORT).show()
+                    showSavedToast()
                 }.onFailure { error ->
                     Toast.makeText(
                         activity,

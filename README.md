@@ -1,6 +1,6 @@
 # Where To Study
 
-北邮空教室与个人课表联动查询应用。Windows 客户端使用 Tauri 2、React 和 Rust，
+北邮空教室与个人课表联动查询应用。Windows 与 Linux 客户端使用 Tauri 2、React 和 Rust，
 macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android Views，
 鸿蒙（HarmonyOS NEXT）客户端使用 ArkTS 与 ArkUI；macOS 同时保留 Tauri Apple
 Silicon 兼容构建。
@@ -20,15 +20,16 @@ Silicon 兼容构建。
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.1.5 (38)` 正式签名 Universal 构建；公开 GitHub Release 另提供临时签名预览包 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.1.6 (40)` 正式签名 Universal 构建；公开 GitHub Release 另提供临时签名预览包 |
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
-| iOS | SwiftUI 原生 | `0.1.5 (38)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
+| Linux | Tauri 2 + React + Rust | 发布 x86_64 Debian 包与 AppImage |
+| iOS | SwiftUI 原生 | `0.1.6 (40)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板布局已移植并通过 45 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-稳定版 [v0.1.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.5) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版逐项统一 Android 与 iOS 的边线、控件高度、首页和设置密度，并在两套原生手机教学日历的日期、模式、翻页、月历展开及年视图跳转中加入系统触觉反馈。移动端继续支持日、周、月左右滑动与月视图连续展开动画；桌面端保留完整月历、双栏年历和 16px 正常页面边距。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 使用 `0.1.5 (38)`，公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
+稳定版 [v0.1.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.6) 提供 Windows x64 NSIS、Linux x86_64 Debian/AppImage、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版修正移动日历的滑动判定、月视图跟手展开、课程详情、时间轴密度和底部导航层级，并进一步统一 Android 与 iOS 的边线、控件高度、首页和设置密度。移动端支持日、周、月左右滑动与月视图连续展开动画；桌面端继续保留完整月历、双栏年历和正常页面边距。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 使用 `0.1.6 (40)`，公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
 
 ## 许可证状态
 
@@ -85,6 +86,15 @@ npm run tauri:build:windows
 ```
 
 该脚本固定使用 `--bundles nsis --ci`，产物位于 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。Windows 构建建议在 Windows 机器或 Windows CI runner 上执行，需要安装 Rust MSVC toolchain、Microsoft C++ Build Tools 和 WebView2 Runtime。
+
+在 Debian 12/Ubuntu 22.04 或兼容的 x86_64 Linux 环境构建 Debian 包与 AppImage：
+
+```bash
+npm run tauri:build:linux
+./scripts/linux-package.sh vX.Y.Z
+```
+
+Linux 打包脚本会解包校验版本、架构、正式 HTTPS 数据源和三份法律文件，并输出带相邻 SHA-256 文件的 `.deb` 与 `.AppImage`。仓库的 `Build Linux` 工作流使用 Ubuntu 22.04 原生 runner 执行同一流程。
 
 ### 原生客户端
 

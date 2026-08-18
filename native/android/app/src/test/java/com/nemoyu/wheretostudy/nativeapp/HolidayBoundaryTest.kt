@@ -47,7 +47,7 @@ class HolidaySourceBoundaryTest {
             "https://unpkg.com/holiday-calendar@1.3.3/data/CN",
             HolidayMetadata.source,
         )
-        assertEquals("WhereToStudyNative/0.1.5", HolidayUserAgent.value)
+        assertEquals("WhereToStudyNative/0.1.6", HolidayUserAgent.value)
     }
 
     @Test

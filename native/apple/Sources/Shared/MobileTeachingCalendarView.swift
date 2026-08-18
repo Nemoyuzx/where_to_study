@@ -20,22 +20,34 @@ private enum MobileCalendarMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-private struct MobileCalendarSelection: Identifiable {
+private struct MobileCalendarDetailSelection: Identifiable {
+    enum Content {
+        case day
+        case course(Course)
+        case holiday(HolidayItem)
+    }
+
+    let id = UUID()
     let date: Date
-    var id: Date { date }
+    let content: Content
 }
 
 private struct MobileMonthEvent: Identifiable {
     let id: String
     let title: String
     let tint: Color
+    let detail: MobileCalendarDetailSelection.Content
 }
 
 struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var session: TeachingCalendarSessionState
-    @State private var presentedDay: MobileCalendarSelection?
+    @State private var presentedDetail: MobileCalendarDetailSelection?
     @State private var pageDirection = 1
+    @State private var isHorizontalPaging = false
+    @State private var suppressesEventSelection = false
+    @State private var monthDragTranslation: CGFloat = 0
+    @State private var monthDragAxis: TeachingCalendarLogic.GestureAxis?
 
     private let calendar = Calendar.shanghai
 
@@ -73,8 +85,8 @@ struct MobileTeachingCalendarView: View {
             .accessibilityIdentifier("screen.calendar")
             .navigationBarHidden(true)
         }
-        .sheet(item: $presentedDay) { selection in
-            dayDetailSheet(selection.date)
+        .sheet(item: $presentedDetail) { selection in
+            detailSheet(selection)
                 .presentationDetents([.medium, .large])
         }
         .onAppear(perform: ensureVisibleHolidays)
@@ -201,6 +213,7 @@ struct MobileTeachingCalendarView: View {
         let holiday = holidayItems(on: day).first
 
         return Button {
+            guard !suppressesEventSelection else { return }
             navigate(to: day)
         } label: {
             VStack(spacing: 3) {
@@ -281,8 +294,13 @@ struct MobileTeachingCalendarView: View {
                 days: days.map(timelineDay),
                 selectedDate: selectedDate,
                 showsWeekColumns: mode == .week,
+                isScrollEnabled: !isHorizontalPaging,
                 onSelectDay: { date in
+                    guard !suppressesEventSelection else { return }
                     navigate(to: date)
+                },
+                onSelectCourse: { date, course in
+                    presentCourse(course, on: date)
                 }
             )
             .accessibilityElement(children: .contain)
@@ -304,20 +322,26 @@ struct MobileTeachingCalendarView: View {
                     .foregroundStyle(AppTheme.secondaryText)
             }
             ForEach(dayCourses) { course in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(course.name)
-                        .font(.caption.weight(.semibold))
+                Button {
+                    presentCourse(course, on: selectedDate)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(course.name)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                        Text(
+                            [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
+                                .filter { !$0.isEmpty }
+                                .joined(separator: " · ")
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.secondaryText)
                         .lineLimit(1)
-                    Text(
-                        [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
-                            .filter { !$0.isEmpty }
-                            .joined(separator: " · ")
-                    )
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.secondaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                        .minimumScaleFactor(0.75)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 16)
@@ -338,7 +362,7 @@ struct MobileTeachingCalendarView: View {
                         .foregroundStyle(AppTheme.secondaryText)
                     ForEach(items, id: \.1.id) { day, item in
                         Button {
-                            navigate(to: day)
+                            presentHoliday(item, on: day)
                         } label: {
                             Text("\(Self.monthDayCompactFormatter.string(from: day)) · \(item.name)")
                                 .font(.caption.weight(.semibold))
@@ -363,27 +387,48 @@ struct MobileTeachingCalendarView: View {
         let days = monthGridDates(containing: first)
 
         return GeometryReader { proxy in
+            let usableHeight = max(
+                proxy.size.height - MobileCalendarTimelineLayout.bottomContentInset,
+                0
+            )
+            let expansionProgress = TeachingCalendarLogic.monthExpansionProgress(
+                isExpanded: isMonthExpanded,
+                verticalTranslation: monthDragTranslation,
+                travelDistance: max(usableHeight * 0.34, 150)
+            )
+            let expandedCellHeight = TeachingCalendarLogic.expandedMonthCellHeight(
+                availableHeight: usableHeight
+            )
+            let cellHeight = 46 + (expandedCellHeight - 46) * expansionProgress
+            let gridHeight = cellHeight * 6 + 20
+            let summaryHeight = max(usableHeight - 18 - 8 - gridHeight - 28 - 16, 0)
+
             VStack(spacing: 0) {
                 monthWeekdayHeader
                     .padding(.bottom, 8)
                 monthDateGrid(
                     days: days,
                     month: first,
-                    expanded: isMonthExpanded,
-                    dayCellHeight: isMonthExpanded
-                        ? expandedMonthCellHeight(availableHeight: proxy.size.height)
-                        : 46
+                    expansionProgress: expansionProgress,
+                    dayCellHeight: cellHeight
                 )
                 monthExpansionHandle
-                if !isMonthExpanded {
-                    daySummaryCard(selectedDate)
-                        .accessibilityIdentifier("calendar.mobile.month-day-summary")
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                if expansionProgress < 0.999, summaryHeight > 0 {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        daySummaryCard(selectedDate)
+                    }
+                    .scrollDisabled(monthDragAxis != nil)
+                    .frame(height: summaryHeight)
+                    .opacity(1 - expansionProgress)
+                    .allowsHitTesting(expansionProgress < 0.25 && monthDragAxis == nil)
+                    .accessibilityIdentifier("calendar.mobile.month-day-summary")
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, minHeight: usableHeight, maxHeight: usableHeight, alignment: .top)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .clipped()
             .contentShape(Rectangle())
@@ -414,7 +459,7 @@ struct MobileTeachingCalendarView: View {
     private func monthDateGrid(
         days: [Date],
         month: Date,
-        expanded: Bool,
+        expansionProgress: CGFloat,
         dayCellHeight: CGFloat
     ) -> some View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
@@ -423,7 +468,7 @@ struct MobileTeachingCalendarView: View {
                 monthDayButton(
                     day,
                     month: month,
-                    expanded: expanded,
+                    expansionProgress: expansionProgress,
                     cellHeight: dayCellHeight
                 )
             }
@@ -459,7 +504,7 @@ struct MobileTeachingCalendarView: View {
     private func monthDayButton(
         _ day: Date,
         month: Date,
-        expanded: Bool,
+        expansionProgress: CGFloat,
         cellHeight: CGFloat
     ) -> some View {
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
@@ -473,79 +518,94 @@ struct MobileTeachingCalendarView: View {
             maximumRows: expandedMonthEventRowLimit(cellHeight: cellHeight)
         )
 
-        return Button {
-            navigate(to: day)
-        } label: {
-            VStack(spacing: expanded ? 4 : 3) {
+        return VStack(spacing: 3) {
+            Button {
+                guard !suppressesEventSelection else { return }
+                navigate(to: day)
+            } label: {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.subheadline.weight(selected ? .bold : .medium))
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, expanded ? 3 : 0)
-                if expanded {
-                    VStack(spacing: 2) {
-                        ForEach(Array(events.prefix(eventLayout.visibleEventCount))) { event in
-                            monthEventItem(
-                                event.title,
-                                tint: selected ? AppTheme.onPrimary : event.tint
-                            )
-                        }
-                        if eventLayout.hiddenEventCount > 0 {
-                            monthEventItem(
-                                "+\(eventLayout.hiddenEventCount)",
-                                tint: selected ? AppTheme.onPrimary : AppTheme.secondaryText
-                            )
-                        }
+                    .padding(.top, 3 * expansionProgress)
+            }
+            .buttonStyle(.plain)
+
+            ZStack(alignment: .top) {
+                HStack(spacing: 2) {
+                    if holiday != nil {
+                        Text(holiday?.type == "holiday" ? "休" : "班")
+                            .font(.system(size: 8, weight: .bold))
                     }
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .transition(.move(edge: .top))
-                } else {
-                    HStack(spacing: 2) {
-                        if holiday != nil {
-                            Text(holiday?.type == "holiday" ? "休" : "班")
-                                .font(.system(size: 8, weight: .bold))
-                        }
-                        ForEach(0 ..< min(dayCourses.count, 3), id: \.self) { _ in
-                            Circle().frame(width: 3, height: 3)
-                        }
+                    ForEach(0 ..< min(dayCourses.count, 3), id: \.self) { _ in
+                        Circle().frame(width: 3, height: 3)
                     }
-                    .frame(height: 7)
-                    .transition(.opacity)
                 }
+                .frame(height: 14)
+                .opacity(1 - expansionProgress)
+
+                VStack(spacing: 2) {
+                    ForEach(Array(events.prefix(eventLayout.visibleEventCount))) { event in
+                        monthEventItem(
+                            event,
+                            tint: selected ? AppTheme.onPrimary : event.tint,
+                            day: day
+                        )
+                    }
+                    if eventLayout.hiddenEventCount > 0 {
+                        Text("+\(eventLayout.hiddenEventCount)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.secondaryText)
+                            .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14)
+                            .background(AppTheme.surface.opacity(0.78))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .opacity(expansionProgress)
+                .offset(y: (1 - expansionProgress) * -5)
+                .allowsHitTesting(expansionProgress > 0.75 && monthDragAxis == nil)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
-            .foregroundStyle(monthForeground(selected: selected, inMonth: inMonth, holiday: holiday))
-            .padding(.horizontal, expanded ? 2 : 3)
-            .padding(.vertical, expanded ? 2 : 4)
-            .frame(
-                maxWidth: .infinity,
-                minHeight: cellHeight,
-                maxHeight: cellHeight,
-                alignment: expanded ? .top : .center
-            )
-            .background(monthBackground(selected: selected, courseCount: dayCourses.count))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(today && !selected ? AppTheme.primary : Color.clear, lineWidth: 2)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 9))
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(monthForeground(selected: selected, inMonth: inMonth, holiday: holiday))
+        .padding(.horizontal, 2 + (1 - expansionProgress))
+        .padding(.vertical, 2 + (1 - expansionProgress) * 2)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: cellHeight,
+            maxHeight: cellHeight,
+            alignment: expansionProgress > 0.5 ? .top : .center
+        )
+        .background(monthBackground(selected: selected, courseCount: dayCourses.count))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9)
+                .stroke(today && !selected ? AppTheme.primary : Color.clear, lineWidth: 2)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
     }
 
-    private func monthEventItem(_ title: String, tint: Color) -> some View {
-        Text(title)
-            .font(.system(size: 9, weight: .semibold))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .foregroundStyle(tint)
-            .padding(.horizontal, 3)
-            .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14, alignment: .center)
-            .background(AppTheme.surface.opacity(0.78))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(tint.opacity(0.55), lineWidth: 0.75)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+    private func monthEventItem(_ event: MobileMonthEvent, tint: Color, day: Date) -> some View {
+        Button {
+            guard !suppressesEventSelection else { return }
+            present(event.detail, on: day)
+        } label: {
+            Text(event.title)
+                .font(.system(size: 9, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(tint)
+                .padding(.horizontal, 3)
+                .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14, alignment: .center)
+                .background(AppTheme.surface.opacity(0.78))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(tint.opacity(0.55), lineWidth: 0.75)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .buttonStyle(.plain)
     }
 
     private func monthEvents(on day: Date) -> [MobileMonthEvent] {
@@ -553,22 +613,19 @@ struct MobileTeachingCalendarView: View {
             MobileMonthEvent(
                 id: "holiday-\(item.id)",
                 title: "\(item.type == "holiday" ? "休" : "班") \(item.name)",
-                tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary
+                tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary,
+                detail: .holiday(item)
             )
         }
         let dayCourses = courses(on: day).map { course in
             MobileMonthEvent(
                 id: "course-\(course.id)",
                 title: course.name,
-                tint: AppTheme.primary
+                tint: AppTheme.primary,
+                detail: .course(course)
             )
         }
         return holidays + dayCourses
-    }
-
-    private func expandedMonthCellHeight(availableHeight: CGFloat) -> CGFloat {
-        let reservedHeight: CGFloat = 18 + 8 + 20 + 16
-        return max(44, min(82, floor((availableHeight - reservedHeight) / 6)))
     }
 
     private func expandedMonthEventRowLimit(cellHeight: CGFloat) -> Int {
@@ -604,8 +661,21 @@ struct MobileTeachingCalendarView: View {
         let days = monthGridDates(containing: month)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 1), count: 7)
         return VStack(alignment: .leading, spacing: 6) {
-            Text(Self.monthFormatter.string(from: month))
-                .font(.headline)
+            Button {
+                jumpToMonth(month)
+            } label: {
+                HStack {
+                    Text(Self.monthFormatter.string(from: month))
+                        .font(.headline)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("查看\(Self.monthFormatter.string(from: month))")
+            .accessibilityIdentifier(
+                "calendar.mobile.year-month.\(Self.yearMonthKeyFormatter.string(from: month))"
+            )
             LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(Self.weekdayLabels, id: \.self) { label in
                     Text(label)
@@ -628,7 +698,7 @@ struct MobileTeachingCalendarView: View {
             Button {
                 MobileCalendarHaptics.selection()
                 selectedDate = day
-                presentedDay = MobileCalendarSelection(date: day)
+                presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
             } label: {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8, weight: .medium))
@@ -667,21 +737,27 @@ struct MobileTeachingCalendarView: View {
                     .foregroundStyle(AppTheme.secondaryText)
             } else {
                 ForEach(dayCourses) { course in
-                    HStack(alignment: .top, spacing: 10) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(AppTheme.primary)
-                            .frame(width: 4, height: 38)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(course.name).font(.subheadline.weight(.semibold))
-                            Text(
-                                [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
-                                    .filter { !$0.isEmpty }
-                                    .joined(separator: " · ")
-                            )
+                    Button {
+                        presentCourse(course, on: day)
+                    } label: {
+                        HStack(alignment: .top, spacing: 10) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(AppTheme.primary)
+                                .frame(width: 4, height: 38)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(course.name).font(.subheadline.weight(.semibold))
+                                Text(
+                                    [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
+                                        .filter { !$0.isEmpty }
+                                        .joined(separator: " · ")
+                                )
                                 .font(.caption)
                                 .foregroundStyle(AppTheme.secondaryText)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -694,23 +770,115 @@ struct MobileTeachingCalendarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    private func dayDetailSheet(_ day: Date) -> some View {
+    private func detailSheet(_ selection: MobileCalendarDetailSelection) -> some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    yearNavigationCommands(day)
-                    daySummaryCard(day)
+                    switch selection.content {
+                    case .day:
+                        yearNavigationCommands(selection.date)
+                        fullDayDetail(selection.date)
+                    case let .course(course):
+                        courseDetailCard(course, on: selection.date)
+                    case let .holiday(holiday):
+                        holidayDetailCard(holiday, on: selection.date)
+                    }
                 }
                 .padding(16)
             }
             .background(AppTheme.background)
-            .navigationTitle(Self.monthDayCompactFormatter.string(from: day))
+            .navigationTitle(detailTitle(selection))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { presentedDay = nil }
+                    Button("完成") { presentedDetail = nil }
                 }
             }
+        }
+    }
+
+    private func fullDayDetail(_ day: Date) -> some View {
+        let holidays = holidayItems(on: day)
+        let dayCourses = courses(on: day)
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(Self.fullDateFormatter.string(from: day))
+                .font(.headline)
+            ForEach(holidays) { holiday in
+                holidayDetailCard(holiday, on: day)
+            }
+            ForEach(dayCourses) { course in
+                courseDetailCard(course, on: day)
+            }
+            if holidays.isEmpty, dayCourses.isEmpty {
+                Text("暂无日程")
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func courseDetailCard(_ course: Course, on day: Date) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(course.name, systemImage: "book.closed")
+                .font(.headline)
+                .foregroundStyle(AppTheme.text)
+            detailRow("日期", Self.fullDateFormatter.string(from: day))
+            detailRow("时间", course.timeRange)
+            detailRow("节次", course.sectionText)
+            detailRow("地点", course.room.isEmpty ? "未标注" : course.room)
+            detailRow("教师", course.teacher.isEmpty ? "未标注" : course.teacher)
+            detailRow("教学周", course.weekText)
+            if !course.examWeekNumbers.isEmpty {
+                detailRow("考试周", course.examWeekNumbers.map(String.init).joined(separator: "、"))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(AppTheme.surface)
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border, lineWidth: 1) }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func holidayDetailCard(_ holiday: HolidayItem, on day: Date) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(
+                holiday.name,
+                systemImage: holiday.type == "holiday" ? "calendar.badge.exclamationmark" : "briefcase"
+            )
+            .font(.headline)
+            .foregroundStyle(holiday.type == "holiday" ? AppTheme.danger : AppTheme.primary)
+            detailRow("日期", Self.fullDateFormatter.string(from: day))
+            detailRow("类型", holiday.type == "holiday" ? "法定节假日" : "调休工作日")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(AppTheme.surface)
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border, lineWidth: 1) }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryText)
+                .frame(width: 52, alignment: .leading)
+            Text(value.isEmpty ? "未标注" : value)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func detailTitle(_ selection: MobileCalendarDetailSelection) -> String {
+        switch selection.content {
+        case .day:
+            Self.monthDayCompactFormatter.string(from: selection.date)
+        case .course:
+            "课程详情"
+        case .holiday:
+            "日程详情"
         }
     }
 
@@ -734,11 +902,35 @@ struct MobileTeachingCalendarView: View {
                 selectedDate = day
                 mode = targetMode
             }
-            presentedDay = nil
+            presentedDetail = nil
         }
         .buttonStyle(.bordered)
         .frame(maxWidth: .infinity)
         .accessibilityIdentifier("calendar.mobile.year-jump.\(targetMode.rawValue)")
+    }
+
+    private func jumpToMonth(_ month: Date) {
+        MobileCalendarHaptics.selection()
+        pageDirection = month > selectedDate ? 1 : -1
+        withAnimation(Self.pageAnimation) {
+            selectedDate = month
+            mode = .month
+        }
+    }
+
+    private func presentCourse(_ course: Course, on day: Date) {
+        guard !suppressesEventSelection else { return }
+        present(.course(course), on: day)
+    }
+
+    private func presentHoliday(_ holiday: HolidayItem, on day: Date) {
+        guard !suppressesEventSelection else { return }
+        present(.holiday(holiday), on: day)
+    }
+
+    private func present(_ content: MobileCalendarDetailSelection.Content, on day: Date) {
+        MobileCalendarHaptics.selection()
+        presentedDetail = MobileCalendarDetailSelection(date: day, content: content)
     }
 
     private var periodTitle: String {
@@ -833,7 +1025,14 @@ struct MobileTeachingCalendarView: View {
 
     private var periodSwipeGesture: some Gesture {
         DragGesture(minimumDistance: 18, coordinateSpace: .local)
+            .onChanged { value in
+                trackPeriodDrag(
+                    horizontalTranslation: value.translation.width,
+                    verticalTranslation: value.translation.height
+                )
+            }
             .onEnded { value in
+                defer { finishTrackedDrag() }
                 guard mode != .year,
                       let direction = TeachingCalendarLogic.swipeDirection(
                           horizontalTranslation: value.translation.width,
@@ -847,8 +1046,25 @@ struct MobileTeachingCalendarView: View {
 
     private var monthNavigationGesture: some Gesture {
         DragGesture(minimumDistance: 18, coordinateSpace: .local)
+            .onChanged { value in
+                let axis = monthDragAxis ?? TeachingCalendarLogic.gestureAxis(
+                    horizontalTranslation: value.translation.width,
+                    verticalTranslation: value.translation.height
+                )
+                guard let axis else { return }
+                monthDragAxis = axis
+                suppressesEventSelection = true
+                switch axis {
+                case .horizontal:
+                    isHorizontalPaging = true
+                case .vertical:
+                    monthDragTranslation = value.translation.height
+                }
+            }
             .onEnded { value in
-                if let direction = TeachingCalendarLogic.swipeDirection(
+                defer { finishTrackedDrag() }
+                if monthDragAxis == .horizontal,
+                   let direction = TeachingCalendarLogic.swipeDirection(
                     horizontalTranslation: value.translation.width,
                     verticalTranslation: value.translation.height,
                     predictedHorizontalTranslation: value.predictedEndTranslation.width
@@ -857,14 +1073,42 @@ struct MobileTeachingCalendarView: View {
                     return
                 }
 
+                guard monthDragAxis == .vertical else {
+                    withAnimation(Self.monthExpansionAnimation) { monthDragTranslation = 0 }
+                    return
+                }
                 guard let action = TeachingCalendarLogic.monthExpansionAction(
                     horizontalTranslation: value.translation.width,
                     verticalTranslation: value.translation.height
-                ) else { return }
-                if action == .expand, isMonthExpanded { return }
-                if action == .collapse, !isMonthExpanded { return }
-                changeMonthExpansion(to: action == .expand)
+                ) else {
+                    withAnimation(Self.monthExpansionAnimation) { monthDragTranslation = 0 }
+                    return
+                }
+                settleMonthExpansion(to: action == .expand)
             }
+    }
+
+    private func trackPeriodDrag(
+        horizontalTranslation: CGFloat,
+        verticalTranslation: CGFloat
+    ) {
+        guard let axis = TeachingCalendarLogic.gestureAxis(
+            horizontalTranslation: horizontalTranslation,
+            verticalTranslation: verticalTranslation
+        ) else { return }
+        suppressesEventSelection = true
+        if axis == .horizontal {
+            isHorizontalPaging = true
+        }
+    }
+
+    private func finishTrackedDrag() {
+        isHorizontalPaging = false
+        monthDragAxis = nil
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            suppressesEventSelection = false
+        }
     }
 
     private var modeSelection: Binding<MobileCalendarMode> {
@@ -885,6 +1129,17 @@ struct MobileTeachingCalendarView: View {
         guard expanded != isMonthExpanded else { return }
         MobileCalendarHaptics.selection()
         withAnimation(Self.monthExpansionAnimation) {
+            monthDragTranslation = 0
+            isMonthExpanded = expanded
+        }
+    }
+
+    private func settleMonthExpansion(to expanded: Bool) {
+        if expanded != isMonthExpanded {
+            MobileCalendarHaptics.selection()
+        }
+        withAnimation(Self.monthExpansionAnimation) {
+            monthDragTranslation = 0
             isMonthExpanded = expanded
         }
     }
@@ -947,6 +1202,7 @@ struct MobileTeachingCalendarView: View {
     private static let fullDateFormatter = formatter("yyyy年M月d日 EEEE")
     private static let yearMonthFormatter = formatter("yyyy年M月")
     private static let monthFormatter = formatter("M月")
+    private static let yearMonthKeyFormatter = formatter("yyyy-MM")
     private static let monthDayCompactFormatter = formatter("M月d日")
     private static let weekdayFormatter = formatter("E")
 

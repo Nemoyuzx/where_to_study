@@ -474,7 +474,7 @@ final class AppModel: ObservableObject {
             defaults.set(campusID, forKey: "campusID")
             defaults.set(termID, forKey: "termID")
             defaults.set(termStartDate, forKey: "termStartDate")
-            statusMessage = "设置已保存"
+            setStatusMessage("设置已保存", autoDismiss: true)
             return true
         } catch {
             statusMessage = error.localizedDescription

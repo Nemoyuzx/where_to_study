@@ -37,7 +37,9 @@ struct MobileCalendarTimelineView: View {
     let days: [CalendarTimelineDay]
     let selectedDate: Date
     let showsWeekColumns: Bool
+    var isScrollEnabled = true
     var onSelectDay: ((Date) -> Void)?
+    var onSelectCourse: ((Date, Course) -> Void)?
 
     private let calendar = Calendar.shanghai
 
@@ -61,6 +63,7 @@ struct MobileCalendarTimelineView: View {
                             .accessibilityHidden(true)
                     }
                 }
+                .scrollDisabled(!isScrollEnabled)
                 .background(MobileDirectionalScrollLock())
                 .task(id: scrollRequestID) {
                     try? await Task.sleep(nanoseconds: 100_000_000)
@@ -243,6 +246,7 @@ struct MobileCalendarTimelineView: View {
                     let top = MobileCalendarTimelineLayout.yPosition(minute: start) + 2
                     let bottom = max(top + 38, MobileCalendarTimelineLayout.yPosition(minute: end) - 2)
                     courseBlock(
+                        date: day.date,
                         placement: placement,
                         width: max(trackWidth - inset * 2, showsWeekColumns ? 8 : 24),
                         x: x,
@@ -255,6 +259,7 @@ struct MobileCalendarTimelineView: View {
     }
 
     private func courseBlock(
+        date: Date,
         placement: CoursePlacement,
         width: CGFloat,
         x: CGFloat,
@@ -263,41 +268,46 @@ struct MobileCalendarTimelineView: View {
     ) -> some View {
         let height = bottom - top
         let metadata = CalendarTimelineLogic.courseMetadata(placement.course)
-        return VStack(alignment: .leading, spacing: showsWeekColumns ? 1 : 2) {
-            Text(placement.course.name)
-                .font(.system(size: showsWeekColumns ? 10 : 12, weight: .semibold))
-                .lineLimit(showsWeekColumns ? 3 : 1)
-                .fixedSize(horizontal: false, vertical: true)
-            if height >= 38 {
-                Text(placement.course.timeRange)
-                    .font(.system(size: showsWeekColumns ? 8 : 10, design: .monospaced))
-                    .lineLimit(showsWeekColumns ? 2 : 1)
+        return Button {
+            onSelectCourse?(date, placement.course)
+        } label: {
+            VStack(alignment: .leading, spacing: showsWeekColumns ? 1 : 2) {
+                Text(placement.course.name)
+                    .font(.system(size: showsWeekColumns ? 10 : 12, weight: .semibold))
+                    .lineLimit(showsWeekColumns ? 3 : 1)
                     .fixedSize(horizontal: false, vertical: true)
+                if height >= 38 {
+                    Text(placement.course.timeRange)
+                        .font(.system(size: showsWeekColumns ? 8 : 10, design: .monospaced))
+                        .lineLimit(showsWeekColumns ? 2 : 1)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if showsWeekColumns, height >= 48 {
+                    Text(placement.course.room.isEmpty ? "地点未标注" : placement.course.room)
+                        .font(.system(size: 10, weight: .medium))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(placement.course.teacher.isEmpty ? "教师未标注" : "教师：\(placement.course.teacher)")
+                        .font(.system(size: 10, weight: .medium))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if height >= 44, !metadata.isEmpty {
+                    Text(metadata)
+                        .font(.system(size: 10))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
             }
-            if showsWeekColumns, height >= 48 {
-                Text(placement.course.room.isEmpty ? "地点未标注" : placement.course.room)
-                    .font(.system(size: 10, weight: .medium))
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(placement.course.teacher.isEmpty ? "教师未标注" : "教师：\(placement.course.teacher)")
-                    .font(.system(size: 10, weight: .medium))
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if height >= 44, !metadata.isEmpty {
-                Text(metadata)
-                    .font(.system(size: 10))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+            .foregroundStyle(AppTheme.onPrimary)
+            .padding(showsWeekColumns ? 5 : 6)
+            .frame(width: width, height: height, alignment: .topLeading)
+            .background(AppTheme.primaryFill)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(alignment: .leading) {
+                Rectangle().fill(AppTheme.accent).frame(width: 3)
             }
         }
-        .foregroundStyle(AppTheme.onPrimary)
-        .padding(showsWeekColumns ? 5 : 6)
-        .frame(width: width, height: height, alignment: .topLeading)
-        .background(AppTheme.primaryFill)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(alignment: .leading) {
-            Rectangle().fill(AppTheme.accent).frame(width: 3)
-        }
+        .buttonStyle(.plain)
         .position(x: x + width / 2, y: (top + bottom) / 2)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(

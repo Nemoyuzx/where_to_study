@@ -1,9 +1,29 @@
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "android",
+    target_os = "windows"
+))]
+use zeroize::Zeroizing;
 
 use crate::error::{ServiceError, ServiceResult};
 
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "android",
+    target_os = "windows"
+))]
 const SERVICE_NAME: &str = "com.nemoyu.wheretostudy";
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "android",
+    target_os = "windows"
+))]
 const ENTRY_NAME: &str = "default-account";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]

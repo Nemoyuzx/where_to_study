@@ -50,6 +50,7 @@ class YearCalendarView(
     days: List<YearCalendarDay>,
     private val availableWidthDp: Int,
     private val onDateSelected: (YearCalendarView, Calendar, Float, Float) -> Unit,
+    private val onMonthSelected: (Calendar) -> Unit,
 ) : View(context) {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val dayByKey = days.associateBy { key(it.date) }
@@ -134,9 +135,15 @@ class YearCalendarView(
 
             MotionEvent.ACTION_UP -> {
                 if (abs(event.x - downX) <= touchSlop && abs(event.y - downY) <= touchSlop) {
-                    dateAt(event.x, event.y)?.let { date ->
+                    val date = dateAt(event.x, event.y)
+                    if (date != null) {
                         performClick()
                         onDateSelected(this, date, event.x, event.y)
+                    } else {
+                        monthAtHeader(event.x, event.y)?.let { month ->
+                            performClick()
+                            onMonthSelected(month)
+                        }
                     }
                 }
                 return true
@@ -210,7 +217,7 @@ class YearCalendarView(
         canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), fillPaint)
 
         borderPaint.color = if (today) Palette.primary else Palette.border
-        borderPaint.strokeWidth = resources.displayMetrics.density * if (today) 2f else 0.5f
+        borderPaint.strokeWidth = resources.displayMetrics.density * if (today) 1.5f else 0.32f
         canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), borderPaint)
 
         textPaint.textAlign = Paint.Align.CENTER
@@ -243,6 +250,20 @@ class YearCalendarView(
         val row = (localY / dayCellHeight).toInt().coerceAtMost(5)
         val day = YearCalendarLogic.dayNumber(year, monthIndex + 1, row, column) ?: return null
         return calendar(monthIndex + 1, day)
+    }
+
+    private fun monthAtHeader(x: Float, y: Float): Calendar? {
+        if (x !in 0f..width.toFloat() || y !in 0f..height.toFloat()) return null
+        val monthWidth = monthWidth()
+        val monthStride = monthWidth + monthGap
+        val monthColumn = (x / monthStride).toInt().coerceAtMost(columns - 1)
+        val monthRow = (y / monthHeight).toInt()
+        val monthIndex = monthRow * columns + monthColumn
+        if (monthIndex !in 0..11) return null
+        val localX = x - monthColumn * monthStride
+        val localY = y - monthRow * monthHeight
+        if (localX !in 0f..monthWidth || localY !in 0f..monthTitleHeight) return null
+        return calendar(monthIndex + 1, 1)
     }
 
     private fun monthWidth(): Float =

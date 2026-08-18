@@ -424,9 +424,9 @@ class ScheduleLogicTest {
         assertTrue(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 51))
         assertFalse(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 47))
         assertEquals(312f to 468f, CalendarTimelineLogic.dayColumnBounds(2, 156f, 1_092f))
-        assertEquals(56, CalendarTimelineLogic.axisWidthDp(compact = true))
+        assertEquals(48, CalendarTimelineLogic.axisWidthDp(compact = true))
         assertEquals(
-            56,
+            48,
             CalendarTimelineLogic.axisWidthDp(compact = true, showCourseSlots = false),
         )
         assertEquals(144, CalendarTimelineLogic.axisWidthDp(compact = false))
@@ -446,6 +446,40 @@ class ScheduleLogicTest {
         assertEquals(0f, TeachingCalendarLogic.yearCourseOpacity(0))
         assertTrue(opacities.zipWithNext().all { (left, right) -> right > left })
         assertTrue(opacities.all { it in 0f..1f })
+    }
+
+    @Test
+    fun expandedMonthRowsFitTheAvailablePhoneViewport() {
+        assertEquals(47, TeachingCalendarLogic.expandedMonthCellHeightDp(360))
+        assertEquals(63, TeachingCalendarLogic.expandedMonthCellHeightDp(456))
+        assertEquals(82, TeachingCalendarLogic.expandedMonthCellHeightDp(720))
+        assertEquals(30, TeachingCalendarLogic.expandedMonthCellHeightDp(240))
+    }
+
+    @Test
+    fun courseDetailContainsEveryUserVisibleField() {
+        val detail = TeachingCalendarLogic.courseDetailLines(
+            Course(
+                id = "course-detail",
+                name = "数据挖掘",
+                teacher = "徐思雅",
+                room = "教二楼-335",
+                weekText = "1-3周",
+                weekNumbers = listOf(1, 2),
+                examWeekNumbers = emptyList(),
+                weekday = 1,
+                startSlot = 0,
+                endSlot = 1,
+                sectionText = "1-2节",
+                timeRange = "08:00-09:35",
+            ),
+        ).joinToString("\n")
+
+        assertTrue(detail.contains("08:00-09:35"))
+        assertTrue(detail.contains("1-2节"))
+        assertTrue(detail.contains("教二楼-335"))
+        assertTrue(detail.contains("徐思雅"))
+        assertTrue(detail.contains("1-3周"))
     }
 
     @Test
