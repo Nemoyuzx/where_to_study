@@ -124,7 +124,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
         PRODUCT_NAME: WhereToStudyiOS
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"

@@ -92,3 +92,30 @@ test("Android adaptive icons keep the canonical logo inside the launcher safe zo
     assert.match(adaptiveIcon, /@color\/ic_launcher_background/);
   }
 });
+
+test("native Apple targets keep the App Store Connect bundle identifiers", () => {
+  const nativeApple = readFileSync(path.join(root, "native", "apple", "project.yml"), "utf8");
+  const appStoreScript = readFileSync(
+    path.join(root, "scripts", "native-apple-app-store.sh"),
+    "utf8",
+  );
+  const iosPackageScript = readFileSync(
+    path.join(root, "scripts", "native-ios-package.sh"),
+    "utf8",
+  );
+
+  assert.equal(
+    nativeApple.match(
+      /^\s*PRODUCT_BUNDLE_IDENTIFIER: com\.nemoyu\.wheretostudy\.native\.macos$/gm,
+    )?.length,
+    2,
+  );
+  assert.match(
+    appStoreScript,
+    /MAIN_BUNDLE_IDENTIFIER="com\.nemoyu\.wheretostudy\.native\.macos"/,
+  );
+  assert.match(
+    iosPackageScript,
+    /EXPECTED_BUNDLE_IDENTIFIER="com\.nemoyu\.wheretostudy\.native\.macos"/,
+  );
+});
