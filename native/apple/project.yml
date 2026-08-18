@@ -8,7 +8,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.5"
-    CURRENT_PROJECT_VERSION: "38"
+    CURRENT_PROJECT_VERSION: "39"
     CODE_SIGN_STYLE: Automatic
 targets:
   WhereToStudyMac:
@@ -124,7 +124,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
         PRODUCT_NAME: WhereToStudyiOS
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1,2"

@@ -58,6 +58,7 @@ class PlannerPage(
         divider = null
         dividerHeight = 0
         isVerticalScrollBarEnabled = true
+        scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
         addHeaderView(verticalPage(activity).apply {
             layoutParams = AbsListView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -75,12 +76,12 @@ class PlannerPage(
             addSection(slotSurface())
             addSection(todayCoursesSurface())
             addSection(buildingsSurface())
-            addView(surface(activity).apply {
-                addView(sectionTitle(
-                    activity,
-                    "空教室结果",
-                    R.drawable.ic_section_check,
-                ))
+            addView(sectionTitle(
+                activity,
+                "空教室结果",
+                R.drawable.ic_section_check,
+            ).apply {
+                setPadding(0, 0, 0, activity.dp(4))
             })
         }, null, false)
         addFooterView(verticalPage(activity).apply {
@@ -89,7 +90,16 @@ class PlannerPage(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
             addView(spacer(activity, 8))
-            summaryContainer = surface(activity).apply { id = R.id.planner_summary }
+            setPadding(activity.dp(12), 0, activity.dp(12), activity.dp(28))
+            summaryContainer = surface(activity, showsBorder = false).apply {
+                id = R.id.planner_summary
+                setPadding(
+                    activity.dp(10),
+                    activity.dp(UiMetrics.surfacePaddingDp),
+                    activity.dp(10),
+                    activity.dp(UiMetrics.surfacePaddingDp),
+                )
+            }
             addView(summaryContainer)
             if (usesBottomNavigation) {
                 addView(spacer(activity, 72))
@@ -105,7 +115,7 @@ class PlannerPage(
         addView(spacer(activity, UiMetrics.sectionSpacingDp))
     }
 
-    private fun querySurface(): LinearLayout = surface(activity).apply {
+    private fun querySurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.planner_query_surface
         setPadding(
             activity.dp(UiMetrics.surfacePaddingDp),
@@ -202,9 +212,9 @@ class PlannerPage(
             setImageResource(R.drawable.ic_refresh)
             imageTintList = ColorStateList.valueOf(Palette.onPrimary)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
-            setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
+            adjustViewBounds = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply {
+        }, LinearLayout.LayoutParams(activity.dp(20), activity.dp(20)).apply {
             marginEnd = activity.dp(8)
         })
         val label = TextView(activity).apply {
@@ -241,7 +251,7 @@ class PlannerPage(
         }
     }
 
-    private fun slotSurface(): LinearLayout = surface(activity).apply {
+    private fun slotSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         addView(sectionTitle(
             activity,
             "节次筛选",
@@ -410,7 +420,7 @@ class PlannerPage(
         }
     }
 
-    private fun todayCoursesSurface(): LinearLayout = surface(activity).apply {
+    private fun todayCoursesSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         addView(sectionTitle(activity, "当天课程", R.drawable.ic_nav_calendar))
         val courses = ScheduleLogic.courses(scheduleRepository.schedule, today)
         if (courses.isEmpty()) {
@@ -431,7 +441,7 @@ class PlannerPage(
         }
     }
 
-    private fun buildingsSurface(): LinearLayout = surface(activity).apply {
+    private fun buildingsSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.planner_buildings_surface
         addView(sectionTitle(activity, "教学楼", R.drawable.ic_section_building))
         val buildings = AppMetadata.buildings(queryState.campusID).ifEmpty {
@@ -564,12 +574,13 @@ class PlannerPage(
         val columns = AdaptiveContentLogic.plannerSummaryColumns(availableWidthDp)
         fun metric(label: String, value: Int): LinearLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
+            setPadding(activity.dp(2), activity.dp(10), activity.dp(2), activity.dp(10))
             addView(TextView(activity).apply {
                 text = label
-                textSize = 12f
+                textSize = 11.5f
                 gravity = Gravity.CENTER_HORIZONTAL
                 setTextColor(Palette.muted)
+                maxLines = 1
             })
             addView(TextView(activity).apply {
                 text = value.toString()
@@ -674,7 +685,7 @@ class PlannerPage(
             setPadding(0, activity.dp(3), 0, 0)
             addView(TextView(activity).apply {
                 text = "联动查询"
-                textSize = 34f
+                textSize = 28f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
                 includeFontPadding = false

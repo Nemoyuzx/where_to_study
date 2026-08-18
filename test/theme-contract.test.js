@@ -24,6 +24,27 @@ const androidPlannerSource = readFileSync(
   ),
   'utf8',
 )
+const androidSettingsSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/SettingsPage.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const androidMainActivitySource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/MainActivity.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const androidTimelineSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/CalendarTimelineView.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
 const androidCalendarSource = readFileSync(
   new URL(
     '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/TeachingCalendarPage.kt',
@@ -130,6 +151,10 @@ test('Windows workspace follows the native Apple layout metrics', () => {
   assert.match(appCss, /\.settings-layout\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
 })
 
+test('scrolling content reserves scrollbar space without shifting the layout', () => {
+  assert.match(appCss, /\.page-content\s*\{[^}]*scrollbar-gutter:\s*stable/s)
+})
+
 test('mobile navigation keeps the same icon and label hierarchy as iOS tabs', () => {
   assert.match(
     appCss,
@@ -197,6 +222,40 @@ test('native Android year calendar follows the compact iOS mini-month layout', (
   assert.match(
     androidUiSupportSource,
     /fun TextView\.setCompactSelectedStyle[\s\S]*Palette\.segmentedSelection/,
+  )
+})
+
+test('native Android compact surfaces and timeline keep the iOS density contracts', () => {
+  assert.match(
+    androidUiSupportSource,
+    /fun surface\([\s\S]*showsBorder: Boolean = true[\s\S]*if \(showsBorder\) Palette\.border else Color\.TRANSPARENT/,
+  )
+  assert.doesNotMatch(androidPlannerSource, /surface\(activity\)\.apply/)
+  assert.doesNotMatch(androidSettingsSource, /surface\(activity\)\.apply/)
+  assert.match(androidPlannerSource, /roundedBackground\([\s\S]*Palette\.border/)
+  assert.match(androidSettingsSource, /roundedBackground\([\s\S]*Palette\.border/)
+  assert.match(androidPlannerSource, /text = "联动查询"[\s\S]*textSize = 28f/)
+  assert.match(androidSettingsSource, /titleSizeSp = if \(isCompact\) 28f else 34f/)
+  assert.match(
+    androidPlannerSource,
+    /setImageResource\(R\.drawable\.ic_refresh\)[\s\S]*adjustViewBounds = true[\s\S]*activity\.dp\(20\), activity\.dp\(20\)/,
+  )
+  assert.match(
+    androidPlannerSource,
+    /addView\(sectionTitle\([\s\S]*"空教室结果"[\s\S]*R\.drawable\.ic_section_check/,
+  )
+  assert.match(androidPlannerSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
+  assert.match(androidSettingsSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
+  assert.match(androidCalendarSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
+  assert.match(androidTimelineSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
+  assert.match(androidTimelineSource, /setBackgroundColor\(Palette\.background\)/)
+  assert.match(androidTimelineSource, /canvas\.drawColor\(Palette\.background\)/)
+  assert.match(androidTimelineSource, /showCourseSlots = true/)
+  assert.match(androidTimelineSource, /DashPathEffect/)
+  assert.match(androidTimelineSource, /density \* 0\.5f/)
+  assert.doesNotMatch(
+    androidMainActivitySource,
+    /Palette\.surfaceVariant,\s*Palette\.border,\s*radius = 30/,
   )
 })
 

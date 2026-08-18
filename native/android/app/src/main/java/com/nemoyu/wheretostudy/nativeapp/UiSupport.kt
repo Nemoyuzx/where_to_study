@@ -137,6 +137,7 @@ fun pageTitle(
     title: String,
     subtitle: String? = null,
     subtitleIconResource: Int = 0,
+    titleSizeSp: Float = 34f,
 ): LinearLayout =
     LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -149,7 +150,7 @@ fun pageTitle(
         })
         addView(TextView(context).apply {
             text = title
-            textSize = 34f
+            textSize = titleSizeSp
             setTextColor(Palette.text)
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
@@ -198,12 +199,15 @@ fun sectionTitle(
     }
 }
 
-fun surface(context: Context): LinearLayout = LinearLayout(context).apply {
+fun surface(
+    context: Context,
+    showsBorder: Boolean = true,
+): LinearLayout = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
     background = roundedBackground(
         context,
         Palette.surface,
-        Palette.border,
+        if (showsBorder) Palette.border else Color.TRANSPARENT,
         radius = UiMetrics.surfaceRadiusDp,
     )
     setPadding(

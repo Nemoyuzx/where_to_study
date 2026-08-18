@@ -676,6 +676,28 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(PlannerLayoutMetrics.slotSpacing, 6)
     }
 
+    func testDesktopColumnLayoutUsesNormalMarginsAndOneToTwoRatio() {
+        let widths = DesktopColumnLayoutPolicy.widths(containerWidth: 1_200)
+
+        XCTAssertEqual(DesktopColumnLayoutPolicy.horizontalPadding, 16)
+        XCTAssertEqual(DesktopColumnLayoutPolicy.spacing, 16)
+        XCTAssertEqual(widths.leading, 384)
+        XCTAssertEqual(widths.trailing, 768)
+        XCTAssertEqual(
+            widths.leading + widths.trailing
+                + DesktopColumnLayoutPolicy.horizontalPadding * 2
+                + DesktopColumnLayoutPolicy.spacing,
+            1_200
+        )
+    }
+
+    func testDesktopColumnLayoutClampsWidthsForNarrowContainers() {
+        let widths = DesktopColumnLayoutPolicy.widths(containerWidth: 40)
+
+        XCTAssertEqual(widths.leading, 0)
+        XCTAssertEqual(widths.trailing, 0)
+    }
+
     func testBusySlotsIncludeEverySlotCoveredByTodaysCourses() {
         let calendar = Calendar.shanghai
         let start = calendar.date(from: DateComponents(year: 2026, month: 3, day: 2))!

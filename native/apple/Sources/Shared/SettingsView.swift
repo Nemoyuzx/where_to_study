@@ -16,6 +16,37 @@ struct SettingsView: View {
     var body: some View {
         GeometryReader { proxy in
             let columnCount = AdaptiveLayoutPolicy.contentColumnCount(width: proxy.size.width)
+            #if os(macOS)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    PageTitle(eyebrow: "Where To Study", title: "设置")
+                    if columnCount == 2 {
+                        let widths = DesktopColumnLayoutPolicy.widths(containerWidth: proxy.size.width)
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(spacing: 16) {
+                                accountSurface
+                            }
+                            .frame(width: widths.leading, alignment: .top)
+                            VStack(spacing: 16) {
+                                notificationSurface
+                                localDataSurface
+                                aboutSurface
+                            }
+                            .frame(width: widths.trailing, alignment: .top)
+                        }
+                    } else {
+                        VStack(spacing: 16) {
+                            accountSurface
+                            notificationSurface
+                            localDataSurface
+                            aboutSurface
+                        }
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            #else
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     PageTitle(eyebrow: "Where To Study", title: "设置")
@@ -51,6 +82,7 @@ struct SettingsView: View {
             .onTapGesture {
                 dismissKeyboard()
             }
+            #endif
             #endif
         }
         .background(AppTheme.background)

@@ -92,7 +92,7 @@ class CalendarTimelineView(
     init {
         orientation = HORIZONTAL
         isBaselineAligned = false
-        setBackgroundColor(Palette.surface)
+        setBackgroundColor(Palette.background)
 
         val totalHeight = context.dp(CalendarTimelineLogic.totalHeightDp(compact, showDayHeader))
         val showCourseSlots = !compact || days.size == 1
@@ -121,7 +121,7 @@ class CalendarTimelineView(
             onDaySelected = onDaySelected,
             compact = compact,
             showDayHeader = showDayHeader,
-            showCourseSlots = showCourseSlots,
+            showCourseSlots = true,
         )
         if (compact) {
             addView(dayCanvas, LayoutParams(0, totalHeight, 1f))
@@ -134,6 +134,7 @@ class CalendarTimelineView(
                     id = R.id.calendar_timeline_day_scroll
                     isFillViewport = true
                     isHorizontalScrollBarEnabled = false
+                    scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
                     overScrollMode = OVER_SCROLL_IF_CONTENT_SCROLLS
                     addView(
                         dayCanvas,
@@ -165,11 +166,11 @@ private class CalendarTimelineCanvas(
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Palette.border
-        strokeWidth = dp(1).toFloat()
+        strokeWidth = (resources.displayMetrics.density * 0.5f).coerceAtLeast(1f)
     }
     private val slotLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = (Palette.muted and 0x00FFFFFF) or (0x3D shl 24)
-        strokeWidth = resources.displayMetrics.density * 0.7f
+        strokeWidth = (resources.displayMetrics.density * 0.5f).coerceAtLeast(1f)
         pathEffect = DashPathEffect(
             floatArrayOf(
                 resources.displayMetrics.density * 4f,
@@ -245,7 +246,7 @@ private class CalendarTimelineCanvas(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(Palette.surface)
+        canvas.drawColor(Palette.background)
         when (layer) {
             TimelineLayer.AXIS -> drawAxis(canvas)
             TimelineLayer.DAYS -> drawDays(canvas)

@@ -33,6 +33,7 @@ class SettingsPage(
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
         clipToPadding = false
+        scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
         setBackgroundColor(Palette.background)
         addView(verticalPage(activity).apply {
             if (isCompact) {
@@ -45,6 +46,7 @@ class SettingsPage(
                 activity,
                 "设置",
                 if (isCompact) null else "个人账户与本地偏好",
+                titleSizeSp = if (isCompact) 28f else 34f,
             ))
             if (availableWidthDp >= 760) {
                 addView(LinearLayout(activity).apply {
@@ -78,7 +80,7 @@ class SettingsPage(
         })
     }
 
-    private fun accountSurface(): LinearLayout = surface(activity).apply {
+    private fun accountSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         val savedIdentity = credentialStore.load()?.let { it.account to it.password.isNotEmpty() }
         var persistedAccount = savedIdentity?.first.orEmpty()
@@ -332,7 +334,7 @@ class SettingsPage(
         })
     }
 
-    private fun notificationSurface(): LinearLayout = surface(activity).apply {
+    private fun notificationSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "课程提醒"))
         addView(Switch(activity).apply {
@@ -365,7 +367,7 @@ class SettingsPage(
         })
     }
 
-    private fun localDataSurface(): LinearLayout = surface(activity).apply {
+    private fun localDataSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "本地数据"))
         addView(TextView(activity).apply {
@@ -416,7 +418,7 @@ class SettingsPage(
         })
     }
 
-    private fun aboutSurface(): LinearLayout = surface(activity).apply {
+    private fun aboutSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         id = R.id.settings_about_section
         addView(sectionTitle(activity, "关于本应用"))
@@ -595,6 +597,7 @@ class SettingsPage(
         }
         val scroll = ScrollView(activity).apply {
             isFillViewport = true
+            scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
             setBackgroundColor(Palette.surface)
             addView(content)
         }
