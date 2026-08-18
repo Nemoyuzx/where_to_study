@@ -146,7 +146,7 @@ enum CalendarImportLogic {
         // window are their deliberate edits and must never be reverted or
         // deleted by a sync.
         let scopedOwnedEvents = existingEvents.filter { event in
-            (event.marker?.hasPrefix(markerPrefix) ?? false) && scope.contains($0.startDate)
+            (event.marker?.hasPrefix(markerPrefix) ?? false) && scope.contains(event.startDate)
         }
         let desiredMarkers = Set(drafts.map(\.marker))
         var eventsByMarker = [String: [CalendarExistingEvent]]()

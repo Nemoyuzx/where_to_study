@@ -21,7 +21,11 @@ fn classrooms_path(app: &AppHandle) -> ServiceResult<PathBuf> {
 
 const MAX_CLASSROOMS_CACHE_BYTES: u64 = 8 * 1024 * 1024;
 
-fn read_limited_cache_bytes(path: &Path, description: &str, max_bytes: u64) -> ServiceResult<Vec<u8>> {
+fn read_limited_cache_bytes(
+    path: &Path,
+    description: &str,
+    max_bytes: u64,
+) -> ServiceResult<Vec<u8>> {
     let metadata = fs::metadata(path)
         .map_err(|error| ServiceError::new(format!("无法读取{description}：{error}")))?;
     if metadata.len() > max_bytes {

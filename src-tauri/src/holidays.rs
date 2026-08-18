@@ -405,7 +405,10 @@ pub(super) fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
     Ok(response)
 }
 
-fn validate_holiday_redirect_target(url: &reqwest::Url, previous_request_count: usize) -> ServiceResult<()> {
+fn validate_holiday_redirect_target(
+    url: &reqwest::Url,
+    previous_request_count: usize,
+) -> ServiceResult<()> {
     if previous_request_count > MAX_HOLIDAY_REDIRECTS {
         return Err(ServiceError::new("节假日数据源重定向次数过多。"));
     }

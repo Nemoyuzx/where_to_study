@@ -496,7 +496,10 @@ mod tests {
     #[test]
     fn parse_sjd_week_numbers_expands_details_ranges_and_suffixes() {
         let ranged = serde_json::json!({ "classWeekDetails": "1-16" });
-        assert_eq!(parse_sjd_week_numbers(&ranged), (1..=16).collect::<Vec<_>>());
+        assert_eq!(
+            parse_sjd_week_numbers(&ranged),
+            (1..=16).collect::<Vec<_>>()
+        );
 
         let odd = serde_json::json!({ "classWeekDetails": "1-17单" });
         assert_eq!(
@@ -555,7 +558,10 @@ mod tests {
         }
         let mut found = Vec::new();
         collect_sjd_course_items(&nested, &mut found);
-        assert!(found.is_empty(), "courses beyond the depth limit must be ignored");
+        assert!(
+            found.is_empty(),
+            "courses beyond the depth limit must be ignored"
+        );
 
         let mut shallow = serde_json::json!({ "courseName": "浅层课程" });
         for _ in 0..8 {
@@ -563,7 +569,11 @@ mod tests {
         }
         let mut found = Vec::new();
         collect_sjd_course_items(&shallow, &mut found);
-        assert_eq!(found.len(), 1, "courses within the depth limit must be collected");
+        assert_eq!(
+            found.len(),
+            1,
+            "courses within the depth limit must be collected"
+        );
     }
 
     #[test]
