@@ -32,14 +32,30 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh   # assembleHap + 41 个契约单元测试
+./scripts/native-harmony-build.sh      # assembleHap + 41 个契约单元测试
+./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（13 个断言，对应 iOS UITests）
 ```
 
 手动命令（hvigorw 在 DevEco 安装目录下）：`hvigorw assembleHap` 与
 `hvigorw test --mode module -p module=entry -p buildMode=test`。
-测试源码在 `entry/src/test`，复用 `contracts/v1/fixtures` 的 41 个用例
-（日期/节次/考试周/表单编码/URL 策略/课表解析/空教室解析/节假日解析/
-日历纯逻辑/通知规划与协调）。
+测试源码在 `entry/src/test`（41 个契约用例：日期/节次/考试周/表单编码/URL 策略/
+课表解析/空教室解析/节假日解析/日历纯逻辑/通知规划与协调）与
+`entry/src/ohosTest`（DevEco 内运行的 UI 冒烟套件，对应
+native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历断言）。
+
+## 签名与发布
+
+- **模拟器/调试**：无需配置签名。hdc 可直接安装 debug HAP；DevEco 运行 entry
+  时会自动生成本地调试签名。
+- **真机/正式发布**：需要华为开发者账号（AGC）签名。在 DevEco Studio 中打开
+  Project Structure → Signing Configs 自动生成签名材料（.p12/.cer/.p7b），或在
+  `build-profile.json5` 的 `signingConfigs` 中手动填写 material（storeFile、
+  storePassword、keyAlias、keyPassword、certpath、profile、signAlg）。
+  签名材料与密码**绝不能提交仓库**（与全仓库的凭据不变量一致），发布时通过
+  DevEco 配置或 CI 密钥传入。
+- **上架**：在 AppGallery Connect 创建应用、上传签名的 HAP/AAB、填写隐私声明
+  （本应用隐私文案与 `PRIVACY.md` 一致）与截图。发布前复核
+  `native/apple/AppStore/submission-checklist.md` 中与商店审核对应的通用条目。
 
 ## 与 iOS 实现的对应关系
 
@@ -61,7 +77,7 @@
 默认不常驻高频轮询；保持空教室、教学日历、设置三个一级页面的颜色、术语与状态语义一致。
 
 > 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
-> 的 assembleHap 编译（debug 产物 entry-default-unsigned.hap）；41 个单元测试全部
-> 通过；已在 Pura 90 模拟器（HarmonyOS 6.1.1 / API 24）完成安装、启动与
-> 空教室/教学日历（日周月年）/设置页面的 UI 导航验证。
-> 待补：UI 冒烟自动化（对应 native/apple/UITests）与发布签名流程。
+> 的 assembleHap 编译（debug 产物 entry-default-unsigned.hap）；41 个契约单元测试
+> 与 13 个 UI 冒烟断言全部通过；已在 Pura 90 模拟器（HarmonyOS 6.1.1 / API 24）
+> 完成安装、启动与空教室/教学日历（日周月年）/设置页面的验证。
+> 待补：发布签名与 AGC 上架（需要维护者的华为开发者账号，见“签名与发布”）。
