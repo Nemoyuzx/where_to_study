@@ -94,6 +94,7 @@ launch_app() {
 
 echo "== 鸿蒙 UI 冒烟测试（target: ${TARGET}）=="
 
+if [[ "${2:-}" != "wide" ]]; then
 echo "[1] 三个一级页面可导航（uiTesting 模式）"
 launch_app uiTesting
 dump_layout
@@ -137,6 +138,26 @@ tap_text "年" 380 620
 dump_layout
 assert_text "年视图说明" "颜色越深表示当天课程越多"
 assert_text "年视图一月" "1月"
+
+echo
+fi
+
+if [[ "${2:-}" == "wide" ]]; then
+echo "[4] 宽屏（折叠屏展开/2in1/PC）侧栏导航"
+launch_app reviewDemo
+dump_layout
+assert_text "侧栏标题 BUPT" "BUPT"
+assert_text "侧栏应用名" "Where To Study"
+tap_text "教学日历" 100 1000
+dump_layout
+assert_text "日历页（宽屏详情区）" "今天"
+tap_text "设置" 100 1000
+dump_layout
+assert_text "设置页" "个人账户"
+tap_text "空教室" 100 1000
+dump_layout
+assert_text "返回空教室页" "联动查询"
+fi
 
 echo
 echo "== 结果：通过 ${PASS}，失败 ${FAIL} =="

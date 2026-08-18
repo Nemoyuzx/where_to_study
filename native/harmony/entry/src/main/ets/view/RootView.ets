@@ -2,6 +2,7 @@
 // 宽度 >= 700vp 时使用侧栏（对应 NavigationSplitView 的 regular 布局），
 // 否则使用底部 Tabs（对应 compact 布局）；示例模式顶部显示提示条。
 
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppModel } from '../model/AppModel';
 import { AppSection, AppSectionInfo } from '../common/AppSection';
 import { AppTheme } from '../common/AppTheme';
@@ -76,7 +77,17 @@ export struct RootView {
         .vertical(true)
         .color(AppTheme.border())
       Column() {
-        this.sectionView(this.currentSection)
+        // 注意：@ComponentV2 中 @Builder 方法的参数变化不会触发重渲染，
+        // 因此这里在 build() 的直接子树中内联 currentSection 分支，
+        // 保证侧栏切换一级页面时内容区随之更新。
+        if (this.currentSection === AppSection.planner) {
+          PlannerView()
+        } else if (this.currentSection === AppSection.calendar) {
+          // 侧栏模式下按详情区实际宽度决定日历形态（总宽 - 230vp 侧栏）。
+          CalendarSectionView({ containerWidth: this.containerWidth - 230 })
+        } else {
+          SettingsView()
+        }
       }
       .layoutWeight(1)
       .height('100%')
@@ -181,6 +192,7 @@ export struct RootView {
   }
 
   selectSection(section: AppSection): void {
+    hilog.info(0x0000, 'RootView', 'selectSection -> %{public}s', section);
     this.currentSection = section;
     this.model.selectedSection = section;
   }
