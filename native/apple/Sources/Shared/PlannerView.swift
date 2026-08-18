@@ -35,6 +35,24 @@ struct PlannerView: View {
                 }
 
                 if columnCount == 2 {
+                    #if os(macOS)
+                    let widths = DesktopColumnLayoutPolicy.widths(containerWidth: proxy.size.width)
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(spacing: 16) {
+                            querySurface
+                            slotSurface
+                            buildingsSurface
+                        }
+                        .frame(width: widths.leading, alignment: .top)
+
+                        VStack(spacing: 16) {
+                            todayCoursesSurface
+                            resultsSurface
+                            summarySurface
+                        }
+                        .frame(width: widths.trailing, alignment: .top)
+                    }
+                    #else
                     HStack(alignment: .top, spacing: 16) {
                         VStack(spacing: 16) {
                             querySurface
@@ -50,6 +68,7 @@ struct PlannerView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
                     }
+                    #endif
                 } else {
                     VStack(spacing: 16) {
                         querySurface
@@ -432,4 +451,23 @@ enum PlannerLayoutMetrics {
     static let slotMinimumWidth: CGFloat = 104
     static let slotMaximumWidth: CGFloat = 156
     static let slotSpacing: CGFloat = 6
+}
+
+struct DesktopColumnWidths: Equatable {
+    let leading: CGFloat
+    let trailing: CGFloat
+}
+
+enum DesktopColumnLayoutPolicy {
+    static let horizontalPadding: CGFloat = 16
+    static let spacing: CGFloat = 16
+
+    static func widths(containerWidth: CGFloat) -> DesktopColumnWidths {
+        let usableWidth = max(0, containerWidth - horizontalPadding * 2 - spacing)
+        let leadingWidth = usableWidth / 3
+        return DesktopColumnWidths(
+            leading: leadingWidth,
+            trailing: usableWidth - leadingWidth
+        )
+    }
 }
