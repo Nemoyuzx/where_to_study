@@ -187,7 +187,6 @@ class MainActivity : Activity() {
             background = roundedBackground(
                 this@MainActivity,
                 Palette.surfaceVariant,
-                Palette.border,
                 radius = 30,
             )
             elevation = dp(8).toFloat()

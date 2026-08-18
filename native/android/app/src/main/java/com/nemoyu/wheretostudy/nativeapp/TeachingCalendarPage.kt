@@ -427,6 +427,7 @@ internal class TeachingCalendarPage(
     private fun expandedBuild(): ScrollView {
         val scrollView = ScrollView(activity).apply {
             isFillViewport = true
+            scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
             setBackgroundColor(Palette.background)
         }
         val root = verticalPage(activity)
@@ -650,6 +651,7 @@ internal class TeachingCalendarPage(
                     ScrollView(activity).apply {
                         isFillViewport = true
                         clipToPadding = false
+                        scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
                         addView(body, ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -875,6 +877,7 @@ internal class TeachingCalendarPage(
                 id = R.id.calendar_timeline_scroll
                 isFillViewport = false
                 clipToPadding = false
+                scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
                 setPadding(0, 0, 0, activity.dp(if (usesBottomNavigation) 84 else 14))
                 addView(phoneTimelineView(timelineDays, callback))
             }, LinearLayout.LayoutParams(
@@ -1687,6 +1690,7 @@ internal class TeachingCalendarPage(
         val panelWidth = minOf(activity.dp(300), visibleFrame.width() - activity.dp(32))
         val maximumHeight = (visibleFrame.height() - activity.dp(32)).coerceAtLeast(activity.dp(112))
         val panel = ScrollView(activity).apply {
+            scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
             background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
             setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
             addView(LinearLayout(activity).apply {
