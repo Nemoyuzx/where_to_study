@@ -5,7 +5,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
     target_os = "macos",
     target_os = "ios",
     target_os = "android",
-    target_os = "windows"
+    target_os = "windows",
+    target_os = "linux"
 ))]
 use zeroize::Zeroizing;
 
