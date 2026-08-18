@@ -93,3 +93,19 @@
 | W14 | 🟢 | index.css | focus ring 出现无过渡 | ✅ 已加 |
 | W15 | 🟢 | App.jsx 清除确认 | 打开时焦点不移动 | ✅ 已加 |
 | W16 | 🟡 | App.jsx month 手势 | month-expansion-handle 点击与拖拽冲突风险 | ✅ suppressCalendarClickUntilRef 已有 |
+| # | 严重度 | 位置 | 问题 | 状态 |
+|---|--------|------|------|------|
+| W17 | 🟢 | App.jsx year 视图 | 双击先触发两次单击导致 popover 闪现 | ✅ 单击延迟 250ms |
+| W18 | 🟢 | App.jsx | yearClickTimerRef 卸载时未清理 | ✅ 已清理 |
+| W19 | 🟢 | App.jsx 日期输入 | 无 min/max 范围，可输入 1900 年 | ✅ 已加 2024-2030/2020-2035 |
+| W20 | 🟢 | App.jsx month 视图 | 键盘无法用方向键移动选中日期 | ✅ 已加左右/上下导航 |
+| W21 | 🟢 | App.jsx 隐私对话框 | 无焦点陷阱，Tab 可跳出对话框 | ✅ 已加焦点陷阱 |
+| W22 | 🟡 | test/release-label.test.js | 用 execFileSync("bash")，Windows 本机无 Git Bash 时 npm test 失败 | ⏳ CI 有 Git Bash，本机需注意 |
+| W23 | 🟢 | index.css | 高对比度模式下选中元素无边框 | ✅ forced-colors 已加 |
+| W24 | 🟢 | App.css | 主题切换无过渡 | ✅ 已加 0.2s 过渡 |
+| W25 | 🟡 | src-tauri/schedule.rs | endTIme 拼写错误字段优先查询（代码异味） | ⏳ 记录 |
+| W26 | 🟢 | lib.rs | 通知点击行为未验证（Windows toast 默认激活应用） | ✅ 已确认默认正确 |
+| W27 | 🟡 | Web 端 | 周视图无当前时间线 | ✅ 已修复 |
+| W28 | 🟢 | lib.rs | fetch_classrooms 静默覆盖 target_date | ✅ 已改为明确拒绝 |
+| W29 | 🟢 | schedule.rs | 单双周并存时偶数周丢失 | ✅ 已修复 |
+| W30 | 🟢 | App.jsx | loadClassrooms 不返回成功状态，自动获取无法感知失败 | ✅ 已返回布尔 |

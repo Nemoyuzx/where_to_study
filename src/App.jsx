@@ -2167,6 +2167,7 @@ function App() {
                                   type="button"
                                   className="time-course-block"
                                   style={{ top: `${top}%`, height: `${height}%` }}
+                                  title={`${course.name} · ${bounds.start}-${bounds.end} · ${course.room || '地点未标注'}`}
                                   onClick={() => chooseCalendarDate(dateString)}
                                 >
                                   <strong><CourseName course={course} /></strong>
