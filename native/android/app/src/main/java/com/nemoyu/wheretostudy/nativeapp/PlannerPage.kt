@@ -10,12 +10,9 @@ import android.text.style.StyleSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AbsListView
-import android.widget.BaseAdapter
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ListView
+import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -50,20 +47,16 @@ class PlannerPage(
     }
     private val selectedBuildings = mutableSetOf<String>()
     private var usePersonalSchedule = true
-    private lateinit var resultsAdapter: ClassroomResultsAdapter
+    private lateinit var resultsContainer: LinearLayout
     private lateinit var summaryContainer: LinearLayout
 
-    fun build(): ListView = ListView(activity).apply {
+    fun build(): ScrollView = ScrollView(activity).apply {
+        isFillViewport = true
+        clipToPadding = false
         setBackgroundColor(Palette.background)
-        divider = null
-        dividerHeight = 0
         isVerticalScrollBarEnabled = true
         scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-        addHeaderView(verticalPage(activity).apply {
-            layoutParams = AbsListView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            )
+        addView(verticalPage(activity).apply {
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
                 timeZone = shanghai
             }.format(Date())
@@ -76,21 +69,7 @@ class PlannerPage(
             addSection(slotSurface())
             addSection(todayCoursesSurface())
             addSection(buildingsSurface())
-            addView(sectionTitle(
-                activity,
-                "空教室结果",
-                R.drawable.ic_section_check,
-            ).apply {
-                setPadding(0, 0, 0, activity.dp(4))
-            })
-        }, null, false)
-        addFooterView(verticalPage(activity).apply {
-            layoutParams = AbsListView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            )
-            addView(spacer(activity, 8))
-            setPadding(activity.dp(12), 0, activity.dp(12), activity.dp(28))
+            addSection(resultsSurface())
             summaryContainer = surface(activity, showsBorder = false).apply {
                 id = R.id.planner_summary
                 setPadding(
@@ -104,9 +83,7 @@ class PlannerPage(
             if (usesBottomNavigation) {
                 addView(spacer(activity, 72))
             }
-        }, null, false)
-        resultsAdapter = ClassroomResultsAdapter()
-        adapter = resultsAdapter
+        })
         renderResultsAndSummary()
     }
 
@@ -165,7 +142,9 @@ class PlannerPage(
         val tabs = mutableListOf<Pair<CampusMetadata, TextView>>()
         AppMetadata.campuses.forEach { campus ->
             lateinit var tab: TextView
-            tab = fixedTab(activity, campus.name) {
+            tab = fixedTab(activity, campus.name) {}
+            tab.setOnClickListener {
+                activity.performControlHaptic(it)
                 queryState.selectCampus(campus.id)
                 selectedBuildings.clear()
                 activity.refreshCurrentPage()
@@ -210,17 +189,6 @@ class PlannerPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(UiMetrics.compactControlHeightDp),
         )
-        addView(ImageView(activity).apply {
-            id = R.id.planner_fetch_icon
-            setImageResource(R.drawable.ic_refresh)
-            imageTintList = ColorStateList.valueOf(Palette.onPrimary)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            adjustViewBounds = true
-            setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(activity.dp(24), activity.dp(24)).apply {
-            marginEnd = activity.dp(6)
-        })
         val label = TextView(activity).apply {
             text = if (classroomRepository.isRefreshing) {
                 "正在获取当天空教室…"
@@ -234,6 +202,7 @@ class PlannerPage(
         }
         addView(label)
         setOnClickListener {
+            activity.performControlHaptic(it)
             label.text = "正在获取当天空教室…"
             contentDescription = "正在获取当天空教室"
             isEnabled = false
@@ -320,11 +289,13 @@ class PlannerPage(
             }
         }
 
-        fun action(label: String, onClick: () -> Unit): TextView = fixedTab(activity, label) {
-            onClick()
-            refreshCells()
-            renderResultsAndSummary()
-        }.apply {
+        fun action(label: String, onClick: () -> Unit): TextView = fixedTab(activity, label) {}.apply {
+            setOnClickListener {
+                activity.performControlHaptic(it)
+                onClick()
+                refreshCells()
+                renderResultsAndSummary()
+            }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 activity.dp(if (isCompact) 32 else UiMetrics.compactControlHeightDp),
@@ -344,7 +315,8 @@ class PlannerPage(
         actions.addView(action("清空") { selectedSlots.clear() })
         addView(slotControl(cells) { refreshCells() })
 
-        personalToggle.setOnCheckedChangeListener { _, checked ->
+        personalToggle.setOnCheckedChangeListener { button, checked ->
+            activity.performControlHaptic(button)
             usePersonalSchedule = checked
             if (usePersonalSchedule) {
                 selectedSlots.removeAll(personalBusySlots)
@@ -400,6 +372,7 @@ class PlannerPage(
                             isFocusable = true
                             setOnClickListener {
                                 if (usePersonalSchedule && slot.index in personalBusySlots) return@setOnClickListener
+                                activity.performControlHaptic(it)
                                 if (!selectedSlots.add(slot.index)) selectedSlots.remove(slot.index)
                                 refreshCells()
                                 renderResultsAndSummary()
@@ -518,6 +491,7 @@ class PlannerPage(
                         }
                         addView(buttonLabel)
                         setOnClickListener {
+                            activity.performControlHaptic(it)
                             if (!selectedBuildings.add(building)) selectedBuildings.remove(building)
                             refreshButtons()
                             renderResultsAndSummary()
@@ -538,8 +512,21 @@ class PlannerPage(
         refreshButtons()
     }
 
+    private fun resultsSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        id = R.id.planner_results_surface
+        if (isCompact) setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+        addView(sectionTitle(activity, "空教室结果", R.drawable.ic_section_check).apply {
+            if (isCompact) textSize = 15f
+        })
+        resultsContainer = LinearLayout(activity).apply {
+            id = R.id.planner_results_content
+            orientation = LinearLayout.VERTICAL
+        }
+        addView(resultsContainer)
+    }
+
     private fun renderResultsAndSummary() {
-        if (::resultsAdapter.isInitialized) renderResults()
+        if (::resultsContainer.isInitialized) renderResults()
         if (::summaryContainer.isInitialized) renderSummary()
     }
 
@@ -563,7 +550,23 @@ class PlannerPage(
                 }
             }
         }
-        resultsAdapter.submit(presentation)
+        resultsContainer.removeAllViews()
+        presentation.message?.let { message ->
+            resultsContainer.addView(emptyMessage(message))
+            return
+        }
+        presentation.rooms.forEachIndexed { index, room ->
+            resultsContainer.addView(classroomRow(room))
+            if (index < presentation.rooms.lastIndex) {
+                resultsContainer.addView(View(activity).apply {
+                    setBackgroundColor(Palette.border)
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        activity.dp(1),
+                    )
+                })
+            }
+        }
     }
 
     private fun renderSummary() {
@@ -750,120 +753,30 @@ class PlannerPage(
         })
     }
 
-    private companion object {
-        const val ROOM_VIEW_TYPE = 0
-        const val MESSAGE_VIEW_TYPE = 1
-    }
-
-    private inner class ClassroomResultsAdapter : BaseAdapter() {
-        private var presentation = ClassroomResultsPresentation.empty("暂无本地空教室数据")
-
-        fun submit(value: ClassroomResultsPresentation) {
-            presentation = value
-            notifyDataSetChanged()
-        }
-
-        override fun getCount(): Int = presentation.rooms.size +
-            if (presentation.message != null) 1 else 0
-
-        override fun getItem(position: Int): Any? = presentation.rooms.getOrNull(position)
-
-        override fun getItemId(position: Int): Long = position.toLong()
-
-        override fun getViewTypeCount(): Int = 2
-
-        override fun getItemViewType(position: Int): Int =
-            if (position < presentation.rooms.size) ROOM_VIEW_TYPE else MESSAGE_VIEW_TYPE
-
-        override fun isEnabled(position: Int): Boolean = false
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
-            if (getItemViewType(position) == ROOM_VIEW_TYPE) {
-                val holder = (convertView?.tag as? ClassroomRowHolder)
-                    ?: createClassroomRow(parent).also { it.root.tag = it }
-                holder.bind(presentation.rooms[position])
-                holder.root
-            } else {
-                val message = convertView as? TextView ?: TextView(activity).apply {
-                    textSize = if (isCompact) 12f else 13f
-                    gravity = Gravity.CENTER
-                    setTextColor(Palette.muted)
-                    setPadding(
-                        activity.dp(if (isCompact) 12 else 20),
-                        activity.dp(10),
-                        activity.dp(if (isCompact) 12 else 20),
-                        activity.dp(if (isCompact) 14 else 20),
-                    )
-                    minHeight = activity.dp(if (isCompact) 56 else 72)
-                }
-                message.text = presentation.message
-                message
-            }
-
-        private fun createClassroomRow(parent: ViewGroup): ClassroomRowHolder {
-            val root = FrameLayout(parent.context).apply {
-                setPadding(
-                    activity.dp(if (isCompact) 12 else 20),
-                    0,
-                    activity.dp(if (isCompact) 12 else 20),
-                    0,
-                )
-            }
-            val card = LinearLayout(parent.context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(0, activity.dp(if (isCompact) 7 else 10), 0, 0)
-            }
-            root.addView(
-                card,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ),
-            )
-            val heading = LinearLayout(parent.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            card.addView(heading)
-            val name = TextView(parent.context).apply {
+    private fun classroomRow(room: Classroom): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, activity.dp(if (isCompact) 7 else 10), 0, activity.dp(if (isCompact) 7 else 10))
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(activity).apply {
+                text = room.name
                 textSize = if (isCompact) 13.5f else 15f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
-            }
-            heading.addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            val size = TextView(parent.context).apply {
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(activity).apply {
+                text = room.size?.let { "$it 座" } ?: "座位未知"
                 textSize = if (isCompact) 11f else 12f
                 setTextColor(Palette.muted)
-            }
-            heading.addView(size)
-            val ranges = TextView(parent.context).apply {
-                textSize = if (isCompact) 11f else 12f
-                setTextColor(Palette.primaryText)
-                setPadding(0, activity.dp(3), 0, activity.dp(if (isCompact) 7 else 10))
-            }
-            card.addView(ranges)
-            card.addView(View(parent.context).apply {
-                setBackgroundColor(Palette.border)
-                layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    activity.dp(1),
-                )
             })
-            return ClassroomRowHolder(root, name, size, ranges)
-        }
-
-        private inner class ClassroomRowHolder(
-            val root: FrameLayout,
-            private val name: TextView,
-            private val size: TextView,
-            private val ranges: TextView,
-        ) {
-            fun bind(room: Classroom) {
-                name.text = room.name
-                size.text = room.size?.let { "$it 座" } ?: "座位未知"
-                ranges.text = selectedRanges()
-            }
-        }
+        })
+        addView(TextView(activity).apply {
+            text = selectedRanges()
+            textSize = if (isCompact) 11f else 12f
+            setTextColor(Palette.primaryText)
+            setPadding(0, activity.dp(3), 0, 0)
+        })
     }
 }
 

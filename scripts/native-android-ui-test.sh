@@ -48,7 +48,7 @@ if "$ADB" devices | grep -Fq "$SERIAL"; then
   exit 1
 fi
 
-UI_TEST_LOG="$(mktemp "${TMPDIR:-/tmp}/where-to-study-android-ui-test.XXXXXX.log")"
+UI_TEST_LOG="$(mktemp "${TMPDIR:-/tmp}/where-to-study-android-ui-test.XXXXXX")"
 "$EMULATOR" "@$AVD_NAME" \
   -port "$EMULATOR_PORT" \
   -wipe-data \

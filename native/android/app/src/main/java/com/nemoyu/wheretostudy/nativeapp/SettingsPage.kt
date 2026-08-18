@@ -60,12 +60,7 @@ class SettingsPage(
                     setPadding(activity.dp(20), activity.dp(16), activity.dp(20), activity.dp(28))
                 }
             }
-            addView(pageTitle(
-                activity,
-                "设置",
-                if (isCompact) null else "个人账户与本地偏好",
-                titleSizeSp = if (isCompact) 28f else 34f,
-            ))
+            addView(if (isCompact) compactSettingsTitle() else pageTitle(activity, "设置"))
             if (availableWidthDp >= 760) {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -176,7 +171,12 @@ class SettingsPage(
                 }
             }
         }
-        val campus = Spinner(activity).apply {
+        val campus = object : Spinner(activity) {
+            override fun performClick(): Boolean {
+                activity.performControlHaptic(this)
+                return super.performClick()
+            }
+        }.apply {
             adapter = campusAdapter
             setSelection(AppMetadata.campuses.indexOfFirst { it.id == preferences.campusID }.coerceAtLeast(0))
             background = roundedBackground(
@@ -278,6 +278,7 @@ class SettingsPage(
                 activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
+                activity.performControlHaptic(it)
                 saveSettings().onSuccess { credentials ->
                     applySavedCredentials(credentials)
                     showSavedToast()
@@ -310,6 +311,7 @@ class SettingsPage(
                 activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
+                activity.performControlHaptic(it)
                 val button = it as TextView
                 val saveResult = saveSettings()
                 if (saveResult.isFailure) {
@@ -363,6 +365,7 @@ class SettingsPage(
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
             setOnClickListener {
+                activity.performControlHaptic(it)
                 val requested = isChecked
                 isEnabled = false
                 activity.setDailyCourseNotificationsEnabled(requested) { enabled ->
@@ -414,11 +417,13 @@ class SettingsPage(
                 activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
+                activity.performControlHaptic(it)
                 AlertDialog.Builder(activity)
                     .setTitle("清除全部本地数据？")
                     .setMessage("将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。")
-                    .setNegativeButton("取消", null)
+                    .setNegativeButton("取消") { _, _ -> activity.performControlHaptic() }
                     .setPositiveButton("确认清除") { _, _ ->
+                        activity.performControlHaptic()
                         val result = activity.clearAllLocalData()
                         val message = if (result.isComplete) {
                             "本地数据已清除"
@@ -471,6 +476,7 @@ class SettingsPage(
                 activity.dp(UiMetrics.controlHeightDp),
             )
             setOnClickListener {
+                activity.performControlHaptic(it)
                 showPrivacyPolicy()
             }
         })
@@ -525,8 +531,31 @@ class SettingsPage(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(UiMetrics.controlHeightDp),
             )
-            setOnClickListener { onClick() }
+            setOnClickListener {
+                activity.performControlHaptic(it)
+                onClick()
+            }
         }
+
+    private fun compactSettingsTitle(): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, 0, 0, activity.dp(12))
+        addView(TextView(activity).apply {
+            text = activity.getString(R.string.planner_eyebrow)
+            textSize = 11f
+            setTextColor(Palette.muted)
+            setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+        })
+        addView(TextView(activity).apply {
+            text = "设置"
+            textSize = 28f
+            setTextColor(Palette.text)
+            setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+            setPadding(0, activity.dp(3), 0, 0)
+        })
+    }
 
     private fun LinearLayout.applyCompactSurfacePadding() {
         // Keep the shared 16dp surface inset on every width, matching SwiftUI Surface.
@@ -609,6 +638,7 @@ class SettingsPage(
                     topMargin = activity.dp(18)
                 }
                 setOnClickListener {
+                    activity.performControlHaptic(it)
                     activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
                 }
             })
@@ -621,7 +651,7 @@ class SettingsPage(
         }
         AlertDialog.Builder(activity)
             .setView(scroll)
-            .setNegativeButton("关闭", null)
+            .setNegativeButton("关闭") { _, _ -> activity.performControlHaptic() }
             .show()
     }
 

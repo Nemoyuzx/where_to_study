@@ -27,6 +27,7 @@ object AdaptiveLayoutLogic {
     const val EXPANDED_BREAKPOINT_DP = 1000
     const val MEDIUM_NAVIGATION_WIDTH_DP = 210
     const val EXPANDED_NAVIGATION_WIDTH_DP = 230
+    const val COLLAPSED_NAVIGATION_WIDTH_DP = 72
 
     fun widthClass(windowWidthDp: Int): WindowWidthClass = when {
         windowWidthDp < MEDIUM_BREAKPOINT_DP -> WindowWidthClass.COMPACT
@@ -38,6 +39,7 @@ object AdaptiveLayoutLogic {
         windowWidthDp: Int,
         availableWidthDp: Int = windowWidthDp,
         verticalHinge: VerticalHingeBoundsDp? = null,
+        navigationCollapsed: Boolean = false,
     ): AdaptiveLayoutSpec {
         val safeAvailableWidth = availableWidthDp.coerceAtLeast(0)
         val widthClass = widthClass(windowWidthDp.coerceAtLeast(0))
@@ -53,8 +55,13 @@ object AdaptiveLayoutLogic {
             WindowWidthClass.MEDIUM -> MEDIUM_NAVIGATION_WIDTH_DP
             WindowWidthClass.EXPANDED -> EXPANDED_NAVIGATION_WIDTH_DP
         }
-        val navigationWidth = hinge?.let { minOf(preferredNavigationWidth, it.left) }
+        val expandedNavigationWidth = hinge?.let { minOf(preferredNavigationWidth, it.left) }
             ?: preferredNavigationWidth
+        val navigationWidth = if (navigationCollapsed) {
+            minOf(COLLAPSED_NAVIGATION_WIDTH_DP, expandedNavigationWidth)
+        } else {
+            expandedNavigationWidth
+        }
         val hingeSpacer = hingeSpacerDp(
             navigationWidthDp = navigationWidth,
             verticalHinge = hinge,

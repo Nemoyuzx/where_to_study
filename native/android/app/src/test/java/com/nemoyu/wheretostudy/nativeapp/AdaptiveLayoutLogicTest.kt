@@ -33,6 +33,48 @@ class AdaptiveLayoutLogicTest {
     }
 
     @Test
+    fun collapsedRailReturnsTabletWidthToResponsiveContent() {
+        val expanded = AdaptiveLayoutLogic.resolve(windowWidthDp = 900)
+        val collapsed = AdaptiveLayoutLogic.resolve(
+            windowWidthDp = 900,
+            navigationCollapsed = true,
+        )
+
+        assertEquals(210, expanded.navigationWidthDp)
+        assertEquals(690, expanded.contentWidthDp)
+        assertEquals(AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_WIDTH_DP, collapsed.navigationWidthDp)
+        assertEquals(828, collapsed.contentWidthDp)
+        assertFalse(collapsed.usesBottomNavigation)
+    }
+
+    @Test
+    fun collapsedFoldableRailKeepsContentBeyondTheHinge() {
+        val collapsed = AdaptiveLayoutLogic.resolve(
+            windowWidthDp = 1_200,
+            availableWidthDp = 1_200,
+            verticalHinge = VerticalHingeBoundsDp(left = 590, right = 610),
+            navigationCollapsed = true,
+        )
+
+        assertEquals(72, collapsed.navigationWidthDp)
+        assertEquals(538, collapsed.hingeSpacerDp)
+        assertEquals(610, collapsed.navigationWidthDp + collapsed.hingeSpacerDp)
+        assertEquals(590, collapsed.contentWidthDp)
+    }
+
+    @Test
+    fun collapsedPreferenceDoesNotReplaceCompactBottomNavigation() {
+        val compact = AdaptiveLayoutLogic.resolve(
+            windowWidthDp = 699,
+            navigationCollapsed = true,
+        )
+
+        assertTrue(compact.usesBottomNavigation)
+        assertEquals(0, compact.navigationWidthDp)
+        assertEquals(699, compact.contentWidthDp)
+    }
+
+    @Test
     fun classificationUsesWindowWidthWhileContentUsesAvailableWidth() {
         val spec = AdaptiveLayoutLogic.resolve(
             windowWidthDp = 700,

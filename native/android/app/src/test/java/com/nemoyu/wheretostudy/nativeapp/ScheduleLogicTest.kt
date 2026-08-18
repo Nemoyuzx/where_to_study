@@ -437,6 +437,9 @@ class ScheduleLogicTest {
         assertTrue(20 * 60 + 55 in CalendarTimelineLogic.courseSlotBoundaryMinutes())
         assertEquals(1_010, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
         assertEquals(1_026, CalendarTimelineLogic.totalHeightDp(compact = false, showDayHeader = true))
+        assertEquals(0.045f, CalendarTimelineLogic.selectedColumnOpacity, 0.0001f)
+        assertEquals(3, CalendarTimelineLogic.courseAccentWidthDp)
+        assertEquals(38, CalendarTimelineLogic.courseMinimumHeightDp)
     }
 
     @Test
@@ -520,9 +523,23 @@ class ScheduleLogicTest {
         assertEquals(32, TeachingCalendarLogic.phoneModeTabHeightDp)
         assertEquals(36, TeachingCalendarLogic.phoneNavigationHeightDp)
         assertEquals(56, TeachingCalendarLogic.phoneDateStripHeightDp)
+        assertEquals(6, TeachingCalendarLogic.phoneDateStripGapDp)
+        assertEquals(
+            TeachingCalendarLogic.collapsedMonthDayTopPaddingDp,
+            TeachingCalendarLogic.expandedMonthDayTopPaddingDp,
+        )
+        assertEquals(3, TeachingCalendarLogic.collapsedMonthDayTopPaddingDp)
         assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(2))
         assertEquals(1, TeachingCalendarLogic.visibleMonthEntryCount(5))
         assertEquals(4, TeachingCalendarLogic.hiddenMonthEntryCount(5))
+    }
+
+    @Test
+    fun calendarModeTransitionsFollowTheIosDirection() {
+        assertEquals(1, TeachingCalendarLogic.modeTransitionDirection(0, 3))
+        assertEquals(-1, TeachingCalendarLogic.modeTransitionDirection(3, 2))
+        assertEquals(-1, TeachingCalendarLogic.modeTransitionDirection(3, 0))
+        assertEquals(0, TeachingCalendarLogic.modeTransitionDirection(2, 2))
     }
 
     @Test

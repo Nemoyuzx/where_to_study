@@ -100,9 +100,67 @@ enum AppTheme {
     }
 }
 
+enum AppHaptics {
+    @MainActor
+    static func selection() {
+        #if os(iOS)
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        generator.selectionChanged()
+        #endif
+    }
+
+    @MainActor
+    static func impact() {
+        #if os(iOS)
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.prepare()
+        generator.impactOccurred()
+        #endif
+    }
+}
+
+struct MobilePageLayoutMetrics: Equatable {
+    let horizontalPadding: CGFloat
+    let topPadding: CGFloat
+    let bottomPadding: CGFloat
+    let sectionSpacing: CGFloat
+    let usesCompactTitle: Bool
+}
+
+enum MobilePageLayoutPolicy {
+    static let compactHeightThreshold: CGFloat = 500
+
+    static func metrics(availableHeight: CGFloat) -> MobilePageLayoutMetrics {
+        if availableHeight < compactHeightThreshold {
+            return MobilePageLayoutMetrics(
+                horizontalPadding: 16,
+                topPadding: 8,
+                bottomPadding: 16,
+                sectionSpacing: 12,
+                usesCompactTitle: true
+            )
+        }
+        return MobilePageLayoutMetrics(
+            horizontalPadding: 20,
+            topPadding: 20,
+            bottomPadding: 20,
+            sectionSpacing: 16,
+            usesCompactTitle: false
+        )
+    }
+}
+
 struct PageTitle: View {
     let eyebrow: String
     let title: String
+    let compact: Bool
+
+    init(eyebrow: String, title: String, compact: Bool = false) {
+        self.eyebrow = eyebrow
+        self.title = title
+        self.compact = compact
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -110,7 +168,7 @@ struct PageTitle: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(AppTheme.secondaryText)
             Text(title)
-                .font(.largeTitle.bold())
+                .font(compact ? .title2.bold() : .largeTitle.bold())
                 .foregroundStyle(AppTheme.text)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
