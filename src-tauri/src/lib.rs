@@ -18,7 +18,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
 #[cfg(not(mobile))]
+use std::fs;
+#[cfg(not(mobile))]
+use std::io::Write;
+#[cfg(not(mobile))]
+use std::path::PathBuf;
+#[cfg(not(mobile))]
 use std::time::Duration;
+#[cfg(not(mobile))]
+use tempfile::NamedTempFile;
 
 #[cfg(not(mobile))]
 use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime, NaiveTime};
@@ -868,6 +876,10 @@ fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
     if let Err(error) = calendar_export::clear(app) {
         errors.push(error.message);
     }
+    #[cfg(not(mobile))]
+    if let Err(error) = clear_desktop_task_state(app) {
+        errors.push(error);
+    }
     if errors.is_empty() {
         Ok(())
     } else {
@@ -886,6 +898,10 @@ fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
             }
             if let Err(error) = calendar_export::clear(&app) {
                 errors.push(error.message);
+            }
+            #[cfg(not(mobile))]
+            if let Err(error) = clear_desktop_task_state(&app) {
+                errors.push(error);
             }
             if let Err(error) = settings_store::clear_local_files_preserving_revocation(&app) {
                 errors.push(error.message);
@@ -1739,6 +1755,97 @@ struct DesktopTaskRetry {
 
 #[cfg(not(mobile))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PersistedDesktopTaskDates {
+    classroom_refresh_date: Option<NaiveDate>,
+    notification_date: Option<NaiveDate>,
+}
+
+#[cfg(not(mobile))]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct PersistedDesktopTaskDatesFile {
+    #[serde(default)]
+    classroom_refresh_date: Option<String>,
+    #[serde(default)]
+    notification_date: Option<String>,
+}
+
+#[cfg(not(mobile))]
+const DESKTOP_TASK_STATE_FILE_NAME: &str = "scheduler-state.json";
+
+#[cfg(not(mobile))]
+fn desktop_task_state_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_config_dir()
+        .ok()
+        .map(|directory| directory.join(DESKTOP_TASK_STATE_FILE_NAME))
+}
+
+#[cfg(not(mobile))]
+fn load_persisted_desktop_task_dates(app: &tauri::AppHandle) -> PersistedDesktopTaskDates {
+    let parse_date = |value: Option<String>| {
+        value.and_then(|value| NaiveDate::parse_from_str(&value, "%Y-%m-%d").ok())
+    };
+    let empty = PersistedDesktopTaskDates {
+        classroom_refresh_date: None,
+        notification_date: None,
+    };
+    let Some(path) = desktop_task_state_path(app) else {
+        return empty;
+    };
+    let Ok(bytes) = fs::read(&path) else {
+        return empty;
+    };
+    let Ok(file) = serde_json::from_slice::<PersistedDesktopTaskDatesFile>(&bytes) else {
+        return empty;
+    };
+    PersistedDesktopTaskDates {
+        classroom_refresh_date: parse_date(file.classroom_refresh_date),
+        notification_date: parse_date(file.notification_date),
+    }
+}
+
+#[cfg(not(mobile))]
+fn persist_desktop_task_dates(app: &tauri::AppHandle, state: &DesktopScheduleState) {
+    let Some(path) = desktop_task_state_path(app) else {
+        return;
+    };
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let file = PersistedDesktopTaskDatesFile {
+        classroom_refresh_date: state
+            .classroom_refresh_date
+            .map(|date| date.format("%Y-%m-%d").to_string()),
+        notification_date: state
+            .notification_date
+            .map(|date| date.format("%Y-%m-%d").to_string()),
+    };
+    let Ok(bytes) = serde_json::to_vec(&file) else {
+        return;
+    };
+    let Ok(mut temp) = NamedTempFile::new_in(parent) else {
+        return;
+    };
+    let _ = temp.write_all(&bytes).is_err() || temp.persist(&path).is_err();
+}
+
+#[cfg(not(mobile))]
+fn clear_desktop_task_state(app: &tauri::AppHandle) -> Result<(), String> {
+    let Some(path) = desktop_task_state_path(app) else {
+        return Ok(());
+    };
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("无法清除桌面任务状态：{error}")),
+    }
+}
+
+#[cfg(not(mobile))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DesktopScheduleState {
     tray_date: NaiveDate,
     classroom_refresh_date: Option<NaiveDate>,
@@ -1748,14 +1855,13 @@ struct DesktopScheduleState {
 
 #[cfg(not(mobile))]
 impl DesktopScheduleState {
-    fn after_startup(now: NaiveDateTime) -> Self {
+    fn after_startup(now: NaiveDateTime, persisted: PersistedDesktopTaskDates) -> Self {
         let today = now.date();
-        let seven = NaiveTime::from_hms_opt(7, 0, 0).expect("valid refresh time");
-        let seven_thirty = NaiveTime::from_hms_opt(7, 30, 0).expect("valid notification time");
         Self {
             tray_date: today,
-            classroom_refresh_date: (now.time() >= seven).then_some(today),
-            notification_date: (now.time() >= seven_thirty).then_some(today),
+            classroom_refresh_date: (persisted.classroom_refresh_date == Some(today))
+                .then_some(today),
+            notification_date: (persisted.notification_date == Some(today)).then_some(today),
             classroom_retry: None,
         }
     }
@@ -1966,14 +2072,20 @@ fn schedule_desktop_background_tasks(app: tauri::AppHandle) {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(std::thread::current());
         let started_at = desktop_now();
-        let mut state = DesktopScheduleState::after_startup(started_at);
+        let persisted = load_persisted_desktop_task_dates(&app);
+        let mut state = DesktopScheduleState::after_startup(started_at, persisted);
 
         loop {
             let now = desktop_now();
             let notifications_enabled = DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire);
+            let mut completed = false;
             for task in due_desktop_tasks(now, state, notifications_enabled) {
                 let outcome = run_desktop_scheduled_task(&app, task, now.date());
                 state.record_result(task, now.date(), now, outcome);
+                completed = true;
+            }
+            if completed {
+                persist_desktop_task_dates(&app, &state);
             }
             let now = desktop_now();
             let notifications_enabled = DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire);
@@ -2011,7 +2123,13 @@ mod background_schedule_tests {
 
     #[test]
     fn scheduler_uses_daily_boundaries_when_no_retry_is_pending() {
-        let state = DesktopScheduleState::after_startup(date_time(6, 0, 0));
+        let state = DesktopScheduleState::after_startup(
+            date_time(6, 0, 0),
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: None,
+                notification_date: None,
+            },
+        );
         assert_eq!(
             next_desktop_schedule_boundary(date_time(6, 59, 59), state, true),
             date_time(7, 0, 0)
@@ -2068,8 +2186,45 @@ mod background_schedule_tests {
     }
 
     #[test]
+    fn startup_without_persisted_state_runs_todays_tasks_once() {
+        let state = DesktopScheduleState::after_startup(
+            date_time(8, 30, 0),
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: None,
+                notification_date: None,
+            },
+        );
+        assert_eq!(
+            due_desktop_tasks(date_time(8, 30, 0), state, true),
+            vec![
+                DesktopScheduledTask::RefreshClassroomsAndTray,
+                DesktopScheduledTask::SendCourseNotification,
+            ]
+        );
+    }
+
+    #[test]
+    fn startup_reloads_persisted_completed_dates() {
+        let today = date_time(8, 30, 0).date();
+        let state = DesktopScheduleState::after_startup(
+            date_time(8, 30, 0),
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: Some(today),
+                notification_date: Some(today),
+            },
+        );
+        assert!(due_desktop_tasks(date_time(8, 30, 0), state, true).is_empty());
+    }
+
+    #[test]
     fn startup_before_seven_keeps_the_seven_oclock_refresh_due() {
-        let state = DesktopScheduleState::after_startup(date_time(6, 0, 0));
+        let state = DesktopScheduleState::after_startup(
+            date_time(6, 0, 0),
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: None,
+                notification_date: None,
+            },
+        );
         assert!(due_desktop_tasks(date_time(6, 59, 59), state, true).is_empty());
         assert_eq!(
             due_desktop_tasks(date_time(7, 0, 0), state, true),
@@ -2079,7 +2234,13 @@ mod background_schedule_tests {
 
     #[test]
     fn transient_classroom_failures_retry_twice_at_low_frequency() {
-        let mut state = DesktopScheduleState::after_startup(date_time(6, 0, 0));
+        let mut state = DesktopScheduleState::after_startup(
+            date_time(6, 0, 0),
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: None,
+                notification_date: None,
+            },
+        );
         let task = DesktopScheduledTask::RefreshClassroomsAndTray;
 
         state.record_result(
@@ -2122,7 +2283,13 @@ mod background_schedule_tests {
 
     #[test]
     fn missing_credentials_do_not_schedule_retries() {
-        let mut state = DesktopScheduleState::after_startup(date_time(6, 0, 0));
+        let mut state = DesktopScheduleState::after_startup(
+            date_time(6, 0, 0),
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: None,
+                notification_date: None,
+            },
+        );
         let task = DesktopScheduledTask::RefreshClassroomsAndTray;
         let outcome =
             ScheduledClassroomRefreshError::MissingCredentials("missing credentials".to_string())

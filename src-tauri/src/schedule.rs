@@ -114,14 +114,16 @@ fn normalize_course_room(value: &str) -> String {
 }
 
 pub fn parse_sjd_week_numbers(course: &Value) -> Vec<i64> {
-    let details = json_string(course.get("classWeekDetails"));
-    let mut weeks: Vec<i64> = Regex::new(r"\d+")
-        .expect("valid regex")
-        .find_iter(&details)
-        .filter_map(|item| item.as_str().parse::<i64>().ok())
-        .collect();
+    let mut weeks = expand_week_numbers(&json_string(course.get("classWeek")));
     if weeks.is_empty() {
-        weeks = expand_week_numbers(&json_string(course.get("classWeek")));
+        weeks = expand_week_numbers(&json_string(course.get("classWeekDetails")));
+    }
+    if weeks.is_empty() {
+        weeks = Regex::new(r"\d+")
+            .expect("valid regex")
+            .find_iter(&json_string(course.get("classWeekDetails")))
+            .filter_map(|item| item.as_str().parse::<i64>().ok())
+            .collect();
     }
     weeks.sort_unstable();
     weeks.dedup();
@@ -152,7 +154,20 @@ pub fn parse_sjd_slots(course: &Value) -> Option<(usize, usize)> {
     Some((start_slot, end_slot))
 }
 
+const MAX_SJD_COURSE_NESTING_DEPTH: usize = 64;
+
 fn collect_sjd_course_items<'a>(value: &'a Value, output: &mut Vec<&'a Value>) {
+    collect_sjd_course_items_with_depth(value, output, 0)
+}
+
+fn collect_sjd_course_items_with_depth<'a>(
+    value: &'a Value,
+    output: &mut Vec<&'a Value>,
+    depth: usize,
+) {
+    if depth > MAX_SJD_COURSE_NESTING_DEPTH {
+        return;
+    }
     match value {
         Value::Object(map) => {
             if map.contains_key("courseName") || map.contains_key("jx0408id") {
@@ -160,12 +175,12 @@ fn collect_sjd_course_items<'a>(value: &'a Value, output: &mut Vec<&'a Value>) {
                 return;
             }
             for child in map.values() {
-                collect_sjd_course_items(child, output);
+                collect_sjd_course_items_with_depth(child, output, depth + 1);
             }
         }
         Value::Array(items) => {
             for child in items {
-                collect_sjd_course_items(child, output);
+                collect_sjd_course_items_with_depth(child, output, depth + 1);
             }
         }
         _ => {}
@@ -470,6 +485,33 @@ mod tests {
     }
 
     #[test]
+    fn parse_sjd_week_numbers_prefers_class_week_over_details() {
+        let course = serde_json::json!({ "classWeek": "2-18双", "classWeekDetails": "1,3,5" });
+        assert_eq!(
+            parse_sjd_week_numbers(&course),
+            (2..=18).step_by(2).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn parse_sjd_week_numbers_expands_details_ranges_and_suffixes() {
+        let ranged = serde_json::json!({ "classWeekDetails": "1-16" });
+        assert_eq!(
+            parse_sjd_week_numbers(&ranged),
+            (1..=16).collect::<Vec<_>>()
+        );
+
+        let odd = serde_json::json!({ "classWeekDetails": "1-17单" });
+        assert_eq!(
+            parse_sjd_week_numbers(&odd),
+            (1..=17).step_by(2).collect::<Vec<_>>()
+        );
+
+        let prefixed = serde_json::json!({ "classWeekDetails": "第1周,第3周" });
+        assert_eq!(parse_sjd_week_numbers(&prefixed), vec![1, 3]);
+    }
+
+    #[test]
     fn annotate_exam_weeks_counts_existing_weeks_in_order() {
         let mut courses = vec![
             Course {
@@ -506,6 +548,32 @@ mod tests {
 
         assert_eq!(courses[0].exam_week_numbers, vec![18, 19]);
         assert!(courses[1].exam_week_numbers.is_empty());
+    }
+
+    #[test]
+    fn course_collector_stops_at_the_nesting_depth_limit() {
+        let mut nested = serde_json::json!({ "courseName": "深层课程", "jx0408id": "deep" });
+        for _ in 0..100 {
+            nested = serde_json::json!([nested]);
+        }
+        let mut found = Vec::new();
+        collect_sjd_course_items(&nested, &mut found);
+        assert!(
+            found.is_empty(),
+            "courses beyond the depth limit must be ignored"
+        );
+
+        let mut shallow = serde_json::json!({ "courseName": "浅层课程" });
+        for _ in 0..8 {
+            shallow = serde_json::json!({ "wrapper": shallow });
+        }
+        let mut found = Vec::new();
+        collect_sjd_course_items(&shallow, &mut found);
+        assert_eq!(
+            found.len(),
+            1,
+            "courses within the depth limit must be collected"
+        );
     }
 
     #[test]

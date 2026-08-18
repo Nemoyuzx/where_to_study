@@ -48,6 +48,7 @@ if "$ADB" devices | grep -Fq "$SERIAL"; then
   exit 1
 fi
 
+UI_TEST_LOG="$(mktemp "${TMPDIR:-/tmp}/where-to-study-android-ui-test.XXXXXX.log")"
 "$EMULATOR" "@$AVD_NAME" \
   -port "$EMULATOR_PORT" \
   -wipe-data \
@@ -56,7 +57,7 @@ fi
   -no-audio \
   -no-boot-anim \
   -gpu "$EMULATOR_GPU" \
-  >/tmp/where-to-study-android-ui-test.log 2>&1 &
+  >"$UI_TEST_LOG" 2>&1 &
 EMULATOR_PID=$!
 
 "$ADB" -s "$SERIAL" wait-for-device

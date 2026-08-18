@@ -17,7 +17,7 @@ function validateReleaseLabel(label) {
 }
 
 test("release labels accept stable and unnumbered alpha versions", () => {
-  for (const label of ["v0.1.4", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
+  for (const label of ["v0.1.5", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
     assert.doesNotThrow(() => validateReleaseLabel(label), label);
   }
 });
@@ -28,7 +28,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the stable 0.1.4 release version", () => {
+test("all tracked client projects use the stable 0.1.5 release version", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -45,18 +45,18 @@ test("all tracked client projects use the stable 0.1.4 release version", () => {
     "utf8",
   );
 
-  assert.equal(packageMetadata.version, "0.1.4");
-  assert.equal(tauriMetadata.version, "0.1.4");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 1004);
-  assert.match(cargoManifest, /^version = "0\.1\.4"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.1\.4"/);
-  assert.match(nativeAndroid, /versionCode = 18/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.4"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "37"/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.4/);
-  assert.match(tauriApple, /CFBundleVersion: "31"/);
-  assert.match(tauriAppleInfo, /<string>0\.1\.4<\/string>/);
-  assert.match(tauriAppleInfo, /<string>31<\/string>/);
+  assert.equal(packageMetadata.version, "0.1.5");
+  assert.equal(tauriMetadata.version, "0.1.5");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 1005);
+  assert.match(cargoManifest, /^version = "0\.1\.5"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.1\.5"/);
+  assert.match(nativeAndroid, /versionCode = 19/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.5"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "38"/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.5/);
+  assert.match(tauriApple, /CFBundleVersion: "32"/);
+  assert.match(tauriAppleInfo, /<string>0\.1\.5<\/string>/);
+  assert.match(tauriAppleInfo, /<string>32<\/string>/);
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {

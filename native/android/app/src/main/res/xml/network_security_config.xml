@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- The app transports credentials and only talks to pinned HTTPS
+         endpoints; trust only the platform CA set so user-installed CAs
+         (enterprise proxies, local debugging roots) cannot MITM login. -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

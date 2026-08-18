@@ -168,6 +168,7 @@ final class AppModel: ObservableObject {
     private let classroomClient: any ClassroomFetching
     private let holidayStore: any HolidayStoring
     private let holidayClient: any HolidayFetching
+    private let deviceCalendarHolidayClient: any HolidayFetching
     private let calendarImporter: any CalendarImporting
     private let dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling
     private let dailyCourseNotificationAuthorizationTimeout: Duration
@@ -194,6 +195,7 @@ final class AppModel: ObservableObject {
         classroomClient: any ClassroomFetching = SJDClassroomClient(),
         holidayStore: any HolidayStoring = FileHolidayStore(),
         holidayClient: any HolidayFetching = HolidayClient(),
+        deviceCalendarHolidayClient: any HolidayFetching = DeviceCalendarHolidayClient(),
         calendarImporter: any CalendarImporting = EventKitCalendarImporter(),
         dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling = UserNotificationCourseScheduler(),
         dailyCourseNotificationAuthorizationTimeout: Duration = .seconds(8),
@@ -209,6 +211,7 @@ final class AppModel: ObservableObject {
         self.classroomClient = classroomClient
         self.holidayStore = holidayStore
         self.holidayClient = holidayClient
+        self.deviceCalendarHolidayClient = deviceCalendarHolidayClient
         self.calendarImporter = calendarImporter
         self.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler
         self.dailyCourseNotificationAuthorizationTimeout = dailyCourseNotificationAuthorizationTimeout
@@ -512,6 +515,8 @@ final class AppModel: ObservableObject {
             return
         }
         invalidatePendingOperations()
+        dailyClassroomRefreshTask?.cancel()
+        dailyClassroomRefreshTask = nil
         dailyCourseNotificationsEnabled = false
         defaults.removeObject(forKey: Self.dailyCourseNotificationsKey)
         dailyCourseNotificationStatusMessage = ""
@@ -764,6 +769,34 @@ final class AppModel: ObservableObject {
         holidaysByYear[year]?.items ?? []
     }
 
+    private func fetchHolidaySnapshot(year: Int) async throws -> HolidaysSnapshot {
+        // Prefer the device calendar when calendar access is already granted
+        // (never prompts). The system calendar marks rest days but not makeup
+        // workdays, so supplement those from the remote/offline source.
+        if DeviceCalendarHolidayClient.isAuthorized() {
+            if let device = try? await deviceCalendarHolidayClient.fetch(year: year) {
+                return await Self.mergingWorkdays(into: device, year: year, remoteClient: holidayClient)
+            }
+        }
+        return try await holidayClient.fetch(year: year)
+    }
+
+    private static func mergingWorkdays(
+        into device: HolidaysSnapshot,
+        year: Int,
+        remoteClient: any HolidayFetching
+    ) async -> HolidaysSnapshot {
+        guard !device.items.contains(where: { $0.type == "workday" }) else { return device }
+        let workdays: [HolidayItem]
+        if let remote = try? await remoteClient.fetch(year: year) {
+            workdays = remote.items.filter { $0.type == "workday" }
+        } else {
+            workdays = HolidayOfflineFallback.snapshot(year: year)?
+                .items.filter { $0.type == "workday" } ?? []
+        }
+        return DeviceCalendarHolidayLogic.mergingWorkdays(into: device, workdays: workdays)
+    }
+
     func ensureHolidays(for year: Int, force: Bool = false) {
         guard HolidayDefaults.supportedYears.contains(year) else { return }
         if isSampleMode {
@@ -789,7 +822,7 @@ final class AppModel: ObservableObject {
         Task {
             defer { holidayLoads.finish(year: year, token: loadToken) }
             do {
-                let fetched = try await holidayClient.fetch(year: year)
+                let fetched = try await fetchHolidaySnapshot(year: year)
                 guard generation == localDataGeneration else { return }
                 try holidayStore.save(fetched)
                 holidaysByYear[year] = fetched

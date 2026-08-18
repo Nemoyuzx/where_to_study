@@ -61,6 +61,7 @@ object CalendarTimelineLogic {
     }
 
     fun axisWidthDp(compact: Boolean, showCourseSlots: Boolean = true): Int {
+        if (compact) return 56
         val hourWidth = if (compact) 42 else 48
         val slotWidth = if (compact) 70 else 96
         return hourWidth + if (showCourseSlots) slotWidth else 0
@@ -68,9 +69,7 @@ object CalendarTimelineLogic {
 
     fun dayWidthDp(compact: Boolean): Int = if (compact) 132 else 156
 
-    // Compact week columns stay fixed to the phone viewport; the extra vertical room keeps
-    // course metadata readable after it is split into separate lines.
-    fun hourHeightDp(compact: Boolean): Int = if (compact) 84 else 68
+    fun hourHeightDp(compact: Boolean): Int = if (compact) 72 else 68
 
     fun totalHeightDp(compact: Boolean, showDayHeader: Boolean): Int =
         (if (showDayHeader) 72 else 0) + hourHeightDp(compact) * 14 + 2
@@ -97,6 +96,7 @@ class CalendarTimelineView(
 
         val totalHeight = context.dp(CalendarTimelineLogic.totalHeightDp(compact, showDayHeader))
         val showCourseSlots = !compact || days.size == 1
+        val showCourseSlotsInAxis = showCourseSlots && !compact
         addView(
             CalendarTimelineCanvas(
                 context = context,
@@ -105,10 +105,10 @@ class CalendarTimelineView(
                 selectedDate = selectedDate,
                 compact = compact,
                 showDayHeader = showDayHeader,
-                showCourseSlots = showCourseSlots,
+                showCourseSlots = showCourseSlotsInAxis,
             ),
             LayoutParams(
-                context.dp(CalendarTimelineLogic.axisWidthDp(compact, showCourseSlots)),
+                context.dp(CalendarTimelineLogic.axisWidthDp(compact, showCourseSlotsInAxis)),
                 totalHeight,
             ),
         )
@@ -168,9 +168,15 @@ private class CalendarTimelineCanvas(
         strokeWidth = dp(1).toFloat()
     }
     private val slotLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Palette.border
-        strokeWidth = dp(1).toFloat()
-        pathEffect = DashPathEffect(floatArrayOf(dp(4).toFloat(), dp(3).toFloat()), 0f)
+        color = (Palette.muted and 0x00FFFFFF) or (0x3D shl 24)
+        strokeWidth = resources.displayMetrics.density * 0.7f
+        pathEffect = DashPathEffect(
+            floatArrayOf(
+                resources.displayMetrics.density * 4f,
+                resources.displayMetrics.density * 4f,
+            ),
+            0f,
+        )
     }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Palette.muted
@@ -181,8 +187,13 @@ private class CalendarTimelineCanvas(
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val hourAxisWidth = dp(if (compact) 42 else 48).toFloat()
-    private val slotAxisWidth = if (showCourseSlots) dp(if (compact) 70 else 96).toFloat() else 0f
+    private val slotLabelStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Palette.border
+        style = Paint.Style.STROKE
+        strokeWidth = resources.displayMetrics.density * 0.75f
+    }
+    private val hourAxisWidth = dp(if (compact) 56 else 48).toFloat()
+    private val slotAxisWidth = if (showCourseSlots && !compact) dp(96).toFloat() else 0f
     private val axisWidth = hourAxisWidth + slotAxisWidth
     private val headerHeight = dp(if (showDayHeader) 72 else 0).toFloat()
     private val hourHeight = dp(CalendarTimelineLogic.hourHeightDp(compact)).toFloat()
@@ -338,8 +349,36 @@ private class CalendarTimelineCanvas(
     private fun drawDays(canvas: Canvas) {
         val dayWidth = width.toFloat() / days.size.coerceAtLeast(1)
         drawDayGridAndHeaders(canvas, dayWidth)
+        if (compact && days.size == 1 && showCourseSlots) {
+            drawCompactCourseSlotLabels(canvas)
+        }
         drawCourseBlocks(canvas, dayWidth)
         drawCurrentTimeLine(canvas, dayWidth)
+    }
+
+    private fun drawCompactCourseSlotLabels(canvas: Canvas) {
+        boldPaint.color = Palette.muted
+        boldPaint.textAlign = Paint.Align.CENTER
+        boldPaint.textSize = sp(10f)
+        AppMetadata.slots.forEach { slot ->
+            val start = CalendarTimelineLogic.minuteOfDay(slot.start) ?: return@forEach
+            val end = CalendarTimelineLogic.minuteOfDay(slot.end) ?: return@forEach
+            val centerY = (yForMinute(start) + yForMinute(end)) / 2f
+            val label = "第${slot.label}节  ${slot.start}-${slot.end}"
+            val labelWidth = (boldPaint.measureText(label) + dp(16))
+                .coerceAtMost(width - dp(16).toFloat())
+            val left = dp(8).toFloat()
+            val bounds = RectF(
+                left,
+                centerY - dp(12),
+                left + labelWidth,
+                centerY + dp(12),
+            )
+            fillPaint.color = Palette.surface
+            canvas.drawRoundRect(bounds, dp(12).toFloat(), dp(12).toFloat(), fillPaint)
+            canvas.drawRoundRect(bounds, dp(12).toFloat(), dp(12).toFloat(), slotLabelStrokePaint)
+            drawCenteredText(canvas, label, bounds.centerX(), bounds.centerY(), boldPaint)
+        }
     }
 
     private fun drawDayGridAndHeaders(canvas: Canvas, dayWidth: Float) {
