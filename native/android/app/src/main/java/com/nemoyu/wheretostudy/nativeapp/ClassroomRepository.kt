@@ -124,8 +124,8 @@ class ClassroomRepository(
                             retryable = false,
                         )
                     }
-                    val targetDate = today()
-                    client.fetch(checkNotNull(credentials), targetDate).also { fetched ->
+                    val now = Date()
+                    client.fetchAt(checkNotNull(credentials), today(now), now).also { fetched ->
                         if (closed.get()) {
                             throw ClassroomClientException("空教室获取服务已关闭。")
                         }

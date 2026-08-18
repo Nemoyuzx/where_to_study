@@ -28,7 +28,7 @@ jobs:
           targets: aarch64-apple-ios
 
       - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@a45951ff880207c249adf57334cf2e9bd81d6e1e # v2
+        uses: swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
         with:
           workspaces: ./src-tauri
 
@@ -72,7 +72,8 @@ jobs:
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security import "$cert_path" -P "$IOS_CERTIFICATE_PASSWORD" -A -f pkcs12 -k "$keychain_path" -T /usr/bin/codesign -T /usr/bin/security
+          # No -A: only the codesign/security allowlist below may use the imported key.
+          security import "$cert_path" -P "$IOS_CERTIFICATE_PASSWORD" -f pkcs12 -k "$keychain_path" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
           security list-keychain -d user -s "$keychain_path"
           security default-keychain -d user -s "$keychain_path"

@@ -1,0 +1,17 @@
+{
+  "year": 2026,
+  "source": "https://unpkg.com/holiday-calendar@1.3.3/data/CN",
+  "fetched_at": "2026-01-05T08:00:00+08:00",
+  "items": [
+    {
+      "date": "2026-01-01",
+      "name": "示例假期",
+      "type": "holiday"
+    },
+    {
+      "date": "2026-01-04",
+      "name": "示例调休",
+      "type": "workday"
+    }
+  ]
+}

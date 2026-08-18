@@ -110,10 +110,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         attachScreenshot(named: "calendar-month-expanded")
         let initialMonthHeadingY = monthHeading.frame.minY
         let initialMondayHeadingY = mondayHeading.frame.minY
-        verticalSwipe(in: app, atX: 0.5, upward: false)
+        verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
         XCTAssertEqual(monthHeading.frame.minY, initialMonthHeadingY, accuracy: 2)
-        verticalSwipe(in: app, atX: 0.5, upward: true)
+        verticalSwipe(in: app, between: mondayHeading, and: month, upward: true)
         XCTAssertTrue(waitForValue("已收起", of: month))
         XCTAssertEqual(monthHeading.frame.minY, initialMonthHeadingY, accuracy: 2)
         XCTAssertEqual(mondayHeading.frame.minY, initialMondayHeadingY, accuracy: 2)
@@ -122,9 +122,9 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]
             .waitForExistence(timeout: 5))
         attachScreenshot(named: "calendar-month-collapsed")
-        verticalSwipe(in: app, atX: 0.5, upward: true)
+        verticalSwipe(in: app, between: mondayHeading, and: month, upward: true)
         XCTAssertTrue(waitForValue("已收起", of: month))
-        verticalSwipe(in: app, atX: 0.5, upward: false)
+        verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
 
         let initialMonth = monthHeading.label
@@ -404,13 +404,31 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             )
     }
 
-    private func verticalSwipe(in app: XCUIApplication, atX x: CGFloat, upward: Bool) {
-        let startY: CGFloat = upward ? 0.72 : 0.42
-        let endY: CGFloat = upward ? 0.42 : 0.72
-        app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: startY))
+    private func verticalSwipe(
+        in app: XCUIApplication,
+        between topElement: XCUIElement,
+        and bottomElement: XCUIElement,
+        upward: Bool
+    ) {
+        let topY = topElement.frame.maxY
+        let bottomY = bottomElement.frame.minY
+        let distance = bottomY - topY
+        XCTAssertGreaterThan(distance, 80)
+        let startY = topY + distance * (upward ? 0.75 : 0.25)
+        let endY = topY + distance * (upward ? 0.25 : 0.75)
+        let appOrigin = app.coordinate(withNormalizedOffset: .zero)
+        let start = appOrigin.withOffset(CGVector(
+            dx: app.frame.midX - app.frame.minX,
+            dy: startY - app.frame.minY
+        ))
+        let end = appOrigin.withOffset(CGVector(
+            dx: app.frame.midX - app.frame.minX,
+            dy: endY - app.frame.minY
+        ))
+        start
             .press(
                 forDuration: 0.05,
-                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: endY))
+                thenDragTo: end
             )
     }
 

@@ -197,6 +197,9 @@ pub fn save(credentials: &Credentials) -> ServiceResult<()> {
         TargetName: target_name.as_mut_ptr(),
         CredentialBlobSize: payload_size,
         CredentialBlob: payload.as_mut_ptr(),
+        // LOCAL_MACHINE persists across logons on this computer but remains
+        // visible only to the saving user's logon sessions; ENTERPRISE would
+        // additionally roam the credential across a domain and is not safer.
         Persist: CRED_PERSIST_LOCAL_MACHINE,
         UserName: user_name.as_mut_ptr(),
         ..Default::default()

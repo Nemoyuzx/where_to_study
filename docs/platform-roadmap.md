@@ -8,13 +8,14 @@
 | macOS | SwiftUI | 共享 Rust 核心或等价原生适配层 | `.app` / notarized `.dmg` |
 | iOS | SwiftUI | 共享 Rust 核心或等价原生适配层 | TestFlight / App Store |
 | Android | Kotlin + Android Views | 共享 Rust 核心或等价原生适配层 | signed AAB/APK |
+| HarmonyOS | ArkTS + ArkUI（6.1.1 / API 24） | 等价原生适配层（参考 SwiftUI 实现） | 华为应用市场（待定） |
 
 现有根目录 Tauri 工程只承担 Windows 客户端。Android 的 Tauri 生成工程与构建链已删除，唯一 Android 源码和发布入口是 `native/android`；`src-tauri/gen/apple` 仅保留为待下线的旧 Tauri iOS 生成目录，不作为当前原生客户端源码。
 
 ## 不变量
 
-1. 课程、节次、校区、教室、缓存和考试周规则在四个平台含义一致。
-2. 账号和密码只能保存在系统安全存储中：Windows Credential Manager、Apple Keychain、Android Keystore。
+1. 课程、节次、校区、教室、缓存和考试周规则在五个平台含义一致。
+2. 账号和密码只能保存在系统安全存储中：Windows Credential Manager、Apple Keychain、Android Keystore、鸿蒙 ASSET 安全存储。
 3. 仓库、构建日志、测试夹具、截图和 release 资产不得包含真实账号、密码、token、证书或签名私钥。
 4. 原生端不嵌入 WebView，不复制 React 页面。
 5. 默认不常驻高频轮询；网络请求由用户动作、应用启动和每日计划任务触发。
@@ -37,7 +38,7 @@
 - 实现日/周/月/年教学日历。
 - 实现考试周、法定节假日和当前时间线。
 
-完成标准：同一脱敏课表夹具在四个平台生成一致的日期课程集合。
+完成标准：同一脱敏课表夹具在五个平台生成一致的日期课程集合。
 
 ### 阶段 2：空教室
 
@@ -45,7 +46,7 @@
 - 实现课程联动、教学楼过滤和节次选择。
 - 保留当天限制与本地缓存策略。
 
-完成标准：同一脱敏接口响应在四个平台生成一致的教室名称、座位数和可用节次。
+完成标准：同一脱敏接口响应在五个平台生成一致的教室名称、座位数和可用节次。
 
 ### 阶段 3：平台集成
 
@@ -77,6 +78,7 @@
 - Windows/Tauri：功能最完整，凭据已迁移到系统安全存储；React 单文件仍需拆分。
 - macOS/iOS 原生：共享 SwiftUI 已接入移动教务个人课表、Keychain、本地缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知取消、权限撤销、账号切换和 63 条系统上限已有自动化测试，主导航已通过 iOS UI 测试。
 - Android 原生：Kotlin + Android Views 已接入移动教务个人课表、Android Keystore、`AtomicFile` 缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知持久撤销、有效送达窗口、后台中断和主导航已有自动化测试。
-- 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift 和 Kotlin 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
-- 原生分发限制：每日课程摘要已迁移；Android 使用固定维护者密钥签名发布；Apple 已完成正式签名归档并上传 iOS `0.1.4 (35)` 与 macOS `0.1.4 (34)`，等待 App Store Connect 处理和正式提交，但公开 GitHub Release 的 macOS/iOS 资产仍分别为 ad-hoc 与无签名构建；Windows 可信签名链路尚未闭环。
+- 鸿蒙原生：ArkTS + ArkUI 已参考 SwiftUI 实现移植空教室、教学日历、设置三个一级页面，以及 ASSET 安全存储凭据、移动教务课表/空教室/节假日客户端、每日课程摘要（reminderAgent，上限 30 条）、Calendar Kit 系统日历导入与“今日课程”服务卡片；工程在 DevEco Studio 6.1.1 / API 24 上构建通过，45 个单元测试（41 个复用 contracts/v1 fixtures 的契约用例 + 4 个折叠布局策略用例）与手机端 13 项、宽屏 5 项 UI 冒烟断言全部通过。折叠屏与电脑端适配已完成：Mate X7 折叠屏展开态（侧栏+宽布局）、MateBook Pro 2in1（侧栏导航、双列空教室、宽屏日/周/月/年日历）、600x900 悬浮窄窗（标签栏+紧凑单列回退）均已实测验证；半折叠降级规则覆盖单测。待补：发布签名与 AGC 上架（需维护者华为开发者账号）。
+- 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift、Kotlin 和 ArkTS 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
+- 原生分发限制：每日课程摘要已迁移；Android 使用固定维护者密钥签名发布；Apple `0.1.5 (38)` 使用正式分发签名上传 iOS/macOS，公开 GitHub Release 的 macOS/iOS 资产仍分别为 ad-hoc 与无签名构建；Windows 可信签名链路尚未闭环。
 - 开源授权：根目录已加入 GPL-3.0-only 标准许可证文本，项目元数据、贡献指南和发布文档使用同一 SPDX 标识。

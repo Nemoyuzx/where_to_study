@@ -57,6 +57,7 @@ import {
   hasCalendarItemType,
   isValidAccountScope,
   localDateString,
+  msUntilNextShanghaiMidnight,
   normalizeClassroomsCache,
   normalizeError,
   parseTimeMinutes,
@@ -64,6 +65,7 @@ import {
   savedCredentialSnapshot,
   savedSettingsToState,
   settingsToPayload,
+  shanghaiDateString,
   shiftDate,
   slotsToRanges,
   startOfWeekSunday,
@@ -314,7 +316,7 @@ function CourseWidget() {
   const [error, setError] = useState('')
   const scheduleRevision = useRef(0)
 
-  const todayDate = localDateString(now)
+  const todayDate = shanghaiDateString(now)
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
   const courses = schedule?.courses || []
   const weekState = useMemo(
@@ -322,7 +324,7 @@ function CourseWidget() {
     [courses, schedule?.term_start_date, todayDate],
   )
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
-  const upcomingCourse = weekState.dayCourses.find((course) => courseTimeBounds(course, slotMeta).endMinutes >= nowMinutes) || weekState.dayCourses[0] || null
+  const upcomingCourse = weekState.dayCourses.find((course) => courseTimeBounds(course, slotMeta).endMinutes >= nowMinutes) || null
 
   async function loadWidgetSchedule(expectedAccountScope = '') {
     const revision = scheduleRevision.current + 1
@@ -499,6 +501,9 @@ function App() {
   const [calendarView, setCalendarView] = useState('week')
   const [calendarMotion, setCalendarMotion] = useState('')
   const [monthExpanded, setMonthExpanded] = useState(true)
+  const [compactCalendarLayout, setCompactCalendarLayout] = useState(
+    () => window.matchMedia('(max-width: 720px)').matches,
+  )
   const [schedule, setSchedule] = useState(null)
   const [classroomsCache, setClassroomsCache] = useState(null)
   const [classroomsCacheLoaded, setClassroomsCacheLoaded] = useState(false)
@@ -516,7 +521,7 @@ function App() {
     },
   }))
   const [now, setNow] = useState(() => new Date())
-  const [loading, setLoading] = useState('')
+  const [loadingTasks, setLoadingTasks] = useState([])
   const [error, setError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -548,25 +553,31 @@ function App() {
       page.classList.remove('calendar-gesture-locked')
     }
   }, [])
-  const todayDate = localDateString(now)
+  const todayDate = shanghaiDateString(now)
+  const loading = loadingTasks[loadingTasks.length - 1] || ''
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 720px)')
+    const updateLayout = () => setCompactCalendarLayout(query.matches)
+    updateLayout()
+    query.addEventListener('change', updateLayout)
+    return () => query.removeEventListener('change', updateLayout)
+  }, [])
 
   useEffect(() => {
     pageContentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' })
   }, [activePage])
 
   useLayoutEffect(() => {
-    if (activePage !== 'calendar' || calendarView !== 'month') return undefined
-    const mobileMonthQuery = window.matchMedia('(max-width: 720px)')
+    if (activePage !== 'calendar' || calendarView !== 'month' || !compactCalendarLayout) {
+      return undefined
+    }
     const clearAvailableHeight = () => {
       const page = pageContentRef.current
       page?.style.removeProperty('--month-expanded-height')
       page?.style.removeProperty('--month-expanded-row-height')
     }
     const updateAvailableHeight = () => {
-      if (!mobileMonthQuery.matches) {
-        clearAvailableHeight()
-        return
-      }
       const page = pageContentRef.current
       const surface = calendarAnimatedSurfaceRef.current
       if (!page || !surface) return
@@ -593,13 +604,11 @@ function App() {
     }
     updateAvailableHeight()
     window.addEventListener('resize', updateAvailableHeight)
-    mobileMonthQuery.addEventListener('change', updateAvailableHeight)
     return () => {
       window.removeEventListener('resize', updateAvailableHeight)
-      mobileMonthQuery.removeEventListener('change', updateAvailableHeight)
       clearAvailableHeight()
     }
-  }, [activePage, calendarDate, calendarMotion, calendarView])
+  }, [activePage, calendarDate, calendarMotion, calendarView, compactCalendarLayout])
 
   useEffect(() => () => {
     window.clearTimeout(monthExpansionTimerRef.current)
@@ -732,12 +741,9 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const current = new Date()
-    const nextMidnight = new Date(current)
-    nextMidnight.setHours(24, 0, 0, 0)
     const timer = window.setTimeout(
       () => setNow(new Date()),
-      Math.max(1000, nextMidnight.getTime() - current.getTime()),
+      msUntilNextShanghaiMidnight(),
     )
     return () => window.clearTimeout(timer)
   }, [todayDate])
@@ -1052,6 +1058,15 @@ function App() {
     setCalendarPopover(null)
   }
 
+  function chooseCalendarDateFromInput(event) {
+    const dateString = event.target.value
+    if (!dateString || Number.isNaN(dateFromString(dateString).getTime())) {
+      event.target.value = calendarDate
+      return
+    }
+    chooseCalendarDate(dateString)
+  }
+
   function stageCalendarTransition(motion) {
     const host = calendarTransitionHostRef.current
     const source = calendarAnimatedSurfaceRef.current
@@ -1166,6 +1181,9 @@ function App() {
     surface.style.maxHeight = `${height}px`
     surface.style.setProperty('--month-live-row-height', `${rowHeight}px`)
     surface.style.setProperty('--month-drag-progress', String(normalized))
+    surface.style.setProperty('--month-handle-left-angle', `${-24 * normalized}deg`)
+    surface.style.setProperty('--month-handle-right-angle', `${24 * normalized}deg`)
+    surface.style.setProperty('--month-handle-offset-y', `${2 * normalized}px`)
   }
 
   function clearMonthDragVisual(surface) {
@@ -1175,6 +1193,9 @@ function App() {
     surface.style.removeProperty('max-height')
     surface.style.removeProperty('--month-live-row-height')
     surface.style.removeProperty('--month-drag-progress')
+    surface.style.removeProperty('--month-handle-left-angle')
+    surface.style.removeProperty('--month-handle-right-angle')
+    surface.style.removeProperty('--month-handle-offset-y')
   }
 
   function settleMonthDrag(geometry, progress, expanded) {
@@ -1197,6 +1218,9 @@ function App() {
     surface.style.maxHeight = `${currentHeight}px`
     surface.style.setProperty('--month-live-row-height', `${currentRowHeight}px`)
     surface.style.setProperty('--month-drag-progress', String(normalized))
+    surface.style.setProperty('--month-handle-left-angle', `${-24 * normalized}deg`)
+    surface.style.setProperty('--month-handle-right-angle', `${24 * normalized}deg`)
+    surface.style.setProperty('--month-handle-offset-y', `${2 * normalized}px`)
     void surface.offsetHeight
     setMonthExpanded(expanded)
 
@@ -1206,6 +1230,9 @@ function App() {
       surface.style.maxHeight = `${targetHeight}px`
       surface.style.setProperty('--month-live-row-height', `${targetRowHeight}px`)
       surface.style.setProperty('--month-drag-progress', String(targetProgress))
+      surface.style.setProperty('--month-handle-left-angle', `${-24 * targetProgress}deg`)
+      surface.style.setProperty('--month-handle-right-angle', `${24 * targetProgress}deg`)
+      surface.style.setProperty('--month-handle-offset-y', `${2 * targetProgress}px`)
       monthExpansionTimerRef.current = window.setTimeout(() => {
         clearMonthDragVisual(surface)
       }, 300)
@@ -1213,10 +1240,11 @@ function App() {
   }
 
   function beginMonthPointerSwipe(event) {
-    if (calendarView !== 'month' || event.isPrimary === false) return
+    if (!compactCalendarLayout || calendarView !== 'month' || event.isPrimary === false) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
     const target = event.target instanceof Element ? event.target : null
     if (target?.closest('input, select, textarea, a')) return
+    if (target?.closest('.month-expansion-handle, .month-expansion-accessibility-action')) return
 
     const surface = event.currentTarget
     window.clearTimeout(monthExpansionTimerRef.current)
@@ -1369,7 +1397,7 @@ function App() {
   }
 
   function handleMonthCalendarKeyDown(event) {
-    if (calendarView !== 'month') return
+    if (!compactCalendarLayout || calendarView !== 'month') return
     const expanded = event.key === 'ArrowDown' ? true : event.key === 'ArrowUp' ? false : null
     if (expanded === null || expanded === monthExpanded) return
     event.preventDefault()
@@ -1409,15 +1437,33 @@ function App() {
     })
   }
 
+  function selectYearDate(event, dateString) {
+    if (compactCalendarLayout) {
+      openYearDayPopover(event, dateString)
+      return
+    }
+    setCalendarDate(dateString)
+    setCalendarPopover(null)
+  }
+
+  function openDesktopYearMonth(event, dateString) {
+    if (compactCalendarLayout) return
+    event.preventDefault()
+    startCalendarMotion('previous')
+    setCalendarDate(dateString)
+    setCalendarView('month')
+    setCalendarPopover(null)
+  }
+
   async function runTask(name, task) {
-    setLoading(name)
+    setLoadingTasks((current) => [...current, name])
     setError('')
     try {
       await task()
     } catch (taskError) {
       setError(taskError.message)
     } finally {
-      setLoading('')
+      setLoadingTasks((current) => current.filter((item) => item !== name))
     }
   }
 
@@ -1469,14 +1515,15 @@ function App() {
 
   async function clearAllLocalData() {
     await runTask('clear-local-data', async () => {
+      const previousSavedCredential = { ...savedCredentialState.current }
       credentialStateRevision.current += 1
       localDataClearRevision.current += 1
       savedCredentialState.current = { account: '', hasSavedPassword: false }
-      let clearError = null
       try {
         await command('clear_local_data')
-      } catch (taskError) {
-        clearError = taskError
+      } catch (clearError) {
+        savedCredentialState.current = previousSavedCredential
+        throw clearError
       }
       setSettings({
         ...DEFAULT_SETTINGS,
@@ -1489,7 +1536,6 @@ function App() {
       setMinSeats(0)
       setSettingsSaved(false)
       setClearConfirmationOpen(false)
-      if (clearError) throw clearError
     })
   }
 
@@ -1530,7 +1576,7 @@ function App() {
 
         <section
           ref={pageContentRef}
-          className={`page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
+          className={`page-content ${activePage}-page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
         >
           <header className={`topbar ${activePage}-topbar`}>
             <div>
@@ -1759,14 +1805,14 @@ function App() {
           {activePage === 'calendar' ? (
         <section className="calendar-page">
           <div
-            className={`teaching-calendar-layout ${calendarView === 'month' ? 'month-gesture-surface' : ''}`}
-            role={calendarView === 'month' ? 'region' : undefined}
-            tabIndex={calendarView === 'month' ? 0 : undefined}
-            aria-label={calendarView === 'month' ? '月历，下拉或按下方向键展开，上拉或按上方向键收起' : undefined}
-            aria-expanded={calendarView === 'month' ? monthExpanded : undefined}
-            onKeyDown={calendarView === 'month' ? handleMonthCalendarKeyDown : undefined}
+            className={`teaching-calendar-layout ${calendarView === 'month' && compactCalendarLayout ? 'month-gesture-surface' : ''}`}
+            role={calendarView === 'month' && compactCalendarLayout ? 'region' : undefined}
+            tabIndex={calendarView === 'month' && compactCalendarLayout ? 0 : undefined}
+            aria-label={calendarView === 'month' && compactCalendarLayout ? '月历，下拉或按下方向键展开，上拉或按上方向键收起' : undefined}
+            aria-expanded={calendarView === 'month' && compactCalendarLayout ? monthExpanded : undefined}
+            onKeyDown={calendarView === 'month' && compactCalendarLayout ? handleMonthCalendarKeyDown : undefined}
           >
-            {calendarView === 'month' ? (
+            {calendarView === 'month' && compactCalendarLayout ? (
               <button
                 type="button"
                 className="assistive-only month-expansion-accessibility-action"
@@ -1786,7 +1832,7 @@ function App() {
                 <input
                   type="date"
                   value={calendarDate}
-                  onChange={(event) => chooseCalendarDate(event.target.value)}
+                  onChange={chooseCalendarDateFromInput}
                 />
                 <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
                   {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
@@ -1924,17 +1970,17 @@ function App() {
                   <div
                     ref={calendarAnimatedSurfaceRef}
                     key={`month-${calendarDate}`}
-                    className={`month-view ${monthExpanded ? 'expanded' : 'compact'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
-                    onPointerDown={beginMonthPointerSwipe}
-                    onPointerMove={updateMonthPointerSwipe}
-                    onPointerUp={finishMonthPointerSwipe}
-                    onPointerCancel={cancelMonthPointerSwipe}
+                    className={`month-view ${compactCalendarLayout ? (monthExpanded ? 'expanded' : 'compact') : 'expanded desktop-month-view'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
+                    onPointerDown={compactCalendarLayout ? beginMonthPointerSwipe : undefined}
+                    onPointerMove={compactCalendarLayout ? updateMonthPointerSwipe : undefined}
+                    onPointerUp={compactCalendarLayout ? finishMonthPointerSwipe : undefined}
+                    onPointerCancel={compactCalendarLayout ? cancelMonthPointerSwipe : undefined}
                   >
                     <div
                       id="teaching-month-calendar"
                       className="calendar-swipe-surface month-calendar"
-                      aria-label={`${monthExpanded ? '展开' : '收起'}的月历，下拉展开，上拉收起`}
-                      aria-expanded={monthExpanded}
+                      aria-label={compactCalendarLayout ? `${monthExpanded ? '展开' : '收起'}的月历，下拉展开，上拉收起` : '月历'}
+                      aria-expanded={compactCalendarLayout ? monthExpanded : undefined}
                     >
                       {CALENDAR_WEEKDAYS.map((label) => <span key={label} className="month-weekday">{label}</span>)}
                       {visibleCalendarDays.map((dateString) => {
@@ -1985,19 +2031,21 @@ function App() {
                         )
                       })}
                     </div>
-                    <button
-                      type="button"
-                      className="month-expansion-handle"
-                      aria-label={monthExpanded ? '收起月历' : '展开月历'}
-                      aria-controls="teaching-month-calendar"
-                      aria-expanded={monthExpanded}
-                      onClick={() => {
-                        if (Date.now() < suppressCalendarClickUntilRef.current) return
-                        setMonthExpanded((current) => !current)
-                      }}
-                    >
-                      <span aria-hidden="true" />
-                    </button>
+                    {compactCalendarLayout ? (
+                      <button
+                        type="button"
+                        className="month-expansion-handle"
+                        aria-label={monthExpanded ? '收起月历' : '展开月历'}
+                        aria-controls="teaching-month-calendar"
+                        aria-expanded={monthExpanded}
+                        onClick={() => {
+                          if (Date.now() < suppressCalendarClickUntilRef.current) return
+                          setMonthExpanded((current) => !current)
+                        }}
+                      >
+                        <span aria-hidden="true" />
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -2027,10 +2075,11 @@ function App() {
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${currentMonth && (compactCalendarLayout ? calendarPopover?.date === dateString : calendarDate === dateString) ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
                                 style={courseCount ? { '--course-load-opacity': courseOpacity } : null}
                                 title={calendarItems.map((item) => `${item.type === 'holiday' ? '休' : '班'} ${item.name}`).join(' / ')}
-                                onClick={(event) => openYearDayPopover(event, dateString)}
+                                onClick={(event) => currentMonth && selectYearDate(event, dateString)}
+                                onDoubleClick={(event) => currentMonth && openDesktopYearMonth(event, dateString)}
                               >
                                 <span>{date.getDate()}</span>
                                 {hasHoliday ? <em>休</em> : null}
@@ -2044,7 +2093,7 @@ function App() {
                   </div>
                 ) : null}
               </div>
-                {calendarView === 'year' && calendarPopover && calendarPopoverState ? (
+                {compactCalendarLayout && calendarView === 'year' && calendarPopover && calendarPopoverState ? (
                   <div
                     ref={calendarPopoverRef}
                     className="year-day-popover"
@@ -2087,7 +2136,7 @@ function App() {
                 ) : null}
               </section>
 
-              <aside className={`calendar-inspector ${calendarView === 'month' && monthExpanded ? 'month-expanded-hidden' : ''}`}>
+              <aside className={`calendar-inspector ${compactCalendarLayout && calendarView === 'month' && monthExpanded ? 'month-expanded-hidden' : ''}`}>
                 <div className="inspector-card primary">
                   <span>{formatCourseDate(calendarDate)}</span>
                   <strong>{calendarWeekState.dayCourses.length} 门课</strong>
