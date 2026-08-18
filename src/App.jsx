@@ -670,6 +670,7 @@ function App() {
 
   useEffect(() => () => {
     window.clearTimeout(monthExpansionTimerRef.current)
+    window.clearTimeout(yearClickTimerRef.current)
   }, [])
 
   useEffect(() => {
