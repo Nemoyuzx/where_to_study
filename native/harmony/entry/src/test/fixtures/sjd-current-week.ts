@@ -1,0 +1,2 @@
+// 由 contracts/v1/fixtures/sjd-current-week.json 生成的文本常量（本地单元测试用）。
+export const sjdCurrentWeekText: string = "{\n  \"code\": 1,\n  \"data\": [\n    {\n      \"week\": \"1\",\n      \"semesterId\": \"2025-2026-2\",\n      \"date\": [\n        {\n          \"mxrq\": \"2026-03-02\",\n          \"xqid\": \"1\",\n          \"zc\": \"1\"\n        },\n        {\n          \"mxrq\": \"2026-03-03\",\n          \"xqid\": \"2\",\n          \"zc\": \"1\"\n        }\n      ]\n    }\n  ]\n}\n";

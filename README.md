@@ -1,16 +1,17 @@
 # Where To Study
 
 北邮空教室与个人课表联动查询应用。Windows 客户端使用 Tauri 2、React 和 Rust，
-macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android Views；macOS
-同时保留 Tauri Apple Silicon 兼容构建。
+macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android Views，
+鸿蒙（HarmonyOS NEXT）客户端使用 ArkTS 与 ArkUI；macOS 同时保留 Tauri Apple
+Silicon 兼容构建。
 
 - 只通过移动教务 HTTPS 接口获取并解析北邮个人课表；请求失败时不会静默切换数据源。
 - 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
 - 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
 - 空教室查询支持按个人空闲节次和教学楼筛选；Tauri 桌面端另支持最少座位数筛选。
 - macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知；原生 macOS 提供 WidgetKit 系统小组件，Tauri 桌面端保留应用内课程浮窗。
-- SwiftUI 与 Android 原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
-- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit 或 Android Calendar Provider 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
+- SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
+- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
@@ -19,14 +20,15 @@ macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android V
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | 正式签名的 Universal build 34 已上传 App Store Connect；公开 GitHub Release 另提供临时签名预览包 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.1.5 (38)` 正式签名 Universal 构建；公开 GitHub Release 另提供临时签名预览包 |
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
-| iOS | SwiftUI 原生 | 正式签名的 build 35 已上传 App Store Connect；公开 GitHub Release 暂仍为无签名开发者 archive |
+| iOS | SwiftUI 原生 | `0.1.5 (38)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板布局已移植并通过 45 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-稳定版 [v0.1.4](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.4) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版为日、周、月视图增加左右滑动翻页，为年视图增加日/周/月跳转，为月视图增加带动画的展开与折叠状态，并提高周视图课程时间、地点和教师信息在手机上的可读性；空教室页面的临时查询校区也不再改写设置中的默认校区。手机、折叠屏、平板和桌面布局均保持原有配色并完成深浅色检查；Android 自适应启动图标增加安全区，避免被圆形或圆角矩形启动器遮罩裁切。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS `0.1.4 (35)` 与 macOS `0.1.4 (34)` 已上传 App Store Connect，公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
+稳定版 [v0.1.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.5) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版逐项统一 Android 与 iOS 的边线、控件高度、首页和设置密度，并在两套原生手机教学日历的日期、模式、翻页、月历展开及年视图跳转中加入系统触觉反馈。移动端继续支持日、周、月左右滑动与月视图连续展开动画；桌面端保留完整月历、双栏年历和 16px 正常页面边距。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 使用 `0.1.5 (38)`，公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
 
 ## 许可证状态
 
@@ -58,6 +60,8 @@ SwiftUI 客户端会在系统待处理通知上限内安排最多 63 个未来�
 Tauri、SwiftUI 和 Android 客户端都保留一份仅用于首次离线展示的 2026 年兜底日期，其内容对应
 [国务院办公厅关于 2026 年部分节假日安排的通知](https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm)；
 远端或本地缓存可用后会使用自动获取的数据。
+
+macOS/iOS 与 Android 原生客户端在用户已授权系统日历访问时，会优先从设备自带的“中国（大陆）节假日”日历读取休息日（并仍以远端数据补充“调休/补班”上班日，因为系统日历通常不标注补班）。由于中国目前没有官方的机器可读节假日 JSON 接口（国务院通知为 HTML 页面），Tauri 桌面端继续使用上述固定版本数据源。
 
 ## 开发与运行
 
@@ -96,7 +100,13 @@ npm run tauri:build:windows
 ./scripts/native-android-build.sh
 ```
 
-`native/apple` 与 `native/android` 是当前 macOS、iOS 和 Android 客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。
+验证鸿蒙（HarmonyOS NEXT）ArkTS 工程（需要 DevEco Studio 6.1.1+ 与已连接的设备/模拟器）：
+
+```bash
+./scripts/native-harmony-build.sh
+```
+
+`native/apple`、`native/android` 与 `native/harmony` 是当前 macOS、iOS、Android 和鸿蒙客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。鸿蒙客户端当前在 `feature/harmonyos` 分支开发，尚未合入发布流程。
 
 Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri 或 WebView。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 

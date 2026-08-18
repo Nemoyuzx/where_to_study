@@ -1,0 +1,13 @@
+{
+  "modelVersion": "6.0.0",
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Where To Study 鸿蒙客户端入口模块（Stage 模型，ArkTS + ArkUI）。",
+  "main": "",
+  "author": "",
+  "license": "GPL-3.0-only",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19"
+  }
+}

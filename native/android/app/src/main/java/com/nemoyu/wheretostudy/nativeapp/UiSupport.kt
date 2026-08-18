@@ -11,6 +11,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import kotlin.math.roundToInt
 
 data class ThemeColors(
     val primary: Int,
@@ -106,7 +107,7 @@ object UiMetrics {
     const val surfacePaddingDp = 16
     const val surfaceRadiusDp = 8
     const val controlRadiusDp = 8
-    const val controlHeightDp = 44
+    const val controlHeightDp = 36
     const val compactControlHeightDp = 36
     const val sectionSpacingDp = 16
 }
@@ -118,12 +119,16 @@ fun roundedBackground(
     color: Int,
     borderColor: Int = Color.TRANSPARENT,
     radius: Int = UiMetrics.controlRadiusDp,
+    borderWidthDp: Float = 1f,
 ): GradientDrawable = GradientDrawable().apply {
     shape = GradientDrawable.RECTANGLE
     setColor(color)
     cornerRadius = context.dp(radius).toFloat()
     if (borderColor != Color.TRANSPARENT) {
-        setStroke(context.dp(1), borderColor)
+        val borderWidth = (borderWidthDp * context.resources.displayMetrics.density)
+            .roundToInt()
+            .coerceAtLeast(1)
+        setStroke(borderWidth, borderColor)
     }
 }
 
@@ -144,9 +149,10 @@ fun pageTitle(
         })
         addView(TextView(context).apply {
             text = title
-            textSize = 28f
+            textSize = 34f
             setTextColor(Palette.text)
             setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
             setPadding(0, context.dp(4), 0, 0)
         })
         if (subtitle != null) {
@@ -175,13 +181,19 @@ fun sectionTitle(
     iconResource: Int = 0,
 ): TextView = TextView(context).apply {
     text = title
-    textSize = 18f
+    textSize = 17f
     setTextColor(Palette.text)
     setTypeface(typeface, Typeface.BOLD)
+    includeFontPadding = false
+    gravity = Gravity.CENTER_VERTICAL
     setPadding(0, 0, 0, context.dp(12))
     if (iconResource != 0) {
-        setCompoundDrawablesRelativeWithIntrinsicBounds(iconResource, 0, 0, 0)
-        compoundDrawablePadding = context.dp(8)
+        val iconSize = context.dp(18)
+        val icon = context.getDrawable(iconResource)?.mutate()?.apply {
+            setBounds(0, 0, iconSize, iconSize)
+        }
+        setCompoundDrawablesRelative(icon, null, null, null)
+        compoundDrawablePadding = context.dp(6)
         compoundDrawableTintList = ColorStateList.valueOf(Palette.text)
     }
 }

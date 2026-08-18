@@ -12,13 +12,14 @@ import {
   FALLBACK_SLOTS,
   fallbackHolidayItems,
   getCampusClassrooms,
-  getScheduleExamWeeks,
   getWeekState,
   isValidAccountScope,
+  msUntilNextShanghaiMidnight,
   normalizeClassroomsCache,
   requestBody,
   savedSettingsToState,
   settingsToPayload,
+  shanghaiDateString,
   shiftDate,
   slotsToRanges,
   summarizeMonthEntries,
@@ -115,20 +116,43 @@ test('teaching week calculation uses calendar days and reports busy slots', () =
   assert.equal(state.dayCourses[0].is_exam, false)
 })
 
-test('exam weeks are the seventeenth and eighteenth existing schedule weeks', () => {
-  const existingWeeks = [1, 2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17, 19, 20, 22, 23, 25, 26]
+test('exam badges follow the backend-provided exam week numbers only', () => {
   const course = {
     id: 'exam-course',
     name: '考试课程',
     weekday: 1,
-    week_numbers: existingWeeks,
-    exam_week_numbers: [],
+    week_numbers: [1, 2, 25],
+    exam_week_numbers: [25],
     start_slot: 0,
     end_slot: 1,
   }
 
-  assert.deepEqual(getScheduleExamWeeks([course]), [25, 26])
   assert.equal(getWeekState([course], '2026-01-05', '2026-06-22').dayCourses[0].is_exam, true)
+  const plainCourse = { ...course, exam_week_numbers: [] }
+  assert.equal(getWeekState([plainCourse], '2026-01-05', '2026-06-22').dayCourses[0].is_exam, false)
+})
+
+test('shanghai date helpers are independent of the device timezone', () => {
+  // 2026-08-17T20:00:00Z is already 2026-08-18 04:00 in Shanghai.
+  assert.equal(shanghaiDateString(new Date('2026-08-17T20:00:00Z')), '2026-08-18')
+  // 2026-08-17T15:59:00Z is 2026-08-17 23:59 in Shanghai -> one minute until midnight.
+  assert.equal(msUntilNextShanghaiMidnight(new Date('2026-08-17T15:59:00Z')), 60000)
+})
+
+test('malformed schedules never crash week state or slot ranges', () => {
+  const brokenCourse = {
+    id: 'broken',
+    name: '异常课程',
+    weekday: 1,
+    week_numbers: null,
+    start_slot: 0,
+    end_slot: 99,
+  }
+  const state = getWeekState([brokenCourse], '2026-03-02', '2026-03-09')
+  assert.equal(state.dayCourses.length, 0)
+  assert.deepEqual(slotsToRanges([0, 1, 14, -2, 'x'], FALLBACK_SLOTS), [
+    { start: 0, end: 1, label: '08:00-09:35' },
+  ])
 })
 
 test('slot ranges merge adjacent sections and preserve gaps', () => {

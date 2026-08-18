@@ -68,6 +68,28 @@ export function localDateString(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+const SHANGHAI_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+// The backend treats "today" as the Asia/Shanghai calendar date and rejects
+// any other target_date, so app-facing "today" must use Shanghai too.
+export function shanghaiDateString(date = new Date()) {
+  const parts = SHANGHAI_DATE_FORMAT.formatToParts(date)
+  const get = (type) => parts.find((part) => part.type === type)?.value
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
+export function msUntilNextShanghaiMidnight(date = new Date()) {
+  const shanghaiNow = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+  const nextMidnight = new Date(shanghaiNow)
+  nextMidnight.setHours(24, 0, 0, 0)
+  return Math.max(1000, nextMidnight.getTime() - shanghaiNow.getTime())
+}
+
 export function contractTimestamp(date = new Date()) {
   return date.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
@@ -365,17 +387,13 @@ export function isValidAccountScope(value) {
   return /^opaque-v1:[0-9a-f]{64}$/.test(String(value || ''))
 }
 
-export function getScheduleExamWeeks(courses) {
-  const existingWeeks = [...new Set(
-    courses.flatMap((course) => Array.isArray(course.week_numbers) ? course.week_numbers : [])
-      .filter((week) => Number.isFinite(week) && week > 0),
-  )].sort((a, b) => a - b)
-  return [existingWeeks[16], existingWeeks[17]].filter(Boolean)
-}
-
-function isExamCourseOccurrence(course, weekNumber, scheduleExamWeeks) {
+// Exam weeks come exclusively from the backend, which annotates each course
+// (annotate_exam_weeks on parse and on cache load). Keeping a second positional
+// guess here would OR extra weeks into authoritative data once real exam weeks
+// are provided, so the frontend must not duplicate the heuristic.
+function isExamCourseOccurrence(course, weekNumber) {
   const savedExamWeeks = Array.isArray(course.exam_week_numbers) ? course.exam_week_numbers : []
-  return savedExamWeeks.includes(weekNumber) || scheduleExamWeeks.includes(weekNumber)
+  return savedExamWeeks.includes(weekNumber)
 }
 
 function dateOrdinal(dateString) {
@@ -391,17 +409,18 @@ export function getWeekState(courses, termStartDate, targetDate) {
   const days = dateOrdinal(targetDate) - dateOrdinal(termStartDate)
   const weekNumber = Math.max(0, Math.floor(days / 7) + 1)
   const weekday = target.getDay() === 0 ? 7 : target.getDay()
-  const scheduleExamWeeks = getScheduleExamWeeks(courses)
   const dayCourses = courses
-    .filter((course) => course.weekday === weekday && course.week_numbers.includes(weekNumber))
+    .filter((course) => course.weekday === weekday
+      && Array.isArray(course.week_numbers) && course.week_numbers.includes(weekNumber))
     .map((course) => ({
       ...course,
-      is_exam: isExamCourseOccurrence(course, weekNumber, scheduleExamWeeks),
+      is_exam: isExamCourseOccurrence(course, weekNumber),
     }))
     .sort((a, b) => a.start_slot - b.start_slot || a.name.localeCompare(b.name, 'zh-Hans-CN'))
+  const maxSlotIndex = FALLBACK_SLOTS.length - 1
   const busySlots = [...new Set(dayCourses.flatMap((course) => {
     const slots = []
-    for (let slot = course.start_slot; slot <= course.end_slot; slot += 1) slots.push(slot)
+    for (let slot = Math.max(0, course.start_slot); slot <= Math.min(course.end_slot, maxSlotIndex); slot += 1) slots.push(slot)
     return slots
   }))].sort((a, b) => a - b)
   return { weekNumber, weekday, busySlots, dayCourses }
@@ -413,7 +432,9 @@ export function formatTeachingWeek(weekNumber) {
 
 export function slotsToRanges(slots, slotMeta) {
   if (!slots.length) return []
-  const sorted = [...new Set(slots)].sort((a, b) => a - b)
+  const validSlots = slots.filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < slotMeta.length)
+  if (!validSlots.length) return []
+  const sorted = [...new Set(validSlots)].sort((a, b) => a - b)
   const ranges = []
   let start = sorted[0]
   let prev = sorted[0]

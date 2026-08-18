@@ -21,50 +21,57 @@ struct PlannerView: View {
     var body: some View {
         GeometryReader { proxy in
             let columnCount = AdaptiveLayoutPolicy.contentColumnCount(width: proxy.size.width)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .bottom, spacing: 12) {
-                            plannerTitle
-                            Spacer(minLength: 0)
-                            todayLabel
-                        }
-                        VStack(alignment: .leading, spacing: 8) {
-                            plannerTitle
-                            todayLabel
-                        }
+            let page = VStack(alignment: .leading, spacing: 16) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .bottom, spacing: 12) {
+                        plannerTitle
+                        Spacer(minLength: 0)
+                        todayLabel
                     }
+                    VStack(alignment: .leading, spacing: 8) {
+                        plannerTitle
+                        todayLabel
+                    }
+                }
 
-                    if columnCount == 2 {
-                        HStack(alignment: .top, spacing: 16) {
-                            VStack(spacing: 16) {
-                                querySurface
-                                slotSurface
-                                buildingsSurface
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-
-                            VStack(spacing: 16) {
-                                todayCoursesSurface
-                                resultsSurface
-                                summarySurface
-                            }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                        }
-                    } else {
+                if columnCount == 2 {
+                    HStack(alignment: .top, spacing: 16) {
                         VStack(spacing: 16) {
                             querySurface
                             slotSurface
-                            todayCoursesSurface
                             buildingsSurface
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+
+                        VStack(spacing: 16) {
+                            todayCoursesSurface
                             resultsSurface
                             summarySurface
                         }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                    }
+                } else {
+                    VStack(spacing: 16) {
+                        querySurface
+                        slotSurface
+                        todayCoursesSurface
+                        buildingsSurface
+                        resultsSurface
+                        summarySurface
                     }
                 }
+            }
+            ScrollView {
+                #if os(macOS)
+                page
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                #else
+                page
                 .padding(20)
                 .frame(maxWidth: 1200)
                 .frame(maxWidth: .infinity)
+                #endif
             }
         }
         .background(AppTheme.background)
@@ -72,7 +79,7 @@ struct PlannerView: View {
     }
 
     private var plannerTitle: some View {
-        PageTitle(eyebrow: "BUPT Classroom Planner", title: "联动查询")
+        PageTitle(eyebrow: "Where To Study", title: "联动查询")
     }
 
     private var todayLabel: some View {

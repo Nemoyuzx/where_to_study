@@ -581,6 +581,7 @@ object DailyCourseSummaryNotificationRuntime {
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
             description = "每天约 07:30 显示当天个人课程摘要"
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         })
     }
 }

@@ -1,0 +1,27 @@
+{
+  "year": 2026,
+  "region": "CN",
+  "dates": [
+    {
+      "date": "2026-01-01",
+      "name": "示例假期",
+      "name_cn": "示例假期",
+      "name_en": "Example Holiday",
+      "type": "public_holiday"
+    },
+    {
+      "date": "2026-01-04",
+      "name": "示例调休",
+      "name_cn": "示例调休",
+      "name_en": "Example Transfer Workday",
+      "type": "transfer_workday"
+    },
+    {
+      "date": "2026-01-05",
+      "name": "应忽略的类型",
+      "name_cn": "应忽略的类型",
+      "name_en": "Ignored Type",
+      "type": "notice"
+    }
+  ]
+}

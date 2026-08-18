@@ -161,7 +161,7 @@ final class CalendarImportTests: XCTestCase {
         XCTAssertTrue(syncPlan.deleteIdentifiers.isEmpty)
     }
 
-    func testExpectedMarkerOutsideTheTermIsUpdatedInsteadOfInsertedAgain() throws {
+    func testExpectedMarkerOutsideTheTermIsPreservedAndInsertedInsideTheTerm() throws {
         let schedulePlan = try CalendarImportLogic.schedulePlan(
             from: fixtureSchedule(weeks: [1], examWeeks: [])
         )
@@ -181,11 +181,8 @@ final class CalendarImportTests: XCTestCase {
             destinationCalendarIdentifier: "destination"
         )
 
-        XCTAssertTrue(syncPlan.inserts.isEmpty)
-        XCTAssertEqual(
-            syncPlan.matches,
-            [CalendarSyncMatch(existingIdentifier: "moved", draft: draft, needsUpdate: true)]
-        )
+        XCTAssertEqual(syncPlan.inserts, [draft])
+        XCTAssertTrue(syncPlan.matches.isEmpty)
         XCTAssertTrue(syncPlan.deleteIdentifiers.isEmpty)
     }
 

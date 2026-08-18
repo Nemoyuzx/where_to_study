@@ -18,11 +18,20 @@ class SjdClassroomClient(
     fun fetch(
         credentials: Credentials,
         targetDate: String = contractDate(Date()),
-        fetchedAt: String = timestamp(Date()),
+    ): ClassroomsCache = fetchAt(credentials, targetDate, Date())
+
+    // Single-instant variant: targetDate, fetchedAt and the "today" check all
+    // derive from the same Date, so a refresh straddling midnight can no
+    // longer fail the realtime-only-today assertion.
+    internal fun fetchAt(
+        credentials: Credentials,
+        targetDate: String,
+        now: Date,
     ): ClassroomsCache {
-        if (targetDate != contractDate(Date())) {
+        if (targetDate != contractDate(now)) {
             throw ClassroomClientException("空教室实时接口仅支持当天查询。")
         }
+        val fetchedAt = timestamp(now)
         val token = api.login(credentials)
         val payloads = AppMetadata.campuses.associate { campus ->
             val payload = api.get(

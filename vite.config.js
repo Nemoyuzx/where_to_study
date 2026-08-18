@@ -6,7 +6,24 @@ const platform = process.env.TAURI_ENV_PLATFORM
 const webviewTarget = platform === 'windows' || platform === 'android' ? 'chrome105' : 'safari15'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      // Preview/dev browser builds have no Tauri CSP header, so inject the
+      // production-aligned policy (minus Tauri IPC schemes) only while serving.
+      name: 'dev-preview-csp',
+      apply: 'serve',
+      transformIndexHtml(html) {
+        return html.replace(
+          '<head>',
+          [
+            '<head>',
+            '    <meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\' \'unsafe-inline\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; connect-src \'self\' ws: http://localhost:* http://127.0.0.1:*; object-src \'none\'; base-uri \'self\'; frame-ancestors \'none\'" />',
+          ].join('\n'),
+        )
+      },
+    },
+  ],
   clearScreen: false,
   server: {
     port: 5173,
