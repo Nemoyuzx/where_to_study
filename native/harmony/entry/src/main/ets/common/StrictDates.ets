@@ -118,14 +118,17 @@ export class StrictDates {
 
   // 周一 = 1 ... 周日 = 7。1970-01-01 为周四（周一制第 4 天）。
   static weekdayMonday1(parts: DateParts): number {
+    // 对 1970 年前（负纪元）也返回合法值：先归一化 e%7 到 0..6（BUG-001 修复）。
     const e: number = StrictDates.epochDay(parts.year, parts.month, parts.day);
-    return ((e + 3) % 7) + 1;
+    return (((e % 7) + 10) % 7) + 1;
   }
 
   // fetched_at 契约：不含小数秒的 RFC 3339，使用上海偏移 +08:00。
   static formatFetchedAt(epochMs: number): string {
     const shifted: Date = new Date(epochMs + SHANGHAI_OFFSET_MS);
-    return StrictDates.pad4(shifted.getUTCFullYear()) + '-' + StrictDates.pad2(shifted.getUTCMonth() + 1) +
+    // 契约要求 4 位年份；超范围钳制（BUG-037 修复）。
+    const year: number = Math.min(Math.max(shifted.getUTCFullYear(), 1), 9999);
+    return StrictDates.pad4(year) + '-' + StrictDates.pad2(shifted.getUTCMonth() + 1) +
       '-' + StrictDates.pad2(shifted.getUTCDate()) + 'T' + StrictDates.pad2(shifted.getUTCHours()) +
       ':' + StrictDates.pad2(shifted.getUTCMinutes()) + ':' + StrictDates.pad2(shifted.getUTCSeconds()) +
       '+08:00';
@@ -153,6 +156,9 @@ export class StrictDates {
     const hour: number = StrictDates.numberIn(value, 11, 2);
     const minute: number = StrictDates.numberIn(value, 14, 2);
     const second: number = StrictDates.numberIn(value, 17, 2);
+    if (year <= 0) {
+      return null;
+    }
     if (month < 1 || month > 12 || day < 1 || day > StrictDates.daysInMonth(year, month)) {
       return null;
     }

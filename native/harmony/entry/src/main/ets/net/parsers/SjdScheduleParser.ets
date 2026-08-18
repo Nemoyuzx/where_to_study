@@ -45,7 +45,7 @@ export class SJDScheduleParser {
       rawRoot = [];
     }
     const rawCourses: Record<string, Object>[] = [];
-    SJDScheduleParser.collectCourses(rawRoot, rawCourses);
+    SJDScheduleParser.collectCourses(rawRoot, rawCourses, 0);
 
     const seen: Set<string> = new Set<string>();
     const courses: Course[] = [];
@@ -70,14 +70,17 @@ export class SJDScheduleParser {
     return new ScheduleSnapshot(termID, termStartDate, at, withExamWeeks);
   }
 
-  private static collectCourses(value: Object, out: Record<string, Object>[]): void {
-    if (value === undefined || value === null) {
+  // 与 iOS 参考实现的 64 层一致：防止畸形响应导致栈溢出（BUG-011 修复）。
+  static readonly maximumCollectionDepth: number = 64;
+
+  private static collectCourses(value: Object, out: Record<string, Object>[], depth: number): void {
+    if (value === undefined || value === null || depth > SJDScheduleParser.maximumCollectionDepth) {
       return;
     }
     if (Array.isArray(value)) {
       const arr: Object[] = value as Object[];
       for (const child of arr) {
-        SJDScheduleParser.collectCourses(child, out);
+        SJDScheduleParser.collectCourses(child, out, depth + 1);
       }
       return;
     }
@@ -91,7 +94,7 @@ export class SJDScheduleParser {
     }
     const children: Object[] = Object.values(dict);
     for (const child of children) {
-      SJDScheduleParser.collectCourses(child, out);
+      SJDScheduleParser.collectCourses(child, out, depth + 1);
     }
   }
 
@@ -110,7 +113,17 @@ export class SJDScheduleParser {
     if (weekdayText.length === 0) {
       return null;
     }
-    const weekday: number = Number(weekdayText.charAt(0));
+    let weekday: number = Number(weekdayText.charAt(0));
+    if (Number.isNaN(weekday) || weekday < 1 || weekday > 7) {
+      // 兼容中文星期（周X/星期X），避免整门课被静默丢弃（BUG-043 修复）。
+      const chineseMatch: string | null = RegexUtil.firstCapture(weekdayText, '[周星期]([一二三四五六日天])');
+      if (chineseMatch !== null) {
+        const chineseIndex: number = '一二三四五六日天'.indexOf(chineseMatch);
+        if (chineseIndex >= 0) {
+          weekday = chineseIndex + 1;
+        }
+      }
+    }
     if (Number.isNaN(weekday) || weekday < 1 || weekday > 7) {
       return null;
     }

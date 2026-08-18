@@ -2,6 +2,7 @@
 // 对应 iOS 端 AppModel.synchronizeWidgetSchedule + WidgetCenter.reloadTimelines。
 import { formProvider } from '@kit.FormKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ScheduleSnapshot } from '../common/Models';
 import { JsonFile } from '../store/JsonFile';
 import { AppContext } from '../store/AppContext';
@@ -52,6 +53,9 @@ export class WidgetSync {
       const raw: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
       return WidgetSync.parseArchive(raw);
     } catch (e) {
+      // BUG-021 修复：解析失败不再静默，便于排查。
+      hilog.warn(0x0000, 'WidgetSync', '卡片归档解析失败: %{public}s',
+        e instanceof Error ? e.message : 'unknown');
       return null;
     }
   }
@@ -67,6 +71,8 @@ export class WidgetSync {
       const raw: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
       return WidgetSync.parseArchive(raw);
     } catch (e) {
+      hilog.warn(0x0000, 'WidgetSync', '卡片归档同步解析失败: %{public}s',
+        e instanceof Error ? e.message : 'unknown');
       return null;
     }
   }

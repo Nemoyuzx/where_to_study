@@ -4,6 +4,7 @@
 import { HolidaysSnapshot } from '../common/Models';
 import { StrictDates } from '../common/StrictDates';
 import { HolidaySourceLimits } from '../net/SjdErrors';
+import { Utf8 } from '../common/Utf8';
 import { AppContext } from './AppContext';
 import { JsonFile } from './JsonFile';
 
@@ -33,7 +34,7 @@ export class FileHolidayStore implements HolidayStoring {
     if (text === null) {
       return null;
     }
-    if (text.length > HolidaySourceLimits.maximumPayloadBytes) {
+    if (Utf8.bytes(text).length > HolidaySourceLimits.maximumPayloadBytes) {
       throw new Error('本地节假日缓存过大。');
     }
     return HolidayCacheContract.decode(text, year);
@@ -42,7 +43,7 @@ export class FileHolidayStore implements HolidayStoring {
   async save(snapshot: HolidaysSnapshot): Promise<void> {
     HolidayCacheContract.validate(snapshot, null);
     const text: string = JSON.stringify(snapshot.toJson(), null, 2);
-    if (text.length > HolidaySourceLimits.maximumPayloadBytes) {
+    if (Utf8.bytes(text).length > HolidaySourceLimits.maximumPayloadBytes) {
       throw new Error('本地节假日缓存过大。');
     }
     await JsonFile.writeTextAtomic(this.filePathFor(snapshot.year), text);

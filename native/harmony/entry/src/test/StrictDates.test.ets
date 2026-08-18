@@ -29,6 +29,14 @@ export default function strictDatesTest() {
       expect(StrictDates.weekdayMonday1(new DateParts(1970, 1, 1))).assertEqual(4);
     });
 
+    it('weekday_monday_first_is_valid_before_1970', 0, () => {
+      // BUG-001：1970 年前日期不得返回 0 或负数。
+      expect(StrictDates.weekdayMonday1(new DateParts(1969, 12, 28))).assertEqual(7);
+      expect(StrictDates.weekdayMonday1(new DateParts(1969, 12, 29))).assertEqual(1);
+      expect(StrictDates.weekdayMonday1(new DateParts(1968, 12, 29))).assertEqual(7);
+      expect(StrictDates.weekdayMonday1(new DateParts(1900, 1, 1))).assertEqual(1);
+    });
+
     it('epoch_day_round_trips', 0, () => {
       expect(StrictDates.epochDay(1970, 1, 1)).assertEqual(0);
       const parts: DateParts = StrictDates.partsFromEpochDay(20000);
@@ -58,6 +66,17 @@ export default function strictDatesTest() {
         .assertEqual(StrictDates.epochDay(2026, 1, 5) * 86400000);
       expect(StrictDates.parseFetchedAt('2026-01-05T08:00:00.000+08:00')).assertNull();
       expect(StrictDates.parseFetchedAt('2026-01-05T25:00:00+08:00')).assertNull();
+    });
+
+    it('fetched_at_rejects_year_zero_and_clamps_year_format', 0, () => {
+      // BUG-002：year<=0 必须拒绝（与 parseDateString 一致）。
+      expect(StrictDates.parseFetchedAt('0000-01-01T00:00:00Z')).assertNull();
+      expect(StrictDates.parseFetchedAt('0000-02-29T00:00:00Z')).assertNull();
+      // BUG-037：formatFetchedAt 对超范围年份钳制为 4 位，保证自身输出可回读。
+      const year10000: number = StrictDates.parseFetchedAt('9999-12-31T23:59:59Z') as number;
+      const formatted: string = StrictDates.formatFetchedAt(year10000 + 86400000);
+      expect(formatted.startsWith('9999-')).assertTrue();
+      expect(StrictDates.parseFetchedAt(formatted) !== null).assertTrue();
     });
   });
 }

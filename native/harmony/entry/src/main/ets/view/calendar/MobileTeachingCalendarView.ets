@@ -11,7 +11,7 @@ import {
   CalendarTimelineLogic, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
-import { MobileCalendarTimelineLayout, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
+import { CoursePlacement, MobileCalendarTimelineLayout, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
 
 class MonthEvent {
   readonly id: string;
@@ -36,9 +36,20 @@ export struct MobileTeachingCalendarView {
   @Local contentWidth: number = 350;
   @Local contentHeight: number = 500;
   private timelineScroller: Scroller = new Scroller();
+  private timelineScrollTimer: number = -1;
+  private timelinePlacements: Map<string, CoursePlacement[]> =
+    new Map<string, CoursePlacement[]>();
 
   aboutToAppear(): void {
     this.ensureVisibleHolidays();
+  }
+
+  aboutToDisappear(): void {
+    // 清理延迟滚动定时器，避免对已销毁 Scroller 操作（BUG-012 修复）。
+    if (this.timelineScrollTimer >= 0) {
+      clearTimeout(this.timelineScrollTimer);
+      this.timelineScrollTimer = -1;
+    }
   }
 
   @Monitor('session.selectedDate')
@@ -393,13 +404,13 @@ export struct MobileTeachingCalendarView {
   statusArea() {
     if (this.statusMessages().length > 0) {
       Column({ space: 4 }) {
-        ForEach(this.statusMessages(), (message: string) => {
+        ForEach(this.statusMessages(), (message: string, index: number) => {
           Text(message)
             .fontSize(12)
             .fontColor(AppTheme.secondaryText())
             .maxLines(2)
             .width('100%')
-        }, (message: string) => 'status.' + message)
+        }, (message: string, index: number) => 'status.' + index.toString() + '.' + message)
       }
       .padding({ left: 16, right: 16, top: 8, bottom: 8 })
       .width('100%')
@@ -434,6 +445,7 @@ export struct MobileTeachingCalendarView {
         Column() {
           MobileCalendarTimelineView({
             days: this.timelineDays(),
+            placements: this.timelinePlacements,
             selectedDate: this.selectedDate(),
             showsWeekColumns: this.mode() === CalendarMode.week,
             onSelectDay: (day: DateParts): void => {
@@ -463,6 +475,8 @@ export struct MobileTeachingCalendarView {
     for (const day of days) {
       result.push(new CalendarTimelineDay(day, this.coursesOn(day), this.holidayItemsOn(day)));
     }
+    // 一次算好课程布局，供时间线复用（BUG-046 修复）。
+    this.timelinePlacements = MobileCalendarTimelineView.placementsFor(result);
     return result;
   }
 
@@ -483,7 +497,7 @@ export struct MobileTeachingCalendarView {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      ForEach(this.coursesOn(this.selectedDate()), (course: Course) => {
+      ForEach(this.coursesOn(this.selectedDate()), (course: Course, index: number) => {
         Column({ space: 2 }) {
           Text(course.name)
             .fontSize(12)
@@ -497,7 +511,7 @@ export struct MobileTeachingCalendarView {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-      }, (course: Course) => 'summary.' + course.id)
+      }, (course: Course, index: number) => 'summary.' + course.id + '.' + index.toString())
     }
     .padding({ left: 16, right: 16, top: 10, bottom: 10 })
     .width('100%')
@@ -915,7 +929,7 @@ export struct MobileTeachingCalendarView {
         Scroll() {
           this.daySummaryCard(this.presentedDay as DateParts)
         }
-        .constraintSize({ maxHeight: 420 })
+        .layoutWeight(1)
         .width('100%')
       }
       .padding(16)
@@ -979,7 +993,7 @@ export struct MobileTeachingCalendarView {
           .fontSize(14)
           .fontColor(AppTheme.secondaryText())
       } else {
-        ForEach(this.coursesOn(day), (course: Course) => {
+        ForEach(this.coursesOn(day), (course: Course, index: number) => {
           Row({ space: 10 }) {
             Column()
               .width(4)
@@ -1000,7 +1014,7 @@ export struct MobileTeachingCalendarView {
           }
           .width('100%')
           .alignItems(VerticalAlign.Top)
-        }, (course: Course) => 'summary-course.' + course.id)
+        }, (course: Course, index: number) => 'summary-course.' + course.id + '.' + index.toString())
       }
     }
     .padding(14)
@@ -1099,7 +1113,11 @@ export struct MobileTeachingCalendarView {
     }
     const hour: number = MobileCalendarTimelineLayout.initialVisibleHour(
       this.shanghaiHour(), includesToday);
-    setTimeout(() => {
+    if (this.timelineScrollTimer >= 0) {
+      clearTimeout(this.timelineScrollTimer);
+    }
+    this.timelineScrollTimer = setTimeout(() => {
+      this.timelineScrollTimer = -1;
       this.timelineScroller.scrollTo({
         xOffset: 0,
         yOffset: (hour - 8) * MobileCalendarTimelineLayout.hourHeight

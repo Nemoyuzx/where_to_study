@@ -23,6 +23,10 @@
     {
       "name": "app_danger",
       "value": "#E84026"
+    },
+    {
+      "name": "app_selection",
+      "value": "#1A166B5D"
     }
   ]
 }
