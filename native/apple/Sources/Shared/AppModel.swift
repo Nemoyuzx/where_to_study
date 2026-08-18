@@ -515,6 +515,8 @@ final class AppModel: ObservableObject {
             return
         }
         invalidatePendingOperations()
+        dailyClassroomRefreshTask?.cancel()
+        dailyClassroomRefreshTask = nil
         dailyCourseNotificationsEnabled = false
         defaults.removeObject(forKey: Self.dailyCourseNotificationsKey)
         dailyCourseNotificationStatusMessage = ""

@@ -79,7 +79,7 @@ struct PlannerView: View {
     }
 
     private var plannerTitle: some View {
-        PageTitle(eyebrow: "BUPT Classroom Planner", title: "联动查询")
+        PageTitle(eyebrow: "Where To Study", title: "联动查询")
     }
 
     private var todayLabel: some View {

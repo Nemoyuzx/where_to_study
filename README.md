@@ -19,14 +19,14 @@ macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android V
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | 正式签名的 Universal build 37 已上传 App Store Connect；公开 GitHub Release 另提供临时签名预览包 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.1.5 (38)` 正式签名 Universal 构建；公开 GitHub Release 另提供临时签名预览包 |
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
-| iOS | SwiftUI 原生 | 正式签名的 build 37 已上传 App Store Connect；公开 GitHub Release 暂仍为无签名开发者 archive |
+| iOS | SwiftUI 原生 | `0.1.5 (38)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
 
 ## 下载
 
-稳定版 [v0.1.4](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.4) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版在移动端保留日、周、月视图的滑动翻页与月视图连续展开动画，并在展开状态显示向上箭头；桌面端恢复完整月历与双栏年历，不使用移动端折叠交互，年视图支持单击选中、双击进入对应月份。桌面空教室与教学日历使用导航栏右侧全部可用宽度，并保留 16px 正常页面边距。手机、折叠屏、平板和桌面布局均保持原有配色并完成深浅色检查；iOS 对三个主页面分别应用底部安全区策略，使教学日历时间轴延伸到悬浮导航条后方，同时为空教室和设置保留导航条上方间距；Android 自适应启动图标增加安全区，避免被圆形或圆角矩形启动器遮罩裁切。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS `0.1.4 (37)` 已上传 App Store Connect，公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
+稳定版 [v0.1.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.5) 提供 Windows x64 NSIS、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版逐项统一 Android 与 iOS 的边线、控件高度、首页和设置密度，并在两套原生手机教学日历的日期、模式、翻页、月历展开及年视图跳转中加入系统触觉反馈。移动端继续支持日、周、月左右滑动与月视图连续展开动画；桌面端保留完整月历、双栏年历和 16px 正常页面边距。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 使用 `0.1.5 (38)`，公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
 
 ## 许可证状态
 

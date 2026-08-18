@@ -43,3 +43,4 @@ native/android/.gradle/
 native/android/**/build/
 native/android/local.properties
 native/android/.idea/
+native/android/keystore/

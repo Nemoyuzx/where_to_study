@@ -424,9 +424,9 @@ class ScheduleLogicTest {
         assertTrue(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 51))
         assertFalse(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 47))
         assertEquals(312f to 468f, CalendarTimelineLogic.dayColumnBounds(2, 156f, 1_092f))
-        assertEquals(112, CalendarTimelineLogic.axisWidthDp(compact = true))
+        assertEquals(56, CalendarTimelineLogic.axisWidthDp(compact = true))
         assertEquals(
-            42,
+            56,
             CalendarTimelineLogic.axisWidthDp(compact = true, showCourseSlots = false),
         )
         assertEquals(144, CalendarTimelineLogic.axisWidthDp(compact = false))
@@ -435,7 +435,7 @@ class ScheduleLogicTest {
         assertEquals(28, CalendarTimelineLogic.courseSlotBoundaryMinutes().size)
         assertTrue(8 * 60 in CalendarTimelineLogic.courseSlotBoundaryMinutes())
         assertTrue(20 * 60 + 55 in CalendarTimelineLogic.courseSlotBoundaryMinutes())
-        assertEquals(1_178, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
+        assertEquals(1_010, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
         assertEquals(1_026, CalendarTimelineLogic.totalHeightDp(compact = false, showDayHeader = true))
     }
 
@@ -464,9 +464,9 @@ class ScheduleLogicTest {
         assertEquals(40, TeachingCalendarLogic.phoneDateCellWidth(320))
         assertEquals(50, TeachingCalendarLogic.phoneDateCellWidth(390))
         assertEquals(63, TeachingCalendarLogic.phoneDateCellWidth(480))
-        assertEquals(34, TeachingCalendarLogic.phoneDateCellWidth(320, leadingWidthDp = 42))
-        assertEquals(44, TeachingCalendarLogic.phoneDateCellWidth(390, leadingWidthDp = 42))
-        assertEquals(57, TeachingCalendarLogic.phoneDateCellWidth(480, leadingWidthDp = 42))
+        assertEquals(34, TeachingCalendarLogic.phoneDateCellWidth(320, leadingWidthDp = 56))
+        assertEquals(42, TeachingCalendarLogic.phoneDateCellWidth(390, leadingWidthDp = 56))
+        assertEquals(55, TeachingCalendarLogic.phoneDateCellWidth(480, leadingWidthDp = 56))
     }
 
     @Test
@@ -481,11 +481,11 @@ class ScheduleLogicTest {
     @Test
     fun monthExpansionUsesDistinctReadableCellHeights() {
         assertEquals(46, TeachingCalendarLogic.monthCellHeightDp(expanded = false))
-        assertEquals(68, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
+        assertEquals(82, TeachingCalendarLogic.monthCellHeightDp(expanded = true))
         assertEquals(38, TeachingCalendarLogic.phoneModeSwitchHeightDp)
         assertEquals(32, TeachingCalendarLogic.phoneModeTabHeightDp)
         assertEquals(36, TeachingCalendarLogic.phoneNavigationHeightDp)
-        assertEquals(50, TeachingCalendarLogic.phoneDateStripHeightDp)
+        assertEquals(56, TeachingCalendarLogic.phoneDateStripHeightDp)
         assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(2))
         assertEquals(1, TeachingCalendarLogic.visibleMonthEntryCount(5))
         assertEquals(4, TeachingCalendarLogic.hiddenMonthEntryCount(5))
@@ -494,13 +494,13 @@ class ScheduleLogicTest {
     @Test
     fun monthExpansionProgressTracksTheFingerBetweenBothEndpoints() {
         assertEquals(0f, TeachingCalendarLogic.monthExpansionProgress(-40f, false), 0.001f)
-        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(66f, false), 0.001f)
-        assertEquals(1f, TeachingCalendarLogic.monthExpansionProgress(132f, false), 0.001f)
-        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(-66f, true), 0.001f)
-        assertEquals(0f, TeachingCalendarLogic.monthExpansionProgress(-132f, true), 0.001f)
+        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(108f, false), 0.001f)
+        assertEquals(1f, TeachingCalendarLogic.monthExpansionProgress(216f, false), 0.001f)
+        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(-108f, true), 0.001f)
+        assertEquals(0f, TeachingCalendarLogic.monthExpansionProgress(-216f, true), 0.001f)
         assertEquals(
-            57,
-            TeachingCalendarLogic.interpolateMonthMetric(46, 68, progress = 0.5f),
+            64,
+            TeachingCalendarLogic.interpolateMonthMetric(46, 82, progress = 0.5f),
         )
     }
 

@@ -98,6 +98,9 @@ jobs:
           } else {
             "ci-$($env:GITHUB_SHA.Substring(0, 12))"
           }
+          if ($label -notmatch '^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$') {
+            throw "Invalid release label: $label"
+          }
           New-Item -ItemType Directory -Force "release-artifacts" | Out-Null
           $output = "release-artifacts/Where-To-Study-$label-windows-x64-setup.exe"
           Copy-Item $source.FullName $output

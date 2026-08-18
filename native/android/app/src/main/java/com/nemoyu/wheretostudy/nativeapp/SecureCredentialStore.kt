@@ -98,6 +98,10 @@ class SecureCredentialStore(context: Context) {
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
 
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER)
+        // Deliberately not bound to device unlock: the 07:00 classroom refresh
+        // and 07:30 course summary jobs run while the device is still locked,
+        // and the key is already Keystore-only with backups excluded. Binding
+        // to unlock would silently break those background features.
         generator.init(
             KeyGenParameterSpec.Builder(
                 KEY_ALIAS,

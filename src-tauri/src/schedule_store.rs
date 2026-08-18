@@ -19,14 +19,28 @@ fn schedule_path(app: &AppHandle) -> ServiceResult<PathBuf> {
     Ok(directory.join(SCHEDULE_FILE_NAME))
 }
 
+const MAX_SCHEDULE_CACHE_BYTES: u64 = 8 * 1024 * 1024;
+
+fn read_limited_cache_bytes(
+    path: &Path,
+    description: &str,
+    max_bytes: u64,
+) -> ServiceResult<Vec<u8>> {
+    let metadata = fs::metadata(path)
+        .map_err(|error| ServiceError::new(format!("无法读取{description}：{error}")))?;
+    if metadata.len() > max_bytes {
+        return Err(ServiceError::new(format!("{description}缓存过大。")));
+    }
+    fs::read(path).map_err(|error| ServiceError::new(format!("无法读取{description}：{error}")))
+}
+
 pub fn load(app: &AppHandle, account_scope: &str) -> ServiceResult<Option<ScheduleResponse>> {
     let path = schedule_path(app)?;
     if !path.exists() {
         return Ok(None);
     }
 
-    let bytes =
-        fs::read(&path).map_err(|error| ServiceError::new(format!("无法读取本地课表：{error}")))?;
+    let bytes = read_limited_cache_bytes(&path, "本地课表", MAX_SCHEDULE_CACHE_BYTES)?;
     if bytes.is_empty() {
         return Ok(None);
     }
@@ -143,5 +157,16 @@ mod tests {
             serde_json::to_value(actual).unwrap(),
             serde_json::to_value(expected).unwrap()
         );
+    }
+
+    #[test]
+    fn oversized_schedule_cache_is_rejected_before_reading() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let path = directory.path().join(SCHEDULE_FILE_NAME);
+        fs::write(&path, vec![b' '; MAX_SCHEDULE_CACHE_BYTES as usize + 1])
+            .expect("write oversized schedule cache");
+        let error = read_limited_cache_bytes(&path, "本地课表", MAX_SCHEDULE_CACHE_BYTES)
+            .expect_err("oversized schedule cache must be rejected");
+        assert_eq!(error.message, "本地课表缓存过大。");
     }
 }

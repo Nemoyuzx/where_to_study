@@ -304,13 +304,14 @@ jobs:
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
+          # No -A: only the codesign/productbuild/security allowlist below may use the imported keys.
           security import "$distribution_cert_path" \
             -P "$APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD" \
-            -A -f pkcs12 -k "$keychain_path" \
+            -f pkcs12 -k "$keychain_path" \
             -T /usr/bin/codesign -T /usr/bin/security
           security import "$installer_cert_path" \
             -P "$APPLE_INSTALLER_CERTIFICATE_PASSWORD" \
-            -A -f pkcs12 -k "$keychain_path" \
+            -f pkcs12 -k "$keychain_path" \
             -T /usr/bin/productbuild -T /usr/bin/security
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
