@@ -15,14 +15,16 @@ use crate::error::{ServiceError, ServiceResult};
     target_os = "macos",
     target_os = "ios",
     target_os = "android",
-    target_os = "windows"
+    target_os = "windows",
+    target_os = "linux"
 ))]
 const SERVICE_NAME: &str = "com.nemoyu.wheretostudy";
 #[cfg(any(
     target_os = "macos",
     target_os = "ios",
     target_os = "android",
-    target_os = "windows"
+    target_os = "windows",
+    target_os = "linux"
 ))]
 const ENTRY_NAME: &str = "default-account";
 
@@ -238,9 +240,50 @@ fn wide_string(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+#[cfg(target_os = "linux")]
+pub fn load() -> ServiceResult<Option<Credentials>> {
+    use keyring::Entry;
+
+    let entry = Entry::new(SERVICE_NAME, ENTRY_NAME)
+        .map_err(|error| ServiceError::new(format!("无法访问系统凭据存储：{error}")))?;
+    let payload = match entry.get_password() {
+        Ok(payload) => payload,
+        Err(keyring::Error::NoEntry) => return Ok(None),
+        Err(error) => return Err(ServiceError::new(format!("无法读取系统凭据存储：{error}"))),
+    };
+    let payload = Zeroizing::new(payload);
+    serde_json::from_str(&payload)
+        .map(Some)
+        .map_err(|error| ServiceError::new(format!("系统凭据内容格式不正确：{error}")))
+}
+
+#[cfg(target_os = "linux")]
+pub fn save(credentials: &Credentials) -> ServiceResult<()> {
+    use keyring::Entry;
+
+    let entry = Entry::new(SERVICE_NAME, ENTRY_NAME)
+        .map_err(|error| ServiceError::new(format!("无法访问系统凭据存储：{error}")))?;
+    if credentials.account.is_empty() && credentials.password.is_empty() {
+        return match entry.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(ServiceError::new(format!("无法清除系统凭据存储：{error}"))),
+        };
+    }
+
+    let payload = Zeroizing::new(
+        serde_json::to_string(credentials)
+            .map_err(|error| ServiceError::new(format!("无法序列化账户凭据：{error}")))?,
+    );
+    entry
+        .set_password(&payload)
+        .map_err(|error| ServiceError::new(format!("无法写入系统凭据存储：{error}")))
+}
+
 #[cfg(all(
     not(target_os = "macos"),
     not(target_os = "windows"),
+    not(target_os = "linux"),
     not(target_os = "android"),
     not(target_os = "ios")
 ))]
@@ -251,6 +294,7 @@ pub fn load() -> ServiceResult<Option<Credentials>> {
 #[cfg(all(
     not(target_os = "macos"),
     not(target_os = "windows"),
+    not(target_os = "linux"),
     not(target_os = "android"),
     not(target_os = "ios")
 ))]

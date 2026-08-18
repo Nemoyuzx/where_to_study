@@ -48,8 +48,9 @@ SwiftUI 客户端会在系统待处理通知上限内安排最多 63 个未来�
 ## 数据来源与数据安全
 
 应用使用北邮课表和空教室相关接口，因此需要教务系统账号和密码。账号与密码不会写入
-普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Android
-使用 Android Keystore。旧版 `settings.json` 中的凭据会在首次启动时迁移并从普通设置
+普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Linux
+使用 Secret Service（GNOME Keyring / KWallet 等系统密钥环），Android 使用
+Android Keystore。旧版 `settings.json` 中的凭据会在首次启动时迁移并从普通设置
 中删除。迁移先原子替换脱敏设置文件，再写入系统凭据存储。Tauri 为每个已保存账号生成不含账号信息的随机不透明缓存作用域，账号切换或清除失败时会持久化撤销标记并拒绝旧缓存。Tauri 的
 `load_saved_settings` 只向 WebView 返回 `has_saved_password`，不会返回真实密码；密码输入留空时保留已有系统凭据，只有显式输入新密码才替换。课程和空教室缓存不包含密码、token 或 cookie。完整基线见
 [docs/security.md](./docs/security.md)。
