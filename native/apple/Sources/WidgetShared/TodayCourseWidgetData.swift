@@ -107,12 +107,18 @@ enum TodayCourseWidgetData {
         return []
         #else
         // Ad-hoc local packages have no registered App Group container. Keep a
-        // compatibility copy for those preview builds only; App Store archives
-        // define APP_STORE_BUILD and use the signed group container exclusively.
-        let supportURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/WhereToStudyNative", isDirectory: true)
-            .appendingPathComponent(archiveFileName, isDirectory: false)
-        return [supportURL]
+        // compatibility copy inside the app's own Application Support container
+        // for those preview builds only; App Store archives define
+        // APP_STORE_BUILD and use the signed group container exclusively.
+        if let supportDirectory = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first {
+            return [supportDirectory
+                .appendingPathComponent("WhereToStudyNative", isDirectory: true)
+                .appendingPathComponent(archiveFileName, isDirectory: false)]
+        }
+        return []
         #endif
     }
 }

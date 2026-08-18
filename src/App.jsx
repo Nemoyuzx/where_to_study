@@ -57,6 +57,7 @@ import {
   hasCalendarItemType,
   isValidAccountScope,
   localDateString,
+  msUntilNextShanghaiMidnight,
   normalizeClassroomsCache,
   normalizeError,
   parseTimeMinutes,
@@ -64,6 +65,7 @@ import {
   savedCredentialSnapshot,
   savedSettingsToState,
   settingsToPayload,
+  shanghaiDateString,
   shiftDate,
   slotsToRanges,
   startOfWeekSunday,
@@ -314,7 +316,7 @@ function CourseWidget() {
   const [error, setError] = useState('')
   const scheduleRevision = useRef(0)
 
-  const todayDate = localDateString(now)
+  const todayDate = shanghaiDateString(now)
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
   const courses = schedule?.courses || []
   const weekState = useMemo(
@@ -322,7 +324,7 @@ function CourseWidget() {
     [courses, schedule?.term_start_date, todayDate],
   )
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
-  const upcomingCourse = weekState.dayCourses.find((course) => courseTimeBounds(course, slotMeta).endMinutes >= nowMinutes) || weekState.dayCourses[0] || null
+  const upcomingCourse = weekState.dayCourses.find((course) => courseTimeBounds(course, slotMeta).endMinutes >= nowMinutes) || null
 
   async function loadWidgetSchedule(expectedAccountScope = '') {
     const revision = scheduleRevision.current + 1
@@ -519,7 +521,7 @@ function App() {
     },
   }))
   const [now, setNow] = useState(() => new Date())
-  const [loading, setLoading] = useState('')
+  const [loadingTasks, setLoadingTasks] = useState([])
   const [error, setError] = useState('')
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -551,7 +553,8 @@ function App() {
       page.classList.remove('calendar-gesture-locked')
     }
   }, [])
-  const todayDate = localDateString(now)
+  const todayDate = shanghaiDateString(now)
+  const loading = loadingTasks[loadingTasks.length - 1] || ''
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 720px)')
@@ -738,12 +741,9 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const current = new Date()
-    const nextMidnight = new Date(current)
-    nextMidnight.setHours(24, 0, 0, 0)
     const timer = window.setTimeout(
       () => setNow(new Date()),
-      Math.max(1000, nextMidnight.getTime() - current.getTime()),
+      msUntilNextShanghaiMidnight(),
     )
     return () => window.clearTimeout(timer)
   }, [todayDate])
@@ -1056,6 +1056,15 @@ function App() {
     if (Date.now() < suppressCalendarClickUntilRef.current) return
     setCalendarDate(dateString)
     setCalendarPopover(null)
+  }
+
+  function chooseCalendarDateFromInput(event) {
+    const dateString = event.target.value
+    if (!dateString || Number.isNaN(dateFromString(dateString).getTime())) {
+      event.target.value = calendarDate
+      return
+    }
+    chooseCalendarDate(dateString)
   }
 
   function stageCalendarTransition(motion) {
@@ -1447,14 +1456,14 @@ function App() {
   }
 
   async function runTask(name, task) {
-    setLoading(name)
+    setLoadingTasks((current) => [...current, name])
     setError('')
     try {
       await task()
     } catch (taskError) {
       setError(taskError.message)
     } finally {
-      setLoading('')
+      setLoadingTasks((current) => current.filter((item) => item !== name))
     }
   }
 
@@ -1506,14 +1515,15 @@ function App() {
 
   async function clearAllLocalData() {
     await runTask('clear-local-data', async () => {
+      const previousSavedCredential = { ...savedCredentialState.current }
       credentialStateRevision.current += 1
       localDataClearRevision.current += 1
       savedCredentialState.current = { account: '', hasSavedPassword: false }
-      let clearError = null
       try {
         await command('clear_local_data')
-      } catch (taskError) {
-        clearError = taskError
+      } catch (clearError) {
+        savedCredentialState.current = previousSavedCredential
+        throw clearError
       }
       setSettings({
         ...DEFAULT_SETTINGS,
@@ -1526,7 +1536,6 @@ function App() {
       setMinSeats(0)
       setSettingsSaved(false)
       setClearConfirmationOpen(false)
-      if (clearError) throw clearError
     })
   }
 
@@ -1823,7 +1832,7 @@ function App() {
                 <input
                   type="date"
                   value={calendarDate}
-                  onChange={(event) => chooseCalendarDate(event.target.value)}
+                  onChange={chooseCalendarDateFromInput}
                 />
                 <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
                   {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}

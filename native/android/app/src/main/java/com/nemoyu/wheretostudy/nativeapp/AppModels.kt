@@ -133,6 +133,10 @@ object HolidayMetadata {
 object ScheduleLogic {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
 
+    // Positional fallback for BUPT terms: 16 teaching weeks followed by
+    // 2 exam weeks, so the 17th/18th distinct scheduled weeks are exam weeks.
+    // The SJD payload carries no explicit exam-week field; revisit if the API
+    // ever provides one.
     fun examWeeks(courses: List<Course>): Set<Int> {
         val existingWeeks = courses
             .flatMap(Course::weekNumbers)

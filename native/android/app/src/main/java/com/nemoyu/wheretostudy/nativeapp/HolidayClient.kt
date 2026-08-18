@@ -81,7 +81,9 @@ class HolidayClient(
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 20_000
-                connection.instanceFollowRedirects = true
+                // Fail closed on redirects: the source is a pinned unpkg.com
+                // URL, so a redirect to another host must not be followed.
+                connection.instanceFollowRedirects = false
                 connection.doInput = true
                 connection.setRequestProperty("Accept", "application/json")
                 connection.setRequestProperty("User-Agent", HolidayUserAgent.value)

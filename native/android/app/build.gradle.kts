@@ -42,8 +42,9 @@ android {
                 storePassword = releaseSigningValues["storePassword"]
                 keyAlias = releaseSigningValues["keyAlias"]
                 keyPassword = releaseSigningValues["keyPassword"]
-                enableV1Signing = true
+                enableV1Signing = false
                 enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }

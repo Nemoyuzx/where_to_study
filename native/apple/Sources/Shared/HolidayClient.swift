@@ -42,8 +42,18 @@ struct HolidayClient: HolidayFetching {
     private let session: URLSession
     private let source: String
 
-    init(session: URLSession = .shared, source: String = HolidayDefaults.source) {
-        self.session = session
+    init(session: URLSession? = nil, source: String = HolidayDefaults.source) {
+        if let session {
+            self.session = session
+        } else {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = 20
+            self.session = URLSession(
+                configuration: configuration,
+                delegate: HolidayRedirectDelegate(),
+                delegateQueue: nil
+            )
+        }
         self.source = source
     }
 
@@ -86,6 +96,20 @@ struct HolidayClient: HolidayFetching {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
         return formatter.string(from: date)
+    }
+}
+
+// The holiday source is pinned to a fixed unpkg.com URL; a redirect to any
+// other host must never be followed (fail closed with an HTTP error instead).
+private final class HolidayRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
 

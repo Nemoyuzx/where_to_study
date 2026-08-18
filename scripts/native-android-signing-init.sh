@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_PROJECT_DIR="$ROOT_DIR/native/android"
@@ -21,15 +22,30 @@ STORE_FILE_INPUT="${ANDROID_SIGNING_STORE_FILE:-$DEFAULT_STORE_FILE}"
 mkdir -p "$(dirname "$STORE_FILE_INPUT")"
 STORE_FILE="$(cd "$(dirname "$STORE_FILE_INPUT")" && pwd)/$(basename "$STORE_FILE_INPUT")"
 
-STORE_PASSWORD="${ANDROID_SIGNING_STORE_PASSWORD:-$(generate_password)}"
-KEY_PASSWORD="${ANDROID_SIGNING_KEY_PASSWORD:-$STORE_PASSWORD}"
-
 if [ -f "$STORE_FILE" ] && [ -f "$PROPERTIES_PATH" ]; then
   echo "Native Android signing assets already exist:"
   echo "  keystore: $STORE_FILE"
   echo "  properties: $PROPERTIES_PATH"
   exit 0
 fi
+
+if [ -f "$STORE_FILE" ] || [ -f "$PROPERTIES_PATH" ]; then
+  echo "Native Android signing assets are incomplete." >&2
+  echo "  keystore: $([ -f "$STORE_FILE" ] && echo present || echo missing)" >&2
+  echo "  properties: $([ -f "$PROPERTIES_PATH" ] && echo present || echo missing)" >&2
+  echo "Restore the missing file from backup, or delete the remaining one and re-run." >&2
+  exit 1
+fi
+
+case "$STORE_FILE:$PROPERTIES_PATH" in
+  "$ROOT_DIR"/*|*:"$ROOT_DIR"/*)
+    echo "警告：签名文件位于仓库目录内。仓库 .gitignore 只覆盖默认文件名，" >&2
+    echo "自定义文件名请自行确认不会被提交。" >&2
+    ;;
+esac
+
+STORE_PASSWORD="${ANDROID_SIGNING_STORE_PASSWORD:-$(generate_password)}"
+KEY_PASSWORD="${ANDROID_SIGNING_KEY_PASSWORD:-$STORE_PASSWORD}"
 
 KEYTOOL_BIN=""
 
@@ -46,16 +62,21 @@ else
 fi
 
 if [ ! -f "$STORE_FILE" ]; then
+  # Pass passwords through environment variables so they never appear in
+  # process listings (keytool -storepass:env / -keypass:env).
+  export KEYTOOL_STORE_PASSWORD="$STORE_PASSWORD"
+  export KEYTOOL_KEY_PASSWORD="$KEY_PASSWORD"
   "$KEYTOOL_BIN" -genkeypair \
     -storetype JKS \
     -keystore "$STORE_FILE" \
-    -storepass "$STORE_PASSWORD" \
+    -storepass:env KEYTOOL_STORE_PASSWORD \
     -alias "$KEY_ALIAS" \
-    -keypass "$KEY_PASSWORD" \
+    -keypass:env KEYTOOL_KEY_PASSWORD \
     -keyalg RSA \
     -keysize 2048 \
     -validity 10000 \
     -dname "$DNAME"
+  unset KEYTOOL_STORE_PASSWORD KEYTOOL_KEY_PASSWORD
 fi
 
 cat > "$PROPERTIES_PATH" <<EOF
