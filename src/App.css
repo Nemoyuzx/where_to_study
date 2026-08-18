@@ -58,6 +58,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 20px;
+  scrollbar-gutter: stable;
 }
 
 .page-content.calendar-gesture-locked {

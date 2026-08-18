@@ -130,6 +130,10 @@ test('Windows workspace follows the native Apple layout metrics', () => {
   assert.match(appCss, /\.settings-layout\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
 })
 
+test('scrolling content reserves scrollbar space without shifting the layout', () => {
+  assert.match(appCss, /\.page-content\s*\{[^}]*scrollbar-gutter:\s*stable/s)
+})
+
 test('mobile navigation keeps the same icon and label hierarchy as iOS tabs', () => {
   assert.match(
     appCss,
