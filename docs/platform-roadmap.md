@@ -78,7 +78,7 @@
 - Windows/Tauri：功能最完整，凭据已迁移到系统安全存储；React 单文件仍需拆分。
 - macOS/iOS 原生：共享 SwiftUI 已接入移动教务个人课表、Keychain、本地缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知取消、权限撤销、账号切换和 63 条系统上限已有自动化测试，主导航已通过 iOS UI 测试。
 - Android 原生：Kotlin + Android Views 已接入移动教务个人课表、Android Keystore、`AtomicFile` 缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要及当天两校区空教室联动查询；通知持久撤销、有效送达窗口、后台中断和主导航已有自动化测试。
-- 鸿蒙原生（feature/harmonyos 分支）：ArkTS + ArkUI 已参考 SwiftUI 实现移植空教室、教学日历、设置三个一级页面，以及 ASSET 安全存储凭据、移动教务课表/空教室/节假日客户端、每日课程摘要（reminderAgent，上限 30 条）、Calendar Kit 系统日历导入与“今日课程”服务卡片；工程在 DevEco Studio 6.1.1 / API 24 上构建通过，41 个契约单元测试（复用 contracts/v1 fixtures）与 13 个 UI 冒烟断言（scripts/native-harmony-ui-smoke.sh + entry/src/ohosTest，对应 iOS PrimaryNavigationSmokeTests）全部通过，并已在 Pura 90 模拟器（HarmonyOS 6.1.1）完成安装、启动与页面导航验证。尚未合入发布流程，待补：发布签名与 AGC 上架（需维护者华为开发者账号）。
+- 鸿蒙原生（feature/harmonyos 分支）：ArkTS + ArkUI 已参考 SwiftUI 实现移植空教室、教学日历、设置三个一级页面，以及 ASSET 安全存储凭据、移动教务课表/空教室/节假日客户端、每日课程摘要（reminderAgent，上限 30 条）、Calendar Kit 系统日历导入与“今日课程”服务卡片；工程在 DevEco Studio 6.1.1 / API 24 上构建通过，45 个单元测试（41 个复用 contracts/v1 fixtures 的契约用例 + 4 个折叠布局策略用例）与手机端 13 项、宽屏 5 项 UI 冒烟断言全部通过。折叠屏与电脑端适配已完成：Mate X7 折叠屏展开态（侧栏+宽布局）、MateBook Pro 2in1（侧栏导航、双列空教室、宽屏日/周/月/年日历）、600x900 悬浮窄窗（标签栏+紧凑单列回退）均已实测验证；半折叠降级规则覆盖单测。尚未合入发布流程，待补：发布签名与 AGC 上架（需维护者华为开发者账号）。
 - 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift、Kotlin 和 ArkTS 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
 - 原生分发限制：每日课程摘要已迁移；Android 使用固定维护者密钥签名发布；Apple 已完成正式签名归档并上传 iOS/macOS `0.1.4 (37)`，等待 App Store Connect 处理和正式提交，但公开 GitHub Release 的 macOS/iOS 资产仍分别为 ad-hoc 与无签名构建；Windows 可信签名链路尚未闭环。
 - 开源授权：根目录已加入 GPL-3.0-only 标准许可证文本，项目元数据、贡献指南和发布文档使用同一 SPDX 标识。
