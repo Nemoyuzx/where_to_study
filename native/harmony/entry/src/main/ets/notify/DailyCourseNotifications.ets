@@ -3,6 +3,7 @@
 import { reminderAgentManager } from '@kit.BackgroundTasksKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { AppContext } from '../store/AppContext';
 import {
@@ -124,17 +125,24 @@ export class HarmonyReminderScheduler implements DailyCourseNotificationScheduli
         }
       }, timeoutMs);
       promise.then((value: T) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          resolve(value);
+        if (settled) {
+          // 超时后底层操作仍可能成功（BUG-051 修复：记录迟到结果便于对账）。
+          hilog.warn(0x0000, 'DailyCourseNotifications',
+            '提醒代理操作在超时后完成：%{public}s', JSON.stringify(value));
+          return;
         }
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
       }).catch((error: Error) => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          reject(error);
+        if (settled) {
+          hilog.warn(0x0000, 'DailyCourseNotifications',
+            '提醒代理操作在超时后失败：%{public}s', error.message);
+          return;
         }
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
       });
     });
   }
