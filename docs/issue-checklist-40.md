@@ -8,16 +8,16 @@
 | # | 严重度 | 位置 | 问题 |
 |---|--------|------|------|
 | 1 | 🟡 | auth.rs:21 | ServiceError.with_status(message, status_code) 接收状态码但完全忽略（参数 _status_code）。调用方期望的 HTTP 状态语义丢失，前端无法区分 400/401/500 |
-| 2 | 🟡 | schedule.rs:20 | expand_week_numbers 当文本同时含"单"和"双"（如"1-17单,2-18双"）时，odd_only 分支优先，偶数周被丢弃 |
+| 2 | ✅ | schedule.rs:20 | expand_week_numbers 按条目处理单/双标记，混合奇偶周都保留 |
 | 3 | ✅ | schedule.rs:167 | ~~parse_sjd_slots skip(1) 假设~~ 已澄清：SJD classTime 格式为"节数+节次编号"（如 1030405），skip(1) 是正确解析；已补充格式注释 |
 | 4 | 🟢 | schedule.rs:255 | endTIme（错误拼写）在 endTime（正确）之前被优先查询，代码异味 |
-| 5 | 🟢 | schedule.rs:279 | 单节课程 section_text 输出"3-3节"而非"3节" |
+| 5 | ✅ | schedule.rs:279 | 单节课程 section_text 已改为"3节" |
 | 6 | 🟡 | schedule.rs:133 | parse_sjd_week_numbers 兜底从 classWeekDetails 提取所有数字，若含年份等非周次数字会误解析 |
 | 7 | 🟢 | schedule.rs:277 | course_id 用 SHA1 前 12 位（6 字节），大量课程时碰撞概率非零且不可重试 |
 | 8 | 🟡 | schedule.rs:340 | infer_term_start_date 解析失败时静默回退 fallback 日期，用户设置的第一周日期被静默覆盖 |
 | 9 | 🟢 | models.rs:57 | SavedSettings.with_defaults 硬编码 CAMPUSES[0]，新增校区时默认值需手动改 |
 | 10 | 🟢 | lib.rs:1650 | .icon_as_template(true) 是 macOS-only（tray-icon 标注），Windows/Linux 上为静默 no-op |
-| 11 | 🟡 | lib.rs:1039 | fetch_classrooms 无条件覆盖 payload.target_date 为今天，前端传任何日期都被忽略（API 契约误导，未来无法查历史日期） |
+| 11 | ✅ | lib.rs:1039 | fetch_classrooms 现在明确拒绝非今天日期，不再静默覆盖 |
 | 12 | 🟡 | lib.rs:1658 | keep_main_window_in_tray 关闭窗口直接隐藏到托盘，无二次确认；若托盘初始化失败用户无法恢复窗口 |
 | 13 | 🟢 | lib.rs:1140 | 课程小组件窗口 .position(24.0, 80.0) 硬编码，多显示器/高分屏下位置固定不跟随主窗口 |
 
@@ -25,16 +25,16 @@
 
 | # | 严重度 | 位置 | 问题 |
 |---|--------|------|------|
-| 14 | 🔴 | planner-domain.js:186 | dateFromString 用 new Date(拼接 T00:00:00)，非法日期（2026-02-30）被 JS 引擎静默纠正为 3月2日，下游 addDays/shiftDate/getWeekState 全部基于纠正值 |
-| 15 | 🔴 | planner-domain.js:64 | msUntilNextShanghaiMidnight 用 toLocaleString(timeZone:Asia/Shanghai) + new Date()（本地时区解析）。非 UTC+8 时区时返回错误毫秒数（测试用例恰好 23:59 掩盖了 bug；纽约时区中午场景返回 16h 而非 12h） |
+| 14 | ✅ | planner-domain.js:186 | dateFromString 已严格校验 yyyy-MM-dd，拒绝不可能日期 |
+| 15 | ✅ | planner-domain.js:64 | msUntilNextShanghaiMidnight 已改为 UTC 算术，任意时区正确（三时区测试通过） |
 | 16 | 🟡 | planner-domain.js:254 | buildMonthDays/月历构建用本地时区，todayDate 用上海时区——非中国时区设备上"今天"高亮与今天日期可能差一天 |
 | 17 | 🟢 | planner-domain.js:397 | slotsToRanges label 仅时间（"08:00-09:35"），Swift 端显示"第 1-2 节 08:00-09:35"，跨端显示不一致 |
 | 18 | 🟢 | planner-domain.js:50 | fallbackHolidayItems 硬编码 2026 年，2027 年后离线模式无任何节假日数据（Rust 端同样硬编码） |
-| 19 | 🟡 | App.jsx:917,951 | load_saved_classrooms/load_saved_schedule 的错误被空 catch 静默吞掉，加载失败用户无感知 |
-| 20 | 🟡 | App.jsx:937 | 自动获取空教室失败后 autoFetchedClassroomsDate 已标记当天，不再重试，用户只能手动刷新 |
+| 19 | ✅ | App.jsx:917,951 | 加载错误现在显示给用户 |
+| 20 | ✅ | App.jsx:937 | 自动获取失败后允许稍后重试 |
 | 21 | 🟢 | App.jsx:800 | calendarPopover 关闭时直接置 null，只有进入动画（popover-in）没有退出动画 |
-| 22 | 🟡 | App.jsx:74 | 隐私对话框无焦点管理：打开时焦点不转移、无焦点陷阱、背景仍可 Tab 到、关闭后焦点不恢复 |
-| 23 | 🟡 | App.jsx:2406 | 清除数据确认区（role=alertdialog）无焦点管理，键盘用户可跳过确认直接操作背景 |
+| 22 | ✅ | App.jsx:74 | 隐私对话框打开聚焦关闭按钮，关闭恢复焦点到触发按钮 |
+| 23 | ✅ | App.jsx:2406 | 清除确认打开时聚焦取消按钮 |
 | 24 | 🟢 | App.jsx:547 | touchmove 监听 effect 空依赖，updateCalendarSwipe 闭包捕获首次渲染值（当前依赖 ref 恰好安全，但脆弱） |
 | 25 | 🟢 | App.jsx:1955+ | day/week 视图渲染中每个日期调用 getWeekState（7 次/渲染），无 useMemo 缓存 |
 | 26 | 🟢 | App.css | 重复选择器：.summary-band x4、.campus-options button x4、.calendar-today-button x2、.settings-layout x2 等，维护风险 |
@@ -72,3 +72,24 @@
 1. **立即修复**：#14（日期纠正）、#15（跨时区）、#1（状态码）、#11（target_date 覆盖）
 2. **值得修复**：#2、#3、#19、#20、#22、#23、#28、#31、#35、#37
 3. **后续优化**：#5、#9、#10、#17、#18、#21、#24、#25、#26、#33、#34、#36
+
+## Windows 专项新增问题（事件绑定与动画）
+
+| # | 严重度 | 位置 | 问题 | 状态 |
+|---|--------|------|------|------|
+| W1 | 🟡 | App.jsx day/week 视图 | 仅有 touch 事件，Windows 鼠标用户无法拖拽翻页 | ✅ 已加 pointer swipe |
+| W2 | 🟡 | App.jsx 日历页 | 无横向滚轮/触控板滑动支持 | ✅ 已加 wheel 处理器 |
+| W3 | 🟡 | App.jsx year 视图 | 双击日期先触发两次单击（选中+打开 popover 后再打开月视图） | ✅ 单击延迟 250ms |
+| W4 | 🟢 | App.jsx popover | 右键点击也会关闭 popover（context menu 误关） | ✅ 仅左键关闭 |
+| W5 | 🟢 | App.jsx 隐私对话框 | 右键点击背景也会关闭 | ✅ 仅左键关闭 |
+| W6 | 🟢 | App.css month-view | height 动画无 will-change，Windows WebView2 掉帧 | ✅ 已加 will-change |
+| W7 | 🟢 | App.jsx resize | resize 处理器无防抖，拖动窗口时频繁重算布局 | ✅ rAF 防抖 |
+| W8 | 🟢 | App.jsx 设置输入框 | Enter 键不提交表单（Windows 键盘用户习惯） | ✅ 已加 Enter 提交 |
+| W9 | 🟢 | index.css | 无 forced-colors（Windows 高对比度）支持 | ✅ 已加 |
+| W10 | 🟢 | App.css | 日历拖拽区域无 user-select: none，拖拽时选中文本 | ✅ 已加 |
+| W11 | 🟢 | lib.rs 关闭窗口 | 关闭窗口隐藏到托盘无提示，Windows 用户困惑 | ✅ 已加首次提示 |
+| W12 | 🟡 | App.jsx week 视图 | 周视图缺少当前时间线（Swift 端有） | ✅ 已修复 |
+| W13 | 🟢 | index.css | 主题切换（明/暗）无过渡 | ✅ 已加 |
+| W14 | 🟢 | index.css | focus ring 出现无过渡 | ✅ 已加 |
+| W15 | 🟢 | App.jsx 清除确认 | 打开时焦点不移动 | ✅ 已加 |
+| W16 | 🟡 | App.jsx month 手势 | month-expansion-handle 点击与拖拽冲突风险 | ✅ suppressCalendarClickUntilRef 已有 |
