@@ -1,0 +1,14 @@
+{
+  "module": {
+    "name": "entry_test",
+    "type": "feature",
+    "description": "Where To Study 鸿蒙客户端 UI 冒烟测试模块",
+    "deviceTypes": [
+      "phone",
+      "tablet",
+      "2in1"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false
+  }
+}
