@@ -1131,7 +1131,7 @@ fn show_course_widget(app: &tauri::AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         app,
         "course-widget",
         tauri::WebviewUrl::App("index.html?widget=course".into()),
@@ -1143,11 +1143,15 @@ fn show_course_widget(app: &tauri::AppHandle) -> tauri::Result<()> {
     .position(24.0, 80.0)
     .decorations(false)
     .resizable(false)
-    .always_on_top(true)
-    .visible_on_all_workspaces(true)
-    .focused(false)
-    .shadow(true)
-    .build()?;
+    .always_on_top(true);
+    // tao's visible_on_all_workspaces is macOS/Linux-only; calling it on
+    // Windows is a silent no-op, so keep it off that platform.
+    #[cfg(not(target_os = "windows"))]
+    let builder = builder.visible_on_all_workspaces(true);
+    let window = builder
+        .focused(false)
+        .shadow(true)
+        .build()?;
     let _ = window.show();
     Ok(())
 }
