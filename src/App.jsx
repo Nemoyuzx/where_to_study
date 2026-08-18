@@ -89,14 +89,36 @@ const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main
 
 function PrivacyPolicyDialog({ onClose }) {
   const closeButtonRef = useRef(null)
+  const dialogRef = useRef(null)
 
   useEffect(() => {
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') onClose()
     }
+    const trapFocus = (event) => {
+      // Keep keyboard focus inside the dialog (Windows Tab navigation).
+      if (event.key !== 'Tab' || !dialogRef.current) return
+      const focusable = dialogRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
     window.addEventListener('keydown', closeOnEscape)
+    window.addEventListener('keydown', trapFocus)
     closeButtonRef.current?.focus()
-    return () => window.removeEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('keydown', trapFocus)
+    }
   }, [onClose])
 
   return (
@@ -108,6 +130,7 @@ function PrivacyPolicyDialog({ onClose }) {
       }}
     >
       <section
+        ref={dialogRef}
         className="privacy-dialog"
         role="dialog"
         aria-modal="true"
