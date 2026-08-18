@@ -187,6 +187,30 @@ final class LocalDataClearTests: XCTestCase {
     }
 
     @MainActor
+    func testSuccessfulSettingsSaveMessageAutomaticallyDismisses() async throws {
+        let suiteName = "SettingsStatusDismissTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let year = Calendar.shanghai.component(.year, from: .now)
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(
+                credentials: Credentials(account: "fixture-account", password: "fixture-password")
+            ),
+            scheduleStore: InMemoryScheduleStore(schedule: Self.schedule),
+            classroomStore: InMemoryClassroomStore(cache: Self.classrooms),
+            holidayStore: InMemoryHolidayStore(snapshot: Self.holidays(year: year)),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            statusMessageAutoDismissDelay: .milliseconds(200),
+            defaults: defaults
+        )
+
+        XCTAssertTrue(model.saveSettings())
+        XCTAssertEqual(model.statusMessage, "设置已保存")
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(model.statusMessage.isEmpty)
+    }
+
+    @MainActor
     func testRuntimeReviewDemoRestoresLiveDataWithoutMutatingStores() throws {
         let suiteName = "RuntimeReviewDemoTests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

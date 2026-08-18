@@ -185,6 +185,33 @@ class MainNavigationSmokeTest {
                 click(device, "calendar_mode_day")
                 assertVisible(device, "calendar_timeline")
                 assertGone(device, "calendar_all_day_strip")
+                scenario.onActivity { activity ->
+                    val strip = activity.findViewById<ViewGroup>(R.id.calendar_date_strip)
+                    val swipeSurface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    assertTrue(
+                        "Day/week date strip must stay outside the horizontally animated page",
+                        strip.parent !== swipeSurface,
+                    )
+                    repeat(strip.childCount) { index ->
+                        val date = strip.getChildAt(index) as TextView
+                        assertTrue(
+                            "Compact day labels must not show holiday work/rest markers",
+                            date.maxLines <= 2,
+                        )
+                    }
+                    val summary = activity.findViewById<ViewGroup>(R.id.calendar_date_summary)
+                    assertEquals(
+                        "Compact date summary must stay on one low-height row",
+                        LinearLayout.HORIZONTAL,
+                        (summary as LinearLayout).orientation,
+                    )
+                    assertTrue(
+                        "Compact timeline axis must leave more width for course content",
+                        (activity.findViewById<ViewGroup>(R.id.calendar_timeline)
+                            .getChildAt(0) as ViewGroup)
+                            .getChildAt(0).width <= activity.dp(48),
+                    )
+                }
                 val dayBeforeSwipe = objectText(device, "calendar_period_label")
                 swipeResource(device, "calendar_timeline_scroll", horizontalDirection = 1)
                 assertTextChanged(device, "calendar_period_label", dayBeforeSwipe)

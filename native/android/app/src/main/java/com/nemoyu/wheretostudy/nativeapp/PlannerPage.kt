@@ -112,34 +112,37 @@ class PlannerPage(
 
     private fun LinearLayout.addSection(view: LinearLayout) {
         addView(view)
-        addView(spacer(activity, UiMetrics.sectionSpacingDp))
+        addView(spacer(activity, if (isCompact) 10 else UiMetrics.sectionSpacingDp))
     }
+
+    private val isCompact: Boolean
+        get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
 
     private fun querySurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.planner_query_surface
         setPadding(
-            activity.dp(UiMetrics.surfacePaddingDp),
-            activity.dp(UiMetrics.surfacePaddingDp),
-            activity.dp(UiMetrics.surfacePaddingDp),
-            activity.dp(UiMetrics.surfacePaddingDp),
+            activity.dp(if (isCompact) 12 else UiMetrics.surfacePaddingDp),
+            activity.dp(if (isCompact) 12 else UiMetrics.surfacePaddingDp),
+            activity.dp(if (isCompact) 12 else UiMetrics.surfacePaddingDp),
+            activity.dp(if (isCompact) 12 else UiMetrics.surfacePaddingDp),
         )
         addView(sectionTitle(
             activity,
             "查询条件",
             R.drawable.ic_section_query,
         ).apply {
-            textSize = 17f
-            setPadding(0, 0, 0, activity.dp(8))
+            textSize = if (isCompact) 15f else 17f
+            setPadding(0, 0, 0, activity.dp(6))
         })
         addView(campusControl())
-        addView(spacer(activity, 8))
+        addView(spacer(activity, 6))
         addView(fetchButton())
         classroomRepository.cache?.let { cache ->
             addView(TextView(activity).apply {
                 text = activity.getString(R.string.classroom_source_format, cache.targetDate)
                 textSize = 12f
                 setTextColor(Palette.muted)
-                setPadding(0, activity.dp(6), 0, 0)
+            setPadding(0, activity.dp(4), 0, 0)
             })
         }
     }
@@ -213,9 +216,10 @@ class PlannerPage(
             imageTintList = ColorStateList.valueOf(Palette.onPrimary)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             adjustViewBounds = true
+            setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(activity.dp(20), activity.dp(20)).apply {
-            marginEnd = activity.dp(8)
+        }, LinearLayout.LayoutParams(activity.dp(24), activity.dp(24)).apply {
+            marginEnd = activity.dp(6)
         })
         val label = TextView(activity).apply {
             text = if (classroomRepository.isRefreshing) {
@@ -223,7 +227,7 @@ class PlannerPage(
             } else {
                 "获取空教室信息"
             }
-            textSize = 15f
+            textSize = 14f
             setTextColor(Palette.onPrimary)
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
@@ -252,14 +256,15 @@ class PlannerPage(
     }
 
     private fun slotSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        if (isCompact) setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
         addView(sectionTitle(
             activity,
             "节次筛选",
             R.drawable.ic_section_clock,
-        ))
+        ).apply { if (isCompact) textSize = 15f })
         val personalToggle = Switch(activity).apply {
             text = "使用个人课表排除已有课程"
-            textSize = 17f
+            textSize = if (isCompact) 14f else 17f
             setTextColor(Palette.text)
             gravity = Gravity.CENTER_VERTICAL
             isClickable = true
@@ -279,7 +284,7 @@ class PlannerPage(
             )
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(UiMetrics.compactControlHeightDp),
+                activity.dp(if (isCompact) 32 else UiMetrics.compactControlHeightDp),
             ).apply { bottomMargin = activity.dp(4) }
         }
         addView(personalToggle)
@@ -322,12 +327,12 @@ class PlannerPage(
         }.apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                activity.dp(UiMetrics.compactControlHeightDp),
+                activity.dp(if (isCompact) 32 else UiMetrics.compactControlHeightDp),
             ).apply {
                 marginEnd = activity.dp(6)
                 bottomMargin = activity.dp(6)
             }
-            setPadding(activity.dp(12), 0, activity.dp(12), 0)
+            setPadding(activity.dp(if (isCompact) 10 else 12), 0, activity.dp(if (isCompact) 10 else 12), 0)
             background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
         }
 
@@ -387,7 +392,7 @@ class PlannerPage(
                                     )
                                 }
                             }
-                            textSize = 15f
+                            textSize = if (isCompact) 13f else 15f
                             gravity = Gravity.CENTER
                             includeFontPadding = false
                             setPadding(activity.dp(2), 0, activity.dp(2), 0)
@@ -399,8 +404,8 @@ class PlannerPage(
                                 refreshCells()
                                 renderResultsAndSummary()
                             }
-                            minHeight = activity.dp(54)
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
+                            minHeight = activity.dp(if (isCompact) 46 else 54)
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(if (isCompact) 46 else 54), 1f).apply {
                                 marginEnd = activity.dp(4)
                                 bottomMargin = activity.dp(4)
                             }
@@ -410,7 +415,7 @@ class PlannerPage(
                     }
                     repeat(columns - slots.size) {
                         addView(TextView(activity).apply {
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(if (isCompact) 46 else 54), 1f).apply {
                                 marginEnd = activity.dp(4)
                             }
                         })
@@ -421,7 +426,10 @@ class PlannerPage(
     }
 
     private fun todayCoursesSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
-        addView(sectionTitle(activity, "当天课程", R.drawable.ic_nav_calendar))
+        if (isCompact) setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+        addView(sectionTitle(activity, "当天课程", R.drawable.ic_nav_calendar).apply {
+            if (isCompact) textSize = 15f
+        })
         val courses = ScheduleLogic.courses(scheduleRepository.schedule, today)
         if (courses.isEmpty()) {
             addView(emptyMessage("暂无本地课程，请在设置中获取/刷新个人课表"))
@@ -443,7 +451,10 @@ class PlannerPage(
 
     private fun buildingsSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.planner_buildings_surface
-        addView(sectionTitle(activity, "教学楼", R.drawable.ic_section_building))
+        if (isCompact) setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+        addView(sectionTitle(activity, "教学楼", R.drawable.ic_section_building).apply {
+            if (isCompact) textSize = 15f
+        })
         val buildings = AppMetadata.buildings(queryState.campusID).ifEmpty {
             campusRooms().map(Classroom::building).distinct().sorted()
         }
@@ -482,23 +493,24 @@ class PlannerPage(
                         isClickable = true
                         isFocusable = true
                         contentDescription = building
-                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
-                            marginEnd = activity.dp(7)
-                            bottomMargin = activity.dp(7)
+                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(if (isCompact) 40 else 46), 1f).apply {
+                            marginEnd = activity.dp(5)
+                            bottomMargin = activity.dp(5)
                         }
                         buttonIcon = ImageView(activity).apply {
                             setImageResource(R.drawable.ic_location_pin)
                             scaleType = ImageView.ScaleType.CENTER_INSIDE
+                            setPadding(activity.dp(1), activity.dp(1), activity.dp(1), activity.dp(1))
                         }
                         addView(
                             buttonIcon,
-                            LinearLayout.LayoutParams(activity.dp(16), activity.dp(16)).apply {
-                                marginEnd = activity.dp(4)
+                            LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply {
+                                marginEnd = activity.dp(3)
                             },
                         )
                         buttonLabel = TextView(activity).apply {
                             text = building
-                            textSize = 15f
+                            textSize = if (isCompact) 13f else 15f
                             includeFontPadding = false
                             gravity = Gravity.CENTER_VERTICAL
                             maxLines = 1
@@ -516,8 +528,8 @@ class PlannerPage(
                 }
                 repeat(columns - rowBuildings.size) {
                     addView(TextView(activity).apply {
-                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
-                            marginEnd = activity.dp(7)
+                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(if (isCompact) 40 else 46), 1f).apply {
+                            marginEnd = activity.dp(5)
                         }
                     })
                 }
@@ -660,12 +672,12 @@ class PlannerPage(
 
     private fun emptyMessage(message: String): TextView = TextView(activity).apply {
         text = message
-        textSize = 14f
+        textSize = if (isCompact) 12.5f else 14f
         gravity = Gravity.CENTER
         setTextColor(Palette.muted)
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(72),
+            activity.dp(if (isCompact) 56 else 72),
         )
     }
 
@@ -711,7 +723,7 @@ class PlannerPage(
     private fun courseRow(course: Course): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(0, activity.dp(10), 0, activity.dp(10))
+        setPadding(0, activity.dp(if (isCompact) 7 else 10), 0, activity.dp(if (isCompact) 7 else 10))
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -720,7 +732,7 @@ class PlannerPage(
             orientation = LinearLayout.VERTICAL
             addView(TextView(activity).apply {
                 text = if (course.examWeekNumbers.isEmpty()) course.name else "试  ${course.name}"
-                textSize = 15f
+                textSize = if (isCompact) 14f else 15f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
             })
@@ -773,11 +785,16 @@ class PlannerPage(
                 holder.root
             } else {
                 val message = convertView as? TextView ?: TextView(activity).apply {
-                    textSize = 13f
+                    textSize = if (isCompact) 12f else 13f
                     gravity = Gravity.CENTER
                     setTextColor(Palette.muted)
-                    setPadding(activity.dp(20), activity.dp(12), activity.dp(20), activity.dp(20))
-                    minHeight = activity.dp(72)
+                    setPadding(
+                        activity.dp(if (isCompact) 12 else 20),
+                        activity.dp(10),
+                        activity.dp(if (isCompact) 12 else 20),
+                        activity.dp(if (isCompact) 14 else 20),
+                    )
+                    minHeight = activity.dp(if (isCompact) 56 else 72)
                 }
                 message.text = presentation.message
                 message
@@ -785,11 +802,16 @@ class PlannerPage(
 
         private fun createClassroomRow(parent: ViewGroup): ClassroomRowHolder {
             val root = FrameLayout(parent.context).apply {
-                setPadding(activity.dp(20), 0, activity.dp(20), 0)
+                setPadding(
+                    activity.dp(if (isCompact) 12 else 20),
+                    0,
+                    activity.dp(if (isCompact) 12 else 20),
+                    0,
+                )
             }
             val card = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(0, activity.dp(10), 0, 0)
+                setPadding(0, activity.dp(if (isCompact) 7 else 10), 0, 0)
             }
             root.addView(
                 card,
@@ -804,20 +826,20 @@ class PlannerPage(
             }
             card.addView(heading)
             val name = TextView(parent.context).apply {
-                textSize = 15f
+                textSize = if (isCompact) 13.5f else 15f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
             }
             heading.addView(name, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             val size = TextView(parent.context).apply {
-                textSize = 12f
+                textSize = if (isCompact) 11f else 12f
                 setTextColor(Palette.muted)
             }
             heading.addView(size)
             val ranges = TextView(parent.context).apply {
-                textSize = 12f
+                textSize = if (isCompact) 11f else 12f
                 setTextColor(Palette.primaryText)
-                setPadding(0, activity.dp(5), 0, activity.dp(10))
+                setPadding(0, activity.dp(3), 0, activity.dp(if (isCompact) 7 else 10))
             }
             card.addView(ranges)
             card.addView(View(parent.context).apply {

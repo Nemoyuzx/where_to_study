@@ -238,7 +238,7 @@ test('native Android compact surfaces and timeline keep the iOS density contract
   assert.match(androidSettingsSource, /titleSizeSp = if \(isCompact\) 28f else 34f/)
   assert.match(
     androidPlannerSource,
-    /setImageResource\(R\.drawable\.ic_refresh\)[\s\S]*adjustViewBounds = true[\s\S]*activity\.dp\(20\), activity\.dp\(20\)/,
+    /setImageResource\(R\.drawable\.ic_refresh\)[\s\S]*adjustViewBounds = true[\s\S]*setPadding\(activity\.dp\(2\), activity\.dp\(2\), activity\.dp\(2\), activity\.dp\(2\)\)[\s\S]*activity\.dp\(24\), activity\.dp\(24\)/,
   )
   assert.match(
     androidPlannerSource,
@@ -248,8 +248,8 @@ test('native Android compact surfaces and timeline keep the iOS density contract
   assert.match(androidSettingsSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
   assert.match(androidCalendarSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
   assert.match(androidTimelineSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
-  assert.match(androidTimelineSource, /setBackgroundColor\(Palette\.background\)/)
-  assert.match(androidTimelineSource, /canvas\.drawColor\(Palette\.background\)/)
+  assert.match(androidTimelineSource, /setBackgroundColor\(Palette\.surface\)/)
+  assert.match(androidTimelineSource, /canvas\.drawColor\(Palette\.surface\)/)
   assert.match(androidTimelineSource, /showCourseSlots = true/)
   assert.match(androidTimelineSource, /DashPathEffect/)
   assert.match(androidTimelineSource, /density \* 0\.5f/)

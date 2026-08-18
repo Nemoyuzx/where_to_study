@@ -12,6 +12,7 @@ import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewConfiguration
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import java.text.SimpleDateFormat
@@ -61,7 +62,7 @@ object CalendarTimelineLogic {
     }
 
     fun axisWidthDp(compact: Boolean, showCourseSlots: Boolean = true): Int {
-        if (compact) return 56
+        if (compact) return 48
         val hourWidth = if (compact) 42 else 48
         val slotWidth = if (compact) 70 else 96
         return hourWidth + if (showCourseSlots) slotWidth else 0
@@ -86,13 +87,14 @@ class CalendarTimelineView(
     days: List<TimelineDay>,
     selectedDate: Calendar,
     onDaySelected: ((Calendar) -> Unit)? = null,
+    onCourseSelected: ((Course) -> Unit)? = null,
     compact: Boolean = false,
     showDayHeader: Boolean = true,
 ) : LinearLayout(context) {
     init {
         orientation = HORIZONTAL
         isBaselineAligned = false
-        setBackgroundColor(Palette.background)
+        setBackgroundColor(Palette.surface)
 
         val totalHeight = context.dp(CalendarTimelineLogic.totalHeightDp(compact, showDayHeader))
         val showCourseSlots = !compact || days.size == 1
@@ -119,6 +121,7 @@ class CalendarTimelineView(
             days = days,
             selectedDate = selectedDate,
             onDaySelected = onDaySelected,
+            onCourseSelected = onCourseSelected,
             compact = compact,
             showDayHeader = showDayHeader,
             showCourseSlots = true,
@@ -159,6 +162,7 @@ private class CalendarTimelineCanvas(
     private val days: List<TimelineDay>,
     private val selectedDate: Calendar,
     private val onDaySelected: ((Calendar) -> Unit)? = null,
+    private val onCourseSelected: ((Course) -> Unit)? = null,
     private val compact: Boolean,
     private val showDayHeader: Boolean,
     private val showCourseSlots: Boolean,
@@ -193,13 +197,17 @@ private class CalendarTimelineCanvas(
         style = Paint.Style.STROKE
         strokeWidth = resources.displayMetrics.density * 0.75f
     }
-    private val hourAxisWidth = dp(if (compact) 56 else 48).toFloat()
+    private val hourAxisWidth = dp(48).toFloat()
     private val slotAxisWidth = if (showCourseSlots && !compact) dp(96).toFloat() else 0f
     private val axisWidth = hourAxisWidth + slotAxisWidth
     private val headerHeight = dp(if (showDayHeader) 72 else 0).toFloat()
     private val hourHeight = dp(CalendarTimelineLogic.hourHeightDp(compact)).toFloat()
     private val timelineHeight = hourHeight * 14f
     private val totalHeight = headerHeight + timelineHeight + dp(2)
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+    private var touchDownX = 0f
+    private var touchDownY = 0f
+    private var touchMoved = false
     private val minuteInvalidation = object : Runnable {
         override fun run() {
             invalidate()
@@ -209,7 +217,8 @@ private class CalendarTimelineCanvas(
 
     init {
         isFocusable = true
-        isClickable = layer == TimelineLayer.DAYS && onDaySelected != null
+        isClickable = layer == TimelineLayer.DAYS &&
+            (onDaySelected != null || onCourseSelected != null)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         contentDescription = if (layer == TimelineLayer.AXIS) {
             buildAxisContentDescription()
@@ -246,7 +255,7 @@ private class CalendarTimelineCanvas(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawColor(Palette.background)
+        canvas.drawColor(Palette.surface)
         when (layer) {
             TimelineLayer.AXIS -> drawAxis(canvas)
             TimelineLayer.DAYS -> drawDays(canvas)
@@ -254,12 +263,39 @@ private class CalendarTimelineCanvas(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (layer != TimelineLayer.DAYS || onDaySelected == null || days.isEmpty()) return false
-        if (showDayHeader && event.action == MotionEvent.ACTION_UP && event.y <= headerHeight) {
-            val dayWidth = width.toFloat() / days.size
-            val index = (event.x / dayWidth).toInt().coerceIn(days.indices)
-            onDaySelected.invoke(days[index].date.clone() as Calendar)
-            performClick()
+        if (layer != TimelineLayer.DAYS || days.isEmpty() || !isClickable) return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                touchDownX = event.x
+                touchDownY = event.y
+                touchMoved = false
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (abs(event.x - touchDownX) > touchSlop || abs(event.y - touchDownY) > touchSlop) {
+                    touchMoved = true
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!touchMoved) {
+                    val course = courseAt(event.x, event.y)
+                    if (course != null) {
+                        onCourseSelected?.invoke(course)
+                        performClick()
+                    } else if (showDayHeader && event.y <= headerHeight && onDaySelected != null) {
+                        val dayWidth = width.toFloat() / days.size
+                        val index = (event.x / dayWidth).toInt().coerceIn(days.indices)
+                        onDaySelected.invoke(days[index].date.clone() as Calendar)
+                        performClick()
+                    }
+                }
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                touchMoved = true
+                return false
+            }
         }
         return true
     }
@@ -271,7 +307,7 @@ private class CalendarTimelineCanvas(
 
     private fun drawAxis(canvas: Canvas) {
         if (showDayHeader) {
-            fillPaint.color = Palette.background
+            fillPaint.color = Palette.surface
             canvas.drawRect(0f, 0f, width.toFloat(), headerHeight, fillPaint)
             boldPaint.color = Palette.text
             boldPaint.textAlign = Paint.Align.CENTER
@@ -297,7 +333,7 @@ private class CalendarTimelineCanvas(
         val currentMinute = currentMinuteIfVisible()
         textPaint.color = Palette.muted
         textPaint.textAlign = Paint.Align.CENTER
-        textPaint.textSize = sp(if (compact) 10f else 11f)
+        textPaint.textSize = sp(if (compact) 9f else 11f)
         for (hour in 8..22) {
             val hourMinute = hour * 60
             val y = yForMinute(hourMinute)
@@ -324,9 +360,9 @@ private class CalendarTimelineCanvas(
                 val centerY = (yForMinute(start) + yForMinute(end)) / 2f
                 boldPaint.color = Palette.muted
                 boldPaint.textAlign = Paint.Align.CENTER
-                boldPaint.textSize = sp(if (compact) 9.5f else 11f)
+                boldPaint.textSize = sp(if (compact) 8.5f else 11f)
                 textPaint.color = Palette.muted
-                textPaint.textSize = sp(if (compact) 7.5f else 9f)
+                textPaint.textSize = sp(if (compact) 7f else 9f)
                 drawCenteredText(
                     canvas,
                     "第 ${slot.label} 节",
@@ -360,15 +396,15 @@ private class CalendarTimelineCanvas(
     private fun drawCompactCourseSlotLabels(canvas: Canvas) {
         boldPaint.color = Palette.muted
         boldPaint.textAlign = Paint.Align.CENTER
-        boldPaint.textSize = sp(10f)
+        boldPaint.textSize = sp(9f)
         AppMetadata.slots.forEach { slot ->
             val start = CalendarTimelineLogic.minuteOfDay(slot.start) ?: return@forEach
             val end = CalendarTimelineLogic.minuteOfDay(slot.end) ?: return@forEach
             val centerY = (yForMinute(start) + yForMinute(end)) / 2f
             val label = "第${slot.label}节  ${slot.start}-${slot.end}"
-            val labelWidth = (boldPaint.measureText(label) + dp(16))
+            val labelWidth = (boldPaint.measureText(label) + dp(12))
                 .coerceAtMost(width - dp(16).toFloat())
-            val left = dp(8).toFloat()
+            val left = dp(5).toFloat()
             val bounds = RectF(
                 left,
                 centerY - dp(12),
@@ -384,7 +420,7 @@ private class CalendarTimelineCanvas(
 
     private fun drawDayGridAndHeaders(canvas: Canvas, dayWidth: Float) {
         if (showDayHeader) {
-            fillPaint.color = Palette.background
+            fillPaint.color = Palette.surface
             canvas.drawRect(0f, 0f, width.toFloat(), headerHeight, fillPaint)
 
             days.forEachIndexed { index, day ->
@@ -530,6 +566,30 @@ private class CalendarTimelineCanvas(
                 canvas.restore()
             }
         }
+    }
+
+    private fun courseAt(x: Float, y: Float): Course? {
+        if (y < headerHeight) return null
+        val dayWidth = width.toFloat() / days.size.coerceAtLeast(1)
+        days.forEachIndexed { dayIndex, day ->
+            val dayLeft = dayWidth * dayIndex
+            val placements = placeCourses(day.courses)
+            val tracks = placements.maxOfOrNull { it.track + 1 } ?: 1
+            placements.forEach placementLoop@{ placement ->
+                val trackWidth = dayWidth / tracks
+                val outerInset = dp(if (days.size == 1) 3 else 1)
+                val left = dayLeft + trackWidth * placement.track + outerInset
+                val right = left + trackWidth - outerInset * 2
+                val start = AppMetadata.slots.getOrNull(placement.course.startSlot)?.start
+                    ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@placementLoop
+                val end = AppMetadata.slots.getOrNull(placement.course.endSlot)?.end
+                    ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@placementLoop
+                val top = yForMinute(start) + dp(2)
+                val bottom = max(top + dp(34), yForMinute(end) - dp(2))
+                if (x in left..right && y in top..bottom) return placement.course
+            }
+        }
+        return null
     }
 
     private fun drawCurrentTimeLine(canvas: Canvas, dayWidth: Float) {

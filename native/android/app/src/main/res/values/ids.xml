@@ -31,6 +31,7 @@
     <item name="calendar_import_menu_item" type="id" />
     <item name="calendar_week_number" type="id" />
     <item name="calendar_date_strip" type="id" />
+    <item name="calendar_date_summary" type="id" />
     <item name="calendar_timeline" type="id" />
     <item name="calendar_all_day_strip" type="id" />
     <item name="calendar_timeline_scroll" type="id" />

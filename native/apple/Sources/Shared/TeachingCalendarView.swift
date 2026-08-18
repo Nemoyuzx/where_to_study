@@ -16,6 +16,11 @@ private enum CalendarMode: String, CaseIterable, Identifiable {
 }
 
 enum TeachingCalendarLogic {
+    enum GestureAxis: Equatable {
+        case horizontal
+        case vertical
+    }
+
     enum MonthExpansionAction: Equatable {
         case expand
         case collapse
@@ -106,6 +111,42 @@ enum TeachingCalendarLogic {
               abs(verticalTranslation) >= abs(horizontalTranslation) * 1.25
         else { return nil }
         return verticalTranslation > 0 ? .expand : .collapse
+    }
+
+    static func gestureAxis(
+        horizontalTranslation: CGFloat,
+        verticalTranslation: CGFloat,
+        activationDistance: CGFloat = 8
+    ) -> GestureAxis? {
+        let horizontal = abs(horizontalTranslation)
+        let vertical = abs(verticalTranslation)
+        guard max(horizontal, vertical) >= activationDistance else { return nil }
+        return horizontal > vertical ? .horizontal : .vertical
+    }
+
+    static func monthExpansionProgress(
+        isExpanded: Bool,
+        verticalTranslation: CGFloat,
+        travelDistance: CGFloat
+    ) -> CGFloat {
+        let distance = max(travelDistance, 1)
+        let base: CGFloat = isExpanded ? 1 : 0
+        return min(max(base + verticalTranslation / distance, 0), 1)
+    }
+
+    static func expandedMonthCellHeight(availableHeight: CGFloat) -> CGFloat {
+        let weekdayHeight: CGFloat = 18
+        let weekdayBottomSpacing: CGFloat = 8
+        let gridSpacing: CGFloat = 4 * 5
+        let handleHeight: CGFloat = 28
+        let verticalPadding: CGFloat = 8 * 2
+        let availableGridHeight = availableHeight
+            - weekdayHeight
+            - weekdayBottomSpacing
+            - gridSpacing
+            - handleHeight
+            - verticalPadding
+        return max(30, floor(availableGridHeight / 6))
     }
 
     static func monthEventLayout(totalCount: Int, maximumRows: Int) -> MonthEventLayout {

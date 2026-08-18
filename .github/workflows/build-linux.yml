@@ -1,0 +1,118 @@
+name: Build Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - ".gitattributes"
+      - "src/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "package-lock.json"
+      - "LICENSE"
+      - "THIRD_PARTY_LICENSES.html"
+      - "THIRD_PARTY_NOTICES.md"
+      - "scripts/linux-package.sh"
+      - "scripts/package-validation.sh"
+      - "vite.config.js"
+      - ".github/workflows/build-linux.yml"
+  pull_request:
+    paths:
+      - ".gitattributes"
+      - "src/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "package-lock.json"
+      - "LICENSE"
+      - "THIRD_PARTY_LICENSES.html"
+      - "THIRD_PARTY_NOTICES.md"
+      - "scripts/linux-package.sh"
+      - "scripts/package-validation.sh"
+      - "vite.config.js"
+      - ".github/workflows/build-linux.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      RELEASE_LABEL: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('ci-{0}', github.run_id) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
+        with:
+          workspaces: ./src-tauri
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            wget
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Verify third-party license bundle
+        run: npm run licenses:check
+
+      - name: Test web domain logic
+        run: npm test
+
+      - name: Build web frontend
+        run: npm run build
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Test Rust core
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+
+      - name: Run strict Clippy checks
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+
+      - name: Build Linux bundles
+        run: npm run tauri:build:linux
+
+      - name: Validate and package Linux bundles
+        run: ./scripts/linux-package.sh "$RELEASE_LABEL"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: where-to-study-linux-x86_64
+          path: |
+            release-artifacts/*.deb
+            release-artifacts/*.deb.sha256
+            release-artifacts/*.AppImage
+            release-artifacts/*.AppImage.sha256
+          if-no-files-found: error
