@@ -23,6 +23,7 @@ import androidx.test.uiautomator.Until
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -91,26 +92,58 @@ class MainNavigationSmokeTest {
             assertVisible(device, navigationResource)
             assertVisible(device, "page_planner")
             scenario.onActivity { activity ->
-                activity.findViewById<View?>(R.id.phone_navigation)?.let { navigation ->
-                    val page = activity.findViewById<View>(R.id.page_planner)
-                    assertTrue(
-                        "Phone content must continue behind the floating navigation pill",
-                        page.bottom > navigation.top,
-                    )
-                    val button = activity.findViewById<ViewGroup>(R.id.planner_fetch_button)
-                    val icon = activity.findViewById<View>(R.id.planner_fetch_icon)
-                    val label = button.getChildAt(1)
-                    val groupLeft = icon.left
-                    val groupRight = label.right
-                    assertTrue(
-                        "Planner refresh icon and label must be centered as one group",
-                        kotlin.math.abs(groupLeft - (button.width - groupRight)) <= activity.dp(2),
-                    )
-                    assertTrue(
-                        "Planner refresh icon must keep inset space so its stroke is not clipped",
-                        icon.paddingLeft >= activity.dp(1) && icon.paddingTop >= activity.dp(1),
-                    )
-                    val query = activity.findViewById<View>(R.id.planner_query_surface)
+                val fetchButton = activity.findViewById<LinearLayout>(R.id.planner_fetch_button)
+                assertNull(
+                    "Planner fetch action must not restore the removed refresh icon",
+                    activity.findViewById<View?>(R.id.planner_fetch_icon),
+                )
+                assertEquals(
+                    "Planner fetch action must contain only its centered label",
+                    1,
+                    fetchButton.childCount,
+                )
+                val fetchLabel = fetchButton.getChildAt(0) as TextView
+                assertTrue(
+                    "Planner fetch label must be horizontally centered without an icon offset",
+                    kotlin.math.abs(
+                        (fetchLabel.left + fetchLabel.right) - fetchButton.width,
+                    ) <= activity.dp(2),
+                )
+                assertTrue(
+                    "Planner fetch label must not carry an icon as a compound drawable",
+                    fetchLabel.compoundDrawables.all { it == null },
+                )
+
+                val resultsSurface = activity.findViewById<ViewGroup>(
+                    R.id.planner_results_surface,
+                )
+                val resultsContent = activity.findViewById<ViewGroup>(
+                    R.id.planner_results_content,
+                )
+                assertTrue(
+                    "Planner results content must remain inside the dedicated results surface",
+                    resultsContent.parent === resultsSurface,
+                )
+                assertTrue(
+                    "Planner results surface must render an initial empty or room result state",
+                    resultsContent.childCount > 0,
+                )
+
+                val query = activity.findViewById<ViewGroup>(R.id.planner_query_surface)
+                val campusControl = findClickableText(
+                    query,
+                    AppMetadata.campuses.mapTo(mutableSetOf()) { it.name },
+                )
+                assertNotNull("Planner query must expose a clickable campus control", campusControl)
+                val hapticsBeforeCampusSelection = activity.controlHapticEventCount
+                assertTrue(campusControl!!.performClick())
+                assertEquals(
+                    "Planner controls must report haptic feedback while UI testing",
+                    hapticsBeforeCampusSelection + 1,
+                    activity.controlHapticEventCount,
+                )
+
+                activity.findViewById<View?>(R.id.phone_navigation)?.let {
                     assertTrue(
                         "Compact query conditions must not consume excessive vertical space",
                         query.height <= activity.dp(180),
@@ -133,8 +166,15 @@ class MainNavigationSmokeTest {
                     )
                 }
             }
+            assertCollapsibleNavigationRailWhenAvailable(scenario, device)
 
+            val hapticsBeforeCalendarNavigation = hapticCount(scenario)
             click(device, "navigation_calendar")
+            assertEquals(
+                "Primary navigation must report haptic feedback while UI testing",
+                hapticsBeforeCalendarNavigation + 1,
+                hapticCount(scenario),
+            )
             assertVisible(device, "page_calendar")
             var usesCompactCalendar = false
             scenario.onActivity { activity ->
@@ -486,7 +526,13 @@ class MainNavigationSmokeTest {
                 activityText(scenario, R.id.calendar_period_label),
             )
 
+            val hapticsBeforeSettingsNavigation = hapticCount(scenario)
             click(device, "navigation_settings")
+            assertEquals(
+                "Settings navigation must report haptic feedback while UI testing",
+                hapticsBeforeSettingsNavigation + 1,
+                hapticCount(scenario),
+            )
             assertVisible(device, "page_settings")
             scrollUntilVisible(device, "privacy_policy_button")
             assertVisible(device, "settings_github_link")
@@ -504,7 +550,13 @@ class MainNavigationSmokeTest {
                     activity.findViewById<View>(R.id.privacy_policy_button).parent === about,
                 )
             }
+            val hapticsBeforePrivacy = hapticCount(scenario)
             click(device, "privacy_policy_button")
+            assertEquals(
+                "Settings controls must report haptic feedback while UI testing",
+                hapticsBeforePrivacy + 1,
+                hapticCount(scenario),
+            )
             assertVisible(device, "privacy_policy_content")
             scrollUntilVisible(device, "privacy_github_link")
             device.pressBack()
@@ -524,6 +576,88 @@ class MainNavigationSmokeTest {
         assertNotNull("Missing clickable view: $resourceName", view)
         view.click()
         device.waitForIdle()
+    }
+
+    private fun hapticCount(scenario: ActivityScenario<MainActivity>): Int {
+        var count = 0
+        scenario.onActivity { activity -> count = activity.controlHapticEventCount }
+        return count
+    }
+
+    private fun findClickableText(root: View, candidates: Set<String>): TextView? {
+        if (root is TextView && root.isClickable && root.text.toString() in candidates) return root
+        if (root !is ViewGroup) return null
+        repeat(root.childCount) { index ->
+            findClickableText(root.getChildAt(index), candidates)?.let { return it }
+        }
+        return null
+    }
+
+    private fun assertCollapsibleNavigationRailWhenAvailable(
+        scenario: ActivityScenario<MainActivity>,
+        device: UiDevice,
+    ) {
+        var hasNavigationRail = false
+        scenario.onActivity { activity ->
+            hasNavigationRail = activity.findViewById<View?>(R.id.tablet_navigation) != null
+            if (!hasNavigationRail) {
+                assertNull(
+                    "Phone layouts must not expose the navigation rail toggle",
+                    activity.findViewById<View?>(R.id.navigation_rail_toggle),
+                )
+            }
+        }
+        if (!hasNavigationRail) return
+
+        var expandedWidth = 0
+        var hapticsBeforeCollapse = 0
+        scenario.onActivity { activity ->
+            expandedWidth = activity.findViewById<View>(R.id.tablet_navigation).width
+            hapticsBeforeCollapse = activity.controlHapticEventCount
+            assertEquals(
+                "Expanded navigation rail must expose its collapse action",
+                "收起导航栏",
+                activity.findViewById<View>(R.id.navigation_rail_toggle).contentDescription,
+            )
+        }
+        click(device, "navigation_rail_toggle")
+        SystemClock.sleep(400L)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+
+        var collapsedWidth = 0
+        scenario.onActivity { activity ->
+            val rail = activity.findViewById<View>(R.id.tablet_navigation)
+            collapsedWidth = rail.width
+            assertTrue(
+                "Collapsing the navigation rail must reduce its width",
+                collapsedWidth < expandedWidth,
+            )
+            assertEquals(
+                "Collapsed navigation rail must expose its expand action",
+                "展开导航栏",
+                activity.findViewById<View>(R.id.navigation_rail_toggle).contentDescription,
+            )
+            assertEquals(
+                "Navigation rail collapse must report haptic feedback while UI testing",
+                hapticsBeforeCollapse + 1,
+                activity.controlHapticEventCount,
+            )
+        }
+
+        click(device, "navigation_rail_toggle")
+        SystemClock.sleep(400L)
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        scenario.onActivity { activity ->
+            assertTrue(
+                "Expanding the navigation rail must restore its width",
+                activity.findViewById<View>(R.id.tablet_navigation).width > collapsedWidth,
+            )
+            assertEquals(
+                "Expanded navigation rail must restore its collapse action",
+                "收起导航栏",
+                activity.findViewById<View>(R.id.navigation_rail_toggle).contentDescription,
+            )
+        }
     }
 
     private fun assertVisible(device: UiDevice, resourceName: String) {

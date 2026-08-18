@@ -2,15 +2,6 @@
 import SwiftUI
 import UIKit
 
-private enum MobileCalendarHaptics {
-    @MainActor
-    static func selection() {
-        let generator = UISelectionFeedbackGenerator()
-        generator.prepare()
-        generator.selectionChanged()
-    }
-}
-
 private enum MobileCalendarMode: String, CaseIterable, Identifiable {
     case day = "日"
     case week = "周"
@@ -48,6 +39,9 @@ struct MobileTeachingCalendarView: View {
     @State private var suppressesEventSelection = false
     @State private var monthDragTranslation: CGFloat = 0
     @State private var monthDragAxis: TeachingCalendarLogic.GestureAxis?
+    @State private var isMonthExpansionSettling = false
+    @State private var monthSettlementID = UUID()
+    @State private var eventSelectionSuppressionID = UUID()
 
     private let calendar = Calendar.shanghai
 
@@ -387,8 +381,11 @@ struct MobileTeachingCalendarView: View {
         let days = monthGridDates(containing: first)
 
         return GeometryReader { proxy in
+            let bottomInset: CGFloat = proxy.size.height < 420
+                ? 56
+                : MobileCalendarTimelineLayout.bottomContentInset
             let usableHeight = max(
-                proxy.size.height - MobileCalendarTimelineLayout.bottomContentInset,
+                proxy.size.height - bottomInset,
                 0
             )
             let expansionProgress = TeachingCalendarLogic.monthExpansionProgress(
@@ -396,34 +393,49 @@ struct MobileTeachingCalendarView: View {
                 verticalTranslation: monthDragTranslation,
                 travelDistance: max(usableHeight * 0.34, 150)
             )
-            let expandedCellHeight = TeachingCalendarLogic.expandedMonthCellHeight(
+            let gridLayout = TeachingCalendarLogic.monthGridLayout(
+                contentWidth: max(proxy.size.width - 24, 0),
                 availableHeight: usableHeight
             )
-            let cellHeight = 46 + (expandedCellHeight - 46) * expansionProgress
+            let cellHeight = gridLayout.cellHeight(at: expansionProgress)
+            let gridWidth = gridLayout.gridWidth(at: expansionProgress)
             let gridHeight = cellHeight * 6 + 20
             let summaryHeight = max(usableHeight - 18 - 8 - gridHeight - 28 - 16, 0)
 
             VStack(spacing: 0) {
-                monthWeekdayHeader
-                    .padding(.bottom, 8)
-                monthDateGrid(
-                    days: days,
-                    month: first,
-                    expansionProgress: expansionProgress,
-                    dayCellHeight: cellHeight
-                )
-                monthExpansionHandle
+                VStack(spacing: 0) {
+                    monthWeekdayHeader
+                        .frame(width: gridWidth)
+                        .padding(.bottom, 8)
+                    monthDateGrid(
+                        days: days,
+                        month: first,
+                        expansionProgress: expansionProgress,
+                        dayCellHeight: cellHeight
+                    )
+                    .frame(width: gridWidth)
+                    monthExpansionHandle(expansionProgress: expansionProgress)
+                }
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .simultaneousGesture(monthNavigationGesture)
+
                 if expansionProgress < 0.999, summaryHeight > 0 {
                     ScrollView(.vertical, showsIndicators: false) {
                         daySummaryCard(selectedDate)
                     }
-                    .scrollDisabled(monthDragAxis != nil)
                     .frame(height: summaryHeight)
                     .opacity(1 - expansionProgress)
-                    .allowsHitTesting(expansionProgress < 0.25 && monthDragAxis == nil)
+                    .allowsHitTesting(
+                        expansionProgress < 0.25
+                            && monthDragAxis == nil
+                            && !isMonthExpansionSettling
+                    )
+                    .accessibilityHidden(expansionProgress >= 0.25)
                     .accessibilityIdentifier("calendar.mobile.month-day-summary")
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.opacity)
                 }
+
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 12)
@@ -431,9 +443,6 @@ struct MobileTeachingCalendarView: View {
             .frame(maxWidth: .infinity, minHeight: usableHeight, maxHeight: usableHeight, alignment: .top)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .clipped()
-            .contentShape(Rectangle())
-            .simultaneousGesture(monthNavigationGesture)
-            .animation(Self.monthExpansionAnimation, value: isMonthExpanded)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("calendar.mobile.month")
             .accessibilityValue(isMonthExpanded ? "已展开" : "已收起")
@@ -475,7 +484,7 @@ struct MobileTeachingCalendarView: View {
         }
     }
 
-    private var monthExpansionHandle: some View {
+    private func monthExpansionHandle(expansionProgress: CGFloat) -> some View {
         Button {
             changeMonthExpansion(to: !isMonthExpanded)
         } label: {
@@ -483,13 +492,13 @@ struct MobileTeachingCalendarView: View {
                 Capsule()
                     .fill(AppTheme.secondaryText.opacity(0.55))
                     .frame(width: 21, height: 4)
-                    .rotationEffect(.degrees(isMonthExpanded ? -24 : 0))
-                    .offset(x: -9, y: isMonthExpanded ? 2 : 0)
+                    .rotationEffect(.degrees(-24 * expansionProgress))
+                    .offset(x: -9, y: 2 * expansionProgress)
                 Capsule()
                     .fill(AppTheme.secondaryText.opacity(0.55))
                     .frame(width: 21, height: 4)
-                    .rotationEffect(.degrees(isMonthExpanded ? 24 : 0))
-                    .offset(x: 9, y: isMonthExpanded ? 2 : 0)
+                    .rotationEffect(.degrees(24 * expansionProgress))
+                    .offset(x: 9, y: 2 * expansionProgress)
             }
                 .frame(width: 42, height: 12)
                 .frame(maxWidth: .infinity, minHeight: 28)
@@ -526,21 +535,23 @@ struct MobileTeachingCalendarView: View {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.subheadline.weight(selected ? .bold : .medium))
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 3 * expansionProgress)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier(
+                "calendar.mobile.month-day-number.\(StrictContractDateParser.string(from: day))"
+            )
 
             ZStack(alignment: .top) {
                 HStack(spacing: 2) {
                     if holiday != nil {
                         Text(holiday?.type == "holiday" ? "休" : "班")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: 7, weight: .bold))
                     }
                     ForEach(0 ..< min(dayCourses.count, 3), id: \.self) { _ in
                         Circle().frame(width: 3, height: 3)
                     }
                 }
-                .frame(height: 14)
+                .frame(height: 8)
                 .opacity(1 - expansionProgress)
 
                 VStack(spacing: 2) {
@@ -563,19 +574,20 @@ struct MobileTeachingCalendarView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
                 .opacity(expansionProgress)
                 .offset(y: (1 - expansionProgress) * -5)
-                .allowsHitTesting(expansionProgress > 0.75 && monthDragAxis == nil)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .allowsHitTesting(
+                    expansionProgress > 0.75
+                        && monthDragAxis == nil
+                        && !isMonthExpansionSettling
+                )
             }
         }
         .foregroundStyle(monthForeground(selected: selected, inMonth: inMonth, holiday: holiday))
-        .padding(.horizontal, 2 + (1 - expansionProgress))
-        .padding(.vertical, 2 + (1 - expansionProgress) * 2)
-        .frame(
-            maxWidth: .infinity,
-            minHeight: cellHeight,
-            maxHeight: cellHeight,
-            alignment: expansionProgress > 0.5 ? .top : .center
-        )
+        .padding(.horizontal, 2)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+        .frame(maxWidth: .infinity)
+        .frame(height: cellHeight, alignment: .top)
+        .clipped()
         .background(monthBackground(selected: selected, courseCount: dayCourses.count))
         .overlay {
             RoundedRectangle(cornerRadius: 9)
@@ -584,6 +596,9 @@ struct MobileTeachingCalendarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
+        .accessibilityIdentifier(
+            "calendar.mobile.month-day-cell.\(StrictContractDateParser.string(from: day))"
+        )
     }
 
     private func monthEventItem(_ event: MobileMonthEvent, tint: Color, day: Date) -> some View {
@@ -696,7 +711,7 @@ struct MobileTeachingCalendarView: View {
             let count = courses(on: day).count
             let today = sameDay(day, .now)
             Button {
-                MobileCalendarHaptics.selection()
+                AppHaptics.selection()
                 selectedDate = day
                 presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
             } label: {
@@ -897,7 +912,7 @@ struct MobileTeachingCalendarView: View {
         day: Date
     ) -> some View {
         Button("\(title)视图") {
-            MobileCalendarHaptics.selection()
+            AppHaptics.selection()
             withAnimation(Self.viewAnimation) {
                 selectedDate = day
                 mode = targetMode
@@ -910,7 +925,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func jumpToMonth(_ month: Date) {
-        MobileCalendarHaptics.selection()
+        AppHaptics.selection()
         pageDirection = month > selectedDate ? 1 : -1
         withAnimation(Self.pageAnimation) {
             selectedDate = month
@@ -929,7 +944,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func present(_ content: MobileCalendarDetailSelection.Content, on day: Date) {
-        MobileCalendarHaptics.selection()
+        AppHaptics.selection()
         presentedDetail = MobileCalendarDetailSelection(date: day, content: content)
     }
 
@@ -1000,14 +1015,14 @@ struct MobileTeachingCalendarView: View {
             calendar: calendar
         ) {
             pageDirection = direction
-            MobileCalendarHaptics.selection()
+            AppHaptics.selection()
             withAnimation(Self.pageAnimation) { selectedDate = date }
         }
     }
 
     private func navigate(to date: Date) {
         guard !sameDay(date, selectedDate) else { return }
-        MobileCalendarHaptics.selection()
+        AppHaptics.selection()
         if !sameDay(date, selectedDate) {
             pageDirection = date > selectedDate ? 1 : -1
         }
@@ -1047,6 +1062,7 @@ struct MobileTeachingCalendarView: View {
     private var monthNavigationGesture: some Gesture {
         DragGesture(minimumDistance: 18, coordinateSpace: .local)
             .onChanged { value in
+                guard !isMonthExpansionSettling else { return }
                 let axis = monthDragAxis ?? TeachingCalendarLogic.gestureAxis(
                     horizontalTranslation: value.translation.width,
                     verticalTranslation: value.translation.height
@@ -1074,14 +1090,14 @@ struct MobileTeachingCalendarView: View {
                 }
 
                 guard monthDragAxis == .vertical else {
-                    withAnimation(Self.monthExpansionAnimation) { monthDragTranslation = 0 }
+                    settleMonthExpansion(to: isMonthExpanded)
                     return
                 }
                 guard let action = TeachingCalendarLogic.monthExpansionAction(
                     horizontalTranslation: value.translation.width,
                     verticalTranslation: value.translation.height
                 ) else {
-                    withAnimation(Self.monthExpansionAnimation) { monthDragTranslation = 0 }
+                    settleMonthExpansion(to: isMonthExpanded)
                     return
                 }
                 settleMonthExpansion(to: action == .expand)
@@ -1105,8 +1121,11 @@ struct MobileTeachingCalendarView: View {
     private func finishTrackedDrag() {
         isHorizontalPaging = false
         monthDragAxis = nil
+        let suppressionID = UUID()
+        eventSelectionSuppressionID = suppressionID
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(120))
+            guard eventSelectionSuppressionID == suppressionID else { return }
             suppressesEventSelection = false
         }
     }
@@ -1119,28 +1138,31 @@ struct MobileTeachingCalendarView: View {
                 let currentIndex = MobileCalendarMode.allCases.firstIndex(of: mode) ?? 0
                 let newIndex = MobileCalendarMode.allCases.firstIndex(of: newMode) ?? currentIndex
                 pageDirection = newIndex > currentIndex ? 1 : -1
-                MobileCalendarHaptics.selection()
+                AppHaptics.selection()
                 withAnimation(Self.pageAnimation) { mode = newMode }
             }
         )
     }
 
     private func changeMonthExpansion(to expanded: Bool) {
-        guard expanded != isMonthExpanded else { return }
-        MobileCalendarHaptics.selection()
-        withAnimation(Self.monthExpansionAnimation) {
-            monthDragTranslation = 0
-            isMonthExpanded = expanded
-        }
+        guard expanded != isMonthExpanded, !isMonthExpansionSettling else { return }
+        settleMonthExpansion(to: expanded)
     }
 
     private func settleMonthExpansion(to expanded: Bool) {
-        if expanded != isMonthExpanded {
-            MobileCalendarHaptics.selection()
-        }
+        guard !isMonthExpansionSettling else { return }
+        if expanded != isMonthExpanded { AppHaptics.selection() }
+        let settlementID = UUID()
+        monthSettlementID = settlementID
+        isMonthExpansionSettling = true
         withAnimation(Self.monthExpansionAnimation) {
             monthDragTranslation = 0
             isMonthExpanded = expanded
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(320))
+            guard monthSettlementID == settlementID else { return }
+            isMonthExpansionSettling = false
         }
     }
 

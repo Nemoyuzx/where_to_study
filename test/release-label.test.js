@@ -54,9 +54,9 @@ test("all tracked client projects use the stable 0.1.6 release version", () => {
   assert.equal(tauriMetadata.bundle.android.versionCode, 1006);
   assert.match(cargoManifest, /^version = "0\.1\.6"$/m);
   assert.match(nativeAndroid, /versionName = "0\.1\.6"/);
-  assert.match(nativeAndroid, /versionCode = 21/);
+  assert.match(nativeAndroid, /versionCode = 22/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.6"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "40"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "41"/);
   assert.match(nativeHarmony, /"versionName": "0\.1\.6"/);
   assert.match(nativeHarmony, /"versionCode": 1000006/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.6/);

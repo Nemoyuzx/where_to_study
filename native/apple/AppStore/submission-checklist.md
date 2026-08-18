@@ -78,8 +78,8 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Distribution、Mac Installer Distribution 证书及 iOS 主应用、macOS 主应用、macOS Widget 三个 App Store 描述文件；证书私钥和团队标识不写入仓库。
-- `0.1.6 (40)` 的 `preflight all`、macOS/iOS `APP_STORE_BUILD` Release 编译、Apple 逻辑测试、iPhone/iPad 专项 UI 验证和 Universal macOS 正式签名归档均已通过；两个主应用归档均已核对为 `com.nemoyu.wheretostudy.native.macos`，应用图标统一为 Windows/Tauri 当前使用的绿色日历课桌图标。
-- iOS 与 macOS `0.1.6 (40)` 均已收到 App Store Connect 的 `Upload succeeded`，上传完成。TestFlight 和正式提交选择各平台的 build 40。
+- `0.1.6 (41)` 的 `preflight all`、macOS/iOS `APP_STORE_BUILD` Release 编译、Apple 逻辑测试、iPhone/iPad 专项 UI 验证和 Universal macOS 正式签名归档均已通过；两个主应用归档均已核对为 `com.nemoyu.wheretostudy.native.macos`，应用图标统一为 Windows/Tauri 当前使用的绿色日历课桌图标。
+- iOS 与 macOS `0.1.6 (41)` 均已收到 App Store Connect 的 `Upload succeeded`，上传完成。TestFlight 和正式提交选择各平台的 build 41。
 - Build 25 的旧审核截图清单保留作历史校验，不再用于提交；应按 `screenshot-plan.md` 使用对应平台的最新构建重新生成 iPhone、iPad 与 macOS 商店截图并更新 `screenshot-manifest.md`。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
 
@@ -90,7 +90,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 核实北邮服务对账号、密码、课程和教室请求的实际保留行为，再决定 App Privacy 是否可以回答“不收集数据”。
 - 填写真实版权主体、App Review 联系人姓名/电话/邮箱，并确认支持 URL 提供用户可用的联系方式。
 - 完成年龄分级、欧盟 DSA 身份、价格、税务类别、销售地区和中国大陆 ICP 状态；没有有效 ICP 时不要勾选中国大陆销售地区。
-- App Store Connect 处理完成后，将 iOS/macOS build 40 加入内部 TestFlight 群组并在真机验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
+- App Store Connect 处理完成后，将 iOS/macOS build 41 加入内部 TestFlight 群组并在真机验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
 - 使用对应平台的最新构建重新生成并上传商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择最新构建提交审核。
 
 ## Apple 官方核对入口

@@ -497,10 +497,32 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     func testAdaptiveCalendarAndContentColumnsFollowAvailableDetailWidth() {
-        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 759), .compact)
-        XCTAssertEqual(AdaptiveLayoutPolicy.calendarPresentation(width: 760), .expanded)
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.calendarPresentation(width: 900, horizontalClass: .compact),
+            .compact
+        )
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.calendarPresentation(width: 759, horizontalClass: .regular),
+            .compact
+        )
+        XCTAssertEqual(
+            AdaptiveLayoutPolicy.calendarPresentation(width: 760, horizontalClass: .regular),
+            .expanded
+        )
         XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 759), 1)
         XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 760), 2)
+    }
+
+    func testMobilePageLayoutUsesCompactTopSpacingInLandscapeHeight() {
+        let landscape = MobilePageLayoutPolicy.metrics(availableHeight: 393)
+        let portrait = MobilePageLayoutPolicy.metrics(availableHeight: 852)
+
+        XCTAssertEqual(landscape.topPadding, 8)
+        XCTAssertEqual(landscape.sectionSpacing, 12)
+        XCTAssertTrue(landscape.usesCompactTitle)
+        XCTAssertEqual(portrait.topPadding, 20)
+        XCTAssertEqual(portrait.sectionSpacing, 16)
+        XCTAssertFalse(portrait.usesCompactTitle)
     }
 
     #if os(iOS)
@@ -718,6 +740,34 @@ final class ScheduleLogicTests: XCTestCase {
             TeachingCalendarLogic.expandedMonthCellHeight(availableHeight: 300),
             35
         )
+    }
+
+    func testMonthGridExpansionNeverShrinksAndCollapsedCellsStaySquare() {
+        let portrait = TeachingCalendarLogic.monthGridLayout(
+            contentWidth: 369,
+            availableHeight: 620
+        )
+        XCTAssertEqual(portrait.collapsedCellHeight, 49)
+        XCTAssertEqual(portrait.collapsedGridWidth, 367)
+        XCTAssertEqual(portrait.expandedCellHeight, 88)
+        XCTAssertGreaterThan(portrait.expandedGridWidth, portrait.collapsedGridWidth)
+
+        let landscape = TeachingCalendarLogic.monthGridLayout(
+            contentWidth: 828,
+            availableHeight: 250
+        )
+        XCTAssertEqual(landscape.collapsedCellHeight, 30)
+        XCTAssertEqual(landscape.expandedCellHeight, 30)
+        XCTAssertEqual(landscape.collapsedGridWidth, 234)
+        XCTAssertEqual(landscape.gridWidth(at: 0), 234)
+        XCTAssertEqual(landscape.gridWidth(at: 1), 828)
+
+        for progress in stride(from: CGFloat.zero, through: 1, by: 0.1) {
+            XCTAssertGreaterThanOrEqual(
+                landscape.cellHeight(at: progress),
+                landscape.collapsedCellHeight
+            )
+        }
     }
 
     func testExpandedMonthEventsReserveLastRowForOverflowCount() {

@@ -47,9 +47,14 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             #else
+            let pageMetrics = MobilePageLayoutPolicy.metrics(availableHeight: proxy.size.height)
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    PageTitle(eyebrow: "Where To Study", title: "设置")
+                VStack(alignment: .leading, spacing: pageMetrics.sectionSpacing) {
+                    PageTitle(
+                        eyebrow: "Where To Study",
+                        title: "设置",
+                        compact: pageMetrics.usesCompactTitle
+                    )
                     if columnCount == 2 {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
@@ -72,7 +77,9 @@ struct SettingsView: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, pageMetrics.horizontalPadding)
+                .padding(.top, pageMetrics.topPadding)
+                .padding(.bottom, pageMetrics.bottomPadding)
                 .frame(maxWidth: columnCount == 2 ? 1120 : 720)
                 .frame(maxWidth: .infinity)
             }
@@ -95,6 +102,7 @@ struct SettingsView: View {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
                 Button("完成") {
+                    AppHaptics.impact()
                     dismissKeyboard()
                 }
                 .accessibilityIdentifier("action.dismiss-keyboard")
@@ -107,9 +115,12 @@ struct SettingsView: View {
             titleVisibility: .visible
         ) {
             Button("清除本地数据", role: .destructive) {
+                AppHaptics.impact()
                 model.clearLocalData()
             }
-            Button("取消", role: .cancel) {}
+            Button("取消", role: .cancel) {
+                AppHaptics.impact()
+            }
         } message: {
             Text("此操作会删除本机保存的账户密码、个人课表、空教室和节假日缓存，且无法撤销。")
         }
@@ -129,6 +140,7 @@ struct SettingsView: View {
                         .foregroundStyle(AppTheme.primary)
                     if model.canExitSampleMode {
                         Button {
+                            AppHaptics.impact()
                             model.exitReviewDemo()
                         } label: {
                             Label("返回真实数据", systemImage: "arrow.uturn.backward")
@@ -139,6 +151,7 @@ struct SettingsView: View {
                     }
                 } else {
                     Button {
+                        AppHaptics.impact()
                         model.enterReviewDemo()
                     } label: {
                         Label("浏览内置示例数据", systemImage: "eye")
@@ -150,6 +163,7 @@ struct SettingsView: View {
                 }
                 Divider()
                 Button {
+                    AppHaptics.impact()
                     dismissKeyboard()
                     showingPrivacyPolicy = true
                 } label: {
@@ -208,12 +222,23 @@ struct SettingsView: View {
                         dismissKeyboard()
                     }
                     .accessibilityIdentifier("field.term-start-date")
-                Picker("默认校区", selection: $model.campusID) {
+                Picker(
+                    "默认校区",
+                    selection: Binding(
+                        get: { model.campusID },
+                        set: { campusID in
+                            guard campusID != model.campusID else { return }
+                            AppHaptics.selection()
+                            model.campusID = campusID
+                        }
+                    )
+                ) {
                     Text("西土城").tag("01")
                     Text("沙河").tag("04")
                 }
                 .disabled(model.isSampleMode)
                 Button {
+                    AppHaptics.impact()
                     model.saveSettings()
                 } label: {
                     Label("保存设置", systemImage: "checkmark")
@@ -224,6 +249,7 @@ struct SettingsView: View {
                 .tint(AppTheme.primaryFill)
                 .disabled(model.isSampleMode)
                 Button {
+                    AppHaptics.impact()
                     if model.saveSettings() {
                         model.refreshSchedule()
                     }
@@ -255,6 +281,7 @@ struct SettingsView: View {
                     isOn: Binding(
                         get: { model.dailyCourseNotificationsEnabled },
                         set: { enabled in
+                            AppHaptics.selection()
                             model.setDailyCourseNotificationsEnabled(enabled)
                         }
                     )
@@ -282,6 +309,7 @@ struct SettingsView: View {
                     .font(.callout)
                     .foregroundStyle(AppTheme.secondaryText)
                 Button(role: .destructive) {
+                    AppHaptics.impact()
                     showingClearDataConfirmation = true
                 } label: {
                     Label("清除本地数据", systemImage: "trash")
