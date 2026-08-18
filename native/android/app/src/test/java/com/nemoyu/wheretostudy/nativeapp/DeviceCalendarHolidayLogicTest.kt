@@ -24,11 +24,11 @@ class DeviceCalendarHolidayLogicTest {
 
     @Test
     fun isHolidayCalendarMatchesKnownTitlesAndKeywordCombinations() {
-        assertTrue(DeviceCalendarHolidayLogic.isHolidayCalendar("中国大陆节假日", "com.apple"))
-        assertTrue(DeviceCalendarHolidayLogic.isHolidayCalendar("Holidays in China", "com.google"))
-        assertTrue(DeviceCalendarHolidayLogic.isHolidayCalendar("中国节假日", null))
-        assertFalse(DeviceCalendarHolidayLogic.isHolidayCalendar("Work", null))
-        assertFalse(DeviceCalendarHolidayLogic.isHolidayCalendar("个人日历", null))
+        assertTrue(DeviceCalendarHolidayLogic.isHolidayCalendar("中国大陆节假日"))
+        assertTrue(DeviceCalendarHolidayLogic.isHolidayCalendar("Holidays in China"))
+        assertTrue(DeviceCalendarHolidayLogic.isHolidayCalendar("中国节假日"))
+        assertFalse(DeviceCalendarHolidayLogic.isHolidayCalendar("Work"))
+        assertFalse(DeviceCalendarHolidayLogic.isHolidayCalendar("个人日历"))
     }
 
     @Test
@@ -48,5 +48,13 @@ class DeviceCalendarHolidayLogicTest {
 
         val noAdditions = DeviceCalendarHolidayLogic.mergingWorkdays(base, emptyList())
         assertEquals(1, noAdditions.items.size)
+    }
+
+    @Test
+    fun deduplicatedCollapsesTheSameHolidayFromMultipleCalendars() {
+        val holiday = HolidayItem(date = "2026-10-01", name = "国庆节", type = "holiday")
+        val items = DeviceCalendarHolidayLogic.deduplicated(listOf(holiday, holiday))
+
+        assertEquals(listOf(holiday), items)
     }
 }

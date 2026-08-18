@@ -27,7 +27,7 @@ internal object DeviceCalendarHolidayLogic {
         return trimmed.take(maxLength)
     }
 
-    fun isHolidayCalendar(displayName: String?, accountType: String?): Boolean {
+    fun isHolidayCalendar(displayName: String?): Boolean {
         val name = displayName?.trim().orEmpty()
         val candidateTitles = listOf(
             "中国大陆节假日",
@@ -45,11 +45,11 @@ internal object DeviceCalendarHolidayLogic {
     }
 
     fun mergingWorkdays(snapshot: HolidaysSnapshot, workdays: List<HolidayItem>): HolidaysSnapshot {
-        val existingIds = snapshot.items.map(HolidayItem::id).toMutableSet()
+        val existingIds = snapshot.items.map { it.stableID() }.toMutableSet()
         val additions = mutableListOf<HolidayItem>()
         for (workday in workdays) {
             if (workday.type != "workday") continue
-            if (!existingIds.add(workday.id())) continue
+            if (!existingIds.add(workday.stableID())) continue
             additions.add(workday)
         }
         if (additions.isEmpty()) return snapshot
@@ -60,7 +60,10 @@ internal object DeviceCalendarHolidayLogic {
         )
     }
 
-    private fun HolidayItem.id(): String = "$date|$type|$name"
+    fun deduplicated(items: List<HolidayItem>): List<HolidayItem> =
+        items.distinctBy { it.stableID() }
+
+    private fun HolidayItem.stableID(): String = "$date|$type|$name"
 }
 
 class DeviceCalendarHolidayClient(
@@ -100,7 +103,6 @@ class DeviceCalendarHolidayClient(
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.CALENDAR_DISPLAY_NAME,
-            CalendarContract.Calendars.ACCOUNT_TYPE,
         )
         val result = mutableListOf<Long>()
         context.contentResolver.query(
@@ -112,11 +114,9 @@ class DeviceCalendarHolidayClient(
         )?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(CalendarContract.Calendars._ID)
             val nameColumn = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME)
-            val accountColumn = cursor.getColumnIndexOrThrow(CalendarContract.Calendars.ACCOUNT_TYPE)
             while (cursor.moveToNext()) {
                 val displayName = cursor.getString(nameColumn)
-                val accountType = cursor.getString(accountColumn)
-                if (DeviceCalendarHolidayLogic.isHolidayCalendar(displayName, accountType)) {
+                if (DeviceCalendarHolidayLogic.isHolidayCalendar(displayName)) {
                     result.add(cursor.getLong(idColumn))
                 }
             }
@@ -173,7 +173,7 @@ class DeviceCalendarHolidayClient(
                 )
             }
         }
-        return items
+        return DeviceCalendarHolidayLogic.deduplicated(items)
     }
 
     private fun timestamp(date: Date = Date()): String =

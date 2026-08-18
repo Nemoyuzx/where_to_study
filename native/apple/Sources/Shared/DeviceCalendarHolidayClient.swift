@@ -16,8 +16,11 @@ enum DeviceCalendarHolidayLogic {
         if holidayCalendarTitles.contains(where: { title.localizedCaseInsensitiveContains($0) }) {
             return true
         }
-        return calendar.type == .subscription
-            && (title.contains("节假日") || title.localizedCaseInsensitiveContains("holiday"))
+        let isHolidayCalendar = title.contains("节假日")
+            || title.localizedCaseInsensitiveContains("holiday")
+        let isChinaCalendar = title.contains("中国")
+            || title.localizedCaseInsensitiveContains("china")
+        return calendar.type == .subscription && isHolidayCalendar && isChinaCalendar
     }
 
     static func item(from event: EKEvent, year: Int, calendar: Calendar = .shanghai) -> HolidayItem? {
@@ -74,6 +77,11 @@ enum DeviceCalendarHolidayLogic {
         )
     }
 
+    static func deduplicated(_ items: [HolidayItem]) -> [HolidayItem] {
+        var existingIDs = Set<String>()
+        return items.filter { existingIDs.insert($0.id).inserted }
+    }
+
     private static let holidayCalendarTitles = [
         "中国大陆节假日",
         "中国节假日",
@@ -121,9 +129,10 @@ struct DeviceCalendarHolidayClient: HolidayFetching {
         }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: calendars)
         let events = store.events(matching: predicate)
-        let items = events.compactMap { event in
+        let parsedItems = events.compactMap { event in
             DeviceCalendarHolidayLogic.item(from: event, year: year)
         }
+        let items = DeviceCalendarHolidayLogic.deduplicated(parsedItems)
         guard !items.isEmpty else {
             throw HolidayClientError.service("设备日历中该年份没有节假日记录。")
         }

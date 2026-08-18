@@ -51,4 +51,10 @@ final class DeviceCalendarHolidayTests: XCTestCase {
         let noAdditions = DeviceCalendarHolidayLogic.mergingWorkdays(into: base, workdays: [])
         XCTAssertEqual(noAdditions.items.count, 1)
     }
+
+    func testDeduplicatedCollapsesTheSameHolidayFromMultipleCalendars() {
+        let holiday = HolidayItem(date: "2026-10-01", name: "国庆节", type: "holiday")
+
+        XCTAssertEqual(DeviceCalendarHolidayLogic.deduplicated([holiday, holiday]), [holiday])
+    }
 }
