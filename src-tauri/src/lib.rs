@@ -2391,6 +2391,8 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        // Windows toast clicks activate the app by default (appUserModelId);
+        // macOS notification clicks activate the app as well.
         .plugin(tauri_plugin_notification::init());
 
     builder
