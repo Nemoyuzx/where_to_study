@@ -256,20 +256,22 @@ struct MobileTeachingCalendarView: View {
                 guard let value, !value.isEmpty else { return nil }
                 return value
             }
-        if !messages.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(messages, id: \.self) { message in
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .lineLimit(2)
+        Group {
+            if !messages.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(messages, id: \.self) { message in
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .lineLimit(2)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(AppTheme.primary.opacity(0.08))
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(AppTheme.primary.opacity(0.08))
-            .transition(.opacity.combined(with: .move(edge: .top)))
         }
         .animation(Self.viewAnimation, value: holidayStatus)
         .animation(Self.viewAnimation, value: model.statusMessage)
