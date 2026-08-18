@@ -669,7 +669,7 @@ mod tests {
             HOLIDAY_DATA_SOURCE,
             "https://unpkg.com/holiday-calendar@1.3.3/data/CN"
         );
-        assert_eq!(HOLIDAY_USER_AGENT, "WhereToStudyNative/0.1.4");
+        assert_eq!(HOLIDAY_USER_AGENT, "WhereToStudyNative/0.1.5");
     }
 
     #[test]

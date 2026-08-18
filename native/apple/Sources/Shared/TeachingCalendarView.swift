@@ -151,39 +151,27 @@ struct TeachingCalendarView: View {
     var body: some View {
         ZStack {
             ScrollView {
+                #if os(macOS)
+                VStack(alignment: .leading, spacing: 16) {
+                    titleBar
+                        .accessibilityIdentifier("layout.calendar.expanded")
+                    calendarPanelContent
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                #else
                 VStack(alignment: .leading, spacing: 16) {
                     titleBar
                         .accessibilityIdentifier("layout.calendar.expanded")
 
                     Surface {
-                        VStack(alignment: .leading, spacing: 14) {
-                            dateControls
-                            if let status = holidayStatus {
-                                Text(status)
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.secondaryText)
-                            }
-                            if !model.statusMessage.isEmpty {
-                                Text(model.statusMessage)
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.secondaryText)
-                            }
-                            if !model.calendarImportStatusMessage.isEmpty {
-                                Text(model.calendarImportStatusMessage)
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.secondaryText)
-                            }
-                            Divider()
-                            calendarContent
-                                .id(mode)
-                                .transition(.opacity.combined(with: .scale(scale: 0.995)))
-                                .animation(Self.viewAnimation, value: mode)
-                        }
+                        calendarPanelContent
                     }
                 }
                 .padding(20)
                 .frame(maxWidth: 1200)
                 .frame(maxWidth: .infinity)
+                #endif
             }
 
             yearPopoverOverlay
@@ -197,6 +185,33 @@ struct TeachingCalendarView: View {
             dismissYearPopover()
             ensureVisibleHolidays()
         }
+    }
+
+    private var calendarPanelContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            dateControls
+            if let status = holidayStatus {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+            if !model.statusMessage.isEmpty {
+                Text(model.statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+            if !model.calendarImportStatusMessage.isEmpty {
+                Text(model.calendarImportStatusMessage)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+            Divider()
+            calendarContent
+                .id(mode)
+                .transition(.opacity.combined(with: .scale(scale: 0.995)))
+                .animation(Self.viewAnimation, value: mode)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
@@ -365,6 +380,7 @@ struct TeachingCalendarView: View {
         let days = monthGridDates(containing: first)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return VStack(alignment: .leading, spacing: 12) {
+            #if !os(macOS)
             HStack {
                 Spacer()
                 Button {
@@ -379,6 +395,7 @@ struct TeachingCalendarView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            #endif
             LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(Self.weekdayLabels, id: \.self) { label in
                     Text(label)
@@ -403,6 +420,11 @@ struct TeachingCalendarView: View {
         let isSelected = sameDay(day, selectedDate)
         let isToday = sameDay(day, .now)
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
+        #if os(macOS)
+        let showsDetails = true
+        #else
+        let showsDetails = isMonthExpanded
+        #endif
         let detail = holidays.first.map {
             "\($0.type == "holiday" ? "休" : "班") \($0.name)"
         } ?? (dayCourses.isEmpty ? "无课" : "\(dayCourses.count) 门课")
@@ -414,7 +436,7 @@ struct TeachingCalendarView: View {
                     .font(.caption.bold())
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                if isMonthExpanded {
+                if showsDetails {
                     Text(detail)
                         .font(.system(size: 10, weight: holidays.isEmpty ? .regular : .semibold))
                         .lineLimit(2)
@@ -437,7 +459,7 @@ struct TeachingCalendarView: View {
             .padding(6)
             .frame(
                 maxWidth: .infinity,
-                minHeight: isMonthExpanded ? 76 : 46,
+                minHeight: showsDetails ? 76 : 46,
                 alignment: .topLeading
             )
             .background(monthCellColor(selected: isSelected, inMonth: inMonth, courseCount: dayCourses.count))
@@ -492,8 +514,12 @@ struct TeachingCalendarView: View {
             let dayCourses = courses(on: day)
             let holidays = holidayItems(on: day)
             let isToday = sameDay(day, .now)
+            #if os(macOS)
+            let isSelected = sameDay(selectedDate, day)
+            #else
             let isSelected = yearPopoverDate.map { sameDay($0, day) } ?? false
-            VStack(spacing: 0) {
+            #endif
+            let cell = VStack(spacing: 0) {
                 Text("\(calendar.component(.day, from: day))")
                 if let item = holidays.first {
                     Text(item.type == "holiday" ? "休" : "班")
@@ -513,6 +539,38 @@ struct TeachingCalendarView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(dayAccessibilityLabel(day))
             .accessibilityAddTraits(.isButton)
+            #if os(macOS)
+            cell
+                .accessibilityAction {
+                    selectedDate = day
+                }
+                .accessibilityAction(named: Text("查看月份")) {
+                    selectedDate = day
+                    withAnimation(Self.viewAnimation) { mode = .month }
+                }
+                .gesture(
+                    SpatialTapGesture(
+                        count: 2,
+                        coordinateSpace: .named(Self.calendarCoordinateSpace)
+                    )
+                    .exclusively(
+                        before: SpatialTapGesture(
+                            count: 1,
+                            coordinateSpace: .named(Self.calendarCoordinateSpace)
+                        )
+                    )
+                    .onEnded { value in
+                        switch value {
+                        case .first:
+                            selectedDate = day
+                            withAnimation(Self.viewAnimation) { mode = .month }
+                        case .second:
+                            selectedDate = day
+                        }
+                    }
+                )
+            #else
+            cell
             .accessibilityAction {
                 yearPopoverDate = day
                 yearPopoverLocation = nil
@@ -524,6 +582,7 @@ struct TeachingCalendarView: View {
                         yearPopoverLocation = value.location
                     }
             )
+            #endif
         } else {
             Color.clear.frame(height: 30)
         }

@@ -1,5 +1,15 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
+
+private enum MobileCalendarHaptics {
+    @MainActor
+    static func selection() {
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        generator.selectionChanged()
+    }
+}
 
 private enum MobileCalendarMode: String, CaseIterable, Identifiable {
     case day = "日"
@@ -328,7 +338,7 @@ struct MobileTeachingCalendarView: View {
                         .foregroundStyle(AppTheme.secondaryText)
                     ForEach(items, id: \.1.id) { day, item in
                         Button {
-                            selectedDate = day
+                            navigate(to: day)
                         } label: {
                             Text("\(Self.monthDayCompactFormatter.string(from: day)) · \(item.name)")
                                 .font(.caption.weight(.semibold))
@@ -383,9 +393,7 @@ struct MobileTeachingCalendarView: View {
             .accessibilityIdentifier("calendar.mobile.month")
             .accessibilityValue(isMonthExpanded ? "已展开" : "已收起")
             .accessibilityAction(named: Text(isMonthExpanded ? "收起月历" : "展开月历")) {
-                withAnimation(Self.monthExpansionAnimation) {
-                    isMonthExpanded.toggle()
-                }
+                changeMonthExpansion(to: !isMonthExpanded)
             }
         }
     }
@@ -424,13 +432,21 @@ struct MobileTeachingCalendarView: View {
 
     private var monthExpansionHandle: some View {
         Button {
-            withAnimation(Self.monthExpansionAnimation) {
-                isMonthExpanded.toggle()
-            }
+            changeMonthExpansion(to: !isMonthExpanded)
         } label: {
-            Capsule()
-                .fill(AppTheme.secondaryText.opacity(0.55))
-                .frame(width: 40, height: 5)
+            ZStack {
+                Capsule()
+                    .fill(AppTheme.secondaryText.opacity(0.55))
+                    .frame(width: 21, height: 4)
+                    .rotationEffect(.degrees(isMonthExpanded ? -24 : 0))
+                    .offset(x: -9, y: isMonthExpanded ? 2 : 0)
+                Capsule()
+                    .fill(AppTheme.secondaryText.opacity(0.55))
+                    .frame(width: 21, height: 4)
+                    .rotationEffect(.degrees(isMonthExpanded ? 24 : 0))
+                    .offset(x: 9, y: isMonthExpanded ? 2 : 0)
+            }
+                .frame(width: 42, height: 12)
                 .frame(maxWidth: .infinity, minHeight: 28)
                 .contentShape(Rectangle())
         }
@@ -610,6 +626,7 @@ struct MobileTeachingCalendarView: View {
             let count = courses(on: day).count
             let today = sameDay(day, .now)
             Button {
+                MobileCalendarHaptics.selection()
                 selectedDate = day
                 presentedDay = MobileCalendarSelection(date: day)
             } label: {
@@ -712,6 +729,7 @@ struct MobileTeachingCalendarView: View {
         day: Date
     ) -> some View {
         Button("\(title)视图") {
+            MobileCalendarHaptics.selection()
             withAnimation(Self.viewAnimation) {
                 selectedDate = day
                 mode = targetMode
@@ -790,11 +808,14 @@ struct MobileTeachingCalendarView: View {
             calendar: calendar
         ) {
             pageDirection = direction
+            MobileCalendarHaptics.selection()
             withAnimation(Self.pageAnimation) { selectedDate = date }
         }
     }
 
     private func navigate(to date: Date) {
+        guard !sameDay(date, selectedDate) else { return }
+        MobileCalendarHaptics.selection()
         if !sameDay(date, selectedDate) {
             pageDirection = date > selectedDate ? 1 : -1
         }
@@ -842,9 +863,7 @@ struct MobileTeachingCalendarView: View {
                 ) else { return }
                 if action == .expand, isMonthExpanded { return }
                 if action == .collapse, !isMonthExpanded { return }
-                withAnimation(Self.monthExpansionAnimation) {
-                    isMonthExpanded = action == .expand
-                }
+                changeMonthExpansion(to: action == .expand)
             }
     }
 
@@ -856,9 +875,18 @@ struct MobileTeachingCalendarView: View {
                 let currentIndex = MobileCalendarMode.allCases.firstIndex(of: mode) ?? 0
                 let newIndex = MobileCalendarMode.allCases.firstIndex(of: newMode) ?? currentIndex
                 pageDirection = newIndex > currentIndex ? 1 : -1
+                MobileCalendarHaptics.selection()
                 withAnimation(Self.pageAnimation) { mode = newMode }
             }
         )
+    }
+
+    private func changeMonthExpansion(to expanded: Bool) {
+        guard expanded != isMonthExpanded else { return }
+        MobileCalendarHaptics.selection()
+        withAnimation(Self.monthExpansionAnimation) {
+            isMonthExpanded = expanded
+        }
     }
 
     private var contentIdentity: String {

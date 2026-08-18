@@ -5,6 +5,7 @@ import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
+import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -183,7 +184,7 @@ class MainNavigationSmokeTest {
 
                 click(device, "calendar_mode_day")
                 assertVisible(device, "calendar_timeline")
-                assertVisible(device, "calendar_all_day_strip")
+                assertGone(device, "calendar_all_day_strip")
                 val dayBeforeSwipe = objectText(device, "calendar_period_label")
                 swipeResource(device, "calendar_timeline_scroll", horizontalDirection = 1)
                 assertTextChanged(device, "calendar_period_label", dayBeforeSwipe)
@@ -227,6 +228,27 @@ class MainNavigationSmokeTest {
                         "Expanded month rows must stay close to the native iOS height",
                         firstRowHeightDp <= TeachingCalendarLogic.monthCellHeightDp(expanded = true) + 1,
                     )
+                    repeat(grid.childCount) { rowIndex ->
+                        val row = grid.getChildAt(rowIndex) as ViewGroup
+                        repeat(row.childCount) { cellIndex ->
+                            val dayLabel = row.getChildAt(cellIndex)
+                                .findViewById<TextView>(R.id.calendar_month_day_label)
+                            assertTrue(
+                                "Month day labels must match iOS and contain only the date number",
+                                dayLabel.text.matches(Regex("\\d{1,2}")),
+                            )
+                            assertTrue(
+                                "Month day labels must use the iOS-equivalent 15sp size",
+                                kotlin.math.abs(
+                                    dayLabel.textSize - TypedValue.applyDimension(
+                                        TypedValue.COMPLEX_UNIT_SP,
+                                        15f,
+                                        activity.resources.displayMetrics,
+                                    ),
+                                ) < 0.5f,
+                            )
+                        }
+                    }
                 }
                 var monthViewIdentity = 0
                 var monthGridIdentity = 0

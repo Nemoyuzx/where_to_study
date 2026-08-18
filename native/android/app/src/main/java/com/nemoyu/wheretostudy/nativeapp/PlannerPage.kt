@@ -107,7 +107,12 @@ class PlannerPage(
 
     private fun querySurface(): LinearLayout = surface(activity).apply {
         id = R.id.planner_query_surface
-        setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
+        setPadding(
+            activity.dp(UiMetrics.surfacePaddingDp),
+            activity.dp(UiMetrics.surfacePaddingDp),
+            activity.dp(UiMetrics.surfacePaddingDp),
+            activity.dp(UiMetrics.surfacePaddingDp),
+        )
         addView(sectionTitle(
             activity,
             "查询条件",
@@ -133,11 +138,15 @@ class PlannerPage(
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(activity.dp(3), activity.dp(3), activity.dp(3), activity.dp(3))
+            setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
             background = roundedBackground(
                 activity,
                 Palette.surfaceVariant,
                 radius = UiMetrics.controlRadiusDp,
+            )
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(32),
             )
         }
         val tabs = mutableListOf<Pair<CampusMetadata, TextView>>()
@@ -150,7 +159,7 @@ class PlannerPage(
             }
             tab.layoutParams = LinearLayout.LayoutParams(
                 0,
-                activity.dp(UiMetrics.compactControlHeightDp - 6),
+                activity.dp(28),
                 1f,
             ).apply {
                 marginEnd = activity.dp(2)
@@ -186,7 +195,7 @@ class PlannerPage(
         }
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(40),
+            activity.dp(UiMetrics.compactControlHeightDp),
         )
         addView(ImageView(activity).apply {
             id = R.id.planner_fetch_icon
@@ -195,8 +204,8 @@ class PlannerPage(
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(activity.dp(20), activity.dp(20)).apply {
-            marginEnd = activity.dp(6)
+        }, LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply {
+            marginEnd = activity.dp(8)
         })
         val label = TextView(activity).apply {
             text = if (classroomRepository.isRefreshing) {
@@ -204,7 +213,7 @@ class PlannerPage(
             } else {
                 "获取空教室信息"
             }
-            textSize = 14f
+            textSize = 15f
             setTextColor(Palette.onPrimary)
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
@@ -240,7 +249,7 @@ class PlannerPage(
         ))
         val personalToggle = Switch(activity).apply {
             text = "使用个人课表排除已有课程"
-            textSize = 14f
+            textSize = 17f
             setTextColor(Palette.text)
             gravity = Gravity.CENTER_VERTICAL
             isClickable = true
@@ -260,7 +269,7 @@ class PlannerPage(
             )
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(40),
+                activity.dp(UiMetrics.compactControlHeightDp),
             ).apply { bottomMargin = activity.dp(4) }
         }
         addView(personalToggle)
@@ -361,15 +370,16 @@ class PlannerPage(
                                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                                     )
                                     setSpan(
-                                        RelativeSizeSpan(0.74f),
+                                        RelativeSizeSpan(0.8f),
                                         lineBreak + 1,
                                         value.length,
                                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                                     )
                                 }
                             }
-                            textSize = 13f
+                            textSize = 15f
                             gravity = Gravity.CENTER
+                            includeFontPadding = false
                             setPadding(activity.dp(2), 0, activity.dp(2), 0)
                             isClickable = true
                             isFocusable = true
@@ -379,8 +389,8 @@ class PlannerPage(
                                 refreshCells()
                                 renderResultsAndSummary()
                             }
-                            minHeight = activity.dp(48)
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
+                            minHeight = activity.dp(54)
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
                                 marginEnd = activity.dp(4)
                                 bottomMargin = activity.dp(4)
                             }
@@ -390,7 +400,7 @@ class PlannerPage(
                     }
                     repeat(columns - slots.size) {
                         addView(TextView(activity).apply {
-                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
+                            layoutParams = LinearLayout.LayoutParams(0, activity.dp(54), 1f).apply {
                                 marginEnd = activity.dp(4)
                             }
                         })
@@ -406,7 +416,18 @@ class PlannerPage(
         if (courses.isEmpty()) {
             addView(emptyMessage("暂无本地课程，请在设置中获取/刷新个人课表"))
         } else {
-            courses.forEach { course -> addView(courseRow(course)) }
+            courses.forEachIndexed { index, course ->
+                addView(courseRow(course))
+                if (index < courses.lastIndex) {
+                    addView(View(activity).apply {
+                        setBackgroundColor(Palette.border)
+                        layoutParams = LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            activity.dp(1),
+                        )
+                    })
+                }
+            }
         }
     }
 
@@ -430,13 +451,13 @@ class PlannerPage(
                     activity,
                     if (selected) Palette.primaryFill else Palette.surface,
                     if (selected) Palette.primaryFill else Palette.border,
-                    radius = UiMetrics.controlRadiusDp,
+                    radius = 6,
                 )
                 icon.imageTintList = ColorStateList.valueOf(
                     if (selected) Palette.onPrimary else Palette.text,
                 )
                 label.setTextColor(if (selected) Palette.onPrimary else Palette.text)
-                label.setTypeface(label.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
+                label.setTypeface(label.typeface, Typeface.BOLD)
             }
         }
         buildings.chunked(columns).forEach { rowBuildings ->
@@ -451,7 +472,7 @@ class PlannerPage(
                         isClickable = true
                         isFocusable = true
                         contentDescription = building
-                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
                             marginEnd = activity.dp(7)
                             bottomMargin = activity.dp(7)
                         }
@@ -461,8 +482,8 @@ class PlannerPage(
                         }
                         addView(
                             buttonIcon,
-                            LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)).apply {
-                                marginEnd = activity.dp(3)
+                            LinearLayout.LayoutParams(activity.dp(16), activity.dp(16)).apply {
+                                marginEnd = activity.dp(4)
                             },
                         )
                         buttonLabel = TextView(activity).apply {
@@ -471,6 +492,7 @@ class PlannerPage(
                             includeFontPadding = false
                             gravity = Gravity.CENTER_VERTICAL
                             maxLines = 1
+                            setTypeface(typeface, Typeface.BOLD)
                         }
                         addView(buttonLabel)
                         setOnClickListener {
@@ -484,7 +506,7 @@ class PlannerPage(
                 }
                 repeat(columns - rowBuildings.size) {
                     addView(TextView(activity).apply {
-                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(48), 1f).apply {
+                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(46), 1f).apply {
                             marginEnd = activity.dp(7)
                         }
                     })
@@ -546,11 +568,13 @@ class PlannerPage(
             addView(TextView(activity).apply {
                 text = label
                 textSize = 12f
+                gravity = Gravity.CENTER_HORIZONTAL
                 setTextColor(Palette.muted)
             })
             addView(TextView(activity).apply {
                 text = value.toString()
                 textSize = 22f
+                gravity = Gravity.CENTER_HORIZONTAL
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
             })
@@ -630,7 +654,7 @@ class PlannerPage(
         setTextColor(Palette.muted)
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(92),
+            activity.dp(72),
         )
     }
 
@@ -650,7 +674,7 @@ class PlannerPage(
             setPadding(0, activity.dp(3), 0, 0)
             addView(TextView(activity).apply {
                 text = "联动查询"
-                textSize = 27f
+                textSize = 34f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
                 includeFontPadding = false
@@ -676,12 +700,11 @@ class PlannerPage(
     private fun courseRow(course: Course): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
-        background = roundedBackground(activity, Palette.background, Palette.border, radius = 4)
+        setPadding(0, activity.dp(10), 0, activity.dp(10))
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { bottomMargin = activity.dp(8) }
+        )
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(activity).apply {
@@ -751,12 +774,11 @@ class PlannerPage(
 
         private fun createClassroomRow(parent: ViewGroup): ClassroomRowHolder {
             val root = FrameLayout(parent.context).apply {
-                setPadding(activity.dp(20), 0, activity.dp(20), activity.dp(8))
+                setPadding(activity.dp(20), 0, activity.dp(20), 0)
             }
             val card = LinearLayout(parent.context).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
-                background = roundedBackground(activity, Palette.surface, Palette.border, radius = 4)
+                setPadding(0, activity.dp(10), 0, 0)
             }
             root.addView(
                 card,
@@ -784,9 +806,16 @@ class PlannerPage(
             val ranges = TextView(parent.context).apply {
                 textSize = 12f
                 setTextColor(Palette.primaryText)
-                setPadding(0, activity.dp(5), 0, 0)
+                setPadding(0, activity.dp(5), 0, activity.dp(10))
             }
             card.addView(ranges)
+            card.addView(View(parent.context).apply {
+                setBackgroundColor(Palette.border)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    activity.dp(1),
+                )
+            })
             return ClassroomRowHolder(root, name, size, ranges)
         }
 
