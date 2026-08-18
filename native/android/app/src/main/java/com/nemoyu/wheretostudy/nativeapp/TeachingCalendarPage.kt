@@ -2,6 +2,7 @@ package com.nemoyu.wheretostudy.nativeapp
 
 import android.app.AlertDialog
 import android.app.DatePickerDialog
+import android.app.Dialog
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
@@ -19,6 +20,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewConfiguration
+import android.view.Window
+import android.view.WindowManager
 import android.view.VelocityTracker
 import android.view.accessibility.AccessibilityEvent
 import android.view.animation.DecelerateInterpolator
@@ -110,7 +113,16 @@ object TeachingCalendarLogic {
     const val phoneModeTabHeightDp = 32
     const val phoneNavigationHeightDp = 36
     const val phoneDateStripHeightDp = 56
+    const val phoneDateStripGapDp = 6
+    const val collapsedMonthDayTopPaddingDp = 3
+    const val expandedMonthDayTopPaddingDp = 3
     const val compactCalendarBreakpointDp = 1200
+
+    fun modeTransitionDirection(fromIndex: Int, toIndex: Int): Int = when {
+        toIndex > fromIndex -> 1
+        toIndex < fromIndex -> -1
+        else -> 0
+    }
 
     fun yearCourseOpacity(courseCount: Int): Float {
         if (courseCount <= 0) return 0f
@@ -559,6 +571,10 @@ internal class TeachingCalendarPage(
             orientation = LinearLayout.HORIZONTAL
             Mode.entries.forEach { mode ->
                 val tab = fixedTab(activity, mode.label) {
+                    pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
+                        selectedMode.ordinal,
+                        mode.ordinal,
+                    )
                     selectedMode = mode
                     render()
                 }.apply {
@@ -693,6 +709,7 @@ internal class TeachingCalendarPage(
             }
             content.removeAllViews()
             if (selectedMode == Mode.DAY || selectedMode == Mode.WEEK) {
+                content.addView(spacer(activity, TeachingCalendarLogic.phoneDateStripGapDp))
                 content.addView(phoneDateStrip(::render))
             }
             content.addView(
@@ -758,6 +775,10 @@ internal class TeachingCalendarPage(
                 val tab = fixedTab(activity, mode.label) {
                     if (selectedMode == mode) return@fixedTab
                     performCalendarHaptic()
+                    pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
+                        selectedMode.ordinal,
+                        mode.ordinal,
+                    )
                     selectedMode = mode
                     render()
                 }.apply {
@@ -829,10 +850,10 @@ internal class TeachingCalendarPage(
             val distance = container.width.takeIf { it > 0 } ?: activity.dp(availableWidthDp)
             page.translationX = pageDirection * distance.toFloat()
             container.addView(page, layoutParams)
-            val interpolator = DecelerateInterpolator()
+            val interpolator = AccelerateDecelerateInterpolator()
             oldPage.animate()
                 .translationX(-pageDirection * distance.toFloat())
-                .setDuration(260L)
+                .setDuration(300L)
                 .setInterpolator(interpolator)
                 .withEndAction {
                     if (oldPage.parent === container) container.removeView(oldPage)
@@ -840,7 +861,7 @@ internal class TeachingCalendarPage(
                 .start()
             page.animate()
                 .translationX(0f)
-                .setDuration(260L)
+                .setDuration(300L)
                 .setInterpolator(interpolator)
                 .start()
             return
@@ -875,8 +896,8 @@ internal class TeachingCalendarPage(
         content.translationX = direction * distance.toFloat()
         content.animate()
             .translationX(0f)
-            .setDuration(260L)
-            .setInterpolator(DecelerateInterpolator())
+            .setDuration(300L)
+            .setInterpolator(AccelerateDecelerateInterpolator())
             .start()
     }
 
@@ -1362,7 +1383,7 @@ internal class TeachingCalendarPage(
             isFillViewport = false
             clipToPadding = false
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            addView(selectedDayDetails(selectedDate))
+            addView(selectedDayDetails(selectedDate, asCard = true))
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0,
@@ -1475,7 +1496,7 @@ internal class TeachingCalendarPage(
                 id = R.id.calendar_month_expanded_entries
                 orientation = LinearLayout.VERTICAL
                 entries.take(TeachingCalendarLogic.visibleMonthEntryCount(entries.size)).forEach { entry ->
-                    addView(monthEntryView(entry, selected), LinearLayout.LayoutParams(
+                    addView(monthEntryView(entry, selected, day), LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         activity.dp(14),
                     ).apply { topMargin = activity.dp(1) })
@@ -1486,6 +1507,7 @@ internal class TeachingCalendarPage(
                         addView(monthEntryView(
                             MonthCalendarEntry("+$hiddenCount"),
                             selected,
+                            day,
                         ), LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             activity.dp(14),
@@ -1527,7 +1549,11 @@ internal class TeachingCalendarPage(
         }
         cell.setPadding(
             activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 3, resolved)),
-            activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 3, resolved)),
+            activity.dp(TeachingCalendarLogic.interpolateMonthMetric(
+                TeachingCalendarLogic.collapsedMonthDayTopPaddingDp,
+                TeachingCalendarLogic.expandedMonthDayTopPaddingDp,
+                resolved,
+            )),
             activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 3, resolved)),
             activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 2, resolved)),
         )
@@ -1630,7 +1656,11 @@ internal class TeachingCalendarPage(
         }
     }
 
-    private fun monthEntryView(entry: MonthCalendarEntry, selected: Boolean): TextView = TextView(activity).apply {
+    private fun monthEntryView(
+        entry: MonthCalendarEntry,
+        selected: Boolean,
+        day: Calendar,
+    ): TextView = TextView(activity).apply {
         id = R.id.calendar_month_entry
         text = entry.title
         textSize = 9.5f
@@ -1650,7 +1680,7 @@ internal class TeachingCalendarPage(
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                entry.course?.let(::showCourseDetails)
+                entry.course?.let { course -> showCourseDetails(day, course) }
                     ?: entry.holiday?.let(::showHolidayDetails)
             }
         }
@@ -1680,6 +1710,10 @@ internal class TeachingCalendarPage(
                 onMonthSelected = { month ->
                     performCalendarHaptic()
                     selectedDate.timeInMillis = month.timeInMillis
+                    pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
+                        selectedMode.ordinal,
+                        Mode.MONTH.ordinal,
+                    )
                     selectedMode = Mode.MONTH
                     onDateChanged()
                 },
@@ -1794,6 +1828,10 @@ internal class TeachingCalendarPage(
                         addView(fixedTab(activity, mode.label) {
                             performCalendarHaptic()
                             selectedDate.timeInMillis = day.timeInMillis
+                            pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
+                                selectedMode.ordinal,
+                                mode.ordinal,
+                            )
                             selectedMode = mode
                             dismissYearPopover()
                             onDateChanged()
@@ -1842,8 +1880,23 @@ internal class TeachingCalendarPage(
         popup.showAtLocation(anchor, Gravity.TOP or Gravity.START, popupX, popupY)
     }
 
-    private fun selectedDayDetails(day: Calendar): LinearLayout = LinearLayout(activity).apply {
+    private fun selectedDayDetails(
+        day: Calendar,
+        asCard: Boolean = false,
+    ): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
+        if (asCard) {
+            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 10)
+            setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
+            addView(TextView(activity).apply {
+                text = "当日日程"
+                textSize = 11f
+                setTextColor(Palette.muted)
+                setTypeface(typeface, Typeface.BOLD)
+                includeFontPadding = false
+                setPadding(0, 0, 0, activity.dp(4))
+            })
+        }
         val formatter = SimpleDateFormat("yyyy年M月d日 EEEE", Locale.CHINA).apply { timeZone = shanghai }
         addView(TextView(activity).apply {
             text = formatter.format(day.time)
@@ -1878,29 +1931,185 @@ internal class TeachingCalendarPage(
             })
         } else {
             courses.forEach { course ->
-                addView(TextView(activity).apply {
-                    text = listOf(course.timeRange, course.name, course.room, course.teacher)
-                        .filter(String::isNotEmpty).joinToString("  ·  ")
-                    textSize = 13f
-                    setTextColor(Palette.primaryText)
-                    setPadding(0, activity.dp(3), 0, activity.dp(3))
-                    isClickable = true
-                    isFocusable = true
-                    setOnClickListener { showCourseDetails(course) }
-                })
+                addView(selectedDayCourseRow(day, course))
             }
         }
     }
 
-    private fun showCourseDetails(course: Course) {
+    private fun selectedDayCourseRow(day: Calendar, course: Course): LinearLayout =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            isClickable = true
+            isFocusable = true
+            background = roundedBackground(activity, Color.TRANSPARENT, radius = 6)
+            contentDescription = listOf(
+                course.name,
+                course.timeRange,
+                course.room,
+                course.teacher,
+            ).filter(String::isNotEmpty).joinToString("，")
+            setPadding(0, activity.dp(4), 0, activity.dp(4))
+            addView(View(activity).apply {
+                background = roundedBackground(activity, Palette.primary, radius = 2)
+            }, LinearLayout.LayoutParams(activity.dp(4), activity.dp(38)).apply {
+                marginEnd = activity.dp(10)
+            })
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(activity).apply {
+                    text = course.name
+                    textSize = 13f
+                    setTextColor(Palette.text)
+                    setTypeface(typeface, Typeface.BOLD)
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    includeFontPadding = false
+                })
+                addView(TextView(activity).apply {
+                    text = listOf(
+                        course.timeRange,
+                        course.room,
+                        course.teacher.takeIf(String::isNotEmpty)?.let { "教师：$it" }.orEmpty(),
+                    ).filter(String::isNotEmpty).joinToString(" · ")
+                    textSize = 11f
+                    setTextColor(Palette.muted)
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                    includeFontPadding = false
+                    setPadding(0, activity.dp(2), 0, 0)
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            setOnClickListener { showCourseDetails(day, course) }
+        }
+
+    private fun showCourseDetails(day: Calendar, course: Course) {
         performCalendarHaptic()
-        val details = TeachingCalendarLogic.courseDetailLines(course).joinToString("\n")
-        AlertDialog.Builder(activity)
-            .setTitle(if (course.examWeekNumbers.isEmpty()) course.name else "试  ${course.name}")
-            .setMessage(details)
-            .setPositiveButton("完成", null)
-            .show()
+        val dialog = Dialog(activity).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+            setCanceledOnTouchOutside(true)
+        }
+        val card = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 10)
+            setPadding(activity.dp(18), activity.dp(18), activity.dp(18), activity.dp(14))
+        }
+        card.addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            addView(View(activity).apply {
+                background = roundedBackground(activity, Palette.accent, radius = 2)
+            }, LinearLayout.LayoutParams(activity.dp(4), activity.dp(44)).apply {
+                marginEnd = activity.dp(12)
+            })
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(activity).apply {
+                    text = if (course.examWeekNumbers.isEmpty()) course.name else "试  ${course.name}"
+                    textSize = 18f
+                    setTextColor(Palette.text)
+                    setTypeface(typeface, Typeface.BOLD)
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                    includeFontPadding = false
+                })
+                addView(TextView(activity).apply {
+                    text = "课程详情"
+                    textSize = 11f
+                    setTextColor(Palette.muted)
+                    includeFontPadding = false
+                    setPadding(0, activity.dp(3), 0, 0)
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(activity).apply {
+                text = "×"
+                textSize = 24f
+                gravity = Gravity.CENTER
+                setTextColor(Palette.muted)
+                includeFontPadding = false
+                isClickable = true
+                isFocusable = true
+                contentDescription = "关闭"
+                background = roundedBackground(activity, Palette.surfaceVariant, radius = 8)
+                setOnClickListener { dialog.dismiss() }
+            }, LinearLayout.LayoutParams(activity.dp(36), activity.dp(36)).apply {
+                marginStart = activity.dp(8)
+            })
+        })
+        card.addView(spacer(activity, 16))
+        val date = SimpleDateFormat("yyyy年M月d日 EEEE", Locale.CHINA).apply {
+            timeZone = shanghai
+        }.format(day.time)
+        buildList {
+            add("日期" to date)
+            add("时间" to course.timeRange.ifEmpty { "未标注" })
+            add("节次" to course.sectionText.ifEmpty { "未标注" })
+            add("地点" to course.room.ifEmpty { "未标注" })
+            add("教师" to course.teacher.ifEmpty { "未标注" })
+            add("教学周" to course.weekText.ifEmpty { course.weekNumbers.joinToString("、") })
+            if (course.examWeekNumbers.isNotEmpty()) {
+                add("考试周" to course.examWeekNumbers.joinToString("、") { "$it 周" })
+            }
+        }.forEachIndexed { index, (label, value) ->
+            card.addView(courseDetailRow(label, value), LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                if (index > 0) topMargin = activity.dp(10)
+            })
+        }
+        card.addView(TextView(activity).apply {
+            text = "完成"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.onPrimary)
+            setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+            isClickable = true
+            isFocusable = true
+            background = roundedBackground(activity, Palette.primaryFill, radius = 8)
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(42)).apply {
+            topMargin = activity.dp(18)
+        })
+        dialog.setContentView(ScrollView(activity).apply {
+            clipToPadding = false
+            setPadding(activity.dp(1), activity.dp(1), activity.dp(1), activity.dp(1))
+            addView(card, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        })
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = 0.34f }
+            val availableWidth = (
+                activity.resources.displayMetrics.widthPixels - activity.dp(32)
+            ).coerceAtLeast(activity.dp(240))
+            setLayout(minOf(activity.dp(420), availableWidth), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.CENTER)
+        }
     }
+
+    private fun courseDetailRow(label: String, value: String): LinearLayout =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            addView(TextView(activity).apply {
+                text = label
+                textSize = 11f
+                setTextColor(Palette.muted)
+                includeFontPadding = false
+            }, LinearLayout.LayoutParams(activity.dp(54), ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(TextView(activity).apply {
+                text = value
+                textSize = 14f
+                setTextColor(Palette.text)
+                includeFontPadding = false
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
 
     private fun showHolidayDetails(item: HolidayItem) {
         performCalendarHaptic()

@@ -4,6 +4,7 @@
     <item name="folding_feature_spacer" type="id" />
     <item name="phone_navigation" type="id" />
     <item name="tablet_navigation" type="id" />
+    <item name="navigation_rail_toggle" type="id" />
     <item name="navigation_planner" type="id" />
     <item name="navigation_calendar" type="id" />
     <item name="navigation_settings" type="id" />
@@ -14,6 +15,8 @@
     <item name="planner_fetch_icon" type="id" />
     <item name="planner_query_surface" type="id" />
     <item name="planner_buildings_surface" type="id" />
+    <item name="planner_results_surface" type="id" />
+    <item name="planner_results_content" type="id" />
     <item name="planner_summary" type="id" />
     <item name="privacy_policy_button" type="id" />
     <item name="settings_about_section" type="id" />

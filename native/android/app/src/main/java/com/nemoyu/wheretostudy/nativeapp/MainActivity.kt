@@ -1,5 +1,8 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import android.animation.ValueAnimator
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -10,6 +13,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -18,6 +22,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.core.util.Consumer
 import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter
 import androidx.window.layout.FoldingFeature
@@ -73,6 +78,14 @@ class MainActivity : Activity() {
     private var notificationPermissionRequestPending = false
     private var pendingNotificationPermissionCompletion: ((Boolean) -> Unit)? = null
     private var currentLayoutSpec: AdaptiveLayoutSpec? = null
+    private var navigationRailCollapsed = false
+    private var navigationRail: LinearLayout? = null
+    private var navigationRailBrand: LinearLayout? = null
+    private var navigationRailToggle: TextView? = null
+    private var foldingFeatureSpacer: View? = null
+    private var navigationRailAnimator: ValueAnimator? = null
+    internal var controlHapticEventCount = 0
+        private set
     private var currentFoldingFeature: FoldingFeature? = null
     private var windowLayoutListenerRegistered = false
     private val windowInfoTracker by lazy {
@@ -100,6 +113,9 @@ class MainActivity : Activity() {
         calendarImportInFlight = calendarImportToken != null
         notificationPermissionRequestPending = savedInstanceState
             ?.getBoolean(NOTIFICATION_PERMISSION_PENDING_KEY, false)
+            ?: false
+        navigationRailCollapsed = savedInstanceState
+            ?.getBoolean(NAVIGATION_RAIL_COLLAPSED_KEY, false)
             ?: false
         selectedDestination = savedInstanceState
             ?.getString(SELECTED_DESTINATION_KEY)
@@ -204,39 +220,74 @@ class MainActivity : Activity() {
         LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         setBackgroundColor(Palette.background)
-        addView(LinearLayout(this@MainActivity).apply {
+        val rail = LinearLayout(this@MainActivity).apply {
             id = R.id.tablet_navigation
             orientation = LinearLayout.VERTICAL
-            val horizontalPadding = if (spec.widthClass == WindowWidthClass.MEDIUM) 16 else 20
-            setPadding(dp(horizontalPadding), dp(16), dp(horizontalPadding), dp(16))
             setBackgroundColor(Palette.surface)
-            addView(TextView(this@MainActivity).apply {
-                text = getString(R.string.brand_eyebrow)
-                textSize = 12f
-                setTextColor(Palette.muted)
-                setTypeface(typeface, Typeface.BOLD)
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = getString(R.string.brand_name)
-                textSize = 17f
-                setTextColor(Palette.text)
-                setTypeface(typeface, Typeface.BOLD)
-                setPadding(0, dp(4), 0, dp(16))
-            })
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val brand = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(this@MainActivity).apply {
+                        text = getString(R.string.brand_eyebrow)
+                        textSize = 12f
+                        setTextColor(Palette.muted)
+                        setTypeface(typeface, Typeface.BOLD)
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        text = getString(R.string.brand_name)
+                        textSize = 17f
+                        setTextColor(Palette.text)
+                        setTypeface(typeface, Typeface.BOLD)
+                        setPadding(0, dp(4), 0, 0)
+                    })
+                }
+                navigationRailBrand = brand
+                addView(
+                    brand,
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+                )
+                val toggle = TextView(this@MainActivity).apply {
+                    id = R.id.navigation_rail_toggle
+                    textSize = 28f
+                    gravity = Gravity.CENTER
+                    includeFontPadding = false
+                    setTextColor(Palette.primaryText)
+                    isClickable = true
+                    isFocusable = true
+                    background = roundedBackground(
+                        this@MainActivity,
+                        Palette.surfaceVariant,
+                        radius = UiMetrics.controlRadiusDp,
+                    )
+                    setOnClickListener { toggleNavigationRail(it) }
+                }
+                navigationRailToggle = toggle
+                addView(toggle, LinearLayout.LayoutParams(dp(48), dp(48)))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = false))
             }
-        }, LinearLayout.LayoutParams(dp(spec.navigationWidthDp), ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        navigationRail = rail
+        addView(rail, LinearLayout.LayoutParams(dp(spec.navigationWidthDp), ViewGroup.LayoutParams.MATCH_PARENT))
         if (spec.hingeSpacerDp > 0) {
-            addView(View(this@MainActivity).apply {
+            val spacer = View(this@MainActivity).apply {
                 id = R.id.folding_feature_spacer
                 setBackgroundColor(Palette.background)
-            }, LinearLayout.LayoutParams(dp(spec.hingeSpacerDp), ViewGroup.LayoutParams.MATCH_PARENT))
+            }
+            foldingFeatureSpacer = spacer
+            addView(
+                spacer,
+                LinearLayout.LayoutParams(dp(spec.hingeSpacerDp), ViewGroup.LayoutParams.MATCH_PARENT),
+            )
         }
         content = FrameLayout(this@MainActivity).apply {
             setBackgroundColor(Palette.background)
         }
         addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+        updateNavigationRailPresentation()
     }
 
     private fun scheduleAdaptiveLayout() {
@@ -249,15 +300,17 @@ class MainActivity : Activity() {
         if (!::adaptiveRoot.isInitialized) return
         val windowWidthDp = currentWindowWidthDp()
         if (windowWidthDp <= 0) return
-        val spec = AdaptiveLayoutLogic.resolve(
-            windowWidthDp = windowWidthDp,
-            availableWidthDp = currentAvailableWidthDp(),
-            verticalHinge = verticalHingeBoundsDp(),
-        )
+        val spec = resolveAdaptiveLayout(windowWidthDp, navigationRailCollapsed)
         if (!force && spec == currentLayoutSpec) return
 
+        navigationRailAnimator?.cancel()
+        navigationRailAnimator = null
         currentLayoutSpec = spec
         navigationViews.clear()
+        navigationRail = null
+        navigationRailBrand = null
+        navigationRailToggle = null
+        foldingFeatureSpacer = null
         adaptiveRoot.removeAllViews()
         val layout = if (spec.usesBottomNavigation) {
             phoneLayout()
@@ -273,6 +326,16 @@ class MainActivity : Activity() {
         )
         navigate(selectedDestination)
     }
+
+    private fun resolveAdaptiveLayout(
+        windowWidthDp: Int = currentWindowWidthDp(),
+        collapsed: Boolean = navigationRailCollapsed,
+    ): AdaptiveLayoutSpec = AdaptiveLayoutLogic.resolve(
+        windowWidthDp = windowWidthDp,
+        availableWidthDp = currentAvailableWidthDp(),
+        verticalHinge = verticalHingeBoundsDp(),
+        navigationCollapsed = collapsed,
+    )
 
     private fun currentWindowWidthDp(): Int {
         val widthPx = WindowMetricsCalculator.getOrCreate()
@@ -317,29 +380,131 @@ class MainActivity : Activity() {
     private fun navigationTab(destination: Destination, compact: Boolean): TextView =
         TextView(this).apply {
             id = destination.navigationViewID
-            text = destination.label
             textSize = if (compact) 11f else 15f
             gravity = Gravity.CENTER
             includeFontPadding = false
             isClickable = true
             isFocusable = true
+            contentDescription = destination.label
             if (compact) {
+                text = destination.label
                 setCompoundDrawablesRelativeWithIntrinsicBounds(0, destination.iconResource, 0, 0)
                 compoundDrawablePadding = dp(2)
                 setPadding(0, dp(3), 0, dp(2))
+            } else {
+                applyNavigationRailTabPresentation(this, destination)
             }
-            setOnClickListener { navigate(destination) }
+            setOnClickListener {
+                performControlHaptic(it)
+                navigate(destination)
+            }
             layoutParams = if (compact) {
                 LinearLayout.LayoutParams(0, dp(50), 1f).apply {
                     marginEnd = dp(4)
                 }
             } else {
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)).apply {
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
                     bottomMargin = dp(4)
                 }
             }
             navigationViews[destination] = this
         }
+
+    private fun applyNavigationRailTabPresentation(view: TextView, destination: Destination) {
+        view.text = if (navigationRailCollapsed) "" else destination.label
+        view.gravity = if (navigationRailCollapsed) Gravity.CENTER else Gravity.CENTER_VERTICAL
+        view.setCompoundDrawablesRelativeWithIntrinsicBounds(destination.iconResource, 0, 0, 0)
+        view.compoundDrawablePadding = if (navigationRailCollapsed) 0 else dp(10)
+        view.setPadding(if (navigationRailCollapsed) 0 else dp(12), 0, 0, 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.tooltipText = destination.label
+        }
+    }
+
+    private fun updateNavigationRailPresentation() {
+        val spec = currentLayoutSpec ?: return
+        if (spec.usesBottomNavigation) return
+        val horizontalPadding = when {
+            navigationRailCollapsed -> 12
+            spec.widthClass == WindowWidthClass.MEDIUM -> 16
+            else -> 20
+        }
+        navigationRail?.setPadding(dp(horizontalPadding), dp(8), dp(horizontalPadding), dp(16))
+        navigationRailBrand?.visibility = if (navigationRailCollapsed) View.GONE else View.VISIBLE
+        navigationRailToggle?.apply {
+            text = if (navigationRailCollapsed) "›" else "‹"
+            contentDescription = if (navigationRailCollapsed) "展开导航栏" else "收起导航栏"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                tooltipText = contentDescription
+            }
+        }
+        navigationViews.forEach { (destination, view) ->
+            applyNavigationRailTabPresentation(view, destination)
+        }
+    }
+
+    private fun toggleNavigationRail(source: View) {
+        val oldSpec = currentLayoutSpec ?: return
+        val rail = navigationRail ?: return
+        if (oldSpec.usesBottomNavigation || navigationRailAnimator?.isRunning == true) return
+
+        performControlHaptic(source)
+        val targetCollapsed = !navigationRailCollapsed
+        navigationRailCollapsed = targetCollapsed
+        val targetSpec = resolveAdaptiveLayout(collapsed = targetCollapsed)
+        val startNavigationWidth = rail.layoutParams.width
+            .takeIf { it > 0 }
+            ?: dp(oldSpec.navigationWidthDp)
+        val targetNavigationWidth = dp(targetSpec.navigationWidthDp)
+        val spacer = foldingFeatureSpacer
+        val startSpacerWidth = spacer?.layoutParams?.width ?: 0
+        val targetSpacerWidth = dp(targetSpec.hingeSpacerDp)
+        var presentationUpdated = false
+        var cancelled = false
+
+        navigationRailAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = NAVIGATION_RAIL_ANIMATION_MILLIS
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animation ->
+                val fraction = animation.animatedFraction
+                if (!presentationUpdated && fraction >= 0.35f) {
+                    presentationUpdated = true
+                    updateNavigationRailPresentation()
+                }
+                rail.layoutParams = rail.layoutParams.apply {
+                    width = lerp(startNavigationWidth, targetNavigationWidth, fraction)
+                }
+                spacer?.let { spacerView ->
+                    spacerView.layoutParams = spacerView.layoutParams.apply {
+                        width = lerp(startSpacerWidth, targetSpacerWidth, fraction)
+                    }
+                }
+                (rail.parent as? View)?.requestLayout()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
+                override fun onAnimationEnd(animation: Animator) {
+                    navigationRailAnimator = null
+                    if (cancelled) return
+                    currentLayoutSpec = targetSpec
+                    updateNavigationRailPresentation()
+                    if (oldSpec.contentWidthDp != targetSpec.contentWidthDp) {
+                        navigate(selectedDestination)
+                    }
+                    navigationRailToggle?.announceForAccessibility(
+                        if (targetCollapsed) "导航栏已收起" else "导航栏已展开",
+                    )
+                }
+            })
+            start()
+        }
+    }
+
+    private fun lerp(start: Int, end: Int, fraction: Float): Int =
+        (start + (end - start) * fraction).toInt()
 
     private fun navigate(destination: Destination) {
         selectedDestination = destination
@@ -405,6 +570,14 @@ class MainActivity : Activity() {
 
     fun refreshCurrentPage() {
         navigate(selectedDestination)
+    }
+
+    fun performControlHaptic(source: View? = null) {
+        if (DailyCourseNotificationRuntimeMode.isUiTesting) {
+            controlHapticEventCount += 1
+        }
+        val target = source?.takeIf(View::isAttachedToWindow) ?: window.decorView
+        target.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
     }
 
     fun setDailyCourseNotificationsEnabled(
@@ -530,6 +703,7 @@ class MainActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString(SELECTED_DESTINATION_KEY, selectedDestination.name)
+        outState.putBoolean(NAVIGATION_RAIL_COLLAPSED_KEY, navigationRailCollapsed)
         outState.putBoolean(
             CALENDAR_PERMISSION_PENDING_KEY,
             calendarPermissionRequestPending || pendingCalendarImport != null,
@@ -606,6 +780,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         if (::adaptiveRoot.isInitialized) adaptiveRoot.removeCallbacks(applyAdaptiveLayout)
+        navigationRailAnimator?.cancel()
         pendingCalendarImport = null
         pendingNotificationPermissionCompletion = null
         scheduleRepository.close()
@@ -734,6 +909,8 @@ class MainActivity : Activity() {
 
     private companion object {
         const val ADAPTIVE_LAYOUT_DEBOUNCE_MILLIS = 80L
+        const val NAVIGATION_RAIL_ANIMATION_MILLIS = 240L
+        const val NAVIGATION_RAIL_COLLAPSED_KEY = "navigation_rail_collapsed"
         const val SELECTED_DESTINATION_KEY = "selected_destination"
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"

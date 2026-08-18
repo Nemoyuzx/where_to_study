@@ -38,6 +38,26 @@ enum TeachingCalendarLogic {
         let hiddenEventCount: Int
     }
 
+    struct MonthGridLayout: Equatable {
+        let collapsedCellHeight: CGFloat
+        let expandedCellHeight: CGFloat
+        let collapsedGridWidth: CGFloat
+        let expandedGridWidth: CGFloat
+
+        func cellHeight(at progress: CGFloat) -> CGFloat {
+            interpolate(from: collapsedCellHeight, to: expandedCellHeight, at: progress)
+        }
+
+        func gridWidth(at progress: CGFloat) -> CGFloat {
+            interpolate(from: collapsedGridWidth, to: expandedGridWidth, at: progress)
+        }
+
+        private func interpolate(from start: CGFloat, to end: CGFloat, at progress: CGFloat) -> CGFloat {
+            let clampedProgress = min(max(progress, 0), 1)
+            return start + (end - start) * clampedProgress
+        }
+    }
+
     static func yearCourseOpacity(courseCount: Int) -> Double {
         guard courseCount > 0 else { return 0 }
         let count = Double(courseCount)
@@ -147,6 +167,28 @@ enum TeachingCalendarLogic {
             - handleHeight
             - verticalPadding
         return max(30, floor(availableGridHeight / 6))
+    }
+
+    static func monthGridLayout(
+        contentWidth: CGFloat,
+        availableHeight: CGFloat,
+        columnSpacing: CGFloat = 4
+    ) -> MonthGridLayout {
+        let width = max(contentWidth, 0)
+        let totalColumnSpacing = columnSpacing * 6
+        let squareCellHeight = max(24, floor((width - totalColumnSpacing) / 7))
+        let expandedCellHeight = expandedMonthCellHeight(availableHeight: availableHeight)
+        let collapsedCellHeight = min(squareCellHeight, expandedCellHeight)
+        let collapsedGridWidth = min(
+            width,
+            collapsedCellHeight * 7 + totalColumnSpacing
+        )
+        return MonthGridLayout(
+            collapsedCellHeight: collapsedCellHeight,
+            expandedCellHeight: expandedCellHeight,
+            collapsedGridWidth: collapsedGridWidth,
+            expandedGridWidth: width
+        )
     }
 
     static func monthEventLayout(totalCount: Int, maximumRows: Int) -> MonthEventLayout {

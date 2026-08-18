@@ -21,15 +21,20 @@ struct PlannerView: View {
     var body: some View {
         GeometryReader { proxy in
             let columnCount = AdaptiveLayoutPolicy.contentColumnCount(width: proxy.size.width)
-            let page = VStack(alignment: .leading, spacing: 16) {
+            #if os(iOS)
+            let pageMetrics = MobilePageLayoutPolicy.metrics(availableHeight: proxy.size.height)
+            #else
+            let pageMetrics = MobilePageLayoutPolicy.metrics(availableHeight: .infinity)
+            #endif
+            let page = VStack(alignment: .leading, spacing: pageMetrics.sectionSpacing) {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .bottom, spacing: 12) {
-                        plannerTitle
+                        plannerTitle(compact: pageMetrics.usesCompactTitle)
                         Spacer(minLength: 0)
                         todayLabel
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        plannerTitle
+                        plannerTitle(compact: pageMetrics.usesCompactTitle)
                         todayLabel
                     }
                 }
@@ -91,7 +96,9 @@ struct PlannerView: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 #else
                 page
-                .padding(20)
+                .padding(.horizontal, pageMetrics.horizontalPadding)
+                .padding(.top, pageMetrics.topPadding)
+                .padding(.bottom, pageMetrics.bottomPadding)
                 .frame(maxWidth: 1200)
                 .frame(maxWidth: .infinity)
                 #endif
@@ -101,8 +108,8 @@ struct PlannerView: View {
         .accessibilityIdentifier("screen.planner")
     }
 
-    private var plannerTitle: some View {
-        PageTitle(eyebrow: "Where To Study", title: "联动查询")
+    private func plannerTitle(compact: Bool) -> some View {
+        PageTitle(eyebrow: "Where To Study", title: "联动查询", compact: compact)
     }
 
     private var todayLabel: some View {
@@ -121,9 +128,11 @@ struct PlannerView: View {
                     "校区",
                     selection: Binding(
                         get: { model.queryCampusID },
-                        set: { newID in
+                        set: { campusID in
+                            guard campusID != model.queryCampusID else { return }
+                            AppHaptics.selection()
                             withAnimation(.easeInOut(duration: 0.22)) {
-                                model.selectQueryCampus(newID)
+                                model.selectQueryCampus(campusID)
                             }
                         }
                     )
@@ -135,6 +144,7 @@ struct PlannerView: View {
                 .frame(maxWidth: .infinity)
 
                 Button {
+                    AppHaptics.impact()
                     model.refreshClassrooms()
                 } label: {
                     HStack(spacing: 8) {
@@ -177,16 +187,25 @@ struct PlannerView: View {
                     "使用个人课表排除已有课程",
                     isOn: Binding(
                         get: { model.usePersonalSchedule },
-                        set: { model.setUsePersonalSchedule($0) }
+                        set: { enabled in
+                            AppHaptics.selection()
+                            model.setUsePersonalSchedule(enabled)
+                        }
                     )
                 )
                 .toggleStyle(.switch)
                 .tint(AppTheme.primary)
 
                 HStack(spacing: 8) {
-                    Button("选中空闲") { model.selectFreeSlots() }
+                    Button("选中空闲") {
+                        AppHaptics.impact()
+                        model.selectFreeSlots()
+                    }
                         .buttonStyle(.bordered)
-                    Button("清空") { model.clearSelectedSlots() }
+                    Button("清空") {
+                        AppHaptics.impact()
+                        model.clearSelectedSlots()
+                    }
                         .buttonStyle(.bordered)
                 }
 
@@ -203,6 +222,7 @@ struct PlannerView: View {
         let busy = model.usePersonalSchedule && model.personalBusySlots.contains(slot.index)
         let selected = model.selectedSlots.contains(slot.index)
         return Button {
+            AppHaptics.selection()
             withAnimation(.easeInOut(duration: 0.18)) {
                 model.toggleSlot(slot.index)
             }
@@ -287,6 +307,7 @@ struct PlannerView: View {
                         ForEach(model.campusBuildings, id: \.self) { building in
                             let selected = model.selectedBuildings.contains(building)
                             Button {
+                                AppHaptics.selection()
                                 withAnimation(.easeInOut(duration: 0.18)) {
                                     model.toggleBuilding(building)
                                 }

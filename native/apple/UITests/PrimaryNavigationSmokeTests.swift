@@ -155,6 +155,57 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         }
     }
 
+    func testIPhoneLandscapeMonthUsesNaturalExpansionDirectionAndStableDayInset() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--review-demo"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        defer {
+            app.terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        navigate(to: "教学日历", in: app)
+        let monthMode = app.segmentedControls.buttons["月"]
+        XCTAssertTrue(monthMode.waitForExistence(timeout: 5))
+        monthMode.tap()
+
+        let mondayHeading = app.staticTexts["calendar.mobile.month-weekday.一"].firstMatch
+        let monthState = app.descendants(matching: .any)["calendar.mobile.month-state"].firstMatch
+        let dateKey = currentShanghaiDateString()
+        let dayCell = app.descendants(matching: .any)["calendar.mobile.month-day-cell.\(dateKey)"].firstMatch
+        let dayNumber = app.buttons["calendar.mobile.month-day-number.\(dateKey)"].firstMatch
+        XCTAssertTrue(mondayHeading.waitForExistence(timeout: 5))
+        XCTAssertTrue(monthState.waitForExistence(timeout: 5))
+        XCTAssertTrue(dayCell.waitForExistence(timeout: 5))
+        XCTAssertTrue(dayNumber.waitForExistence(timeout: 5))
+        XCTAssertEqual(monthState.value as? String, "已展开")
+
+        let expandedTopInset = dayNumber.frame.minY - dayCell.frame.minY
+        verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: false)
+        XCTAssertTrue(waitForValue("已展开", of: monthState))
+
+        verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: true)
+        XCTAssertTrue(waitForValue("已收起", of: monthState))
+        Thread.sleep(forTimeInterval: 0.4)
+        XCTAssertEqual(monthState.value as? String, "已收起")
+        let collapsedTopInset = dayNumber.frame.minY - dayCell.frame.minY
+        XCTAssertEqual(collapsedTopInset, expandedTopInset, accuracy: 1)
+        XCTAssertEqual(dayCell.frame.width, dayCell.frame.height, accuracy: 5)
+        attachScreenshot(named: "calendar-month-landscape-collapsed")
+
+        verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: true)
+        XCTAssertTrue(waitForValue("已收起", of: monthState))
+        verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: false)
+        XCTAssertTrue(waitForValue("已展开", of: monthState))
+        Thread.sleep(forTimeInterval: 0.4)
+        XCTAssertEqual(monthState.value as? String, "已展开")
+        XCTAssertEqual(dayNumber.frame.minY - dayCell.frame.minY, expandedTopInset, accuracy: 1)
+        attachScreenshot(named: "calendar-month-landscape-expanded")
+    }
+
     func testSettingsCanEnterAndExitBuiltInSampleMode() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -327,18 +378,18 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         XCUIDevice.shared.orientation = .portrait
         assertRegularSidebar(in: app)
-        let compactPeriod = app.staticTexts.matching(
-            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
-        ).firstMatch
-        if compactPeriod.waitForExistence(timeout: 2) {
+        let compactMonthState = app.descendants(matching: .any)["calendar.mobile.month-state"]
+        if compactMonthState.waitForExistence(timeout: 2) {
+            let compactPeriod = app.staticTexts.matching(
+                NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
+            ).firstMatch
+            XCTAssertTrue(compactPeriod.waitForExistence(timeout: 2))
             XCTAssertTrue(compactPeriod.label.range(
                 of: "^[0-9]{4}年[0-9]+月$",
                 options: .regularExpression
             ) != nil)
             XCTAssertTrue(app.segmentedControls.buttons["月"].isSelected)
             XCTAssertEqual(monthHeading.label, pagedMonth)
-            let compactMonthState = app.descendants(matching: .any)["calendar.mobile.month-state"]
-            XCTAssertTrue(compactMonthState.waitForExistence(timeout: 5))
             XCTAssertEqual(compactMonthState.value as? String, "已收起")
             attachScreenshot(named: "ipad-calendar-portrait-compact-state-preserved")
         } else {

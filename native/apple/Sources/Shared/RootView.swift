@@ -27,8 +27,12 @@ enum AdaptiveLayoutPolicy {
         horizontalClass == .regular && width >= minimumSidebarWidth ? .sidebar : .tabs
     }
 
-    static func calendarPresentation(width: CGFloat) -> CalendarPresentationLayout {
-        width >= minimumExpandedCalendarWidth ? .expanded : .compact
+    static func calendarPresentation(
+        width: CGFloat,
+        horizontalClass: AdaptiveHorizontalClass
+    ) -> CalendarPresentationLayout {
+        guard horizontalClass == .regular else { return .compact }
+        return width >= minimumExpandedCalendarWidth ? .expanded : .compact
     }
 
     static func contentColumnCount(width: CGFloat) -> Int {
@@ -219,10 +223,14 @@ private extension AdaptiveHorizontalClass {
 
 private struct AdaptiveTeachingCalendarView: View {
     @ObservedObject var session: TeachingCalendarSessionState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         GeometryReader { proxy in
-            switch AdaptiveLayoutPolicy.calendarPresentation(width: proxy.size.width) {
+            switch AdaptiveLayoutPolicy.calendarPresentation(
+                width: proxy.size.width,
+                horizontalClass: AdaptiveHorizontalClass(horizontalSizeClass: horizontalSizeClass)
+            ) {
             case .compact:
                 MobileTeachingCalendarView(session: session)
             case .expanded:

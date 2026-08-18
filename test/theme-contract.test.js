@@ -235,10 +235,11 @@ test('native Android compact surfaces and timeline keep the iOS density contract
   assert.match(androidPlannerSource, /roundedBackground\([\s\S]*Palette\.border/)
   assert.match(androidSettingsSource, /roundedBackground\([\s\S]*Palette\.border/)
   assert.match(androidPlannerSource, /text = "联动查询"[\s\S]*textSize = 28f/)
-  assert.match(androidSettingsSource, /titleSizeSp = if \(isCompact\) 28f else 34f/)
+  assert.match(androidSettingsSource, /text = "设置"[\s\S]*textSize = 28f/)
+  assert.doesNotMatch(androidPlannerSource, /setImageResource\(R\.drawable\.ic_refresh\)/)
   assert.match(
     androidPlannerSource,
-    /setImageResource\(R\.drawable\.ic_refresh\)[\s\S]*adjustViewBounds = true[\s\S]*setPadding\(activity\.dp\(2\), activity\.dp\(2\), activity\.dp\(2\), activity\.dp\(2\)\)[\s\S]*activity\.dp\(24\), activity\.dp\(24\)/,
+    /private fun fetchButton\(\)[\s\S]*gravity = Gravity\.CENTER[\s\S]*contentDescription = if[\s\S]*"获取空教室信息"[\s\S]*addView\(label\)/,
   )
   assert.match(
     androidPlannerSource,
@@ -300,7 +301,7 @@ test('month expansion stays mobile-only and morphs its drag handle with progress
   assert.match(appCss, /--month-live-row-height/)
   assert.match(
     appleMobileCalendarSource,
-    /Capsule\(\)[\s\S]*rotationEffect\(\.degrees\(isMonthExpanded \? -24 : 0\)\)/,
+    /Capsule\(\)[\s\S]*rotationEffect\(\.degrees\(-24 \* expansionProgress\)\)[\s\S]*rotationEffect\(\.degrees\(24 \* expansionProgress\)\)/,
   )
   assert.match(androidCalendarSource, /class MonthExpansionIndicatorView/)
   assert.match(androidCalendarSource, /setExpansionProgress\(progress: Float\)/)
