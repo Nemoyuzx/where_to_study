@@ -88,11 +88,14 @@ const PROJECT_URL = 'https://github.com/Nemoyuzx/where_to_study'
 const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md'
 
 function PrivacyPolicyDialog({ onClose }) {
+  const closeButtonRef = useRef(null)
+
   useEffect(() => {
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', closeOnEscape)
+    closeButtonRef.current?.focus()
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [onClose])
 
@@ -115,7 +118,7 @@ function PrivacyPolicyDialog({ onClose }) {
             <h2 id="privacy-dialog-title">隐私声明</h2>
             <span>生效日期：2026 年 8 月 9 日</span>
           </div>
-          <button type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
+          <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
           </button>
         </header>
@@ -543,6 +546,7 @@ function App() {
   const savedCredentialState = useRef({ account: '', hasSavedPassword: false })
   const credentialStateRevision = useRef(0)
   const localDataClearRevision = useRef(0)
+  const privacyTriggerRef = useRef(null)
 
   useEffect(() => {
     const page = pageContentRef.current
@@ -914,7 +918,11 @@ function App() {
           setClassroomsCache(nextCache)
         }
       })
-      .catch(() => {})
+      .catch((loadError) => {
+        if (!cancelled && accountDataRevision === localDataClearRevision.current) {
+          setError(loadError.message)
+        }
+      })
       .finally(() => {
         if (!cancelled) setClassroomsCacheLoaded(true)
       })
@@ -948,7 +956,11 @@ function App() {
           setSchedule(data)
         }
       })
-      .catch(() => {})
+      .catch((loadError) => {
+        if (!cancelled && accountDataRevision === localDataClearRevision.current) {
+          setError(loadError.message)
+        }
+      })
 
     return () => {
       cancelled = true
@@ -2313,7 +2325,10 @@ function App() {
               <button
                 type="button"
                 className="settings-privacy-link"
-                onClick={() => setPrivacyPolicyOpen(true)}
+                onClick={(event) => {
+                  privacyTriggerRef.current = event.currentTarget
+                  setPrivacyPolicyOpen(true)
+                }}
               >
                 <ShieldCheck size={16} />
                 隐私说明
@@ -2329,7 +2344,10 @@ function App() {
         </section>
       </div>
       {privacyPolicyOpen ? (
-        <PrivacyPolicyDialog onClose={() => setPrivacyPolicyOpen(false)} />
+        <PrivacyPolicyDialog onClose={() => {
+          setPrivacyPolicyOpen(false)
+          privacyTriggerRef.current?.focus()
+        }} />
       ) : null}
     </main>
   )

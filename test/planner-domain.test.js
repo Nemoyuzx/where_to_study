@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   accountHasSavedPassword,
   buildingsForCampus,
+  dateFromString,
   calendarMonthExpansion,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
@@ -137,6 +138,29 @@ test('shanghai date helpers are independent of the device timezone', () => {
   assert.equal(shanghaiDateString(new Date('2026-08-17T20:00:00Z')), '2026-08-18')
   // 2026-08-17T15:59:00Z is 2026-08-17 23:59 in Shanghai -> one minute until midnight.
   assert.equal(msUntilNextShanghaiMidnight(new Date('2026-08-17T15:59:00Z')), 60000)
+})
+
+test('Shanghai midnight calculation stays correct in any device timezone', () => {
+  // Noon in Shanghai (2026-08-18T04:00:00Z) is exactly 12h before midnight,
+  // regardless of which local timezone the process runs in.
+  assert.equal(msUntilNextShanghaiMidnight(new Date('2026-08-18T04:00:00Z')), 12 * 60 * 60 * 1000)
+  // 08:00 Shanghai is 16h before midnight.
+  assert.equal(msUntilNextShanghaiMidnight(new Date('2026-08-18T00:00:00Z')), 16 * 60 * 60 * 1000)
+  // Right at midnight, the timer must not be zero (min 1000ms guard).
+  const atMidnight = msUntilNextShanghaiMidnight(new Date('2026-08-17T16:00:00Z'))
+  assert.ok(atMidnight >= 1000 && atMidnight <= 24 * 60 * 60 * 1000)
+})
+
+test('date parsing rejects impossible calendar dates instead of rolling them', () => {
+  assert.equal(dateFromString('2026-03-02').getFullYear(), 2026)
+  assert.ok(Number.isNaN(dateFromString('2026-02-30').getTime()), 'Feb 30 must be rejected')
+  assert.ok(Number.isNaN(dateFromString('2026-13-01').getTime()), 'month 13 must be rejected')
+  assert.ok(Number.isNaN(dateFromString('2026-00-10').getTime()), 'month 0 must be rejected')
+  assert.ok(Number.isNaN(dateFromString('2026-04-31').getTime()), 'Apr 31 must be rejected')
+  assert.ok(Number.isNaN(dateFromString('2026-2-03').getTime()), 'unpadded must be rejected')
+  assert.ok(Number.isNaN(dateFromString('not-a-date').getTime()), 'garbage must be rejected')
+  // Leap day is valid.
+  assert.equal(dateFromString('2024-02-29').getDate(), 29)
 })
 
 test('malformed schedules never crash week state or slot ranges', () => {

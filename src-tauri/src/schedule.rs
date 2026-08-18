@@ -132,6 +132,8 @@ pub fn parse_sjd_week_numbers(course: &Value) -> Vec<i64> {
 
 pub fn parse_sjd_slots(course: &Value) -> Option<(usize, usize)> {
     let class_time = json_string(course.get("classTime"));
+    // SJD encodes classTime as "<course-count><node><node>...", e.g. "1030405"
+    // means one course using nodes 03, 04, 05. Skip the leading count digit.
     let class_time_tail: String = class_time.chars().skip(1).collect();
     let node_regex = Regex::new(r"\d{2}").expect("valid regex");
     let mut nodes: Vec<usize> = node_regex
@@ -295,7 +297,11 @@ pub fn parse_sjd_courses(
             weekday,
             start_slot,
             end_slot,
-            section_text: format!("{}-{}节", start_slot + 1, end_slot + 1),
+            section_text: if start_slot == end_slot {
+                format!("{}节", start_slot + 1)
+            } else {
+                format!("{}-{}节", start_slot + 1, end_slot + 1)
+            },
             time_range: format!(
                 "{}-{}",
                 if start_time.is_empty() {
