@@ -9,16 +9,10 @@ import { PlannerView } from './PlannerView';
 import { CalendarSectionView } from './CalendarSectionView';
 import { SettingsView } from './SettingsView';
 
-export class AdaptiveLayoutPolicy {
-  static readonly minimumSidebarWidth: number = 700;
-  static readonly minimumExpandedCalendarWidth: number = 760;
-
-  // iOS 端 horizontalClass == .regular 等价于宽度 >= 600vp，
-  // 与 minimumSidebarWidth 合取后侧栏阈值即 700vp。
-  static useSidebar(width: number): boolean {
-    return width >= AdaptiveLayoutPolicy.minimumSidebarWidth;
-  }
-}
+// 布局策略统一在 common/DeviceState.ets 中（含折叠屏半折叠降级规则），
+// 这里保留导出以兼容旧引用。
+import { AdaptiveLayoutPolicy } from '../common/DeviceState';
+export { AdaptiveLayoutPolicy };
 
 @ComponentV2
 export struct RootView {

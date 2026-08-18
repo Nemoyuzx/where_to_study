@@ -6,6 +6,7 @@ import parsersContractTest from './ParsersContract.test';
 import teachingCalendarLogicTest from './TeachingCalendarLogic.test';
 import calendarImportLogicTest from './CalendarImportLogic.test';
 import dailyCoursePlanningTest from './DailyCoursePlanning.test';
+import adaptivePolicyTest from './AdaptivePolicy.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -15,4 +16,5 @@ export default function testsuite() {
   teachingCalendarLogicTest();
   calendarImportLogicTest();
   dailyCoursePlanningTest();
+  adaptivePolicyTest();
 }

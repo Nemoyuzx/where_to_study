@@ -1,6 +1,7 @@
 // 与 iOS 端 PlannerView.swift 对应的空教室联动查询页。
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
+import { AdaptiveLayoutPolicy } from '../common/DeviceState';
 import { Classroom, Course, SlotMetadata } from '../common/Models';
 import { StrictDates } from '../common/StrictDates';
 import { PageTitle, SurfaceCard, SectionHeader, EmptyMessage, ChipButton } from './SharedComponents';
@@ -39,7 +40,7 @@ export struct PlannerView {
     Scroll() {
       Column({ space: 16 }) {
         this.header()
-        if (this.contentWidth >= 760) {
+        if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
               this.querySurface()

@@ -1,6 +1,7 @@
 // 与 iOS 端 SettingsView.swift 对应的设置页。
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
+import { AdaptiveLayoutPolicy } from '../common/DeviceState';
 import { PageTitle, SurfaceCard, SectionHeader } from './SharedComponents';
 import { PrivacyPolicyView } from './PrivacyPolicyView';
 
@@ -27,7 +28,7 @@ export struct SettingsView {
     Scroll() {
       Column({ space: 16 }) {
         PageTitle({ eyebrow: 'Where To Study', title: '设置' })
-        if (this.contentWidth >= 760) {
+        if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
               this.accountSurface()
