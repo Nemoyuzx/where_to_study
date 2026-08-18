@@ -757,6 +757,12 @@ function App() {
       unlisten = dispose
     })
 
+    listen('tray:hide-notice', (event) => {
+      setError(String(event.payload || '窗口已隐藏，应用仍在系统托盘运行。'))
+    }).then((dispose) => {
+      unlisten = dispose
+    })
+
     return () => {
       if (unlisten) unlisten()
     }
@@ -929,7 +935,12 @@ function App() {
       : null
   ), [activeTermStartDate, calendarPopover, courses])
   const currentTimeLine = useMemo(() => {
-    if (calendarView !== 'day' || calendarDate !== todayDate) return null
+    // Show the time line when today is visible: day view always, week view
+    // when the current week includes today (matches the native clients).
+    const todayVisible = calendarView === 'day'
+      ? calendarDate === todayDate
+      : calendarView === 'week' && visibleCalendarDays.includes(todayDate)
+    if (!todayVisible) return null
     const minutes = now.getHours() * 60 + now.getMinutes()
     const visibleStart = CALENDAR_START_HOUR * 60
     const visibleEnd = CALENDAR_END_HOUR * 60
@@ -938,7 +949,7 @@ function App() {
       label: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
       top: ((minutes - visibleStart) / (visibleEnd - visibleStart)) * 100,
     }
-  }, [calendarDate, calendarView, now, todayDate])
+  }, [calendarDate, calendarView, now, todayDate, visibleCalendarDays])
 
   useEffect(() => {
     visibleHolidayYears.forEach((year) => {

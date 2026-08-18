@@ -1035,7 +1035,17 @@ async fn fetch_classrooms(
             Ok(request_scope)
         })
         .map_err(LocalDataAccessError::message)?;
-    payload.target_date = Some(config::today_in_app_tz().to_string());
+    // The SJD classroom endpoint only serves "today" in the app timezone;
+    // reject other dates explicitly instead of silently overriding them.
+    let today = config::today_in_app_tz();
+    if payload
+        .target_date
+        .as_deref()
+        .is_some_and(|date| date != today.to_string().as_str())
+    {
+        return Err("空教室接口仅支持查询今天的数据。".to_string());
+    }
+    payload.target_date = Some(today.to_string());
     let classrooms = classrooms::fetch_all_classrooms(&payload)
         .await
         .map_err(|error| error.message)?;
@@ -1651,6 +1661,9 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
 }
 
 #[cfg(not(mobile))]
+static HIDE_TO_TRAY_NOTIFIED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(not(mobile))]
 fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) {
     if window.label() != "main" {
         return;
@@ -1658,6 +1671,14 @@ fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) 
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
         let _ = window.hide();
+        // Windows users expect "close" to exit; explain once that the app
+        // keeps running in the system tray.
+        if !HIDE_TO_TRAY_NOTIFIED.swap(true, Ordering::Relaxed) {
+            let _ = window.app_handle().emit(
+                "tray:hide-notice",
+                "窗口已隐藏，应用仍在系统托盘运行。右键托盘图标可退出。",
+            );
+        }
     }
 }
 
