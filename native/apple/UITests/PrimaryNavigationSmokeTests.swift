@@ -131,7 +131,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         horizontalSwipe(in: app, atY: 0.56, toLeft: true)
         XCTAssertTrue(waitForLabelChange(of: monthHeading, from: initialMonth))
         horizontalSwipe(in: app, atY: 0.56, toLeft: false)
-        XCTAssertEqual(monthHeading.label, initialMonth)
+        XCTAssertTrue(waitForLabel(initialMonth, of: monthHeading))
 
         for mode in ["日", "周", "月"] {
             app.segmentedControls.buttons["年"].tap()
@@ -213,11 +213,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         navigate(to: "设置", in: app)
         let openButton = app.descendants(matching: .any)["action.open-privacy-policy"]
-        XCTAssertTrue(openButton.waitForExistence(timeout: 5))
-        for _ in 0..<4 where !openButton.isHittable {
-            app.swipeUp()
-        }
-        XCTAssertTrue(openButton.isHittable)
+        revealByScrolling(visibleElement: openButton, in: app)
         openButton.tap()
 
         XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"]
@@ -394,6 +390,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         ) == .completed
     }
 
+    private func waitForLabel(_ label: String, of element: XCUIElement) -> Bool {
+        let predicate = NSPredicate(format: "label == %@", label)
+        return XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
+            timeout: 3
+        ) == .completed
+    }
+
     private func horizontalSwipe(in app: XCUIApplication, atY y: CGFloat, toLeft: Bool) {
         let startX: CGFloat = toLeft ? 0.82 : 0.18
         let endX: CGFloat = toLeft ? 0.18 : 0.82
@@ -433,12 +437,16 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     }
 
     private func scrollToBottom(visibleElement: XCUIElement, in app: XCUIApplication) {
-        XCTAssertTrue(visibleElement.waitForExistence(timeout: 5))
-        for _ in 0..<24 where !visibleElement.isHittable {
+        revealByScrolling(visibleElement: visibleElement, in: app)
+        app.swipeUp()
+    }
+
+    private func revealByScrolling(visibleElement: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<24 where !visibleElement.exists || !visibleElement.isHittable {
             app.swipeUp()
         }
+        XCTAssertTrue(visibleElement.waitForExistence(timeout: 5))
         XCTAssertTrue(visibleElement.isHittable)
-        app.swipeUp()
     }
 
     private func waitForValue(_ value: String, of element: XCUIElement) -> Bool {
