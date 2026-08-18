@@ -188,6 +188,22 @@ body,
   min-height: 100%;
 }
 
+/* Smooth light/dark theme transition on desktop WebViews. */
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .app-shell,
+  .side-nav,
+  .panel,
+  .summary-band,
+  .privacy-dialog,
+  .year-day-popover,
+  .course-widget-card {
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+}
+
 body {
   margin: 0;
 }
@@ -243,4 +259,28 @@ a:focus-visible {
 /* WebView2 (Windows) flashes a default highlight on touch taps. */
 * {
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Windows high-contrast mode: keep interactive elements distinguishable
+   when the user forces a contrast theme (Accessibility settings). */
+@media (forced-colors: active) {
+  .app-nav button.active,
+  .calendar-view-switch button.active,
+  .settings-actions button.primary,
+  .action-panel .primary,
+  .planner-refresh-button,
+  .slot-cell.selected,
+  .month-cell.selected,
+  .mini-month-grid button.selected,
+  .time-course-block {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* Smooth focus-ring appearance for keyboard navigation. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  transition: outline-color 0.12s ease;
 }

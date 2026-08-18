@@ -103,6 +103,7 @@ function PrivacyPolicyDialog({ onClose }) {
     <div
       className="privacy-dialog-backdrop"
       onMouseDown={(event) => {
+        if (event.button !== 0) return
         if (event.target === event.currentTarget) onClose()
       }}
     >
@@ -547,6 +548,8 @@ function App() {
   const credentialStateRevision = useRef(0)
   const localDataClearRevision = useRef(0)
   const privacyTriggerRef = useRef(null)
+  const yearClickTimerRef = useRef(null)
+  const clearCancelButtonRef = useRef(null)
 
   useEffect(() => {
     const page = pageContentRef.current
@@ -557,6 +560,51 @@ function App() {
       page.classList.remove('calendar-gesture-locked')
     }
   }, [])
+
+  // Trackpad/mouse-wheel horizontal swipe navigation for desktop WebView2
+  // (Windows). macOS touchpads also produce horizontal wheel events.
+  useEffect(() => {
+    const page = pageContentRef.current
+    if (!page) return undefined
+
+    let wheelAccumulator = 0
+    let wheelTimer = null
+    const WHEEL_THRESHOLD = 120
+    const WHEEL_RESET_MS = 400
+
+    function handleCalendarWheel(event) {
+      // Only handle horizontal wheel events (trackpad horizontal swipe)
+      if (Math.abs(event.deltaX) < Math.abs(event.deltaY) * 1.5) return
+      // Don't intercept when interacting with form elements
+      if (event.target.closest('input, select, textarea, a')) return
+      // Don't intercept when popover is open
+      if (calendarPopover) return
+
+      wheelAccumulator += event.deltaX
+      window.clearTimeout(wheelTimer)
+
+      if (Math.abs(wheelAccumulator) >= WHEEL_THRESHOLD) {
+        const direction = wheelAccumulator > 0 ? 1 : -1
+        wheelAccumulator = 0
+        suppressCalendarClickUntilRef.current = Date.now() + 400
+        moveCalendar(direction)
+      }
+
+      wheelTimer = window.setTimeout(() => {
+        wheelAccumulator = 0
+      }, WHEEL_RESET_MS)
+    }
+
+    // Only add wheel listener when on calendar page
+    if (activePage === 'calendar') {
+      page.addEventListener('wheel', handleCalendarWheel, { passive: true })
+    }
+
+    return () => {
+      page.removeEventListener('wheel', handleCalendarWheel)
+      window.clearTimeout(wheelTimer)
+    }
+  }, [activePage, calendarView, calendarPopover])
   const todayDate = shanghaiDateString(now)
   const loading = loadingTasks[loadingTasks.length - 1] || ''
 
@@ -607,9 +655,15 @@ function App() {
       page.style.setProperty('--month-expanded-row-height', `${monthMetrics.rowHeight}px`)
     }
     updateAvailableHeight()
-    window.addEventListener('resize', updateAvailableHeight)
+    let resizeFrame = 0
+    const handleResize = () => {
+      window.cancelAnimationFrame(resizeFrame)
+      resizeFrame = window.requestAnimationFrame(updateAvailableHeight)
+    }
+    window.addEventListener('resize', handleResize)
     return () => {
-      window.removeEventListener('resize', updateAvailableHeight)
+      window.removeEventListener('resize', handleResize)
+      window.cancelAnimationFrame(resizeFrame)
       clearAvailableHeight()
     }
   }, [activePage, calendarDate, calendarMotion, calendarView, compactCalendarLayout])
@@ -617,6 +671,12 @@ function App() {
   useEffect(() => () => {
     window.clearTimeout(monthExpansionTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    if (clearConfirmationOpen) {
+      clearCancelButtonRef.current?.focus()
+    }
+  }, [clearConfirmationOpen])
 
   useEffect(() => {
     command('get_metadata')
@@ -766,6 +826,9 @@ function App() {
     if (!calendarPopover) return undefined
 
     const closePopover = (event) => {
+      // Only a primary (left) click outside should dismiss; right-click
+      // (context menu) and middle-click must not close the popover.
+      if (event.button !== 0) return
       if (calendarPopoverRef.current?.contains(event.target)) {
         return
       }
@@ -943,7 +1006,10 @@ function App() {
     if (!settings.account.trim() || !settings.hasSavedPassword) return
 
     autoFetchedClassroomsDate.current = todayDate
-    loadClassrooms()
+    void loadClassrooms().then((succeeded) => {
+      // Allow a later retry when the fetch fails.
+      if (!succeeded) autoFetchedClassroomsDate.current = ''
+    })
   }, [classroomsCache, classroomsCacheLoaded, settings.account, settings.hasSavedPassword, settingsLoaded, settingsSaving, todayDate])
 
   useEffect(() => {
@@ -1132,6 +1198,76 @@ function App() {
       scrollLocked: false,
       blocked: Boolean(event.target.closest('input, select, textarea, a')),
     }
+  }
+
+  // Pointer-based swipe for the day/week calendar: lets Windows/macOS mouse
+  // users drag horizontally to page the calendar, matching the touch gesture.
+  function beginCalendarPointerSwipe(event) {
+    if (calendarView === 'year' || event.isPrimary === false) return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    if (event.target.closest('input, select, textarea, a')) return
+    if (event.target.closest('.time-course-block')) return
+
+    calendarGestureRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      axis: null,
+      view: calendarView,
+      monthExpanded,
+      scrollTop: pageContentRef.current?.scrollTop || 0,
+      scrollLocked: false,
+      blocked: false,
+      pointerId: event.pointerId,
+      pointerTarget: event.currentTarget,
+    }
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Pointer capture is optional in older embedded WebViews.
+    }
+  }
+
+  function updateCalendarPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view === 'month' || start.pointerId !== event.pointerId) return
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    if (!start.axis && Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= 8) {
+      if (Math.abs(deltaX) > Math.abs(deltaY) * 1.12) start.axis = 'horizontal'
+      else if (Math.abs(deltaY) > Math.abs(deltaX) * 1.12) start.axis = 'vertical'
+    }
+
+    if (start.axis === 'horizontal') {
+      lockCalendarVerticalScroll(start)
+      event.preventDefault()
+    }
+  }
+
+  function finishCalendarPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view === 'month' || start.pointerId !== event.pointerId) return
+    calendarGestureRef.current = null
+    unlockCalendarVerticalScroll(start)
+    try {
+      start.pointerTarget.releasePointerCapture(event.pointerId)
+    } catch {
+      // The browser may release capture before pointerup.
+    }
+
+    if (start.axis !== 'horizontal') return
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    const direction = calendarSwipeDirection(deltaX, deltaY)
+    if (!direction) return
+    suppressCalendarClickUntilRef.current = Date.now() + 400
+    moveCalendar(direction)
+  }
+
+  function cancelCalendarPointerSwipe(event) {
+    const start = calendarGestureRef.current
+    if (!start || start.view === 'month' || start.pointerId !== event.pointerId) return
+    calendarGestureRef.current = null
+    unlockCalendarVerticalScroll(start)
   }
 
   function lockCalendarVerticalScroll(start) {
@@ -1450,12 +1586,17 @@ function App() {
   }
 
   function selectYearDate(event, dateString) {
-    if (compactCalendarLayout) {
-      openYearDayPopover(event, dateString)
+    // A double-click fires two click events first; defer the single-click
+    // action so the desktop double-click (open month view) wins cleanly.
+    if (!compactCalendarLayout) {
+      window.clearTimeout(yearClickTimerRef.current)
+      yearClickTimerRef.current = window.setTimeout(() => {
+        setCalendarDate(dateString)
+        setCalendarPopover(null)
+      }, 250)
       return
     }
-    setCalendarDate(dateString)
-    setCalendarPopover(null)
+    openYearDayPopover(event, dateString)
   }
 
   function openDesktopYearMonth(event, dateString) {
@@ -1498,7 +1639,8 @@ function App() {
   }
 
   async function loadClassrooms() {
-    if (settingsSaving) return
+    if (settingsSaving) return false
+    let succeeded = false
     await runTask('classrooms', async () => {
       const accountDataRevision = localDataClearRevision.current
       const data = await command('fetch_classrooms', requestBody(settings, {
@@ -1507,8 +1649,12 @@ function App() {
       }))
       if (accountDataRevision !== localDataClearRevision.current) return
       const nextCache = normalizeClassroomsCache(data)
-      if (nextCache) setClassroomsCache(nextCache)
+      if (nextCache) {
+        setClassroomsCache(nextCache)
+        succeeded = true
+      }
     })
+    return succeeded
   }
 
   async function importSystemCalendar() {
@@ -1871,6 +2017,10 @@ function App() {
                     onTouchStart={beginCalendarSwipe}
                     onTouchEnd={finishCalendarSwipe}
                     onTouchCancel={cancelCalendarSwipe}
+                    onPointerDown={beginCalendarPointerSwipe}
+                    onPointerMove={updateCalendarPointerSwipe}
+                    onPointerUp={finishCalendarPointerSwipe}
+                    onPointerCancel={cancelCalendarPointerSwipe}
                   >
                     <div className="time-corner" />
                     {visibleCalendarDays.map((dateString) => {
@@ -2193,6 +2343,9 @@ function App() {
               <input
                 value={settings.account}
                 onChange={(event) => updateSetting('account', event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') saveCurrentSettings()
+                }}
                 inputMode="numeric"
                 placeholder="可使用环境变量"
               />
@@ -2202,6 +2355,9 @@ function App() {
               <input
                 value={settings.password}
                 onChange={(event) => updateSetting('password', event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') saveCurrentSettings()
+                }}
                 type="password"
                 placeholder={settings.hasSavedPassword ? '已安全保存，留空保持不变' : '输入后保存到系统凭据存储'}
                 autoComplete="new-password"
@@ -2216,7 +2372,13 @@ function App() {
             </div>
             <label>
               学期
-              <input value={settings.termId} onChange={(event) => updateSetting('termId', event.target.value)} />
+              <input
+                value={settings.termId}
+                onChange={(event) => updateSetting('termId', event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') saveCurrentSettings()
+                }}
+              />
             </label>
             <label>
               第一周周一
@@ -2303,7 +2465,7 @@ function App() {
                 <strong id="clear-data-title">清除全部本地数据？</strong>
                 <p>将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。</p>
                 <div>
-                  <button type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={settingsSaving || !!loading}>
+                  <button ref={clearCancelButtonRef} type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={settingsSaving || !!loading}>
                     取消
                   </button>
                   <button type="button" className="danger" onClick={clearAllLocalData} disabled={settingsSaving || !!loading}>
