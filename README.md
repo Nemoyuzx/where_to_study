@@ -59,6 +59,8 @@ Tauri、SwiftUI 和 Android 客户端都保留一份仅用于首次离线展示�
 [国务院办公厅关于 2026 年部分节假日安排的通知](https://www.gov.cn/yaowen/liebiao/202511/content_7047099.htm)；
 远端或本地缓存可用后会使用自动获取的数据。
 
+macOS/iOS 与 Android 原生客户端在用户已授权系统日历访问时，会优先从设备自带的“中国（大陆）节假日”日历读取休息日（并仍以远端数据补充“调休/补班”上班日，因为系统日历通常不标注补班）。由于中国目前没有官方的机器可读节假日 JSON 接口（国务院通知为 HTML 页面），Tauri 桌面端继续使用上述固定版本数据源。
+
 ## 开发与运行
 
 所有平台的应用主图标以 `src-tauri/icons/icon.png`（Windows/Tauri 当前绿色日历课桌图标）为唯一源图。修改源图后运行 `npm run icons:sync`，同步生成 Windows/macOS Tauri、原生 iOS 和 Android 启动图标；macOS 菜单栏与 Android 通知图标仍使用符合系统规范的单色模板资源。

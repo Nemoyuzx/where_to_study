@@ -29,7 +29,7 @@
 - 错误信息面向用户时不得回显凭据。
 - 教务请求只使用 `jwglweixin.bupt.edu.cn` 的 HTTPS 端点；客户端不得为该数据源开放明文传输例外。
 - 个人课表请求失败时必须原样返回移动教务链路的错误，不得自动切换到旧教务或其他数据源。
-- 节假日数据只通过固定版本的 `unpkg.com/holiday-calendar@1.3.3/data/CN/{year}.json` HTTPS 地址按年份读取，不为其开放明文传输例外；来源说明见根目录 README，MIT 许可文本与归属记录见 `THIRD_PARTY_NOTICES.md`。
+- 节假日数据：Apple/Android 原生客户端在用户已授权系统日历访问时优先读取设备“中国（大陆）节假日”日历中的休息日，并以远端数据补充“调休/补班”上班日；无设备日历可用时（含 Tauri 桌面端）只通过固定版本的 `unpkg.com/holiday-calendar@1.3.3/data/CN/{year}.json` HTTPS 地址按年份读取，不为其开放明文传输例外。来源说明见根目录 README，MIT 许可文本与归属记录见 `THIRD_PARTY_NOTICES.md`。
 
 ## Apple 隐私清单
 
