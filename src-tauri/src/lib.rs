@@ -1158,10 +1158,7 @@ fn show_course_widget(app: &tauri::AppHandle) -> tauri::Result<()> {
     // Windows is a silent no-op, so keep it off that platform.
     #[cfg(not(target_os = "windows"))]
     let builder = builder.visible_on_all_workspaces(true);
-    let window = builder
-        .focused(false)
-        .shadow(true)
-        .build()?;
+    let window = builder.focused(false).shadow(true).build()?;
     let _ = window.show();
     Ok(())
 }
@@ -1660,7 +1657,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-#[cfg(not(mobile))]
+#[cfg(target_os = "windows")]
 static HIDE_TO_TRAY_NOTIFIED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(mobile))]
@@ -1671,13 +1668,16 @@ fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) 
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
         let _ = window.hide();
-        // Windows users expect "close" to exit; explain once that the app
-        // keeps running in the system tray.
-        if !HIDE_TO_TRAY_NOTIFIED.swap(true, Ordering::Relaxed) {
-            let _ = window.app_handle().emit(
-                "tray:hide-notice",
-                "窗口已隐藏，应用仍在系统托盘运行。右键托盘图标可退出。",
-            );
+        #[cfg(target_os = "windows")]
+        {
+            // Windows users often expect "close" to exit; explain once that
+            // the app keeps running in the system tray.
+            if !HIDE_TO_TRAY_NOTIFIED.swap(true, Ordering::Relaxed) {
+                let _ = window.app_handle().emit(
+                    "tray:hide-notice",
+                    "窗口已隐藏，应用仍在系统托盘运行。右键托盘图标可退出。",
+                );
+            }
         }
     }
 }

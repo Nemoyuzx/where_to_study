@@ -775,24 +775,26 @@ function App() {
   useEffect(() => {
     if (!hasTauriRuntime()) return undefined
 
-    let unlisten = null
+    let unlistenNavigate = null
+    let unlistenHideNotice = null
 
     listen('tray:navigate', (event) => {
       if (['planner', 'calendar', 'settings'].includes(event.payload)) {
         setActivePage(event.payload)
       }
     }).then((dispose) => {
-      unlisten = dispose
+      unlistenNavigate = dispose
     })
 
     listen('tray:hide-notice', (event) => {
       setError(String(event.payload || '窗口已隐藏，应用仍在系统托盘运行。'))
     }).then((dispose) => {
-      unlisten = dispose
+      unlistenHideNotice = dispose
     })
 
     return () => {
-      if (unlisten) unlisten()
+      if (unlistenNavigate) unlistenNavigate()
+      if (unlistenHideNotice) unlistenHideNotice()
     }
   }, [])
 
@@ -847,7 +849,11 @@ function App() {
   }, [todayDate])
 
   useEffect(() => {
-    if (activePage !== 'calendar' || calendarView !== 'day' || calendarDate !== todayDate) {
+    const todayVisible = calendarView === 'day'
+      ? calendarDate === todayDate
+      : calendarView === 'week'
+        && startOfWeekSunday(calendarDate) === startOfWeekSunday(todayDate)
+    if (activePage !== 'calendar' || !todayVisible) {
       return undefined
     }
 

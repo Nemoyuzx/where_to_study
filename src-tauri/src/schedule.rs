@@ -480,7 +480,8 @@ mod tests {
     fn expand_week_numbers_keeps_both_parities_when_items_carry_own_markers() {
         assert_eq!(
             expand_week_numbers("1-17单,2-18双"),
-            (1..=18).filter(|week| week % 2 != 0 || (2..=18).contains(week))
+            (1..=18)
+                .filter(|week| week % 2 != 0 || (2..=18).contains(week))
                 .collect::<Vec<_>>()
         );
         // Equivalent explicit assertion:
