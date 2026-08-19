@@ -1,6 +1,6 @@
 # 鸿蒙（HarmonyOS）平台 BUG 审计报告
 
-> 分支：audit/harmony-bugs（基于 origin/main b8b4987，native/harmony 与 feature/harmonyos@17f9448 一致）
+> 原始审计分支：audit/harmony-bugs（审计时基于 origin/main b8b4987，native/harmony 与 feature/harmonyos@17f9448 一致）
 > 范围：native/harmony 鸿蒙客户端（ArkTS/ArkUI，HarmonyOS NEXT 6.1.1 / API 24）
 > 方法：逐文件代码审计；关键算术用 Node 复现验证；部分行为在 Pura 90 / Mate X7 / MateBook Pro 模拟器上验证
 
@@ -83,10 +83,3 @@
 | BUG-055 | @Consumer 默认实例仅构造轻量对象、无副作用，启动期短暂存在，属可接受开销，保持 |
 | BUG-063 | 超出 30 条时按序保留前 30 条属合理降级（与 iOS 截断策略一致），保持 |
 | BUG-065 | 归档写入为幂等小文件（<10KB），写前比较收益低，保持 |
-
-### 待处理（⏳）
-
-| 编号 | 说明 |
-|---|---|
-| BUG-040 | 已完成：卡片按 formDimension 限行（2*2 两行），见修复表 |
-| BUG-051 | 已完成：超时后记录迟到结果（hilog），便于对账 |
