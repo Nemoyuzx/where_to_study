@@ -188,6 +188,99 @@ body,
   min-height: 100%;
 }
 
+/* Smooth light/dark theme transition on desktop WebViews. */
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .app-shell,
+  .side-nav,
+  .panel,
+  .summary-band,
+  .privacy-dialog,
+  .year-day-popover,
+  .course-widget-card {
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+}
+
 body {
   margin: 0;
+}
+
+/* Windows / WebView2 (Chromium) scrollbars: slim, rounded, theme-aware.
+   WKWebView on macOS uses overlay scrollbars and ignores these rules. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-border);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--primary);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Keyboard focus rings for links (Windows Tab navigation relies on these). */
+a:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* WebView2 (Windows) flashes a default highlight on touch taps. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Windows high-contrast mode: keep interactive elements distinguishable
+   when the user forces a contrast theme (Accessibility settings). */
+@media (forced-colors: active) {
+  .app-nav button.active,
+  .calendar-view-switch button.active,
+  .settings-actions button.primary,
+  .action-panel .primary,
+  .planner-refresh-button,
+  .slot-cell.selected,
+  .month-cell.selected,
+  .mini-month-grid button.selected,
+  .time-course-block {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* Smooth focus-ring appearance for keyboard navigation. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  transition: outline-color 0.12s ease;
 }

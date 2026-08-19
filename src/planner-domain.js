@@ -84,10 +84,21 @@ export function shanghaiDateString(date = new Date()) {
 }
 
 export function msUntilNextShanghaiMidnight(date = new Date()) {
-  const shanghaiNow = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
-  const nextMidnight = new Date(shanghaiNow)
-  nextMidnight.setHours(24, 0, 0, 0)
-  return Math.max(1000, nextMidnight.getTime() - shanghaiNow.getTime())
+  // Compute the next Asia/Shanghai midnight in absolute (UTC) time so the
+  // result is correct regardless of the device timezone. Shanghai is fixed
+  // at UTC+8 with no DST, so Shanghai midnight is 16:00 UTC of the previous
+  // calendar day.
+  const SHANGHAI_UTC_OFFSET_MS = 8 * 60 * 60 * 1000
+  const utcNow = date.getTime()
+  const shanghaiNow = utcNow + SHANGHAI_UTC_OFFSET_MS
+  const shanghaiDate = new Date(shanghaiNow)
+  const shanghaiDayStartUtc = Date.UTC(
+    shanghaiDate.getUTCFullYear(),
+    shanghaiDate.getUTCMonth(),
+    shanghaiDate.getUTCDate(),
+  )
+  const nextShanghaiMidnightUtc = shanghaiDayStartUtc + 24 * 60 * 60 * 1000 - SHANGHAI_UTC_OFFSET_MS
+  return Math.max(1000, nextShanghaiMidnightUtc - utcNow)
 }
 
 export function contractTimestamp(date = new Date()) {
@@ -152,7 +163,23 @@ export function formatShortDate(dateString) {
 }
 
 export function dateFromString(dateString) {
-  return new Date(`${dateString}T00:00:00`)
+  // Strict yyyy-MM-dd validation: reject impossible dates like 2026-02-30
+  // instead of letting the JS engine silently roll them forward.
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateString || ''))
+  if (!match) return new Date(NaN)
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (month < 1 || month > 12 || day < 1 || day > 31) return new Date(NaN)
+  const date = new Date(year, month - 1, day)
+  if (
+    date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+  ) {
+    return new Date(NaN)
+  }
+  return date
 }
 
 function lastDayOfMonth(year, monthIndex) {

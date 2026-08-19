@@ -92,22 +92,49 @@ const PROJECT_URL = 'https://github.com/Nemoyuzx/where_to_study'
 const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md'
 
 function PrivacyPolicyDialog({ onClose }) {
+  const closeButtonRef = useRef(null)
+  const dialogRef = useRef(null)
+
   useEffect(() => {
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') onClose()
     }
+    const trapFocus = (event) => {
+      // Keep keyboard focus inside the dialog (Windows Tab navigation).
+      if (event.key !== 'Tab' || !dialogRef.current) return
+      const focusable = dialogRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
     window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
+    window.addEventListener('keydown', trapFocus)
+    closeButtonRef.current?.focus()
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('keydown', trapFocus)
+    }
   }, [onClose])
 
   return (
     <div
       className="privacy-dialog-backdrop"
       onMouseDown={(event) => {
+        if (event.button !== 0) return
         if (event.target === event.currentTarget) onClose()
       }}
     >
       <section
+        ref={dialogRef}
         className="privacy-dialog"
         role="dialog"
         aria-modal="true"
@@ -119,7 +146,7 @@ function PrivacyPolicyDialog({ onClose }) {
             <h2 id="privacy-dialog-title">隐私声明</h2>
             <span>生效日期：2026 年 8 月 9 日</span>
           </div>
-          <button type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
+          <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
           </button>
         </header>
@@ -547,6 +574,9 @@ function App() {
   const savedCredentialState = useRef({ account: '', hasSavedPassword: false })
   const credentialStateRevision = useRef(0)
   const localDataClearRevision = useRef(0)
+  const privacyTriggerRef = useRef(null)
+  const yearClickTimerRef = useRef(null)
+  const clearCancelButtonRef = useRef(null)
 
   useEffect(() => {
     const page = pageContentRef.current
@@ -558,7 +588,8 @@ function App() {
     }
   }, [activePage])
 
-  // macOS trackpad wheel-based calendar navigation
+  // Trackpad/mouse-wheel horizontal swipe navigation for desktop WebView2
+  // (Windows). macOS touchpads also produce horizontal wheel events.
   useEffect(() => {
     const page = pageContentRef.current
     if (!page) return undefined
@@ -651,16 +682,29 @@ function App() {
       page.style.setProperty('--month-expanded-row-height', `${monthMetrics.rowHeight}px`)
     }
     updateAvailableHeight()
-    window.addEventListener('resize', updateAvailableHeight)
+    let resizeFrame = 0
+    const handleResize = () => {
+      window.cancelAnimationFrame(resizeFrame)
+      resizeFrame = window.requestAnimationFrame(updateAvailableHeight)
+    }
+    window.addEventListener('resize', handleResize)
     return () => {
-      window.removeEventListener('resize', updateAvailableHeight)
+      window.removeEventListener('resize', handleResize)
+      window.cancelAnimationFrame(resizeFrame)
       clearAvailableHeight()
     }
   }, [activePage, calendarDate, calendarMotion, calendarView, compactCalendarLayout])
 
   useEffect(() => () => {
     window.clearTimeout(monthExpansionTimerRef.current)
+    window.clearTimeout(yearClickTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    if (clearConfirmationOpen) {
+      clearCancelButtonRef.current?.focus()
+    }
+  }, [clearConfirmationOpen])
 
   useEffect(() => {
     command('get_metadata')
@@ -731,18 +775,26 @@ function App() {
   useEffect(() => {
     if (!hasTauriRuntime()) return undefined
 
-    let unlisten = null
+    let unlistenNavigate = null
+    let unlistenHideNotice = null
 
     listen('tray:navigate', (event) => {
       if (['planner', 'calendar', 'settings'].includes(event.payload)) {
         setActivePage(event.payload)
       }
     }).then((dispose) => {
-      unlisten = dispose
+      unlistenNavigate = dispose
+    })
+
+    listen('tray:hide-notice', (event) => {
+      setError(String(event.payload || '窗口已隐藏，应用仍在系统托盘运行。'))
+    }).then((dispose) => {
+      unlistenHideNotice = dispose
     })
 
     return () => {
-      if (unlisten) unlisten()
+      if (unlistenNavigate) unlistenNavigate()
+      if (unlistenHideNotice) unlistenHideNotice()
     }
   }, [])
 
@@ -797,7 +849,11 @@ function App() {
   }, [todayDate])
 
   useEffect(() => {
-    if (activePage !== 'calendar' || calendarView !== 'day' || calendarDate !== todayDate) {
+    const todayVisible = calendarView === 'day'
+      ? calendarDate === todayDate
+      : calendarView === 'week'
+        && startOfWeekSunday(calendarDate) === startOfWeekSunday(todayDate)
+    if (activePage !== 'calendar' || !todayVisible) {
       return undefined
     }
 
@@ -810,6 +866,9 @@ function App() {
     if (!calendarPopover) return undefined
 
     const closePopover = (event) => {
+      // Only a primary (left) click outside should dismiss; right-click
+      // (context menu) and middle-click must not close the popover.
+      if (event.button !== 0) return
       if (calendarPopoverRef.current?.contains(event.target)) {
         return
       }
@@ -910,7 +969,12 @@ function App() {
       : null
   ), [activeTermStartDate, calendarPopover, courses])
   const currentTimeLine = useMemo(() => {
-    if (calendarView !== 'day' || calendarDate !== todayDate) return null
+    // Show the time line when today is visible: day view always, week view
+    // when the current week includes today (matches the native clients).
+    const todayVisible = calendarView === 'day'
+      ? calendarDate === todayDate
+      : calendarView === 'week' && visibleCalendarDays.includes(todayDate)
+    if (!todayVisible) return null
     const minutes = now.getHours() * 60 + now.getMinutes()
     const visibleStart = CALENDAR_START_HOUR * 60
     const visibleEnd = CALENDAR_END_HOUR * 60
@@ -919,7 +983,7 @@ function App() {
       label: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
       top: ((minutes - visibleStart) / (visibleEnd - visibleStart)) * 100,
     }
-  }, [calendarDate, calendarView, now, todayDate])
+  }, [calendarDate, calendarView, now, todayDate, visibleCalendarDays])
 
   useEffect(() => {
     visibleHolidayYears.forEach((year) => {
@@ -962,7 +1026,11 @@ function App() {
           setClassroomsCache(nextCache)
         }
       })
-      .catch(() => {})
+      .catch((loadError) => {
+        if (!cancelled && accountDataRevision === localDataClearRevision.current) {
+          setError(loadError.message)
+        }
+      })
       .finally(() => {
         if (!cancelled) setClassroomsCacheLoaded(true)
       })
@@ -983,7 +1051,10 @@ function App() {
     if (!settings.account.trim() || !settings.hasSavedPassword) return
 
     autoFetchedClassroomsDate.current = todayDate
-    loadClassrooms()
+    void loadClassrooms().then((succeeded) => {
+      // Allow a later retry when the fetch fails.
+      if (!succeeded) autoFetchedClassroomsDate.current = ''
+    })
   }, [classroomsCache, classroomsCacheLoaded, settings.account, settings.hasSavedPassword, settingsLoaded, settingsSaving, todayDate])
 
   useEffect(() => {
@@ -996,7 +1067,11 @@ function App() {
           setSchedule(data)
         }
       })
-      .catch(() => {})
+      .catch((loadError) => {
+        if (!cancelled && accountDataRevision === localDataClearRevision.current) {
+          setError(loadError.message)
+        }
+      })
 
     return () => {
       cancelled = true
@@ -1170,6 +1245,8 @@ function App() {
     }
   }
 
+  // Pointer-based swipe for the day/week calendar: lets Windows/macOS mouse
+  // users drag horizontally to page the calendar, matching the touch gesture.
   function beginCalendarPointerSwipe(event) {
     if (calendarView === 'year' || event.isPrimary === false) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
@@ -1514,10 +1591,30 @@ function App() {
 
   function handleMonthCalendarKeyDown(event) {
     if (!compactCalendarLayout || calendarView !== 'month') return
-    const expanded = event.key === 'ArrowDown' ? true : event.key === 'ArrowUp' ? false : null
-    if (expanded === null || expanded === monthExpanded) return
+    // Left/right move the selected date by one day (Windows keyboard
+    // navigation). Up/down keep their collapse/expand meaning and move by
+    // a week when the month is already expanded.
+    const horizontalOffset = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+    }[event.key]
+    if (horizontalOffset !== undefined) {
+      event.preventDefault()
+      suppressCalendarClickUntilRef.current = Date.now() + 400
+      setCalendarDate((current) => addDays(current, horizontalOffset))
+      return
+    }
+    const wantsExpanded = event.key === 'ArrowDown' ? true : event.key === 'ArrowUp' ? false : null
+    if (wantsExpanded === null) return
     event.preventDefault()
-    setMonthExpanded(expanded)
+    if (wantsExpanded === monthExpanded) {
+      // Already in the target state: move by a week instead.
+      const weekOffset = wantsExpanded ? 7 : -7
+      suppressCalendarClickUntilRef.current = Date.now() + 400
+      setCalendarDate((current) => addDays(current, weekOffset))
+      return
+    }
+    setMonthExpanded(wantsExpanded)
   }
 
   function jumpFromYearPopover(view) {
@@ -1554,12 +1651,17 @@ function App() {
   }
 
   function selectYearDate(event, dateString) {
-    if (compactCalendarLayout) {
-      openYearDayPopover(event, dateString)
+    // A double-click fires two click events first; defer the single-click
+    // action so the desktop double-click (open month view) wins cleanly.
+    if (!compactCalendarLayout) {
+      window.clearTimeout(yearClickTimerRef.current)
+      yearClickTimerRef.current = window.setTimeout(() => {
+        setCalendarDate(dateString)
+        setCalendarPopover(null)
+      }, 250)
       return
     }
-    setCalendarDate(dateString)
-    setCalendarPopover(null)
+    openYearDayPopover(event, dateString)
   }
 
   function openDesktopYearMonth(event, dateString) {
@@ -1629,7 +1731,8 @@ function App() {
   }
 
   async function loadClassrooms() {
-    if (settingsSaving) return
+    if (settingsSaving) return false
+    let succeeded = false
     await runTask('classrooms', async () => {
       const accountDataRevision = localDataClearRevision.current
       const data = await command('fetch_classrooms', requestBody(settings, {
@@ -1638,8 +1741,12 @@ function App() {
       }))
       if (accountDataRevision !== localDataClearRevision.current) return
       const nextCache = normalizeClassroomsCache(data)
-      if (nextCache) setClassroomsCache(nextCache)
+      if (nextCache) {
+        setClassroomsCache(nextCache)
+        succeeded = true
+      }
     })
+    return succeeded
   }
 
   async function importSystemCalendar() {
@@ -1976,6 +2083,8 @@ function App() {
                 <input
                   type="date"
                   value={calendarDate}
+                  min="2024-01-01"
+                  max="2030-12-31"
                   onChange={chooseCalendarDateFromInput}
                 />
                 <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
@@ -2096,6 +2205,7 @@ function App() {
                                   type="button"
                                   className="time-course-block"
                                   style={{ top: `${top}%`, height: `${height}%` }}
+                                  title={`${course.name} · ${bounds.start}-${bounds.end} · ${course.room || '地点未标注'}`}
                                   onClick={() => chooseCalendarDate(dateString)}
                                 >
                                   <strong><CourseName course={course} /></strong>
@@ -2329,6 +2439,9 @@ function App() {
               <input
                 value={settings.account}
                 onChange={(event) => updateSetting('account', event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') saveCurrentSettings()
+                }}
                 inputMode="numeric"
                 placeholder="可使用环境变量"
               />
@@ -2338,6 +2451,9 @@ function App() {
               <input
                 value={settings.password}
                 onChange={(event) => updateSetting('password', event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') saveCurrentSettings()
+                }}
                 type="password"
                 placeholder={settings.hasSavedPassword ? '已安全保存，留空保持不变' : '输入后保存到系统凭据存储'}
                 autoComplete="new-password"
@@ -2352,11 +2468,23 @@ function App() {
             </div>
             <label>
               学期
-              <input value={settings.termId} onChange={(event) => updateSetting('termId', event.target.value)} />
+              <input
+                value={settings.termId}
+                onChange={(event) => updateSetting('termId', event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') saveCurrentSettings()
+                }}
+              />
             </label>
             <label>
               第一周周一
-              <input type="date" value={settings.termStartDate} onChange={(event) => updateSetting('termStartDate', event.target.value)} />
+              <input
+                type="date"
+                value={settings.termStartDate}
+                min="2020-01-01"
+                max="2035-12-31"
+                onChange={(event) => updateSetting('termStartDate', event.target.value)}
+              />
             </label>
             <div className="mini-actions term-detect-actions">
               <button
@@ -2462,7 +2590,7 @@ function App() {
                 <strong id="clear-data-title">清除全部本地数据？</strong>
                 <p>将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。</p>
                 <div>
-                  <button type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={settingsSaving || !!loading}>
+                  <button ref={clearCancelButtonRef} type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={settingsSaving || !!loading}>
                     取消
                   </button>
                   <button type="button" className="danger" onClick={clearAllLocalData} disabled={settingsSaving || !!loading}>
@@ -2484,7 +2612,10 @@ function App() {
               <button
                 type="button"
                 className="settings-privacy-link"
-                onClick={() => setPrivacyPolicyOpen(true)}
+                onClick={(event) => {
+                  privacyTriggerRef.current = event.currentTarget
+                  setPrivacyPolicyOpen(true)
+                }}
               >
                 <ShieldCheck size={16} />
                 隐私说明
@@ -2500,7 +2631,10 @@ function App() {
         </section>
       </div>
       {privacyPolicyOpen ? (
-        <PrivacyPolicyDialog onClose={() => setPrivacyPolicyOpen(false)} />
+        <PrivacyPolicyDialog onClose={() => {
+          setPrivacyPolicyOpen(false)
+          privacyTriggerRef.current?.focus()
+        }} />
       ) : null}
     </main>
   )
