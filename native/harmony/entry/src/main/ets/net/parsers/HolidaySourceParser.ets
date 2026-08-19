@@ -4,13 +4,14 @@ import { HolidayDefaults, HolidayItem, HolidaysSnapshot } from '../../common/Mod
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { JsonUtil } from '../../common/JsonUtil';
 import { HolidayClientError, HolidaySourceLimits } from '../SjdErrors';
+import { Utf8 } from '../../common/Utf8';
 
 export class HolidaySourceParser {
   static parse(data: string, year: number, source: string, fetchedAt: string): HolidaysSnapshot {
     if (year < HolidayDefaults.supportedYearsStart || year > HolidayDefaults.supportedYearsEnd) {
       throw HolidayClientError.service('节假日年份不在支持范围内。');
     }
-    if (data.length > HolidaySourceLimits.maximumPayloadBytes) {
+    if (Utf8.bytes(data).length > HolidaySourceLimits.maximumPayloadBytes) {
       throw HolidayClientError.service('节假日数据响应过大。');
     }
     const payload: Record<string, Object> | null = JsonUtil.parseObject(data);
@@ -43,7 +44,7 @@ export class HolidaySourceParser {
       if (name.length === 0) {
         throw HolidayClientError.service('节假日名称不能为空。');
       }
-      if (name.length > HolidaySourceLimits.maximumNameLength) {
+      if (HolidaySourceParser.codePointLength(name) > HolidaySourceLimits.maximumNameLength) {
         throw HolidayClientError.service('节假日名称过长。');
       }
       const dateParts: DateParts | null = StrictDates.parseDateString(JsonUtil.string(item['date']));
@@ -75,6 +76,20 @@ export class HolidaySourceParser {
       return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
     });
     return new HolidaysSnapshot(year, source, fetchedAt, items);
+  }
+
+  // 按 Unicode 码点计数（代理对算 1 个），对齐 Swift unicodeScalars.count（BUG-019 修复）。
+  static codePointLength(value: string): number {
+    let count: number = 0;
+    for (let i = 0; i < value.length; i++) {
+      count++;
+      const code: number = value.charCodeAt(i);
+      if (code >= 0xD800 && code <= 0xDBFF && i + 1 < value.length &&
+        value.charCodeAt(i + 1) >= 0xDC00 && value.charCodeAt(i + 1) <= 0xDFFF) {
+        i++;
+      }
+    }
+    return count;
   }
 
   private static normalizedType(value: string): string | null {

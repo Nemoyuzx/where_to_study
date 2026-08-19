@@ -35,6 +35,16 @@ export default function teachingCalendarLogicTest() {
       expect(feb.day).assertEqual(28);
     });
 
+    it('year_mode_movement_clamps_leap_day', 0, () => {
+      // BUG-048：2028-02-29 在年视图跨年必须钳制为 2029-02-28，不得产生非法日期。
+      const leapDay: DateParts = new DateParts(2028, 2, 29);
+      const moved: DateParts = TeachingCalendarLogic.movedDate(leapDay, CalendarMode.year, 1);
+      expect(moved.year).assertEqual(2029);
+      expect(moved.month).assertEqual(2);
+      expect(moved.day).assertEqual(28);
+      expect(StrictDates.parseDateString(StrictDates.formatDateParts(moved)) !== null).assertTrue();
+    });
+
     it('swipe_requires_deliberate_horizontal_gesture', 0, () => {
       expect(TeachingCalendarLogic.swipeDirection(-72, 12, -118)).assertEqual(1);
       expect(TeachingCalendarLogic.swipeDirection(72, 12, 118)).assertEqual(-1);

@@ -36,8 +36,15 @@ export class HarmonyCalendarImporter implements CalendarImporting {
       return result.authResults.length === permissions.length &&
         result.authResults.every((value: number) => value === 0);
     } catch (e) {
-      return false;
+      // 系统弹窗/服务异常与用户拒绝区分（BUG-029 修复）。
+      throw CalendarImportError.systemError();
     }
+  }
+
+  private static operationError(operation: string, e: Object): Error {
+    const detail: string = e instanceof Error && e.message.length > 0 ?
+      '：' + (e as Error).message : '';
+    return new Error(operation + '失败' + detail);
   }
 
   private static async write(importPlan: CalendarScheduleImportPlan): Promise<CalendarImportResult> {
@@ -95,7 +102,7 @@ export class HarmonyCalendarImporter implements CalendarImporting {
       try {
         await calendar.deleteEvent(event.id);
       } catch (e) {
-        throw new Error('系统日历在同步期间发生变化，请重试。');
+        throw HarmonyCalendarImporter.operationError('删除日历事件', e);
       }
     }
 
@@ -111,7 +118,7 @@ export class HarmonyCalendarImporter implements CalendarImporting {
         try {
           await calendar.updateEvent(event);
         } catch (e) {
-          throw new Error('系统日历在同步期间发生变化，请重试。');
+          throw HarmonyCalendarImporter.operationError('更新日历事件', e);
         }
         updated++;
       } else {
@@ -131,7 +138,11 @@ export class HarmonyCalendarImporter implements CalendarImporting {
         timeZone: CalendarImportLogic.shanghaiTimeZoneId,
         reminderTime: [CalendarImportLogic.reminderOffsetMinutes]
       };
-      await calendar.addEvent(event);
+      try {
+        await calendar.addEvent(event);
+      } catch (e) {
+        throw HarmonyCalendarImporter.operationError('写入日历事件', e);
+      }
     }
 
     const inserted: number = syncPlan.inserts.length;

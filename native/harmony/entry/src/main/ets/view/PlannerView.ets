@@ -19,6 +19,42 @@ export class PlannerLayoutMetrics {
 export struct PlannerView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Local contentWidth: number = 350;
+  // 当天日期文本：跨午夜自动刷新（BUG-024 修复）。
+  @Local todayText: string = StrictDates.formatDateParts(StrictDates.todayParts());
+  // 派生数据缓存（BUG-015/023 修复）：由 @Monitor 在依赖状态变化时刷新。
+  @Local todayCoursesValue: Course[] = [];
+  @Local busySlotsValue: Set<number> = new Set<number>();
+  private dayRefreshTimer: number = -1;
+
+  @Monitor('model.schedule', 'model.usePersonalSchedule')
+  onDerivedStateChange(monitor: IMonitor): void {
+    this.refreshDerivedState();
+  }
+
+  private refreshDerivedState(): void {
+    this.todayCoursesValue = this.model.todayCourses();
+    this.busySlotsValue = this.model.usePersonalSchedule ?
+      this.model.personalBusySlots() : new Set<number>();
+  }
+
+  aboutToAppear(): void {
+    this.refreshDerivedState();
+    this.dayRefreshTimer = setInterval(() => {
+      const today: string = StrictDates.formatDateParts(StrictDates.todayParts());
+      if (today !== this.todayText) {
+        this.todayText = today;
+        // 跨午夜后课程/空闲节次也要重算（BUG-024 修复）。
+        this.refreshDerivedState();
+      }
+    }, 60000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.dayRefreshTimer >= 0) {
+      clearInterval(this.dayRefreshTimer);
+      this.dayRefreshTimer = -1;
+    }
+  }
 
   private slotColumnCount(): number {
     const available: number = Math.max(this.contentWidth, 200);
@@ -96,7 +132,7 @@ export struct PlannerView {
         SymbolGlyph($r('sys.symbol.clock'))
           .fontSize(14)
           .fontColor([AppTheme.secondaryText()])
-        Text(StrictDates.formatDateParts(StrictDates.todayParts()))
+        Text(this.todayText)
           .fontSize(14)
           .fontColor(AppTheme.secondaryText())
       }
@@ -240,8 +276,8 @@ export struct PlannerView {
   slotChip(slot: SlotMetadata) {
     ChipButton({
       selected: this.model.selectedSlots.has(slot.index),
-      busy: this.model.usePersonalSchedule && this.model.personalBusySlots().has(slot.index),
-      interactive: !(this.model.usePersonalSchedule && this.model.personalBusySlots().has(slot.index)),
+      busy: this.busySlotsValue.has(slot.index),
+      interactive: !this.busySlotsValue.has(slot.index),
       onTap: (): void => {
         this.model.toggleSlot(slot.index);
       }
@@ -263,20 +299,20 @@ export struct PlannerView {
     SurfaceCard() {
       Column({ space: 12 }) {
         SectionHeader({ icon: $r('sys.symbol.calendar'), title: '当天课程' })
-        if (this.model.todayCourses().length === 0) {
+        if (this.todayCoursesValue.length === 0) {
           EmptyMessage({ message: '暂无本地课程，请在设置中获取/刷新个人课表' })
         } else {
-          ForEach(this.model.todayCourses(), (course: Course, index: number) => {
+          ForEach(this.todayCoursesValue, (course: Course, index: number) => {
             Column() {
               this.courseRow(course)
-              if (index < this.model.todayCourses().length - 1) {
+              if (index < this.todayCoursesValue.length - 1) {
                 Divider()
                   .color(AppTheme.border())
                   .margin({ top: 6, bottom: 6 })
               }
             }
             .width('100%')
-          }, (course: Course) => course.id)
+          }, (course: Course, index: number) => 'today-course.' + course.id + '.' + index.toString())
         }
       }
       .width('100%')
@@ -429,7 +465,7 @@ export struct PlannerView {
       Column({ space: 12 }) {
         SectionHeader({ icon: $r('sys.symbol.square_grid_2x2'), title: '查询概览' })
         Row({ space: 0 }) {
-          this.summaryItem('当天课程', this.model.todayCourses().length)
+          this.summaryItem('当天课程', this.todayCoursesValue.length)
           Divider()
             .vertical(true)
             .height(64)
@@ -471,7 +507,7 @@ export struct PlannerView {
 
   private freeSlotCount(): number {
     if (this.model.usePersonalSchedule) {
-      return this.model.slots.length - this.model.personalBusySlots().size;
+      return this.model.slots.length - this.busySlotsValue.size;
     }
     return this.model.slots.length;
   }

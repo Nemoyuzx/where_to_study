@@ -18,6 +18,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   onDestroy(): void {
+    // 注销折叠状态监听，避免监听累积（BUG-017 修复）。
+    DeviceState.instance().detach();
     hilog.info(DOMAIN, 'WhereToStudy', 'EntryAbility onDestroy');
   }
 

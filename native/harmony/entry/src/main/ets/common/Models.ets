@@ -69,6 +69,11 @@ export class Course {
   }
 
   static fromJson(raw: Record<string, Object>): Course {
+    // 缓存可能被污染：节次/星期越界会在时间线里触发越界访问，这里统一钳制（BUG-049 修复）。
+    const maximumSlot: number = SlotMetadata.defaults.length - 1;
+    const startSlot: number = Math.min(Math.max(JsonUtil.number(raw['start_slot']), 0), maximumSlot);
+    const endSlot: number = Math.min(Math.max(JsonUtil.number(raw['end_slot']), startSlot), maximumSlot);
+    const weekday: number = Math.min(Math.max(JsonUtil.number(raw['weekday']), 1), 7);
     return new Course(
       JsonUtil.string(raw['id']),
       JsonUtil.string(raw['name']),
@@ -77,9 +82,9 @@ export class Course {
       JsonUtil.string(raw['week_text']),
       JsonUtil.numberArray(raw['week_numbers']),
       JsonUtil.numberArray(raw['exam_week_numbers']),
-      JsonUtil.number(raw['weekday']),
-      JsonUtil.number(raw['start_slot']),
-      JsonUtil.number(raw['end_slot']),
+      weekday,
+      startSlot,
+      endSlot,
       JsonUtil.string(raw['section_text']),
       JsonUtil.string(raw['time_range'])
     );
