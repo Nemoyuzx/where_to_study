@@ -48,6 +48,31 @@ class AdaptiveLayoutLogicTest {
     }
 
     @Test
+    fun collapsedRailUsesTheWholeSeventyTwoDpContainerForCenteredIcons() {
+        assertEquals(
+            0,
+            AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+                collapsed = true,
+                widthClass = WindowWidthClass.MEDIUM,
+            ),
+        )
+        assertEquals(
+            16,
+            AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+                collapsed = false,
+                widthClass = WindowWidthClass.MEDIUM,
+            ),
+        )
+        assertEquals(
+            20,
+            AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+                collapsed = false,
+                widthClass = WindowWidthClass.EXPANDED,
+            ),
+        )
+    }
+
+    @Test
     fun collapsedFoldableRailKeepsContentBeyondTheHinge() {
         val collapsed = AdaptiveLayoutLogic.resolve(
             windowWidthDp = 1_200,

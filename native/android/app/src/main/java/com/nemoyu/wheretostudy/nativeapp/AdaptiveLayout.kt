@@ -29,6 +29,15 @@ object AdaptiveLayoutLogic {
     const val EXPANDED_NAVIGATION_WIDTH_DP = 230
     const val COLLAPSED_NAVIGATION_WIDTH_DP = 72
 
+    fun navigationHorizontalPaddingDp(
+        collapsed: Boolean,
+        widthClass: WindowWidthClass,
+    ): Int = when {
+        collapsed -> 0
+        widthClass == WindowWidthClass.MEDIUM -> 16
+        else -> 20
+    }
+
     fun widthClass(windowWidthDp: Int): WindowWidthClass = when {
         windowWidthDp < MEDIUM_BREAKPOINT_DP -> WindowWidthClass.COMPACT
         windowWidthDp < EXPANDED_BREAKPOINT_DP -> WindowWidthClass.MEDIUM

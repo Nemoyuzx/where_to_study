@@ -131,6 +131,9 @@ class MainActivity : Activity() {
             monthExpanded = savedInstanceState
                 ?.getBoolean(TEACHING_CALENDAR_MONTH_EXPANDED_KEY, true)
                 ?: true,
+            initialMonthSheetPosition = savedInstanceState
+                ?.takeIf { it.containsKey(TEACHING_CALENDAR_MONTH_POSITION_KEY) }
+                ?.getFloat(TEACHING_CALENDAR_MONTH_POSITION_KEY),
         )
 
         adaptiveRoot = FrameLayout(this).apply {
@@ -413,7 +416,11 @@ class MainActivity : Activity() {
     private fun applyNavigationRailTabPresentation(view: TextView, destination: Destination) {
         view.text = if (navigationRailCollapsed) "" else destination.label
         view.gravity = if (navigationRailCollapsed) Gravity.CENTER else Gravity.CENTER_VERTICAL
-        view.setCompoundDrawablesRelativeWithIntrinsicBounds(destination.iconResource, 0, 0, 0)
+        if (navigationRailCollapsed) {
+            view.setCompoundDrawablesRelativeWithIntrinsicBounds(0, destination.iconResource, 0, 0)
+        } else {
+            view.setCompoundDrawablesRelativeWithIntrinsicBounds(destination.iconResource, 0, 0, 0)
+        }
         view.compoundDrawablePadding = if (navigationRailCollapsed) 0 else dp(10)
         view.setPadding(if (navigationRailCollapsed) 0 else dp(12), 0, 0, 0)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -424,11 +431,10 @@ class MainActivity : Activity() {
     private fun updateNavigationRailPresentation() {
         val spec = currentLayoutSpec ?: return
         if (spec.usesBottomNavigation) return
-        val horizontalPadding = when {
-            navigationRailCollapsed -> 12
-            spec.widthClass == WindowWidthClass.MEDIUM -> 16
-            else -> 20
-        }
+        val horizontalPadding = AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+            collapsed = navigationRailCollapsed,
+            widthClass = spec.widthClass,
+        )
         navigationRail?.setPadding(dp(horizontalPadding), dp(8), dp(horizontalPadding), dp(16))
         navigationRailBrand?.visibility = if (navigationRailCollapsed) View.GONE else View.VISIBLE
         navigationRailToggle?.apply {
@@ -728,6 +734,10 @@ class MainActivity : Activity() {
             TEACHING_CALENDAR_MONTH_EXPANDED_KEY,
             teachingCalendarSessionState.monthExpanded,
         )
+        outState.putFloat(
+            TEACHING_CALENDAR_MONTH_POSITION_KEY,
+            teachingCalendarSessionState.monthSheetPosition,
+        )
         super.onSaveInstanceState(outState)
     }
 
@@ -921,6 +931,7 @@ class MainActivity : Activity() {
         const val TEACHING_CALENDAR_DATE_KEY = "teaching_calendar_date"
         const val TEACHING_CALENDAR_MODE_KEY = "teaching_calendar_mode"
         const val TEACHING_CALENDAR_MONTH_EXPANDED_KEY = "teaching_calendar_month_expanded"
+        const val TEACHING_CALENDAR_MONTH_POSITION_KEY = "teaching_calendar_month_position"
         val CALENDAR_PERMISSIONS = arrayOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,

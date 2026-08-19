@@ -288,13 +288,27 @@ class MainNavigationSmokeTest {
                 assertVisible(device, "calendar_month_drag_handle")
                 assertGone(device, "calendar_month_selected_details")
                 scenario.onActivity { activity ->
+                    val monthView = activity.findViewById<View>(R.id.calendar_month_view)
                     val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                    val dragHandle = activity.findViewById<View>(R.id.calendar_month_drag_handle)
                     val firstRowHeightDp = grid.getChildAt(0).height /
                         activity.resources.displayMetrics.density
                     assertTrue(
                         "Expanded month rows must stay close to the native iOS height",
                         firstRowHeightDp <= TeachingCalendarLogic.monthCellHeightDp(expanded = true) + 1,
                     )
+                    assertTrue(
+                        "Expanded month handle must remain inside the measured month viewport",
+                        dragHandle.bottom <= monthView.height - monthView.paddingBottom,
+                    )
+                    activity.findViewById<View?>(R.id.phone_navigation)?.let { phoneNavigation ->
+                        val handleLocation = IntArray(2).also(dragHandle::getLocationOnScreen)
+                        val navigationLocation = IntArray(2).also(phoneNavigation::getLocationOnScreen)
+                        assertTrue(
+                            "Expanded month handle must remain fully above bottom navigation",
+                            handleLocation[1] + dragHandle.height <= navigationLocation[1],
+                        )
+                    }
                     repeat(grid.childCount) { rowIndex ->
                         val row = grid.getChildAt(rowIndex) as ViewGroup
                         repeat(row.childCount) { cellIndex ->
@@ -359,6 +373,54 @@ class MainNavigationSmokeTest {
                         "Weekday header must remain fixed while the date grid changes height",
                         weekdayHeaderTop,
                         activity.findViewById<View>(R.id.calendar_month_weekday_header).top,
+                    )
+                    val monthView = activity.findViewById<View>(R.id.calendar_month_view)
+                    if (activity.findViewById<View?>(R.id.phone_navigation) != null) {
+                        assertEquals(
+                            "Phone month content must span edge to edge",
+                            0,
+                            monthView.paddingLeft,
+                        )
+                        assertEquals(
+                            "Phone month content must span edge to edge",
+                            0,
+                            monthView.paddingRight,
+                        )
+                    }
+                }
+                swipeResource(device, "calendar_month_selected_details", horizontalDirection = 0)
+                scenario.onActivity { activity ->
+                    val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                    val visibleRows = (0 until grid.childCount).count { grid.getChildAt(it).height > 0 }
+                    assertEquals(
+                        "Third month-sheet anchor must retain only the selected week",
+                        1,
+                        visibleRows,
+                    )
+                    assertEquals(
+                        "Month detail surface must declare a borderless style",
+                        0f,
+                        TeachingCalendarLogic.monthDetailsBorderWidthDp(),
+                        0f,
+                    )
+                }
+                swipeResource(
+                    device,
+                    "calendar_month_selected_details",
+                    horizontalDirection = 0,
+                    reverseVertical = true,
+                )
+                assertActivityViewMounted(
+                    scenario,
+                    R.id.calendar_month_selected_details,
+                    expected = true,
+                )
+                scenario.onActivity { activity ->
+                    val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                    assertEquals(
+                        "Returning to the middle anchor must restore the full month",
+                        grid.childCount,
+                        (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
                     )
                 }
                 swipeResource(device, "calendar_month_grid", horizontalDirection = 0, reverseVertical = true)
@@ -487,11 +549,14 @@ class MainNavigationSmokeTest {
                     ),
                 )
                 device.waitForIdle()
-                assertActivityViewMounted(
-                    scenario,
-                    R.id.calendar_month_selected_details,
-                    expected = false,
-                )
+                scenario.onActivity { activity ->
+                    val surface = activity.findViewById<View>(R.id.calendar_swipe_surface)
+                    if (activity.findViewById<View>(R.id.calendar_month_selected_details).visibility == View.VISIBLE) {
+                        surface.performAccessibilityAction(AccessibilityNodeInfo.ACTION_EXPAND, null)
+                    }
+                }
+                device.waitForIdle()
+                assertActivityViewMounted(scenario, R.id.calendar_month_selected_details, expected = false)
             }
             assertTrue(
                 "The month gesture surface must expose an accessibility collapse action",
@@ -642,6 +707,33 @@ class MainNavigationSmokeTest {
                 hapticsBeforeCollapse + 1,
                 activity.controlHapticEventCount,
             )
+            assertEquals(
+                "Collapsed 72dp rail must not inset its icon containers",
+                0,
+                rail.paddingLeft,
+            )
+            val railLocation = IntArray(2).also(rail::getLocationOnScreen)
+            val railCenterX = railLocation[0] + rail.width / 2
+            listOf(
+                R.id.navigation_planner,
+                R.id.navigation_calendar,
+                R.id.navigation_settings,
+            ).forEach { navigationID ->
+                val navigation = activity.findViewById<TextView>(navigationID)
+                val location = IntArray(2).also(navigation::getLocationOnScreen)
+                assertTrue(
+                    "Collapsed rail navigation icons must be centered in the 72dp container",
+                    kotlin.math.abs(location[0] + navigation.width / 2 - railCenterX) <= activity.dp(1),
+                )
+                assertNotNull(
+                    "Collapsed rail must use a centered top drawable",
+                    navigation.compoundDrawablesRelative[1],
+                )
+                assertNull(
+                    "Collapsed rail must not leave the icon in the leading drawable slot",
+                    navigation.compoundDrawablesRelative[0],
+                )
+            }
         }
 
         click(device, "navigation_rail_toggle")

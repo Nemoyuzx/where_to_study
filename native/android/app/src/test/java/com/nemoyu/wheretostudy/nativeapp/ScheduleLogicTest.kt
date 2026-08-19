@@ -453,10 +453,28 @@ class ScheduleLogicTest {
 
     @Test
     fun expandedMonthRowsFitTheAvailablePhoneViewport() {
-        assertEquals(47, TeachingCalendarLogic.expandedMonthCellHeightDp(360))
-        assertEquals(63, TeachingCalendarLogic.expandedMonthCellHeightDp(456))
-        assertEquals(82, TeachingCalendarLogic.expandedMonthCellHeightDp(720))
-        assertEquals(30, TeachingCalendarLogic.expandedMonthCellHeightDp(240))
+        val weekdayReservedHeightDp = TeachingCalendarLogic.monthWeekdayHeaderHeightDp +
+            TeachingCalendarLogic.monthWeekdayHeaderBottomMarginDp
+        fun resolvedHeight(monthViewHeightDp: Int) =
+            TeachingCalendarLogic.expandedMonthCellHeightDp(
+                monthViewHeightDp = monthViewHeightDp,
+                verticalPaddingDp = 8,
+                weekdayReservedHeightDp = weekdayReservedHeightDp,
+                dragHandleReservedHeightDp = TeachingCalendarLogic.monthDragHandleHeightDp,
+            )
+
+        assertEquals(48, resolvedHeight(360))
+        assertEquals(64, resolvedHeight(456))
+        assertEquals(82, resolvedHeight(720))
+        assertEquals(28, resolvedHeight(240))
+        assertEquals(8, resolvedHeight(120))
+        listOf(120, 240, 360, 456, 720).forEach { monthViewHeightDp ->
+            val rowsHeightDp = resolvedHeight(monthViewHeightDp) * 6
+            assertTrue(
+                rowsHeightDp + 8 + weekdayReservedHeightDp +
+                    TeachingCalendarLogic.monthDragHandleHeightDp <= monthViewHeightDp,
+            )
+        }
     }
 
     @Test
@@ -528,10 +546,15 @@ class ScheduleLogicTest {
             TeachingCalendarLogic.collapsedMonthDayTopPaddingDp,
             TeachingCalendarLogic.expandedMonthDayTopPaddingDp,
         )
-        assertEquals(3, TeachingCalendarLogic.collapsedMonthDayTopPaddingDp)
-        assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(2))
-        assertEquals(1, TeachingCalendarLogic.visibleMonthEntryCount(5))
-        assertEquals(4, TeachingCalendarLogic.hiddenMonthEntryCount(5))
+        assertEquals(5, TeachingCalendarLogic.collapsedMonthDayTopPaddingDp)
+        assertEquals(3, TeachingCalendarLogic.monthEntrySlotCapacity(51))
+        assertEquals(2, TeachingCalendarLogic.monthEntrySlotCapacity(32))
+        assertEquals(1, TeachingCalendarLogic.monthEntrySlotCapacity(16))
+        assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(2, slotCapacity = 3))
+        assertEquals(2, TeachingCalendarLogic.visibleMonthEntryCount(5, slotCapacity = 3))
+        assertEquals(3, TeachingCalendarLogic.hiddenMonthEntryCount(5, slotCapacity = 3))
+        assertEquals(0, TeachingCalendarLogic.visibleMonthEntryCount(5, slotCapacity = 1))
+        assertEquals(5, TeachingCalendarLogic.hiddenMonthEntryCount(5, slotCapacity = 1))
     }
 
     @Test
@@ -543,74 +566,63 @@ class ScheduleLogicTest {
     }
 
     @Test
-    fun monthExpansionProgressTracksTheFingerBetweenBothEndpoints() {
-        assertEquals(0f, TeachingCalendarLogic.monthExpansionProgress(-40f, false), 0.001f)
-        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(108f, false), 0.001f)
-        assertEquals(1f, TeachingCalendarLogic.monthExpansionProgress(216f, false), 0.001f)
-        assertEquals(0.5f, TeachingCalendarLogic.monthExpansionProgress(-108f, true), 0.001f)
-        assertEquals(0f, TeachingCalendarLogic.monthExpansionProgress(-216f, true), 0.001f)
+    fun monthSheetPositionTracksTheFingerAcrossThreeContinuousAnchors() {
+        assertEquals(0f, TeachingCalendarLogic.monthSheetDragPosition(40f, 0f), 0.001f)
+        assertEquals(0.5f, TeachingCalendarLogic.monthSheetDragPosition(-108f, 0f), 0.001f)
+        assertEquals(1f, TeachingCalendarLogic.monthSheetDragPosition(-216f, 0f), 0.001f)
+        assertEquals(1.5f, TeachingCalendarLogic.monthSheetDragPosition(-108f, 1f), 0.001f)
+        assertEquals(2f, TeachingCalendarLogic.monthSheetDragPosition(-216f, 1f), 0.001f)
+        assertEquals(1f, TeachingCalendarLogic.monthSheetDragPosition(216f, 2f), 0.001f)
         assertEquals(
             64,
             TeachingCalendarLogic.interpolateMonthMetric(46, 82, progress = 0.5f),
         )
+        assertEquals(82, TeachingCalendarLogic.monthRowHeightDp(0f, 0, 3))
+        assertEquals(46, TeachingCalendarLogic.monthRowHeightDp(1f, 0, 3))
+        assertEquals(46, TeachingCalendarLogic.monthRowHeightDp(2f, 3, 3))
+        assertEquals(0, TeachingCalendarLogic.monthRowHeightDp(2f, 2, 3))
     }
 
     @Test
-    fun monthExpansionSettlesByVelocityBeforeDistanceThreshold() {
-        assertTrue(TeachingCalendarLogic.settledMonthExpansion(0.2f, 900f))
-        assertFalse(TeachingCalendarLogic.settledMonthExpansion(0.8f, -900f))
-        assertTrue(TeachingCalendarLogic.settledMonthExpansion(0.51f, 0f))
-        assertFalse(TeachingCalendarLogic.settledMonthExpansion(0.49f, 0f))
+    fun monthSheetSettlesByVelocityThenNearestOfThreeAnchors() {
+        assertEquals(1, TeachingCalendarLogic.settledMonthSheetPosition(0.2f, -900f))
+        assertEquals(0, TeachingCalendarLogic.settledMonthSheetPosition(0.8f, 900f))
+        assertEquals(2, TeachingCalendarLogic.settledMonthSheetPosition(1.2f, -900f))
+        assertEquals(1, TeachingCalendarLogic.settledMonthSheetPosition(1.8f, 900f))
+        assertEquals(1, TeachingCalendarLogic.settledMonthSheetPosition(0.51f, 0f))
+        assertEquals(2, TeachingCalendarLogic.settledMonthSheetPosition(1.51f, 0f))
     }
 
     @Test
-    fun monthExpansionOnlyAcceptsTheApplicableDominantVerticalDirection() {
-        assertEquals(
-            true,
-            TeachingCalendarLogic.monthExpansionTarget(8f, 72f, currentlyExpanded = false),
-        )
-        assertEquals(
-            false,
-            TeachingCalendarLogic.monthExpansionTarget(-8f, -72f, currentlyExpanded = true),
-        )
-        assertEquals(
-            null,
-            TeachingCalendarLogic.monthExpansionTarget(8f, -72f, currentlyExpanded = false),
-        )
-        assertEquals(
-            null,
-            TeachingCalendarLogic.monthExpansionTarget(64f, 72f, currentlyExpanded = false),
-        )
-        assertEquals(
-            null,
-            TeachingCalendarLogic.monthExpansionTarget(8f, 32f, currentlyExpanded = false),
-        )
+    fun monthSheetClaimsDominantVerticalGesturesOnlyWhenAnotherAnchorExists() {
+        assertTrue(TeachingCalendarLogic.canMoveMonthSheet(8f, -72f, 0f, 8))
+        assertTrue(TeachingCalendarLogic.canMoveMonthSheet(8f, -72f, 1f, 8))
+        assertTrue(TeachingCalendarLogic.canMoveMonthSheet(8f, 72f, 2f, 8))
+        assertFalse(TeachingCalendarLogic.canMoveMonthSheet(8f, 72f, 0f, 8))
+        assertFalse(TeachingCalendarLogic.canMoveMonthSheet(8f, -72f, 2f, 8))
+        assertFalse(TeachingCalendarLogic.canMoveMonthSheet(64f, -72f, 1f, 8))
+        assertFalse(TeachingCalendarLogic.canMoveMonthSheet(8f, -4f, 1f, 8))
     }
 
     @Test
-    fun monthGestureClaimsOnlyStateChangesAndLeavesCollapsedContentScrolling() {
-        assertTrue(
-            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
-                targetExpanded = false,
-                scrollCouldMoveUpAtGestureStart = true,
+    fun monthPhoneWidthSelectedColorsAndBorderFollowNativeContract() {
+        assertEquals(0, TeachingCalendarLogic.monthHorizontalPaddingDp(true))
+        assertEquals(16, TeachingCalendarLogic.monthHorizontalPaddingDp(false))
+        assertEquals(0f, TeachingCalendarLogic.monthDetailsBorderWidthDp(), 0f)
+        assertEquals(
+            ThemePalettes.light.onPrimary,
+            TeachingCalendarLogic.monthEntryTextColor(
+                selected = true,
+                textColor = ThemePalettes.light.text,
+                onPrimaryColor = ThemePalettes.light.onPrimary,
             ),
         )
-        assertTrue(
-            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
-                targetExpanded = true,
-                scrollCouldMoveUpAtGestureStart = false,
-            ),
-        )
-        assertFalse(
-            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
-                targetExpanded = true,
-                scrollCouldMoveUpAtGestureStart = true,
-            ),
-        )
-        assertFalse(
-            TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
-                targetExpanded = null,
-                scrollCouldMoveUpAtGestureStart = false,
+        assertEquals(
+            ThemePalettes.light.primaryDark,
+            TeachingCalendarLogic.monthEntryBackgroundColor(
+                selected = true,
+                surfaceVariantColor = ThemePalettes.light.surfaceVariant,
+                primaryDarkColor = ThemePalettes.light.primaryDark,
             ),
         )
     }
