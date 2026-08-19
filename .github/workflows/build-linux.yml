@@ -41,7 +41,7 @@ permissions:
 jobs:
   linux:
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       RELEASE_LABEL: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('ci-{0}', github.run_id) }}
 
@@ -67,8 +67,14 @@ jobs:
 
       - name: Install Tauri Linux dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
+          if [[ -f /etc/apt/sources.list ]]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
+          fi
+          if [[ -f /etc/apt/sources.list.d/ubuntu.sources ]]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install --no-install-recommends -y \
             build-essential \
             curl \
             file \
@@ -116,3 +122,33 @@ jobs:
             release-artifacts/*.AppImage
             release-artifacts/*.AppImage.sha256
           if-no-files-found: error
+
+  ubuntu-24-04-deb-install:
+    name: Install Debian package on Ubuntu 24.04
+    needs: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: where-to-study-linux-x86_64
+          path: release-artifacts
+
+      - name: Install generated Debian package
+        shell: bash
+        run: |
+          mapfile -d '' debs < <(find release-artifacts -maxdepth 1 -type f -name '*.deb' -print0)
+          if (( ${#debs[@]} != 1 )); then
+            echo "Expected exactly one Debian package, found ${#debs[@]}." >&2
+            exit 1
+          fi
+          deb_path="$(realpath "${debs[0]}")"
+          dependencies="$(dpkg-deb -f "$deb_path" Depends)"
+          grep -q 'libwebkit2gtk-4.1-0' <<<"$dependencies"
+          grep -q 'libgtk-3-0' <<<"$dependencies"
+          grep -Eq 'lib(ayatana-)?appindicator3-1' <<<"$dependencies"
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install --no-install-recommends -y "$deb_path"
+          dpkg-query -W -f='${Status}\n' where-to-study | grep -qx 'install ok installed'

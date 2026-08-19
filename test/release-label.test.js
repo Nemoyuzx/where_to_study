@@ -133,9 +133,13 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
 
   assert.match(packageMetadata.scripts["tauri:build:linux"], /--bundles deb,appimage/);
   assert.match(workflow, /runs-on: ubuntu-22\.04/);
+  assert.match(workflow, /runs-on: ubuntu-24\.04/);
+  assert.match(workflow, /Acquire::Retries=5/);
   assert.match(workflow, /libwebkit2gtk-4\.1-dev/);
+  assert.match(workflow, /install --no-install-recommends -y "\$deb_path"/);
   assert.match(workflow, /\.\/scripts\/linux-package\.sh "\$RELEASE_LABEL"/);
   assert.match(packagingScript, /dpkg-deb -f "\$DEB_PATH" Version/);
+  assert.match(packagingScript, /lib\(ayatana-\)\?appindicator3-1/);
   assert.match(packagingScript, /--appimage-extract/);
   assert.match(packagingScript, /linux-x86_64\.deb/);
   assert.match(packagingScript, /linux-x86_64\.AppImage/);
