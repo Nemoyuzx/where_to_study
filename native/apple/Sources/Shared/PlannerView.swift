@@ -85,10 +85,6 @@ struct PlannerView: View {
                     }
                 }
             }
-            .animation(.easeInOut(duration: 0.22), value: model.selectedSlots)
-            .animation(.easeInOut(duration: 0.22), value: model.selectedBuildings)
-            .animation(.easeInOut(duration: 0.22), value: model.queryCampusID)
-            .animation(.easeInOut(duration: 0.22), value: model.usePersonalSchedule)
             ScrollView {
                 #if os(macOS)
                 page
@@ -131,9 +127,7 @@ struct PlannerView: View {
                         set: { campusID in
                             guard campusID != model.queryCampusID else { return }
                             AppHaptics.selection()
-                            withAnimation(.easeInOut(duration: 0.22)) {
-                                model.selectQueryCampus(campusID)
-                            }
+                            model.selectQueryCampus(campusID)
                         }
                     )
                 ) {
@@ -155,7 +149,6 @@ struct PlannerView: View {
                         }
                         Text(model.isRefreshingClassrooms ? "正在获取当天空教室…" : "获取空教室信息")
                     }
-                    .contentTransition(.opacity)
                     .foregroundStyle(AppTheme.onPrimary)
                     .frame(maxWidth: .infinity, minHeight: 28)
                 }
@@ -223,9 +216,7 @@ struct PlannerView: View {
         let selected = model.selectedSlots.contains(slot.index)
         return Button {
             AppHaptics.selection()
-            withAnimation(.easeInOut(duration: 0.18)) {
-                model.toggleSlot(slot.index)
-            }
+            model.toggleSlot(slot.index)
         } label: {
             VStack(spacing: 3) {
                 Text("第 \(slot.label) 节")
@@ -256,11 +247,9 @@ struct PlannerView: View {
                     .font(.headline)
                 if model.todayCourses.isEmpty {
                     emptyMessage("暂无本地课程，请在设置中获取/刷新个人课表")
-                        .transition(.opacity)
                 } else {
                     ForEach(Array(model.todayCourses.enumerated()), id: \.element.id) { index, course in
                         courseRow(course)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
                         if index < model.todayCourses.count - 1 { Divider() }
                     }
                 }
@@ -308,9 +297,7 @@ struct PlannerView: View {
                             let selected = model.selectedBuildings.contains(building)
                             Button {
                                 AppHaptics.selection()
-                                withAnimation(.easeInOut(duration: 0.18)) {
-                                    model.toggleBuilding(building)
-                                }
+                                model.toggleBuilding(building)
                             } label: {
                                 Label(building, systemImage: "mappin.and.ellipse")
                                     .font(.subheadline.bold())
@@ -340,16 +327,12 @@ struct PlannerView: View {
                     .font(.headline)
                 if model.classroomsCache == nil {
                     emptyMessage("暂无本地空教室数据")
-                        .transition(.opacity)
                 } else if model.selectedBuildings.isEmpty {
                     emptyMessage("请选择教学楼")
-                        .transition(.opacity)
                 } else if model.selectedSlots.isEmpty {
                     emptyMessage("请选择节次")
-                        .transition(.opacity)
                 } else if model.matchingRooms.isEmpty {
                     emptyMessage("暂无匹配空教室")
-                        .transition(.opacity)
                 } else {
                     let rooms = model.matchingRooms
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -358,14 +341,9 @@ struct PlannerView: View {
                             if index < rooms.count - 1 { Divider() }
                         }
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: model.matchingRooms.count)
-        .animation(.easeInOut(duration: 0.22), value: model.classroomsCache == nil)
-        .animation(.easeInOut(duration: 0.22), value: model.selectedBuildings.isEmpty)
-        .animation(.easeInOut(duration: 0.22), value: model.selectedSlots.isEmpty)
     }
 
     private func classroomRow(_ room: Classroom) -> some View {
@@ -391,8 +369,6 @@ struct PlannerView: View {
                 Label("查询概览", systemImage: "chart.bar")
                     .font(.headline)
                 summaryItems
-                    .animation(.easeInOut(duration: 0.22), value: model.todayCourses.count)
-                    .animation(.easeInOut(duration: 0.22), value: model.matchingRooms.count)
             }
         }
     }

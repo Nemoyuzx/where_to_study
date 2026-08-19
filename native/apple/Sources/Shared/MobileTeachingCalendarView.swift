@@ -168,7 +168,6 @@ struct MobileTeachingCalendarView: View {
                     model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
                     systemImage: "arrow.clockwise"
                 )
-                .contentTransition(.opacity)
             }
             .disabled(model.isRefreshingSchedule || model.isImportingCalendar)
 
@@ -179,7 +178,6 @@ struct MobileTeachingCalendarView: View {
                     model.isImportingCalendar ? "正在导入…" : "导入系统日历",
                     systemImage: "calendar.badge.plus"
                 )
-                .contentTransition(.opacity)
             }
             .disabled(model.schedule == nil || model.isRefreshingSchedule || model.isImportingCalendar)
         } label: {
@@ -265,26 +263,20 @@ struct MobileTeachingCalendarView: View {
                 guard let value, !value.isEmpty else { return nil }
                 return value
             }
-        Group {
-            if !messages.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(messages, id: \.self) { message in
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
-                            .lineLimit(2)
-                    }
+        if !messages.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(messages, id: \.self) { message in
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .lineLimit(2)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(AppTheme.primary.opacity(0.08))
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(AppTheme.primary.opacity(0.08))
         }
-        .animation(Self.viewAnimation, value: holidayStatus)
-        .animation(Self.viewAnimation, value: model.statusMessage)
-        .animation(Self.viewAnimation, value: model.calendarImportStatusMessage)
     }
 
     @ViewBuilder
@@ -771,10 +763,8 @@ struct MobileTeachingCalendarView: View {
             let today = sameDay(day, .now)
             Button {
                 AppHaptics.selection()
-                withAnimation(Self.pageAnimation) {
-                    selectedDate = day
-                    presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
-                }
+                selectedDate = day
+                presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
             } label: {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8, weight: .medium))

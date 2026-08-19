@@ -556,7 +556,7 @@ function App() {
       page.removeEventListener('touchmove', updateCalendarSwipe)
       page.classList.remove('calendar-gesture-locked')
     }
-  }, [])
+  }, [activePage])
 
   // macOS trackpad wheel-based calendar navigation
   useEffect(() => {

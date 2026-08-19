@@ -348,19 +348,16 @@ struct TeachingCalendarView: View {
                 Text(status)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
-                    .transition(.opacity)
             }
             if !model.statusMessage.isEmpty {
                 Text(model.statusMessage)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
-                    .transition(.opacity)
             }
             if !model.calendarImportStatusMessage.isEmpty {
                 Text(model.calendarImportStatusMessage)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
-                    .transition(.opacity)
             }
             Divider()
             calendarContent
@@ -369,9 +366,6 @@ struct TeachingCalendarView: View {
                 .animation(Self.viewAnimation, value: mode)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .animation(Self.viewAnimation, value: holidayStatus)
-        .animation(Self.viewAnimation, value: model.statusMessage)
-        .animation(Self.viewAnimation, value: model.calendarImportStatusMessage)
     }
 
     @ViewBuilder
@@ -485,7 +479,6 @@ struct TeachingCalendarView: View {
                     model.isRefreshingSchedule ? "正在获取…" : "获取/刷新个人课表",
                     systemImage: "arrow.clockwise"
                 )
-                .contentTransition(.opacity)
             }
             .disabled(model.isRefreshingSchedule || model.isImportingCalendar)
             Button {
@@ -495,7 +488,6 @@ struct TeachingCalendarView: View {
                     model.isImportingCalendar ? "正在导入…" : "导入系统日历",
                     systemImage: "calendar.badge.plus"
                 )
-                .contentTransition(.opacity)
             }
             .disabled(model.schedule == nil || model.isRefreshingSchedule || model.isImportingCalendar)
         }
@@ -591,7 +583,7 @@ struct TeachingCalendarView: View {
             "\($0.type == "holiday" ? "休" : "班") \($0.name)"
         } ?? (dayCourses.isEmpty ? "无课" : "\(dayCourses.count) 门课")
         return Button {
-            withAnimation(Self.viewAnimation) { selectedDate = day }
+            selectedDate = day
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(isToday ? "今天 \(calendar.component(.day, from: day))" : "\(calendar.component(.day, from: day))")
@@ -704,13 +696,11 @@ struct TeachingCalendarView: View {
             #if os(macOS)
             cell
                 .accessibilityAction {
-                    withAnimation(Self.viewAnimation) { selectedDate = day }
+                    selectedDate = day
                 }
                 .accessibilityAction(named: Text("查看月份")) {
-                    withAnimation(Self.viewAnimation) {
-                        selectedDate = day
-                        mode = .month
-                    }
+                    selectedDate = day
+                    withAnimation(Self.viewAnimation) { mode = .month }
                 }
                 .gesture(
                     SpatialTapGesture(
@@ -726,30 +716,24 @@ struct TeachingCalendarView: View {
                     .onEnded { value in
                         switch value {
                         case .first:
-                            withAnimation(Self.viewAnimation) {
-                                selectedDate = day
-                                mode = .month
-                            }
+                            selectedDate = day
+                            withAnimation(Self.viewAnimation) { mode = .month }
                         case .second:
-                            withAnimation(Self.viewAnimation) { selectedDate = day }
+                            selectedDate = day
                         }
                     }
                 )
             #else
             cell
             .accessibilityAction {
-                withAnimation(Self.viewAnimation) {
-                    yearPopoverDate = day
-                    yearPopoverLocation = nil
-                }
+                yearPopoverDate = day
+                yearPopoverLocation = nil
             }
             .gesture(
                 SpatialTapGesture(coordinateSpace: .named(Self.calendarCoordinateSpace))
                     .onEnded { value in
-                        withAnimation(Self.viewAnimation) {
-                            yearPopoverDate = day
-                            yearPopoverLocation = value.location
-                        }
+                        yearPopoverDate = day
+                        yearPopoverLocation = value.location
                     }
             )
             #endif
@@ -797,10 +781,8 @@ struct TeachingCalendarView: View {
                     .offset(x: originX, y: originY)
                     .contentShape(Rectangle())
                     .onTapGesture { }
-                    .transition(.scale(scale: 0.96).combined(with: .opacity))
                 }
             }
-            .animation(Self.viewAnimation, value: yearPopoverDate)
             .zIndex(20)
         }
     }
@@ -902,7 +884,7 @@ struct TeachingCalendarView: View {
                         .foregroundStyle(AppTheme.secondaryText)
                     ForEach(items, id: \.1.id) { day, item in
                         Button {
-                            withAnimation(Self.viewAnimation) { selectedDate = day }
+                            selectedDate = day
                         } label: {
                             Text("\(Self.monthDayCompactFormatter.string(from: day)) · \(item.name)")
                                 .font(.caption.weight(.semibold))
@@ -1037,10 +1019,8 @@ struct TeachingCalendarView: View {
     }
 
     private func dismissYearPopover() {
-        withAnimation(Self.viewAnimation) {
-            yearPopoverDate = nil
-            yearPopoverLocation = nil
-        }
+        yearPopoverDate = nil
+        yearPopoverLocation = nil
     }
 
     private func estimatedYearPopoverHeight(_ day: Date, availableHeight: CGFloat) -> CGFloat {

@@ -44,7 +44,6 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
-    @State private var columnVisibility = NavigationSplitViewVisibility.all
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isRegularSidebarExpanded = true
@@ -54,7 +53,6 @@ struct RootView: View {
         VStack(spacing: 0) {
             if model.isSampleMode {
                 sampleModeBanner
-                    .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             Group {
@@ -79,7 +77,6 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .animation(.easeInOut(duration: 0.24), value: model.isSampleMode)
         .onAppear {
             model.refreshClassroomsIfNeeded()
             #if os(macOS)
@@ -109,16 +106,13 @@ struct RootView: View {
 
     #if os(macOS)
     private var splitNavigation: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView(columnVisibility: .constant(.all)) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 250)
         } detail: {
             sectionView(model.selectedSection)
-                .transition(.opacity.combined(with: .scale(scale: 0.995)))
-                .id(model.selectedSection)
         }
         .navigationSplitViewStyle(.balanced)
-        .animation(.easeInOut(duration: 0.22), value: model.selectedSection)
     }
     #endif
 
@@ -138,9 +132,7 @@ struct RootView: View {
 
             List(AppSection.allCases) { section in
                 Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        model.selectedSection = section
-                    }
+                    model.selectedSection = section
                 } label: {
                     Label(section.title, systemImage: section.systemImage)
                         .font(.body.weight(model.selectedSection == section ? .semibold : .regular))
@@ -154,7 +146,6 @@ struct RootView: View {
                         ? AppTheme.primary.opacity(0.14)
                         : Color.clear
                 )
-                .animation(.easeInOut(duration: 0.18), value: model.selectedSection)
                 .accessibilityIdentifier(section.accessibilityIdentifier)
                 .accessibilityAddTraits(model.selectedSection == section ? .isSelected : [])
             }
