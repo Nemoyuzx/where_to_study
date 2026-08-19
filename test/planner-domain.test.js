@@ -256,8 +256,8 @@ test('suggestTermForDate picks the fall semester in September', () => {
   assert.equal(suggested.termStartDate, '2026-08-31')
 })
 
-test('suggestTermForDate handles spring months 2..7 and fall months 8..1', () => {
-  for (const month of [1, 8, 9, 10, 11, 12]) {
+test('suggestTermForDate handles spring months 2..7 and fall months 8..12', () => {
+  for (const month of [8, 9, 10, 11, 12]) {
     const fall = suggestTermForDate(new Date(2026, month - 1, 15))
     assert.match(fall.termId, /^2026-2027-1$/)
   }
@@ -265,6 +265,12 @@ test('suggestTermForDate handles spring months 2..7 and fall months 8..1', () =>
     const spring = suggestTermForDate(new Date(2026, month - 1, 15))
     assert.match(spring.termId, /^2025-2026-2$/)
   }
+})
+
+test('January remains in the fall term that started the previous year', () => {
+  const suggested = suggestTermForDate(new Date(2026, 0, 15))
+  assert.equal(suggested.termId, '2025-2026-1')
+  assert.equal(suggested.termStartDate, '2025-09-01')
 })
 
 test('spring term anchor stays in early March', () => {

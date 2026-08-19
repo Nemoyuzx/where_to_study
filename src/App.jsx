@@ -1486,16 +1486,29 @@ function App() {
       // Auto-apply the authoritative term info returned by the backend so
       // users never need to hand-enter the semester id or start date.
       if (isValidTermId(data.term_id) && isValidTermStartDate(data.term_start_date)) {
-        setSettings((current) => {
-          const termChanged = current.termId !== data.term_id
-            || current.termStartDate !== data.term_start_date
-          if (!termChanged) return current
-          setSettingsSaved(false)
-          // Persist the authoritative term so future launches start with it.
-          const next = { ...current, termId: data.term_id, termStartDate: data.term_start_date }
-          command('save_saved_settings', settingsToPayload(next)).catch(() => {})
-          return next
-        })
+        const termChanged = settings.termId !== data.term_id
+          || settings.termStartDate !== data.term_start_date
+        if (termChanged) {
+          const next = {
+            ...settings,
+            termId: data.term_id,
+            termStartDate: data.term_start_date,
+          }
+          // Keep persistence outside the React state updater. Updaters may run
+          // more than once in development, while saving credentials/settings
+          // must remain a single, observable operation.
+          const persisted = await command('save_saved_settings', settingsToPayload(next))
+          if (accountDataRevision !== localDataClearRevision.current) return
+          const persistedSettings = savedSettingsToState(persisted, next)
+          const persistedCredential = savedCredentialSnapshot(persistedSettings)
+          savedCredentialState.current = persistedCredential
+          setSettings((current) => ({
+            ...current,
+            termId: persistedSettings.termId,
+            termStartDate: persistedSettings.termStartDate,
+            hasSavedPassword: accountHasSavedPassword(current.account, persistedCredential),
+          }))
+        }
       }
       const nextState = getWeekState(data.courses, data.term_start_date, todayDate)
       const nextFreeSlots = slotMeta.map((slot) => slot.index).filter((slot) => !nextState.busySlots.includes(slot))

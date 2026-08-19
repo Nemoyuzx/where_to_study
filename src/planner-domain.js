@@ -490,9 +490,11 @@ export function suggestTermForDate(date = new Date()) {
     }
   }
   // Fall semester starts around September 1.
+  // January still belongs to the fall term that started in the previous year.
+  const fallStartYear = month === 1 ? year - 1 : year
   return {
-    termId: year + '-' + (year + 1) + '-1',
-    termStartDate: mondayOfWeekContaining(year, 9, 1),
+    termId: fallStartYear + '-' + (fallStartYear + 1) + '-1',
+    termStartDate: mondayOfWeekContaining(fallStartYear, 9, 1),
   }
 }
 
@@ -518,6 +520,6 @@ export function isValidTermStartDate(value) {
 export function termMatchesCurrentPeriod(termId, termStartDate) {
   if (!isValidTermId(termId)) return false
   const suggested = suggestTermForDate()
-  return termId === suggested.termId
-    && termStartDate === suggested.termStartDate
+  return String(termId).trim() === suggested.termId
+    && String(termStartDate).trim() === suggested.termStartDate
 }
