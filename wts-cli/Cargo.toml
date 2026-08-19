@@ -1,0 +1,20 @@
+[package]
+name = "wts-cli"
+version = "0.1.6"
+description = "Where To Study command-line client (BUPT empty classroom planner)"
+authors = ["Nemoyu"]
+license = "GPL-3.0-only"
+edition = "2021"
+rust-version = "1.89"
+
+[dependencies]
+where_to_study = { path = "../src-tauri" }
+chrono = { version = "0.4", features = ["clock"] }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+serde_json = "1"
+rpassword = "7"
+zeroize = "1"
+
+[profile.release]
+strip = true

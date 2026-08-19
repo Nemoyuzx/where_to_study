@@ -35,6 +35,7 @@ codesign.properties
 
 src-tauri/target
 src-tauri/gen/schemas
+wts-cli/target
 
 native/apple/WhereToStudyNative.xcodeproj/
 native/apple/DerivedData/

@@ -346,7 +346,7 @@ pub(super) fn save_cache(app: &AppHandle, response: &HolidaysResponse) -> Servic
     save_cache_to_path(&cache_path(app, response.year)?, response)
 }
 
-pub(super) fn validate_fetch_year(year: i32) -> ServiceResult<()> {
+pub fn validate_fetch_year(year: i32) -> ServiceResult<()> {
     validate_requested_year(year)
         .map_err(|_| ServiceError::with_status("节假日年份不在支持范围内。", 400))?;
     Ok(())
@@ -385,7 +385,7 @@ fn fallback_2026_items() -> Vec<HolidayItem> {
     items
 }
 
-pub(super) fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
+pub fn offline_response(year: i32) -> ServiceResult<HolidaysResponse> {
     let response = if year == 2026 {
         HolidaysResponse {
             year,
@@ -433,7 +433,7 @@ fn holiday_redirect_policy() -> reqwest::redirect::Policy {
     })
 }
 
-pub(super) async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
+pub async fn fetch_remote(year: i32) -> ServiceResult<HolidaysResponse> {
     let url = format!("{HOLIDAY_DATA_SOURCE}/{year}.json");
     let client = reqwest::Client::builder()
         .connect_timeout(StdDuration::from_secs(15))

@@ -24,6 +24,7 @@ Silicon 兼容构建。
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 x86_64 Debian 包与 AppImage |
+| CLI | Rust（复用 Tauri 核心逻辑） | `wts-cli` 纯命令行客户端，当前提供 macOS 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | iOS | SwiftUI 原生 | `0.1.6 (43)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板布局已移植并通过 45 项单元测试；发布签名与 AGC 上架尚待配置 |
 
