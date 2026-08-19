@@ -135,7 +135,7 @@ enum MobilePageLayoutPolicy {
         if availableHeight < compactHeightThreshold {
             return MobilePageLayoutMetrics(
                 horizontalPadding: 16,
-                topPadding: 8,
+                topPadding: 16,
                 bottomPadding: 16,
                 sectionSpacing: 12,
                 usesCompactTitle: true

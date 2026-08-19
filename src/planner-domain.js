@@ -481,3 +481,72 @@ export function slotsToRanges(slots, slotMeta) {
 export function displayBuildingName(name) {
   return String(name || '').replaceAll('未来学习大楼', '主楼')
 }
+
+
+// ---------- Term (semester) auto-detection ----------
+
+// Beijing University of Posts and Telecommunications academic calendar:
+// - Spring semester (term 2): starts early March, ends mid July
+// - Fall semester (term 1): starts early September, ends mid January
+const SPRING_MONTHS = [2, 3, 4, 5, 6, 7]
+
+/** Monday of the week that contains the given date. */
+function mondayOfWeekContaining(year, month, day) {
+  const date = new Date(year, month - 1, day)
+  const offset = (date.getDay() + 6) % 7 // days since Monday
+  date.setDate(date.getDate() - offset)
+  return localDateString(date)
+}
+
+/**
+ * Suggest the current term id and term start date based on the calendar
+ * date. Uses the standard BUPT schedule pattern (spring starts around
+ * March 1, fall around September 1); the authoritative values come back
+ * in the fetch_schedule response and are applied automatically after a
+ * successful fetch.
+ */
+export function suggestTermForDate(date = new Date()) {
+  const month = date.getMonth() + 1
+  const year = date.getFullYear()
+  if (SPRING_MONTHS.includes(month)) {
+    // Spring semester starts around March 1-3; the week of March 2 is a
+    // stable anchor (2026-03-02, 2025-02-24, 2024-02-26 all match).
+    return {
+      termId: (year - 1) + '-' + year + '-2',
+      termStartDate: mondayOfWeekContaining(year, 3, 2),
+    }
+  }
+  // Fall semester starts around September 1.
+  // January still belongs to the fall term that started in the previous year.
+  const fallStartYear = month === 1 ? year - 1 : year
+  return {
+    termId: fallStartYear + '-' + (fallStartYear + 1) + '-1',
+    termStartDate: mondayOfWeekContaining(fallStartYear, 9, 1),
+  }
+}
+
+/** Validate a term id like "2025-2026-2" or "2025-2026-1". */
+export function isValidTermId(value) {
+  return /^\d{4}-\d{4}-[12]$/.test(String(value || '').trim())
+}
+
+/** Validate a term start date as yyyy-MM-dd that parses to a real date. */
+export function isValidTermStartDate(value) {
+  const text = String(value || '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false
+  const parsed = dateFromString(text)
+  return !Number.isNaN(parsed.getTime())
+    && parsed.getFullYear() === Number(text.slice(0, 4))
+    && parsed.getMonth() + 1 === Number(text.slice(5, 7))
+    && parsed.getDate() === Number(text.slice(8, 10))
+}
+
+/**
+ * True when the given term is the one suggested for the current period.
+ */
+export function termMatchesCurrentPeriod(termId, termStartDate) {
+  if (!isValidTermId(termId)) return false
+  const suggested = suggestTermForDate()
+  return String(termId).trim() === suggested.termId
+    && String(termStartDate).trim() === suggested.termStartDate
+}
