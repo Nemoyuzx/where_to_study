@@ -7,6 +7,16 @@ import org.junit.Test
 
 class AdaptiveLayoutLogicTest {
     @Test
+    fun collapsedNavigationItemsAreCenteredSquaresInsideTheRail() {
+        assertEquals(72, AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_WIDTH_DP)
+        assertEquals(48, AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP)
+        assertTrue(
+            AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP <
+                AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_WIDTH_DP,
+        )
+    }
+
+    @Test
     fun widthClassesUseActualWindowBreakpoints() {
         assertEquals(WindowWidthClass.COMPACT, AdaptiveLayoutLogic.widthClass(0))
         assertEquals(WindowWidthClass.COMPACT, AdaptiveLayoutLogic.widthClass(699))
@@ -45,6 +55,31 @@ class AdaptiveLayoutLogicTest {
         assertEquals(AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_WIDTH_DP, collapsed.navigationWidthDp)
         assertEquals(828, collapsed.contentWidthDp)
         assertFalse(collapsed.usesBottomNavigation)
+    }
+
+    @Test
+    fun collapsedRailUsesTheWholeSeventyTwoDpContainerForCenteredIcons() {
+        assertEquals(
+            0,
+            AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+                collapsed = true,
+                widthClass = WindowWidthClass.MEDIUM,
+            ),
+        )
+        assertEquals(
+            16,
+            AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+                collapsed = false,
+                widthClass = WindowWidthClass.MEDIUM,
+            ),
+        )
+        assertEquals(
+            20,
+            AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+                collapsed = false,
+                widthClass = WindowWidthClass.EXPANDED,
+            ),
+        )
     }
 
     @Test

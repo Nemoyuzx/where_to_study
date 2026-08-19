@@ -47,6 +47,7 @@ struct RootView: View {
     @State private var columnVisibility = NavigationSplitViewVisibility.all
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var isRegularSidebarExpanded = true
     #endif
 
     var body: some View {
@@ -69,7 +70,7 @@ struct RootView: View {
                     horizontalClass: horizontalClass
                 ) {
                 case .sidebar:
-                    splitNavigation
+                    regularNavigation
                 case .tabs:
                     tabNavigation
                 }
@@ -106,6 +107,7 @@ struct RootView: View {
         .accessibilityIdentifier("banner.sample-mode")
     }
 
+    #if os(macOS)
     private var splitNavigation: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
@@ -118,6 +120,7 @@ struct RootView: View {
         .navigationSplitViewStyle(.balanced)
         .animation(.easeInOut(duration: 0.22), value: model.selectedSection)
     }
+    #endif
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -165,6 +168,105 @@ struct RootView: View {
     }
 
     #if os(iOS)
+    private var regularNavigation: some View {
+        HStack(spacing: 0) {
+            regularSidebar
+                .frame(width: isRegularSidebarExpanded ? 224 : 64)
+                .animation(.easeInOut(duration: 0.22), value: isRegularSidebarExpanded)
+
+            Divider()
+
+            sectionView(model.selectedSection)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(AppTheme.background)
+    }
+
+    private var regularSidebar: some View {
+        VStack(alignment: isRegularSidebarExpanded ? .leading : .center, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    isRegularSidebarExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: isRegularSidebarExpanded ? "sidebar.left" : "sidebar.right")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(AppTheme.primary)
+            .accessibilityLabel(isRegularSidebarExpanded ? "收起侧栏" : "展开侧栏")
+            .accessibilityIdentifier("navigation.sidebar-toggle")
+
+            if isRegularSidebarExpanded {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("BUPT")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.secondaryText)
+                    Text("Where To Study")
+                        .font(.headline)
+                        .foregroundStyle(AppTheme.text)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .transition(.opacity)
+            }
+
+            Divider()
+
+            ForEach(AppSection.allCases) { section in
+                Button {
+                    model.selectedSection = section
+                } label: {
+                    HStack(spacing: 11) {
+                        Image(systemName: section.systemImage)
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: 24, height: 24, alignment: .center)
+                        if isRegularSidebarExpanded {
+                            Text(section.title)
+                                .font(.body.weight(model.selectedSection == section ? .semibold : .regular))
+                                .lineLimit(1)
+                                .transition(.opacity)
+                        }
+                    }
+                    .foregroundStyle(model.selectedSection == section ? AppTheme.primary : AppTheme.text)
+                    .frame(
+                        maxWidth: isRegularSidebarExpanded ? .infinity : nil,
+                        minHeight: 42,
+                        alignment: isRegularSidebarExpanded ? .leading : .center
+                    )
+                    .frame(
+                        width: isRegularSidebarExpanded ? nil : 42,
+                        height: 42,
+                        alignment: .center
+                    )
+                    .padding(.horizontal, isRegularSidebarExpanded ? 12 : 0)
+                    .background(
+                        model.selectedSection == section
+                            ? AppTheme.primary.opacity(0.14)
+                            : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: isRegularSidebarExpanded ? .infinity : nil, alignment: .center)
+                .accessibilityIdentifier(section.accessibilityIdentifier)
+                .accessibilityLabel(section.title)
+                .accessibilityAddTraits(model.selectedSection == section ? .isSelected : [])
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, isRegularSidebarExpanded ? 12 : 10)
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(AppTheme.surface.ignoresSafeArea())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("layout.regular-sidebar")
+    }
+
     private var tabNavigation: some View {
         TabView(selection: $model.selectedSection) {
             ForEach(AppSection.allCases) { section in
@@ -225,16 +327,21 @@ private struct AdaptiveTeachingCalendarView: View {
     @ObservedObject var session: TeachingCalendarSessionState
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    @ViewBuilder
     var body: some View {
-        GeometryReader { proxy in
-            switch AdaptiveLayoutPolicy.calendarPresentation(
-                width: proxy.size.width,
-                horizontalClass: AdaptiveHorizontalClass(horizontalSizeClass: horizontalSizeClass)
-            ) {
-            case .compact:
-                MobileTeachingCalendarView(session: session)
-            case .expanded:
-                TeachingCalendarView(session: session)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            MobileTeachingCalendarView(session: session)
+        } else {
+            GeometryReader { proxy in
+                switch AdaptiveLayoutPolicy.calendarPresentation(
+                    width: proxy.size.width,
+                    horizontalClass: AdaptiveHorizontalClass(horizontalSizeClass: horizontalSizeClass)
+                ) {
+                case .compact:
+                    MobileTeachingCalendarView(session: session)
+                case .expanded:
+                    TeachingCalendarView(session: session)
+                }
             }
         }
     }
