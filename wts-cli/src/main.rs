@@ -12,7 +12,7 @@ mod output;
     long_about = "Where To Study 命令行客户端
 
 基于与桌面版相同的数据源（移动教务 HTTPS 接口），支持个人课表、空教室、节假日查询。
-账号密码保存在系统凭据存储（macOS Keychain / Windows Credential Manager / Linux Secret Service）。"
+当前发布版本面向 macOS，账号密码保存在系统 Keychain。"
 )]
 struct Cli {
     #[command(subcommand)]
