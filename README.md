@@ -24,12 +24,12 @@ Silicon 兼容构建。
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 x86_64 Debian 包与 AppImage |
-| iOS | SwiftUI 原生 | `0.1.6 (42)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
+| iOS | SwiftUI 原生 | `0.1.6 (43)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板布局已移植并通过 45 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-稳定版 [v0.1.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.6) 提供 Windows x64 NSIS、Linux x86_64 Debian/AppImage、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版修正移动日历的滑动判定、月视图跟手展开、课程详情、时间轴密度和底部导航层级，并进一步统一 Android 与 iOS 的边线、控件高度、首页和设置密度。移动端支持日、周、月左右滑动与月视图连续展开动画；桌面端继续保留完整月历、双栏年历和正常页面边距。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 当前为 `0.1.6 (42)`，macOS 当前为 `0.1.6 (41)`；公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
+稳定版 [v0.1.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.6) 提供 Windows x64 NSIS、Linux x86_64 Debian/AppImage、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及 Android APK/AAB；每个二进制制品都附带相邻的 SHA-256 校验文件。本版修正移动日历的滑动判定、月视图跟手展开、课程详情、时间轴密度和底部导航层级，并进一步统一 Android 与 iOS 的边线、控件高度、首页和设置密度。移动端支持日、周、月左右滑动与月视图连续展开动画；桌面端继续保留完整月历、双栏年历和正常页面边距。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 当前为 `0.1.6 (43)`，macOS 当前为 `0.1.6 (41)`；公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
 
 ## 许可证状态
 

@@ -252,11 +252,11 @@ fun TextView.setCompactSelectedStyle(context: Context, selected: Boolean) {
 }
 
 internal fun View.disableMonthGridEntryInteraction() {
+    setOnClickListener(null)
     isClickable = false
     isFocusable = false
     isFocusableInTouchMode = false
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
-    setOnClickListener(null)
 }
 
 fun verticalPage(context: Context): LinearLayout = LinearLayout(context).apply {
