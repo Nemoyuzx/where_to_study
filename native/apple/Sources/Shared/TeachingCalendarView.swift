@@ -185,10 +185,18 @@ enum TeachingCalendarLogic {
     static func settledMonthPosition(
         position: CGFloat,
         verticalTranslation: CGFloat,
-        predictedVerticalTranslation: CGFloat
+        predictedVerticalTranslation: CGFloat,
+        allowsIntermediatePosition: Bool = true
     ) -> MonthPosition {
         let clamped = min(max(position, 0), 2)
         let projectedDelta = predictedVerticalTranslation - verticalTranslation
+        if !allowsIntermediatePosition {
+            if projectedDelta <= -42 { return .detailRaised }
+            if projectedDelta >= 42 { return .expanded }
+            return clamped < CGFloat(MonthPosition.collapsed.rawValue)
+                ? .detailRaised
+                : .expanded
+        }
         let target: Int
         if abs(projectedDelta) >= 42 {
             target = projectedDelta > 0 ? Int(ceil(clamped)) : Int(floor(clamped))
@@ -196,6 +204,14 @@ enum TeachingCalendarLogic {
             target = Int(clamped.rounded())
         }
         return MonthPosition(rawValue: min(max(target, 0), 2)) ?? .collapsed
+    }
+
+    static func normalizedMonthPosition(
+        _ position: MonthPosition,
+        allowsIntermediatePosition: Bool
+    ) -> MonthPosition {
+        guard !allowsIntermediatePosition, position == .collapsed else { return position }
+        return .detailRaised
     }
 
     static func expandedMonthCellHeight(availableHeight: CGFloat) -> CGFloat {

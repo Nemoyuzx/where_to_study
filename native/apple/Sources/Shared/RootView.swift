@@ -227,6 +227,11 @@ struct RootView: View {
                         minHeight: 42,
                         alignment: isRegularSidebarExpanded ? .leading : .center
                     )
+                    .frame(
+                        width: isRegularSidebarExpanded ? nil : 42,
+                        height: 42,
+                        alignment: .center
+                    )
                     .padding(.horizontal, isRegularSidebarExpanded ? 12 : 0)
                     .background(
                         model.selectedSection == section

@@ -9,6 +9,10 @@ enum MobileCalendarTimelineLayout {
     static let axisWidth: CGFloat = 56
     static let bottomContentInset: CGFloat = 104
 
+    static func contentBottomInset(isLandscape: Bool) -> CGFloat {
+        isLandscape ? 0 : bottomContentInset
+    }
+
     static var timelineHeight: CGFloat {
         CGFloat(endMinute - startMinute) / 60 * hourHeight
     }
@@ -38,6 +42,7 @@ struct MobileCalendarTimelineView: View {
     let selectedDate: Date
     let showsWeekColumns: Bool
     var isScrollEnabled = true
+    var bottomContentInset = MobileCalendarTimelineLayout.bottomContentInset
     var onSelectDay: ((Date) -> Void)?
     var onSelectCourse: ((Date, Course) -> Void)?
 
@@ -59,7 +64,7 @@ struct MobileCalendarTimelineView: View {
                         .frame(height: MobileCalendarTimelineLayout.timelineHeight)
 
                         Color.clear
-                            .frame(height: MobileCalendarTimelineLayout.bottomContentInset)
+                            .frame(height: bottomContentInset)
                             .accessibilityHidden(true)
                     }
                 }
