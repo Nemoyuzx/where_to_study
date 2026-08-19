@@ -4,6 +4,7 @@ final class TeachingCalendarSessionState: ObservableObject {
     @Published var selectedDate = Date()
     @Published var modeRawValue = "周"
     @Published var isMonthExpanded = true
+    @Published var isMonthDetailRaised = false
 }
 
 private enum CalendarMode: String, CaseIterable, Identifiable {
@@ -56,6 +57,12 @@ enum TeachingCalendarLogic {
             let clampedProgress = min(max(progress, 0), 1)
             return start + (end - start) * clampedProgress
         }
+    }
+
+    enum MonthPosition: Int, CaseIterable {
+        case detailRaised = 0
+        case collapsed = 1
+        case expanded = 2
     }
 
     static func yearCourseOpacity(courseCount: Int) -> Double {
@@ -154,6 +161,59 @@ enum TeachingCalendarLogic {
         return min(max(base + verticalTranslation / distance, 0), 1)
     }
 
+    static func monthPosition(
+        isExpanded: Bool,
+        isDetailRaised: Bool,
+        verticalTranslation: CGFloat,
+        travelDistance: CGFloat
+    ) -> CGFloat {
+        let distance = max(travelDistance, 1)
+        let base = isExpanded
+            ? CGFloat(MonthPosition.expanded.rawValue)
+            : CGFloat(isDetailRaised ? MonthPosition.detailRaised.rawValue : MonthPosition.collapsed.rawValue)
+        return min(max(base + verticalTranslation / distance, 0), 2)
+    }
+
+    static func monthGridExpansionProgress(position: CGFloat) -> CGFloat {
+        min(max(position - CGFloat(MonthPosition.collapsed.rawValue), 0), 1)
+    }
+
+    static func monthDetailLiftProgress(position: CGFloat) -> CGFloat {
+        min(max(CGFloat(MonthPosition.collapsed.rawValue) - position, 0), 1)
+    }
+
+    static func settledMonthPosition(
+        position: CGFloat,
+        verticalTranslation: CGFloat,
+        predictedVerticalTranslation: CGFloat,
+        allowsIntermediatePosition: Bool = true
+    ) -> MonthPosition {
+        let clamped = min(max(position, 0), 2)
+        let projectedDelta = predictedVerticalTranslation - verticalTranslation
+        if !allowsIntermediatePosition {
+            if projectedDelta <= -42 { return .detailRaised }
+            if projectedDelta >= 42 { return .expanded }
+            return clamped < CGFloat(MonthPosition.collapsed.rawValue)
+                ? .detailRaised
+                : .expanded
+        }
+        let target: Int
+        if abs(projectedDelta) >= 42 {
+            target = projectedDelta > 0 ? Int(ceil(clamped)) : Int(floor(clamped))
+        } else {
+            target = Int(clamped.rounded())
+        }
+        return MonthPosition(rawValue: min(max(target, 0), 2)) ?? .collapsed
+    }
+
+    static func normalizedMonthPosition(
+        _ position: MonthPosition,
+        allowsIntermediatePosition: Bool
+    ) -> MonthPosition {
+        guard !allowsIntermediatePosition, position == .collapsed else { return position }
+        return .detailRaised
+    }
+
     static func expandedMonthCellHeight(availableHeight: CGFloat) -> CGFloat {
         let weekdayHeight: CGFloat = 18
         let weekdayBottomSpacing: CGFloat = 8
@@ -179,16 +239,27 @@ enum TeachingCalendarLogic {
         let squareCellHeight = max(24, floor((width - totalColumnSpacing) / 7))
         let expandedCellHeight = expandedMonthCellHeight(availableHeight: availableHeight)
         let collapsedCellHeight = min(squareCellHeight, expandedCellHeight)
-        let collapsedGridWidth = min(
-            width,
-            collapsedCellHeight * 7 + totalColumnSpacing
-        )
         return MonthGridLayout(
             collapsedCellHeight: collapsedCellHeight,
             expandedCellHeight: expandedCellHeight,
-            collapsedGridWidth: collapsedGridWidth,
+            collapsedGridWidth: width,
             expandedGridWidth: width
         )
+    }
+
+    static func monthDayTopInset(collapsedCellHeight: CGFloat) -> CGFloat {
+        let compactContentHeight: CGFloat = 31
+        return max(4, floor((collapsedCellHeight - compactContentHeight) / 2))
+    }
+
+    static func monthEventRowCapacity(
+        cellHeight: CGFloat,
+        dayTopInset: CGFloat,
+        dayLabelHeight: CGFloat = 20,
+        rowHeight: CGFloat = 16
+    ) -> Int {
+        let available = cellHeight - dayTopInset - dayLabelHeight - 5
+        return max(1, Int(floor(available / max(rowHeight, 1))))
     }
 
     static func monthEventLayout(totalCount: Int, maximumRows: Int) -> MonthEventLayout {
