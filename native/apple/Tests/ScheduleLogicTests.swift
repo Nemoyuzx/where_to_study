@@ -517,7 +517,7 @@ final class ScheduleLogicTests: XCTestCase {
         let landscape = MobilePageLayoutPolicy.metrics(availableHeight: 393)
         let portrait = MobilePageLayoutPolicy.metrics(availableHeight: 852)
 
-        XCTAssertEqual(landscape.topPadding, 8)
+        XCTAssertEqual(landscape.topPadding, 16)
         XCTAssertEqual(landscape.sectionSpacing, 12)
         XCTAssertTrue(landscape.usesCompactTitle)
         XCTAssertEqual(portrait.topPadding, 20)
@@ -773,6 +773,53 @@ final class ScheduleLogicTests: XCTestCase {
             .expanded
         )
     }
+
+    func testLandscapeMonthPositionOnlySettlesAtTwoStops() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.normalizedMonthPosition(
+                .collapsed,
+                allowsIntermediatePosition: false
+            ),
+            .detailRaised
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.settledMonthPosition(
+                position: 1.4,
+                verticalTranslation: -70,
+                predictedVerticalTranslation: -130,
+                allowsIntermediatePosition: false
+            ),
+            .detailRaised
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.settledMonthPosition(
+                position: 0.6,
+                verticalTranslation: 70,
+                predictedVerticalTranslation: 130,
+                allowsIntermediatePosition: false
+            ),
+            .expanded
+        )
+        XCTAssertNotEqual(
+            TeachingCalendarLogic.settledMonthPosition(
+                position: 1,
+                verticalTranslation: 0,
+                predictedVerticalTranslation: 0,
+                allowsIntermediatePosition: false
+            ),
+            .collapsed
+        )
+    }
+
+    #if os(iOS)
+    func testLandscapeCalendarRemovesPortraitTabBarInset() {
+        XCTAssertEqual(
+            MobileCalendarTimelineLayout.contentBottomInset(isLandscape: false),
+            MobileCalendarTimelineLayout.bottomContentInset
+        )
+        XCTAssertEqual(MobileCalendarTimelineLayout.contentBottomInset(isLandscape: true), 0)
+    }
+    #endif
 
     func testExpandedMonthHeightReservesWeekdayGridSpacingAndHandle() {
         let availableHeight: CGFloat = 620

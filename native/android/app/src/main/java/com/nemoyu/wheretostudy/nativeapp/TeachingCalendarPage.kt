@@ -83,14 +83,11 @@ private typealias Mode = TeachingCalendarMode
 
 private data class MonthCalendarEntry(
     val title: String,
-    val course: Course? = null,
-    val holiday: HolidayItem? = null,
 )
 
 private data class MonthEntriesRenderState(
     val entries: List<MonthCalendarEntry>,
     val selected: Boolean,
-    val day: Calendar,
     var slotCapacity: Int = -1,
 )
 
@@ -138,6 +135,7 @@ object TeachingCalendarLogic {
     const val monthWeekdayHeaderBottomMarginDp = 8
     const val monthDragHandleHeightDp = 28
     const val compactCalendarBreakpointDp = 1200
+    const val bottomNavigationContentInsetDp = 84
 
     fun modeTransitionDirection(fromIndex: Int, toIndex: Int): Int = when {
         toIndex > fromIndex -> 1
@@ -285,6 +283,11 @@ object TeachingCalendarLogic {
 
     fun monthHorizontalPaddingDp(usesBottomNavigation: Boolean): Int =
         if (usesBottomNavigation) 0 else 16
+
+    fun calendarContentBottomInsetDp(usesBottomNavigation: Boolean): Int =
+        if (usesBottomNavigation) bottomNavigationContentInsetDp else 0
+
+    fun monthDaySelectionTargetPosition(): Float = monthSheetDetailsPosition
 
     fun monthDetailsBorderWidthDp(): Float = 0f
 
@@ -740,6 +743,7 @@ internal class TeachingCalendarPage(
             } else {
                 val fixedMonth = selectedMode == Mode.MONTH
                 val body = LinearLayout(activity).apply {
+                    id = R.id.calendar_page_body
                     orientation = LinearLayout.VERTICAL
                     val horizontalPadding = if (selectedMode == Mode.YEAR) 16 else 0
                     val topPadding = if (selectedMode == Mode.YEAR) 16 else 8
@@ -747,7 +751,11 @@ internal class TeachingCalendarPage(
                         activity.dp(horizontalPadding),
                         activity.dp(topPadding),
                         activity.dp(horizontalPadding),
-                        activity.dp(if (usesBottomNavigation) 84 else 16),
+                        activity.dp(
+                            TeachingCalendarLogic.calendarContentBottomInsetDp(
+                                usesBottomNavigation,
+                            ),
+                        ),
                     )
                     holidayStatus()?.let { message ->
                         addView(TextView(activity).apply {
@@ -978,6 +986,7 @@ internal class TeachingCalendarPage(
 
     private fun phoneDayWeekContent(onDateChanged: () -> Unit): LinearLayout =
         LinearLayout(activity).apply {
+            id = R.id.calendar_page_body
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.surface)
             setPadding(0, activity.dp(6), 0, 0)
@@ -1013,7 +1022,16 @@ internal class TeachingCalendarPage(
                 isFillViewport = false
                 clipToPadding = false
                 scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-                setPadding(0, 0, 0, activity.dp(if (usesBottomNavigation) 84 else 14))
+                setPadding(
+                    0,
+                    0,
+                    0,
+                    activity.dp(
+                        TeachingCalendarLogic.calendarContentBottomInsetDp(
+                            usesBottomNavigation,
+                        ),
+                    ),
+                )
                 addView(phoneTimelineView(timelineDays, callback))
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1453,7 +1471,12 @@ internal class TeachingCalendarPage(
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     week.forEach { day ->
-                        addView(monthDayCell(day, onDateChanged, renderedMonthSheetPosition))
+                        addView(monthDayCell(
+                            day = day,
+                            onDateChanged = onDateChanged,
+                            onPositionChanged = onPositionChanged,
+                            sheetPosition = renderedMonthSheetPosition,
+                        ))
                     }
                 }, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1563,6 +1586,7 @@ internal class TeachingCalendarPage(
     private fun monthDayCell(
         day: Calendar,
         onDateChanged: () -> Unit,
+        onPositionChanged: (Float) -> Unit,
         sheetPosition: Float,
     ): LinearLayout {
         val courses = coursesOn(day)
@@ -1587,9 +1611,15 @@ internal class TeachingCalendarPage(
                 courses.forEach { add("${it.name} ${it.timeRange} ${it.room} ${it.teacher}") }
             }.joinToString("，")
             setOnClickListener {
-                if (!sameDay(selectedDate, day)) performCalendarHaptic()
+                if (!sameDay(selectedDate, day) ||
+                    renderedMonthSheetPosition.roundToInt() !=
+                    TeachingCalendarLogic.monthSheetDetailsPosition.roundToInt()
+                ) {
+                    performCalendarHaptic()
+                }
                 selectedDate.timeInMillis = day.timeInMillis
                 onDateChanged()
+                onPositionChanged(TeachingCalendarLogic.monthDaySelectionTargetPosition())
             }
             addView(TextView(activity).apply {
                 id = R.id.calendar_month_day_label
@@ -1608,15 +1638,14 @@ internal class TeachingCalendarPage(
                 holidays.forEach { item ->
                     add(MonthCalendarEntry(
                         title = (if (item.type == "holiday") "休 " else "班 ") + item.name,
-                        holiday = item,
                     ))
                 }
-                courses.forEach { course -> add(MonthCalendarEntry(course.name, course = course)) }
+                courses.forEach { course -> add(MonthCalendarEntry(course.name)) }
             }
             addView(LinearLayout(activity).apply {
                 id = R.id.calendar_month_expanded_entries
                 orientation = LinearLayout.VERTICAL
-                tag = MonthEntriesRenderState(entries, selected, day.clone() as Calendar)
+                tag = MonthEntriesRenderState(entries, selected)
             })
             val marker = buildString {
                 holidays.firstOrNull()?.let { append(if (it.type == "holiday") "休" else "班") }
@@ -1708,7 +1737,7 @@ internal class TeachingCalendarPage(
             slotCapacity,
         )
         state.entries.take(visibleCount).forEach { entry ->
-            container.addView(monthEntryView(entry, state.selected, state.day), LinearLayout.LayoutParams(
+            container.addView(monthEntryView(entry, state.selected), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(14),
             ).apply { topMargin = activity.dp(1) })
@@ -1719,7 +1748,6 @@ internal class TeachingCalendarPage(
                 container.addView(monthEntryView(
                     MonthCalendarEntry("+$hiddenCount"),
                     state.selected,
-                    state.day,
                 ), LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     activity.dp(14),
@@ -1821,7 +1849,6 @@ internal class TeachingCalendarPage(
     private fun monthEntryView(
         entry: MonthCalendarEntry,
         selected: Boolean,
-        day: Calendar,
     ): TextView = TextView(activity).apply {
         id = R.id.calendar_month_entry
         text = entry.title
@@ -1846,14 +1873,7 @@ internal class TeachingCalendarPage(
             radius = 4,
             borderWidthDp = 0.75f,
         )
-        if (entry.course != null || entry.holiday != null) {
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                entry.course?.let { course -> showCourseDetails(day, course) }
-                    ?: entry.holiday?.let(::showHolidayDetails)
-            }
-        }
+        disableMonthGridEntryInteraction()
     }
 
     private fun yearView(onDateChanged: () -> Unit): LinearLayout = LinearLayout(activity).apply {

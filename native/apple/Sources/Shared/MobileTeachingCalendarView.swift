@@ -27,11 +27,11 @@ private struct MobileMonthEvent: Identifiable {
     let id: String
     let title: String
     let tint: Color
-    let detail: MobileCalendarDetailSelection.Content
 }
 
 struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var session: TeachingCalendarSessionState
     @State private var presentedDetail: MobileCalendarDetailSelection?
     @State private var pageDirection = 1
@@ -65,6 +65,10 @@ struct MobileTeachingCalendarView: View {
         nonmutating set { session.isMonthDetailRaised = newValue }
     }
 
+    private var usesLandscapeMonthStops: Bool {
+        verticalSizeClass == .compact
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -88,9 +92,15 @@ struct MobileTeachingCalendarView: View {
             detailSheet(selection)
                 .presentationDetents([.medium, .large])
         }
-        .onAppear(perform: ensureVisibleHolidays)
+        .onAppear {
+            ensureVisibleHolidays()
+            normalizeMonthPositionForLayout()
+        }
         .onChange(of: selectedDate) { _ in ensureVisibleHolidays() }
         .onChange(of: mode) { _ in ensureVisibleHolidays() }
+        .onChange(of: verticalSizeClass) { _ in
+            normalizeMonthPositionForLayout()
+        }
     }
 
     private var compactHeader: some View {
@@ -294,6 +304,9 @@ struct MobileTeachingCalendarView: View {
                 selectedDate: selectedDate,
                 showsWeekColumns: mode == .week,
                 isScrollEnabled: !isHorizontalPaging,
+                bottomContentInset: MobileCalendarTimelineLayout.contentBottomInset(
+                    isLandscape: usesLandscapeMonthStops
+                ),
                 onSelectDay: { date in
                     guard !suppressesEventSelection else { return }
                     navigate(to: date)
@@ -386,18 +399,18 @@ struct MobileTeachingCalendarView: View {
         let days = monthGridDates(containing: first)
 
         return GeometryReader { proxy in
-            let bottomInset: CGFloat = proxy.size.height < 420
-                ? 56
-                : MobileCalendarTimelineLayout.bottomContentInset
+            let bottomInset = MobileCalendarTimelineLayout.contentBottomInset(
+                isLandscape: usesLandscapeMonthStops
+            )
             let usableHeight = max(
                 proxy.size.height - bottomInset,
                 0
             )
             let travelDistance = max(min(usableHeight * 0.34, 220), 120)
             let position = TeachingCalendarLogic.monthPosition(
-                isExpanded: isMonthExpanded,
-                isDetailRaised: isMonthDetailRaised,
-                verticalTranslation: monthDragTranslation,
+                isExpanded: effectiveMonthPosition == .expanded,
+                isDetailRaised: effectiveMonthPosition == .detailRaised,
+                verticalTranslation: monthDragTranslation * (usesLandscapeMonthStops ? 2 : 1),
                 travelDistance: travelDistance
             )
             let expansionProgress = TeachingCalendarLogic.monthGridExpansionProgress(position: position)
@@ -445,18 +458,19 @@ struct MobileTeachingCalendarView: View {
                 if expansionProgress < 0.999, summaryHeight > 0 {
                     ScrollView(.vertical, showsIndicators: false) {
                         daySummaryCard(selectedDate)
+                            .padding(.horizontal, 1)
+                            .padding(.vertical, 2)
                     }
                     .frame(height: summaryHeight)
                     .opacity(1 - expansionProgress)
                     .scrollDisabled(
-                        !isMonthDetailRaised
+                        effectiveMonthPosition != .detailRaised
                             || monthDragAxis == .vertical
                             || isMonthExpansionSettling
                     )
                     .accessibilityHidden(expansionProgress >= 0.25)
                     .accessibilityIdentifier("calendar.mobile.month-day-summary")
-                    .background(AppTheme.surface)
-                    .overlay(alignment: .top) { Divider() }
+                    .background(Color.clear)
                 }
 
                 Spacer(minLength: 0)
@@ -564,7 +578,7 @@ struct MobileTeachingCalendarView: View {
         return VStack(spacing: 3) {
             Button {
                 guard !suppressesEventSelection else { return }
-                navigate(to: day)
+                selectMonthDay(day)
             } label: {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.subheadline.weight(selected ? .bold : .medium))
@@ -594,7 +608,6 @@ struct MobileTeachingCalendarView: View {
                         monthEventItem(
                             event,
                             tint: selected ? AppTheme.onPrimary : event.tint,
-                            day: day,
                             selected: selected
                         )
                     }
@@ -609,16 +622,14 @@ struct MobileTeachingCalendarView: View {
                                     : AppTheme.surface.opacity(0.78)
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .contentShape(Rectangle())
+                            .onTapGesture { }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
                 .opacity(expansionProgress)
                 .offset(y: (1 - expansionProgress) * -5)
-                .allowsHitTesting(
-                    expansionProgress > 0.75
-                        && monthDragAxis == nil
-                        && !isMonthExpansionSettling
-                )
+                .allowsHitTesting(expansionProgress > 0.5)
             }
         }
         .foregroundStyle(monthForeground(selected: selected, inMonth: inMonth, holiday: holiday))
@@ -644,32 +655,29 @@ struct MobileTeachingCalendarView: View {
     private func monthEventItem(
         _ event: MobileMonthEvent,
         tint: Color,
-        day: Date,
         selected: Bool
     ) -> some View {
-        Button {
-            guard !suppressesEventSelection else { return }
-            present(event.detail, on: day)
-        } label: {
-            Text(event.title)
-                .font(.system(size: 9, weight: .semibold))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(tint)
-                .padding(.horizontal, 3)
-                .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14, alignment: .center)
-                .background(
-                    selected
-                        ? Color.black.opacity(0.18)
-                        : AppTheme.surface.opacity(0.78)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(tint.opacity(0.55), lineWidth: 0.75)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        }
-        .buttonStyle(.plain)
+        Text(event.title)
+            .font(.system(size: 9, weight: .semibold))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 3)
+            .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14, alignment: .center)
+            .background(
+                selected
+                    ? Color.black.opacity(0.18)
+                    : AppTheme.surface.opacity(0.78)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(tint.opacity(0.55), lineWidth: 0.75)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .contentShape(Rectangle())
+            .onTapGesture { }
+            .accessibilityIdentifier("calendar.mobile.month-event.\(event.id)")
+            .accessibilityLabel(event.title)
     }
 
     private func monthEvents(on day: Date) -> [MobileMonthEvent] {
@@ -677,16 +685,14 @@ struct MobileTeachingCalendarView: View {
             MobileMonthEvent(
                 id: "holiday-\(item.id)",
                 title: "\(item.type == "holiday" ? "休" : "班") \(item.name)",
-                tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary,
-                detail: .holiday(item)
+                tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary
             )
         }
         let dayCourses = courses(on: day).map { course in
             MobileMonthEvent(
                 id: "course-\(course.id)",
                 title: course.name,
-                tint: AppTheme.primary,
-                detail: .course(course)
+                tint: AppTheme.primary
             )
         }
         return holidays + dayCourses
@@ -785,6 +791,9 @@ struct MobileTeachingCalendarView: View {
         let dayCourses = courses(on: day)
         let holidays = holidayItems(on: day)
         return VStack(alignment: .leading, spacing: 10) {
+            Text("当日日程")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.secondaryText)
             Text(Self.fullDateFormatter.string(from: day))
                 .font(.headline)
             ForEach(holidays) { item in
@@ -824,6 +833,9 @@ struct MobileTeachingCalendarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("calendar.mobile.month-day-summary-card")
     }
 
     private func detailSheet(_ selection: MobileCalendarDetailSelection) -> some View {
@@ -1140,15 +1152,16 @@ struct MobileTeachingCalendarView: View {
                     return
                 }
                 let position = TeachingCalendarLogic.monthPosition(
-                    isExpanded: isMonthExpanded,
-                    isDetailRaised: isMonthDetailRaised,
-                    verticalTranslation: value.translation.height,
+                    isExpanded: effectiveMonthPosition == .expanded,
+                    isDetailRaised: effectiveMonthPosition == .detailRaised,
+                    verticalTranslation: value.translation.height * (usesLandscapeMonthStops ? 2 : 1),
                     travelDistance: travelDistance
                 )
                 let target = TeachingCalendarLogic.settledMonthPosition(
                     position: position,
                     verticalTranslation: value.translation.height,
-                    predictedVerticalTranslation: value.predictedEndTranslation.height
+                    predictedVerticalTranslation: value.predictedEndTranslation.height,
+                    allowsIntermediatePosition: !usesLandscapeMonthStops
                 )
                 settleMonthPosition(to: target)
             }
@@ -1199,8 +1212,15 @@ struct MobileTeachingCalendarView: View {
         return isMonthDetailRaised ? .detailRaised : .collapsed
     }
 
+    private var effectiveMonthPosition: TeachingCalendarLogic.MonthPosition {
+        TeachingCalendarLogic.normalizedMonthPosition(
+            currentMonthPosition,
+            allowsIntermediatePosition: !usesLandscapeMonthStops
+        )
+    }
+
     private var monthAccessibilityValue: String {
-        switch currentMonthPosition {
+        switch effectiveMonthPosition {
         case .expanded: "已展开"
         case .collapsed: "已收起"
         case .detailRaised: "日程已展开"
@@ -1209,20 +1229,34 @@ struct MobileTeachingCalendarView: View {
 
     private func settleMonthPosition(to target: TeachingCalendarLogic.MonthPosition) {
         guard !isMonthExpansionSettling else { return }
-        if target != currentMonthPosition { AppHaptics.selection() }
+        let normalizedTarget = TeachingCalendarLogic.normalizedMonthPosition(
+            target,
+            allowsIntermediatePosition: !usesLandscapeMonthStops
+        )
+        if normalizedTarget != effectiveMonthPosition { AppHaptics.selection() }
         let settlementID = UUID()
         monthSettlementID = settlementID
         isMonthExpansionSettling = true
         withAnimation(Self.monthExpansionAnimation) {
             monthDragTranslation = 0
-            isMonthExpanded = target == .expanded
-            isMonthDetailRaised = target == .detailRaised
+            isMonthExpanded = normalizedTarget == .expanded
+            isMonthDetailRaised = normalizedTarget == .detailRaised
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(320))
             guard monthSettlementID == settlementID else { return }
             isMonthExpansionSettling = false
         }
+    }
+
+    private func normalizeMonthPositionForLayout() {
+        guard effectiveMonthPosition != currentMonthPosition else { return }
+        settleMonthPosition(to: effectiveMonthPosition)
+    }
+
+    private func selectMonthDay(_ day: Date) {
+        navigate(to: day)
+        settleMonthPosition(to: usesLandscapeMonthStops ? .detailRaised : .collapsed)
     }
 
     private var contentIdentity: String {

@@ -28,6 +28,7 @@ object AdaptiveLayoutLogic {
     const val MEDIUM_NAVIGATION_WIDTH_DP = 210
     const val EXPANDED_NAVIGATION_WIDTH_DP = 230
     const val COLLAPSED_NAVIGATION_WIDTH_DP = 72
+    const val COLLAPSED_NAVIGATION_ITEM_SIZE_DP = 48
 
     fun navigationHorizontalPaddingDp(
         collapsed: Boolean,

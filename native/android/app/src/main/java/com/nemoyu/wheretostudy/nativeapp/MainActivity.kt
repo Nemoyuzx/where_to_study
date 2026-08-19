@@ -80,6 +80,7 @@ class MainActivity : Activity() {
     private var currentLayoutSpec: AdaptiveLayoutSpec? = null
     private var navigationRailCollapsed = false
     private var navigationRail: LinearLayout? = null
+    private var navigationRailHeader: LinearLayout? = null
     private var navigationRailBrand: LinearLayout? = null
     private var navigationRailToggle: TextView? = null
     private var foldingFeatureSpacer: View? = null
@@ -230,6 +231,7 @@ class MainActivity : Activity() {
             addView(LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                navigationRailHeader = this
                 val brand = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(TextView(this@MainActivity).apply {
@@ -311,6 +313,7 @@ class MainActivity : Activity() {
         currentLayoutSpec = spec
         navigationViews.clear()
         navigationRail = null
+        navigationRailHeader = null
         navigationRailBrand = null
         navigationRailToggle = null
         foldingFeatureSpacer = null
@@ -423,6 +426,17 @@ class MainActivity : Activity() {
         }
         view.compoundDrawablePadding = if (navigationRailCollapsed) 0 else dp(10)
         view.setPadding(if (navigationRailCollapsed) 0 else dp(12), 0, 0, 0)
+        view.layoutParams = (view.layoutParams as? LinearLayout.LayoutParams
+            ?: LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))).apply {
+            width = if (navigationRailCollapsed) {
+                dp(AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP)
+            } else {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            }
+            height = dp(AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP)
+            gravity = if (navigationRailCollapsed) Gravity.CENTER_HORIZONTAL else Gravity.NO_GRAVITY
+            bottomMargin = dp(4)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             view.tooltipText = destination.label
         }
@@ -437,6 +451,11 @@ class MainActivity : Activity() {
         )
         navigationRail?.setPadding(dp(horizontalPadding), dp(8), dp(horizontalPadding), dp(16))
         navigationRailBrand?.visibility = if (navigationRailCollapsed) View.GONE else View.VISIBLE
+        navigationRailHeader?.gravity = if (navigationRailCollapsed) {
+            Gravity.CENTER
+        } else {
+            Gravity.CENTER_VERTICAL
+        }
         navigationRailToggle?.apply {
             text = if (navigationRailCollapsed) "›" else "‹"
             contentDescription = if (navigationRailCollapsed) "展开导航栏" else "收起导航栏"
