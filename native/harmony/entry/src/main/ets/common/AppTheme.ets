@@ -44,4 +44,9 @@ export class AppTheme {
   static danger(): Resource {
     return $r('app.color.app_danger');
   }
+
+  // 列表选中背景（深浅色各有独立 alpha，BUG-045 修复）。
+  static selection(): Resource {
+    return $r('app.color.app_selection');
+  }
 }

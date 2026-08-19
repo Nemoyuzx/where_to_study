@@ -314,7 +314,7 @@ export struct SettingsView {
         } else {
           this.borderedButton('浏览内置示例数据', $r('sys.symbol.eye'), (): void => {
             this.model.enterReviewDemo();
-          })
+          }, !this.model.isImportingCalendar)
         }
         Divider()
           .color(AppTheme.border())
@@ -328,7 +328,7 @@ export struct SettingsView {
   }
 
   @Builder
-  borderedButton(label: string, icon: Resource, action: () => void) {
+  borderedButton(label: string, icon: Resource, action: () => void, interactive: boolean = true) {
     Button() {
       Row({ space: 8 }) {
         SymbolGlyph(icon)
@@ -345,8 +345,12 @@ export struct SettingsView {
     .backgroundColor(AppTheme.background())
     .width('100%')
     .height(36)
+    .enabled(interactive)
+    .opacity(interactive ? 1 : 0.5)
     .onClick(() => {
-      action();
+      if (interactive) {
+        action();
+      }
     })
   }
 }

@@ -7,6 +7,7 @@ import teachingCalendarLogicTest from './TeachingCalendarLogic.test';
 import calendarImportLogicTest from './CalendarImportLogic.test';
 import dailyCoursePlanningTest from './DailyCoursePlanning.test';
 import adaptivePolicyTest from './AdaptivePolicy.test';
+import robustnessTest from './Robustness.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -17,4 +18,5 @@ export default function testsuite() {
   calendarImportLogicTest();
   dailyCoursePlanningTest();
   adaptivePolicyTest();
+  robustnessTest();
 }

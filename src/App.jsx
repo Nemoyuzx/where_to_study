@@ -586,7 +586,7 @@ function App() {
       page.removeEventListener('touchmove', updateCalendarSwipe)
       page.classList.remove('calendar-gesture-locked')
     }
-  }, [])
+  }, [activePage])
 
   // Trackpad/mouse-wheel horizontal swipe navigation for desktop WebView2
   // (Windows). macOS touchpads also produce horizontal wheel events.
@@ -1826,6 +1826,7 @@ function App() {
 
         <section
           ref={pageContentRef}
+          key={activePage}
           className={`page-content ${activePage}-page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
         >
           <header className={`topbar ${activePage}-topbar`}>

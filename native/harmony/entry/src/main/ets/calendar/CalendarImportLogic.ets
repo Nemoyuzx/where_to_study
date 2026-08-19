@@ -142,6 +142,11 @@ export class CalendarImportError extends Error {
   static noWritableCalendar(): CalendarImportError {
     return new CalendarImportError('系统中没有可写入的默认日历。');
   }
+
+  // 权限弹窗/系统服务异常（非用户拒绝），BUG-029 修复。
+  static systemError(): CalendarImportError {
+    return new CalendarImportError('日历权限请求失败，请稍后重试或检查系统日历服务。');
+  }
 }
 
 export class CalendarImportLogic {

@@ -12,14 +12,15 @@ import { SettingsView } from './SettingsView';
 
 // 布局策略统一在 common/DeviceState.ets 中（含折叠屏半折叠降级规则），
 // 这里保留导出以兼容旧引用。
-import { AdaptiveLayoutPolicy } from '../common/DeviceState';
+import { AdaptiveLayoutPolicy, DeviceState } from '../common/DeviceState';
 export { AdaptiveLayoutPolicy };
 
 @ComponentV2
 export struct RootView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Local currentSection: AppSection = AppSection.planner;
-  @Local containerWidth: number = 390;
+  // 初始值按屏幕宽度预估，避免宽屏启动首帧闪 Tabs（BUG-022 修复）。
+  @Local containerWidth: number = DeviceState.screenWidthVp();
 
   aboutToAppear(): void {
     // 与 iOS 端 AppModel.init + RootView.onAppear 对应：引导加载后按需刷新当天教室。
@@ -130,7 +131,7 @@ export struct RootView {
         .height(36)
         .padding({ left: 12, right: 12 })
         .borderRadius(6)
-        .backgroundColor(this.currentSection === section ? '#24000000' : Color.Transparent)
+        .backgroundColor(this.currentSection === section ? AppTheme.selection() : Color.Transparent)
         .onClick(() => {
           this.selectSection(section);
         })

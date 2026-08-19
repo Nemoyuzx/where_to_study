@@ -18,6 +18,9 @@ export struct PageTitle {
         .fontSize(30)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')

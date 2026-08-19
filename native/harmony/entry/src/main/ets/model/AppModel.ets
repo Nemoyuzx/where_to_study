@@ -202,6 +202,12 @@ export class AppModel {
   private statusMessageDismissTimer: number | null = null;
   private savedCredentialAccount: string | null = null;
   private launched: boolean = false;
+  private launchPromise: Promise<void> | null = null;
+  private readonly preferencesName: string;
+  private classroomRefreshInFlight: boolean = false;
+  // 每日课程摘要对账门控（BUG-050 修复）：当日已对账且无变化时不再全量重排提醒。
+  private dailyCourseNotificationReconciledDay: string = '';
+  private dailyCourseNotificationDirty: boolean = true;
 
   constructor(
     runtimeMode: AppRuntimeMode = AppRuntimeMode.live(),
@@ -229,16 +235,27 @@ export class AppModel {
     this.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler;
     this.dailyCourseNotificationAuthorizationTimeoutMs = 8000;
     this.statusMessageAutoDismissMs = 4000;
+    this.preferencesName = preferencesName;
     this.preferences = new PreferencesStore(preferencesName);
   }
 
   // 与 iOS 端 AppModel.init 对应的冷启动引导（RootView.aboutToAppear 调用一次）。
   // iOS 端为同步加载，鸿蒙端存储均为异步，因此集中在 launch() 串行完成。
   async launch(): Promise<void> {
+    if (this.launchPromise !== null) {
+      return this.launchPromise;
+    }
+    this.launchPromise = this.performLaunch();
+    return this.launchPromise;
+  }
+
+  private async performLaunch(): Promise<void> {
     if (this.launched) {
       return;
     }
     this.launched = true;
+    // BUG-039 修复：UI 测试偏好域每次启动清空，避免跨测试残留状态。
+    await this.prepareForLaunch();
     const savedTermID: string | null = await this.preferences.getString('termID');
     const savedTermStart: string | null = await this.preferences.getString('termStartDate');
     const savedCampusID: string | null = await this.preferences.getString('campusID');
@@ -257,6 +274,16 @@ export class AppModel {
     this.ensureHolidays(StrictDates.todayParts().year, false);
     // 冷启动总是对账一次，即使开关已关闭也能移除旧批次。
     this.reconcileDailyCourseNotifications(false);
+  }
+
+  private async prepareForLaunch(): Promise<void> {
+    if (this.preferencesName.startsWith('ui-tests')) {
+      try {
+        await this.preferences.clearAll();
+      } catch (e) {
+        // 清空失败不阻断启动。
+      }
+    }
   }
 
   // ---------- 派生状态 ----------
@@ -498,23 +525,42 @@ export class AppModel {
     this.classroomStatusMessage = '';
     this.calendarImportStatusMessage = '';
     this.dailyCourseNotificationStatusMessage = '';
-    this.restorePersistedSettings();
+    this.dailyCourseNotificationDirty = true;
+    const work: Promise<void> = this.restorePersistedSettings();
+    work.catch(() => {
+      // 已在内部处理。
+    });
   }
 
-  private restorePersistedSettings(): void {
-    this.preferences.getString('termID').then((value: string | null) => {
-      this.termID = value !== null && value.length > 0 ? value : ScheduleDefaults.termID;
-    });
-    this.preferences.getString('termStartDate').then((value: string | null) => {
-      this.termStartDate = value !== null && value.length > 0 ? value : ScheduleDefaults.termStartDate;
-    });
-    this.preferences.getString('campusID').then((value: string | null) => {
-      this.campusID = value !== null && value.length > 0 ? value : '01';
+  private async restorePersistedSettings(): Promise<void> {
+    try {
+      const savedTermID: string | null = await this.preferences.getString('termID');
+      const savedTermStart: string | null = await this.preferences.getString('termStartDate');
+      const savedCampusID: string | null = await this.preferences.getString('campusID');
+      const notificationsEnabled: boolean = await this.preferences.getBool(
+        DailyCourseNotificationSettings.enabledKey, false);
+      this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
+      this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
+        savedTermStart : ScheduleDefaults.termStartDate;
+      this.campusID = savedCampusID !== null && savedCampusID.length > 0 ? savedCampusID : '01';
       this.queryCampusID = this.campusID;
-    });
-    this.loadCredentials();
-    this.loadSchedule();
-    this.loadClassrooms();
+      this.dailyCourseNotificationsEnabled = notificationsEnabled;
+    } catch (e) {
+      // 偏好读取失败时保留默认值（BUG-006 修复）。
+    }
+    try {
+      await this.loadCredentials();
+    } catch (e) {
+    }
+    try {
+      await this.loadSchedule();
+    } catch (e) {
+    }
+    try {
+      await this.loadClassrooms();
+    } catch (e) {
+    }
+    // 串行完成后再同步节次，避免与 loadSchedule 的写回竞态（BUG-007/009 修复）。
     this.synchronizeSelectedSlots();
     const year: number = StrictDates.todayParts().year;
     this.ensureHolidays(year, false);
@@ -599,12 +645,20 @@ export class AppModel {
     }
     this.dailyCourseNotificationsEnabled = enabled;
     if (enabled) {
+      this.dailyCourseNotificationDirty = true;
       this.dailyCourseNotificationStatusMessage = '正在确认通知权限…';
       this.reconcileDailyCourseNotifications(true);
     } else {
-      this.preferences.setBool(DailyCourseNotificationSettings.enabledKey, false);
+      const work: Promise<void> = this.preferences.setBool(
+        DailyCourseNotificationSettings.enabledKey, false);
+      work.catch(() => {
+        // 偏好写入失败不影响本次关闭（BUG-016 修复）。
+      });
       this.dailyCourseNotificationStatusMessage = '每日课程摘要已关闭';
-      this.cancelDailyCourseNotifications();
+      const cancelWork: Promise<void> = this.cancelDailyCourseNotifications();
+      cancelWork.catch(() => {
+        // 取消失败由下次对账兜底。
+      });
     }
   }
 
@@ -617,6 +671,14 @@ export class AppModel {
       this.dailyCourseNotificationsEnabled = false;
       return;
     }
+    // 当日已对账且无变化时跳过，避免每次回前台都全量取消并重发提醒（BUG-050 修复）。
+    const today: string = StrictDates.formatDateParts(StrictDates.todayParts());
+    if (!requestPermissionIfNeeded && !this.dailyCourseNotificationDirty &&
+      this.dailyCourseNotificationReconciledDay === today) {
+      return;
+    }
+    this.dailyCourseNotificationDirty = false;
+    this.dailyCourseNotificationReconciledDay = today;
     this.dailyCourseNotificationRevision++;
     const revision: number = this.dailyCourseNotificationRevision;
     if (!this.dailyCourseNotificationsEnabled) {
@@ -663,9 +725,9 @@ export class AppModel {
     });
   }
 
-  private cancelDailyCourseNotifications(): void {
+  private cancelDailyCourseNotifications(): Promise<void> {
     this.dailyCourseNotificationRevision++;
-    this.dailyCourseNotificationScheduler.cancelPending(this.dailyCourseNotificationRevision);
+    return this.dailyCourseNotificationScheduler.cancelPending(this.dailyCourseNotificationRevision);
   }
 
   // ---------- 清除本地数据 ----------
@@ -679,7 +741,12 @@ export class AppModel {
     this.dailyCourseNotificationsEnabled = false;
     await this.preferences.remove(DailyCourseNotificationSettings.enabledKey);
     this.dailyCourseNotificationStatusMessage = '';
-    this.cancelDailyCourseNotifications();
+    // 等待提醒取消完成再清空凭据/课表，避免残留提醒（BUG-060 修复）。
+    try {
+      await this.cancelDailyCourseNotifications();
+    } catch (e) {
+      // 取消失败由下次对账兜底。
+    }
     const failures: string[] = [];
 
     try {
@@ -781,6 +848,7 @@ export class AppModel {
         await this.preferences.setString('termID', this.termID);
         await this.preferences.setString('termStartDate', this.termStartDate);
         this.synchronizeSelectedSlots();
+        this.dailyCourseNotificationDirty = true;
         this.reconcileDailyCourseNotifications(false);
         this.setStatusMessage('个人课表已更新，共 ' + fetched.courses.length.toString() + ' 门课程', true);
       } catch (e) {
@@ -865,11 +933,20 @@ export class AppModel {
     if (this.isSampleMode()) {
       return;
     }
-    if (this.classroomsCache !== null &&
-      this.classroomsCache.targetDate === AppModel.todayString()) {
-      return;
-    }
-    this.refreshClassrooms(false);
+    const work: Promise<void> = (async (): Promise<void> => {
+      // 等待 launch 完成（凭据/缓存就绪），避免启动竞态误报与重复请求（BUG-003/038 修复）。
+      if (this.launchPromise !== null) {
+        await this.launchPromise;
+      }
+      if (this.classroomsCache !== null &&
+        this.classroomsCache.targetDate === AppModel.todayString()) {
+        return;
+      }
+      await this.refreshClassrooms(false);
+    })();
+    work.catch(() => {
+      // 已在内部处理。
+    });
   }
 
   async refreshClassrooms(force: boolean = true): Promise<void> {
@@ -877,29 +954,28 @@ export class AppModel {
       this.classroomStatusMessage = '正在展示内置示例空教室，未连接北邮服务';
       return;
     }
-    if (this.isRefreshingClassrooms) {
+    if (this.classroomRefreshInFlight) {
       return;
     }
     if (!force && this.classroomsCache !== null &&
       this.classroomsCache.targetDate === AppModel.todayString()) {
       return;
     }
-    let credentials: Credentials;
-    try {
-      credentials = await this.credentialsForRequest();
-    } catch (e) {
-      this.classroomStatusMessage = e instanceof Error ? e.message : '';
-      return;
-    }
-    this.isRefreshingClassrooms = true;
+    // 同步置位，防止并发入口在凭据读取期间重复发起请求（BUG-038 修复）。
+    this.classroomRefreshInFlight = true;
     this.classroomRefreshToken++;
     const refreshToken: number = this.classroomRefreshToken;
+    this.isRefreshingClassrooms = true;
     this.classroomStatusMessage = '正在获取当天空教室…';
     const targetDate: string = AppModel.todayString();
     const generation: number = this.localDataGeneration;
 
     const work: Promise<void> = (async (): Promise<void> => {
       try {
+        const credentials: Credentials = await this.credentialsForRequest();
+        if (generation !== this.localDataGeneration || refreshToken !== this.classroomRefreshToken) {
+          return;
+        }
         const fetched: ClassroomsCache = await this.classroomClient.fetch(credentials, targetDate);
         if (generation !== this.localDataGeneration || refreshToken !== this.classroomRefreshToken) {
           return;
@@ -923,6 +999,7 @@ export class AppModel {
       } finally {
         if (refreshToken === this.classroomRefreshToken) {
           this.isRefreshingClassrooms = false;
+          this.classroomRefreshInFlight = false;
         }
       }
     })();
@@ -1042,7 +1119,10 @@ export class AppModel {
 
   private async clearAccountScopedData(): Promise<void> {
     this.invalidatePendingAccountRequests();
-    this.cancelDailyCourseNotifications();
+    const cancelWork: Promise<void> = this.cancelDailyCourseNotifications();
+    cancelWork.catch(() => {
+      // 取消失败由下次对账兜底。
+    });
     if (this.dailyCourseNotificationsEnabled) {
       this.dailyCourseNotificationStatusMessage = '账号已更改，获取课表后将重新安排摘要';
     }

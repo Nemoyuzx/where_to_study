@@ -23,10 +23,17 @@ export class JsonUtil {
   }
 
   static string(value: Object | undefined | null, fallback: string = ''): string {
-    if (value === undefined || value === null || typeof value !== 'string') {
+    if (value === undefined || value === null) {
       return fallback;
     }
-    return value as string;
+    if (typeof value === 'string') {
+      return value as string;
+    }
+    // 兼容数字字段（对齐 Swift NSNumber->String，BUG-018 修复）。
+    if (typeof value === 'number') {
+      return (value as number).toString();
+    }
+    return fallback;
   }
 
   static number(value: Object | undefined | null, fallback: number = 0): number {

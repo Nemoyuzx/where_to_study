@@ -140,7 +140,10 @@ export class TeachingCalendarLogic {
     if (mode === CalendarMode.month) {
       return TeachingCalendarLogic.addMonths(date, direction);
     }
-    return new DateParts(date.year + direction, date.month, date.day);
+    // 年视图：2 月 29 日跨年时按目标年钳制，避免产生非法日期（BUG-048 修复）。
+    const nextYear: number = date.year + direction;
+    return new DateParts(nextYear, date.month,
+      Math.min(date.day, StrictDates.daysInMonth(nextYear, date.month)));
   }
 
   static addMonths(date: DateParts, direction: number): DateParts {

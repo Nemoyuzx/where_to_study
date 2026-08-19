@@ -17,12 +17,12 @@ struct TodayCourseCard {
         Text(this.todayTitle)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
-          .fontColor('#1A1A1A')
+          .fontColor($r('sys.color.ohos_id_color_text_primary'))
         Blank()
         Text(this.todayCountText)
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#88000000')
+          .fontColor($r('sys.color.ohos_id_color_text_secondary'))
       }
       .width('100%')
 
@@ -33,10 +33,10 @@ struct TodayCourseCard {
         Column() {
           Text(this.emptyGlyph)
             .fontSize(22)
-            .fontColor('#166B5D')
+            .fontColor($r('sys.color.ohos_id_color_primary'))
           Text(this.emptyText)
             .fontSize(13)
-            .fontColor('#88000000')
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
             .margin({ top: 4 })
         }
         .width('100%')
@@ -45,14 +45,14 @@ struct TodayCourseCard {
         Column() {
           Text(this.todayLines)
             .fontSize(12)
-            .fontColor('#1A1A1A')
+            .fontColor($r('sys.color.ohos_id_color_text_primary'))
             .maxLines(3)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
           if (this.moreHint.length > 0) {
             Text(this.moreHint)
               .fontSize(10)
-              .fontColor('#88000000')
+              .fontColor($r('sys.color.ohos_id_color_text_secondary'))
               .margin({ top: 4 })
           }
         }
@@ -64,12 +64,12 @@ struct TodayCourseCard {
 
       Text(this.tomorrowHint)
         .fontSize(11)
-        .fontColor('#166B5D')
+        .fontColor($r('sys.color.ohos_id_color_primary'))
     }
     .padding(14)
     .width('100%')
     .height('100%')
     .alignItems(HorizontalAlign.Start)
-    .backgroundColor('#F2F4F6')
+    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
   }
 }

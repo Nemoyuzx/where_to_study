@@ -82,14 +82,15 @@ export class TodayCourseWidgetData {
     return result;
   }
 
-  // 卡片绑定数据：今天课程条目（最多 3 行）+ 明日提示 + 空态文案。
-  static binding(archive: WidgetArchive | null): Record<string, Object> {
+  // 卡片绑定数据：今天课程条目 + 明日提示 + 空态文案。
+  // courseLimit 按卡片尺寸传入（2*2 两行，其余三行），BUG-040 修复。
+  static binding(archive: WidgetArchive | null, courseLimit: number = 3): Record<string, Object> {
     const today: DateParts = StrictDates.todayParts();
     const todayCourses: WidgetArchiveCourse[] = TodayCourseWidgetData.coursesOn(today, archive);
     const tomorrowCourses: WidgetArchiveCourse[] = TodayCourseWidgetData.coursesOn(
       StrictDates.addDays(today, 1), archive);
     const lines: string[] = [];
-    const limit: number = 3;
+    const limit: number = Math.max(1, courseLimit);
     for (let i = 0; i < Math.min(todayCourses.length, limit); i++) {
       const course: WidgetArchiveCourse = todayCourses[i];
       const parts: string[] = [course.timeRange, course.name];

@@ -84,6 +84,9 @@ export class SJDFormURLEncoder {
         bytes.push(0xF0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3F), 0x80 | ((cp >> 6) & 0x3F),
           0x80 | (cp & 0x3F));
         i++;
+      } else if (code >= 0xD800 && code <= 0xDFFF) {
+        // 孤立代理对替换为 U+FFFD（%EF%BF%BD），对齐 Swift addingPercentEncoding（BUG-062 修复）。
+        bytes.push(0xEF, 0xBF, 0xBD);
       } else {
         bytes.push(0xE0 | (code >> 12), 0x80 | ((code >> 6) & 0x3F), 0x80 | (code & 0x3F));
       }

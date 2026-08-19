@@ -49,6 +49,29 @@ export class DeviceState {
     }
   }
 
+  // 屏幕宽度（vp）；用于布局初始值预估（BUG-022 修复）。
+  static screenWidthVp(): number {
+    try {
+      const defaultDisplay: display.Display = display.getDefaultDisplaySync();
+      return defaultDisplay.width / defaultDisplay.densityPixels;
+    } catch (e) {
+      return 390;
+    }
+  }
+
+  // EntryAbility.onDestroy 调用：注销折叠监听（BUG-017 修复）。
+  detach(): void {
+    if (!this.listening) {
+      return;
+    }
+    this.listening = false;
+    try {
+      display.off('foldStatusChange');
+    } catch (e) {
+      // 注销失败仅影响监听清理。
+    }
+  }
+
   foldState(): DeviceFoldState {
     if (this.foldStatus === DeviceFoldState.expanded ||
       this.foldStatus === DeviceFoldState.doubleExpanded) {

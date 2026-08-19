@@ -12,7 +12,7 @@ import {
   CalendarTimelineLogic, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
-import { MobileCalendarTimelineView } from './MobileCalendarTimelineView';
+import { CoursePlacement, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
 
 class MonthEventItem {
   readonly id: string;
@@ -32,6 +32,9 @@ export struct ExpandedTeachingCalendarView {
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
   @Local presentedDay: DateParts | null = null;
   @Local contentWidth: number = 900;
+  @Local contentHeight: number = 700;
+  private timelinePlacements: Map<string, CoursePlacement[]> =
+    new Map<string, CoursePlacement[]>();
 
   aboutToAppear(): void {
     this.ensureVisibleHolidays();
@@ -193,12 +196,12 @@ export struct ExpandedTeachingCalendarView {
 
           this.dateControls()
 
-          ForEach(this.statusMessages(), (message: string) => {
+          ForEach(this.statusMessages(), (message: string, index: number) => {
             Text(message)
               .fontSize(12)
               .fontColor(AppTheme.secondaryText())
               .width('100%')
-          }, (message: string) => 'status.' + message)
+          }, (message: string, index: number) => 'status.' + index.toString() + '.' + message)
 
           Divider()
             .color(AppTheme.border())
@@ -214,9 +217,11 @@ export struct ExpandedTeachingCalendarView {
         .padding(20)
         .width('100%')
         .constraintSize({ maxWidth: 1200 })
+        .alignSelf(ItemAlign.Center)
         .alignItems(HorizontalAlign.Start)
         .onAreaChange((oldArea: Area, newArea: Area) => {
           this.contentWidth = Number(newArea.width);
+          this.contentHeight = Number(newArea.height);
         })
       }
       .width('100%')
@@ -327,6 +332,7 @@ export struct ExpandedTeachingCalendarView {
       Scroll() {
         MobileCalendarTimelineView({
           days: this.timelineDays(),
+          placements: this.timelinePlacements,
           selectedDate: this.selectedDate(),
           showsWeekColumns: this.mode() === CalendarMode.week,
           onSelectDay: (day: DateParts): void => {
@@ -339,7 +345,8 @@ export struct ExpandedTeachingCalendarView {
       .width('100%')
     }
     .width('100%')
-    .height(720)
+    // 高度随视口自适应（BUG-058 修复），下限保证时间线可用。
+    .height(Math.max(this.contentHeight - 280, 360))
   }
 
   private timelineDays(): CalendarTimelineDay[] {
@@ -349,6 +356,8 @@ export struct ExpandedTeachingCalendarView {
     for (const day of days) {
       result.push(new CalendarTimelineDay(day, this.coursesOn(day), this.holidayItemsOn(day)));
     }
+    // 一次算好课程布局，供时间线复用（BUG-046 修复）。
+    this.timelinePlacements = MobileCalendarTimelineView.placementsFor(result);
     return result;
   }
 
@@ -670,6 +679,7 @@ export struct ExpandedTeachingCalendarView {
       .borderRadius(10)
       .backgroundColor(AppTheme.surface())
       .position({ x: '50%', y: '30%' })
+      .translate({ x: '-50%' })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
@@ -694,7 +704,7 @@ export struct ExpandedTeachingCalendarView {
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       } else {
-        ForEach(this.coursesOn(day), (course: Course) => {
+        ForEach(this.coursesOn(day), (course: Course, index: number) => {
           Row({ space: 8 }) {
             Text(course.timeRange)
               .fontSize(12)
@@ -714,7 +724,7 @@ export struct ExpandedTeachingCalendarView {
           }
           .width('100%')
           .alignItems(VerticalAlign.Top)
-        }, (course: Course) => 'summary-course.' + course.id)
+        }, (course: Course, index: number) => 'summary-course.' + course.id + '.' + index.toString())
       }
     }
     .padding({ top: 4 })

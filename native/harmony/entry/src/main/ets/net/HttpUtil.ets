@@ -4,7 +4,9 @@
 // 2. 响应体按上限截断检查（对应 .responseTooLarge）；
 // 3. 传输失败统一转为可读错误信息。
 import { http } from '@kit.NetworkKit';
+import { util } from '@kit.ArkTS';
 import { UrlPolicy } from './UrlPolicy';
+import { Utf8 } from '../common/Utf8';
 
 export class HttpTooLargeError extends Error {
   constructor() {
@@ -51,7 +53,8 @@ export class HttpUtil {
           extraData: spec.body,
           connectTimeout: spec.connectTimeoutMs,
           readTimeout: spec.readTimeoutMs,
-          expectDataType: http.HttpDataType.STRING,
+          // 以字节为单位接收并校验上限，避免 UTF-16 字符数与字节数的偏差（BUG-004 修复）。
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
           maxRedirects: 0
         });
         const code: number = typeof response.responseCode === 'number' ? response.responseCode as number : 0;
@@ -63,11 +66,7 @@ export class HttpUtil {
           currentUrl = UrlPolicy.resolveRedirect(currentUrl, location);
           continue;
         }
-        const body: string = typeof response.result === 'string' ? response.result as string : '';
-        if (body.length > spec.maxBytes) {
-          throw new HttpTooLargeError();
-        }
-        return new HttpResult(code, body);
+        const body: string = HttpUtil.responseBody(response.result, spec.maxBytes);
       } catch (e) {
         if (e instanceof HttpTooLargeError) {
           throw e;
@@ -85,6 +84,23 @@ export class HttpUtil {
       }
     }
     throw new Error('请求重定向次数过多。');
+  }
+
+  // 校验字节上限后再解码；超限不执行解码（BUG-005：尽早拒绝，降低内存放大）。
+  private static responseBody(result: Object | undefined, maxBytes: number): string {
+    if (result instanceof ArrayBuffer) {
+      if (result.byteLength > maxBytes) {
+        throw new HttpTooLargeError();
+      }
+      return new util.TextDecoder('utf-8').decode(new Uint8Array(result));
+    }
+    if (typeof result === 'string') {
+      if (Utf8.bytes(result as string).length > maxBytes) {
+        throw new HttpTooLargeError();
+      }
+      return result as string;
+    }
+    return '';
   }
 
   private static headerValue(header: Object, name: string): string | null {

@@ -39,7 +39,7 @@ export class MobileCalendarTimelineLayout {
   }
 }
 
-class CoursePlacement {
+export class CoursePlacement {
   readonly course: Course;
   readonly track: number;
 
@@ -54,25 +54,44 @@ export struct MobileCalendarTimelineView {
   @Param days: CalendarTimelineDay[] = [];
   @Param selectedDate: DateParts = StrictDates.todayParts();
   @Param showsWeekColumns: boolean = false;
+  // 各天课程布局缓存（BUG-046 修复）：由父组件在构造 days 时一次算好。
+  @Param placements: Map<string, CoursePlacement[]> = new Map<string, CoursePlacement[]>();
   @Event onSelectDay: (day: DateParts) => void = () => {
   };
   @Local nowEpochMs: number = Date.now();
   @Local viewportWidth: number = 300;
   private scroller: Scroller = new Scroller();
   private timerId: number = -1;
+  private viewVisible: boolean = true;
   private readonly hours: number[] = MobileCalendarTimelineLayout.hours();
 
   aboutToAppear(): void {
+    this.startTimerIfNeeded();
+  }
+
+  aboutToDisappear(): void {
+    this.stopTimer();
+  }
+
+  // BUG-052 修复：标签页不可见时暂停 30 秒刷新定时器，避免后台空转。
+  private startTimerIfNeeded(): void {
+    if (this.timerId >= 0 || !this.viewVisible) {
+      return;
+    }
     this.timerId = setInterval(() => {
       this.nowEpochMs = Date.now();
     }, 30000);
   }
 
-  aboutToDisappear(): void {
+  private stopTimer(): void {
     if (this.timerId >= 0) {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
+  }
+
+  private placementsOf(day: CalendarTimelineDay): CoursePlacement[] {
+    return this.placements.get(this.dayKey(day)) ?? [];
   }
 
   private dayCount(): number {
@@ -98,7 +117,17 @@ export struct MobileCalendarTimelineView {
     return false;
   }
 
-  private placeCourses(courses: Course[]): CoursePlacement[] {
+  // 为各天一次计算课程布局（BUG-046 修复）。
+  static placementsFor(days: CalendarTimelineDay[]): Map<string, CoursePlacement[]> {
+    const result: Map<string, CoursePlacement[]> = new Map<string, CoursePlacement[]>();
+    for (const day of days) {
+      result.set(StrictDates.formatDateParts(day.date),
+        MobileCalendarTimelineView.placeCourses(day.courses));
+    }
+    return result;
+  }
+
+  static placeCourses(courses: Course[]): CoursePlacement[] {
     const sorted: Course[] = courses.slice().sort((lhs: Course, rhs: Course) => {
       if (lhs.startSlot !== rhs.startSlot) {
         return lhs.startSlot - rhs.startSlot;
@@ -206,7 +235,7 @@ export struct MobileCalendarTimelineView {
 
         // 课程块
         ForEach(this.days, (day: CalendarTimelineDay, dayIndex: number) => {
-          ForEach(this.placeCourses(day.courses), (placement: CoursePlacement) => {
+          ForEach(this.placementsOf(day), (placement: CoursePlacement) => {
             this.courseBlock(dayIndex, placement)
           }, (placement: CoursePlacement) => this.dayKey(day) + '|' + placement.course.id + '|' +
             placement.track.toString())
@@ -241,6 +270,14 @@ export struct MobileCalendarTimelineView {
     .backgroundColor(AppTheme.surface())
     .onAreaChange((oldArea: Area, newArea: Area) => {
       this.viewportWidth = Math.max(Number(newArea.width) - MobileCalendarTimelineLayout.axisWidth, 1);
+    })
+    .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, currentRatio: number): void => {
+      this.viewVisible = isVisible;
+      if (isVisible) {
+        this.startTimerIfNeeded();
+      } else {
+        this.stopTimer();
+      }
     })
   }
 
@@ -375,7 +412,7 @@ export struct MobileCalendarTimelineView {
   }
 
   private blockTrackCount(dayIndex: number): number {
-    const placements: CoursePlacement[] = this.placeCourses(this.days[dayIndex].courses);
+    const placements: CoursePlacement[] = this.placementsOf(this.days[dayIndex]);
     let trackCount: number = 1;
     for (const item of placements) {
       if (item.track + 1 > trackCount) {
