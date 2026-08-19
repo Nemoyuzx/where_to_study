@@ -19,12 +19,12 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
 
     // Login form
     let focus = app.settings_focus;
-    let account_style = if focus == 0 {
+    let account_style = if focus == 0 && app.settings_editing {
         Style::default().fg(theme.background).bg(theme.primary)
     } else {
         theme.strong_text()
     };
-    let password_style = if focus == 1 {
+    let password_style = if focus == 1 && app.settings_editing {
         Style::default().fg(theme.background).bg(theme.primary)
     } else {
         theme.strong_text()
@@ -37,13 +37,17 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     let password_display = if app.login_password.is_empty() {
         "（空）".to_string()
     } else {
-        "•".repeat(app.login_password.len())
+        "•".repeat(app.login_password.chars().count())
     };
     let form = Paragraph::new(vec![
         Line::from(format!("账号：{account_display}")).style(account_style),
         Line::from(format!("密码：{password_display}")).style(password_style),
         Line::from(""),
-        Line::from("↑↓ 切换输入框 · 输入账号/密码 · Enter 登录 · o 退出登录 · r 刷新课表"),
+        Line::from(if app.settings_editing {
+            "输入模式 · ↑↓/Tab 切换 · Enter 登录 · Esc 结束输入"
+        } else {
+            "Enter/e 开始输入 · l 登录 · o 退出登录 · r 刷新课表"
+        }),
     ])
     .block(Block::default().borders(Borders::ALL).title("账号设置"))
     .wrap(Wrap { trim: false });
@@ -78,7 +82,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         )),
         ListItem::new(format!(
             "节假日：{}",
-            if app.holidays.is_some() {
+            if !app.holidays.is_empty() {
                 "已加载"
             } else {
                 "未加载"

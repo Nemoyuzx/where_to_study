@@ -5,16 +5,16 @@ description = "Where To Study 可视化终端客户端（TUI）"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"
 edition = "2021"
+rust-version = "1.89"
 
 [dependencies]
 where_to_study = { path = "../src-tauri" }
 ratatui = "0.30"
 crossterm = "0.29"
 chrono = { version = "0.4", features = ["clock"] }
-serde_json = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "net", "sync"] }
-rpassword = "7"
 zeroize = { version = "1", features = ["derive"] }
+ctrlc = "3"
 
 [profile.release]
 strip = true

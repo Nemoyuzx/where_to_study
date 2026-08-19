@@ -50,10 +50,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     for day in 1..=days_in_month {
         let date = NaiveDate::from_ymd_opt(year, month.month(), day).unwrap();
         let is_today = date == today;
-        let has_holiday = app.holiday_on(date).is_some();
+        let holiday = app.holiday_on(date);
         let courses = app.courses_on(date);
         let mut content = day.to_string();
-        if let Some((kind, _)) = app.holiday_on(date) {
+        if let Some((kind, _)) = &holiday {
             content = format!("{}{}", kind, content);
         }
         if !courses.is_empty() {
@@ -64,8 +64,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
                 .fg(theme.background)
                 .bg(theme.primary)
                 .add_modifier(Modifier::BOLD)
-        } else if has_holiday {
+        } else if holiday.as_ref().is_some_and(|(kind, _)| *kind == "休") {
             theme.danger_text()
+        } else if holiday.as_ref().is_some_and(|(kind, _)| *kind == "班") {
+            theme.gold_text()
         } else if !courses.is_empty() {
             theme.primary_text()
         } else {

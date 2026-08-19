@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::{Datelike, Duration};
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
@@ -17,13 +17,6 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         return;
     };
 
-    let Some(term_start) = NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d").ok()
-    else {
-        let msg = Paragraph::new("学期开始日期无效。").style(theme.danger_text());
-        frame.render_widget(msg, area);
-        return;
-    };
-
     // Build the week grid: 7 days x 14 slots
     let today = today_in_app_tz();
     let monday = today
@@ -31,7 +24,11 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
             today.weekday().num_days_from_monday() as u64
         ))
         .unwrap_or(today);
-    let week = (today - term_start).num_days() / 7 + 1;
+    let Some(week) = app.schedule_week_on(today) else {
+        let msg = Paragraph::new("今天不在已加载课表的学期范围内。").style(theme.muted_text());
+        frame.render_widget(msg, area);
+        return;
+    };
 
     let mut header = vec![Cell::from("节次").style(theme.strong_text())];
     for offset in 0..7 {

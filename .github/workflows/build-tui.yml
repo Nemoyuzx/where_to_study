@@ -25,51 +25,8 @@ permissions:
   contents: read
 
 jobs:
-  linux:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-        with:
-          components: clippy, rustfmt
-
-      - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
-        with:
-          workspaces: |
-            ./src-tauri
-            ./wts-tui
-
-      - name: Install Tauri Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y             build-essential             libayatana-appindicator3-dev             librsvg2-dev             libssl-dev             libwebkit2gtk-4.1-dev             libxdo-dev
-
-      - name: Check Rust formatting
-        run: cargo fmt --manifest-path wts-tui/Cargo.toml --all -- --check
-
-      - name: Run strict Clippy checks
-        run: cargo clippy --manifest-path wts-tui/Cargo.toml --locked --all-targets -- -D warnings
-
-      - name: Test TUI
-        run: cargo test --manifest-path wts-tui/Cargo.toml --locked
-
-      - name: Build TUI release
-        run: cargo build --manifest-path wts-tui/Cargo.toml --release --locked
-
-      - name: Upload TUI binary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wts-tui-linux-x86_64
-          path: wts-tui/target/release/wts-tui
-          if-no-files-found: error
-
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -99,9 +56,14 @@ jobs:
       - name: Build TUI release
         run: cargo build --manifest-path wts-tui/Cargo.toml --release --locked
 
+      - name: Verify TUI binary
+        run: |
+          file wts-tui/target/release/wts-tui
+          wts-tui/target/release/wts-tui --version
+
       - name: Upload TUI binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wts-tui-macos-arm64
+          name: wts-tui-macos
           path: wts-tui/target/release/wts-tui
           if-no-files-found: error

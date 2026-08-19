@@ -11,7 +11,6 @@ pub struct Theme {
     pub surface: Color,
     #[allow(dead_code)]
     pub primary_soft: Color,
-    #[allow(dead_code)]
     pub gold: Color,
     #[allow(dead_code)]
     pub gold_soft: Color,
@@ -66,6 +65,10 @@ impl Theme {
         Style::default()
             .fg(self.danger)
             .add_modifier(Modifier::BOLD)
+    }
+
+    pub fn gold_text(&self) -> Style {
+        Style::default().fg(self.gold).add_modifier(Modifier::BOLD)
     }
 }
 

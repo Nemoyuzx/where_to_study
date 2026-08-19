@@ -41,20 +41,31 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     frame.render_widget(campus_list, filter_chunks[0]);
 
     // Buildings
+    let visible_building_rows = filter_chunks[1].height.saturating_sub(2) as usize;
+    let building_start = app
+        .building_cursor
+        .saturating_sub(visible_building_rows.saturating_sub(1));
     let building_items: Vec<ListItem> = if app.available_buildings.is_empty() {
         vec![ListItem::new("（获取空教室后显示教学楼）").style(theme.muted_text())]
     } else {
         app.available_buildings
             .iter()
-            .map(|building| {
+            .enumerate()
+            .skip(building_start)
+            .take(visible_building_rows)
+            .map(|(index, building)| {
                 let selected = app.selected_buildings.contains(building);
                 ListItem::new(format!(
-                    "{} {}{}",
+                    "{} {} {}",
+                    if index == app.building_cursor {
+                        "▶"
+                    } else {
+                        " "
+                    },
                     if selected { "☑" } else { "☐" },
-                    building,
-                    if selected { " ✓" } else { "" }
+                    building
                 ))
-                .style(if selected {
+                .style(if index == app.building_cursor || selected {
                     theme.primary_text()
                 } else {
                     theme.muted_text()
@@ -65,7 +76,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     let building_list = List::new(building_items).block(
         Block::default()
             .borders(Borders::ALL)
-            .title("教学楼（空格选择）"),
+            .title("教学楼（↑↓移动 · 空格切换）"),
     );
 
     frame.render_widget(building_list, filter_chunks[1]);
@@ -83,7 +94,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     };
     let slots_para = Paragraph::new(format!(
         "{slots_text}
-[1-9/0] 切换节次 · [a] 全选 · [c] 清空"
+[1-9,0,-,=,[,]] 第1-14节 · [a] 全选 · [c] 清空"
     ))
     .block(Block::default().borders(Borders::ALL).title("节次筛选"))
     .wrap(Wrap { trim: false });
@@ -128,10 +139,14 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
             )));
         }
     }
-    let results_list = List::new(items).block(
+    let max_scroll = items.len().saturating_sub(1);
+    if app.room_scroll > max_scroll {
+        app.room_scroll = max_scroll;
+    }
+    let results_list = List::new(items.into_iter().skip(app.room_scroll)).block(
         Block::default()
             .borders(Borders::ALL)
-            .title(format!("空教室结果（{room_count} 间）")),
+            .title(format!("空教室结果（{room_count} 间 · PgUp/PgDn 滚动）")),
     );
 
     frame.render_widget(results_list, chunks[1]);

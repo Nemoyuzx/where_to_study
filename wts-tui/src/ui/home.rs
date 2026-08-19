@@ -76,15 +76,17 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
 
     // Holiday today
     let holiday = app.holiday_on(today_in_app_tz());
-    let has_holiday = holiday.is_some();
+    let holiday_kind = holiday.as_ref().map(|(kind, _)| *kind);
     let holiday_text = match &holiday {
         Some((kind, name)) => format!("今天：{kind} {name}"),
         None => "今天无节假日安排".to_string(),
     };
     let holiday_para = Paragraph::new(holiday_text)
         .block(Block::default().borders(Borders::ALL).title("节假日"))
-        .style(if has_holiday {
+        .style(if holiday_kind == Some("休") {
             theme.danger_text()
+        } else if holiday_kind == Some("班") {
+            theme.gold_text()
         } else {
             theme.muted_text()
         });
