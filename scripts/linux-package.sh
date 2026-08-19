@@ -83,12 +83,25 @@ APPIMAGE_PATH="${LINUX_APPIMAGE_PATH:-$(require_single_artifact "$BUNDLE_DIR/app
 
 DEB_VERSION="$(dpkg-deb -f "$DEB_PATH" Version)"
 DEB_ARCHITECTURE="$(dpkg-deb -f "$DEB_PATH" Architecture)"
+DEB_DEPENDENCIES="$(dpkg-deb -f "$DEB_PATH" Depends)"
 if [[ "$DEB_VERSION" != "$APP_VERSION" ]]; then
   echo "Debian package version $DEB_VERSION does not match package version $APP_VERSION." >&2
   exit 1
 fi
 if [[ "$DEB_ARCHITECTURE" != "amd64" ]]; then
   echo "Debian package architecture must be amd64, got $DEB_ARCHITECTURE." >&2
+  exit 1
+fi
+if ! grep -q 'libwebkit2gtk-4.1-0' <<<"$DEB_DEPENDENCIES"; then
+  echo "Debian package is missing the WebKitGTK runtime dependency." >&2
+  exit 1
+fi
+if ! grep -q 'libgtk-3-0' <<<"$DEB_DEPENDENCIES"; then
+  echo "Debian package is missing the GTK runtime dependency." >&2
+  exit 1
+fi
+if ! grep -Eq 'lib(ayatana-)?appindicator3-1' <<<"$DEB_DEPENDENCIES"; then
+  echo "Debian package is missing the detected app-indicator runtime dependency." >&2
   exit 1
 fi
 if ! file "$APPIMAGE_PATH" | grep -Eq 'ELF 64-bit.*x86-64'; then

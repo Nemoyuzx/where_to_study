@@ -51,11 +51,6 @@
     "macOS": {
       "minimumSystemVersion": "12.0"
     },
-    "linux": {
-      "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libappindicator3-1", "librsvg2-2"]
-      }
-    },
     "android": {
       "versionCode": 1006
     }
