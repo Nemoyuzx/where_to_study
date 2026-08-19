@@ -36,22 +36,20 @@ struct SJDClassroomClient: ClassroomFetching {
         )
     }
 
-    private static func contractDate(_ date: Date = .now) -> String {
-        formatter("yyyy-MM-dd").string(from: date)
+    static func contractDate(_ date: Date = .now) -> String {
+        StrictContractDateParser.string(from: date)
     }
 
-    private static func timestamp(_ date: Date = .now) -> String {
-        formatter("yyyy-MM-dd'T'HH:mm:ssXXX").string(from: date)
+    static func timestamp(_ date: Date = .now) -> String {
+        timestampStyle.format(date)
     }
 
-    private static func formatter(_ format: String) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        formatter.dateFormat = format
-        return formatter
-    }
+    private static let timestampStyle = Date.ISO8601FormatStyle(timeZone: Calendar.shanghai.timeZone)
+        .year()
+        .month()
+        .day()
+        .time(includingFractionalSeconds: false)
+        .timeZone(separator: .colon)
 }
 
 enum SJDClassroomParser {

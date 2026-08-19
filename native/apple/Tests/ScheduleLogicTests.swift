@@ -35,6 +35,25 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertTrue(SJDURLSession.shared.delegate is SJDURLSessionRedirectDelegate)
     }
 
+    func testClassroomClientFormatsShanghaiContractDatesWithoutFractionalSeconds() throws {
+        let date = try XCTUnwrap(
+            Calendar.shanghai.date(
+                from: DateComponents(
+                    timeZone: Calendar.shanghai.timeZone,
+                    year: 2026,
+                    month: 8,
+                    day: 19,
+                    hour: 7,
+                    minute: 5,
+                    second: 9
+                )
+            )
+        )
+
+        XCTAssertEqual(SJDClassroomClient.contractDate(date), "2026-08-19")
+        XCTAssertEqual(SJDClassroomClient.timestamp(date), "2026-08-19T07:05:09+08:00")
+    }
+
     func testSJDLoginFormUsesStandardEncodingForReservedAndUnicodeCharacters() throws {
         let data = SJDFormURLEncoder.data([
             "userNo": "2026+test",

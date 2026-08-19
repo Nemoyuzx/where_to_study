@@ -443,7 +443,7 @@ struct TeachingCalendarView: View {
                         .labelsHidden()
                         .datePickerStyle(.graphical)
                         .environment(\.locale, Locale(identifier: "zh_CN"))
-                        .environment(\.timeZone, Self.shanghaiTimeZone)
+                        .environment(\.timeZone, Calendar.shanghai.timeZone)
                 }
                 .padding(14)
                 .frame(width: 310)
@@ -1067,7 +1067,6 @@ struct TeachingCalendarView: View {
     private static let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
     private static let nowRed = AppTheme.danger
     private static let holidayRed = AppTheme.danger
-    private static let shanghaiTimeZone = TimeZone(identifier: "Asia/Shanghai")!
     private static let calendarCoordinateSpace = "teaching-calendar"
     private static let viewAnimation = Animation.easeInOut(duration: 0.24)
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
