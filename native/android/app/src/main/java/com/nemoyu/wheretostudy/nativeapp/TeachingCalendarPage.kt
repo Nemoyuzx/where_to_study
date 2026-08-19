@@ -41,6 +41,7 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -55,7 +56,8 @@ internal enum class TeachingCalendarMode(val label: String) {
 internal class TeachingCalendarSessionState(
     selectedDateMillis: Long = System.currentTimeMillis(),
     selectedModeName: String = TeachingCalendarMode.WEEK.name,
-    var monthExpanded: Boolean = true,
+    monthExpanded: Boolean = true,
+    initialMonthSheetPosition: Float? = null,
 ) {
     val selectedDate: Calendar = Calendar.getInstance(SHANGHAI).apply {
         timeInMillis = selectedDateMillis
@@ -63,6 +65,14 @@ internal class TeachingCalendarSessionState(
     var selectedMode: TeachingCalendarMode = TeachingCalendarMode.entries
         .firstOrNull { it.name == selectedModeName }
         ?: TeachingCalendarMode.WEEK
+    var monthSheetPosition: Float = initialMonthSheetPosition
+        ?.coerceIn(0f, 2f)
+        ?: if (monthExpanded) 0f else 1f
+    var monthExpanded: Boolean
+        get() = monthSheetPosition < 0.5f
+        set(value) {
+            monthSheetPosition = if (value) 0f else 1f
+        }
 
     private companion object {
         val SHANGHAI: TimeZone = TimeZone.getTimeZone("Asia/Shanghai")
@@ -73,8 +83,12 @@ private typealias Mode = TeachingCalendarMode
 
 private data class MonthCalendarEntry(
     val title: String,
-    val course: Course? = null,
-    val holiday: HolidayItem? = null,
+)
+
+private data class MonthEntriesRenderState(
+    val entries: List<MonthCalendarEntry>,
+    val selected: Boolean,
+    var slotCapacity: Int = -1,
 )
 
 private class MonthExpansionIndicatorView(context: Context) : View(context) {
@@ -106,17 +120,22 @@ private class MonthExpansionIndicatorView(context: Context) : View(context) {
 
 object TeachingCalendarLogic {
     const val swipeThresholdDp = 72
-    const val expansionSwipeThresholdDp = 48
     const val expansionVelocityThresholdDpPerSecond = 640f
-    const val expandedMonthEntryLimit = 2
+    const val monthSheetExpandedPosition = 0f
+    const val monthSheetDetailsPosition = 1f
+    const val monthSheetWeekPosition = 2f
     const val phoneModeSwitchHeightDp = 38
     const val phoneModeTabHeightDp = 32
     const val phoneNavigationHeightDp = 36
     const val phoneDateStripHeightDp = 56
     const val phoneDateStripGapDp = 6
-    const val collapsedMonthDayTopPaddingDp = 3
-    const val expandedMonthDayTopPaddingDp = 3
+    const val collapsedMonthDayTopPaddingDp = 5
+    const val expandedMonthDayTopPaddingDp = 5
+    const val monthWeekdayHeaderHeightDp = 26
+    const val monthWeekdayHeaderBottomMarginDp = 8
+    const val monthDragHandleHeightDp = 28
     const val compactCalendarBreakpointDp = 1200
+    const val bottomNavigationContentInsetDp = 84
 
     fun modeTransitionDirection(fromIndex: Int, toIndex: Int): Int = when {
         toIndex > fromIndex -> 1
@@ -149,68 +168,137 @@ object TeachingCalendarLogic {
         return if (deltaXDp < 0f) 1 else -1
     }
 
-    fun monthExpansionTarget(
+    fun canMoveMonthSheet(
         deltaXDp: Float,
         deltaYDp: Float,
-        currentlyExpanded: Boolean,
-        thresholdDp: Int = expansionSwipeThresholdDp,
-    ): Boolean? {
+        currentPosition: Float,
+        thresholdDp: Int,
+    ): Boolean {
         val horizontalDistance = abs(deltaXDp)
         val verticalDistance = abs(deltaYDp)
         if (verticalDistance < thresholdDp || verticalDistance <= horizontalDistance * 1.2f) {
-            return null
+            return false
         }
-        val target = deltaYDp > 0f
-        return target.takeIf { it != currentlyExpanded }
-    }
-
-    fun shouldClaimMonthExpansionGesture(
-        targetExpanded: Boolean?,
-        scrollCouldMoveUpAtGestureStart: Boolean,
-    ): Boolean = when (targetExpanded) {
-        true -> !scrollCouldMoveUpAtGestureStart
-        false -> true
-        null -> false
+        return when {
+            deltaYDp < 0f -> currentPosition < monthSheetWeekPosition
+            deltaYDp > 0f -> currentPosition > monthSheetExpandedPosition
+            else -> false
+        }
     }
 
     fun monthCellHeightDp(expanded: Boolean): Int = if (expanded) 82 else 46
 
-    fun expandedMonthCellHeightDp(availableHeightDp: Int): Int {
-        val reservedHeightDp = 26 + 8 + 28 + 16
-        return ((availableHeightDp - reservedHeightDp) / 6).coerceIn(30, 82)
-    }
+    fun expandedMonthCellHeightDp(
+        monthViewHeightDp: Int,
+        verticalPaddingDp: Int,
+        weekdayReservedHeightDp: Int,
+        dragHandleReservedHeightDp: Int,
+    ): Int = (
+        (monthViewHeightDp - verticalPaddingDp - weekdayReservedHeightDp -
+            dragHandleReservedHeightDp).coerceAtLeast(0) / 6
+        ).coerceAtMost(monthCellHeightDp(expanded = true))
 
-    fun monthExpansionProgress(
+    fun monthSheetDragPosition(
         deltaYDp: Float,
-        currentlyExpanded: Boolean,
+        startPosition: Float,
         travelDp: Float = (monthCellHeightDp(true) - monthCellHeightDp(false)) * 6f,
     ): Float {
-        if (travelDp <= 0f) return if (currentlyExpanded) 1f else 0f
-        val initial = if (currentlyExpanded) 1f else 0f
-        return (initial + deltaYDp / travelDp).coerceIn(0f, 1f)
+        if (travelDp <= 0f) return startPosition.coerceIn(0f, 2f)
+        return (startPosition - deltaYDp / travelDp).coerceIn(0f, 2f)
     }
 
-    fun settledMonthExpansion(
-        progress: Float,
+    fun settledMonthSheetPosition(
+        position: Float,
         velocityYDpPerSecond: Float,
         velocityThresholdDpPerSecond: Float = expansionVelocityThresholdDpPerSecond,
-    ): Boolean {
+    ): Int {
+        val resolved = position.coerceIn(0f, 2f)
         if (abs(velocityYDpPerSecond) >= velocityThresholdDpPerSecond) {
-            return velocityYDpPerSecond > 0f
+            return if (velocityYDpPerSecond < 0f) {
+                (kotlin.math.floor((resolved + 0.001f).toDouble()).toInt() + 1).coerceAtMost(2)
+            } else {
+                (kotlin.math.ceil((resolved - 0.001f).toDouble()).toInt() - 1).coerceAtLeast(0)
+            }
         }
-        return progress.coerceIn(0f, 1f) >= 0.5f
+        return resolved.roundToInt().coerceIn(0, 2)
     }
 
     fun interpolateMonthMetric(collapsed: Int, expanded: Int, progress: Float): Int =
         (collapsed + (expanded - collapsed) * progress.coerceIn(0f, 1f)).roundToInt()
 
-    fun visibleMonthEntryCount(entryCount: Int): Int {
-        val count = entryCount.coerceAtLeast(0)
-        return if (count > expandedMonthEntryLimit) expandedMonthEntryLimit - 1 else count
+    fun monthCellExpansionProgress(position: Float): Float =
+        1f - position.coerceIn(monthSheetExpandedPosition, monthSheetDetailsPosition)
+
+    fun monthSelectedWeekProgress(position: Float): Float =
+        (position - monthSheetDetailsPosition).coerceIn(0f, 1f)
+
+    fun monthRowHeightDp(
+        position: Float,
+        rowIndex: Int,
+        selectedWeekIndex: Int,
+        expandedHeightDp: Int = monthCellHeightDp(true),
+    ): Int {
+        val expandedProgress = monthCellExpansionProgress(position)
+        val fullMonthHeight = interpolateMonthMetric(
+            monthCellHeightDp(false),
+            expandedHeightDp,
+            expandedProgress,
+        )
+        if (rowIndex == selectedWeekIndex) return fullMonthHeight
+        return (fullMonthHeight * (1f - monthSelectedWeekProgress(position)))
+            .roundToInt()
+            .coerceAtLeast(0)
     }
 
-    fun hiddenMonthEntryCount(entryCount: Int): Int =
-        (entryCount - visibleMonthEntryCount(entryCount)).coerceAtLeast(0)
+    fun monthEntryAvailableHeightDp(
+        cellHeightDp: Int,
+        expandedProgress: Float,
+        labelHeightDp: Int = 24,
+    ): Int {
+        val resolved = expandedProgress.coerceIn(0f, 1f)
+        val bottomPadding = interpolateMonthMetric(5, 2, resolved)
+        val markerHeight = interpolateMonthMetric(12, 0, resolved)
+        return (cellHeightDp - expandedMonthDayTopPaddingDp - bottomPadding -
+            labelHeightDp - markerHeight).coerceAtLeast(0)
+    }
+
+    fun monthEntrySlotCapacity(
+        availableHeightDp: Int,
+        entryHeightDp: Int = 14,
+        entrySpacingDp: Int = 1,
+    ): Int {
+        if (availableHeightDp <= 0 || entryHeightDp <= 0) return 0
+        return ((availableHeightDp + entrySpacingDp) / (entryHeightDp + entrySpacingDp))
+            .coerceAtLeast(0)
+    }
+
+    fun visibleMonthEntryCount(entryCount: Int, slotCapacity: Int): Int {
+        val count = entryCount.coerceAtLeast(0)
+        val capacity = slotCapacity.coerceAtLeast(0)
+        return if (count > capacity) (capacity - 1).coerceAtLeast(0) else count
+    }
+
+    fun hiddenMonthEntryCount(entryCount: Int, slotCapacity: Int): Int =
+        (entryCount - visibleMonthEntryCount(entryCount, slotCapacity)).coerceAtLeast(0)
+
+    fun monthHorizontalPaddingDp(usesBottomNavigation: Boolean): Int =
+        if (usesBottomNavigation) 0 else 16
+
+    fun calendarContentBottomInsetDp(usesBottomNavigation: Boolean): Int =
+        if (usesBottomNavigation) bottomNavigationContentInsetDp else 0
+
+    fun monthDaySelectionTargetPosition(): Float = monthSheetDetailsPosition
+
+    fun monthDetailsBorderWidthDp(): Float = 0f
+
+    fun monthEntryTextColor(selected: Boolean, textColor: Int, onPrimaryColor: Int): Int =
+        if (selected) onPrimaryColor else textColor
+
+    fun monthEntryBackgroundColor(
+        selected: Boolean,
+        surfaceVariantColor: Int,
+        primaryDarkColor: Int,
+    ): Int = if (selected) primaryDarkColor else surfaceVariantColor
 
     fun courseDetailLines(course: Course): List<String> = buildList {
         add("时间：${course.timeRange.ifEmpty { "未标注" }}")
@@ -229,15 +317,18 @@ private class CalendarSwipeContainer(
     context: MainActivity,
 ) : FrameLayout(context) {
     var onPageSwipe: ((Int) -> Unit)? = null
-    var onMonthExpansionSwipe: ((Boolean) -> Unit)? = null
+    var onMonthSheetSettled: ((Float) -> Unit)? = null
         set(value) {
             field = value
             sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
         }
-    var onMonthExpansionProgress: ((Float) -> Unit)? = null
-    var monthExpanded: Boolean = true
+    var onMonthSheetProgress: ((Float) -> Unit)? = null
+    var monthSheetPosition: Float = TeachingCalendarLogic.monthSheetExpandedPosition
         set(value) {
-            field = value
+            field = value.coerceIn(
+                TeachingCalendarLogic.monthSheetExpandedPosition,
+                TeachingCalendarLogic.monthSheetWeekPosition,
+            )
             sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
         }
     var swipeEnabled: Boolean = true
@@ -246,8 +337,8 @@ private class CalendarSwipeContainer(
     private var gestureEligible = false
     private var claimedGesture = 0
     private var childCancelled = false
-    private var scrollCouldMoveUpAtGestureStart = false
-    private var monthDragProgress = 1f
+    private var monthDragStartPosition = TeachingCalendarLogic.monthSheetExpandedPosition
+    private var monthDragPosition = TeachingCalendarLogic.monthSheetExpandedPosition
     private var velocityTracker: VelocityTracker? = null
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop / density
@@ -268,15 +359,22 @@ private class CalendarSwipeContainer(
                         AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SCROLL_BACKWARD,
                     )
                 }
-                if (onMonthExpansionSwipe != null) {
-                    info.contentDescription = if (monthExpanded) "月历，已展开" else "月历，已收起"
-                    info.addAction(
-                        if (monthExpanded) {
-                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE
-                        } else {
-                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND
-                        },
-                    )
+                if (onMonthSheetSettled != null) {
+                    info.contentDescription = when (monthSheetPosition.roundToInt()) {
+                        0 -> "月历，已展开"
+                        1 -> "月历与当日日程"
+                        else -> "选中周与当日日程"
+                    }
+                    if (monthSheetPosition < TeachingCalendarLogic.monthSheetWeekPosition) {
+                        info.addAction(
+                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE,
+                        )
+                    }
+                    if (monthSheetPosition > TeachingCalendarLogic.monthSheetExpandedPosition) {
+                        info.addAction(
+                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND,
+                        )
+                    }
                 }
             }
 
@@ -293,12 +391,14 @@ private class CalendarSwipeContainer(
                     }
                 }
                 val target = when (action) {
-                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND.id -> true
-                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE.id -> false
+                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND.id ->
+                        monthSheetPosition.roundToInt() - 1
+                    AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE.id ->
+                        monthSheetPosition.roundToInt() + 1
                     else -> return super.performAccessibilityAction(host, action, args)
-                }
-                if (onMonthExpansionSwipe == null || target == monthExpanded) return false
-                post { onMonthExpansionSwipe?.invoke(target) }
+                }.coerceIn(0, 2)
+                if (onMonthSheetSettled == null || target == monthSheetPosition.roundToInt()) return false
+                post { onMonthSheetSettled?.invoke(target.toFloat()) }
                 return true
             }
         })
@@ -316,22 +416,6 @@ private class CalendarSwipeContainer(
         childCancelled = true
     }
 
-    private fun scrollHierarchyCanMoveUp(): Boolean {
-        fun canMoveUp(view: View): Boolean {
-            if (view.canScrollVertically(-1)) return true
-            if (view !is ViewGroup) return false
-            return (0 until view.childCount).any { canMoveUp(view.getChildAt(it)) }
-        }
-        if ((0 until childCount).any { canMoveUp(getChildAt(it)) }) return true
-        var ancestor = parent
-        while (ancestor is View) {
-            val ancestorView = ancestor as View
-            if (ancestorView.canScrollVertically(-1)) return true
-            ancestor = ancestorView.parent
-        }
-        return false
-    }
-
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -340,8 +424,8 @@ private class CalendarSwipeContainer(
                 gestureEligible = swipeEnabled
                 claimedGesture = 0
                 childCancelled = false
-                scrollCouldMoveUpAtGestureStart = scrollHierarchyCanMoveUp()
-                monthDragProgress = if (monthExpanded) 1f else 0f
+                monthDragStartPosition = monthSheetPosition
+                monthDragPosition = monthSheetPosition
                 velocityTracker?.recycle()
                 velocityTracker = VelocityTracker.obtain().also { it.addMovement(event) }
                 if (gestureEligible) {
@@ -356,14 +440,11 @@ private class CalendarSwipeContainer(
                     if (abs(deltaX) >= touchSlop || abs(deltaY) >= touchSlop) {
                         claimedGesture = when {
                             abs(deltaX) > abs(deltaY) * 1.12f -> 1
-                            onMonthExpansionSwipe != null && TeachingCalendarLogic.shouldClaimMonthExpansionGesture(
-                                TeachingCalendarLogic.monthExpansionTarget(
-                                    deltaX,
-                                    deltaY,
-                                    monthExpanded,
-                                    thresholdDp = touchSlop.roundToInt().coerceAtLeast(6),
-                                ),
-                                scrollCouldMoveUpAtGestureStart,
+                            onMonthSheetSettled != null && TeachingCalendarLogic.canMoveMonthSheet(
+                                deltaXDp = deltaX,
+                                deltaYDp = deltaY,
+                                currentPosition = monthDragStartPosition,
+                                thresholdDp = touchSlop.roundToInt().coerceAtLeast(6),
                             ) -> 2
                             else -> -1
                         }
@@ -377,11 +458,11 @@ private class CalendarSwipeContainer(
                 }
                 if (claimedGesture == 2) {
                     val deltaY = (event.y - downY) / density
-                    monthDragProgress = TeachingCalendarLogic.monthExpansionProgress(
+                    monthDragPosition = TeachingCalendarLogic.monthSheetDragPosition(
                         deltaYDp = deltaY,
-                        currentlyExpanded = monthExpanded,
+                        startPosition = monthDragStartPosition,
                     )
-                    onMonthExpansionProgress?.invoke(monthDragProgress)
+                    onMonthSheetProgress?.invoke(monthDragPosition)
                     return true
                 }
                 if (claimedGesture > 0) return true
@@ -400,15 +481,15 @@ private class CalendarSwipeContainer(
                 }
                 if (gestureEligible && claimedGesture == 2) {
                     val velocityY = (velocityTracker?.yVelocity ?: 0f) / density
-                    val target = TeachingCalendarLogic.settledMonthExpansion(
-                        progress = monthDragProgress,
+                    val target = TeachingCalendarLogic.settledMonthSheetPosition(
+                        position = monthDragPosition,
                         velocityYDpPerSecond = velocityY,
                     )
                     gestureEligible = false
                     restoreParentInterception()
                     velocityTracker?.recycle()
                     velocityTracker = null
-                    post { onMonthExpansionSwipe?.invoke(target) }
+                    post { onMonthSheetSettled?.invoke(target.toFloat()) }
                     return true
                 }
                 gestureEligible = false
@@ -419,7 +500,7 @@ private class CalendarSwipeContainer(
             }
             MotionEvent.ACTION_CANCEL -> {
                 if (claimedGesture == 2) {
-                    post { onMonthExpansionSwipe?.invoke(monthExpanded) }
+                    post { onMonthSheetSettled?.invoke(monthDragStartPosition.roundToInt().toFloat()) }
                 }
                 gestureEligible = false
                 claimedGesture = 0
@@ -447,12 +528,12 @@ internal class TeachingCalendarPage(
         set(value) {
             sessionState.selectedMode = value
         }
-    private var monthExpanded: Boolean
-        get() = sessionState.monthExpanded
+    private var monthSheetPosition: Float
+        get() = sessionState.monthSheetPosition
         set(value) {
-            sessionState.monthExpanded = value
+            sessionState.monthSheetPosition = value.coerceIn(0f, 2f)
         }
-    private var monthExpansionProgress = if (monthExpanded) 1f else 0f
+    private var renderedMonthSheetPosition = monthSheetPosition
     private var expandedMonthCellHeightDp = TeachingCalendarLogic.monthCellHeightDp(true)
     private var monthExpansionAnimator: ValueAnimator? = null
     private var pendingPageDirection = 0
@@ -477,25 +558,22 @@ internal class TeachingCalendarPage(
         val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         val tabs = mutableMapOf<Mode, TextView>()
 
-        fun updateMonthExpansionProgress(progress: Float) {
+        fun updateMonthSheetProgress(position: Float) {
             monthExpansionAnimator?.cancel()
-            monthExpansionProgress = progress.coerceIn(0f, 1f)
+            renderedMonthSheetPosition = position.coerceIn(0f, 2f)
             content.findViewById<ViewGroup?>(R.id.calendar_month_view)?.let { monthView ->
-                applyMonthExpansionProgress(monthView, monthExpansionProgress)
+                applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
             }
         }
 
-        fun updateMonthExpansion(expanded: Boolean) {
+        fun settleMonthSheet(position: Float) {
             val monthView = content.findViewById<ViewGroup?>(R.id.calendar_month_view) ?: return
-            val stateChanged = expanded != monthExpanded
-            if (expanded == monthExpanded &&
-                abs(monthExpansionProgress - if (expanded) 1f else 0f) <= 0.001f
-            ) return
-            if (stateChanged) performCalendarHaptic()
-            animateMonthExpansion(monthView, expanded) {
-                monthExpanded = expanded
+            val target = position.roundToInt().coerceIn(0, 2).toFloat()
+            if (target != monthSheetPosition.roundToInt().toFloat()) performCalendarHaptic()
+            animateMonthSheetPosition(monthView, target) {
+                monthSheetPosition = target
                 content.findViewById<CalendarSwipeContainer?>(R.id.calendar_swipe_surface)
-                    ?.monthExpanded = expanded
+                    ?.monthSheetPosition = target
             }
         }
 
@@ -503,7 +581,7 @@ internal class TeachingCalendarPage(
             dismissYearPopover()
             tabs.forEach { (mode, view) -> view.setSelectedStyle(activity, mode == selectedMode) }
             content.removeAllViews()
-            monthExpansionProgress = if (monthExpanded) 1f else 0f
+            renderedMonthSheetPosition = monthSheetPosition
             content.addView(dateNavigation(::render))
             content.addView(spacer(activity, 12))
             content.addView(dateSummary())
@@ -519,7 +597,7 @@ internal class TeachingCalendarPage(
             val calendarView = when (selectedMode) {
                     Mode.DAY -> dayView()
                     Mode.WEEK -> weekView(::render)
-                    Mode.MONTH -> monthView(::render, ::updateMonthExpansion)
+                    Mode.MONTH -> monthView(::render, ::settleMonthSheet)
                     Mode.YEAR -> yearView(::render)
                 }
             content.addView(
@@ -529,14 +607,14 @@ internal class TeachingCalendarPage(
                     swipeContainer(
                         calendarView,
                         ::render,
-                        monthExpanded = monthExpanded,
-                        onMonthExpansionSwipe = if (selectedMode == Mode.MONTH) {
-                            ::updateMonthExpansion
+                        monthSheetPosition = monthSheetPosition,
+                        onMonthSheetSettled = if (selectedMode == Mode.MONTH) {
+                            ::settleMonthSheet
                         } else {
                             null
                         },
-                        onMonthExpansionProgress = if (selectedMode == Mode.MONTH) {
-                            ::updateMonthExpansionProgress
+                        onMonthSheetProgress = if (selectedMode == Mode.MONTH) {
+                            ::updateMonthSheetProgress
                         } else {
                             null
                         },
@@ -623,21 +701,21 @@ internal class TeachingCalendarPage(
             isClickable = true
             isFocusable = true
         }
-        fun updateMonthExpansionProgress(progress: Float) {
+        fun updateMonthSheetProgress(position: Float) {
             monthExpansionAnimator?.cancel()
-            monthExpansionProgress = progress.coerceIn(0f, 1f)
+            renderedMonthSheetPosition = position.coerceIn(0f, 2f)
             pageSurface.findViewById<ViewGroup?>(R.id.calendar_month_view)?.let { monthView ->
-                applyMonthExpansionProgress(monthView, monthExpansionProgress)
+                applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
             }
         }
 
-        fun updateMonthExpansion(expanded: Boolean) {
+        fun settleMonthSheet(position: Float) {
             val monthView = pageSurface.findViewById<ViewGroup?>(R.id.calendar_month_view) ?: return
-            val stateChanged = expanded != monthExpanded
-            if (stateChanged) performCalendarHaptic()
-            animateMonthExpansion(monthView, expanded) {
-                monthExpanded = expanded
-                pageSurface.monthExpanded = expanded
+            val target = position.roundToInt().coerceIn(0, 2).toFloat()
+            if (target != monthSheetPosition.roundToInt().toFloat()) performCalendarHaptic()
+            animateMonthSheetPosition(monthView, target) {
+                monthSheetPosition = target
+                pageSurface.monthSheetPosition = target
             }
         }
 
@@ -647,14 +725,14 @@ internal class TeachingCalendarPage(
                 view.setCompactSelectedStyle(activity, mode == selectedMode)
             }
             pageSurface.swipeEnabled = selectedMode != Mode.YEAR
-            pageSurface.monthExpanded = monthExpanded
-            pageSurface.onMonthExpansionSwipe = if (selectedMode == Mode.MONTH) {
-                ::updateMonthExpansion
+            pageSurface.monthSheetPosition = monthSheetPosition
+            pageSurface.onMonthSheetSettled = if (selectedMode == Mode.MONTH) {
+                ::settleMonthSheet
             } else {
                 null
             }
-            pageSurface.onMonthExpansionProgress = if (selectedMode == Mode.MONTH) {
-                ::updateMonthExpansionProgress
+            pageSurface.onMonthSheetProgress = if (selectedMode == Mode.MONTH) {
+                ::updateMonthSheetProgress
             } else {
                 null
             }
@@ -665,6 +743,7 @@ internal class TeachingCalendarPage(
             } else {
                 val fixedMonth = selectedMode == Mode.MONTH
                 val body = LinearLayout(activity).apply {
+                    id = R.id.calendar_page_body
                     orientation = LinearLayout.VERTICAL
                     val horizontalPadding = if (selectedMode == Mode.YEAR) 16 else 0
                     val topPadding = if (selectedMode == Mode.YEAR) 16 else 8
@@ -672,7 +751,11 @@ internal class TeachingCalendarPage(
                         activity.dp(horizontalPadding),
                         activity.dp(topPadding),
                         activity.dp(horizontalPadding),
-                        activity.dp(if (usesBottomNavigation) 84 else 16),
+                        activity.dp(
+                            TeachingCalendarLogic.calendarContentBottomInsetDp(
+                                usesBottomNavigation,
+                            ),
+                        ),
                     )
                     holidayStatus()?.let { message ->
                         addView(TextView(activity).apply {
@@ -684,7 +767,7 @@ internal class TeachingCalendarPage(
                     }
                     val calendar = when (selectedMode) {
                         Mode.DAY, Mode.WEEK -> error("Day and week use a fixed phone timeline layout")
-                        Mode.MONTH -> monthView(::render, ::updateMonthExpansion)
+                        Mode.MONTH -> monthView(::render, ::settleMonthSheet)
                         Mode.YEAR -> yearView(::render)
                     }
                     addView(calendar, LinearLayout.LayoutParams(
@@ -903,6 +986,7 @@ internal class TeachingCalendarPage(
 
     private fun phoneDayWeekContent(onDateChanged: () -> Unit): LinearLayout =
         LinearLayout(activity).apply {
+            id = R.id.calendar_page_body
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.surface)
             setPadding(0, activity.dp(6), 0, 0)
@@ -938,7 +1022,16 @@ internal class TeachingCalendarPage(
                 isFillViewport = false
                 clipToPadding = false
                 scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-                setPadding(0, 0, 0, activity.dp(if (usesBottomNavigation) 84 else 14))
+                setPadding(
+                    0,
+                    0,
+                    0,
+                    activity.dp(
+                        TeachingCalendarLogic.calendarContentBottomInsetDp(
+                            usesBottomNavigation,
+                        ),
+                    ),
+                )
                 addView(phoneTimelineView(timelineDays, callback))
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1344,31 +1437,55 @@ internal class TeachingCalendarPage(
 
     private fun monthView(
         onDateChanged: () -> Unit,
-        onExpansionChanged: (Boolean) -> Unit,
+        onPositionChanged: (Float) -> Unit,
     ): LinearLayout = surface(activity).apply {
         id = R.id.calendar_month_view
+        clipChildren = false
+        clipToPadding = false
         val compactMonth = availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp
         if (compactMonth) {
             setBackgroundColor(Palette.background)
-            setPadding(activity.dp(16), activity.dp(8), activity.dp(16), 0)
+            val horizontalPadding = TeachingCalendarLogic.monthHorizontalPaddingDp(
+                usesBottomNavigation,
+            )
+            setPadding(
+                activity.dp(horizontalPadding),
+                activity.dp(8),
+                activity.dp(horizontalPadding),
+                0,
+            )
         }
         val monthTitle = SimpleDateFormat("yyyy年M月", Locale.CHINA).apply { timeZone = shanghai }
         if (!compactMonth) {
             addView(sectionTitle(activity, monthTitle.format(selectedDate.time)))
         }
         addView(weekdayHeader())
+        val dates = monthGridDates()
+        val selectedWeekIndex = dates.indexOfFirst { sameDay(it, selectedDate) }
+            .coerceAtLeast(0) / 7
         val grid = LinearLayout(activity).apply {
             id = R.id.calendar_month_grid
+            tag = selectedWeekIndex
             orientation = LinearLayout.VERTICAL
-            monthGridDates().chunked(7).forEach { week ->
+            dates.chunked(7).forEachIndexed { rowIndex, week ->
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     week.forEach { day ->
-                        addView(monthDayCell(day, onDateChanged, monthExpanded))
+                        addView(monthDayCell(
+                            day = day,
+                            onDateChanged = onDateChanged,
+                            onPositionChanged = onPositionChanged,
+                            sheetPosition = renderedMonthSheetPosition,
+                        ))
                     }
                 }, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    activity.dp(TeachingCalendarLogic.monthCellHeightDp(monthExpanded)),
+                    activity.dp(TeachingCalendarLogic.monthRowHeightDp(
+                        position = renderedMonthSheetPosition,
+                        rowIndex = rowIndex,
+                        selectedWeekIndex = selectedWeekIndex,
+                        expandedHeightDp = expandedMonthCellHeightDp,
+                    )),
                 ))
             }
         }
@@ -1376,10 +1493,10 @@ internal class TeachingCalendarPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
-        addView(monthExpansionHandle(onExpansionChanged))
+        addView(monthExpansionHandle(onPositionChanged))
         addView(ScrollView(activity).apply {
             id = R.id.calendar_month_selected_details
-            visibility = if (monthExpanded) View.GONE else View.VISIBLE
+            visibility = if (renderedMonthSheetPosition <= 0.01f) View.GONE else View.VISIBLE
             isFillViewport = false
             clipToPadding = false
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
@@ -1391,31 +1508,56 @@ internal class TeachingCalendarPage(
         ))
         if (compactMonth) {
             post {
-                val availableHeightDp = ((parent as? View)?.height ?: height) /
-                    resources.displayMetrics.density
+                val density = resources.displayMetrics.density
+                val weekday = findViewById<View>(R.id.calendar_month_weekday_header)
+                val weekdayMargins = weekday.layoutParams as? ViewGroup.MarginLayoutParams
+                val weekdayReservedPx = weekday.height +
+                    (weekdayMargins?.topMargin ?: 0) + (weekdayMargins?.bottomMargin ?: 0)
+                val dragHandle = findViewById<View>(R.id.calendar_month_drag_handle)
                 expandedMonthCellHeightDp = TeachingCalendarLogic.expandedMonthCellHeightDp(
-                    availableHeightDp.roundToInt(),
+                    monthViewHeightDp = (height / density).toInt(),
+                    verticalPaddingDp = ceil(
+                        (paddingTop + paddingBottom) / density.toDouble(),
+                    ).toInt(),
+                    weekdayReservedHeightDp = ceil(
+                        weekdayReservedPx / density.toDouble(),
+                    ).toInt(),
+                    dragHandleReservedHeightDp = ceil(
+                        dragHandle.height / density.toDouble(),
+                    ).toInt(),
                 )
-                applyMonthExpansionProgress(this, monthExpansionProgress)
+                applyMonthSheetPosition(this, renderedMonthSheetPosition)
             }
         }
     }
 
-    private fun monthExpansionHandle(onExpansionChanged: (Boolean) -> Unit): FrameLayout =
+    private fun monthExpansionHandle(onPositionChanged: (Float) -> Unit): FrameLayout =
         FrameLayout(activity).apply {
             id = R.id.calendar_month_drag_handle
             isClickable = true
             isFocusable = true
-            contentDescription = if (monthExpanded) "收起月历" else "展开月历"
-            setOnClickListener { onExpansionChanged(!monthExpanded) }
+            clipChildren = false
+            clipToPadding = false
+            elevation = activity.dp(2).toFloat()
+            contentDescription = monthSheetContentDescription(renderedMonthSheetPosition)
+            setOnClickListener {
+                val target = when (renderedMonthSheetPosition.roundToInt()) {
+                    0 -> 1f
+                    1 -> 0f
+                    else -> 1f
+                }
+                onPositionChanged(target)
+            }
             addView(MonthExpansionIndicatorView(activity).apply {
                 id = R.id.calendar_month_drag_indicator
-                setExpansionProgress(monthExpansionProgress)
-            }, FrameLayout.LayoutParams(activity.dp(44), activity.dp(14), Gravity.CENTER))
+                setExpansionProgress(
+                    TeachingCalendarLogic.monthCellExpansionProgress(renderedMonthSheetPosition),
+                )
+            }, FrameLayout.LayoutParams(activity.dp(44), activity.dp(18), Gravity.CENTER))
         }.also {
             it.layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(28),
+                activity.dp(TeachingCalendarLogic.monthDragHandleHeightDp),
             )
         }
 
@@ -1425,8 +1567,10 @@ internal class TeachingCalendarPage(
         gravity = Gravity.CENTER_VERTICAL
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(26),
-        ).apply { bottomMargin = activity.dp(8) }
+            activity.dp(TeachingCalendarLogic.monthWeekdayHeaderHeightDp),
+        ).apply {
+            bottomMargin = activity.dp(TeachingCalendarLogic.monthWeekdayHeaderBottomMarginDp)
+        }
         listOf("一", "二", "三", "四", "五", "六", "日").forEach { label ->
             addView(TextView(activity).apply {
                 text = label
@@ -1442,7 +1586,8 @@ internal class TeachingCalendarPage(
     private fun monthDayCell(
         day: Calendar,
         onDateChanged: () -> Unit,
-        expanded: Boolean,
+        onPositionChanged: (Float) -> Unit,
+        sheetPosition: Float,
     ): LinearLayout {
         val courses = coursesOn(day)
         val holidays = holidaysOn(day)
@@ -1466,9 +1611,15 @@ internal class TeachingCalendarPage(
                 courses.forEach { add("${it.name} ${it.timeRange} ${it.room} ${it.teacher}") }
             }.joinToString("，")
             setOnClickListener {
-                if (!sameDay(selectedDate, day)) performCalendarHaptic()
+                if (!sameDay(selectedDate, day) ||
+                    renderedMonthSheetPosition.roundToInt() !=
+                    TeachingCalendarLogic.monthSheetDetailsPosition.roundToInt()
+                ) {
+                    performCalendarHaptic()
+                }
                 selectedDate.timeInMillis = day.timeInMillis
                 onDateChanged()
+                onPositionChanged(TeachingCalendarLogic.monthDaySelectionTargetPosition())
             }
             addView(TextView(activity).apply {
                 id = R.id.calendar_month_day_label
@@ -1487,32 +1638,14 @@ internal class TeachingCalendarPage(
                 holidays.forEach { item ->
                     add(MonthCalendarEntry(
                         title = (if (item.type == "holiday") "休 " else "班 ") + item.name,
-                        holiday = item,
                     ))
                 }
-                courses.forEach { course -> add(MonthCalendarEntry(course.name, course = course)) }
+                courses.forEach { course -> add(MonthCalendarEntry(course.name)) }
             }
             addView(LinearLayout(activity).apply {
                 id = R.id.calendar_month_expanded_entries
                 orientation = LinearLayout.VERTICAL
-                entries.take(TeachingCalendarLogic.visibleMonthEntryCount(entries.size)).forEach { entry ->
-                    addView(monthEntryView(entry, selected, day), LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        activity.dp(14),
-                    ).apply { topMargin = activity.dp(1) })
-                }
-                TeachingCalendarLogic.hiddenMonthEntryCount(entries.size)
-                    .takeIf { it > 0 }
-                    ?.let { hiddenCount ->
-                        addView(monthEntryView(
-                            MonthCalendarEntry("+$hiddenCount"),
-                            selected,
-                            day,
-                        ), LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            activity.dp(14),
-                        ).apply { topMargin = activity.dp(1) })
-                    }
+                tag = MonthEntriesRenderState(entries, selected)
             })
             val marker = buildString {
                 holidays.firstOrNull()?.let { append(if (it.type == "holiday") "休" else "班") }
@@ -1536,93 +1669,143 @@ internal class TeachingCalendarPage(
                 marginEnd = activity.dp(2)
                 bottomMargin = activity.dp(2)
             }
-            applyMonthDayCellProgress(this, if (expanded) 1f else 0f)
+            val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(sheetPosition)
+            val initialCellHeightDp = TeachingCalendarLogic.monthRowHeightDp(
+                position = sheetPosition,
+                rowIndex = 0,
+                selectedWeekIndex = 0,
+                expandedHeightDp = expandedMonthCellHeightDp,
+            )
+            applyMonthDayCellProgress(this, expandedProgress, initialCellHeightDp)
         }
     }
 
-    private fun applyMonthDayCellProgress(cell: LinearLayout, progress: Float) {
+    private fun applyMonthDayCellProgress(
+        cell: LinearLayout,
+        progress: Float,
+        cellHeightDp: Int,
+    ) {
         val resolved = progress.coerceIn(0f, 1f)
-        cell.gravity = if (resolved < 0.5f) {
-            Gravity.CENTER
-        } else {
-            Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        }
+        cell.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        val markerHeightDp = TeachingCalendarLogic.interpolateMonthMetric(12, 0, resolved)
+        val bottomPaddingDp = TeachingCalendarLogic.interpolateMonthMetric(5, 2, resolved)
         cell.setPadding(
             activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 3, resolved)),
-            activity.dp(TeachingCalendarLogic.interpolateMonthMetric(
-                TeachingCalendarLogic.collapsedMonthDayTopPaddingDp,
-                TeachingCalendarLogic.expandedMonthDayTopPaddingDp,
-                resolved,
-            )),
+            activity.dp(TeachingCalendarLogic.expandedMonthDayTopPaddingDp),
             activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 3, resolved)),
-            activity.dp(TeachingCalendarLogic.interpolateMonthMetric(4, 2, resolved)),
+            activity.dp(bottomPaddingDp),
         )
         cell.findViewById<TextView>(R.id.calendar_month_day_label).apply {
             textSize = 15f
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(TeachingCalendarLogic.interpolateMonthMetric(24, 22, resolved)),
+                activity.dp(24),
             )
         }
-        cell.findViewById<View>(R.id.calendar_month_expanded_entries).apply {
+        cell.findViewById<LinearLayout>(R.id.calendar_month_expanded_entries).apply {
+            val availableHeightDp = TeachingCalendarLogic.monthEntryAvailableHeightDp(
+                cellHeightDp = cellHeightDp,
+                expandedProgress = resolved,
+            )
             visibility = if (resolved <= 0.01f) View.GONE else View.VISIBLE
             alpha = resolved
             layoutParams = layoutParams.apply {
-                height = activity.dp(TeachingCalendarLogic.interpolateMonthMetric(0, 32, resolved))
+                height = activity.dp(availableHeightDp)
             }
+            renderMonthEntries(this, availableHeightDp)
         }
         cell.findViewById<TextView>(R.id.calendar_month_compact_marker).apply {
-            visibility = if (resolved >= 0.99f || text.isEmpty()) View.GONE else View.VISIBLE
+            visibility = if (resolved >= 0.99f) View.GONE else View.VISIBLE
             alpha = 1f - resolved
             includeFontPadding = false
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(TeachingCalendarLogic.interpolateMonthMetric(12, 0, resolved)),
+                activity.dp(markerHeightDp),
             )
         }
     }
 
-    private fun applyMonthExpansionProgress(
+    private fun renderMonthEntries(container: LinearLayout, availableHeightDp: Int) {
+        val state = container.tag as? MonthEntriesRenderState ?: return
+        val slotCapacity = TeachingCalendarLogic.monthEntrySlotCapacity(availableHeightDp)
+        if (state.slotCapacity == slotCapacity) return
+        state.slotCapacity = slotCapacity
+        container.removeAllViews()
+        if (slotCapacity <= 0) return
+        val visibleCount = TeachingCalendarLogic.visibleMonthEntryCount(
+            state.entries.size,
+            slotCapacity,
+        )
+        state.entries.take(visibleCount).forEach { entry ->
+            container.addView(monthEntryView(entry, state.selected), LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(14),
+            ).apply { topMargin = activity.dp(1) })
+        }
+        TeachingCalendarLogic.hiddenMonthEntryCount(state.entries.size, slotCapacity)
+            .takeIf { it > 0 }
+            ?.let { hiddenCount ->
+                container.addView(monthEntryView(
+                    MonthCalendarEntry("+$hiddenCount"),
+                    state.selected,
+                ), LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    activity.dp(14),
+                ).apply { topMargin = activity.dp(1) })
+            }
+    }
+
+    private fun applyMonthSheetPosition(
         monthView: ViewGroup,
-        progress: Float,
+        position: Float,
     ) {
-        val resolved = progress.coerceIn(0f, 1f)
+        val resolved = position.coerceIn(0f, 2f)
+        renderedMonthSheetPosition = resolved
+        val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(resolved)
         val grid = monthView.findViewById<ViewGroup>(R.id.calendar_month_grid)
+        val selectedWeekIndex = (grid.tag as? Int) ?: 0
         repeat(grid.childCount) { rowIndex ->
             val row = grid.getChildAt(rowIndex) as ViewGroup
+            val rowHeightDp = TeachingCalendarLogic.monthRowHeightDp(
+                position = resolved,
+                rowIndex = rowIndex,
+                selectedWeekIndex = selectedWeekIndex,
+                expandedHeightDp = expandedMonthCellHeightDp,
+            )
             row.layoutParams = row.layoutParams.apply {
-                height = activity.dp(TeachingCalendarLogic.interpolateMonthMetric(
-                    TeachingCalendarLogic.monthCellHeightDp(false),
-                    expandedMonthCellHeightDp,
-                    resolved,
-                ))
+                height = activity.dp(rowHeightDp)
             }
             repeat(row.childCount) { cellIndex ->
-                applyMonthDayCellProgress(row.getChildAt(cellIndex) as LinearLayout, resolved)
+                applyMonthDayCellProgress(
+                    row.getChildAt(cellIndex) as LinearLayout,
+                    expandedProgress,
+                    rowHeightDp,
+                )
             }
         }
         monthView.findViewById<View>(R.id.calendar_month_selected_details).apply {
-            visibility = if (resolved >= 0.99f) View.GONE else View.VISIBLE
-            alpha = 1f - resolved
+            visibility = if (resolved <= 0.01f) View.GONE else View.VISIBLE
+            alpha = resolved.coerceIn(0f, 1f)
         }
-        monthView.findViewById<View>(R.id.calendar_month_drag_handle).contentDescription =
-            if (resolved >= 0.5f) "收起月历" else "展开月历"
+        monthView.findViewById<View>(R.id.calendar_month_drag_handle).apply {
+            contentDescription = monthSheetContentDescription(resolved)
+        }
         monthView.findViewById<MonthExpansionIndicatorView>(R.id.calendar_month_drag_indicator)
-            .setExpansionProgress(resolved)
+            .setExpansionProgress(expandedProgress)
         monthView.requestLayout()
     }
 
-    private fun animateMonthExpansion(
+    private fun animateMonthSheetPosition(
         monthView: ViewGroup,
-        expanded: Boolean,
+        targetPosition: Float,
         onSettled: () -> Unit,
     ) {
         monthExpansionAnimator?.cancel()
-        val target = if (expanded) 1f else 0f
-        val start = monthExpansionProgress.coerceIn(0f, 1f)
+        val target = targetPosition.coerceIn(0f, 2f)
+        val start = renderedMonthSheetPosition.coerceIn(0f, 2f)
         if (abs(target - start) <= 0.001f) {
-            monthExpansionProgress = target
-            applyMonthExpansionProgress(monthView, target)
+            renderedMonthSheetPosition = target
+            applyMonthSheetPosition(monthView, target)
             onSettled()
             return
         }
@@ -1630,9 +1813,9 @@ internal class TeachingCalendarPage(
             duration = (120L + 160L * abs(target - start)).roundToInt().toLong()
             interpolator = AccelerateDecelerateInterpolator()
             addUpdateListener { animator ->
-                monthExpansionProgress = animator.animatedValue as Float
+                renderedMonthSheetPosition = animator.animatedValue as Float
                 if (monthView.isAttachedToWindow) {
-                    applyMonthExpansionProgress(monthView, monthExpansionProgress)
+                    applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
                 }
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {
@@ -1644,9 +1827,9 @@ internal class TeachingCalendarPage(
 
                 override fun onAnimationEnd(animation: android.animation.Animator) {
                     if (cancelled) return
-                    monthExpansionProgress = target
+                    renderedMonthSheetPosition = target
                     if (monthView.isAttachedToWindow) {
-                        applyMonthExpansionProgress(monthView, target)
+                        applyMonthSheetPosition(monthView, target)
                     }
                     onSettled()
                     monthExpansionAnimator = null
@@ -1656,10 +1839,16 @@ internal class TeachingCalendarPage(
         }
     }
 
+    private fun monthSheetContentDescription(position: Float): String =
+        when (position.roundToInt().coerceIn(0, 2)) {
+            0 -> "收起月历并显示当日日程"
+            1 -> "展开月历"
+            else -> "显示完整月份"
+        }
+
     private fun monthEntryView(
         entry: MonthCalendarEntry,
         selected: Boolean,
-        day: Calendar,
     ): TextView = TextView(activity).apply {
         id = R.id.calendar_month_entry
         text = entry.title
@@ -1668,22 +1857,23 @@ internal class TeachingCalendarPage(
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
         setPadding(activity.dp(3), 0, activity.dp(3), 0)
-        setTextColor(if (selected) Palette.onPrimary else Palette.text)
+        setTextColor(TeachingCalendarLogic.monthEntryTextColor(
+            selected = selected,
+            textColor = Palette.text,
+            onPrimaryColor = Palette.onPrimary,
+        ))
         background = roundedBackground(
             activity,
-            if (selected) Palette.surface else Palette.surfaceVariant,
+            TeachingCalendarLogic.monthEntryBackgroundColor(
+                selected = selected,
+                surfaceVariantColor = Palette.surfaceVariant,
+                primaryDarkColor = Palette.primaryDark,
+            ),
             Palette.border,
             radius = 4,
             borderWidthDp = 0.75f,
         )
-        if (entry.course != null || entry.holiday != null) {
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                entry.course?.let { course -> showCourseDetails(day, course) }
-                    ?: entry.holiday?.let(::showHolidayDetails)
-            }
-        }
+        disableMonthGridEntryInteraction()
     }
 
     private fun yearView(onDateChanged: () -> Unit): LinearLayout = LinearLayout(activity).apply {
@@ -1886,7 +2076,12 @@ internal class TeachingCalendarPage(
     ): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         if (asCard) {
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 10)
+            background = roundedBackground(
+                activity,
+                Palette.surface,
+                radius = 10,
+                borderWidthDp = TeachingCalendarLogic.monthDetailsBorderWidthDp(),
+            )
             setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
             addView(TextView(activity).apply {
                 text = "当日日程"
@@ -2247,15 +2442,15 @@ internal class TeachingCalendarPage(
     private fun swipeContainer(
         view: View,
         onChanged: () -> Unit,
-        monthExpanded: Boolean = true,
-        onMonthExpansionSwipe: ((Boolean) -> Unit)? = null,
-        onMonthExpansionProgress: ((Float) -> Unit)? = null,
+        monthSheetPosition: Float = TeachingCalendarLogic.monthSheetExpandedPosition,
+        onMonthSheetSettled: ((Float) -> Unit)? = null,
+        onMonthSheetProgress: ((Float) -> Unit)? = null,
     ): CalendarSwipeContainer =
         CalendarSwipeContainer(activity).apply {
             id = R.id.calendar_swipe_surface
-            this.monthExpanded = monthExpanded
-            this.onMonthExpansionSwipe = onMonthExpansionSwipe
-            this.onMonthExpansionProgress = onMonthExpansionProgress
+            this.monthSheetPosition = monthSheetPosition
+            this.onMonthSheetSettled = onMonthSheetSettled
+            this.onMonthSheetProgress = onMonthSheetProgress
             addView(view, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,

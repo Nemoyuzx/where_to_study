@@ -80,6 +80,7 @@ class MainActivity : Activity() {
     private var currentLayoutSpec: AdaptiveLayoutSpec? = null
     private var navigationRailCollapsed = false
     private var navigationRail: LinearLayout? = null
+    private var navigationRailHeader: LinearLayout? = null
     private var navigationRailBrand: LinearLayout? = null
     private var navigationRailToggle: TextView? = null
     private var foldingFeatureSpacer: View? = null
@@ -131,6 +132,9 @@ class MainActivity : Activity() {
             monthExpanded = savedInstanceState
                 ?.getBoolean(TEACHING_CALENDAR_MONTH_EXPANDED_KEY, true)
                 ?: true,
+            initialMonthSheetPosition = savedInstanceState
+                ?.takeIf { it.containsKey(TEACHING_CALENDAR_MONTH_POSITION_KEY) }
+                ?.getFloat(TEACHING_CALENDAR_MONTH_POSITION_KEY),
         )
 
         adaptiveRoot = FrameLayout(this).apply {
@@ -227,6 +231,7 @@ class MainActivity : Activity() {
             addView(LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                navigationRailHeader = this
                 val brand = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(TextView(this@MainActivity).apply {
@@ -308,6 +313,7 @@ class MainActivity : Activity() {
         currentLayoutSpec = spec
         navigationViews.clear()
         navigationRail = null
+        navigationRailHeader = null
         navigationRailBrand = null
         navigationRailToggle = null
         foldingFeatureSpacer = null
@@ -413,9 +419,24 @@ class MainActivity : Activity() {
     private fun applyNavigationRailTabPresentation(view: TextView, destination: Destination) {
         view.text = if (navigationRailCollapsed) "" else destination.label
         view.gravity = if (navigationRailCollapsed) Gravity.CENTER else Gravity.CENTER_VERTICAL
-        view.setCompoundDrawablesRelativeWithIntrinsicBounds(destination.iconResource, 0, 0, 0)
+        if (navigationRailCollapsed) {
+            view.setCompoundDrawablesRelativeWithIntrinsicBounds(0, destination.iconResource, 0, 0)
+        } else {
+            view.setCompoundDrawablesRelativeWithIntrinsicBounds(destination.iconResource, 0, 0, 0)
+        }
         view.compoundDrawablePadding = if (navigationRailCollapsed) 0 else dp(10)
         view.setPadding(if (navigationRailCollapsed) 0 else dp(12), 0, 0, 0)
+        view.layoutParams = (view.layoutParams as? LinearLayout.LayoutParams
+            ?: LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48))).apply {
+            width = if (navigationRailCollapsed) {
+                dp(AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP)
+            } else {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            }
+            height = dp(AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP)
+            gravity = if (navigationRailCollapsed) Gravity.CENTER_HORIZONTAL else Gravity.NO_GRAVITY
+            bottomMargin = dp(4)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             view.tooltipText = destination.label
         }
@@ -424,13 +445,17 @@ class MainActivity : Activity() {
     private fun updateNavigationRailPresentation() {
         val spec = currentLayoutSpec ?: return
         if (spec.usesBottomNavigation) return
-        val horizontalPadding = when {
-            navigationRailCollapsed -> 12
-            spec.widthClass == WindowWidthClass.MEDIUM -> 16
-            else -> 20
-        }
+        val horizontalPadding = AdaptiveLayoutLogic.navigationHorizontalPaddingDp(
+            collapsed = navigationRailCollapsed,
+            widthClass = spec.widthClass,
+        )
         navigationRail?.setPadding(dp(horizontalPadding), dp(8), dp(horizontalPadding), dp(16))
         navigationRailBrand?.visibility = if (navigationRailCollapsed) View.GONE else View.VISIBLE
+        navigationRailHeader?.gravity = if (navigationRailCollapsed) {
+            Gravity.CENTER
+        } else {
+            Gravity.CENTER_VERTICAL
+        }
         navigationRailToggle?.apply {
             text = if (navigationRailCollapsed) "›" else "‹"
             contentDescription = if (navigationRailCollapsed) "展开导航栏" else "收起导航栏"
@@ -728,6 +753,10 @@ class MainActivity : Activity() {
             TEACHING_CALENDAR_MONTH_EXPANDED_KEY,
             teachingCalendarSessionState.monthExpanded,
         )
+        outState.putFloat(
+            TEACHING_CALENDAR_MONTH_POSITION_KEY,
+            teachingCalendarSessionState.monthSheetPosition,
+        )
         super.onSaveInstanceState(outState)
     }
 
@@ -921,6 +950,7 @@ class MainActivity : Activity() {
         const val TEACHING_CALENDAR_DATE_KEY = "teaching_calendar_date"
         const val TEACHING_CALENDAR_MODE_KEY = "teaching_calendar_mode"
         const val TEACHING_CALENDAR_MONTH_EXPANDED_KEY = "teaching_calendar_month_expanded"
+        const val TEACHING_CALENDAR_MONTH_POSITION_KEY = "teaching_calendar_month_position"
         val CALENDAR_PERMISSIONS = arrayOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,

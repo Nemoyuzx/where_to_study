@@ -107,9 +107,30 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         XCTAssertEqual(month.value as? String, "已展开")
         XCTAssertFalse(app.descendants(matching: .any)["calendar.mobile.month-day-summary"].exists)
+        let monthEventID = "calendar.mobile.month-event.course-sample-data-mining"
+        let monthEvent = app.staticTexts[monthEventID].firstMatch
+        XCTAssertTrue(monthEvent.waitForExistence(timeout: 5))
+        XCTAssertFalse(monthEvent.label.isEmpty)
+        XCTAssertFalse(app.buttons[monthEventID].exists)
+        monthEvent.tap()
+        XCTAssertEqual(month.value as? String, "已展开")
+        XCTAssertFalse(app.descendants(matching: .any)["calendar.mobile.month-day-summary"].exists)
         attachScreenshot(named: "calendar-month-expanded")
         let initialMonthHeadingY = monthHeading.frame.minY
         let initialMondayHeadingY = mondayHeading.frame.minY
+        let selectedDay = app.buttons[
+            "calendar.mobile.month-day-number.\(currentShanghaiDateString())"
+        ].firstMatch
+        XCTAssertTrue(selectedDay.waitForExistence(timeout: 5))
+        selectedDay.tap()
+        XCTAssertTrue(waitForValue("已收起", of: month))
+        XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]
+            .waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary-card"]
+            .waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["当日日程"].waitForExistence(timeout: 5))
+        verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
+        XCTAssertTrue(waitForValue("已展开", of: month))
         verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
         XCTAssertEqual(monthHeading.frame.minY, initialMonthHeadingY, accuracy: 2)
@@ -123,6 +144,11 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             .waitForExistence(timeout: 5))
         attachScreenshot(named: "calendar-month-collapsed")
         verticalSwipe(in: app, between: mondayHeading, and: month, upward: true)
+        XCTAssertTrue(waitForValue("日程已展开", of: month))
+        let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
+        XCTAssertTrue(monthSummary.waitForExistence(timeout: 5))
+        attachScreenshot(named: "calendar-month-detail-raised")
+        verticalSwipe(in: app, within: monthSummary, upward: false)
         XCTAssertTrue(waitForValue("已收起", of: month))
         verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
@@ -155,7 +181,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         }
     }
 
-    func testIPhoneLandscapeMonthUsesNaturalExpansionDirectionAndStableDayInset() throws {
+    func testIPhoneLandscapeMonthUsesOnlyExpandedAndSelectedWeekStops() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -187,18 +213,23 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: monthState))
 
-        verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: true)
-        XCTAssertTrue(waitForValue("已收起", of: monthState))
+        dayNumber.tap()
+        XCTAssertTrue(waitForValue("日程已展开", of: monthState))
         Thread.sleep(forTimeInterval: 0.4)
-        XCTAssertEqual(monthState.value as? String, "已收起")
+        XCTAssertEqual(monthState.value as? String, "日程已展开")
         let collapsedTopInset = dayNumber.frame.minY - dayCell.frame.minY
         XCTAssertEqual(collapsedTopInset, expandedTopInset, accuracy: 1)
-        XCTAssertEqual(dayCell.frame.width, dayCell.frame.height, accuracy: 5)
+        XCTAssertGreaterThan(dayCell.frame.width, dayCell.frame.height * 1.5)
         attachScreenshot(named: "calendar-month-landscape-collapsed")
 
-        verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: true)
-        XCTAssertTrue(waitForValue("已收起", of: monthState))
-        verticalSwipe(in: app, between: mondayHeading, and: monthState, upward: false)
+        XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]
+            .waitForExistence(timeout: 5))
+        let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
+        verticalSwipe(in: app, within: monthSummary, upward: true)
+        XCTAssertTrue(waitForValue("日程已展开", of: monthState))
+        attachScreenshot(named: "calendar-month-landscape-detail-raised")
+
+        verticalSwipe(in: app, within: monthSummary, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: monthState))
         Thread.sleep(forTimeInterval: 0.4)
         XCTAssertEqual(monthState.value as? String, "已展开")
@@ -359,6 +390,17 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         assertScreen("screen.calendar", in: app)
         XCTAssertTrue(app.descendants(matching: .any)["layout.calendar.expanded"]
             .waitForExistence(timeout: 5))
+        let sidebarToggle = app.buttons["navigation.sidebar-toggle"]
+        XCTAssertTrue(sidebarToggle.waitForExistence(timeout: 5))
+        sidebarToggle.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["layout.calendar.expanded"]
+            .waitForExistence(timeout: 3))
+        let selectedSidebarItem = app.descendants(matching: .any)["navigation.calendar"].firstMatch
+        XCTAssertTrue(selectedSidebarItem.waitForExistence(timeout: 3))
+        XCTAssertEqual(selectedSidebarItem.frame.width, selectedSidebarItem.frame.height, accuracy: 2)
+        sidebarToggle.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["layout.calendar.expanded"]
+            .waitForExistence(timeout: 3))
         let monthMode = app.segmentedControls.buttons["月"]
         XCTAssertTrue(monthMode.waitForExistence(timeout: 5))
         monthMode.tap()
@@ -469,8 +511,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let bottomY = bottomElement.frame.minY
         let distance = bottomY - topY
         XCTAssertGreaterThan(distance, 80)
-        let startY = topY + distance * (upward ? 0.75 : 0.25)
-        let endY = topY + distance * (upward ? 0.25 : 0.75)
+        let centerY = topY + distance * 0.5
+        let travel = min(distance * 0.5, 180)
+        let startY = centerY + (upward ? travel * 0.5 : -travel * 0.5)
+        let endY = centerY + (upward ? -travel * 0.5 : travel * 0.5)
         let appOrigin = app.coordinate(withNormalizedOffset: .zero)
         let start = appOrigin.withOffset(CGVector(
             dx: app.frame.midX - app.frame.minX,
@@ -485,6 +529,28 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
                 forDuration: 0.05,
                 thenDragTo: end
             )
+    }
+
+    private func verticalSwipe(
+        in app: XCUIApplication,
+        within element: XCUIElement,
+        upward: Bool
+    ) {
+        let frame = element.frame.intersection(app.frame)
+        XCTAssertGreaterThan(frame.height, 80)
+        let travel = min(max(frame.height * 0.35, 96), 180)
+        let startY = upward ? frame.maxY - 28 : frame.minY + 28
+        let endY = upward ? startY - travel : startY + travel
+        let appOrigin = app.coordinate(withNormalizedOffset: .zero)
+        let start = appOrigin.withOffset(CGVector(
+            dx: frame.midX - app.frame.minX,
+            dy: startY - app.frame.minY
+        ))
+        let end = appOrigin.withOffset(CGVector(
+            dx: frame.midX - app.frame.minX,
+            dy: endY - app.frame.minY
+        ))
+        start.press(forDuration: 0.05, thenDragTo: end)
     }
 
     private func scrollToBottom(visibleElement: XCUIElement, in app: XCUIApplication) {

@@ -251,6 +251,14 @@ fun TextView.setCompactSelectedStyle(context: Context, selected: Boolean) {
     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
 }
 
+internal fun View.disableMonthGridEntryInteraction() {
+    setOnClickListener(null)
+    isClickable = false
+    isFocusable = false
+    isFocusableInTouchMode = false
+    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+}
+
 fun verticalPage(context: Context): LinearLayout = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
     setPadding(

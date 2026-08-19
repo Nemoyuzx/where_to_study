@@ -24,6 +24,7 @@
     <item name="privacy_policy_content" type="id" />
     <item name="privacy_github_link" type="id" />
     <item name="calendar_phone_header" type="id" />
+    <item name="calendar_page_body" type="id" />
     <item name="calendar_mode_switch" type="id" />
     <item name="calendar_mode_day" type="id" />
     <item name="calendar_mode_week" type="id" />
