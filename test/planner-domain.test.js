@@ -14,7 +14,11 @@ import {
   getCampusClassrooms,
   getWeekState,
   isValidAccountScope,
+  isValidTermId,
+  isValidTermStartDate,
   msUntilNextShanghaiMidnight,
+  suggestTermForDate,
+  termMatchesCurrentPeriod,
   normalizeClassroomsCache,
   requestBody,
   savedSettingsToState,
@@ -238,4 +242,63 @@ test('year heat intensity increases with course count and remains bounded', () =
   assert.equal(yearCourseOpacity(0), 0)
   assert.ok(yearCourseOpacity(1) < yearCourseOpacity(4))
   assert.ok(yearCourseOpacity(100) < 0.84)
+})
+
+test('suggestTermForDate picks the spring semester in March', () => {
+  const suggested = suggestTermForDate(new Date(2026, 2, 15))
+  assert.equal(suggested.termId, '2025-2026-2')
+  assert.equal(suggested.termStartDate, '2026-03-02')
+})
+
+test('suggestTermForDate picks the fall semester in September', () => {
+  const suggested = suggestTermForDate(new Date(2026, 8, 10))
+  assert.equal(suggested.termId, '2026-2027-1')
+  assert.equal(suggested.termStartDate, '2026-08-31')
+})
+
+test('suggestTermForDate handles spring months 2..7 and fall months 8..12', () => {
+  for (const month of [8, 9, 10, 11, 12]) {
+    const fall = suggestTermForDate(new Date(2026, month - 1, 15))
+    assert.match(fall.termId, /^2026-2027-1$/)
+  }
+  for (const month of [2, 3, 4, 5, 6, 7]) {
+    const spring = suggestTermForDate(new Date(2026, month - 1, 15))
+    assert.match(spring.termId, /^2025-2026-2$/)
+  }
+})
+
+test('January remains in the fall term that started the previous year', () => {
+  const suggested = suggestTermForDate(new Date(2026, 0, 15))
+  assert.equal(suggested.termId, '2025-2026-1')
+  assert.equal(suggested.termStartDate, '2025-09-01')
+})
+
+test('spring term anchor stays in early March', () => {
+  // 2026-03-01 is Sunday; the week of March 2 anchors the start on 03-02.
+  const suggested = suggestTermForDate(new Date(2026, 2, 1))
+  assert.equal(suggested.termStartDate, '2026-03-02')
+})
+
+test('isValidTermId accepts standard ids and rejects garbage', () => {
+  assert.equal(isValidTermId('2025-2026-2'), true)
+  assert.equal(isValidTermId('2026-2027-1'), true)
+  assert.equal(isValidTermId('2025-2026-3'), false)
+  assert.equal(isValidTermId('2025-2026'), false)
+  assert.equal(isValidTermId('abc'), false)
+  assert.equal(isValidTermId(''), false)
+})
+
+test('isValidTermStartDate rejects impossible dates', () => {
+  assert.equal(isValidTermStartDate('2026-03-02'), true)
+  assert.equal(isValidTermStartDate('2026-02-30'), false)
+  assert.equal(isValidTermStartDate('2026-13-01'), false)
+  assert.equal(isValidTermStartDate('2026-3-2'), false)
+  assert.equal(isValidTermStartDate(''), false)
+})
+
+test('termMatchesCurrentPeriod flags mismatched terms', () => {
+  const suggested = suggestTermForDate()
+  assert.equal(termMatchesCurrentPeriod(suggested.termId, suggested.termStartDate), true)
+  assert.equal(termMatchesCurrentPeriod('1999-2000-1', '2000-09-04'), false)
+  assert.equal(termMatchesCurrentPeriod('garbage', '2026-03-02'), false)
 })
