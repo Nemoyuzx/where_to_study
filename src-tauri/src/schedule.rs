@@ -49,9 +49,9 @@ pub fn expand_week_numbers(week_text: &str) -> Vec<i64> {
         } else if let Ok(week) = clean.parse::<i64>() {
             expanded.push(week);
         }
-        if item_odd || (!item_odd && !item_even && global_odd) {
+        if item_odd || (!item_even && global_odd) {
             expanded.retain(|week| week % 2 == 1);
-        } else if item_even || (!item_odd && !item_even && global_even) {
+        } else if item_even || (!item_odd && global_even) {
             expanded.retain(|week| week % 2 == 0);
         }
         week_numbers.extend(expanded);
