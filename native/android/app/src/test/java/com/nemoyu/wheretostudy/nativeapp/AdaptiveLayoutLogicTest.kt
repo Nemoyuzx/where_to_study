@@ -7,6 +7,16 @@ import org.junit.Test
 
 class AdaptiveLayoutLogicTest {
     @Test
+    fun collapsedNavigationItemsAreCenteredSquaresInsideTheRail() {
+        assertEquals(72, AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_WIDTH_DP)
+        assertEquals(48, AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP)
+        assertTrue(
+            AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP <
+                AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_WIDTH_DP,
+        )
+    }
+
+    @Test
     fun widthClassesUseActualWindowBreakpoints() {
         assertEquals(WindowWidthClass.COMPACT, AdaptiveLayoutLogic.widthClass(0))
         assertEquals(WindowWidthClass.COMPACT, AdaptiveLayoutLogic.widthClass(699))

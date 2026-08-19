@@ -627,6 +627,21 @@ class ScheduleLogicTest {
         )
     }
 
+    @Test
+    fun selectingAnyMonthDayOpensTheMiddleDetailsAnchor() {
+        assertEquals(
+            TeachingCalendarLogic.monthSheetDetailsPosition,
+            TeachingCalendarLogic.monthDaySelectionTargetPosition(),
+            0f,
+        )
+    }
+
+    @Test
+    fun sideNavigationCalendarDoesNotReservePhoneNavigationSpace() {
+        assertEquals(84, TeachingCalendarLogic.calendarContentBottomInsetDp(true))
+        assertEquals(0, TeachingCalendarLogic.calendarContentBottomInsetDp(false))
+    }
+
     private fun parseHolidays(
         dates: JSONArray,
         year: Int = 2026,
