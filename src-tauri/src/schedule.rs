@@ -21,9 +21,12 @@ const EXAM_WEEK_ORDINALS: [usize; 2] = [17, 18];
 
 pub fn expand_week_numbers(week_text: &str) -> Vec<i64> {
     let mut raw = week_text.replace('，', ",").replace(' ', "");
-    let odd_only = raw.contains('单');
-    let even_only = raw.contains('双');
-    raw = raw.replace(['周', '单', '双'], "");
+    // Global odd/even markers ("1-5(单)") apply to items without their own
+    // suffix; when both markers appear ("1-17单,2-18双") each item keeps
+    // its own parity instead of dropping one side.
+    let global_odd = raw.contains('单');
+    let global_even = raw.contains('双');
+    raw = raw.replace('周', "");
     raw = Regex::new(r"\[.*?\]")
         .expect("valid regex")
         .replace_all(&raw, "")
@@ -35,29 +38,27 @@ pub fn expand_week_numbers(week_text: &str) -> Vec<i64> {
 
     let mut week_numbers = Vec::new();
     for item in raw.split(',').filter(|item| !item.is_empty()) {
-        if let Some((left, right)) = item.split_once('-') {
+        let item_odd = item.contains('单');
+        let item_even = item.contains('双');
+        let clean = item.replace(['单', '双'], "");
+        let mut expanded = Vec::new();
+        if let Some((left, right)) = clean.split_once('-') {
             if let (Ok(start), Ok(end)) = (left.parse::<i64>(), right.parse::<i64>()) {
-                week_numbers.extend(start..=end);
+                expanded.extend(start..=end);
             }
-        } else if let Ok(week) = item.parse::<i64>() {
-            week_numbers.push(week);
+        } else if let Ok(week) = clean.parse::<i64>() {
+            expanded.push(week);
         }
+        if item_odd || (!item_odd && !item_even && global_odd) {
+            expanded.retain(|week| week % 2 == 1);
+        } else if item_even || (!item_odd && !item_even && global_even) {
+            expanded.retain(|week| week % 2 == 0);
+        }
+        week_numbers.extend(expanded);
     }
 
     week_numbers.sort_unstable();
     week_numbers.dedup();
-    if odd_only {
-        return week_numbers
-            .into_iter()
-            .filter(|week| week % 2 == 1)
-            .collect();
-    }
-    if even_only {
-        return week_numbers
-            .into_iter()
-            .filter(|week| week % 2 == 0)
-            .collect();
-    }
     week_numbers
 }
 
@@ -132,6 +133,8 @@ pub fn parse_sjd_week_numbers(course: &Value) -> Vec<i64> {
 
 pub fn parse_sjd_slots(course: &Value) -> Option<(usize, usize)> {
     let class_time = json_string(course.get("classTime"));
+    // SJD encodes classTime as "<course-count><node><node>...", e.g. "1030405"
+    // means one course using nodes 03, 04, 05. Skip the leading count digit.
     let class_time_tail: String = class_time.chars().skip(1).collect();
     let node_regex = Regex::new(r"\d{2}").expect("valid regex");
     let mut nodes: Vec<usize> = node_regex
@@ -295,7 +298,11 @@ pub fn parse_sjd_courses(
             weekday,
             start_slot,
             end_slot,
-            section_text: format!("{}-{}节", start_slot + 1, end_slot + 1),
+            section_text: if start_slot == end_slot {
+                format!("{}节", start_slot + 1)
+            } else {
+                format!("{}-{}节", start_slot + 1, end_slot + 1)
+            },
             time_range: format!(
                 "{}-{}",
                 if start_time.is_empty() {
@@ -467,6 +474,21 @@ mod tests {
         assert_eq!(expand_week_numbers("1-5[周]"), vec![1, 2, 3, 4, 5]);
         assert_eq!(expand_week_numbers("1-5[周](单)"), vec![1, 3, 5]);
         assert_eq!(expand_week_numbers("2,4,6[周]"), vec![2, 4, 6]);
+    }
+
+    #[test]
+    fn expand_week_numbers_keeps_both_parities_when_items_carry_own_markers() {
+        assert_eq!(
+            expand_week_numbers("1-17单,2-18双"),
+            (1..=18)
+                .filter(|week| week % 2 != 0 || (2..=18).contains(week))
+                .collect::<Vec<_>>()
+        );
+        // Equivalent explicit assertion:
+        assert_eq!(
+            expand_week_numbers("1-17单,2-18双"),
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+        );
     }
 
     #[test]

@@ -1035,7 +1035,17 @@ async fn fetch_classrooms(
             Ok(request_scope)
         })
         .map_err(LocalDataAccessError::message)?;
-    payload.target_date = Some(config::today_in_app_tz().to_string());
+    // The SJD classroom endpoint only serves "today" in the app timezone;
+    // reject other dates explicitly instead of silently overriding them.
+    let today = config::today_in_app_tz();
+    if payload
+        .target_date
+        .as_deref()
+        .is_some_and(|date| date != today.to_string().as_str())
+    {
+        return Err("空教室接口仅支持查询今天的数据。".to_string());
+    }
+    payload.target_date = Some(today.to_string());
     let classrooms = classrooms::fetch_all_classrooms(&payload)
         .await
         .map_err(|error| error.message)?;
@@ -1131,7 +1141,7 @@ fn show_course_widget(app: &tauri::AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         app,
         "course-widget",
         tauri::WebviewUrl::App("index.html?widget=course".into()),
@@ -1143,11 +1153,12 @@ fn show_course_widget(app: &tauri::AppHandle) -> tauri::Result<()> {
     .position(24.0, 80.0)
     .decorations(false)
     .resizable(false)
-    .always_on_top(true)
-    .visible_on_all_workspaces(true)
-    .focused(false)
-    .shadow(true)
-    .build()?;
+    .always_on_top(true);
+    // tao's visible_on_all_workspaces is macOS/Linux-only; calling it on
+    // Windows is a silent no-op, so keep it off that platform.
+    #[cfg(not(target_os = "windows"))]
+    let builder = builder.visible_on_all_workspaces(true);
+    let window = builder.focused(false).shadow(true).build()?;
     let _ = window.show();
     Ok(())
 }
@@ -1646,6 +1657,9 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+static HIDE_TO_TRAY_NOTIFIED: AtomicBool = AtomicBool::new(false);
+
 #[cfg(not(mobile))]
 fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) {
     if window.label() != "main" {
@@ -1654,6 +1668,17 @@ fn keep_main_window_in_tray(window: &tauri::Window, event: &tauri::WindowEvent) 
     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
         api.prevent_close();
         let _ = window.hide();
+        #[cfg(target_os = "windows")]
+        {
+            // Windows users often expect "close" to exit; explain once that
+            // the app keeps running in the system tray.
+            if !HIDE_TO_TRAY_NOTIFIED.swap(true, Ordering::Relaxed) {
+                let _ = window.app_handle().emit(
+                    "tray:hide-notice",
+                    "窗口已隐藏，应用仍在系统托盘运行。右键托盘图标可退出。",
+                );
+            }
+        }
     }
 }
 
@@ -2366,6 +2391,8 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        // Windows toast clicks activate the app by default (appUserModelId);
+        // macOS notification clicks activate the app as well.
         .plugin(tauri_plugin_notification::init());
 
     builder
