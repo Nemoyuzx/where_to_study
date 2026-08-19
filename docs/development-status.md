@@ -3,12 +3,12 @@
 ## 当前状态
 
 - 分支：`main`
-- 当前稳定版：[v0.1.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.6)
-- 应用版本：`0.1.6`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=43`；Android `versionCode=24`
+- 当前稳定版：[v0.1.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.7)
+- 应用版本：`0.1.7`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=44`；Android `versionCode=25`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：仅保留最新 SwiftUI Universal 应用 `/Applications/Where To Study.app`；未再检测到其他 Where To Study 安装副本
-- 发布边界：`v0.1.6` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书、描述文件和双平台 App Store Connect 记录已配置，正式签名的 iOS 使用 build 43、macOS 使用 build 41；公开 GitHub Release 的 macOS/iOS 制品仍分别为 ad-hoc 与无签名构建；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.1.7` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书、描述文件和双平台 App Store Connect 记录已配置，正式签名的 iOS 与 macOS 均使用 build 44；公开 GitHub Release 的 macOS/iOS 制品仍分别为 ad-hoc 与无签名构建；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -23,7 +23,7 @@
 ### Tauri / Windows / Linux
 
 - 保留 Tauri 2 + React + Rust 作为 Windows/Linux 客户端，并继续提供迁移期 macOS 构建。
-- Linux 使用 Ubuntu 22.04 原生 CI 生成 x86_64 Debian 包和 AppImage；打包脚本解包验证版本、架构、许可证、正式 HTTPS 数据源与本地路径泄漏。
+- Linux 使用 Ubuntu 22.04 原生 CI 生成 x86_64 Debian 包和 AppImage；凭据保存在 Secret Service，打包脚本验证 Tauri 实际检测到的 GTK/WebKitGTK/托盘依赖，并在 Ubuntu 24.04 上安装生成的 Debian 包。
 - 完成空教室、教学日历、设置、教学楼/三位教室号、个人课表联动、系统日历导入、托盘和课程小组件。
 - 教学日历保留绿白配色，支持日/周/月/年、整点与 14 个节次、当前时间红线、节假日、年视图课程热度及日期日程浮层。
 - 托盘提供今日/明日课程；关闭主窗口后保持运行；启动和每天 07:00 获取当天空教室；课程摘要默认关闭，用户显式开启后才在 07:30 发送。
@@ -63,19 +63,19 @@
 
 | 范围 | 结果 |
 | --- | --- |
-| React | 44/44 业务规则、主题契约、图标安全区、Linux 发布契约与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
+| React | 54/54 业务规则、主题契约、图标安全区、Linux 发布契约与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
 | 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
-| Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；100/100 测试通过 |
+| Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；101/101 共享测试通过；CLI/TUI 严格检查与测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
 | macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；111/111 XCTest 通过 |
-| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；110/110 单元测试通过；iPhone 当前适用 UI 用例 9/9、iPad 专项 1/1 通过 |
+| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；111/111 单元测试通过；UI 测试执行 10 项、跳过 1 项、0 失败 |
 | Android Debug | 131/131 JVM 测试、Debug APK 与 AndroidTest APK 构建通过 |
 | Android Release | 131/131 JVM 测试、`lintRelease`、固定证书签名 APK/AAB 构建通过 |
 | Android UI | Medium Phone、WhereToStudy Fold 与 Pixel Tablet 各 4/4 导航及布局测试通过，共 12/12 |
 | 浏览器视觉检查 | 日/周/月真实触摸翻页、年视图日/周/月跳转、校区状态隔离通过；手机、折叠屏、平板、桌面深浅色均无横向溢出或文本裁切，控制台 0 错误 |
-| macOS 安装检查 | SwiftUI Universal `0.1.6 (41)` 已覆盖安装到 `/Applications/Where To Study.app`；x86_64/arm64、ad-hoc 签名、WidgetKit 扩展、版本与统一应用图标复核通过，应用目录只保留一个最新安装副本 |
-| App Store Connect | iOS `0.1.6 (43)` 与 macOS `0.1.6 (41)` 均已使用 Apple Distribution 签名并校验描述文件/entitlement；两个平台的上传任务均收到 `Upload succeeded` |
-| Linux 发布 | Ubuntu 22.04 原生工作流生成并解包验证 x86_64 `.deb` 与 `.AppImage`，制品附带 LF 行尾 SHA-256 文件 |
+| macOS 安装检查 | SwiftUI Universal `0.1.7 (44)` 已覆盖安装到 `/Applications/Where To Study.app`；x86_64/arm64、ad-hoc 签名、WidgetKit 扩展、版本与统一应用图标复核通过，应用目录只保留一个最新安装副本 |
+| App Store Connect | iOS 与 macOS `0.1.7 (44)` 均已使用 Apple Distribution 签名并校验描述文件/entitlement；两个平台的上传任务均收到 `Upload succeeded` |
+| Linux 发布 | Ubuntu 22.04 原生工作流生成并解包验证 x86_64 `.deb` 与 `.AppImage`，Ubuntu 24.04 实际安装 `.deb` 通过，制品附带 LF 行尾 SHA-256 文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
@@ -83,12 +83,12 @@
 Apple 测试结果（2026-08-19 使用 `xcresulttool` 复核）：
 
 - macOS：111/111 通过
-- iOS：110/110 项单元测试通过；iPhone 当前适用 UI 用例 9/9、iPad 专项 1/1 通过
+- iOS：111/111 项单元测试通过；UI 测试执行 10 项、跳过 1 项、0 失败
 - 通知权限超时精确测试：20 轮、40/40 通过
 
-## 0.1.6 稳定版发布制品
+## 0.1.7 稳定版发布制品
 
-`v0.1.6` 通过标签工作流生成 Windows x64 NSIS、Linux x86_64 Debian/AppImage、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive，以及固定 release key 签名的 Android APK/AAB。当前维护刷新只将 Android 更新为 `versionCode=24` 并替换 APK、AAB 及其 SHA-256 文件；Linux、Windows、macOS 与 iOS 的 GitHub Release 附件保持不变。每个二进制制品均带相邻的 LF 行尾 SHA-256 校验文件；Release 页面是当前稳定版制品和校验值的最终来源。
+`v0.1.7` 通过标签工作流生成 Windows x64 NSIS、Linux x86_64 Debian/AppImage、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、固定 release key 签名的 Android APK/AAB，以及 macOS CLI/TUI。每个二进制制品均带相邻的 LF 行尾 SHA-256 校验文件；Release 页面是当前稳定版制品和校验值的最终来源。
 
 ## Build 15 稳定版发布制品
 

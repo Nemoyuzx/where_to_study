@@ -97,7 +97,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     // About
     let about = Paragraph::new(
         "Where To Study TUI · 数据源：北邮移动教务 HTTPS 接口
-版本 0.1.6 · GPL-3.0",
+版本 0.1.7 · GPL-3.0",
     )
     .block(Block::default().borders(Borders::ALL).title("关于"))
     .style(theme.muted_text());

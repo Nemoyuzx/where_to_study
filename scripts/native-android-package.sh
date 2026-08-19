@@ -9,7 +9,7 @@ npm --prefix "$ROOT_DIR" run licenses:check
 ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ANDROID_DIR/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.1.6}"
+RELEASE_LABEL="${1:-v0.1.7}"
 APK_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"
 AAB_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android.aab"
 EXPECTED_CERTIFICATE_FILE="$ANDROID_DIR/release-certificate.sha256"

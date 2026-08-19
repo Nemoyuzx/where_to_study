@@ -5241,7 +5241,7 @@ dependencies = [
 
 [[package]]
 name = "where_to_study"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "android-native-keyring-store",
  "chrono",
@@ -5791,7 +5791,7 @@ dependencies = [
 
 [[package]]
 name = "wts-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "chrono",
  "clap",
