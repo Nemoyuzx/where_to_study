@@ -11,7 +11,7 @@ pub mod models;
 mod recommender;
 pub mod schedule;
 mod schedule_store;
-mod scoped_cache;
+pub mod scoped_cache;
 mod settings_store;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

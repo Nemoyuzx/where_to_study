@@ -5558,6 +5558,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "where_to_study",
+ "zeroize",
 ]
 
 [[package]]

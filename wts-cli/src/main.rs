@@ -25,9 +25,6 @@ enum Commands {
     Login {
         /// 教务学号
         account: String,
-        /// 直接提供密码（不推荐，会出现在 shell 历史中）
-        #[arg(long)]
-        password: Option<String>,
     },
     /// 清除已保存的教务凭据
     Logout,
@@ -60,9 +57,6 @@ enum Commands {
         /// 节次筛选，如 1-3,5（默认全部空闲节次）
         #[arg(long)]
         slots: Option<String>,
-        /// 目标日期 yyyy-MM-dd（默认今天）
-        #[arg(long)]
-        date: Option<String>,
         /// 以 JSON 输出
         #[arg(long)]
         json: bool,
@@ -82,7 +76,7 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
-        Commands::Login { account, password } => commands::login(account, password),
+        Commands::Login { account } => commands::login(account),
         Commands::Logout => commands::logout(),
         Commands::Schedule { date, json } => commands::schedule(date, json).await,
         Commands::Week { date, json } => commands::week(date, json).await,
@@ -90,14 +84,31 @@ async fn main() {
             campus,
             building,
             slots,
-            date,
             json,
-        } => commands::classrooms(campus, building, slots, date, json).await,
+        } => commands::classrooms(campus, building, slots, json).await,
         Commands::Holidays { year, json } => commands::holidays(year, json).await,
     };
 
     if let Err(error) = result {
         eprintln!("错误：{error}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn login_does_not_accept_password_in_process_arguments() {
+        assert!(
+            Cli::try_parse_from(["wts-cli", "login", "2023000000", "--password", "secret"])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn classrooms_does_not_accept_non_today_date() {
+        assert!(Cli::try_parse_from(["wts-cli", "classrooms", "--date", "2026-09-01",]).is_err());
     }
 }

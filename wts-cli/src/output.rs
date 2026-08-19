@@ -4,15 +4,6 @@ use where_to_study_lib::models::{ClassroomsResponse, Course, HolidaysResponse, S
 
 const WEEKDAY_LABELS: [&str; 7] = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
-fn term_start(schedule: &ScheduleResponse) -> NaiveDate {
-    NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d")
-        .unwrap_or_else(|_| NaiveDate::from_ymd_opt(2026, 3, 2).unwrap())
-}
-
-fn week_number(schedule: &ScheduleResponse, date: NaiveDate) -> i64 {
-    (date - term_start(schedule)).num_days() / 7 + 1
-}
-
 fn day_courses(schedule: &ScheduleResponse, date: NaiveDate, week: i64) -> Vec<&Course> {
     let weekday = date.weekday().num_days_from_monday() as i64 + 1;
     let mut courses: Vec<&Course> = schedule
@@ -28,8 +19,11 @@ fn slot_label(index: usize) -> String {
     format!("第 {} 节", index + 1)
 }
 
-pub fn print_schedule_day(schedule: &ScheduleResponse, date: NaiveDate) -> ServiceResult<()> {
-    let week = week_number(schedule, date);
+pub fn print_schedule_day(
+    schedule: &ScheduleResponse,
+    date: NaiveDate,
+    week: i64,
+) -> ServiceResult<()> {
     let weekday = WEEKDAY_LABELS[date.weekday().num_days_from_monday() as usize];
     let courses = day_courses(schedule, date, week);
     println!(
@@ -77,13 +71,16 @@ pub fn print_schedule_day(schedule: &ScheduleResponse, date: NaiveDate) -> Servi
     Ok(())
 }
 
-pub fn print_schedule_week(schedule: &ScheduleResponse, date: NaiveDate) -> ServiceResult<()> {
+pub fn print_schedule_week(
+    schedule: &ScheduleResponse,
+    date: NaiveDate,
+    week: i64,
+) -> ServiceResult<()> {
     let monday = date
         .checked_sub_days(chrono::Days::new(
             date.weekday().num_days_from_monday() as u64
         ))
         .unwrap_or(date);
-    let week = week_number(schedule, monday);
     println!("第 {} 周（{} 起）", week, monday.format("%Y-%m-%d"));
     for offset in 0..7 {
         let day = monday + Duration::days(offset);

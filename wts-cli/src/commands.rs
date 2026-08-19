@@ -1,10 +1,12 @@
 use chrono::{Datelike, NaiveDate};
-use where_to_study_lib::config::{default_term_start_date, today_in_app_tz};
+use where_to_study_lib::config::today_in_app_tz;
 use where_to_study_lib::error::{ServiceError, ServiceResult};
 use where_to_study_lib::models::{ClassroomsRequest, Course, ScheduleRequest, ScheduleResponse};
 
 use crate::credentials;
 use crate::output;
+
+const TERM_VALIDITY_WEEKS: i64 = 26;
 
 /// Parse a yyyy-MM-dd date, defaulting to today (Shanghai timezone).
 fn parse_date(value: Option<&str>) -> ServiceResult<NaiveDate> {
@@ -16,109 +18,109 @@ fn parse_date(value: Option<&str>) -> ServiceResult<NaiveDate> {
 }
 
 /// Load credentials, requiring both account and password.
-fn require_credentials() -> ServiceResult<(String, String)> {
-    let Some((account, password)) = credentials::load()? else {
+fn require_credentials() -> ServiceResult<where_to_study_lib::credential_store::Credentials> {
+    let Some(credentials) = credentials::load()? else {
         return Err(ServiceError::new(
             "尚未保存教务账号。请先运行：wts-cli login <学号>",
         ));
     };
-    if account.trim().is_empty() || password.is_empty() {
+    if credentials.account.trim().is_empty() || credentials.password.is_empty() {
         return Err(ServiceError::new(
             "已保存的凭据不完整。请重新运行：wts-cli login <学号>",
         ));
     }
-    Ok((account, password))
+    Ok(credentials)
 }
 
-pub fn login(account: String, password: Option<String>) -> ServiceResult<()> {
+fn schedule_request(
+    mut credentials: where_to_study_lib::credential_store::Credentials,
+) -> ScheduleRequest {
+    ScheduleRequest {
+        account: Some(std::mem::take(&mut credentials.account)),
+        password: Some(std::mem::take(&mut credentials.password)),
+        term_id: None,
+        term_start_date: None,
+    }
+}
+
+pub fn login(account: String) -> ServiceResult<()> {
     let account = account.trim().to_string();
     if account.is_empty() {
         return Err(ServiceError::new("请输入教务账号。"));
     }
-    let password = match password {
-        Some(value) if !value.is_empty() => value,
-        _ => {
-            // Preserve the existing saved password when none is provided.
-            if let Some((saved_account, saved_password)) = credentials::load()? {
-                if saved_account.trim() == account && !saved_password.is_empty() {
-                    credentials::save(&account, &saved_password)?;
-                    println!("已保留账号 {account} 的已保存密码。");
-                    return Ok(());
-                }
-            }
-            credentials::prompt_password("教务密码：")?
-        }
+    let mut existing = credentials::load()?;
+    let mut entered = credentials::prompt_password("教务密码（同账号留空则保留已保存密码）：")?;
+    let password = if entered.is_empty() {
+        let Some(saved) = existing.as_mut().filter(|credentials| {
+            credentials.account.trim() == account && !credentials.password.is_empty()
+        }) else {
+            return Err(ServiceError::new("请输入教务密码。"));
+        };
+        std::mem::take(&mut saved.password)
+    } else {
+        std::mem::take(&mut *entered)
     };
-    credentials::save(&account, &password)?;
+    credentials::save(&account, password)?;
     println!("已保存账号 {account} 的凭据到系统安全存储。");
     Ok(())
 }
 
 pub fn logout() -> ServiceResult<()> {
     credentials::clear()?;
-    println!("已清除系统凭据存储中的教务账号。");
+    println!("已清除 CLI 与桌面端共享的系统凭据存储中的教务账号。");
     Ok(())
 }
 
 pub async fn schedule(date: Option<String>, json: bool) -> ServiceResult<()> {
-    let (account, password) = require_credentials()?;
+    let credentials = require_credentials()?;
     let target_date = parse_date(date.as_deref())?;
-    let request = ScheduleRequest {
-        account: Some(account),
-        password: Some(password),
-        term_id: None,
-        term_start_date: None,
-    };
+    let request = schedule_request(credentials);
     let schedule = where_to_study_lib::schedule::fetch_schedule(&request).await?;
+    let week = schedule_week_number(&schedule, target_date)?;
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&day_schedule_json(&schedule, target_date))
+            serde_json::to_string_pretty(&day_schedule_json(&schedule, target_date, week))
                 .map_err(|error| ServiceError::new(format!("无法序列化输出：{error}")))?
         );
         return Ok(());
     }
-    output::print_schedule_day(&schedule, target_date)
+    output::print_schedule_day(&schedule, target_date, week)
 }
 
 pub async fn week(date: Option<String>, json: bool) -> ServiceResult<()> {
-    let (account, password) = require_credentials()?;
+    let credentials = require_credentials()?;
     let target_date = parse_date(date.as_deref())?;
-    let request = ScheduleRequest {
-        account: Some(account),
-        password: Some(password),
-        term_id: None,
-        term_start_date: None,
-    };
+    let request = schedule_request(credentials);
     let schedule = where_to_study_lib::schedule::fetch_schedule(&request).await?;
+    let week = schedule_week_number(&schedule, target_date)?;
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&week_schedule_json(&schedule, target_date))
+            serde_json::to_string_pretty(&week_schedule_json(&schedule, target_date, week))
                 .map_err(|error| ServiceError::new(format!("无法序列化输出：{error}")))?
         );
         return Ok(());
     }
-    output::print_schedule_week(&schedule, target_date)
+    output::print_schedule_week(&schedule, target_date, week)
 }
 
 pub async fn classrooms(
     campus: String,
     buildings: Vec<String>,
     slots: Option<String>,
-    date: Option<String>,
     json: bool,
 ) -> ServiceResult<()> {
-    let (account, password) = require_credentials()?;
-    let target_date = parse_date(date.as_deref())?;
+    let mut credentials = require_credentials()?;
+    let target_date = today_in_app_tz();
     let campus_id = if campus.trim().is_empty() {
         "01".to_string()
     } else {
         campus.trim().to_string()
     };
     let request = ClassroomsRequest {
-        account: Some(account),
-        password: Some(password),
+        account: Some(std::mem::take(&mut credentials.account)),
+        password: Some(std::mem::take(&mut credentials.password)),
         campus_id: Some(campus_id.clone()),
         target_date: Some(target_date.format("%Y-%m-%d").to_string()),
     };
@@ -192,13 +194,16 @@ pub async fn holidays(year: Option<i32>, json: bool) -> ServiceResult<()> {
     output::print_holidays(&response)
 }
 
-fn week_schedule_json(schedule: &ScheduleResponse, date: NaiveDate) -> serde_json::Value {
+fn week_schedule_json(
+    schedule: &ScheduleResponse,
+    date: NaiveDate,
+    week: i64,
+) -> serde_json::Value {
     let monday = date
         .checked_sub_days(chrono::Days::new(
             (date.weekday().num_days_from_monday()) as u64,
         ))
         .unwrap_or(date);
-    let week = (monday - schedule_term_start(schedule)).num_days() / 7 + 1;
     let days: Vec<serde_json::Value> = (0..7)
         .map(|offset| {
             let day = monday + chrono::Duration::days(offset);
@@ -216,8 +221,7 @@ fn week_schedule_json(schedule: &ScheduleResponse, date: NaiveDate) -> serde_jso
     })
 }
 
-fn day_schedule_json(schedule: &ScheduleResponse, date: NaiveDate) -> serde_json::Value {
-    let week = (date - schedule_term_start(schedule)).num_days() / 7 + 1;
+fn day_schedule_json(schedule: &ScheduleResponse, date: NaiveDate, week: i64) -> serde_json::Value {
     serde_json::json!({
         "term_id": schedule.term_id,
         "term_start_date": schedule.term_start_date,
@@ -228,10 +232,22 @@ fn day_schedule_json(schedule: &ScheduleResponse, date: NaiveDate) -> serde_json
     })
 }
 
-fn schedule_term_start(schedule: &ScheduleResponse) -> NaiveDate {
-    NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d").unwrap_or_else(|_| {
-        NaiveDate::parse_from_str(&default_term_start_date(), "%Y-%m-%d").unwrap()
-    })
+fn schedule_term_start(schedule: &ScheduleResponse) -> ServiceResult<NaiveDate> {
+    NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d")
+        .map_err(|_| ServiceError::new("课表返回的学期开始日期格式不正确。"))
+}
+
+fn schedule_week_number(schedule: &ScheduleResponse, date: NaiveDate) -> ServiceResult<i64> {
+    let term_start = schedule_term_start(schedule)?;
+    let term_end =
+        term_start + chrono::Duration::weeks(TERM_VALIDITY_WEEKS) - chrono::Duration::days(1);
+    if date < term_start || date > term_end {
+        return Err(ServiceError::new(format!(
+            "目标日期不在当前课表学期 {} 的有效范围内（{} 至 {}）。",
+            schedule.term_id, term_start, term_end
+        )));
+    }
+    Ok((date - term_start).num_days().div_euclid(7) + 1)
 }
 
 fn courses_on_day(
@@ -295,6 +311,9 @@ fn parse_slot_filter(text: &str) -> ServiceResult<Vec<usize>> {
     }
     selected.sort_unstable();
     selected.dedup();
+    if selected.is_empty() {
+        return Err(ServiceError::new("节次筛选不能为空。"));
+    }
     Ok(selected)
 }
 
@@ -325,6 +344,7 @@ mod tests {
         assert!(parse_slot_filter("3-2").is_err());
         assert!(parse_slot_filter("abc").is_err());
         assert!(parse_slot_filter("1-15").is_err());
+        assert!(parse_slot_filter(",").is_err());
     }
 
     #[test]
@@ -333,5 +353,33 @@ mod tests {
         assert!(parse_date(Some("2026-09-01")).is_ok());
         assert!(parse_date(Some("2026-13-01")).is_err());
         assert!(parse_date(Some("2026/09/01")).is_err());
+    }
+
+    fn fixture_schedule() -> ScheduleResponse {
+        ScheduleResponse {
+            term_id: "2025-2026-2".to_string(),
+            term_start_date: "2026-03-02".to_string(),
+            fetched_at: String::new(),
+            courses: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn schedule_week_rejects_dates_outside_returned_term() {
+        let schedule = fixture_schedule();
+        assert!(
+            schedule_week_number(&schedule, NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()).is_err()
+        );
+        assert_eq!(
+            schedule_week_number(&schedule, NaiveDate::from_ymd_opt(2026, 3, 2).unwrap()).unwrap(),
+            1
+        );
+        assert_eq!(
+            schedule_week_number(&schedule, NaiveDate::from_ymd_opt(2026, 8, 30).unwrap()).unwrap(),
+            26
+        );
+        assert!(
+            schedule_week_number(&schedule, NaiveDate::from_ymd_opt(2026, 9, 1).unwrap()).is_err()
+        );
     }
 }

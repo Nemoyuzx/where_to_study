@@ -5,11 +5,11 @@
 
 ## 功能
 
-- `login` / `logout`：保存/清除教务凭据到系统安全存储；当前发布的 macOS
-  构建使用 Keychain
-- `schedule`：显示指定日期（默认今天，上海时区）的个人课程
+- `login` / `logout`：通过隐藏终端输入保存/清除教务凭据；当前发布的 macOS
+  构建与桌面端共享同一个 Keychain 条目和账号缓存作用域
+- `schedule`：显示服务返回学期内的指定日期（默认今天，上海时区）个人课程
 - `week`：显示本周课程
-- `classrooms`：按校区、教学楼、节次筛选查询当天空教室
+- `classrooms`：按校区、教学楼、节次筛选查询当天空教室（实时接口不支持其他日期）
 - `holidays`：显示中国法定节假日与调休（支持离线兜底数据）
 - 所有查询命令支持 `--json` 输出，方便脚本消费
 
@@ -21,7 +21,7 @@ cargo build --release
 # 产物：target/release/wts-cli
 ```
 
-需要 Rust 1.75+。当前 CI 与发布产物面向 macOS，需要 Xcode Command Line
+需要 Rust 1.89+。当前 CI 与发布产物面向 macOS，需要 Xcode Command Line
 Tools 提供系统 WebKit。
 
 ## 使用示例
@@ -34,7 +34,7 @@ wts-cli login 2023xxxxx
 wts-cli schedule
 
 # 查看指定日期的课
-wts-cli schedule --date 2026-09-01
+wts-cli schedule --date 2026-06-01
 
 # 查看本周课程（JSON 输出）
 wts-cli week --json
@@ -51,6 +51,10 @@ wts-cli holidays --year 2026
 # 清除本地保存的凭据
 wts-cli logout
 ```
+
+`login` 会提示输入密码且不回显；同账号留空会保留已保存密码。为避免密码出现在
+shell 历史与进程参数中，不提供命令行密码选项。`logout` 会同时清除桌面端共享的
+Keychain 凭据。
 
 ## 设计
 
