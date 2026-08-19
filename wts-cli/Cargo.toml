@@ -13,7 +13,6 @@ clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 serde_json = "1"
 rpassword = "7"
-zeroize = { version = "1", features = ["derive"] }
 
 [profile.release]
 strip = true
