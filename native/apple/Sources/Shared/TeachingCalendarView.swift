@@ -16,6 +16,21 @@ private enum CalendarMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+#if os(macOS)
+private struct DesktopMonthEvent: Identifiable {
+    enum Kind: Equatable {
+        case course
+        case holiday
+        case workday
+    }
+
+    let id: String
+    let title: String
+    let time: String?
+    let kind: Kind
+}
+#endif
+
 enum TeachingCalendarLogic {
     enum GestureAxis: Equatable {
         case horizontal
@@ -59,6 +74,28 @@ enum TeachingCalendarLogic {
         }
     }
 
+    #if os(macOS)
+    struct DesktopYearLayout: Equatable {
+        let rowSpacing: CGFloat
+        let columnSpacing: CGFloat
+        let monthHeight: CGFloat
+        let monthTitleFontSize: CGFloat
+        let monthTitleHeight: CGFloat
+        let monthContentSpacing: CGFloat
+        let weekdayFontSize: CGFloat
+        let weekdayHeight: CGFloat
+        let gridSpacing: CGFloat
+        let dayCellHeight: CGFloat
+        let dayFontSize: CGFloat
+        let holidayFontSize: CGFloat
+        let selectionDiameter: CGFloat
+
+        var totalHeight: CGFloat {
+            monthHeight * 3 + rowSpacing * 2
+        }
+    }
+    #endif
+
     enum MonthPosition: Int, CaseIterable {
         case detailRaised = 0
         case collapsed = 1
@@ -70,6 +107,44 @@ enum TeachingCalendarLogic {
         let count = Double(courseCount)
         return 0.12 + 0.72 * count / (count + 3)
     }
+
+    #if os(macOS)
+    static func desktopYearLayout(availableHeight: CGFloat) -> DesktopYearLayout {
+        let height = max(availableHeight, 0)
+        let rowSpacing = min(max(height * 0.025, 8), 28)
+        let monthHeight = max((height - rowSpacing * 2) / 3, 0)
+        let monthTitleFontSize = min(max(monthHeight * 0.095, 13), 22)
+        let monthTitleHeight = monthTitleFontSize * 1.25
+        let monthContentSpacing = min(max(monthHeight * 0.025, 2), 10)
+        let weekdayFontSize = min(max(monthHeight * 0.052, 8), 12)
+        let weekdayHeight = min(max(monthHeight * 0.075, 10), 20)
+        let gridSpacing = min(max(monthHeight * 0.014, 1), 4)
+        let reservedHeight = monthTitleHeight
+            + monthContentSpacing
+            + weekdayHeight
+            + gridSpacing * 6
+        let dayCellHeight = max((monthHeight - reservedHeight) / 6, 1)
+        let dayFontSize = min(max(dayCellHeight * 0.4, 7), 14)
+        let holidayFontSize = min(max(dayCellHeight * 0.28, 6), 10)
+        let selectionDiameter = min(dayCellHeight, min(max(dayCellHeight * 0.82, 10), 40))
+
+        return DesktopYearLayout(
+            rowSpacing: rowSpacing,
+            columnSpacing: min(max(monthHeight * 0.07, 12), 28),
+            monthHeight: monthHeight,
+            monthTitleFontSize: monthTitleFontSize,
+            monthTitleHeight: monthTitleHeight,
+            monthContentSpacing: monthContentSpacing,
+            weekdayFontSize: weekdayFontSize,
+            weekdayHeight: weekdayHeight,
+            gridSpacing: gridSpacing,
+            dayCellHeight: dayCellHeight,
+            dayFontSize: dayFontSize,
+            holidayFontSize: holidayFontSize,
+            selectionDiameter: selectionDiameter
+        )
+    }
+    #endif
 
     static func periodTitle(
         for date: Date,
@@ -304,16 +379,16 @@ struct TeachingCalendarView: View {
 
     var body: some View {
         ZStack {
+            #if os(macOS)
+            VStack(alignment: .leading, spacing: 16) {
+                titleBar
+                    .accessibilityIdentifier("layout.calendar.expanded")
+                calendarPanelContent
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            #else
             ScrollView {
-                #if os(macOS)
-                VStack(alignment: .leading, spacing: 16) {
-                    titleBar
-                        .accessibilityIdentifier("layout.calendar.expanded")
-                    calendarPanelContent
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                #else
                 VStack(alignment: .leading, spacing: 16) {
                     titleBar
                         .accessibilityIdentifier("layout.calendar.expanded")
@@ -325,8 +400,8 @@ struct TeachingCalendarView: View {
                 .padding(20)
                 .frame(maxWidth: 1200)
                 .frame(maxWidth: .infinity)
-                #endif
             }
+            #endif
 
             yearPopoverOverlay
         }
@@ -360,12 +435,28 @@ struct TeachingCalendarView: View {
                     .foregroundStyle(AppTheme.secondaryText)
             }
             Divider()
+            #if os(macOS)
+            ZStack(alignment: .topLeading) {
+                calendarContent
+                    .id(mode)
+                    .transition(.opacity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .clipped()
+            .animation(Self.viewAnimation, value: mode)
+            #else
             calendarContent
                 .id(mode)
                 .transition(.opacity.combined(with: .scale(scale: 0.995)))
                 .animation(Self.viewAnimation, value: mode)
+            #endif
         }
+        #if os(macOS)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        #else
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        #endif
     }
 
     @ViewBuilder
@@ -530,6 +621,9 @@ struct TeachingCalendarView: View {
     }
 
     private var monthView: some View {
+        #if os(macOS)
+        return desktopMonthView
+        #else
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         let days = monthGridDates(containing: first)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
@@ -566,7 +660,203 @@ struct TeachingCalendarView: View {
         .contentShape(Rectangle())
         .simultaneousGesture(periodSwipeGesture)
         .animation(Self.monthExpansionAnimation, value: isMonthExpanded)
+        #endif
     }
+
+    #if os(macOS)
+    private var desktopMonthView: some View {
+        let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+        let days = monthGridDates(containing: first)
+        let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 0), count: 7)
+
+        return GeometryReader { proxy in
+            let weekdayHeight: CGFloat = 30
+            let availableGridHeight = max(proxy.size.height - weekdayHeight, 0)
+            let cellHeight = max(floor(availableGridHeight / 6), 70)
+
+            VStack(alignment: .leading, spacing: 0) {
+                LazyVGrid(columns: columns, spacing: 0) {
+                    ForEach(Self.weekdayLabels, id: \.self) { label in
+                        Text("周\(label)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .frame(maxWidth: .infinity, minHeight: weekdayHeight)
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(AppTheme.border)
+                                    .frame(height: 0.5)
+                            }
+                    }
+
+                    ForEach(days, id: \.self) { day in
+                        desktopMonthDay(day, month: first, cellHeight: cellHeight)
+                    }
+                }
+                .overlay {
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: 0.5)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .simultaneousGesture(periodSwipeGesture)
+        .accessibilityIdentifier("calendar.desktop.month-grid")
+    }
+
+    private func desktopMonthDay(_ day: Date, month: Date, cellHeight: CGFloat) -> some View {
+        let events = desktopMonthEvents(on: day)
+        let maximumRows = cellHeight >= 100 ? 4 : (cellHeight >= 80 ? 3 : 2)
+        let layout = TeachingCalendarLogic.monthEventLayout(
+            totalCount: events.count,
+            maximumRows: maximumRows
+        )
+        let isSelected = sameDay(day, selectedDate)
+        let isToday = sameDay(day, .now)
+        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
+        let weekNumber = calendar.component(.weekOfYear, from: day)
+
+        return Button {
+            selectedDate = day
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .center, spacing: 5) {
+                    if calendar.component(.weekday, from: day) == 2 {
+                        Text("第 \(weekNumber) 周")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(AppTheme.secondaryText)
+                    }
+                    Spacer(minLength: 4)
+                    desktopMonthDayBadge(
+                        day: day,
+                        isSelected: isSelected,
+                        isToday: isToday,
+                        inMonth: inMonth
+                    )
+                }
+                .frame(height: 22)
+
+                ForEach(Array(events.prefix(layout.visibleEventCount))) { event in
+                    desktopMonthEventRow(event)
+                }
+
+                if layout.hiddenEventCount > 0 {
+                    Text("+\(layout.hiddenEventCount) 项")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .padding(.horizontal, 6)
+                        .frame(height: 15)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: cellHeight,
+                maxHeight: cellHeight,
+                alignment: .topLeading
+            )
+            .background(
+                isSelected
+                    ? AppTheme.primary.opacity(0.08)
+                    : (inMonth ? Color.clear : AppTheme.surface.opacity(0.28))
+            )
+            .overlay {
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: 0.5)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(dayAccessibilityLabel(day))
+    }
+
+    private func desktopMonthDayBadge(
+        day: Date,
+        isSelected: Bool,
+        isToday: Bool,
+        inMonth: Bool
+    ) -> some View {
+        Text("\(calendar.component(.day, from: day))")
+            .font(.system(size: 12, weight: isSelected || isToday ? .semibold : .medium))
+            .monospacedDigit()
+            .foregroundStyle(
+                isSelected || isToday
+                    ? AppTheme.onPrimary
+                    : (inMonth ? AppTheme.text : AppTheme.secondaryText.opacity(0.55))
+            )
+            .frame(minWidth: 22, minHeight: 22)
+            .background {
+                if isToday {
+                    Circle().fill(Self.nowRed)
+                } else if isSelected {
+                    Circle().fill(AppTheme.primaryFill)
+                }
+            }
+    }
+
+    private func desktopMonthEventRow(_ event: DesktopMonthEvent) -> some View {
+        let tint = desktopMonthEventTint(event.kind)
+        return HStack(spacing: 4) {
+            if event.kind != .course {
+                Image(systemName: event.kind == .holiday ? "star.fill" : "briefcase.fill")
+                    .font(.system(size: 7, weight: .semibold))
+            }
+            Text(event.title)
+                .lineLimit(1)
+            Spacer(minLength: 2)
+            if let time = event.time {
+                Text(time)
+                    .font(.system(size: 8, weight: .medium))
+                    .monospacedDigit()
+                    .opacity(0.82)
+                    .lineLimit(1)
+            }
+        }
+        .font(.system(size: 9, weight: .semibold))
+        .foregroundStyle(tint)
+        .padding(.horizontal, 5)
+        .frame(maxWidth: .infinity, minHeight: 15, maxHeight: 15, alignment: .leading)
+        .background(tint.opacity(0.15))
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+
+    private func desktopMonthEvents(on day: Date) -> [DesktopMonthEvent] {
+        let dateKey = StrictContractDateParser.string(from: day)
+        let holidayEvents = holidayItems(on: day).map { item in
+            DesktopMonthEvent(
+                id: "\(dateKey)|holiday|\(item.id)",
+                title: item.name,
+                time: nil,
+                kind: item.type == "holiday" ? .holiday : .workday
+            )
+        }
+        let courseEvents = courses(on: day).map { course in
+            DesktopMonthEvent(
+                id: "\(dateKey)|course|\(course.id)",
+                title: course.name,
+                time: course.timeRange.split(separator: "-").first.map(String.init),
+                kind: .course
+            )
+        }
+        return holidayEvents + courseEvents
+    }
+
+    private func desktopMonthEventTint(_ kind: DesktopMonthEvent.Kind) -> Color {
+        switch kind {
+        case .course:
+            return AppTheme.primary
+        case .holiday:
+            return Self.holidayRed
+        case .workday:
+            return AppTheme.accent
+        }
+    }
+    #endif
 
     private func monthDayButton(_ day: Date, month: Date) -> some View {
         let dayCourses = courses(on: day)
@@ -628,6 +918,9 @@ struct TeachingCalendarView: View {
     }
 
     private var yearView: some View {
+        #if os(macOS)
+        return desktopYearView
+        #else
         let year = calendar.component(.year, from: selectedDate)
         let months = (1 ... 12).compactMap {
             calendar.date(from: DateComponents(year: year, month: $0, day: 1))
@@ -640,7 +933,178 @@ struct TeachingCalendarView: View {
                 }
             }
         }
+        #endif
     }
+
+    #if os(macOS)
+    private var desktopYearView: some View {
+        let year = calendar.component(.year, from: selectedDate)
+        let months = (1 ... 12).compactMap {
+            calendar.date(from: DateComponents(year: year, month: $0, day: 1))
+        }
+
+        return GeometryReader { proxy in
+            let layout = TeachingCalendarLogic.desktopYearLayout(availableHeight: proxy.size.height)
+            let columns = Array(
+                repeating: GridItem(.flexible(minimum: 120), spacing: layout.columnSpacing),
+                count: 4
+            )
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: layout.rowSpacing) {
+                ForEach(months, id: \.self) { month in
+                    desktopMiniMonth(month, layout: layout)
+                }
+            }
+            .frame(
+                width: proxy.size.width,
+                height: proxy.size.height,
+                alignment: .topLeading
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityIdentifier("calendar.desktop.year-grid")
+    }
+
+    private func desktopMiniMonth(
+        _ month: Date,
+        layout: TeachingCalendarLogic.DesktopYearLayout
+    ) -> some View {
+        let days = monthGridDates(containing: month)
+        let columns = Array(
+            repeating: GridItem(.flexible(minimum: 0), spacing: layout.gridSpacing),
+            count: 7
+        )
+
+        return VStack(alignment: .leading, spacing: layout.monthContentSpacing) {
+            Text(Self.monthFormatter.string(from: month))
+                .font(.system(size: layout.monthTitleFontSize, weight: .semibold))
+                .foregroundStyle(AppTheme.primary)
+                .frame(height: layout.monthTitleHeight, alignment: .leading)
+
+            LazyVGrid(columns: columns, spacing: layout.gridSpacing) {
+                ForEach(Self.weekdayLabels, id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: layout.weekdayFontSize, weight: .semibold))
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .frame(
+                            maxWidth: .infinity,
+                            minHeight: layout.weekdayHeight,
+                            maxHeight: layout.weekdayHeight
+                        )
+                }
+
+                ForEach(days, id: \.self) { day in
+                    desktopYearDay(day, month: month, layout: layout)
+                }
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: layout.monthHeight,
+            maxHeight: layout.monthHeight,
+            alignment: .topLeading
+        )
+    }
+
+    @ViewBuilder
+    private func desktopYearDay(
+        _ day: Date,
+        month: Date,
+        layout: TeachingCalendarLogic.DesktopYearLayout
+    ) -> some View {
+        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
+        if inMonth {
+            let dayCourses = courses(on: day)
+            let holidays = holidayItems(on: day)
+            let isToday = sameDay(day, .now)
+            let isSelected = sameDay(selectedDate, day)
+            let baseColor = dayCourses.isEmpty
+                ? Color.clear
+                : AppTheme.primary.opacity(
+                    TeachingCalendarLogic.yearCourseOpacity(courseCount: dayCourses.count)
+                )
+
+            let cell = VStack(spacing: 0) {
+                Text("\(calendar.component(.day, from: day))")
+                    .monospacedDigit()
+                if let item = holidays.first {
+                    Text(item.type == "holiday" ? "休" : "班")
+                        .font(.system(size: layout.holidayFontSize, weight: .semibold))
+                        .foregroundStyle(
+                            isSelected || isToday ? AppTheme.onPrimary : Self.holidayColor(item)
+                        )
+                }
+            }
+            .font(.system(size: layout.dayFontSize, weight: .medium))
+            .foregroundStyle(
+                isSelected || isToday
+                    ? AppTheme.onPrimary
+                    : (dayCourses.isEmpty ? AppTheme.text : AppTheme.onPrimary)
+            )
+            .frame(
+                maxWidth: .infinity,
+                minHeight: layout.dayCellHeight,
+                maxHeight: layout.dayCellHeight
+            )
+            .background {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 3).fill(baseColor)
+                    if isToday {
+                        Circle()
+                            .fill(Self.nowRed)
+                            .frame(
+                                width: layout.selectionDiameter,
+                                height: layout.selectionDiameter
+                            )
+                    } else if isSelected {
+                        Circle()
+                            .fill(AppTheme.primaryFill)
+                            .frame(
+                                width: layout.selectionDiameter,
+                                height: layout.selectionDiameter
+                            )
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(dayAccessibilityLabel(day))
+            .accessibilityAddTraits(.isButton)
+
+            cell
+                .accessibilityAction {
+                    selectedDate = day
+                }
+                .accessibilityAction(named: Text("查看月份")) {
+                    selectedDate = day
+                    withAnimation(Self.viewAnimation) { mode = .month }
+                }
+                .gesture(
+                    SpatialTapGesture(
+                        count: 2,
+                        coordinateSpace: .named(Self.calendarCoordinateSpace)
+                    )
+                    .exclusively(
+                        before: SpatialTapGesture(
+                            count: 1,
+                            coordinateSpace: .named(Self.calendarCoordinateSpace)
+                        )
+                    )
+                    .onEnded { value in
+                        switch value {
+                        case .first:
+                            selectedDate = day
+                            withAnimation(Self.viewAnimation) { mode = .month }
+                        case .second:
+                            selectedDate = day
+                        }
+                    }
+                )
+        } else {
+            Color.clear.frame(height: layout.dayCellHeight)
+        }
+    }
+    #endif
 
     private func miniMonth(_ month: Date) -> some View {
         let days = monthGridDates(containing: month)
@@ -1003,7 +1467,11 @@ struct TeachingCalendarView: View {
         Binding(
             get: { mode },
             set: { newMode in
+                #if os(macOS)
+                mode = newMode
+                #else
                 withAnimation(Self.viewAnimation) { mode = newMode }
+                #endif
             }
         )
     }

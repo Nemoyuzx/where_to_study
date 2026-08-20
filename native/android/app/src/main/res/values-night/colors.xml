@@ -3,4 +3,9 @@
     <color name="primary">#176B5D</color>
     <color name="background">#101512</color>
     <color name="surface">#181E1B</color>
+    <color name="widget_primary">#5AD2B8</color>
+    <color name="widget_accent">#E6B048</color>
+    <color name="widget_background">#181E1B</color>
+    <color name="widget_text_primary">#F2F6F4</color>
+    <color name="widget_text_secondary">#A8B2AD</color>
 </resources>

@@ -1,6 +1,6 @@
 [package]
-name = "wts-cli"
-version = "0.1.7"
+name = "where-to-study-cli"
+version = "0.1.8"
 description = "Where To Study command-line client (BUPT empty classroom planner)"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"
@@ -8,7 +8,7 @@ edition = "2021"
 rust-version = "1.89"
 
 [dependencies]
-where_to_study = { path = "../src-tauri" }
+where_to_study_lib = { package = "where-to-study-core", path = "../where-to-study-core" }
 chrono = { version = "0.4", features = ["clock"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

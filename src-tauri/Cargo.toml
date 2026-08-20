@@ -1,6 +1,6 @@
 [package]
 name = "where_to_study"
-version = "0.1.7"
+version = "0.1.8"
 description = "BUPT empty classroom planner for desktop and mobile"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"
@@ -11,6 +11,8 @@ name = "where_to_study_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
+default = ["tauri-runtime"]
+tauri-runtime = []
 custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]

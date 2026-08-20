@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_nav_calendar"
+            android:tint="@color/widget_primary" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="7dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/widget_today_course_title"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_course_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_section_check"
+            android:tint="@color/widget_primary" />
+
+        <TextView
+            android:id="@+id/widget_empty_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="9dp"
+            android:text="@string/widget_empty_course_message"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_courses"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/widget_course_1"
+            style="@style/WidgetCourseRow">
+
+            <TextView
+                style="@style/WidgetCourseAccent"
+                android:text="" />
+
+            <LinearLayout style="@style/WidgetCourseTextGroup">
+
+                <TextView
+                    android:id="@+id/widget_course_name_1"
+                    style="@style/WidgetCourseName" />
+
+                <TextView
+                    android:id="@+id/widget_course_details_1"
+                    style="@style/WidgetCourseDetails" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_course_2"
+            style="@style/WidgetCourseRow">
+
+            <TextView
+                style="@style/WidgetCourseAccent"
+                android:text="" />
+
+            <LinearLayout style="@style/WidgetCourseTextGroup">
+
+                <TextView
+                    android:id="@+id/widget_course_name_2"
+                    style="@style/WidgetCourseName" />
+
+                <TextView
+                    android:id="@+id/widget_course_details_2"
+                    style="@style/WidgetCourseDetails" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_course_3"
+            style="@style/WidgetCourseRow">
+
+            <TextView
+                style="@style/WidgetCourseAccent"
+                android:text="" />
+
+            <LinearLayout style="@style/WidgetCourseTextGroup">
+
+                <TextView
+                    android:id="@+id/widget_course_name_3"
+                    style="@style/WidgetCourseName" />
+
+                <TextView
+                    android:id="@+id/widget_course_details_3"
+                    style="@style/WidgetCourseDetails" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_more_courses"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingTop="2dp"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

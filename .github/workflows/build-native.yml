@@ -221,6 +221,7 @@ jobs:
           APPLE_INSTALLER_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_P12_BASE64 }}
           APPLE_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
           APPLE_IOS_PROFILE_BASE64: ${{ secrets.APPLE_IOS_PROFILE_BASE64 }}
+          APPLE_IOS_WIDGET_PROFILE_BASE64: ${{ secrets.APPLE_IOS_WIDGET_PROFILE_BASE64 }}
           APPLE_MACOS_PROFILE_BASE64: ${{ secrets.APPLE_MACOS_PROFILE_BASE64 }}
           APPLE_WIDGET_PROFILE_BASE64: ${{ secrets.APPLE_WIDGET_PROFILE_BASE64 }}
         run: |
@@ -236,6 +237,7 @@ jobs:
             APPLE_INSTALLER_CERTIFICATE_P12_BASE64 \
             APPLE_INSTALLER_CERTIFICATE_PASSWORD \
             APPLE_IOS_PROFILE_BASE64 \
+            APPLE_IOS_WIDGET_PROFILE_BASE64 \
             APPLE_MACOS_PROFILE_BASE64 \
             APPLE_WIDGET_PROFILE_BASE64; do
             if [[ -z "${!variable:-}" ]]; then
@@ -258,6 +260,7 @@ jobs:
           APPLE_INSTALLER_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_P12_BASE64 }}
           APPLE_INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
           APPLE_IOS_PROFILE_BASE64: ${{ secrets.APPLE_IOS_PROFILE_BASE64 }}
+          APPLE_IOS_WIDGET_PROFILE_BASE64: ${{ secrets.APPLE_IOS_WIDGET_PROFILE_BASE64 }}
           APPLE_MACOS_PROFILE_BASE64: ${{ secrets.APPLE_MACOS_PROFILE_BASE64 }}
           APPLE_WIDGET_PROFILE_BASE64: ${{ secrets.APPLE_WIDGET_PROFILE_BASE64 }}
           APPLE_BUILD_NUMBER_INPUT: ${{ inputs.apple_build_number }}
@@ -270,6 +273,7 @@ jobs:
           distribution_cert_path="$RUNNER_TEMP/apple-distribution.p12"
           installer_cert_path="$RUNNER_TEMP/mac-installer-distribution.p12"
           ios_profile_path="$RUNNER_TEMP/ios-app-store.mobileprovision"
+          ios_widget_profile_path="$RUNNER_TEMP/ios-widget-app-store.mobileprovision"
           macos_profile_path="$RUNNER_TEMP/macos-app-store.provisionprofile"
           widget_profile_path="$RUNNER_TEMP/widget-app-store.provisionprofile"
           keychain_path="$RUNNER_TEMP/app-store-signing.keychain-db"
@@ -284,6 +288,7 @@ jobs:
               "$distribution_cert_path" \
               "$installer_cert_path" \
               "$ios_profile_path" \
+              "$ios_widget_profile_path" \
               "$macos_profile_path" \
               "$widget_profile_path"
             if (( ${#installed_profiles[@]} > 0 )); then
@@ -295,6 +300,7 @@ jobs:
           printf '%s' "$APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64" | base64 -D > "$distribution_cert_path"
           printf '%s' "$APPLE_INSTALLER_CERTIFICATE_P12_BASE64" | base64 -D > "$installer_cert_path"
           printf '%s' "$APPLE_IOS_PROFILE_BASE64" | base64 -D > "$ios_profile_path"
+          printf '%s' "$APPLE_IOS_WIDGET_PROFILE_BASE64" | base64 -D > "$ios_widget_profile_path"
           printf '%s' "$APPLE_MACOS_PROFILE_BASE64" | base64 -D > "$macos_profile_path"
           printf '%s' "$APPLE_WIDGET_PROFILE_BASE64" | base64 -D > "$widget_profile_path"
           test -s "$auth_key_path"
@@ -334,6 +340,7 @@ jobs:
             fi
           }
           install_profile "$ios_profile_path" mobileprovision
+          install_profile "$ios_widget_profile_path" mobileprovision
           install_profile "$macos_profile_path" provisionprofile
           install_profile "$widget_profile_path" provisionprofile
 

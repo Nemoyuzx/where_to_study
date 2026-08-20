@@ -149,6 +149,24 @@ class AppPreferences(context: Context) {
             save(TERM_START_DATE_KEY, value)
         }
 
+    var automaticTermDetectionEnabled: Boolean
+        get() = preferences.getBoolean(AUTOMATIC_TERM_DETECTION_KEY, true)
+        set(value) {
+            save(AUTOMATIC_TERM_DETECTION_KEY, value)
+        }
+
+    var widgetShowsLocation: Boolean
+        get() = preferences.getBoolean(WIDGET_SHOWS_LOCATION_KEY, true)
+        set(value) {
+            save(WIDGET_SHOWS_LOCATION_KEY, value)
+        }
+
+    var widgetCourseLimit: Int
+        get() = preferences.getInt(WIDGET_COURSE_LIMIT_KEY, 3).coerceIn(1, 3)
+        set(value) {
+            save(WIDGET_COURSE_LIMIT_KEY, value.coerceIn(1, 3))
+        }
+
     var dailyCourseNotificationsEnabled: Boolean
         get() = preferences.getBoolean(DAILY_COURSE_NOTIFICATIONS_KEY, false)
         set(value) {
@@ -169,11 +187,26 @@ class AppPreferences(context: Context) {
         }
     }
 
+    private fun save(key: String, value: Boolean) {
+        if (!preferences.edit().putBoolean(key, value).commit()) {
+            throw IllegalStateException("无法保存本地偏好。")
+        }
+    }
+
+    private fun save(key: String, value: Int) {
+        if (!preferences.edit().putInt(key, value).commit()) {
+            throw IllegalStateException("无法保存本地偏好。")
+        }
+    }
+
     private companion object {
         const val PREFERENCES_NAME = "app_preferences_v1"
         const val CAMPUS_KEY = "campus_id"
         const val TERM_ID_KEY = "term_id"
         const val TERM_START_DATE_KEY = "term_start_date"
         const val DAILY_COURSE_NOTIFICATIONS_KEY = "daily_course_notifications_enabled"
+        const val AUTOMATIC_TERM_DETECTION_KEY = "automatic_term_detection_enabled"
+        const val WIDGET_SHOWS_LOCATION_KEY = "widget_shows_location"
+        const val WIDGET_COURSE_LIMIT_KEY = "widget_course_limit"
     }
 }

@@ -2,6 +2,7 @@ use chrono::{Datelike, NaiveDate};
 use where_to_study_lib::config::today_in_app_tz;
 use where_to_study_lib::error::{ServiceError, ServiceResult};
 use where_to_study_lib::models::{ClassroomsRequest, Course, ScheduleRequest, ScheduleResponse};
+use zeroize::Zeroizing;
 
 use crate::credentials;
 use crate::output;
@@ -21,12 +22,12 @@ fn parse_date(value: Option<&str>) -> ServiceResult<NaiveDate> {
 fn require_credentials() -> ServiceResult<where_to_study_lib::credential_store::Credentials> {
     let Some(credentials) = credentials::load()? else {
         return Err(ServiceError::new(
-            "尚未保存教务账号。请先运行：wts-cli login <学号>",
+            "尚未保存教务账号。请先运行：where-to-study-cli login",
         ));
     };
     if credentials.account.trim().is_empty() || credentials.password.is_empty() {
         return Err(ServiceError::new(
-            "已保存的凭据不完整。请重新运行：wts-cli login <学号>",
+            "已保存的凭据不完整。请重新运行：where-to-study-cli login",
         ));
     }
     Ok(credentials)
@@ -43,8 +44,12 @@ fn schedule_request(
     }
 }
 
-pub fn login(account: String) -> ServiceResult<()> {
-    let account = account.trim().to_string();
+pub fn login(account: Option<String>) -> ServiceResult<()> {
+    let entered_account = match account {
+        Some(value) => Zeroizing::new(value),
+        None => credentials::prompt_account()?,
+    };
+    let account = entered_account.trim().to_string();
     if account.is_empty() {
         return Err(ServiceError::new("请输入教务账号。"));
     }
@@ -61,13 +66,16 @@ pub fn login(account: String) -> ServiceResult<()> {
         std::mem::take(&mut *entered)
     };
     credentials::save(&account, password)?;
-    println!("已保存账号 {account} 的凭据到系统安全存储。");
+    println!(
+        "已保存账号 {account} 的凭据到本地配置文件：{}",
+        credentials::storage_description()?
+    );
     Ok(())
 }
 
 pub fn logout() -> ServiceResult<()> {
     credentials::clear()?;
-    println!("已清除 CLI 与桌面端共享的系统凭据存储中的教务账号。");
+    println!("已清除 CLI 本地配置文件中的教务凭据。");
     Ok(())
 }
 

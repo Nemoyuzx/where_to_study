@@ -2,8 +2,15 @@ import XCTest
 
 #if os(macOS)
 @testable import WhereToStudyMac
+#elseif os(iOS)
+@testable import WhereToStudyiOS
+#endif
 
 final class TodayCourseWidgetDataTests: XCTestCase {
+    func testWidgetEmptyStateAlwaysUsesNoCoursesCopy() {
+        XCTAssertEqual(TodayCourseWidgetData.emptyMessage, "今日无课")
+    }
+
     func testWidgetArchiveSelectsAndOrdersCoursesForRequestedDate() throws {
         let archive = TodayCourseWidgetData.Archive(
             termStartDate: "2026-03-02",
@@ -32,6 +39,17 @@ final class TodayCourseWidgetDataTests: XCTestCase {
         XCTAssertTrue(TodayCourseWidgetData.courses(on: secondWeek, archive: archive).isEmpty)
     }
 
+    func testWidgetPreferencesNormalizeCourseLimit() {
+        XCTAssertEqual(
+            TodayCourseWidgetData.Preferences(showsLocation: false, courseLimit: 0).normalized,
+            .init(showsLocation: false, courseLimit: 1)
+        )
+        XCTAssertEqual(
+            TodayCourseWidgetData.Preferences(showsLocation: true, courseLimit: 8).normalized,
+            .init(showsLocation: true, courseLimit: 3)
+        )
+    }
+
     private func course(
         id: String,
         name: String,
@@ -51,4 +69,3 @@ final class TodayCourseWidgetDataTests: XCTestCase {
         )
     }
 }
-#endif

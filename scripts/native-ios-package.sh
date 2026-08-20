@@ -10,7 +10,7 @@ APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-iOS"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.1.7}"
+RELEASE_LABEL="${1:-v0.1.8}"
 ARCHIVE_PATH="$DERIVED_DATA/WhereToStudyiOS.xcarchive"
 PACKAGE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-ios-unsigned.xcarchive.zip"
 validate_release_label "$RELEASE_LABEL"
@@ -43,6 +43,21 @@ xcodebuild \
 APP="$ARCHIVE_PATH/Products/Applications/WhereToStudyiOS.app"
 if [[ ! -d "$APP" ]]; then
   echo "Native iOS archive does not contain WhereToStudyiOS.app." >&2
+  exit 1
+fi
+WIDGET="$APP/PlugIns/WhereToStudyiOSWidget.appex"
+if [[ ! -d "$WIDGET" ]]; then
+  echo "Native iOS archive is missing the WidgetKit extension." >&2
+  exit 1
+fi
+if [[ "$(plutil -extract CFBundleIdentifier raw "$WIDGET/Info.plist")" \
+  != "com.nemoyu.wheretostudy.native.macos.widget" ]]; then
+  echo "Native iOS WidgetKit extension has the wrong bundle identifier." >&2
+  exit 1
+fi
+if [[ "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$WIDGET/Info.plist")" \
+  != "com.apple.widgetkit-extension" ]]; then
+  echo "Native iOS archive does not contain a WidgetKit extension point." >&2
   exit 1
 fi
 

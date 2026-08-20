@@ -1,4 +1,5 @@
 mod app;
+mod file_credentials;
 mod theme;
 mod ui;
 
@@ -16,6 +17,7 @@ use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use file_credentials::Credentials;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use theme::Theme;
 use where_to_study_lib::config::today_in_app_tz;
@@ -106,9 +108,14 @@ fn main() -> io::Result<()> {
 
     let theme_dark = theme::prefers_dark();
     let mut app = App::new(theme_dark);
-    app.credentials_saved = credentials_have_account();
-    if let Ok(Some(credentials)) = where_to_study_lib::credential_store::load() {
-        app.saved_account = credentials.account.clone();
+    match file_credentials::load() {
+        Ok(Some(credentials)) => {
+            app.credentials_saved =
+                !credentials.account.trim().is_empty() && !credentials.password.is_empty();
+            app.saved_account = credentials.account.clone();
+        }
+        Ok(None) => {}
+        Err(error) => app.set_error(error.message),
     }
 
     let (tx, rx) = mpsc::channel::<Message>();
@@ -129,11 +136,13 @@ fn handle_meta_args() -> bool {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("--version" | "-V") => {
-            println!("wts-tui {}", env!("CARGO_PKG_VERSION"));
+            println!("where-to-study-tui {}", env!("CARGO_PKG_VERSION"));
             true
         }
         Some("--help" | "-h") => {
-            println!("Where To Study TUI\n\n用法: wts-tui\n\n快捷键说明见 wts-tui/README.md");
+            println!(
+                "Where To Study TUI\n\n用法: where-to-study-tui\n\n快捷键说明见 wts-tui/README.md"
+            );
             true
         }
         Some(argument) => {
@@ -149,16 +158,6 @@ pub fn date_today_label() -> String {
     let weekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
         [today.weekday().num_days_from_monday() as usize];
     format!("{} {}", today.format("%Y-%m-%d"), weekday)
-}
-
-fn credentials_have_account() -> bool {
-    where_to_study_lib::credential_store::load()
-        .ok()
-        .flatten()
-        .map(|credentials| {
-            !credentials.account.trim().is_empty() && !credentials.password.is_empty()
-        })
-        .unwrap_or(false)
 }
 
 fn ensure_holidays(app: &mut App, tx: &mpsc::Sender<Message>, year: i32) {
@@ -242,7 +241,7 @@ fn run(
                         app.saved_account = account;
                         app.login_password.clear();
                         app.settings_editing = false;
-                        app.set_status("凭据已保存".to_string());
+                        app.set_status("凭据已保存到本地文件".to_string());
                     }
                     Err(message) => app.set_error(message),
                 },
@@ -278,9 +277,10 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
         KeyCode::Char('q') if key.modifiers.is_empty() => return true,
         KeyCode::Char('r') if key.modifiers.is_empty() => {
             app.clear_error();
-            refresh_schedule(app, tx);
-            if app.selected_tab_index == 2 {
-                refresh_classrooms(app, tx);
+            match app.selected_tab_index {
+                0 | 1 | 3 => refresh_schedule(app, tx),
+                2 => refresh_classrooms(app, tx),
+                _ => app.set_status("设置页没有需要刷新的远程数据".to_string()),
             }
         }
         KeyCode::Char('l') if key.modifiers.is_empty() => login_with_form(app, tx),
@@ -457,7 +457,7 @@ fn login_with_form(app: &mut App, tx: &mpsc::Sender<Message>) {
 }
 
 fn save_credentials(account: String, mut password: Zeroizing<String>) -> ServiceResult<String> {
-    let existing = where_to_study_lib::credential_store::load()?;
+    let existing = file_credentials::load()?;
     let account_scope = existing
         .as_ref()
         .filter(|credentials| credentials.account.trim() == account)
@@ -467,12 +467,12 @@ fn save_credentials(account: String, mut password: Zeroizing<String>) -> Service
         .map(Ok)
         .unwrap_or_else(where_to_study_lib::scoped_cache::new_account_scope)?;
 
-    let mut credentials = where_to_study_lib::credential_store::Credentials {
+    let mut credentials = Credentials {
         account: account.clone(),
         password: std::mem::take(&mut *password),
         account_scope,
     };
-    let result = where_to_study_lib::credential_store::save(&credentials);
+    let result = file_credentials::save(&credentials);
     credentials.password.zeroize();
     result?;
     Ok(account)
@@ -482,10 +482,7 @@ fn clear_credentials(app: &mut App, tx: &mpsc::Sender<Message>) {
     app.settings_editing = false;
     let tx = tx.clone();
     thread::spawn(move || {
-        let result = where_to_study_lib::credential_store::save(
-            &where_to_study_lib::credential_store::Credentials::default(),
-        )
-        .map_err(|error| error.message);
+        let result = file_credentials::clear().map_err(|error| error.message);
         let _ = tx.send(Message::CredentialsCleared(result));
     });
 }
@@ -545,8 +542,8 @@ fn refresh_classrooms(app: &mut App, tx: &mpsc::Sender<Message>) {
     });
 }
 
-fn require_credentials() -> ServiceResult<where_to_study_lib::credential_store::Credentials> {
-    let Some(credentials) = where_to_study_lib::credential_store::load()? else {
+fn require_credentials() -> ServiceResult<Credentials> {
+    let Some(credentials) = file_credentials::load()? else {
         return Err(ServiceError::new(
             "尚未保存凭据，请先在设置页输入账号和密码。",
         ));

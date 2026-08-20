@@ -1,0 +1,17 @@
+#[path = "../../src-tauri/src/auth.rs"]
+pub mod auth;
+#[path = "../../src-tauri/src/classrooms.rs"]
+pub mod classrooms;
+#[path = "../../src-tauri/src/config.rs"]
+pub mod config;
+pub mod credential_store;
+#[path = "../../src-tauri/src/error.rs"]
+pub mod error;
+#[path = "../../src-tauri/src/holidays.rs"]
+pub mod holidays;
+#[path = "../../src-tauri/src/models.rs"]
+pub mod models;
+#[path = "../../src-tauri/src/schedule.rs"]
+pub mod schedule;
+#[path = "../../src-tauri/src/scoped_cache.rs"]
+pub mod scoped_cache;

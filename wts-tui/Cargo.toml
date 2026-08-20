@@ -1,20 +1,26 @@
 [package]
-name = "wts-tui"
-version = "0.1.7"
+name = "where-to-study-tui"
+version = "0.1.8"
 description = "Where To Study 可视化终端客户端（TUI）"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"
 edition = "2021"
 rust-version = "1.89"
 
+[[bin]]
+name = "where-to-study-tui"
+path = "src/main.rs"
+
 [dependencies]
-where_to_study = { path = "../src-tauri" }
+where_to_study_lib = { package = "where-to-study-core", path = "../where-to-study-core" }
 ratatui = "0.30"
 crossterm = "0.29"
 chrono = { version = "0.4", features = ["clock"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "net", "sync"] }
 zeroize = { version = "1", features = ["derive"] }
 ctrlc = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [profile.release]
 strip = true
