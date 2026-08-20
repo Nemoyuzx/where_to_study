@@ -1,8 +1,7 @@
-// 与 iOS 端 AppTheme.swift 对应的主题入口。
+// 与 Android ThemePalettes / Palette 对应的主题入口。
 // 颜色值定义在 resources/base/element/color.json（浅色）与
 // resources/dark/element/color.json（深色）中，引用后自动随系统深色模式切换，
-// 与 SwiftUI 的 adaptiveColor 行为一致。
-// 调色板数值与 AppThemePalette.light / .dark 完全一致。
+// 调色板数值与 Android 端 light / dark 完全一致。
 
 export class AppTheme {
   static primary(): Resource {
@@ -22,23 +21,27 @@ export class AppTheme {
   }
 
   static background(): Resource {
-    return $r('sys.color.ohos_id_color_background');
+    return $r('app.color.app_background');
   }
 
   static surface(): Resource {
-    return $r('sys.color.ohos_id_color_sub_background');
+    return $r('app.color.app_surface');
+  }
+
+  static surfaceVariant(): Resource {
+    return $r('app.color.app_surface_variant');
   }
 
   static text(): Resource {
-    return $r('sys.color.ohos_id_color_text_primary');
+    return $r('app.color.app_text');
   }
 
   static secondaryText(): Resource {
-    return $r('sys.color.ohos_id_color_text_secondary');
+    return $r('app.color.app_secondary_text');
   }
 
   static border(): Resource {
-    return $r('sys.color.ohos_id_color_list_separator');
+    return $r('app.color.app_border');
   }
 
   static danger(): Resource {
@@ -48,5 +51,13 @@ export class AppTheme {
   // 列表选中背景（深浅色各有独立 alpha，BUG-045 修复）。
   static selection(): Resource {
     return $r('app.color.app_selection');
+  }
+
+  static selectionSurface(): Resource {
+    return $r('app.color.app_selection_surface');
+  }
+
+  static segmentedSelection(): Resource {
+    return $r('app.color.app_segmented_selection');
   }
 }

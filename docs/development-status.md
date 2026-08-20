@@ -75,7 +75,7 @@
 | 浏览器视觉检查 | 日/周/月真实触摸翻页、年视图日/周/月跳转、校区状态隔离通过；手机、折叠屏、平板、桌面深浅色均无横向溢出或文本裁切，控制台 0 错误 |
 | macOS 安装检查 | SwiftUI Universal `0.1.7 (44)` 已覆盖安装到 `/Applications/Where To Study.app`；x86_64/arm64、ad-hoc 签名、WidgetKit 扩展、版本与统一应用图标复核通过，应用目录只保留一个最新安装副本 |
 | App Store Connect | iOS 与 macOS `0.1.7 (44)` 均已使用 Apple Distribution 签名并校验描述文件/entitlement；两个平台的上传任务均收到 `Upload succeeded` |
-| Linux 发布 | Ubuntu 22.04 原生工作流生成并解包验证 x86_64 `.deb` 与 `.AppImage`，Ubuntu 24.04 实际安装 `.deb` 通过，制品附带 LF 行尾 SHA-256 文件 |
+| Linux 发布 | arm64 在 Ubuntu 26.04 虚拟机、x86_64 在 Ubuntu 22.04 服务器完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；校验文件保留在本地与 CI，不上传到 GitHub Release |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
@@ -88,7 +88,7 @@ Apple 测试结果（2026-08-19 使用 `xcresulttool` 复核）：
 
 ## 0.1.7 稳定版发布制品
 
-`v0.1.7` 通过标签工作流生成 Windows x64 NSIS、Linux x86_64 Debian/AppImage、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、固定 release key 签名的 Android APK/AAB，以及 macOS CLI/TUI。每个二进制制品均带相邻的 LF 行尾 SHA-256 校验文件；Release 页面是当前稳定版制品和校验值的最终来源。
+`v0.1.7` 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、固定 release key 签名的 Android APK/AAB，以及 macOS CLI/TUI。发布脚本仍生成相邻的 LF 行尾 SHA-256 文件供本地和 CI 验证，但 GitHub Release 只保留可下载二进制制品。
 
 ## Build 15 稳定版发布制品
 

@@ -1,5 +1,4 @@
-// 与 iOS 端 AppTheme.swift 的 PageTitle/Surface 及各处重复使用的
-// 小部件对应的共享 UI 组件。
+// 与 Android UiSupport.kt 的 pageTitle/surface 及各处重复使用的小部件对应。
 import { AppTheme } from '../common/AppTheme';
 
 // 对应 PageTitle：小标题 eyebrow（大写）+ 大标题。
@@ -15,7 +14,7 @@ export struct PageTitle {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.secondaryText())
       Text(this.title)
-        .fontSize(30)
+        .fontSize(34)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
         .maxLines(1)
@@ -31,6 +30,7 @@ export struct PageTitle {
 @ComponentV2
 export struct SurfaceCard {
   @Param cardPadding: number = 16;
+  @Param showsBorder: boolean = false;
   @BuilderParam content: () => void;
 
   build() {
@@ -40,7 +40,7 @@ export struct SurfaceCard {
     .padding(this.cardPadding)
     .width('100%')
     .borderRadius(8)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ width: this.showsBorder ? 1 : 0, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -58,7 +58,7 @@ export struct SectionHeader {
         .fontSize(18)
         .fontColor([AppTheme.text()])
       Text(this.title)
-        .fontSize(16)
+        .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
     }
@@ -73,10 +73,10 @@ export struct EmptyMessage {
 
   build() {
     Text(this.message)
-      .fontSize(14)
+      .fontSize(12.5)
       .fontColor(AppTheme.secondaryText())
       .width('100%')
-      .height(72)
+      .height(56)
       .textAlign(TextAlign.Center)
   }
 }
@@ -87,6 +87,7 @@ export struct ChipButton {
   @Param selected: boolean = false;
   @Param busy: boolean = false;
   @Param interactive: boolean = true;
+  @Param controlHeight: number = 46;
   @BuilderParam content: () => void;
   @Event onTap: () => void = () => {
   };
@@ -96,12 +97,12 @@ export struct ChipButton {
       this.content();
     }
     .width('100%')
-    .height(54)
-    .padding(4)
+    .height(this.controlHeight)
+    .padding(2)
     .justifyContent(FlexAlign.Center)
     .backgroundColor(this.selected ? AppTheme.primaryFill() :
       (this.busy ? '#73E2BC62' : AppTheme.background()))
-    .borderRadius(6)
+    .borderRadius(8)
     .border({
       width: 1,
       color: this.selected ? AppTheme.primaryFill() : AppTheme.border()

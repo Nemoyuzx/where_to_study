@@ -1,4 +1,4 @@
-// 教学日历的纯逻辑与时间线布局，对应 iOS 端
+// 教学日历的纯逻辑与时间线布局，以原生 Android 实现为移动端基准。
 // TeachingCalendarLogic / CalendarTimelineLogic / CalendarTimelineDay。
 import { Course, HolidayItem, SlotMetadata } from '../../common/Models';
 import { StrictDates, DateParts } from '../../common/StrictDates';
@@ -108,6 +108,26 @@ export class CalendarTimelineLogic {
 }
 
 export class TeachingCalendarLogic {
+  static readonly swipeThreshold: number = 72;
+  static readonly expansionVelocityThreshold: number = 640;
+  static readonly monthSheetExpandedPosition: number = 0;
+  static readonly monthSheetDetailsPosition: number = 1;
+  static readonly monthSheetWeekPosition: number = 2;
+  static readonly monthExpandedCellHeight: number = 82;
+  static readonly monthCollapsedCellHeight: number = 46;
+
+  static modeTransitionDirection(fromMode: CalendarMode, toMode: CalendarMode): number {
+    const fromIndex: number = CalendarModeInfo.all.indexOf(fromMode);
+    const toIndex: number = CalendarModeInfo.all.indexOf(toMode);
+    if (toIndex > fromIndex) {
+      return 1;
+    }
+    if (toIndex < fromIndex) {
+      return -1;
+    }
+    return 0;
+  }
+
   static yearCourseOpacity(courseCount: number): number {
     if (courseCount <= 0) {
       return 0;
@@ -121,8 +141,8 @@ export class TeachingCalendarLogic {
       return date.year.toString() + '年' + date.month.toString() + '月' + date.day.toString() + '日';
     }
     if (mode === CalendarMode.week) {
-      return date.year.toString() + '年' + date.month.toString() + '月 第 ' +
-        TeachingCalendarLogic.weekOfYear(date).toString() + ' 周';
+      return date.year.toString() + '年' + date.month.toString() + '月 第' +
+        TeachingCalendarLogic.weekOfYear(date).toString() + '周';
     }
     if (mode === CalendarMode.year) {
       return date.year.toString() + '年';
@@ -172,8 +192,9 @@ export class TeachingCalendarLogic {
   ): number | null {
     const projected: number = Math.abs(predictedHorizontal) > Math.abs(horizontal) ?
       predictedHorizontal : horizontal;
-    if (Math.abs(horizontal) < 36 || Math.abs(projected) < 80 ||
-      Math.abs(horizontal) < Math.abs(vertical) * 1.35) {
+    if (Math.abs(horizontal) < TeachingCalendarLogic.swipeThreshold ||
+      Math.abs(projected) < TeachingCalendarLogic.swipeThreshold ||
+      Math.abs(horizontal) <= Math.abs(vertical) * 1.4) {
       return null;
     }
     return projected < 0 ? 1 : -1;
@@ -185,6 +206,102 @@ export class TeachingCalendarLogic {
       return null;
     }
     return vertical > 0 ? 1 : -1;
+  }
+
+  static canMoveMonthSheet(horizontal: number, vertical: number,
+    currentPosition: number, threshold: number = 6): boolean {
+    if (Math.abs(vertical) < threshold || Math.abs(vertical) <= Math.abs(horizontal) * 1.2) {
+      return false;
+    }
+    if (vertical < 0) {
+      return currentPosition < TeachingCalendarLogic.monthSheetWeekPosition;
+    }
+    if (vertical > 0) {
+      return currentPosition > TeachingCalendarLogic.monthSheetExpandedPosition;
+    }
+    return false;
+  }
+
+  static monthSheetDragPosition(vertical: number, startPosition: number,
+    travel: number = (TeachingCalendarLogic.monthExpandedCellHeight -
+      TeachingCalendarLogic.monthCollapsedCellHeight) * 6): number {
+    if (travel <= 0) {
+      return TeachingCalendarLogic.clampMonthSheetPosition(startPosition);
+    }
+    return TeachingCalendarLogic.clampMonthSheetPosition(startPosition - vertical / travel);
+  }
+
+  static settledMonthSheetPosition(position: number, velocityY: number): number {
+    const resolved: number = TeachingCalendarLogic.clampMonthSheetPosition(position);
+    if (Math.abs(velocityY) >= TeachingCalendarLogic.expansionVelocityThreshold) {
+      if (velocityY < 0) {
+        return Math.min(Math.floor(resolved + 0.001) + 1,
+          TeachingCalendarLogic.monthSheetWeekPosition);
+      }
+      return Math.max(Math.ceil(resolved - 0.001) - 1,
+        TeachingCalendarLogic.monthSheetExpandedPosition);
+    }
+    return Math.min(Math.max(Math.round(resolved), 0), 2);
+  }
+
+  static clampMonthSheetPosition(position: number): number {
+    return Math.min(Math.max(position, TeachingCalendarLogic.monthSheetExpandedPosition),
+      TeachingCalendarLogic.monthSheetWeekPosition);
+  }
+
+  static monthCellExpansionProgress(position: number): number {
+    return 1 - Math.min(Math.max(position,
+      TeachingCalendarLogic.monthSheetExpandedPosition),
+    TeachingCalendarLogic.monthSheetDetailsPosition);
+  }
+
+  static monthSelectedWeekProgress(position: number): number {
+    return Math.min(Math.max(position - TeachingCalendarLogic.monthSheetDetailsPosition, 0), 1);
+  }
+
+  static interpolateMonthMetric(collapsed: number, expanded: number, progress: number): number {
+    const resolved: number = Math.min(Math.max(progress, 0), 1);
+    return Math.round(collapsed + (expanded - collapsed) * resolved);
+  }
+
+  static monthRowHeight(position: number, rowIndex: number, selectedWeekIndex: number,
+    expandedHeight: number = TeachingCalendarLogic.monthExpandedCellHeight): number {
+    const expandedProgress: number = TeachingCalendarLogic.monthCellExpansionProgress(position);
+    const fullHeight: number = TeachingCalendarLogic.interpolateMonthMetric(
+      TeachingCalendarLogic.monthCollapsedCellHeight, expandedHeight, expandedProgress);
+    if (rowIndex === selectedWeekIndex) {
+      return fullHeight;
+    }
+    return Math.max(Math.round(fullHeight *
+      (1 - TeachingCalendarLogic.monthSelectedWeekProgress(position))), 0);
+  }
+
+  static monthEntryAvailableHeight(cellHeight: number, expandedProgress: number): number {
+    const bottomPadding: number = TeachingCalendarLogic.interpolateMonthMetric(5, 2,
+      expandedProgress);
+    const markerHeight: number = TeachingCalendarLogic.interpolateMonthMetric(12, 0,
+      expandedProgress);
+    return Math.max(cellHeight - 5 - bottomPadding - 24 - markerHeight, 0);
+  }
+
+  static monthEntrySlotCapacity(availableHeight: number, entryHeight: number = 14,
+    entrySpacing: number = 1): number {
+    if (availableHeight <= 0 || entryHeight <= 0) {
+      return 0;
+    }
+    return Math.max(Math.floor((availableHeight + entrySpacing) /
+      (entryHeight + entrySpacing)), 0);
+  }
+
+  static visibleMonthEntryCount(entryCount: number, slotCapacity: number): number {
+    const count: number = Math.max(entryCount, 0);
+    const capacity: number = Math.max(slotCapacity, 0);
+    return count > capacity ? Math.max(capacity - 1, 0) : count;
+  }
+
+  static hiddenMonthEntryCount(entryCount: number, slotCapacity: number): number {
+    return Math.max(entryCount - TeachingCalendarLogic.visibleMonthEntryCount(
+      entryCount, slotCapacity), 0);
   }
 
   static monthEventLayout(totalCount: number, maximumRows: number): number[] {
@@ -204,7 +321,7 @@ export class CalendarFormatters {
   static readonly weekdayLabels: string[] = ['一', '二', '三', '四', '五', '六', '日'];
 
   static weekdayLabel(day: DateParts): string {
-    return CalendarFormatters.weekdayLabels[StrictDates.weekdayMonday1(day) - 1];
+    return '周' + CalendarFormatters.weekdayLabels[StrictDates.weekdayMonday1(day) - 1];
   }
 
   // 2026年8月18日 星期二

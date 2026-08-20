@@ -13,7 +13,7 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.day))
         .assertEqual('2026年8月14日');
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.week))
-        .assertEqual('2026年8月 第 33 周');
+        .assertEqual('2026年8月 第33周');
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.month))
         .assertEqual('2026年8月');
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.year))

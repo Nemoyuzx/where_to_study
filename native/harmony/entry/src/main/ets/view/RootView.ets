@@ -1,4 +1,4 @@
-// 与 iOS 端 RootView.swift 对应的根布局：
+// 与 Android MainActivity 对应的根布局：
 // 宽度 >= 700vp 时使用侧栏（对应 NavigationSplitView 的 regular 布局），
 // 否则使用底部 Tabs（对应 compact 布局）；示例模式顶部显示提示条。
 
@@ -21,6 +21,10 @@ export struct RootView {
   @Local currentSection: AppSection = AppSection.planner;
   // 初始值按屏幕宽度预估，避免宽屏启动首帧闪 Tabs（BUG-022 修复）。
   @Local containerWidth: number = DeviceState.screenWidthVp();
+
+  private sidebarWidth(): number {
+    return this.containerWidth < 1000 ? 210 : 230;
+  }
 
   aboutToAppear(): void {
     // 与 iOS 端 AppModel.init + RootView.onAppear 对应：引导加载后按需刷新当天教室。
@@ -84,8 +88,7 @@ export struct RootView {
         if (this.currentSection === AppSection.planner) {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
-          // 侧栏模式下按详情区实际宽度决定日历形态（总宽 - 230vp 侧栏）。
-          CalendarSectionView({ containerWidth: this.containerWidth - 230 })
+          CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
         } else {
           SettingsView()
         }
@@ -137,7 +140,7 @@ export struct RootView {
         })
       }, (section: AppSection) => AppSectionInfo.accessibilityId(section))
     }
-    .width(230)
+    .width(this.sidebarWidth())
     .height('100%')
     .padding({ top: 16 })
     .backgroundColor(AppTheme.surface())
@@ -146,39 +149,56 @@ export struct RootView {
 
   @Builder
   tabLayout() {
-    Tabs({ barPosition: BarPosition.End, index: this.sectionIndexOf(this.currentSection) }) {
-      ForEach(AppSectionInfo.all, (section: AppSection) => {
-        TabContent() {
-          this.sectionView(section)
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column() {
+        if (this.currentSection === AppSection.planner) {
+          PlannerView()
+        } else if (this.currentSection === AppSection.calendar) {
+          CalendarSectionView({ containerWidth: this.containerWidth })
+        } else {
+          SettingsView()
         }
-        .tabBar(this.tabBarBuilder(section))
-      }, (section: AppSection) => AppSectionInfo.accessibilityId(section))
+      }
+      .width('100%')
+      .height('100%')
+
+      Row({ space: 4 }) {
+        ForEach(AppSectionInfo.all, (section: AppSection) => {
+          this.phoneNavigationItem(section)
+        }, (section: AppSection) => AppSectionInfo.accessibilityId(section))
+      }
+      .width('calc(100% - 88vp)')
+      .height(60)
+      .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+      .margin({ bottom: 10 })
+      .borderRadius(30)
+      .backgroundColor(AppTheme.surfaceVariant())
+      .shadow({ radius: 8, color: '#33000000', offsetY: 4 })
     }
     .width('100%')
     .height('100%')
-    .barBackgroundColor(AppTheme.surface())
-    .onChange((index: number) => {
-      const section: AppSection | undefined = this.sectionAt(index);
-      if (section !== undefined) {
-        this.selectSection(section);
-      }
-    })
-    .scrollable(false)
   }
 
   @Builder
-  tabBarBuilder(section: AppSection) {
+  phoneNavigationItem(section: AppSection) {
     Column({ space: 2 }) {
       SymbolGlyph(AppSectionInfo.symbol(section))
         .fontSize(22)
         .fontColor([this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText()])
       Text(AppSectionInfo.title(section))
-        .fontSize(10)
+        .fontSize(11)
+        .fontWeight(this.currentSection === section ? FontWeight.Bold : FontWeight.Regular)
         .fontColor(this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText())
     }
-    .width('100%')
-    .height('100%')
+    .layoutWeight(1)
+    .height(50)
     .justifyContent(FlexAlign.Center)
+    .borderRadius(26)
+    .backgroundColor(this.currentSection === section ? AppTheme.background() : Color.Transparent)
+    .animation({ duration: 160, curve: Curve.EaseOut })
+    .onClick(() => {
+      this.selectSection(section);
+    })
   }
 
   @Builder

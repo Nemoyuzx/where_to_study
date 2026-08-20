@@ -1,4 +1,4 @@
-// 移动端日历时间线，对应 iOS 端 MobileCalendarTimelineView.swift。
+// 移动端日历时间线，以原生 Android CalendarTimelineView.kt 为基准。
 // 08:00–22:00，每小时 72vp，共 1008vp；左侧小时轴 + 网格线 + 课程块 +
 // 当前时间红线。用普通组件定位代替 Canvas，避免画布 API 的平台差异。
 import { Course, SlotMetadata } from '../../common/Models';
@@ -10,8 +10,8 @@ export class MobileCalendarTimelineLayout {
   static readonly startMinute: number = 8 * 60;
   static readonly endMinute: number = 22 * 60;
   static readonly hourHeight: number = 72;
-  static readonly axisWidth: number = 56;
-  static readonly bottomContentInset: number = 104;
+  static readonly axisWidth: number = 48;
+  static readonly bottomContentInset: number = 84;
   static readonly timelineHeight: number =
     (MobileCalendarTimelineLayout.endMinute - MobileCalendarTimelineLayout.startMinute) / 60 *
     MobileCalendarTimelineLayout.hourHeight;
@@ -32,10 +32,7 @@ export class MobileCalendarTimelineLayout {
   }
 
   static initialVisibleHour(currentHour: number, includesToday: boolean): number {
-    if (!includesToday) {
-      return 8;
-    }
-    return Math.min(Math.max(currentHour - 1, 8), 20);
+    return 8;
   }
 }
 
@@ -163,16 +160,30 @@ export struct MobileCalendarTimelineView {
       // 小时轴
       Column() {
         ForEach(this.hours, (hour: number) => {
-          Text(CalendarFormatters.hourLabel(hour))
-            .fontSize(11)
-            .fontColor(AppTheme.secondaryText())
-            .width(MobileCalendarTimelineLayout.axisWidth - 8)
-            .textAlign(TextAlign.End)
-            .position({
-              x: 0,
-              y: MobileCalendarTimelineLayout.yPosition(hour * 60) + this.adjustedHourLabelY(hour)
-            })
+          if (!this.hourLabelObscured(hour)) {
+            Text(CalendarFormatters.hourLabel(hour))
+              .fontSize(9)
+              .fontColor(AppTheme.secondaryText())
+              .width(MobileCalendarTimelineLayout.axisWidth - 8)
+              .textAlign(TextAlign.Center)
+              .position({
+                x: 0,
+                y: MobileCalendarTimelineLayout.yPosition(hour * 60) + this.adjustedHourLabelY(hour)
+              })
+          }
         }, (hour: number) => 'hour-label.' + hour.toString())
+        if (this.isNowVisible()) {
+          Text(this.timeLabel())
+            .fontSize(10)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.onPrimary())
+            .width(40)
+            .height(18)
+            .textAlign(TextAlign.Center)
+            .borderRadius(9)
+            .backgroundColor(AppTheme.danger())
+            .position({ x: 4, y: this.indicatorY() - 9 })
+        }
       }
       .width(MobileCalendarTimelineLayout.axisWidth)
       .height(MobileCalendarTimelineLayout.timelineHeight)
@@ -183,19 +194,23 @@ export struct MobileCalendarTimelineView {
         // 小时线
         ForEach(this.hours, (hour: number) => {
           Divider()
-            .strokeWidth(1)
+            .strokeWidth(0.5)
             .color(AppTheme.border())
             .width(this.viewportWidth)
             .position({ x: 0, y: MobileCalendarTimelineLayout.yPosition(hour * 60) })
         }, (hour: number) => 'grid-hour.' + hour.toString())
 
-        // 非整点节次边界线（iOS 为虚线，这里用细实线近似）
-        ForEach(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes(), (minute: number) => {
-          Divider()
-            .strokeWidth(0.7)
-            .color(AppTheme.border())
-            .opacity(0.24)
+        // 课程节次边界使用虚线，与 Android 的 DashPathEffect(4, 4) 对齐。
+        ForEach(CalendarTimelineLogic.courseBoundaryMinutes(), (minute: number) => {
+          Column()
             .width(this.viewportWidth)
+            .height(1)
+            .border({
+              width: { top: 0.7 },
+              color: AppTheme.border(),
+              style: BorderStyle.Dashed
+            })
+            .opacity(0.24)
             .position({ x: 0, y: MobileCalendarTimelineLayout.yPosition(minute) })
         }, (minute: number) => 'grid-slot.' + minute.toString())
 
@@ -204,7 +219,7 @@ export struct MobileCalendarTimelineView {
           ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
             Divider()
               .vertical(true)
-              .strokeWidth(1)
+              .strokeWidth(0.5)
               .color(AppTheme.border())
               .opacity(0.7)
               .height(MobileCalendarTimelineLayout.timelineHeight)
@@ -265,7 +280,7 @@ export struct MobileCalendarTimelineView {
       .position({ x: MobileCalendarTimelineLayout.axisWidth, y: 0 })
       .clip(true)
     }
-    .width(this.viewportWidth + MobileCalendarTimelineLayout.axisWidth)
+    .width('100%')
     .height(MobileCalendarTimelineLayout.timelineHeight)
     .backgroundColor(AppTheme.surface())
     .onAreaChange((oldArea: Area, newArea: Area) => {
@@ -326,9 +341,14 @@ export struct MobileCalendarTimelineView {
           .fontColor(AppTheme.onPrimary())
           .maxLines(1)
       }
-      if (this.blockHeight(placement.course) >= 44 &&
-        this.courseMetadataOf(placement.course).length > 0) {
-        Text(this.courseMetadataOf(placement.course))
+      if (this.blockHeight(placement.course) >= 60) {
+        Text(placement.course.room)
+          .fontSize(10)
+          .fontColor(AppTheme.onPrimary())
+          .maxLines(1)
+      }
+      if (this.blockHeight(placement.course) >= 76 && placement.course.teacher.length > 0) {
+        Text(placement.course.teacher)
           .fontSize(10)
           .fontColor(AppTheme.onPrimary())
           .maxLines(1)
@@ -336,11 +356,12 @@ export struct MobileCalendarTimelineView {
     }
     .alignItems(HorizontalAlign.Start)
     .padding(6)
-    .width(this.viewportWidth - 6)
+    .width(this.blockDayWidth(dayIndex, placement))
     .height(this.blockHeight(placement.course))
     .borderRadius(6)
+    .border({ width: { left: 3 }, color: AppTheme.accent() })
     .backgroundColor(AppTheme.primaryFill())
-    .position({ x: 3, y: this.blockTop(placement.course) })
+    .position({ x: this.blockDayX(dayIndex, placement), y: this.blockTop(placement.course) })
   }
 
   @Builder
@@ -379,6 +400,7 @@ export struct MobileCalendarTimelineView {
     .width(this.blockWeekWidth(dayIndex, placement))
     .height(this.blockHeight(placement.course))
     .borderRadius(6)
+    .border({ width: { left: 3 }, color: AppTheme.accent() })
     .backgroundColor(AppTheme.primaryFill())
     .position({
       x: this.blockWeekX(dayIndex, placement),
@@ -426,6 +448,15 @@ export struct MobileCalendarTimelineView {
     return this.dayWidthValue() / this.blockTrackCount(dayIndex);
   }
 
+  private blockDayWidth(dayIndex: number, placement: CoursePlacement): number {
+    return Math.max(this.blockTrackWidth(dayIndex) - 6, 8);
+  }
+
+  private blockDayX(dayIndex: number, placement: CoursePlacement): number {
+    return dayIndex * this.dayWidthValue() +
+      placement.track * this.blockTrackWidth(dayIndex) + 3;
+  }
+
   private blockWeekWidth(dayIndex: number, placement: CoursePlacement): number {
     return Math.max(this.blockTrackWidth(dayIndex) - 2, 8);
   }
@@ -449,16 +480,6 @@ export struct MobileCalendarTimelineView {
         .borderRadius(4)
         .backgroundColor(AppTheme.danger())
         .position({ x: this.indicatorLeft(), y: -3 })
-      if (!this.showsWeekColumns) {
-        Text(this.timeLabel())
-          .fontSize(11)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.onPrimary())
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(9)
-          .backgroundColor(AppTheme.danger())
-          .position({ x: this.indicatorLeft() + 26, y: -15 })
-      }
     }
     .width(this.viewportWidth)
     .height(2)
@@ -512,6 +533,13 @@ export struct MobileCalendarTimelineView {
       return -8;
     }
     return 0;
+  }
+
+  private hourLabelObscured(hour: number): boolean {
+    if (!this.isNowVisible()) {
+      return false;
+    }
+    return Math.abs(hour * 60 - this.shanghaiMinuteOfDay()) <= 12;
   }
 
   private dayKey(day: CalendarTimelineDay): string {

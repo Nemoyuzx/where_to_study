@@ -27,6 +27,38 @@
     {
       "name": "app_selection",
       "value": "#1A166B5D"
+    },
+    {
+      "name": "app_background",
+      "value": "#F2F2F7"
+    },
+    {
+      "name": "app_surface",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "app_surface_variant",
+      "value": "#E5E5EA"
+    },
+    {
+      "name": "app_text",
+      "value": "#111111"
+    },
+    {
+      "name": "app_secondary_text",
+      "value": "#6E6E73"
+    },
+    {
+      "name": "app_border",
+      "value": "#C6C6C8"
+    },
+    {
+      "name": "app_selection_surface",
+      "value": "#DDECE8"
+    },
+    {
+      "name": "app_segmented_selection",
+      "value": "#FFFFFF"
     }
   ]
 }

@@ -23,7 +23,7 @@ Silicon 兼容构建。
 | macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.1.7 (44)` 正式签名 Universal 构建；公开 GitHub Release 另提供临时签名预览包 |
 | Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
-| Linux | Tauri 2 + React + Rust | 发布 x86_64 Debian 包与 AppImage |
+| Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用 Tauri 核心逻辑） | `wts-cli` 纯命令行客户端，当前提供 macOS 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用 Tauri 核心逻辑） | `wts-tui` 可视化终端客户端，当前提供 macOS 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.1.7 (44)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
@@ -31,7 +31,7 @@ Silicon 兼容构建。
 
 ## 下载
 
-稳定版 [v0.1.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.7) 提供 Windows x64 NSIS、Linux x86_64 Debian/AppImage、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、Android APK/AAB，以及 macOS `wts-cli` 和 `wts-tui`。本版加入学期编号与开学日期自动识别，完善桌面端悬停、动画和触控板翻页，修复 Windows 与 HarmonyOS 平台问题，并让 Linux 凭据改用 Secret Service；Debian 包会在 Ubuntu 24.04 上实际安装验证运行时依赖。每个公开制品都附带 SHA-256 校验文件。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 当前均为 `0.1.7 (44)`；公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
+稳定版 [v0.1.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.7) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、Android APK/AAB，以及 macOS `wts-cli` 和 `wts-tui`。本版加入学期编号与开学日期自动识别，完善桌面端悬停、动画和触控板翻页，修复 Windows 与 HarmonyOS 平台问题，并让 Linux 凭据改用 Secret Service；Debian 包会在 Ubuntu 环境中实际安装验证运行时依赖。校验文件仍由本地脚本和 CI 生成并用于发布前验证，但不再作为 GitHub Release 附件。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 当前均为 `0.1.7 (44)`；公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
 
 ## 许可证状态
 

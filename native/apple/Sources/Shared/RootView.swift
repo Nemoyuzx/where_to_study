@@ -44,6 +44,9 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
+    #if os(macOS)
+    @State private var macSidebarVisibility: NavigationSplitViewVisibility = .all
+    #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isRegularSidebarExpanded = true
@@ -106,7 +109,7 @@ struct RootView: View {
 
     #if os(macOS)
     private var splitNavigation: some View {
-        NavigationSplitView(columnVisibility: .constant(.all)) {
+        NavigationSplitView(columnVisibility: $macSidebarVisibility) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 250)
         } detail: {

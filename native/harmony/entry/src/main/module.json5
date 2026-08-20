@@ -65,6 +65,9 @@
         "name": "ohos.permission.PUBLISH_AGENT_REMINDER"
       },
       {
+        "name": "ohos.permission.VIBRATE"
+      },
+      {
         "name": "ohos.permission.READ_CALENDAR",
         "reason": "$string:calendar_read_reason",
         "usedScene": {
