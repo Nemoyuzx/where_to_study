@@ -1,14 +1,14 @@
-# 稳定版发布检查点（2026-08-19）
+# 稳定版发布检查点（2026-08-20）
 
 ## 当前状态
 
 - 分支：`main`
-- 当前稳定版：[v0.1.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.7)
-- 应用版本：`0.1.7`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=44`；Android `versionCode=25`
+- 当前稳定版：[v0.1.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.8)
+- 应用版本：`0.1.8`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=46`；Android `versionCode=26`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：仅保留最新 SwiftUI Universal 应用 `/Applications/Where To Study.app`；未再检测到其他 Where To Study 安装副本
-- 发布边界：`v0.1.7` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书、描述文件和双平台 App Store Connect 记录已配置，正式签名的 iOS 与 macOS 均使用 build 44；公开 GitHub Release 的 macOS/iOS 制品仍分别为 ad-hoc 与无签名构建；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.1.8` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS 正式构建均使用 build 46 并只通过 TestFlight 分发；GitHub Release 不再上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -29,6 +29,8 @@
 - 托盘提供今日/明日课程；关闭主窗口后保持运行；启动和每天 07:00 获取当天空教室；课程摘要默认关闭，用户显式开启后才在 07:30 发送。
 - 为每个账号生成不含账号信息的随机不透明缓存作用域；账号切换、清除或持久化失败时采用失效代次和撤销标记拒绝旧数据。
 - 设置与安全凭据提交具备回滚；WebView 不接收密码；课程小组件权限缩减为仅监听所需事件。
+- Tauri 设置页与原生 macOS 保持同样的双栏卡片层级，并补齐课程提醒开关、学期自动检测和 Widget 展示偏好。
+- 独立 CLI/TUI 使用共享 Rust 业务核心和用户私有本地凭据文件；发布名称统一为 `where-to-study-cli` 与 `where-to-study-tui`，不再带 `wts-` 前缀。
 
 ### Apple 原生端
 
@@ -45,6 +47,7 @@
 - 手机月视图点击日期会进入半折叠状态并在下方显示当日日程；日期格中的事件条只用于展示，不再抢占日期点击。横屏月视图只保留完整月与选中周两种状态，日视图摘要使用与页面一致的卡片表面。
 - iPhone 横屏取消竖屏底部导航占位；iPad 和 macOS 收起侧栏的选中图标保持居中正方形，设置与联动查询页面保留正常安全边距。
 - Windows/Tauri 当前使用的绿色日历课桌图标成为全平台唯一源图；同步脚本生成 Windows、Tauri macOS、原生 iOS 和 Android 图标，Apple AppIcon 同时移除透明通道以满足上传要求。
+- iOS/macOS 设置页提供学期自动检测、手动学期参数与 Widget 展示条数/地点偏好；课程提醒使用系统开关且与同列其他卡片等宽。
 
 ### Android 原生端
 
@@ -58,6 +61,7 @@
 - Android 手机端按 iOS 对应页面统一卡片与控件边线、36dp 输入框和按钮高度、54dp 节次按钮及紧凑设置密度；教学日历的整点实线、节次虚线、日期条、月视图展开单元格和事件小条均完成浅色与深色复核。
 - iOS 与 Android 手机教学日历在模式切换、日期选择、前后翻页、滑动换页、月视图展开/折叠及年视图跳转时提供系统触觉反馈。
 - Android 月视图点击日期后进入半折叠状态并展示当日日程，日期格内事件不可独立点击；折叠屏与横屏布局不再保留竖屏底部导航空白，收起侧栏图标按固定正方形居中。
+- Android 设置页补齐学期自动检测与 Widget 展示条数/地点偏好，并保持课程提醒为系统开关。
 
 ## 最终本地验证
 
@@ -65,30 +69,31 @@
 | --- | --- |
 | React | 54/54 业务规则、主题契约、图标安全区、Linux 发布契约与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
 | 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
-| Rust | `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；101/101 共享测试通过；CLI/TUI 严格检查与测试通过 |
+| Rust | 共享核心、Tauri、CLI、TUI 的 `fmt`、`check --locked --all-targets`、`clippy -D warnings` 通过；共享核心 43/43、Tauri 101/101、CLI 13/13、TUI 12/12 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
-| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；111/111 XCTest 通过 |
-| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；111/111 单元测试通过；UI 测试执行 10 项、跳过 1 项、0 失败 |
+| macOS SwiftUI | 严格 Swift 6 并发、警告视为错误；122/122 XCTest 通过 |
+| iOS SwiftUI | 严格 Swift 6 并发、警告视为错误；122/122 逻辑测试通过；UI 测试执行 9 项、iPad 专项跳过 1 项、0 失败 |
 | Android Debug | 131/131 JVM 测试、Debug APK 与 AndroidTest APK 构建通过 |
 | Android Release | 131/131 JVM 测试、`lintRelease`、固定证书签名 APK/AAB 构建通过 |
 | Android UI | Medium Phone、WhereToStudy Fold 与 Pixel Tablet 各 4/4 导航及布局测试通过，共 12/12 |
 | 浏览器视觉检查 | 日/周/月真实触摸翻页、年视图日/周/月跳转、校区状态隔离通过；手机、折叠屏、平板、桌面深浅色均无横向溢出或文本裁切，控制台 0 错误 |
-| macOS 安装检查 | SwiftUI Universal `0.1.7 (44)` 已覆盖安装到 `/Applications/Where To Study.app`；x86_64/arm64、ad-hoc 签名、WidgetKit 扩展、版本与统一应用图标复核通过，应用目录只保留一个最新安装副本 |
-| App Store Connect | iOS 与 macOS `0.1.7 (44)` 均已使用 Apple Distribution 签名并校验描述文件/entitlement；两个平台的上传任务均收到 `Upload succeeded` |
-| Linux 发布 | arm64 在 Ubuntu 26.04 虚拟机、x86_64 在 Ubuntu 22.04 服务器完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；校验文件保留在本地与 CI，不上传到 GitHub Release |
+| macOS 安装检查 | SwiftUI Universal `0.1.8 (46)` 的 x86_64/arm64、WidgetKit 扩展、版本与统一应用图标复核通过；本机安装目录只保留一个最新副本 |
+| App Store Connect | iOS 与 macOS `0.1.8 (46)` 均完成正式归档；两个平台的上传任务均收到 Xcode `Upload succeeded`，未额外打开浏览器复核 |
+| CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
+| Linux 发布 | arm64 在 Ubuntu 26.04 虚拟机、x86_64 在 Ubuntu 22.04 服务器完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、小组件、空教室、教学日历、设置、刷新与退出 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |
 
-Apple 测试结果（2026-08-19 使用 `xcresulttool` 复核）：
+Apple 测试结果（2026-08-20 使用 `xcresulttool` 复核）：
 
-- macOS：111/111 通过
-- iOS：111/111 项单元测试通过；UI 测试执行 10 项、跳过 1 项、0 失败
+- macOS：122/122 通过
+- iOS：122/122 项逻辑测试通过；UI 测试执行 9 项、iPad 专项跳过 1 项、0 失败
 - 通知权限超时精确测试：20 轮、40/40 通过
 
-## 0.1.7 稳定版发布制品
+## 0.1.8 稳定版发布制品
 
-`v0.1.7` 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、固定 release key 签名的 Android APK/AAB，以及 macOS CLI/TUI。发布脚本仍生成相邻的 LF 行尾 SHA-256 文件供本地和 CI 验证，但 GitHub Release 只保留可下载二进制制品。
+`v0.1.8` 的 GitHub Release 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android APK/AAB。iOS 与 macOS 只上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。
 
 ## Build 15 稳定版发布制品
 
