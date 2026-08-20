@@ -9,6 +9,7 @@ on:
       - "v*"
     paths:
       - "wts-tui/**"
+      - "where-to-study-core/**"
       - "src-tauri/src/**"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - "wts-tui/**"
+      - "where-to-study-core/**"
       - "src-tauri/src/**"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
@@ -42,6 +44,7 @@ jobs:
         with:
           workspaces: |
             ./src-tauri
+            ./where-to-study-core
             ./wts-tui
 
       - name: Check Rust formatting
@@ -58,12 +61,12 @@ jobs:
 
       - name: Verify TUI binary
         run: |
-          file wts-tui/target/release/wts-tui
-          wts-tui/target/release/wts-tui --version
+          file wts-tui/target/release/where-to-study-tui
+          wts-tui/target/release/where-to-study-tui --version
 
       - name: Upload TUI binary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wts-tui-macos
-          path: wts-tui/target/release/wts-tui
+          name: where-to-study-tui-macos-arm64
+          path: wts-tui/target/release/where-to-study-tui
           if-no-files-found: error

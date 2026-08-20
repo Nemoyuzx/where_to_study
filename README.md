@@ -20,18 +20,18 @@ Silicon 兼容构建。
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.1.7 (44)` 正式签名 Universal 构建；公开 GitHub Release 另提供临时签名预览包 |
-| Android | Kotlin + Android Views | 发布固定维护者密钥签名的 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历和课程提醒 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.1.8 (46)` 正式签名 Universal 构建通过 TestFlight 分发；不再作为 GitHub Release 附件 |
+| Android | Kotlin + Android Views | `0.1.8 (26)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
-| CLI | Rust（复用 Tauri 核心逻辑） | `wts-cli` 纯命令行客户端，当前提供 macOS 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
-| 终端 TUI | Rust + ratatui（复用 Tauri 核心逻辑） | `wts-tui` 可视化终端客户端，当前提供 macOS 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.1.7 (44)` 正式签名构建；公开 GitHub Release 暂仍为无签名开发者 archive |
+| CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
+| 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
+| iOS | SwiftUI 原生 | `0.1.8 (46)` 正式签名构建通过 TestFlight 分发；不再作为 GitHub Release 附件 |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板布局已移植并通过 45 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-稳定版 [v0.1.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.7) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、Android APK/AAB，以及 macOS `wts-cli` 和 `wts-tui`。本版加入学期编号与开学日期自动识别，完善桌面端悬停、动画和触控板翻页，修复 Windows 与 HarmonyOS 平台问题，并让 Linux Tauri 图形端凭据改用 Secret Service；Debian 包会在 Ubuntu 环境中实际安装验证运行时依赖。校验文件仍由本地脚本和 CI 生成并用于发布前验证，但不再作为 GitHub Release 附件。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 当前均为 `0.1.7 (44)`；公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
+稳定版 [v0.1.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.8) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版统一三端设置中的课程提醒、桌面小组件和学期自动检测，完善 Tauri 设置界面对齐，并让 CLI/TUI 在无桌面密码库的 Linux 环境使用权限受限的独立本地凭据文件。Debian 包会在 Ubuntu 环境中实际安装验证运行时依赖。构建流程仍会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`；从本版起 GitHub Release 也不再附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.1.8 (46)` 仅通过 TestFlight 分发。
 
 ## 许可证状态
 
@@ -55,9 +55,10 @@ Android Keystore。旧版 `settings.json` 中的凭据会在首次启动时迁�
 `load_saved_settings` 只向 WebView 返回 `has_saved_password`，不会返回真实密码；密码输入留空时保留已有系统凭据，只有显式输入新密码才替换。课程和空教室缓存不包含密码、token 或 cookie。完整基线见
 [docs/security.md](./docs/security.md)。
 
-`wts-tui` 按终端客户端的独立约定，不调用系统密码库：账号和密码保存在用户配置目录
-下权限受限的 TUI 专用本地文件中，且不会自动读取或迁移图形客户端的系统凭据。具体
-路径与风险说明见 [wts-tui/README.md](./wts-tui/README.md)。
+`where-to-study-cli` 与 `where-to-study-tui` 按终端客户端的独立约定，不调用系统密码库：
+账号和密码分别保存在用户配置目录下权限受限的专用本地文件中，且不会自动读取或迁移
+图形客户端的系统凭据。具体路径与风险说明见 [wts-cli/README.md](./wts-cli/README.md)
+和 [wts-tui/README.md](./wts-tui/README.md)。
 
 法定节假日运行时数据来自
 [cg-zhou/holiday-calendar](https://github.com/cg-zhou/holiday-calendar)，客户端通过其文档列出的
@@ -102,6 +103,18 @@ npm run tauri:build:linux
 ```
 
 Linux 打包脚本会解包校验版本、架构、Tauri 按构建环境检测出的 GTK/WebKitGTK/托盘运行时依赖、正式 HTTPS 数据源和三份法律文件，并输出带相邻 SHA-256 文件的 `.deb` 与 `.AppImage`。仓库的 `Build Linux` 工作流使用 Ubuntu 22.04 作为兼容构建基线，并在 Ubuntu 24.04 runner 上实际安装生成的 `.deb`。
+
+Linux 终端客户端可以直接从 Release 安装。以 x86_64 为例：
+
+```bash
+mkdir -p ~/.local/bin
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.1.8/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.1.8/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
+install -m 0755 where-to-study-cli where-to-study-tui ~/.local/bin/
+```
+
+arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 各自 README
+中的步骤从源码构建；请确保 `~/.local/bin` 已加入 `PATH`。
 
 ### 原生客户端
 

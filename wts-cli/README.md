@@ -26,7 +26,20 @@ CLI 不依赖正在运行的 Secret Service、GNOME Keyring 或 macOS Keychain�
 
 ### Linux 拉取与安装
 
-先安装 Rust 1.89+、Git 和系统 C/C++ 构建工具，然后从源码安装：
+从 GitHub Release 安装（以 x86_64 为例）：
+
+```bash
+mkdir -p ~/.local/bin
+curl -L -o where-to-study-cli.tar.gz \
+  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.1.8/where-to-study-cli-linux-x86_64.tar.gz
+tar -xzf where-to-study-cli.tar.gz
+install -m 0755 where-to-study-cli ~/.local/bin/where-to-study-cli
+where-to-study-cli --version
+```
+
+ARM64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。
+
+从源码安装时，先安装 Rust 1.89+、Git 和系统 C/C++ 构建工具：
 
 ```bash
 git clone https://github.com/Nemoyuzx/where_to_study.git

@@ -95,10 +95,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     frame.render_widget(status_list, chunks[1]);
 
     // About
-    let about = Paragraph::new(
-        "Where To Study TUI · 数据源：北邮移动教务 HTTPS 接口
-版本 0.1.7 · GPL-3.0",
-    )
+    let about = Paragraph::new(format!(
+        "Where To Study TUI · 数据源：北邮移动教务 HTTPS 接口\n版本 {} · GPL-3.0",
+        env!("CARGO_PKG_VERSION")
+    ))
     .block(Block::default().borders(Borders::ALL).title("关于"))
     .style(theme.muted_text());
 
