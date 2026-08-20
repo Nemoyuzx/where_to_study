@@ -56,7 +56,7 @@ test("all tracked client projects use the stable 0.1.7 release version", () => {
   assert.match(nativeAndroid, /versionName = "0\.1\.7"/);
   assert.match(nativeAndroid, /versionCode = 25/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.1\.7"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "44"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "45"/);
   assert.match(nativeHarmony, /"versionName": "0\.1\.7"/);
   assert.match(nativeHarmony, /"versionCode": 1000007/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.1\.7/);
