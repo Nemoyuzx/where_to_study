@@ -303,22 +303,28 @@ mod tests {
         }
     }
 
+    fn temporary_password(label: &str) -> String {
+        format!("{label}-{}", std::process::id())
+    }
+
     #[test]
     fn credentials_round_trip_overwrite_and_clear() {
         let directory = TestDirectory::new("round-trip");
         let path = directory.credentials_path();
+        let first_password = temporary_password("first");
+        let second_password = temporary_password("second");
         assert_eq!(load_from(&path).unwrap(), None);
 
-        save_to(&path, &fixture("2023000000", "first-password")).unwrap();
+        save_to(&path, &fixture("2023000000", &first_password)).unwrap();
         assert_eq!(
             load_from(&path).unwrap().unwrap(),
-            fixture("2023000000", "first-password")
+            fixture("2023000000", &first_password)
         );
 
-        save_to(&path, &fixture("2023000001", "second-password")).unwrap();
+        save_to(&path, &fixture("2023000001", &second_password)).unwrap();
         assert_eq!(
             load_from(&path).unwrap().unwrap(),
-            fixture("2023000001", "second-password")
+            fixture("2023000001", &second_password)
         );
 
         clear_from(&path).unwrap();
@@ -344,7 +350,8 @@ mod tests {
 
         let directory = TestDirectory::new("permissions");
         let path = directory.credentials_path();
-        save_to(&path, &fixture("2023000000", "fixture-password")).unwrap();
+        let password = temporary_password("permissions");
+        save_to(&path, &fixture("2023000000", &password)).unwrap();
 
         assert_eq!(
             fs::metadata(parent_directory(&path))
