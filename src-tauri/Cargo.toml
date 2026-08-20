@@ -11,6 +11,8 @@ name = "where_to_study_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
+default = ["tauri-runtime"]
+tauri-runtime = []
 custom-protocol = ["tauri/custom-protocol"]
 
 [build-dependencies]

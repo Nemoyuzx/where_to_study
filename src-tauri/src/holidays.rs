@@ -1,17 +1,25 @@
+#[cfg(any(feature = "tauri-runtime", test))]
 use std::fs;
+#[cfg(any(feature = "tauri-runtime", test))]
 use std::io::Write;
-use std::path::{Path, PathBuf};
+#[cfg(any(feature = "tauri-runtime", test))]
+use std::path::Path;
+#[cfg(feature = "tauri-runtime")]
+use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, SecondsFormat};
 use serde::Deserialize;
+#[cfg(feature = "tauri-runtime")]
 use tauri::{AppHandle, Manager};
+#[cfg(any(feature = "tauri-runtime", test))]
 use tempfile::NamedTempFile;
 
 use crate::config::now_in_app_tz;
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{HolidayItem, HolidaysResponse};
 
+#[cfg(feature = "tauri-runtime")]
 const HOLIDAY_CACHE_PREFIX: &str = "holidays";
 const HOLIDAY_DATA_SOURCE: &str = "https://unpkg.com/holiday-calendar@1.3.3/data/CN";
 const HOLIDAY_FALLBACK_SOURCE: &str =
@@ -46,6 +54,7 @@ struct SourceHoliday {
     kind: String,
 }
 
+#[cfg(any(feature = "tauri-runtime", test))]
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CachedHolidayItem {
@@ -55,6 +64,7 @@ struct CachedHolidayItem {
     kind: String,
 }
 
+#[cfg(any(feature = "tauri-runtime", test))]
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CachedHolidaysResponse {
@@ -64,6 +74,7 @@ struct CachedHolidaysResponse {
     items: Vec<CachedHolidayItem>,
 }
 
+#[cfg(feature = "tauri-runtime")]
 fn cache_path(app: &AppHandle, year: i32) -> ServiceResult<PathBuf> {
     let directory = app
         .path()
@@ -252,6 +263,7 @@ fn decode_source(bytes: &[u8], year: i32) -> ServiceResult<Vec<HolidayItem>> {
     parse_source_payload(payload, year)
 }
 
+#[cfg(any(feature = "tauri-runtime", test))]
 fn decode_cache(bytes: &[u8], expected_year: i32) -> ServiceResult<Option<HolidaysResponse>> {
     validate_requested_year(expected_year)?;
     if bytes.len() > MAX_HOLIDAY_RESPONSE_BYTES {
@@ -281,6 +293,7 @@ fn decode_cache(bytes: &[u8], expected_year: i32) -> ServiceResult<Option<Holida
     Ok(Some(response))
 }
 
+#[cfg(any(feature = "tauri-runtime", test))]
 fn encode_cache(response: &HolidaysResponse) -> ServiceResult<Vec<u8>> {
     validate_holidays_response(response, None)?;
     let bytes = serde_json::to_vec_pretty(response)
@@ -291,6 +304,7 @@ fn encode_cache(response: &HolidaysResponse) -> ServiceResult<Vec<u8>> {
     Ok(bytes)
 }
 
+#[cfg(any(feature = "tauri-runtime", test))]
 fn load_cache_from_path(path: &Path, year: i32) -> ServiceResult<Option<HolidaysResponse>> {
     validate_requested_year(year)?;
     if !path.exists() {
@@ -307,10 +321,12 @@ fn load_cache_from_path(path: &Path, year: i32) -> ServiceResult<Option<Holidays
     decode_cache(&bytes, year)
 }
 
+#[cfg(feature = "tauri-runtime")]
 pub(super) fn load_cache(app: &AppHandle, year: i32) -> ServiceResult<Option<HolidaysResponse>> {
     load_cache_from_path(&cache_path(app, year)?, year)
 }
 
+#[cfg(any(feature = "tauri-runtime", test))]
 pub(super) fn save_cache_to_path(path: &Path, response: &HolidaysResponse) -> ServiceResult<()> {
     let bytes = encode_cache(response)?;
     if let Some(parent) = path.parent() {
@@ -342,6 +358,7 @@ pub(super) fn save_cache_to_path(path: &Path, response: &HolidaysResponse) -> Se
     Err(ServiceError::new("无法定位本地节假日缓存目录。"))
 }
 
+#[cfg(feature = "tauri-runtime")]
 pub(super) fn save_cache(app: &AppHandle, response: &HolidaysResponse) -> ServiceResult<()> {
     save_cache_to_path(&cache_path(app, response.year)?, response)
 }

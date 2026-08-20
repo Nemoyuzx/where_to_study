@@ -57,7 +57,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     // Credential status
     let status_items = vec![
         ListItem::new(format!(
-            "凭据状态：{}",
+            "本地凭据文件：{}",
             if app.credentials_saved {
                 format!("已保存（{}）", app.saved_account)
             } else {

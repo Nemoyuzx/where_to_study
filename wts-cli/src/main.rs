@@ -6,13 +6,13 @@ mod output;
 
 #[derive(Parser)]
 #[command(
-    name = "wts-cli",
+    name = "where-to-study-cli",
     version,
     about = "Where To Study 命令行客户端 - 北邮课表与空教室查询",
     long_about = "Where To Study 命令行客户端
 
 基于与桌面版相同的数据源（移动教务 HTTPS 接口），支持个人课表、空教室、节假日查询。
-当前发布版本面向 macOS，账号密码保存在系统 Keychain。"
+支持 macOS 与 Linux，账号密码保存在当前用户专属的本地配置文件中。"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -23,8 +23,8 @@ struct Cli {
 enum Commands {
     /// 保存教务账号（交互输入密码），已保存时留空密码保持不变
     Login {
-        /// 教务学号
-        account: String,
+        /// 教务学号；省略时在终端中隐藏输入
+        account: Option<String>,
     },
     /// 清除已保存的教务凭据
     Logout,
@@ -101,14 +101,26 @@ mod tests {
 
     #[test]
     fn login_does_not_accept_password_in_process_arguments() {
-        assert!(
-            Cli::try_parse_from(["wts-cli", "login", "2023000000", "--password", "secret"])
-                .is_err()
-        );
+        assert!(Cli::try_parse_from([
+            "where-to-study-cli",
+            "login",
+            "2023000000",
+            "--password",
+            "secret"
+        ])
+        .is_err());
+    }
+
+    #[test]
+    fn login_can_prompt_for_account_without_process_arguments() {
+        assert!(Cli::try_parse_from(["where-to-study-cli", "login"]).is_ok());
     }
 
     #[test]
     fn classrooms_does_not_accept_non_today_date() {
-        assert!(Cli::try_parse_from(["wts-cli", "classrooms", "--date", "2026-09-01",]).is_err());
+        assert!(
+            Cli::try_parse_from(["where-to-study-cli", "classrooms", "--date", "2026-09-01",])
+                .is_err()
+        );
     }
 }

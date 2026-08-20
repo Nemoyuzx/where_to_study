@@ -1,4 +1,4 @@
-# Where To Study 可视化终端 (wts-tui)
+# Where To Study 可视化终端
 
 功能丰富的终端界面（TUI）客户端，用 ratatui + crossterm 构建，复用桌面版的
 Rust 核心逻辑与数据源（北邮移动教务 HTTPS 接口）。
@@ -36,7 +36,7 @@ Rust 核心逻辑与数据源（北邮移动教务 HTTPS 接口）。
 
 - 主题：浅色/深色自动（WTS_TUI_THEME=light|dark 可强制），配色与桌面版一致
 - 状态栏：当前日期、教学周、加载状态、错误/状态消息
-- 凭据安全：保存在系统安全存储，输入不落盘、不回显
+- 凭据存储：账号与密码保存在 TUI 专用本地文件，输入不回显；不会调用系统密码库
 - 数据缓存：课表/空教室/节假日内存缓存，切换页面不重复请求
 - 节假日离线兜底：与桌面版相同的 2026 年内置数据
 
@@ -47,16 +47,40 @@ cd wts-tui
 cargo build --release
 ```
 
-需要 Rust 1.89+ 及 macOS Tauri 桌面依赖。当前发布构建仅支持 macOS。
+需要 Rust 1.89+。TUI 直接复用 Rust 核心库，不依赖图形桌面环境。
+
+### Linux 从 Release 安装
+
+以 x86_64 为例：
+
+```bash
+curl -L -o where-to-study-tui.tar.gz \
+  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.1.8/where-to-study-tui-linux-x86_64.tar.gz
+tar -xzf where-to-study-tui.tar.gz
+install -m 0755 where-to-study-tui ~/.local/bin/where-to-study-tui
+```
+
+ARM64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。请确保 `~/.local/bin`
+已加入 `PATH`。
 
 ## 使用
 
 ```bash
-wts-tui
+where-to-study-tui
 ```
 
 启动后进入设置页，按 Enter 或 e 进入输入模式，输入账号密码并再次按 Enter
 登录；Esc 可退出输入模式。随后按 r 刷新课表和空教室。
+
+TUI 不读取或迁移图形客户端保存在 Keychain、Credential Manager 或 Secret Service
+中的凭据。默认文件位置如下，Unix 系统会把目录和文件权限分别限制为 `0700` 与
+`0600`：
+
+- macOS：`~/Library/Application Support/where-to-study/wts-tui/credentials.json`
+- Linux：`${XDG_CONFIG_HOME:-~/.config}/where-to-study/wts-tui/credentials.json`
+- Windows：`%LOCALAPPDATA%\where-to-study\wts-tui\credentials.json`
+
+该文件包含明文账号和密码，不得同步、分享或提交到 Git；退出登录会删除该文件。
 
 ## 测试
 
