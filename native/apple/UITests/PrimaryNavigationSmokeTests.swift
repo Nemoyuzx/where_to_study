@@ -129,7 +129,8 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary-card"]
             .waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["当日日程"].waitForExistence(timeout: 5))
-        verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
+        XCTAssertTrue(month.isHittable)
+        month.tap()
         XCTAssertTrue(waitForValue("已展开", of: month))
         verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))

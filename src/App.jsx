@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   Clock3,
   ExternalLink,
+  Eye,
+  EyeOff,
   Home,
   HardDrive,
   Info,
@@ -72,7 +74,7 @@ import {
   shanghaiDateString,
   shiftDate,
   slotsToRanges,
-  startOfWeekSunday,
+  startOfWeekMonday,
   summarizeMonthEntries,
   yearCourseOpacity,
 } from './planner-domain.js'
@@ -852,7 +854,7 @@ function App() {
     const todayVisible = calendarView === 'day'
       ? calendarDate === todayDate
       : calendarView === 'week'
-        && startOfWeekSunday(calendarDate) === startOfWeekSunday(todayDate)
+        && startOfWeekMonday(calendarDate) === startOfWeekMonday(todayDate)
     if (activePage !== 'calendar' || !todayVisible) {
       return undefined
     }
@@ -934,7 +936,7 @@ function App() {
   const visibleCalendarDays = useMemo(() => {
     if (calendarView === 'day') return [calendarDate]
     if (calendarView === 'week') {
-      const start = startOfWeekSunday(calendarDate)
+      const start = startOfWeekMonday(calendarDate)
       return Array.from({ length: 7 }, (_, index) => addDays(start, index))
     }
     if (calendarView === 'month') return buildMonthDays(calendarDate)
@@ -1763,6 +1765,12 @@ function App() {
     })
   }
 
+  async function hideDesktopWidget() {
+    await runTask('widget-hide', async () => {
+      await command('hide_desktop_widget')
+    })
+  }
+
   async function clearAllLocalData() {
     await runTask('clear-local-data', async () => {
       const previousSavedCredential = { ...savedCredentialState.current }
@@ -2129,7 +2137,7 @@ function App() {
                           aria-label={`${date.getMonth() + 1}月${date.getDate()}日，${dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}`}
                           onClick={() => chooseCalendarDate(dateString)}
                         >
-                          <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
+                          <span>{CALENDAR_WEEKDAYS[(date.getDay() + 6) % 7]}</span>
                           <strong data-mobile-day={date.getDate()}>{date.getMonth() + 1}/{date.getDate()}</strong>
                           <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}</small>
                           {dayState.dayCourses.length ? (
@@ -2394,41 +2402,14 @@ function App() {
                 ) : null}
               </section>
 
-              <aside className={`calendar-inspector ${compactCalendarLayout && calendarView === 'month' && monthExpanded ? 'month-expanded-hidden' : ''}`}>
-                <div className="inspector-card primary">
-                  <span>{formatCourseDate(calendarDate)}</span>
-                  <strong>{calendarWeekState.dayCourses.length} 门课</strong>
-                  <small>{formatTeachingWeek(calendarWeekState.weekNumber)}</small>
-                </div>
-                {calendarDetailCourse ? (
-                  <div className="inspector-card">
-                    <strong><CourseName course={calendarDetailCourse} /></strong>
-                    <span>{courseTimeBounds(calendarDetailCourse, slotMeta).start}-{courseTimeBounds(calendarDetailCourse, slotMeta).end}</span>
-                    <span>{calendarDetailCourse.room || '地点未标注'}</span>
-                    <small>{calendarDetailCourse.teacher || '教师未标注'}</small>
-                  </div>
-                ) : (
-                  <div className="inspector-card muted-card">所选日期暂无课程</div>
-                )}
-                <div className="inspector-list">
-                  {calendarWeekState.dayCourses.slice(calendarDetailCourse ? 1 : 0).map((course) => {
-                    const bounds = courseTimeBounds(course, slotMeta)
-                    return (
-                      <article key={`${calendarDate}-${course.id}`}>
-                        <strong><CourseName course={course} /></strong>
-                        <span>{bounds.start}-{bounds.end}</span>
-                        <small>{course.room || '地点未标注'}</small>
-                      </article>
-                    )
-                  })}
-                </div>
-            </aside>
+
           </div>
         </section>
           ) : null}
 
           {activePage === 'settings' ? (
         <section className="settings-layout">
+          <div className="settings-column">
           <section className="panel">
             <div className="panel-title">
               <KeyRound size={18} />
@@ -2540,22 +2521,36 @@ function App() {
                 value={settings.defaultMinSeats}
                 onChange={(event) => updateSetting('defaultMinSeats', Number(event.target.value))}
               />
-            </label>
+              </label>
           </section>
 
-          <section className="panel">
+          </div>
+          <div className="settings-column settings-secondary-column">
+
+          <section className="panel settings-reminder">
             <div className="panel-title">
               <BellRing size={18} />
               <h2>课程提醒</h2>
             </div>
-            <label className="settings-toggle">
-              <span>每天 07:30 课程摘要</span>
-              <input
-                type="checkbox"
-                checked={settings.dailyCourseNotificationsEnabled}
-                onChange={(event) => updateSetting('dailyCourseNotificationsEnabled', event.target.checked)}
-              />
-            </label>
+            <div className="settings-switch-row">
+              <div>
+                <strong>每天 07:30 发送当日课程摘要</strong>
+                <span>仅在当天有课时发送；课表更新或账号变更后会自动重排。</span>
+              </div>
+              <button
+                type="button"
+                className="settings-switch"
+                role="switch"
+                aria-checked={settings.dailyCourseNotificationsEnabled}
+                aria-label="每天 07:30 发送当日课程摘要"
+                onClick={() => updateSetting(
+                  'dailyCourseNotificationsEnabled',
+                  !settings.dailyCourseNotificationsEnabled,
+                )}
+              >
+                <span aria-hidden="true" />
+              </button>
+            </div>
           </section>
 
           <section className="panel settings-actions">
@@ -2563,11 +2558,29 @@ function App() {
               {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />}
               保存设置
             </button>
-            <button type="button" className="secondary" onClick={openDesktopWidget} disabled={settingsSaving || !!loading}>
-              {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <CalendarDays size={17} />}
-              打开课程小组件
+            <button type="button" className="secondary" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
+              {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+              获取/刷新个人课表
             </button>
             {settingsSaved ? <span>已保存</span> : null}
+          </section>
+
+          <section className="panel settings-widget">
+            <div className="panel-title">
+              <CalendarDays size={18} />
+              <h2>课程小组件</h2>
+            </div>
+            <p>控制桌面悬浮课程小组件。小组件只读取已保存在本机的个人课表。</p>
+            <div className="settings-widget-actions">
+              <button type="button" className="secondary" onClick={openDesktopWidget} disabled={settingsSaving || !!loading}>
+                {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <Eye size={17} />}
+                显示小组件
+              </button>
+              <button type="button" className="secondary" onClick={hideDesktopWidget} disabled={settingsSaving || !!loading}>
+                {loading === 'widget-hide' ? <Loader2 className="spin" size={17} /> : <EyeOff size={17} />}
+                隐藏小组件
+              </button>
+            </div>
           </section>
 
           <section className="panel settings-actions settings-local-data">
@@ -2626,6 +2639,7 @@ function App() {
               </a>
             </div>
           </section>
+          </div>
         </section>
           ) : null}
         </section>

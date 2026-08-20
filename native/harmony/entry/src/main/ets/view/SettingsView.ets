@@ -4,6 +4,7 @@ import { AppMeta } from '../common/AppMeta';
 import { AppTheme } from '../common/AppTheme';
 import { AdaptiveLayoutPolicy } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
+import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { PrivacyPolicyView } from './PrivacyPolicyView';
 
 @ComponentV2
@@ -167,6 +168,48 @@ export struct SettingsView {
         (value: string): void => {
           this.model.termStartDate = value;
         })
+
+      Blank().height(7)
+      Button('按当前日期自动检测')
+        .type(ButtonType.Normal)
+        .stateEffect(true)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.primary())
+        .borderRadius(6)
+        .border({ width: 1, color: AppTheme.primary() })
+        .backgroundColor(AppTheme.surface())
+        .width('100%')
+        .height(36)
+        .enabled(!this.model.isSampleMode())
+        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+        .onClick(() => {
+          const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
+          this.model.termID = suggested.termID;
+          this.model.termStartDate = suggested.termStartDate;
+        })
+      if (SemesterLogic.matchesCurrentPeriod(this.model.termID, this.model.termStartDate)) {
+        Text('✓ 与当前学期一致')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.primary())
+          .width('100%')
+          .padding({ left: 2, right: 2, top: 7 })
+      } else if (SemesterLogic.isValidTermID(this.model.termID) &&
+        SemesterLogic.isValidTermStartDate(this.model.termStartDate)) {
+        Text('当前设置与检测结果不同')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.accent())
+          .width('100%')
+          .padding({ left: 2, right: 2, top: 7 })
+      }
+      Text('获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。')
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .lineHeight(17)
+        .width('100%')
+        .padding({ left: 2, right: 2, top: 7 })
 
       Text('默认校区')
         .fontSize(13)
