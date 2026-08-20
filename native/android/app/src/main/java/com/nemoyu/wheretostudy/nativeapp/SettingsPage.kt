@@ -108,6 +108,40 @@ class SettingsPage(
         }
         val termID = field("学期编号", preferences.termID, false)
         val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
+        val termStatus = TextView(activity).apply {
+            textSize = 13f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(activity.dp(2), activity.dp(7), activity.dp(2), 0)
+        }
+        fun updateTermStatus() {
+            val termId = termID.text.toString().trim()
+            val startDate = termStartDate.text.toString().trim()
+            when {
+                SemesterLogic.termMatchesCurrentPeriod(termId, startDate) -> {
+                    termStatus.text = "✓ 与当前学期一致"
+                    termStatus.setTextColor(Palette.primary)
+                    termStatus.visibility = View.VISIBLE
+                }
+                SemesterLogic.isValidTermId(termId) &&
+                    SemesterLogic.isValidTermStartDate(startDate) -> {
+                    termStatus.text = "当前设置与检测结果不同"
+                    termStatus.setTextColor(Palette.muted)
+                    termStatus.visibility = View.VISIBLE
+                }
+                else -> termStatus.visibility = View.GONE
+            }
+        }
+        val termWatcher = object : TextWatcher {
+            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
+
+            override fun afterTextChanged(value: Editable?) {
+                updateTermStatus()
+            }
+        }
+        termID.addTextChangedListener(termWatcher)
+        termStartDate.addTextChangedListener(termWatcher)
         fun updatePasswordStatus() {
             val preservesSavedPassword = hasPersistedPassword &&
                 persistedAccount == account.text.toString().trim()
@@ -130,6 +164,7 @@ class SettingsPage(
             override fun afterTextChanged(value: Editable?) = Unit
         })
         updatePasswordStatus()
+        updateTermStatus()
         addView(account)
         addView(spacer(activity, compactGap))
         addView(password)
@@ -138,6 +173,40 @@ class SettingsPage(
         addView(termID)
         addView(spacer(activity, compactGap))
         addView(termStartDate)
+        addView(spacer(activity, compactGap))
+        addView(TextView(activity).apply {
+            text = "按当前日期自动检测"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(Palette.primaryText)
+            setTypeface(typeface, Typeface.BOLD)
+            background = roundedBackground(
+                activity,
+                Palette.surface,
+                Palette.primary,
+                radius = 6,
+            )
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(UiMetrics.controlHeightDp),
+            )
+            setOnClickListener {
+                activity.performControlHaptic(it)
+                val suggested = SemesterLogic.suggestTermForDate()
+                termID.setText(suggested.termId)
+                termStartDate.setText(suggested.termStartDate)
+            }
+        })
+        addView(termStatus)
+        addView(spacer(activity, compactGap))
+        addView(TextView(activity).apply {
+            text = "获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。"
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setLineSpacing(0f, 1.1f)
+        })
         addView(spacer(activity, if (isCompact) 10 else 16))
         addView(TextView(activity).apply {
             text = "默认校区"

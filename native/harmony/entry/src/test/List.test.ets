@@ -1,5 +1,6 @@
 // 本地测试聚合入口（模板默认入口），串行运行全部测试套件。
 import strictDatesTest from './StrictDates.test';
+import semesterLogicTest from './SemesterLogic.test';
 import scheduleLogicTest from './ScheduleLogic.test';
 import sjdEncodingTest from './SjdEncoding.test';
 import parsersContractTest from './ParsersContract.test';
@@ -11,6 +12,7 @@ import robustnessTest from './Robustness.test';
 
 export default function testsuite() {
   strictDatesTest();
+  semesterLogicTest();
   scheduleLogicTest();
   sjdEncodingTest();
   parsersContractTest();

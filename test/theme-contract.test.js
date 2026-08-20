@@ -142,11 +142,12 @@ test('component styles use semantic theme tokens instead of fixed colors', () =>
 })
 
 test('Windows workspace follows the native Apple layout metrics', () => {
-  assert.match(appCss, /\.app-frame\s*\{[^}]*grid-template-columns:\s*230px minmax\(0, 1fr\)/s)
-  assert.match(appCss, /\.topbar\s*\{[^}]*max-width:\s*1200px/s)
+  assert.match(appCss, /\.app-frame\s*\{[^}]*grid-template-columns:\s*clamp\(210px, 230px, 250px\) minmax\(0, 1fr\)/s)
+  assert.match(appCss, /\.topbar\s*\{[^}]*justify-content:\s*space-between/s)
+  assert.doesNotMatch(appCss, /\.topbar\s*\{[^}]*max-width:\s*1200px/s)
   assert.match(appCss, /\.panel\s*\{[^}]*padding:\s*16px/s)
   assert.match(appCss, /\.panel,\s*\.summary-band\s*\{[^}]*border-radius:\s*8px/s)
-  assert.match(appCss, /\.app-nav\s*\{[^}]*grid-auto-rows:\s*36px/s)
+  assert.match(appCss, /\.app-nav\s*\{[^}]*grid-auto-rows:\s*32px/s)
   assert.match(appCss, /h1\s*\{[^}]*font-size:\s*34px/s)
   assert.match(appCss, /\.settings-layout\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
 })

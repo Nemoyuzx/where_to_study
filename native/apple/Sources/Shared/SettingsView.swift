@@ -222,6 +222,20 @@ struct SettingsView: View {
                         dismissKeyboard()
                     }
                     .accessibilityIdentifier("field.term-start-date")
+                Button {
+                    AppHaptics.impact()
+                    applySuggestedTerm()
+                } label: {
+                    Label("按当前日期自动检测", systemImage: "calendar.badge.clock")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isSampleMode)
+                .accessibilityIdentifier("action.detect-term")
+                termConsistencyIndicator
+                Text("获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
                 Picker(
                     "默认校区",
                     selection: Binding(
@@ -319,6 +333,29 @@ struct SettingsView: View {
                 .disabled(model.isSampleMode)
             }
         }
+    }
+
+    @ViewBuilder
+    private var termConsistencyIndicator: some View {
+        if SemesterLogic.matchesCurrentPeriod(
+            termID: model.termID,
+            termStartDate: model.termStartDate
+        ) {
+            Label("✓ 与当前学期一致", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(AppTheme.primary)
+        } else if SemesterLogic.isValidTermID(model.termID),
+                  SemesterLogic.isValidTermStartDate(model.termStartDate) {
+            Label("当前设置与检测结果不同", systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryText)
+        }
+    }
+
+    private func applySuggestedTerm() {
+        let suggested = SemesterLogic.suggestTerm()
+        model.termID = suggested.termID
+        model.termStartDate = suggested.termStartDate
     }
 
     private func dismissKeyboard() {

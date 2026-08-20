@@ -16,7 +16,7 @@ export const FALLBACK_SLOTS = [
 ]
 
 export const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-export const CALENDAR_WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
+export const CALENDAR_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 export const CALENDAR_VIEWS = [
   { id: 'day', label: '日' },
   { id: 'week', label: '周' },
@@ -270,22 +270,22 @@ export function expandedMonthGridMetrics(
   }
 }
 
-export function startOfWeekSunday(dateString) {
+export function startOfWeekMonday(dateString) {
   const date = dateFromString(dateString)
-  date.setDate(date.getDate() - date.getDay())
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7))
   return localDateString(date)
 }
 
 export function buildMonthDays(dateString) {
   const date = dateFromString(dateString)
   const first = new Date(date.getFullYear(), date.getMonth(), 1)
-  first.setDate(first.getDate() - first.getDay())
+  first.setDate(first.getDate() - ((first.getDay() + 6) % 7))
   return Array.from({ length: 42 }, (_, index) => localDateString(new Date(first.getFullYear(), first.getMonth(), first.getDate() + index)))
 }
 
 export function buildMiniMonthDays(year, monthIndex) {
   const first = new Date(year, monthIndex, 1)
-  first.setDate(first.getDate() - first.getDay())
+  first.setDate(first.getDate() - ((first.getDay() + 6) % 7))
   return Array.from({ length: 42 }, (_, index) => localDateString(new Date(first.getFullYear(), first.getMonth(), first.getDate() + index)))
 }
 

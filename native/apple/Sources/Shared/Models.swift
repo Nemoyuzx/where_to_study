@@ -269,6 +269,91 @@ enum ScheduleLogic {
     }
 }
 
+// ---------- Term (semester) auto-detection ----------
+
+// Beijing University of Posts and Telecommunications academic calendar:
+// - Spring semester (term 2): starts early March, ends mid July
+// - Fall semester (term 1): starts early September, ends mid January
+enum SemesterLogic {
+    private static let springMonths = [2, 3, 4, 5, 6, 7]
+
+    /// The yyyy-MM-dd date string of the Monday of the week that contains the
+    /// given calendar date, using the app-wide Shanghai calendar convention.
+    static func mondayOfWeekContaining(
+        year: Int,
+        month: Int,
+        day: Int,
+        calendar: Calendar = .shanghai
+    ) -> String? {
+        guard let date = calendar.date(
+            from: DateComponents(timeZone: calendar.timeZone, year: year, month: month, day: day)
+        ) else { return nil }
+        let daysSinceMonday = (calendar.component(.weekday, from: date) + 5) % 7
+        guard let monday = calendar.date(byAdding: .day, value: -daysSinceMonday, to: date) else {
+            return nil
+        }
+        return StrictContractDateParser.string(from: monday, calendar: calendar)
+    }
+
+    /// Suggest the current term id and term start date based on the calendar
+    /// date. Uses the standard BUPT schedule pattern (spring starts around
+    /// March 1, fall around September 1); the authoritative values come back
+    /// in the schedule response and are applied automatically after a
+    /// successful fetch, so this is only a convenience suggestion.
+    static func suggestTerm(
+        for date: Date = .now,
+        calendar: Calendar = .shanghai
+    ) -> (termID: String, termStartDate: String) {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        if springMonths.contains(month) {
+            // Spring semester starts around March 1-3; the week of March 2 is a
+            // stable anchor (2026-03-02, 2025-02-24, 2024-02-26 all match).
+            return (
+                termID: "\(year - 1)-\(year)-2",
+                termStartDate: mondayOfWeekContaining(
+                    year: year, month: 3, day: 2, calendar: calendar
+                ) ?? ScheduleDefaults.termStartDate
+            )
+        }
+        // Fall semester starts around September 1.
+        // January still belongs to the fall term that started in the previous year.
+        let fallStartYear = month == 1 ? year - 1 : year
+        return (
+            termID: "\(fallStartYear)-\(fallStartYear + 1)-1",
+            termStartDate: mondayOfWeekContaining(
+                year: fallStartYear, month: 9, day: 1, calendar: calendar
+            ) ?? ScheduleDefaults.termStartDate
+        )
+    }
+
+    /// Validate a term id like "2025-2026-2" or "2025-2026-1".
+    static func isValidTermID(_ value: String) -> Bool {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .range(of: #"^\d{4}-\d{4}-[12]$"#, options: .regularExpression) != nil
+    }
+
+    /// Validate a term start date as yyyy-MM-dd that parses to a real date.
+    static func isValidTermStartDate(_ value: String) -> Bool {
+        StrictContractDateParser.date(
+            from: value.trimmingCharacters(in: .whitespacesAndNewlines)
+        ) != nil
+    }
+
+    /// True when the given term is the one suggested for the current period.
+    static func matchesCurrentPeriod(
+        termID: String,
+        termStartDate: String,
+        on date: Date = .now
+    ) -> Bool {
+        guard isValidTermID(termID) else { return false }
+        let suggested = suggestTerm(for: date)
+        return termID.trimmingCharacters(in: .whitespacesAndNewlines) == suggested.termID
+            && termStartDate.trimmingCharacters(in: .whitespacesAndNewlines) == suggested.termStartDate
+    }
+}
+
 extension Collection {
     subscript(safe index: Index) -> Element? {
         indices.contains(index) ? self[index] : nil

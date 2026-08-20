@@ -970,6 +970,106 @@ final class ScheduleLogicTests: XCTestCase {
     }
 }
 
+final class SemesterLogicTests: XCTestCase {
+    private func shanghaiDate(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        Calendar.shanghai.date(from: DateComponents(year: year, month: month, day: day))!
+    }
+
+    func testMondayOfWeekContainingAnchorsSpringAndFallStartWeeks() {
+        XCTAssertEqual(
+            SemesterLogic.mondayOfWeekContaining(year: 2026, month: 3, day: 2),
+            "2026-03-02"
+        )
+        XCTAssertEqual(
+            SemesterLogic.mondayOfWeekContaining(year: 2025, month: 3, day: 2),
+            "2025-02-24"
+        )
+        XCTAssertEqual(
+            SemesterLogic.mondayOfWeekContaining(year: 2024, month: 3, day: 2),
+            "2024-02-26"
+        )
+        XCTAssertEqual(
+            SemesterLogic.mondayOfWeekContaining(year: 2026, month: 9, day: 1),
+            "2026-08-31"
+        )
+        XCTAssertEqual(
+            SemesterLogic.mondayOfWeekContaining(year: 2025, month: 9, day: 1),
+            "2025-09-01"
+        )
+    }
+
+    func testSuggestTermForSpringMonths() {
+        let start = SemesterLogic.suggestTerm(for: shanghaiDate(2026, 3, 2))
+        XCTAssertEqual(start.termID, "2025-2026-2")
+        XCTAssertEqual(start.termStartDate, "2026-03-02")
+
+        let lateSpring = SemesterLogic.suggestTerm(for: shanghaiDate(2026, 7, 31))
+        XCTAssertEqual(lateSpring.termID, "2025-2026-2")
+        XCTAssertEqual(lateSpring.termStartDate, "2026-03-02")
+    }
+
+    func testSuggestTermForFallMonths() {
+        let start = SemesterLogic.suggestTerm(for: shanghaiDate(2026, 9, 1))
+        XCTAssertEqual(start.termID, "2026-2027-1")
+        XCTAssertEqual(start.termStartDate, "2026-08-31")
+
+        let lateFall = SemesterLogic.suggestTerm(for: shanghaiDate(2026, 12, 31))
+        XCTAssertEqual(lateFall.termID, "2026-2027-1")
+        XCTAssertEqual(lateFall.termStartDate, "2026-08-31")
+    }
+
+    func testSuggestTermForJanuaryBelongsToPreviousYearsFall() {
+        let suggested = SemesterLogic.suggestTerm(for: shanghaiDate(2026, 1, 1))
+        XCTAssertEqual(suggested.termID, "2025-2026-1")
+        XCTAssertEqual(suggested.termStartDate, "2025-09-01")
+    }
+
+    func testValidTermIDAcceptsStandardAndRejectsMalformed() {
+        XCTAssertTrue(SemesterLogic.isValidTermID("2025-2026-2"))
+        XCTAssertTrue(SemesterLogic.isValidTermID("2025-2026-1"))
+        XCTAssertTrue(SemesterLogic.isValidTermID(" 2025-2026-2 "))
+        for value in ["2025-2026-3", "2025-2026", "20252026-2", "25-26-2", "2025-2026-0", ""] {
+            XCTAssertFalse(SemesterLogic.isValidTermID(value), value)
+        }
+    }
+
+    func testValidTermStartDateRejectsImpossibleDates() {
+        XCTAssertTrue(SemesterLogic.isValidTermStartDate("2026-03-02"))
+        XCTAssertTrue(SemesterLogic.isValidTermStartDate("2024-02-29"))
+        XCTAssertTrue(SemesterLogic.isValidTermStartDate(" 2026-03-02 "))
+        for value in [
+            "2026-02-30", "2025-02-29", "2026-13-01", "2026-00-01",
+            "2026-03-2", "20260302", "",
+        ] {
+            XCTAssertFalse(SemesterLogic.isValidTermStartDate(value), value)
+        }
+    }
+
+    func testMatchesCurrentPeriodComparesAgainstSuggestion() {
+        let now = shanghaiDate(2026, 3, 2)
+        XCTAssertTrue(SemesterLogic.matchesCurrentPeriod(
+            termID: "2025-2026-2",
+            termStartDate: "2026-03-02",
+            on: now
+        ))
+        XCTAssertFalse(SemesterLogic.matchesCurrentPeriod(
+            termID: "2025-2026-1",
+            termStartDate: "2025-09-01",
+            on: now
+        ))
+        XCTAssertFalse(SemesterLogic.matchesCurrentPeriod(
+            termID: "not-a-term",
+            termStartDate: "2026-03-02",
+            on: now
+        ))
+        XCTAssertFalse(SemesterLogic.matchesCurrentPeriod(
+            termID: "2025-2026-2",
+            termStartDate: "not-a-date",
+            on: now
+        ))
+    }
+}
+
 private struct StubSJDHTTPTransport: SJDHTTPTransport {
     let data: Data
     let declaredContentLength: Int

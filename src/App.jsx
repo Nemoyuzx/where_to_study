@@ -72,7 +72,7 @@ import {
   shanghaiDateString,
   shiftDate,
   slotsToRanges,
-  startOfWeekSunday,
+  startOfWeekMonday,
   summarizeMonthEntries,
   yearCourseOpacity,
 } from './planner-domain.js'
@@ -852,7 +852,7 @@ function App() {
     const todayVisible = calendarView === 'day'
       ? calendarDate === todayDate
       : calendarView === 'week'
-        && startOfWeekSunday(calendarDate) === startOfWeekSunday(todayDate)
+        && startOfWeekMonday(calendarDate) === startOfWeekMonday(todayDate)
     if (activePage !== 'calendar' || !todayVisible) {
       return undefined
     }
@@ -934,7 +934,7 @@ function App() {
   const visibleCalendarDays = useMemo(() => {
     if (calendarView === 'day') return [calendarDate]
     if (calendarView === 'week') {
-      const start = startOfWeekSunday(calendarDate)
+      const start = startOfWeekMonday(calendarDate)
       return Array.from({ length: 7 }, (_, index) => addDays(start, index))
     }
     if (calendarView === 'month') return buildMonthDays(calendarDate)
@@ -2129,7 +2129,7 @@ function App() {
                           aria-label={`${date.getMonth() + 1}月${date.getDate()}日，${dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}`}
                           onClick={() => chooseCalendarDate(dateString)}
                         >
-                          <span>{CALENDAR_WEEKDAYS[date.getDay()]}</span>
+                          <span>{CALENDAR_WEEKDAYS[(date.getDay() + 6) % 7]}</span>
                           <strong data-mobile-day={date.getDate()}>{date.getMonth() + 1}/{date.getDate()}</strong>
                           <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}</small>
                           {dayState.dayCourses.length ? (
