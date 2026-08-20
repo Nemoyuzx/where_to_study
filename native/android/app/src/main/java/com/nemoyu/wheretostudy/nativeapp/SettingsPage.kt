@@ -65,7 +65,12 @@ class SettingsPage(
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.TOP
-                    addView(accountSurface(), LinearLayout.LayoutParams(
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(accountSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(semesterSurface())
+                    }, LinearLayout.LayoutParams(
                         0,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         1f,
@@ -74,17 +79,23 @@ class SettingsPage(
                         orientation = LinearLayout.VERTICAL
                         addView(notificationSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(widgetSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(localDataSurface())
                     }, LinearLayout.LayoutParams(
                         0,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
-                        1f,
+                        2f,
                     ).apply { marginStart = activity.dp(8) })
                 })
             } else {
                 addView(accountSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(semesterSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(notificationSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(widgetSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(localDataSurface())
             }
@@ -106,42 +117,6 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(activity.dp(2), activity.dp(7), activity.dp(2), 0)
         }
-        val termID = field("学期编号", preferences.termID, false)
-        val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
-        val termStatus = TextView(activity).apply {
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(activity.dp(2), activity.dp(7), activity.dp(2), 0)
-        }
-        fun updateTermStatus() {
-            val termId = termID.text.toString().trim()
-            val startDate = termStartDate.text.toString().trim()
-            when {
-                SemesterLogic.termMatchesCurrentPeriod(termId, startDate) -> {
-                    termStatus.text = "✓ 与当前学期一致"
-                    termStatus.setTextColor(Palette.primary)
-                    termStatus.visibility = View.VISIBLE
-                }
-                SemesterLogic.isValidTermId(termId) &&
-                    SemesterLogic.isValidTermStartDate(startDate) -> {
-                    termStatus.text = "当前设置与检测结果不同"
-                    termStatus.setTextColor(Palette.muted)
-                    termStatus.visibility = View.VISIBLE
-                }
-                else -> termStatus.visibility = View.GONE
-            }
-        }
-        val termWatcher = object : TextWatcher {
-            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
-
-            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = Unit
-
-            override fun afterTextChanged(value: Editable?) {
-                updateTermStatus()
-            }
-        }
-        termID.addTextChangedListener(termWatcher)
-        termStartDate.addTextChangedListener(termWatcher)
         fun updatePasswordStatus() {
             val preservesSavedPassword = hasPersistedPassword &&
                 persistedAccount == account.text.toString().trim()
@@ -164,49 +139,10 @@ class SettingsPage(
             override fun afterTextChanged(value: Editable?) = Unit
         })
         updatePasswordStatus()
-        updateTermStatus()
         addView(account)
         addView(spacer(activity, compactGap))
         addView(password)
         addView(passwordStatus)
-        addView(spacer(activity, compactGap))
-        addView(termID)
-        addView(spacer(activity, compactGap))
-        addView(termStartDate)
-        addView(spacer(activity, compactGap))
-        addView(TextView(activity).apply {
-            text = "按当前日期自动检测"
-            textSize = 15f
-            gravity = Gravity.CENTER
-            setTextColor(Palette.primaryText)
-            setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(
-                activity,
-                Palette.surface,
-                Palette.primary,
-                radius = 6,
-            )
-            isClickable = true
-            isFocusable = true
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(UiMetrics.controlHeightDp),
-            )
-            setOnClickListener {
-                activity.performControlHaptic(it)
-                val suggested = SemesterLogic.suggestTermForDate()
-                termID.setText(suggested.termId)
-                termStartDate.setText(suggested.termStartDate)
-            }
-        })
-        addView(termStatus)
-        addView(spacer(activity, compactGap))
-        addView(TextView(activity).apply {
-            text = "获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。"
-            textSize = 12f
-            setTextColor(Palette.muted)
-            setLineSpacing(0f, 1.1f)
-        })
         addView(spacer(activity, if (isCompact) 10 else 16))
         addView(TextView(activity).apply {
             text = "默认校区"
@@ -265,9 +201,6 @@ class SettingsPage(
         fun saveSettings(): Result<Credentials> {
             var credentialTransactionStarted = false
             val result = runCatching {
-                val resolvedTermStartDate = SettingsInputLogic.resolveTermStartDate(
-                    termStartDate.text.toString(),
-                )
                 val savedCredentials = credentialStore.load()
                 val credentials = CredentialUpdateLogic.resolve(
                     saved = savedCredentials,
@@ -282,9 +215,6 @@ class SettingsPage(
                     credentials.also {
                         credentialStore.save(credentials)
                         preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
-                        preferences.termID = termID.text.toString().trim()
-                            .ifEmpty { AppMetadata.defaultTermID }
-                        preferences.termStartDate = resolvedTermStartDate
                     }
                 }
                 if (accountChanged) {
@@ -423,6 +353,68 @@ class SettingsPage(
         })
     }
 
+    private fun semesterSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        applyCompactSurfacePadding()
+        addView(sectionTitle(activity, "学期设置"))
+        val termID = field("学期编号", preferences.termID, false)
+        val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
+        val autoDetect = Switch(activity).apply {
+            text = "自动检测当前学期"
+            textSize = 15f
+            setTextColor(Palette.text)
+            isChecked = preferences.automaticTermDetectionEnabled
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
+            setPadding(0, 0, 0, 0)
+        }
+        fun updateManualFields() {
+            val enabled = !autoDetect.isChecked
+            termID.isEnabled = enabled
+            termStartDate.isEnabled = enabled
+            termID.alpha = if (enabled) 1f else 0.62f
+            termStartDate.alpha = if (enabled) 1f else 0.62f
+        }
+        addView(autoDetect)
+        addView(spacer(activity, compactGap))
+        addView(termID)
+        addView(spacer(activity, compactGap))
+        addView(termStartDate)
+        addView(TextView(activity).apply {
+            text = if (autoDetect.isChecked) {
+                "获取/刷新课表后会自动应用教务返回的学期与开学日期。"
+            } else {
+                "关闭自动检测后，将使用手动填写的学期信息。"
+            }
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setPadding(0, activity.dp(8), 0, activity.dp(if (isCompact) 8 else 12))
+            autoDetect.setOnCheckedChangeListener { button, checked ->
+                activity.performControlHaptic(button)
+                updateManualFields()
+                text = if (checked) {
+                    "获取/刷新课表后会自动应用教务返回的学期与开学日期。"
+                } else {
+                    "关闭自动检测后，将使用手动填写的学期信息。"
+                }
+            }
+        })
+        updateManualFields()
+        addView(settingsActionButton("保存学期设置", primary = false) {
+            runCatching {
+                val resolvedStartDate = SettingsInputLogic.resolveTermStartDate(
+                    termStartDate.text.toString(),
+                )
+                preferences.automaticTermDetectionEnabled = autoDetect.isChecked
+                preferences.termID = termID.text.toString().trim()
+                    .ifEmpty { AppMetadata.defaultTermID }
+                preferences.termStartDate = resolvedStartDate
+            }.onSuccess {
+                showSavedToast()
+            }.onFailure { error ->
+                Toast.makeText(activity, error.message ?: "无法保存学期设置", Toast.LENGTH_LONG).show()
+            }
+        })
+    }
+
     private fun notificationSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "课程提醒"))
@@ -455,6 +447,96 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(4), 0, 0)
         })
+    }
+
+    private fun widgetSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        applyCompactSurfacePadding()
+        addView(sectionTitle(activity, "桌面小组件"))
+        addView(Switch(activity).apply {
+            text = "显示课程地点"
+            textSize = 15f
+            setTextColor(Palette.text)
+            isChecked = preferences.widgetShowsLocation
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
+            setPadding(0, 0, 0, 0)
+            setOnCheckedChangeListener { button, checked ->
+                activity.performControlHaptic(button)
+                preferences.widgetShowsLocation = checked
+                TodayCourseWidgetProvider.refresh(activity)
+            }
+        })
+        addView(TextView(activity).apply {
+            text = "最多显示课程"
+            textSize = 13f
+            setTextColor(Palette.muted)
+            setPadding(0, activity.dp(8), 0, activity.dp(5))
+        })
+        val labels = listOf("1 门", "2 门", "3 门")
+        addView(Spinner(activity).apply {
+            adapter = ArrayAdapter(
+                activity,
+                android.R.layout.simple_spinner_item,
+                labels,
+            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            setSelection(preferences.widgetCourseLimit - 1)
+            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            setPadding(activity.dp(12), 0, activity.dp(12), 0)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(UiMetrics.controlHeightDp),
+            )
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long,
+                ) {
+                    val limit = position + 1
+                    if (limit != preferences.widgetCourseLimit) {
+                        activity.performControlHaptic(view)
+                        preferences.widgetCourseLimit = limit
+                        TodayCourseWidgetProvider.refresh(activity)
+                    }
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+        })
+        addView(TextView(activity).apply {
+            text = "设置会同步到“今日课程”桌面小组件；无课时显示“今日无课”。"
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setPadding(0, activity.dp(8), 0, 0)
+        })
+    }
+
+    private fun settingsActionButton(
+        label: String,
+        primary: Boolean,
+        onClick: () -> Unit,
+    ): TextView = TextView(activity).apply {
+        text = label
+        textSize = 15f
+        gravity = Gravity.CENTER
+        setTextColor(if (primary) Palette.onPrimary else Palette.primaryText)
+        setTypeface(typeface, Typeface.BOLD)
+        background = roundedBackground(
+            activity,
+            if (primary) Palette.primaryFill else Palette.surface,
+            if (primary) Palette.primaryFill else Palette.primary,
+            radius = 6,
+        )
+        isClickable = true
+        isFocusable = true
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            activity.dp(UiMetrics.controlHeightDp),
+        )
+        setOnClickListener {
+            activity.performControlHaptic(it)
+            onClick()
+        }
     }
 
     private fun localDataSurface(): LinearLayout = surface(activity, showsBorder = false).apply {

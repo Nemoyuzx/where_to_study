@@ -25,10 +25,12 @@ struct SettingsView: View {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
                                 accountSurface
+                                semesterSurface
                             }
                             .frame(width: widths.leading, alignment: .top)
                             VStack(spacing: 16) {
                                 notificationSurface
+                                widgetSurface
                                 localDataSurface
                                 aboutSurface
                             }
@@ -37,7 +39,9 @@ struct SettingsView: View {
                     } else {
                         VStack(spacing: 16) {
                             accountSurface
+                            semesterSurface
                             notificationSurface
+                            widgetSurface
                             localDataSurface
                             aboutSurface
                         }
@@ -59,10 +63,12 @@ struct SettingsView: View {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
                                 accountSurface
+                                semesterSurface
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
                             VStack(spacing: 16) {
                                 notificationSurface
+                                widgetSurface
                                 localDataSurface
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
@@ -71,7 +77,9 @@ struct SettingsView: View {
                     } else {
                         VStack(spacing: 16) {
                             accountSurface
+                            semesterSurface
                             notificationSurface
+                            widgetSurface
                             localDataSurface
                             aboutSurface
                         }
@@ -176,6 +184,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier("action.open-privacy-policy")
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var accountSurface: some View {
@@ -199,43 +208,11 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .disabled(model.isSampleMode)
                     .focused($focusedAccountField, equals: .password)
-                    .submitLabel(.next)
-                    .onSubmit {
-                        focusedAccountField = .termID
-                    }
-                    .accessibilityIdentifier("field.password")
-                TextField("学期编号", text: $model.termID)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(model.isSampleMode)
-                    .focused($focusedAccountField, equals: .termID)
-                    .submitLabel(.next)
-                    .onSubmit {
-                        focusedAccountField = .termStartDate
-                    }
-                    .accessibilityIdentifier("field.term-id")
-                TextField("第一周周一（YYYY-MM-DD）", text: $model.termStartDate)
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(model.isSampleMode)
-                    .focused($focusedAccountField, equals: .termStartDate)
                     .submitLabel(.done)
                     .onSubmit {
                         dismissKeyboard()
                     }
-                    .accessibilityIdentifier("field.term-start-date")
-                Button {
-                    AppHaptics.impact()
-                    applySuggestedTerm()
-                } label: {
-                    Label("按当前日期自动检测", systemImage: "calendar.badge.clock")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(model.isSampleMode)
-                .accessibilityIdentifier("action.detect-term")
-                termConsistencyIndicator
-                Text("获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .accessibilityIdentifier("field.password")
                 Picker(
                     "默认校区",
                     selection: Binding(
@@ -283,6 +260,60 @@ struct SettingsView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var semesterSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("学期设置", systemImage: "calendar.badge.clock")
+                    .font(.headline)
+                Toggle(
+                    "自动检测当前学期",
+                    isOn: Binding(
+                        get: { model.automaticTermDetectionEnabled },
+                        set: { enabled in
+                            AppHaptics.selection()
+                            model.setAutomaticTermDetectionEnabled(enabled)
+                        }
+                    )
+                )
+                .toggleStyle(.switch)
+                .tint(AppTheme.primary)
+                .disabled(model.isSampleMode)
+                TextField("学期编号", text: $model.termID)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.isSampleMode || model.automaticTermDetectionEnabled)
+                    .focused($focusedAccountField, equals: .termID)
+                    .submitLabel(.next)
+                    .onSubmit { focusedAccountField = .termStartDate }
+                    .accessibilityIdentifier("field.term-id")
+                TextField("第一周周一（YYYY-MM-DD）", text: $model.termStartDate)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.isSampleMode || model.automaticTermDetectionEnabled)
+                    .focused($focusedAccountField, equals: .termStartDate)
+                    .submitLabel(.done)
+                    .onSubmit { dismissKeyboard() }
+                    .accessibilityIdentifier("field.term-start-date")
+                Text(
+                    model.automaticTermDetectionEnabled
+                        ? "获取/刷新课表后会自动应用教务返回的学期与开学日期。"
+                        : "已关闭自动检测，将使用上方手动填写的学期信息。"
+                )
+                .font(.callout)
+                .foregroundStyle(AppTheme.secondaryText)
+                Button {
+                    AppHaptics.impact()
+                    model.saveSettings()
+                } label: {
+                    Label("保存学期设置", systemImage: "checkmark")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isSampleMode)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var notificationSurface: some View {
@@ -300,6 +331,7 @@ struct SettingsView: View {
                         }
                     )
                 )
+                .toggleStyle(.switch)
                 .tint(AppTheme.primary)
                 .disabled(model.isSampleMode && !model.isReviewDemo)
                 Text("仅在当天有课时通知；课表更新或账号变更后会自动重排。")
@@ -312,6 +344,49 @@ struct SettingsView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var widgetSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("桌面小组件", systemImage: "rectangle.grid.1x2")
+                    .font(.headline)
+                Toggle(
+                    "显示课程地点",
+                    isOn: Binding(
+                        get: { model.widgetShowsLocation },
+                        set: { enabled in
+                            AppHaptics.selection()
+                            model.setWidgetShowsLocation(enabled)
+                        }
+                    )
+                )
+                .toggleStyle(.switch)
+                .tint(AppTheme.primary)
+                .disabled(model.isSampleMode)
+                Picker(
+                    "最多显示课程",
+                    selection: Binding(
+                        get: { model.widgetCourseLimit },
+                        set: { limit in
+                            AppHaptics.selection()
+                            model.setWidgetCourseLimit(limit)
+                        }
+                    )
+                ) {
+                    ForEach(1 ... 3, id: \.self) { count in
+                        Text("\(count) 门").tag(count)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(model.isSampleMode)
+                Text("设置会同步到 iPhone、iPad 与 Mac 的“今日课程”小组件；无课时显示“今日无课”。")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var localDataSurface: some View {
@@ -333,6 +408,7 @@ struct SettingsView: View {
                 .disabled(model.isSampleMode)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

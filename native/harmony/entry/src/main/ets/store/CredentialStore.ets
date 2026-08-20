@@ -39,6 +39,15 @@ export interface CredentialStoring {
   clear(): Promise<void>;
 }
 
+// ASSET update 仅接受可更新属性。ACCESSIBILITY 属于新增资产时的访问控制属性，
+// 不得放入 update attributes，否则系统会以参数错误（401）拒绝操作。
+export function credentialUpdateAttributes(credentials: Credentials): asset.AssetMap {
+  const map: asset.AssetMap = new Map();
+  const encoder: util.TextEncoder = new util.TextEncoder();
+  map.set(asset.Tag.SECRET, encoder.encodeInto(credentials.toJsonText()));
+  return map;
+}
+
 // ASSET 在条目不存在时报错码 24000002（201 表示调用方无权限）。
 const ASSET_NOT_FOUND: number = 24000002;
 
@@ -49,13 +58,6 @@ export class AssetCredentialStore implements CredentialStoring {
     const map: asset.AssetMap = new Map();
     const encoder: util.TextEncoder = new util.TextEncoder();
     map.set(asset.Tag.ALIAS, encoder.encodeInto(AssetCredentialStore.alias));
-    return map;
-  }
-
-  private static secretAttr(credentials: Credentials): asset.AssetMap {
-    const map: asset.AssetMap = new Map();
-    const encoder: util.TextEncoder = new util.TextEncoder();
-    map.set(asset.Tag.SECRET, encoder.encodeInto(credentials.toJsonText()));
     return map;
   }
 
@@ -81,8 +83,7 @@ export class AssetCredentialStore implements CredentialStoring {
   }
 
   async save(credentials: Credentials): Promise<void> {
-    const updateAttr: asset.AssetMap = AssetCredentialStore.secretAttr(credentials);
-    updateAttr.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_FIRST_UNLOCKED);
+    const updateAttr: asset.AssetMap = credentialUpdateAttributes(credentials);
     try {
       await asset.update(AssetCredentialStore.aliasAttr(), updateAttr);
       return;

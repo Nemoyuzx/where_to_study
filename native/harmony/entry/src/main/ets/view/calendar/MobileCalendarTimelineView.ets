@@ -200,17 +200,17 @@ export struct MobileCalendarTimelineView {
             .position({ x: 0, y: MobileCalendarTimelineLayout.yPosition(hour * 60) })
         }, (hour: number) => 'grid-hour.' + hour.toString())
 
-        // 课程节次边界使用虚线，与 Android 的 DashPathEffect(4, 4) 对齐。
-        ForEach(CalendarTimelineLogic.courseBoundaryMinutes(), (minute: number) => {
+        // 课程节次边界使用更清晰的虚线，避免在深色模式和周视图窄列中消失。
+        ForEach(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes(), (minute: number) => {
           Column()
             .width(this.viewportWidth)
-            .height(1)
+            .height(2)
             .border({
-              width: { top: 0.7 },
+              width: { top: 1.2 },
               color: AppTheme.border(),
               style: BorderStyle.Dashed
             })
-            .opacity(0.24)
+            .opacity(0.56)
             .position({ x: 0, y: MobileCalendarTimelineLayout.yPosition(minute) })
         }, (minute: number) => 'grid-slot.' + minute.toString())
 
@@ -306,7 +306,7 @@ export struct MobileCalendarTimelineView {
       .backgroundColor(AppTheme.surface())
       .border({ width: 0.5, color: AppTheme.border() })
       .position({
-        x: 66,
+        x: 8,
         y: this.slotGuideY(slot)
       })
   }

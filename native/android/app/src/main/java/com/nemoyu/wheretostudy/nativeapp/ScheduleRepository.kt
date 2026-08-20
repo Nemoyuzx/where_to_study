@@ -15,6 +15,7 @@ class ScheduleRepository(
     private val client: SjdScheduleClient = SjdScheduleClient(),
     private val store: ScheduleStore = ScheduleStore(context.applicationContext),
 ) {
+    private val appContext = context.applicationContext
     private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val refreshLock = Any()
@@ -52,16 +53,23 @@ class ScheduleRepository(
                             preferences.termStartDate,
                         )
                     }
-                    client.fetch(request.first, request.second, request.third).also { fetched ->
+                    client.fetch(request.first, request.second, request.third).let { fetched ->
+                        val resolved = if (preferences.automaticTermDetectionEnabled) {
+                            fetched
+                        } else {
+                            fetched.copy(termID = request.second, termStartDate = request.third)
+                        }
                         LocalDataCoordinator.withCurrent(refreshGeneration) {
                             if (closed.get() || !isActiveRefresh(refreshToken)) {
                                 throw ScheduleClientException("个人课表获取服务已关闭。")
                             }
-                            store.save(fetched)
-                            schedule = fetched
-                            preferences.termID = fetched.termID
-                            preferences.termStartDate = fetched.termStartDate
+                            store.save(resolved)
+                            schedule = resolved
+                            runCatching { TodayCourseWidgetProvider.refresh(appContext) }
+                            preferences.termID = resolved.termID
+                            preferences.termStartDate = resolved.termStartDate
                         }
+                        resolved
                     }
                 }
                 mainHandler.post {
@@ -93,6 +101,7 @@ class ScheduleRepository(
     internal fun clearLocalDataCoordinated() {
         store.clear()
         schedule = null
+        runCatching { TodayCourseWidgetProvider.refresh(appContext) }
         synchronized(refreshLock) { activeRefreshToken = null }
     }
 

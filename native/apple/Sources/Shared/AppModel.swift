@@ -1,5 +1,5 @@
 import Foundation
-#if os(macOS)
+#if canImport(WidgetKit)
 import WidgetKit
 #endif
 
@@ -141,6 +141,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var hasSavedPassword = false
     @Published var termID: String
     @Published var termStartDate: String
+    @Published private(set) var automaticTermDetectionEnabled: Bool
     @Published var campusID: String
     @Published private(set) var queryCampusID: String
     @Published var selectedSlots = Set(SlotMetadata.defaults.indices)
@@ -158,6 +159,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var holidayStatusByYear = [Int: String]()
     @Published private(set) var dailyCourseNotificationsEnabled = false
     @Published private(set) var dailyCourseNotificationStatusMessage = ""
+    @Published private(set) var widgetShowsLocation: Bool
+    @Published private(set) var widgetCourseLimit: Int
 
     let slots = SlotMetadata.defaults
     @Published private(set) var runtimeMode: AppRuntimeMode
@@ -219,10 +222,14 @@ final class AppModel: ObservableObject {
         self.defaults = defaults
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
+        automaticTermDetectionEnabled = defaults.object(forKey: Self.automaticTermDetectionKey) as? Bool ?? true
         let savedCampusID = defaults.string(forKey: "campusID") ?? "01"
         campusID = savedCampusID
         queryCampusID = savedCampusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
+        widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
+        let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
+        widgetCourseLimit = savedWidgetCourseLimit == 0 ? 3 : min(max(savedWidgetCourseLimit, 1), 3)
         loadCredentials()
         loadSchedule()
         loadClassrooms()
@@ -401,9 +408,13 @@ final class AppModel: ObservableObject {
         dailyCourseNotificationStatusMessage = ""
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
+        automaticTermDetectionEnabled = defaults.object(forKey: Self.automaticTermDetectionKey) as? Bool ?? true
         campusID = defaults.string(forKey: "campusID") ?? "01"
         queryCampusID = campusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
+        widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
+        let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
+        widgetCourseLimit = savedWidgetCourseLimit == 0 ? 3 : min(max(savedWidgetCourseLimit, 1), 3)
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         loadCredentials()
@@ -474,6 +485,7 @@ final class AppModel: ObservableObject {
             defaults.set(campusID, forKey: "campusID")
             defaults.set(termID, forKey: "termID")
             defaults.set(termStartDate, forKey: "termStartDate")
+            defaults.set(automaticTermDetectionEnabled, forKey: Self.automaticTermDetectionKey)
             setStatusMessage("设置已保存", autoDismiss: true)
             return true
         } catch {
@@ -503,6 +515,31 @@ final class AppModel: ObservableObject {
             dailyCourseNotificationStatusMessage = "每日课程摘要已关闭"
             cancelDailyCourseNotifications()
         }
+    }
+
+    func setAutomaticTermDetectionEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        automaticTermDetectionEnabled = enabled
+        defaults.set(enabled, forKey: Self.automaticTermDetectionKey)
+        if enabled, let schedule {
+            termID = schedule.termID
+            termStartDate = schedule.termStartDate
+        }
+    }
+
+    func setWidgetShowsLocation(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        widgetShowsLocation = enabled
+        defaults.set(enabled, forKey: Self.widgetShowsLocationKey)
+        synchronizeWidgetSchedule()
+    }
+
+    func setWidgetCourseLimit(_ limit: Int) {
+        guard !isSampleMode else { return }
+        let normalized = min(max(limit, 1), 3)
+        widgetCourseLimit = normalized
+        defaults.set(normalized, forKey: Self.widgetCourseLimitKey)
+        synchronizeWidgetSchedule()
     }
 
     func refreshDailyCourseNotificationAuthorization() {
@@ -561,13 +598,20 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: "campusID")
         defaults.removeObject(forKey: "termID")
         defaults.removeObject(forKey: "termStartDate")
+        defaults.removeObject(forKey: Self.automaticTermDetectionKey)
+        defaults.removeObject(forKey: Self.widgetShowsLocationKey)
+        defaults.removeObject(forKey: Self.widgetCourseLimitKey)
         campusID = "01"
         queryCampusID = "01"
         termID = ScheduleDefaults.termID
         termStartDate = ScheduleDefaults.termStartDate
+        automaticTermDetectionEnabled = true
+        widgetShowsLocation = true
+        widgetCourseLimit = 3
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         synchronizeSelectedSlots()
+        synchronizeWidgetSchedule()
 
         statusMessage = failures.isEmpty
             ? "本地数据已清除"
@@ -601,6 +645,7 @@ final class AppModel: ObservableObject {
             return
         }
         let generation = localDataGeneration
+        let usesAutomaticTermDetection = automaticTermDetectionEnabled
 
         Task {
             defer {
@@ -613,18 +658,24 @@ final class AppModel: ObservableObject {
                     fallbackTermStartDate: fallbackTermStart
                 )
                 guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
-                try scheduleStore.save(fetched)
-                schedule = fetched
+                let resolvedSchedule = usesAutomaticTermDetection ? fetched : ScheduleSnapshot(
+                    termID: fallbackTermID,
+                    termStartDate: fallbackTermStart,
+                    fetchedAt: fetched.fetchedAt,
+                    courses: fetched.courses
+                )
+                try scheduleStore.save(resolvedSchedule)
+                schedule = resolvedSchedule
                 synchronizeWidgetSchedule()
                 calendarImportStatusMessage = ""
-                termID = fetched.termID
-                termStartDate = fetched.termStartDate
+                termID = resolvedSchedule.termID
+                termStartDate = resolvedSchedule.termStartDate
                 defaults.set(termID, forKey: "termID")
                 defaults.set(termStartDate, forKey: "termStartDate")
                 synchronizeSelectedSlots()
                 reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
                 setStatusMessage(
-                    "个人课表已更新，共 \(fetched.courses.count) 门课程",
+                    "个人课表已更新，共 \(resolvedSchedule.courses.count) 门课程",
                     autoDismiss: true
                 )
             } catch {
@@ -926,17 +977,25 @@ final class AppModel: ObservableObject {
     }
 
     private func synchronizeWidgetSchedule() {
-        #if os(macOS)
+        #if canImport(WidgetKit)
         let snapshot = schedule
+        let preferences = TodayCourseWidgetData.Preferences(
+            showsLocation: widgetShowsLocation,
+            courseLimit: widgetCourseLimit
+        )
         Task.detached(priority: .utility) {
-            Self.writeWidgetSchedule(snapshot)
+            Self.writeWidgetSchedule(snapshot, preferences: preferences)
         }
         #endif
     }
 
-    #if os(macOS)
-    nonisolated private static func writeWidgetSchedule(_ schedule: ScheduleSnapshot?) {
+    #if canImport(WidgetKit)
+    nonisolated private static func writeWidgetSchedule(
+        _ schedule: ScheduleSnapshot?,
+        preferences: TodayCourseWidgetData.Preferences
+    ) {
         guard !AppLaunchConfiguration.isXCTestRunning else { return }
+        try? TodayCourseWidgetData.save(preferences: preferences)
         if let schedule {
             try? TodayCourseWidgetData.save(schedule: schedule)
         } else {
@@ -1030,6 +1089,9 @@ final class AppModel: ObservableObject {
     }
 
     private static let dailyCourseNotificationsKey = DailyCourseNotificationSettings.enabledKey
+    private static let automaticTermDetectionKey = "automaticTermDetectionEnabled"
+    private static let widgetShowsLocationKey = "widgetShowsLocation"
+    private static let widgetCourseLimitKey = "widgetCourseLimit"
 }
 
 enum DailyRefreshLogic {

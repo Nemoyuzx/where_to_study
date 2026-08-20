@@ -593,6 +593,21 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertLessThan(opacities.last!, 1)
     }
 
+    #if os(macOS)
+    func testDesktopYearLayoutScalesToAvailableWindowHeight() {
+        let compact = TeachingCalendarLogic.desktopYearLayout(availableHeight: 480)
+        let expanded = TeachingCalendarLogic.desktopYearLayout(availableHeight: 900)
+
+        XCTAssertEqual(compact.totalHeight, 480, accuracy: 0.001)
+        XCTAssertEqual(expanded.totalHeight, 900, accuracy: 0.001)
+        XCTAssertLessThan(compact.monthHeight, expanded.monthHeight)
+        XCTAssertLessThan(compact.dayCellHeight, expanded.dayCellHeight)
+        XCTAssertLessThan(compact.monthTitleFontSize, expanded.monthTitleFontSize)
+        XCTAssertLessThanOrEqual(compact.selectionDiameter, compact.dayCellHeight)
+        XCTAssertLessThanOrEqual(expanded.selectionDiameter, expanded.dayCellHeight)
+    }
+    #endif
+
     func testCalendarNavigationMovesByVisiblePeriod() throws {
         let calendar = Calendar.shanghai
         let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 6, day: 15)))

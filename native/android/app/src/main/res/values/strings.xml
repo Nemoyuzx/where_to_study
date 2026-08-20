@@ -15,4 +15,10 @@
     <string name="credential_security_note">账号和密码仅保存于本机，并由 Android Keystore 保护。</string>
     <string name="daily_course_notification_toggle">每天 07:30 发送当日课程摘要</string>
     <string name="daily_course_notification_description">仅在当天有课时通知；课表更新或账号变更后会自动重排。</string>
+    <string name="widget_today_course_name">今日课程</string>
+    <string name="widget_today_course_title">今日课程</string>
+    <string name="widget_today_course_description">在桌面查看今天的课程时间与教室。</string>
+    <string name="widget_empty_course_message">今日无课</string>
+    <string name="widget_course_count_format">%1$d 门</string>
+    <string name="widget_more_courses_format">另有 %1$d 门课程</string>
 </resources>

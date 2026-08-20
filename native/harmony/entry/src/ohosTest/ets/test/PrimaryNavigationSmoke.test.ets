@@ -91,14 +91,14 @@ export default function primaryNavigationSmokeTest() {
       expect(banner !== null).assertTrue();
       const sampleCourse: Component | null = await findText(driver, '数据挖掘');
       expect(sampleCourse !== null).assertTrue();
-      // 设置页示例模式说明与提醒开关
+      // 设置页本地安全说明与提醒开关
       const settingsTab: Component | null = await findText(driver, '设置');
       expect(settingsTab !== null).assertTrue();
       await settingsTab?.click();
       await driver.delayMs(1200);
-      const demoNote: Component | null = await findText(
-        driver, '内置示例模式已开启，不会连接教务服务或读写真实用户数据。');
-      expect(demoNote !== null).assertTrue();
+      const storageNote: Component | null = await findText(
+        driver, '账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。');
+      expect(storageNote !== null).assertTrue();
       const toggleLabel: Component | null = await findText(driver, '每天 07:30 发送当日课程摘要');
       expect(toggleLabel !== null).assertTrue();
       await toggleLabel?.click();

@@ -14,7 +14,7 @@ Where To Study is an independent, unofficial schedule and empty-classroom client
 6. On macOS, add the “今日课程” (Today’s Courses) widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path.
 7. Return to Settings and select “返回真实数据” (Return to live data) to leave sample mode.
 
-Sample mode uses only fictional courses, classrooms, and holiday data bundled with the app. It does not connect to the school service or access/modify Keychain credentials, live user caches, Calendar, or Notifications. On macOS it writes only the fictional schedule to the Widget App Group; leaving sample mode immediately restores the locally cached live schedule snapshot.
+Sample mode uses only fictional courses, classrooms, and holiday data bundled with the app. It does not connect to the school service or access/modify Keychain credentials, live user caches, Calendar, or Notifications. On iOS and macOS it writes only the fictional schedule to the Widget App Group; leaving sample mode immediately restores the locally cached live schedule snapshot.
 
 ## Live-data path
 

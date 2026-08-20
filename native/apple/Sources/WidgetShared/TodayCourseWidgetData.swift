@@ -3,6 +3,19 @@ import Foundation
 enum TodayCourseWidgetData {
     static let appGroupIdentifier = "group.com.nemoyu.wheretostudy.native"
     static let archiveFileName = "widget-schedule.json"
+    static let preferencesFileName = "widget-preferences.json"
+    static let emptyMessage = "今日无课"
+
+    struct Preferences: Codable, Equatable, Sendable {
+        let showsLocation: Bool
+        let courseLimit: Int
+
+        static let `default` = Preferences(showsLocation: true, courseLimit: 3)
+
+        var normalized: Preferences {
+            Preferences(showsLocation: showsLocation, courseLimit: min(max(courseLimit, 1), 3))
+        }
+    }
 
     struct Archive: Codable, Equatable, Sendable {
         let termStartDate: String
@@ -41,7 +54,7 @@ enum TodayCourseWidgetData {
         let data = try JSONEncoder().encode(archive)
         var saved = false
         var lastError: Error?
-        for fileURL in writableFileURLs() {
+        for fileURL in writableFileURLs(named: archiveFileName) {
             do {
                 try FileManager.default.createDirectory(
                     at: fileURL.deletingLastPathComponent(),
@@ -57,7 +70,7 @@ enum TodayCourseWidgetData {
     }
 
     static func load() -> Archive? {
-        for fileURL in readableFileURLs() {
+        for fileURL in readableFileURLs(named: archiveFileName) {
             guard
                 let data = try? Data(contentsOf: fileURL),
                 !data.isEmpty,
@@ -69,9 +82,41 @@ enum TodayCourseWidgetData {
     }
 
     static func clear() {
-        for fileURL in writableFileURLs() where FileManager.default.fileExists(atPath: fileURL.path) {
+        for fileURL in writableFileURLs(named: archiveFileName)
+        where FileManager.default.fileExists(atPath: fileURL.path) {
             try? FileManager.default.removeItem(at: fileURL)
         }
+    }
+
+    static func save(preferences: Preferences) throws {
+        let data = try JSONEncoder().encode(preferences.normalized)
+        var saved = false
+        var lastError: Error?
+        for fileURL in writableFileURLs(named: preferencesFileName) {
+            do {
+                try FileManager.default.createDirectory(
+                    at: fileURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try data.write(to: fileURL, options: .atomic)
+                saved = true
+            } catch {
+                lastError = error
+            }
+        }
+        if !saved, let lastError { throw lastError }
+    }
+
+    static func loadPreferences() -> Preferences {
+        for fileURL in readableFileURLs(named: preferencesFileName) {
+            guard
+                let data = try? Data(contentsOf: fileURL),
+                !data.isEmpty,
+                let preferences = try? JSONDecoder().decode(Preferences.self, from: data)
+            else { continue }
+            return preferences.normalized
+        }
+        return .default
     }
 
     static func courses(on date: Date, archive: Archive?, calendar: Calendar = .shanghai) -> [Course] {
@@ -93,32 +138,30 @@ enum TodayCourseWidgetData {
             ?? date.addingTimeInterval(24 * 60 * 60)
     }
 
-    private static func readableFileURLs() -> [URL] {
-        writableFileURLs().filter { FileManager.default.fileExists(atPath: $0.path) }
+    private static func readableFileURLs(named fileName: String) -> [URL] {
+        writableFileURLs(named: fileName).filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    private static func writableFileURLs() -> [URL] {
-        #if APP_STORE_BUILD
+    private static func writableFileURLs(named fileName: String) -> [URL] {
+        var fileURLs = [URL]()
         if let groupURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupIdentifier
         ) {
-            return [groupURL.appendingPathComponent(archiveFileName, isDirectory: false)]
+            fileURLs.append(groupURL.appendingPathComponent(fileName, isDirectory: false))
         }
-        return []
-        #else
+
+        #if !APP_STORE_BUILD
         // Ad-hoc local packages have no registered App Group container. Keep a
-        // compatibility copy inside the app's own Application Support container
-        // for those preview builds only; App Store archives define
-        // APP_STORE_BUILD and use the signed group container exclusively.
+        // compatibility copy inside Application Support for preview builds.
         if let supportDirectory = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first {
-            return [supportDirectory
+            fileURLs.append(supportDirectory
                 .appendingPathComponent("WhereToStudyNative", isDirectory: true)
-                .appendingPathComponent(archiveFileName, isDirectory: false)]
+                .appendingPathComponent(fileName, isDirectory: false))
         }
-        return []
         #endif
+        return fileURLs
     }
 }

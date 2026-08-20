@@ -4,7 +4,7 @@ import WidgetKit
 private struct TodayCourseEntry: TimelineEntry {
     let date: Date
     let courses: [TodayCourseWidgetData.Course]
-    let hasSchedule: Bool
+    let preferences: TodayCourseWidgetData.Preferences
 }
 
 private struct TodayCourseProvider: TimelineProvider {
@@ -23,7 +23,7 @@ private struct TodayCourseProvider: TimelineProvider {
                     startSlot: 2
                 )
             ],
-            hasSchedule: true
+            preferences: .default
         )
     }
 
@@ -44,7 +44,7 @@ private struct TodayCourseProvider: TimelineProvider {
         return TodayCourseEntry(
             date: date,
             courses: TodayCourseWidgetData.courses(on: date, archive: archive),
-            hasSchedule: archive != nil
+            preferences: TodayCourseWidgetData.loadPreferences()
         )
     }
 }
@@ -68,10 +68,8 @@ private struct TodayCourseWidgetView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if !entry.hasSchedule {
-                message("打开应用获取个人课表", icon: "arrow.clockwise")
-            } else if entry.courses.isEmpty {
-                message("今天没有课程", icon: "checkmark.circle")
+            if entry.courses.isEmpty {
+                message(TodayCourseWidgetData.emptyMessage, icon: "checkmark.circle")
             } else {
                 VStack(alignment: .leading, spacing: family == .systemSmall ? 7 : 9) {
                     ForEach(Array(entry.courses.prefix(courseLimit))) { course in
@@ -91,11 +89,12 @@ private struct TodayCourseWidgetView: View {
     }
 
     private var courseLimit: Int {
-        switch family {
+        let familyLimit = switch family {
         case .systemSmall: 2
         case .systemMedium: 3
         default: 6
         }
+        return min(familyLimit, entry.preferences.courseLimit)
     }
 
     private func courseRow(_ course: TodayCourseWidgetData.Course) -> some View {
@@ -108,7 +107,7 @@ private struct TodayCourseWidgetView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text([course.timeRange, course.room].filter { !$0.isEmpty }.joined(separator: " · "))
+                Text(courseDetails(course))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -134,6 +133,13 @@ private struct TodayCourseWidgetView: View {
 
     private var primary: Color { theme.primary.color }
     private var widgetBackground: Color { theme.background.color }
+
+    private func courseDetails(_ course: TodayCourseWidgetData.Course) -> String {
+        let values = entry.preferences.showsLocation
+            ? [course.timeRange, course.room]
+            : [course.timeRange]
+        return values.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
 }
 
 private extension WidgetThemeColor {
@@ -143,11 +149,19 @@ private extension WidgetThemeColor {
 private extension View {
     @ViewBuilder
     func widgetSurface(background surface: Color) -> some View {
+        #if os(macOS)
         if #available(macOS 14.0, *) {
             containerBackground(surface, for: .widget)
         } else {
             background(surface)
         }
+        #else
+        if #available(iOSApplicationExtension 17.0, *) {
+            containerBackground(surface, for: .widget)
+        } else {
+            background(surface)
+        }
+        #endif
     }
 }
 

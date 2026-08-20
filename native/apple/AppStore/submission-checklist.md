@@ -5,7 +5,7 @@
 - 在 Apple Developer 中注册以下 Bundle ID：
   - iOS 与 macOS 主应用共用 `com.nemoyu.wheretostudy.native.macos`
   - `com.nemoyu.wheretostudy.native.macos.widget`
-- 注册 `group.com.nemoyu.wheretostudy.native`，并把 macOS 主应用与 Widget 扩展都关联到该 App Group。
+- 注册 `group.com.nemoyu.wheretostudy.native`，并把 iOS/macOS 主应用与两个平台的 Widget 扩展都关联到该 App Group。
 - 在 App Store Connect 创建一个同时勾选 iOS 与 macOS 的 App 记录；两个平台共用主应用 Bundle ID、Apple ID 和 SKU。
 - 确认付费应用协议、税务和银行信息状态满足当前发布方式。
 - 确认开发者对北邮教务服务名称、接口及数据的使用具有发布所需授权。
@@ -34,8 +34,9 @@ export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
 export APPLE_BUILD_NUMBER=40
 
 # 本机需安装 Apple Distribution、Mac Installer Distribution 证书，以及以下
-# 三个默认名称的 App Store 描述文件。名称不同时可用对应环境变量覆盖：
+# 四个默认名称的 App Store 描述文件。名称不同时可用对应环境变量覆盖：
 export APPLE_IOS_PROFILE_SPECIFIER="Where To Study iOS App Store"
+export APPLE_IOS_WIDGET_PROFILE_SPECIFIER="Where To Study iOS Widget App Store"
 export APPLE_MACOS_PROFILE_SPECIFIER="Where To Study macOS App Store"
 export APPLE_WIDGET_PROFILE_SPECIFIER="Where To Study Widget App Store"
 
@@ -60,14 +61,14 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - `APPLE_AUTH_KEY_BASE64`、`APPLE_AUTH_KEY_ID`、`APPLE_AUTH_KEY_ISSUER_ID`
 - `APPLE_DISTRIBUTION_CERTIFICATE_P12_BASE64`、`APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`
 - `APPLE_INSTALLER_CERTIFICATE_P12_BASE64`、`APPLE_INSTALLER_CERTIFICATE_PASSWORD`
-- `APPLE_IOS_PROFILE_BASE64`、`APPLE_MACOS_PROFILE_BASE64`、`APPLE_WIDGET_PROFILE_BASE64`
+- `APPLE_IOS_PROFILE_BASE64`、`APPLE_IOS_WIDGET_PROFILE_BASE64`、`APPLE_MACOS_PROFILE_BASE64`、`APPLE_WIDGET_PROFILE_BASE64`
 
 证书、私钥与描述文件只能放入受保护环境 secrets，不得提交到仓库或普通构建产物。团队 API Key 必须具备上传构建所需权限；工作流使用预先生成的描述文件，不依赖 API Key 动态创建 provisioning profile。
 
 ## 发布前验证
 
 - `./scripts/native-apple-build.sh` 全部通过，并确认测试模拟器已关闭。
-- iOS 真机检查登录、课表刷新、空教室、日历权限、通知权限、深浅色和前后台切换。
+- iOS 真机检查登录、课表刷新、空教室、日历权限、通知权限、Widget App Group、深浅色和前后台切换。
 - macOS 检查沙盒网络、Keychain、日历、菜单栏、关闭窗口驻留、Widget App Group 和深浅色。
 - 在正式归档中确认没有 `get-task-allow`，签名不是 ad-hoc，隐私清单与许可证已内嵌。
 - 每次上传使用递增的整数构建号；稳定版本号使用 `X.Y.Z`，不添加 `alpha.1234` 一类后缀。
@@ -77,7 +78,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
-- 本机已安装有效的 Apple Distribution、Mac Installer Distribution 证书及 iOS 主应用、macOS 主应用、macOS Widget 三个 App Store 描述文件；证书私钥和团队标识不写入仓库。
+- 正式归档前需安装有效的 Apple Distribution、Mac Installer Distribution 证书及 iOS 主应用、iOS Widget、macOS 主应用、macOS Widget 四个 App Store 描述文件；证书私钥和团队标识不写入仓库。
 - macOS 与 iOS `0.1.7 (44)` 的对应预检、Release 编译、Apple 逻辑测试及设备专项 UI 验证均已通过；两个主应用归档均已核对为 `com.nemoyu.wheretostudy.native.macos`，应用图标统一为 Windows/Tauri 当前使用的绿色日历课桌图标。
 - iOS 与 macOS `0.1.7 (44)` 均已收到 App Store Connect 的 `Upload succeeded`，上传完成。TestFlight 和正式提交均选择 build 44。
 - Build 25 的旧审核截图清单保留作历史校验，不再用于提交；应按 `screenshot-plan.md` 使用对应平台的最新构建重新生成 iPhone、iPad 与 macOS 商店截图并更新 `screenshot-manifest.md`。
