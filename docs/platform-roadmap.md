@@ -16,7 +16,7 @@
 ## 不变量
 
 1. 课程、节次、校区、教室、缓存和考试周规则在五个平台含义一致。
-2. 账号和密码只能保存在系统安全存储中：Windows Credential Manager、Apple Keychain、Android Keystore、鸿蒙 ASSET 安全存储。
+2. 图形与原生客户端的账号和密码只能保存在系统安全存储中：Windows Credential Manager、Apple Keychain、Android Keystore、鸿蒙 ASSET 安全存储；独立 TUI 按产品约定使用用户私有本地文件，不调用系统密码库。
 3. 仓库、构建日志、测试夹具、截图和 release 资产不得包含真实账号、密码、token、证书或签名私钥。
 4. 原生端不嵌入 WebView，不复制 React 页面。
 5. 默认不常驻高频轮询；网络请求由用户动作、应用启动和每日计划任务触发。

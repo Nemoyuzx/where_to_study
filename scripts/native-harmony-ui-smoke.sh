@@ -144,7 +144,7 @@ assert_text "示例课表课程" "数据挖掘"
 tap_text "设置" 2600 2800
 swipe_up
 dump_layout || true
-assert_text "示例模式说明" "内置示例模式已开启，不会连接教务服务或读写真实用户数据。"
+assert_text "本地安全存储说明" "账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。"
 
 echo "[3] 教学日历日/周/月/年四视图切换"
 launch_app reviewDemo

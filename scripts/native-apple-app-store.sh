@@ -18,6 +18,7 @@ AUTH_KEY_ID="${APPLE_AUTH_KEY_ID:-}"
 AUTH_KEY_ISSUER_ID="${APPLE_AUTH_KEY_ISSUER_ID:-}"
 IOS_PROFILE_SPECIFIER="${APPLE_IOS_PROFILE_SPECIFIER:-Where To Study iOS App Store}"
 MACOS_PROFILE_SPECIFIER="${APPLE_MACOS_PROFILE_SPECIFIER:-Where To Study macOS App Store}"
+IOS_WIDGET_PROFILE_SPECIFIER="${APPLE_IOS_WIDGET_PROFILE_SPECIFIER:-Where To Study iOS Widget App Store}"
 WIDGET_PROFILE_SPECIFIER="${APPLE_WIDGET_PROFILE_SPECIFIER:-Where To Study Widget App Store}"
 INSTALLER_SIGNING_CERTIFICATE="${APPLE_INSTALLER_SIGNING_CERTIFICATE:-}"
 MAIN_BUNDLE_IDENTIFIER="com.nemoyu.wheretostudy.native.macos"
@@ -51,6 +52,8 @@ Optional version overrides:
 Optional provisioning profile overrides:
   APPLE_IOS_PROFILE_SPECIFIER     Defaults to Where To Study iOS App Store
   APPLE_MACOS_PROFILE_SPECIFIER   Defaults to Where To Study macOS App Store
+  APPLE_IOS_WIDGET_PROFILE_SPECIFIER
+                                  Defaults to Where To Study iOS Widget App Store
   APPLE_WIDGET_PROFILE_SPECIFIER  Defaults to Where To Study Widget App Store
 
 Optional macOS installer signing override:
@@ -136,7 +139,9 @@ static_preflight() {
   plutil -lint \
     "$APPLE_DIR/Resources/PrivacyInfo.xcprivacy" \
     "$APPLE_DIR/Resources/WhereToStudyMac.entitlements" \
-    "$APPLE_DIR/Resources/WhereToStudyWidget.entitlements" >/dev/null
+    "$APPLE_DIR/Resources/WhereToStudyWidget.entitlements" \
+    "$APPLE_DIR/Resources/WhereToStudyiOS.entitlements" \
+    "$APPLE_DIR/Resources/WhereToStudyiOSWidget.entitlements" >/dev/null
 
   if ! plist_bool_is_true "$APPLE_DIR/Resources/WhereToStudyMac.entitlements" \
     com.apple.security.app-sandbox; then
@@ -167,7 +172,9 @@ static_preflight() {
     "$APP_GROUP_IDENTIFIER"; do
     if ! grep -Fq "$identifier" "$APPLE_DIR/project.yml" \
       && ! grep -Fq "$identifier" "$APPLE_DIR/Resources/WhereToStudyMac.entitlements" \
-      && ! grep -Fq "$identifier" "$APPLE_DIR/Resources/WhereToStudyWidget.entitlements"; then
+      && ! grep -Fq "$identifier" "$APPLE_DIR/Resources/WhereToStudyWidget.entitlements" \
+      && ! grep -Fq "$identifier" "$APPLE_DIR/Resources/WhereToStudyiOS.entitlements" \
+      && ! grep -Fq "$identifier" "$APPLE_DIR/Resources/WhereToStudyiOSWidget.entitlements"; then
       echo "Missing required Apple identifier: $identifier" >&2
       exit 1
     fi
@@ -275,7 +282,6 @@ validate_archive() {
     exit 1
   fi
   if [[ "$platform" == "macos" ]]; then
-    local widget widget_entitlements
     if ! plist_bool_is_true "$entitlements" com.apple.security.app-sandbox \
       || ! plist_bool_is_true "$entitlements" com.apple.security.network.client \
       || ! plist_bool_is_true "$entitlements" com.apple.security.personal-information.calendars; then
@@ -288,26 +294,45 @@ validate_archive() {
       rm -f "$entitlements"
       exit 1
     fi
+  fi
+
+  local widget widget_info widget_entitlements
+  if [[ "$platform" == "macos" ]]; then
     widget="$app/Contents/PlugIns/WhereToStudyWidget.appex"
-    codesign --verify --strict --verbose=2 "$widget"
-    if [[ "$(plutil -extract CFBundleIdentifier raw "$widget/Contents/Info.plist")" \
-      != "$WIDGET_BUNDLE_IDENTIFIER" ]]; then
-      echo "Signed macOS widget has the wrong bundle identifier." >&2
-      rm -f "$entitlements"
+    widget_info="$widget/Contents/Info.plist"
+  else
+    widget="$app/PlugIns/WhereToStudyiOSWidget.appex"
+    widget_info="$widget/Info.plist"
+  fi
+  if [[ ! -d "$widget" ]]; then
+    echo "Signed $platform archive is missing its WidgetKit extension." >&2
+    rm -f "$entitlements"
+    exit 1
+  fi
+  codesign --verify --strict --verbose=2 "$widget"
+  if [[ "$(plutil -extract CFBundleIdentifier raw "$widget_info")" \
+    != "$WIDGET_BUNDLE_IDENTIFIER" ]]; then
+    echo "Signed $platform widget has the wrong bundle identifier." >&2
+    rm -f "$entitlements"
+    exit 1
+  fi
+  if [[ "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$widget_info")" \
+    != "com.apple.widgetkit-extension" ]]; then
+    echo "Signed $platform widget has the wrong extension point." >&2
+    rm -f "$entitlements"
+    exit 1
+  fi
+  widget_entitlements="$(mktemp "${TMPDIR:-/tmp}/where-to-study-widget-entitlements.plist.XXXXXX")"
+  codesign -d --entitlements :- "$widget" > "$widget_entitlements" 2>/dev/null
+  for signed_entitlements in "$entitlements" "$widget_entitlements"; do
+    if [[ "$(plist_value "$signed_entitlements" 'com.apple.security.application-groups:0')" \
+      != "$APP_GROUP_IDENTIFIER" ]]; then
+      echo "Signed $platform app and widget must share the registered App Group." >&2
+      rm -f "$entitlements" "$widget_entitlements"
       exit 1
     fi
-    widget_entitlements="$(mktemp "${TMPDIR:-/tmp}/where-to-study-widget-entitlements.plist.XXXXXX")"
-    codesign -d --entitlements :- "$widget" > "$widget_entitlements" 2>/dev/null
-    for signed_entitlements in "$entitlements" "$widget_entitlements"; do
-      if [[ "$(plist_value "$signed_entitlements" 'com.apple.security.application-groups:0')" \
-        != "$APP_GROUP_IDENTIFIER" ]]; then
-        echo "Signed macOS app and widget must share the registered App Group." >&2
-        rm -f "$entitlements" "$widget_entitlements"
-        exit 1
-      fi
-    done
-    rm -f "$widget_entitlements"
-  fi
+  done
+  rm -f "$widget_entitlements"
   rm -f "$entitlements"
   echo "Validated signed $platform archive: $archive"
 }
@@ -345,6 +370,7 @@ archive_platform() {
     CODE_SIGN_STYLE=Manual
     CODE_SIGN_IDENTITY="Apple Distribution"
     APPLE_IOS_PROFILE_SPECIFIER="$IOS_PROFILE_SPECIFIER"
+    APPLE_IOS_WIDGET_PROFILE_SPECIFIER="$IOS_WIDGET_PROFILE_SPECIFIER"
     APPLE_MACOS_PROFILE_SPECIFIER="$MACOS_PROFILE_SPECIFIER"
     APPLE_WIDGET_PROFILE_SPECIFIER="$WIDGET_PROFILE_SPECIFIER"
     MARKETING_VERSION="$VERSION"
@@ -364,11 +390,13 @@ archive_platform() {
 }
 
 write_export_options() {
-  local destination="$1" file="$2" platform="$3" main_profile installer_certificate
+  local destination="$1" file="$2" platform="$3" main_profile widget_profile installer_certificate
   if [[ "$platform" == "ios" ]]; then
     main_profile="$IOS_PROFILE_SPECIFIER"
+    widget_profile="$IOS_WIDGET_PROFILE_SPECIFIER"
   else
     main_profile="$MACOS_PROFILE_SPECIFIER"
+    widget_profile="$WIDGET_PROFILE_SPECIFIER"
   fi
   plutil -create xml1 "$file"
   plutil -insert method -string app-store-connect "$file"
@@ -379,6 +407,8 @@ write_export_options() {
   plutil -insert provisioningProfiles -xml '<dict/>' "$file"
   /usr/libexec/PlistBuddy -c \
     "Add :provisioningProfiles:$MAIN_BUNDLE_IDENTIFIER string $main_profile" "$file"
+  /usr/libexec/PlistBuddy -c \
+    "Add :provisioningProfiles:$WIDGET_BUNDLE_IDENTIFIER string $widget_profile" "$file"
   if [[ "$platform" == "macos" ]]; then
     installer_certificate="$(installer_signing_certificate)"
     if [[ -z "$installer_certificate" ]]; then
@@ -387,8 +417,6 @@ write_export_options() {
       return 1
     fi
     plutil -insert installerSigningCertificate -string "$installer_certificate" "$file"
-    /usr/libexec/PlistBuddy -c \
-      "Add :provisioningProfiles:$WIDGET_BUNDLE_IDENTIFIER string $WIDGET_PROFILE_SPECIFIER" "$file"
   fi
   plutil -insert manageAppVersionAndBuildNumber -bool NO "$file"
   plutil -insert uploadSymbols -bool YES "$file"

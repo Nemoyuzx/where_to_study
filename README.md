@@ -9,7 +9,7 @@ Silicon 兼容构建。
 - 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
 - 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
 - 空教室查询支持按个人空闲节次和教学楼筛选；Tauri 桌面端另支持最少座位数筛选。
-- macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知；原生 macOS 提供 WidgetKit 系统小组件，Tauri 桌面端保留应用内课程浮窗。
+- macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知；原生 iOS、macOS 与 Android 均提供系统桌面小组件，Tauri 桌面端保留应用内课程浮窗。
 - SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
 - 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 
@@ -31,7 +31,7 @@ Silicon 兼容构建。
 
 ## 下载
 
-稳定版 [v0.1.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.7) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、Android APK/AAB，以及 macOS `wts-cli` 和 `wts-tui`。本版加入学期编号与开学日期自动识别，完善桌面端悬停、动画和触控板翻页，修复 Windows 与 HarmonyOS 平台问题，并让 Linux 凭据改用 Secret Service；Debian 包会在 Ubuntu 环境中实际安装验证运行时依赖。校验文件仍由本地脚本和 CI 生成并用于发布前验证，但不再作为 GitHub Release 附件。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 当前均为 `0.1.7 (44)`；公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
+稳定版 [v0.1.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.7) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、Tauri macOS arm64、SwiftUI macOS Universal、无签名 iOS archive、Android APK/AAB，以及 macOS `wts-cli` 和 `wts-tui`。本版加入学期编号与开学日期自动识别，完善桌面端悬停、动画和触控板翻页，修复 Windows 与 HarmonyOS 平台问题，并让 Linux Tauri 图形端凭据改用 Secret Service；Debian 包会在 Ubuntu 环境中实际安装验证运行时依赖。校验文件仍由本地脚本和 CI 生成并用于发布前验证，但不再作为 GitHub Release 附件。GitHub Release 中的原生 macOS 包同时支持 Apple Silicon 与 Intel，但没有 Developer ID 公证签名，首次启动可能需要在 Finder 中右键选择“打开”；原生 Android APK 使用项目维护者的固定 release key 签名并校验证书指纹。正式签名的 iOS 与 macOS 当前均为 `0.1.7 (44)`；公开 Release 中的 iOS archive 仍仅供开发者后续签名，不是可直接安装的 TestFlight 包。
 
 ## 许可证状态
 
@@ -41,19 +41,23 @@ Silicon 兼容构建。
 
 macOS 与 Windows 桌面端的课程通知默认关闭。用户在设置中显式开启后，应用运行或驻留托盘时会于每天 7:30 根据本地课表发送今日课程摘要；关闭开关或清除本地数据会立即停止后续发送。后台调度只休眠到实际需要的跨日、每天 7:00、已启用的 7:30 或明确的有界重试时间；系统恢复、设置改变或窗口重新聚焦会中断休眠并重算边界，不进行固定间隔轮询。跨日会重建托盘中的今日/明日课程，7:00 获取当天空教室后也会再次重建托盘。
 
-Tauri 桌面端的课程浮窗可以从托盘菜单的“显示课程小组件”打开，也可以在应用“设置”页点击“打开课程小组件”。原生 macOS 的 WidgetKit 小组件需要从系统小组件图库添加，通过 App Group 读取应用同步的今日课程；两种展示都会在课表刷新后更新。
+Tauri 桌面端的课程浮窗可以从托盘菜单的“显示课程小组件”打开，也可以在应用“设置”页点击“打开课程小组件”。原生 iOS 与 macOS 的 WidgetKit 小组件从系统小组件图库添加，通过 App Group 读取应用同步的今日课程；Android 原生桌面小组件读取应用私有课表缓存。三个原生平台都会在课表刷新或清除后更新小组件，并在当天无课程或尚未获取课表时统一显示“今日无课”。
 
 SwiftUI 客户端会在系统待处理通知上限内安排最多 63 个未来有课日的 07:30 摘要；Android 使用持久化 `JobScheduler` 在 07:30–08:00 的有效窗口内发送当天摘要。所有平台都默认关闭，只有用户明确开启后才启用；系统权限被撤销、关闭开关或清除本地数据时会同步撤销后续任务。账号切换时，原生端会撤销旧账号的已安排摘要，桌面端则只会在新账号设置保存成功后继续使用当前开关。
 
 ## 数据来源与数据安全
 
-应用使用北邮课表和空教室相关接口，因此需要教务系统账号和密码。账号与密码不会写入
-普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Linux
+图形与原生客户端使用北邮课表和空教室相关接口，因此需要教务系统账号和密码。账号与密码不会写入
+普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Linux Tauri 图形端
 使用 Secret Service（GNOME Keyring / KWallet 等系统密钥环），Android 使用
 Android Keystore。旧版 `settings.json` 中的凭据会在首次启动时迁移并从普通设置
 中删除。迁移先原子替换脱敏设置文件，再写入系统凭据存储。Tauri 为每个已保存账号生成不含账号信息的随机不透明缓存作用域，账号切换或清除失败时会持久化撤销标记并拒绝旧缓存。Tauri 的
 `load_saved_settings` 只向 WebView 返回 `has_saved_password`，不会返回真实密码；密码输入留空时保留已有系统凭据，只有显式输入新密码才替换。课程和空教室缓存不包含密码、token 或 cookie。完整基线见
 [docs/security.md](./docs/security.md)。
+
+`wts-tui` 按终端客户端的独立约定，不调用系统密码库：账号和密码保存在用户配置目录
+下权限受限的 TUI 专用本地文件中，且不会自动读取或迁移图形客户端的系统凭据。具体
+路径与风险说明见 [wts-tui/README.md](./wts-tui/README.md)。
 
 法定节假日运行时数据来自
 [cg-zhou/holiday-calendar](https://github.com/cg-zhou/holiday-calendar)，客户端通过其文档列出的
@@ -142,7 +146,7 @@ APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX APPLE_BUILD_NUMBER=31 \
   ./scripts/native-apple-app-store.sh archive all
 ```
 
-脚本还支持 `export` 与 `upload` 动作，并可单独指定 `ios` 或 `macos`。本地正式构建使用已安装的 Apple Distribution、Mac Installer Distribution 证书及三个 App Store 描述文件；团队、描述文件覆盖值和 App Store Connect API 私钥只通过环境变量传入。`Build Native Clients` 工作流也提供受保护的手动上传入口。完整账户配置、CI secrets、元数据和审核步骤见 [`native/apple/AppStore/submission-checklist.md`](./native/apple/AppStore/submission-checklist.md)。
+脚本还支持 `export` 与 `upload` 动作，并可单独指定 `ios` 或 `macos`。本地正式构建使用已安装的 Apple Distribution、Mac Installer Distribution 证书及 iOS/macOS 主应用和 Widget 共四个 App Store 描述文件；团队、描述文件覆盖值和 App Store Connect API 私钥只通过环境变量传入。`Build Native Clients` 工作流也提供受保护的手动上传入口。完整账户配置、CI secrets、元数据和审核步骤见 [`native/apple/AppStore/submission-checklist.md`](./native/apple/AppStore/submission-checklist.md)。
 
 ## GitHub Actions
 

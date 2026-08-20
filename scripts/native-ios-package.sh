@@ -45,6 +45,21 @@ if [[ ! -d "$APP" ]]; then
   echo "Native iOS archive does not contain WhereToStudyiOS.app." >&2
   exit 1
 fi
+WIDGET="$APP/PlugIns/WhereToStudyiOSWidget.appex"
+if [[ ! -d "$WIDGET" ]]; then
+  echo "Native iOS archive is missing the WidgetKit extension." >&2
+  exit 1
+fi
+if [[ "$(plutil -extract CFBundleIdentifier raw "$WIDGET/Info.plist")" \
+  != "com.nemoyu.wheretostudy.native.macos.widget" ]]; then
+  echo "Native iOS WidgetKit extension has the wrong bundle identifier." >&2
+  exit 1
+fi
+if [[ "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$WIDGET/Info.plist")" \
+  != "com.apple.widgetkit-extension" ]]; then
+  echo "Native iOS archive does not contain a WidgetKit extension point." >&2
+  exit 1
+fi
 
 ARCHITECTURES="$(lipo -archs "$APP/WhereToStudyiOS")"
 if [[ " $ARCHITECTURES " != *" arm64 "* ]]; then

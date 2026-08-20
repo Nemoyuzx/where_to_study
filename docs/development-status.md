@@ -23,7 +23,7 @@
 ### Tauri / Windows / Linux
 
 - 保留 Tauri 2 + React + Rust 作为 Windows/Linux 客户端，并继续提供迁移期 macOS 构建。
-- Linux 使用 Ubuntu 22.04 原生 CI 生成 x86_64 Debian 包和 AppImage；凭据保存在 Secret Service，打包脚本验证 Tauri 实际检测到的 GTK/WebKitGTK/托盘依赖，并在 Ubuntu 24.04 上安装生成的 Debian 包。
+- Linux 使用 Ubuntu 22.04 原生 CI 生成 x86_64 Debian 包和 AppImage；Tauri 图形端凭据保存在 Secret Service，独立 TUI 使用用户私有本地文件，打包脚本验证 Tauri 实际检测到的 GTK/WebKitGTK/托盘依赖，并在 Ubuntu 24.04 上安装生成的 Debian 包。
 - 完成空教室、教学日历、设置、教学楼/三位教室号、个人课表联动、系统日历导入、托盘和课程小组件。
 - 教学日历保留绿白配色，支持日/周/月/年、整点与 14 个节次、当前时间红线、节假日、年视图课程热度及日期日程浮层。
 - 托盘提供今日/明日课程；关闭主窗口后保持运行；启动和每天 07:00 获取当天空教室；课程摘要默认关闭，用户显式开启后才在 07:30 发送。

@@ -17,6 +17,7 @@
 - Windows：账号和密码存入 Windows Credential Manager；普通偏好存入应用配置目录。
 - macOS/iOS：账号和密码存入 Keychain；原生客户端普通偏好存入 `UserDefaults`，Tauri 客户端存入应用配置目录。
 - Android：账号和密码使用 Android Keystore 保护后存储；原生客户端普通偏好存入 `SharedPreferences`，Tauri 客户端存入应用配置目录。
+- 终端 TUI：不调用系统密码库，账号和密码存入用户配置目录下独立的 `credentials.json`；Unix 目录/文件权限必须为 `0700/0600`，保存必须使用同目录临时文件替换，退出登录必须删除文件。该文件是明文敏感数据，不得同步、分享或提交到 Git。
 - 课程和空教室缓存不得包含密码、token 或完整响应头。
 - 课程通知默认关闭且只读取本地课表；用户显式开启后才能调度。关闭提醒、切换账号或清除本地数据时必须先持久撤销后续调度，再清理平台 API 支持撤销的系统任务和已显示摘要。
 - Tauri `load_saved_settings` 的响应不得包含密码，只能返回 `has_saved_password`；WebView 中的密码输入仅作为一次性替换值。
