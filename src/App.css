@@ -1444,8 +1444,8 @@ button:disabled {
 .teaching-calendar-layout {
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  min-height: 680px;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
 }
 
 .month-gesture-surface:focus-visible {

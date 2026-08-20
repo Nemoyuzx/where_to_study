@@ -281,7 +281,6 @@ test('month expansion stays mobile-only and morphs its drag handle with progress
     appSource,
     /target\?\.closest\('\.month-expansion-handle, \.month-expansion-accessibility-action'\)/,
   )
-  assert.match(appSource, /month-expanded-hidden/)
   assert.match(appSource, /handleMonthCalendarKeyDown/)
   assert.match(appSource, /month-expansion-accessibility-action/)
   assert.match(appSource, /month-expansion-accessibility-action[\s\S]*tabIndex=\{-1\}/)

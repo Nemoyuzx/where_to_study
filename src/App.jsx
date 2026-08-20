@@ -2394,35 +2394,7 @@ function App() {
                 ) : null}
               </section>
 
-              <aside className={`calendar-inspector ${compactCalendarLayout && calendarView === 'month' && monthExpanded ? 'month-expanded-hidden' : ''}`}>
-                <div className="inspector-card primary">
-                  <span>{formatCourseDate(calendarDate)}</span>
-                  <strong>{calendarWeekState.dayCourses.length} 门课</strong>
-                  <small>{formatTeachingWeek(calendarWeekState.weekNumber)}</small>
-                </div>
-                {calendarDetailCourse ? (
-                  <div className="inspector-card">
-                    <strong><CourseName course={calendarDetailCourse} /></strong>
-                    <span>{courseTimeBounds(calendarDetailCourse, slotMeta).start}-{courseTimeBounds(calendarDetailCourse, slotMeta).end}</span>
-                    <span>{calendarDetailCourse.room || '地点未标注'}</span>
-                    <small>{calendarDetailCourse.teacher || '教师未标注'}</small>
-                  </div>
-                ) : (
-                  <div className="inspector-card muted-card">所选日期暂无课程</div>
-                )}
-                <div className="inspector-list">
-                  {calendarWeekState.dayCourses.slice(calendarDetailCourse ? 1 : 0).map((course) => {
-                    const bounds = courseTimeBounds(course, slotMeta)
-                    return (
-                      <article key={`${calendarDate}-${course.id}`}>
-                        <strong><CourseName course={course} /></strong>
-                        <span>{bounds.start}-{bounds.end}</span>
-                        <small>{course.room || '地点未标注'}</small>
-                      </article>
-                    )
-                  })}
-                </div>
-            </aside>
+
           </div>
         </section>
           ) : null}
@@ -2563,9 +2535,9 @@ function App() {
               {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />}
               保存设置
             </button>
-            <button type="button" className="secondary" onClick={openDesktopWidget} disabled={settingsSaving || !!loading}>
-              {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <CalendarDays size={17} />}
-              打开课程小组件
+            <button type="button" className="secondary" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
+              {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
+              获取/刷新个人课表
             </button>
             {settingsSaved ? <span>已保存</span> : null}
           </section>
