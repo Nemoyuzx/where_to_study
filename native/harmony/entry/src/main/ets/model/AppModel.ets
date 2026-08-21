@@ -158,6 +158,9 @@ export class AppModel {
   @Trace hasSavedPassword: boolean = false;
   @Trace termID: string = ScheduleDefaults.termID;
   @Trace termStartDate: string = ScheduleDefaults.termStartDate;
+  // 自动检测当前学期（对应 Android automaticTermDetectionEnabled）：
+  // 开启时获取/刷新课表后用教务返回的学期覆盖本地，关闭时保留手动填写值。
+  @Trace automaticTermDetection: boolean = true;
   @Trace campusID: string = '01';
   @Trace queryCampusID: string = '01';
   @Trace selectedSlots: Set<number> = new Set<number>();
@@ -261,6 +264,7 @@ export class AppModel {
     const savedCampusID: string | null = await this.preferences.getString('campusID');
     const notificationsEnabled: boolean = await this.preferences.getBool(
       DailyCourseNotificationSettings.enabledKey, false);
+    this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
     this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
     this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
       savedTermStart : ScheduleDefaults.termStartDate;
@@ -539,6 +543,7 @@ export class AppModel {
       const savedCampusID: string | null = await this.preferences.getString('campusID');
       const notificationsEnabled: boolean = await this.preferences.getBool(
         DailyCourseNotificationSettings.enabledKey, false);
+      this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
       this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
       this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
         savedTermStart : ScheduleDefaults.termStartDate;
@@ -621,10 +626,42 @@ export class AppModel {
       await this.preferences.setString('campusID', this.campusID);
       await this.preferences.setString('termID', this.termID);
       await this.preferences.setString('termStartDate', this.termStartDate);
+      await this.preferences.setBool('automaticTermDetection', this.automaticTermDetection);
       this.statusMessage = '设置已保存';
       return true;
     } catch (e) {
       this.statusMessage = e instanceof Error ? e.message : '设置保存失败。';
+      return false;
+    }
+  }
+
+  // 仅保存学期设置（学期编号/第一周周一/自动检测开关），不涉及账号密码
+  // （对应 Android SettingsPage.semesterSurface 的"保存学期设置"按钮）。
+  async saveSemesterSettings(): Promise<boolean> {
+    if (this.isSampleMode()) {
+      this.statusMessage = '示例模式不会保存账户或设置';
+      return false;
+    }
+    const normalizedTermID: string = this.termID.trim();
+    const normalizedTermStartDate: string = this.termStartDate.trim();
+    const nextTermID: string = normalizedTermID.length === 0 ?
+      ScheduleDefaults.termID : normalizedTermID;
+    const nextTermStartDate: string = normalizedTermStartDate.length === 0 ?
+      ScheduleDefaults.termStartDate : normalizedTermStartDate;
+    if (StrictDates.parseDateString(nextTermStartDate) === null) {
+      this.statusMessage = CredentialSettingsError.invalidTermStartDate().message;
+      return false;
+    }
+    this.termID = nextTermID;
+    this.termStartDate = nextTermStartDate;
+    try {
+      await this.preferences.setString('termID', this.termID);
+      await this.preferences.setString('termStartDate', this.termStartDate);
+      await this.preferences.setBool('automaticTermDetection', this.automaticTermDetection);
+      this.statusMessage = '学期设置已保存';
+      return true;
+    } catch (e) {
+      this.statusMessage = e instanceof Error ? e.message : '学期设置保存失败。';
       return false;
     }
   }
@@ -787,6 +824,8 @@ export class AppModel {
     await this.preferences.remove('campusID');
     await this.preferences.remove('termID');
     await this.preferences.remove('termStartDate');
+    await this.preferences.remove('automaticTermDetection');
+    this.automaticTermDetection = true;
     this.campusID = '01';
     this.queryCampusID = '01';
     this.termID = ScheduleDefaults.termID;
@@ -843,10 +882,14 @@ export class AppModel {
         this.schedule = fetched;
         this.synchronizeWidgetSchedule();
         this.calendarImportStatusMessage = '';
-        this.termID = fetched.termID;
-        this.termStartDate = fetched.termStartDate;
-        await this.preferences.setString('termID', this.termID);
-        await this.preferences.setString('termStartDate', this.termStartDate);
+        if (this.automaticTermDetection) {
+          // 自动检测开启时用教务返回的学期覆盖本地（对应 Android
+          // automaticTermDetectionEnabled）；关闭时保留手动填写值。
+          this.termID = fetched.termID;
+          this.termStartDate = fetched.termStartDate;
+          await this.preferences.setString('termID', this.termID);
+          await this.preferences.setString('termStartDate', this.termStartDate);
+        }
         this.synchronizeSelectedSlots();
         this.dailyCourseNotificationDirty = true;
         this.reconcileDailyCourseNotifications(false);

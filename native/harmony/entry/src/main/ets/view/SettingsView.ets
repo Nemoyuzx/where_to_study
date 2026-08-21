@@ -65,8 +65,9 @@ export struct SettingsView {
         this.settingsTitle()
         if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
-            Column() {
+            Column({ space: 16 }) {
               this.accountSurface()
+              this.semesterSurface()
             }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
@@ -84,6 +85,7 @@ export struct SettingsView {
         } else {
           Column({ space: 16 }) {
             this.accountSurface()
+            this.semesterSurface()
             this.notificationSurface()
             this.localDataSurface()
             this.aboutSurface()
@@ -159,58 +161,6 @@ export struct SettingsView {
           .width('100%')
           .padding({ left: 2, right: 2, top: 7 })
       }
-      Blank().height(7)
-      this.field('学期编号', this.model.termID, InputType.Normal, (value: string): void => {
-        this.model.termID = value;
-      })
-      Blank().height(7)
-      this.field('第一周周一（YYYY-MM-DD）', this.model.termStartDate, InputType.Normal,
-        (value: string): void => {
-          this.model.termStartDate = value;
-        })
-
-      Blank().height(7)
-      Button('按当前日期自动检测')
-        .type(ButtonType.Normal)
-        .stateEffect(true)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.primary())
-        .borderRadius(6)
-        .border({ width: 1, color: AppTheme.primary() })
-        .backgroundColor(AppTheme.surface())
-        .width('100%')
-        .height(36)
-        .enabled(!this.model.isSampleMode())
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onClick(() => {
-          const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
-          this.model.termID = suggested.termID;
-          this.model.termStartDate = suggested.termStartDate;
-        })
-      if (SemesterLogic.matchesCurrentPeriod(this.model.termID, this.model.termStartDate)) {
-        Text('✓ 与当前学期一致')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.primary())
-          .width('100%')
-          .padding({ left: 2, right: 2, top: 7 })
-      } else if (SemesterLogic.isValidTermID(this.model.termID) &&
-        SemesterLogic.isValidTermStartDate(this.model.termStartDate)) {
-        Text('当前设置与检测结果不同')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.accent())
-          .width('100%')
-          .padding({ left: 2, right: 2, top: 7 })
-      }
-      Text('获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。')
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .lineHeight(17)
-        .width('100%')
-        .padding({ left: 2, right: 2, top: 7 })
-
       Text('默认校区')
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
@@ -311,7 +261,7 @@ export struct SettingsView {
 
   @Builder
   field(placeholder: string, value: string, inputType: InputType,
-    onChangeValue: (value: string) => void) {
+    onChangeValue: (value: string) => void, enabled: boolean = true) {
     TextInput({ placeholder: placeholder, text: value })
       .type(inputType)
       .fontSize(15)
@@ -324,10 +274,85 @@ export struct SettingsView {
       .width('100%')
       .height(36)
       .showPasswordIcon(false)
-      .enabled(!this.model.isSampleMode())
+      .enabled(!this.model.isSampleMode() && enabled)
+      .opacity(this.model.isSampleMode() || !enabled ? 0.62 : 1)
       .onChange((text: string) => {
         onChangeValue(text);
       })
+  }
+
+  // 学期设置独立卡片（对齐 Android SettingsPage.semesterSurface）：
+  // 自动检测开关 + 手动学期字段（自动检测开启时禁用）+ 说明 + 保存学期设置。
+  @Builder
+  semesterSurface() {
+    Column() {
+      this.sectionTitle('学期设置')
+      Row({ space: 8 }) {
+        Text('自动检测当前学期')
+          .fontSize(15)
+          .fontColor(AppTheme.text())
+          .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.model.automaticTermDetection })
+          .selectedColor(AppTheme.primaryFill())
+          .width(48)
+          .height(28)
+          .enabled(!this.model.isSampleMode())
+          .onChange((value: boolean) => {
+            this.model.automaticTermDetection = value;
+          })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 36 })
+      .alignItems(VerticalAlign.Center)
+
+      Blank().height(7)
+      this.field('学期编号', this.model.termID, InputType.Normal, (value: string): void => {
+        this.model.termID = value;
+      }, !this.model.automaticTermDetection)
+      Blank().height(7)
+      this.field('第一周周一（YYYY-MM-DD）', this.model.termStartDate, InputType.Normal,
+        (value: string): void => {
+          this.model.termStartDate = value;
+        }, !this.model.automaticTermDetection)
+
+      Text(this.model.automaticTermDetection ?
+        '获取/刷新课表后会自动应用教务返回的学期与开学日期。' :
+        '关闭自动检测后，将使用手动填写的学期信息。')
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .lineHeight(17)
+        .width('100%')
+        .padding({ left: 2, right: 2, top: 8 })
+
+      Blank().height(this.isCompact() ? 10 : 12)
+      Button('保存学期设置')
+        .type(ButtonType.Normal)
+        .stateEffect(true)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.primary())
+        .borderRadius(6)
+        .border({ width: 1, color: AppTheme.primary() })
+        .backgroundColor(AppTheme.surface())
+        .width('100%')
+        .height(36)
+        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+        .onClick(() => {
+          const work: Promise<boolean> = this.model.saveSemesterSettings();
+          work.then((saved: boolean) => {
+            if (saved) {
+              this.dismissStatusMessageAfter(this.model.statusMessage);
+            }
+          }).catch(() => {
+            // 错误说明已由 AppModel 写入状态消息。
+          });
+        })
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
