@@ -52,8 +52,11 @@ export struct MobileCalendarTimelineView {
   @Param selectedDate: DateParts = StrictDates.todayParts();
   @Param showsWeekColumns: boolean = false;
   // 宽屏（平板/PC）形态：与 Android CalendarTimelineView 的 expanded 参数对应。
-  // 宽屏显示日头行（72vp）、课程节次轴（96vp）、小时高 68vp、最小日宽 156vp。
+  // 宽屏显示日头行（72vp）、课程节次轴、小时高、最小日宽。
   @Param expanded: boolean = false;
+  // PC（2in1）使用 Windows Tauri 数值（轴 52+104、时高 64、最小日宽 118）；
+  // 平板/折叠屏使用 Android 数值（轴 48+96、时高 68、最小日宽 156）。
+  @Param tauri: boolean = false;
   // 各天课程布局缓存（BUG-046 修复）：由父组件在构造 days 时一次算好。
   @Param placements: Map<string, CoursePlacement[]> = new Map<string, CoursePlacement[]>();
   @Event onSelectDay: (day: DateParts) => void = () => {
@@ -99,25 +102,34 @@ export struct MobileCalendarTimelineView {
   }
 
   private dayWidthValue(): number {
-    return this.viewportWidth / this.dayCount();
+    return Math.max(this.viewportWidth / this.dayCount(), this.dayWidthMin());
   }
 
   // 宽屏布局数值（对齐 Android CalendarTimelineLogic 的 expanded 参数）：
   // axisWidth = 48 小时轴 + 96 节次轴；小时高 68；日头高 72；最小日宽 156。
   private axisWidth(): number {
-    return this.expanded ? 144 : MobileCalendarTimelineLayout.axisWidth;
+    if (!this.expanded) {
+      return MobileCalendarTimelineLayout.axisWidth;
+    }
+    return this.tauri ? 156 : 144;
   }
 
   private hourAxisWidth(): number {
-    return 48;
+    return this.expanded ? (this.tauri ? 52 : 48) : 48;
   }
 
   private slotAxisWidth(): number {
-    return this.expanded ? 96 : 0;
+    if (!this.expanded) {
+      return 0;
+    }
+    return this.tauri ? 104 : 96;
   }
 
   private hourHeight(): number {
-    return this.expanded ? 68 : MobileCalendarTimelineLayout.hourHeight;
+    if (!this.expanded) {
+      return MobileCalendarTimelineLayout.hourHeight;
+    }
+    return this.tauri ? 64 : 68;
   }
 
   private headerHeight(): number {
@@ -140,7 +152,10 @@ export struct MobileCalendarTimelineView {
   }
 
   private dayWidthMin(): number {
-    return this.expanded ? 156 : 0;
+    if (!this.expanded) {
+      return 0;
+    }
+    return this.tauri ? 118 : 156;
   }
 
   private shanghaiMinuteOfDay(): number {

@@ -6,6 +6,7 @@ import { AppModel } from '../../model/AppModel';
 import { Course, HolidayItem } from '../../common/Models';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
+import { DeviceState } from '../../common/DeviceState';
 import { PageTitle } from '../SharedComponents';
 import {
   CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarTimelineDay,
@@ -34,6 +35,8 @@ export struct ExpandedTeachingCalendarView {
   @Local contentWidth: number = 900;
   @Local contentHeight: number = 700;
   @Local isDarkMode: boolean = false;
+  // PC（2in1）按 Windows Tauri 布局；平板/折叠屏按 Android 折叠屏布局。
+  @Local isPc: boolean = DeviceState.isPc2in1();
   private darkModeProbe: DarkModeProbe = new DarkModeProbe();
   private timelinePlacements: Map<string, CoursePlacement[]> =
     new Map<string, CoursePlacement[]>();
@@ -345,6 +348,7 @@ export struct ExpandedTeachingCalendarView {
           selectedDate: this.selectedDate(),
           showsWeekColumns: this.mode() === CalendarMode.week,
           expanded: true,
+          tauri: this.isPc,
           onSelectDay: (day: DateParts): void => {
             this.setSelectedDate(day);
           }
@@ -438,8 +442,8 @@ export struct ExpandedTeachingCalendarView {
           }, (day: DateParts) => 'month-day.' + StrictDates.formatDateParts(day))
       }
       .columnsTemplate('repeat(7, 1fr)')
-      .columnsGap(2)
-      .rowsGap(2)
+      .columnsGap(this.isPc ? 4 : 2)
+      .rowsGap(this.isPc ? 4 : 2)
       .width('100%')
     }
     .width('100%')
@@ -485,10 +489,10 @@ export struct ExpandedTeachingCalendarView {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
     }
-    .padding({ left: 2, right: 2, bottom: 2 })
+    .padding({ left: this.isPc ? 4 : 2, right: this.isPc ? 4 : 2, bottom: this.isPc ? 4 : 2 })
     .width('100%')
-    .height(82)
-    .borderRadius(9)
+    .height(this.isPc ? 96 : 82)
+    .borderRadius(this.isPc ? 5 : 9)
     .backgroundColor(day.equals(this.selectedDate()) ?
       AppTheme.primaryFill() : this.monthBackground(day))
     .border({
