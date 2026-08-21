@@ -160,6 +160,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var dailyCourseNotificationsEnabled = false
     @Published private(set) var dailyCourseNotificationStatusMessage = ""
     @Published private(set) var widgetShowsLocation: Bool
+    @Published private(set) var widgetShowsTeacher: Bool
     @Published private(set) var widgetCourseLimit: Int
 
     let slots = SlotMetadata.defaults
@@ -228,8 +229,11 @@ final class AppModel: ObservableObject {
         queryCampusID = savedCampusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
         widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
+        widgetShowsTeacher = defaults.object(forKey: Self.widgetShowsTeacherKey) as? Bool ?? true
         let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
-        widgetCourseLimit = savedWidgetCourseLimit == 0 ? 3 : min(max(savedWidgetCourseLimit, 1), 3)
+        widgetCourseLimit = savedWidgetCourseLimit == 0
+            ? TodayCourseWidgetData.Preferences.default.courseLimit
+            : min(max(savedWidgetCourseLimit, 1), TodayCourseWidgetData.maximumCourseLimit)
         loadCredentials()
         loadSchedule()
         loadClassrooms()
@@ -413,8 +417,11 @@ final class AppModel: ObservableObject {
         queryCampusID = campusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
         widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
+        widgetShowsTeacher = defaults.object(forKey: Self.widgetShowsTeacherKey) as? Bool ?? true
         let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
-        widgetCourseLimit = savedWidgetCourseLimit == 0 ? 3 : min(max(savedWidgetCourseLimit, 1), 3)
+        widgetCourseLimit = savedWidgetCourseLimit == 0
+            ? TodayCourseWidgetData.Preferences.default.courseLimit
+            : min(max(savedWidgetCourseLimit, 1), TodayCourseWidgetData.maximumCourseLimit)
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         loadCredentials()
@@ -534,9 +541,16 @@ final class AppModel: ObservableObject {
         synchronizeWidgetSchedule()
     }
 
+    func setWidgetShowsTeacher(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        widgetShowsTeacher = enabled
+        defaults.set(enabled, forKey: Self.widgetShowsTeacherKey)
+        synchronizeWidgetSchedule()
+    }
+
     func setWidgetCourseLimit(_ limit: Int) {
         guard !isSampleMode else { return }
-        let normalized = min(max(limit, 1), 3)
+        let normalized = min(max(limit, 1), TodayCourseWidgetData.maximumCourseLimit)
         widgetCourseLimit = normalized
         defaults.set(normalized, forKey: Self.widgetCourseLimitKey)
         synchronizeWidgetSchedule()
@@ -600,6 +614,7 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: "termStartDate")
         defaults.removeObject(forKey: Self.automaticTermDetectionKey)
         defaults.removeObject(forKey: Self.widgetShowsLocationKey)
+        defaults.removeObject(forKey: Self.widgetShowsTeacherKey)
         defaults.removeObject(forKey: Self.widgetCourseLimitKey)
         campusID = "01"
         queryCampusID = "01"
@@ -607,7 +622,8 @@ final class AppModel: ObservableObject {
         termStartDate = ScheduleDefaults.termStartDate
         automaticTermDetectionEnabled = true
         widgetShowsLocation = true
-        widgetCourseLimit = 3
+        widgetShowsTeacher = true
+        widgetCourseLimit = TodayCourseWidgetData.Preferences.default.courseLimit
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         synchronizeSelectedSlots()
@@ -981,6 +997,7 @@ final class AppModel: ObservableObject {
         let snapshot = schedule
         let preferences = TodayCourseWidgetData.Preferences(
             showsLocation: widgetShowsLocation,
+            showsTeacher: widgetShowsTeacher,
             courseLimit: widgetCourseLimit
         )
         Task.detached(priority: .utility) {
@@ -1091,6 +1108,7 @@ final class AppModel: ObservableObject {
     private static let dailyCourseNotificationsKey = DailyCourseNotificationSettings.enabledKey
     private static let automaticTermDetectionKey = "automaticTermDetectionEnabled"
     private static let widgetShowsLocationKey = "widgetShowsLocation"
+    private static let widgetShowsTeacherKey = "widgetShowsTeacher"
     private static let widgetCourseLimitKey = "widgetCourseLimit"
 }
 

@@ -86,8 +86,7 @@ fn status_line(app: &App) -> String {
     let mut parts: Vec<String> = Vec::new();
     if let Some(error) = &app.error_message {
         parts.push(format!("错误：{error}"));
-    }
-    if let Some(status) = &app.status_message {
+    } else if let Some(status) = &app.status_message {
         parts.push(status.clone());
     }
     if app.loading {

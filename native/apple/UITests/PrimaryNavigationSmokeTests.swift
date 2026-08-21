@@ -310,6 +310,39 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         assertScreen("screen.settings", in: app)
     }
 
+    func testSettingsShowsLiveWidgetSizePreview() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing-live"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "设置", in: app)
+        let preview = app.descendants(matching: .any)["widget.preview"].firstMatch
+        revealByScrolling(visibleElement: preview, in: app)
+        XCTAssertTrue(preview.label.contains("中号样式预览"))
+        let mediumFrame = preview.frame
+        attachScreenshot(named: "settings-widget-preview-medium")
+
+        let sixCourseButton = app.segmentedControls.buttons["6"].firstMatch
+        XCTAssertTrue(sixCourseButton.waitForExistence(timeout: 5))
+        sixCourseButton.tap()
+        let largeButton = app.segmentedControls.buttons["大号"].firstMatch
+        XCTAssertTrue(largeButton.waitForExistence(timeout: 5))
+        largeButton.tap()
+        revealByScrolling(visibleElement: preview, in: app)
+        XCTAssertTrue(preview.label.contains("大号样式预览"))
+        XCTAssertGreaterThan(preview.frame.height, mediumFrame.height)
+        attachScreenshot(named: "settings-widget-preview-large-top")
+        let tabBar = app.tabBars.firstMatch
+        for _ in 0..<6 where preview.frame.maxY > tabBar.frame.minY {
+            app.swipeUp()
+        }
+        XCTAssertLessThanOrEqual(preview.frame.maxY, tabBar.frame.minY)
+        attachScreenshot(named: "settings-widget-preview-large-bottom")
+    }
+
     func testPlannerSummaryLabelsRemainSeparatedOnIPhone() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false

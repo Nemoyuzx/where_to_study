@@ -34,7 +34,12 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     } else {
         app.login_account.clone()
     };
-    let password_display = if app.login_password.is_empty() {
+    let password_display = if app.login_password.is_empty()
+        && app.credentials_saved
+        && app.login_account.trim() == app.saved_account.trim()
+    {
+        "（已保存，留空保持不变）".to_string()
+    } else if app.login_password.is_empty() {
         "（空）".to_string()
     } else {
         "•".repeat(app.login_password.chars().count())

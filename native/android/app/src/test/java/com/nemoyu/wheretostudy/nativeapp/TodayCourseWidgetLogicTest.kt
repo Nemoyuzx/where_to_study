@@ -28,8 +28,31 @@ class TodayCourseWidgetLogicTest {
         val content = TodayCourseWidgetLogic.content(schedule(), mondayMorning)
 
         assertEquals(listOf("early", "later"), content.courses.map(Course::id))
-        assertEquals("09:50-10:35 · 教二楼-335", TodayCourseWidgetLogic.details(content.courses.first()))
-        assertEquals("09:50-10:35", TodayCourseWidgetLogic.details(content.courses.first(), false))
+        assertEquals("3月2日 · 周一 · 第1周", content.dateContext)
+        assertEquals("下一节 · 09:50", content.statusText)
+        assertEquals("下一节 · 数据挖掘", TodayCourseWidgetLogic.title(content.courses.first(), content))
+        assertEquals(
+            "09:50-10:35 · 第 3 节 · 教二楼-335 · 测试教师",
+            TodayCourseWidgetLogic.details(content.courses.first()),
+        )
+        assertEquals(
+            "09:50-10:35 · 第 3 节",
+            TodayCourseWidgetLogic.details(
+                content.courses.first(),
+                showsLocation = false,
+                showsTeacher = false,
+            ),
+        )
+    }
+
+    @Test
+    fun widgetHeightAndPreferenceCanExposeUpToSixRows() {
+        assertEquals(1, TodayCourseWidgetLogic.rowLimit(110))
+        assertEquals(1, TodayCourseWidgetLogic.rowLimit(120))
+        assertEquals(2, TodayCourseWidgetLogic.rowLimit(180))
+        assertEquals(3, TodayCourseWidgetLogic.rowLimit(205))
+        assertEquals(4, TodayCourseWidgetLogic.rowLimit(240))
+        assertEquals(6, TodayCourseWidgetLogic.rowLimit(320))
     }
 
     private fun schedule() = ScheduleSnapshot(
