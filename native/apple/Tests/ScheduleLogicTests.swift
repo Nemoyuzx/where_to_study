@@ -580,6 +580,40 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(SlotMetadata.defaults.first?.start, "08:00")
         XCTAssertEqual(SlotMetadata.defaults.last?.end, "20:55")
     }
+
+    func testMobileWeekAllDayLabelsPreserveTheirDateColumns() {
+        let calendar = Calendar.shanghai
+        let monday = calendar.date(from: DateComponents(year: 2026, month: 6, day: 15))!
+        let tuesday = calendar.date(byAdding: .day, value: 1, to: monday)!
+        let wednesday = calendar.date(byAdding: .day, value: 2, to: monday)!
+        let days = [
+            CalendarTimelineDay(
+                date: monday,
+                courses: [],
+                holidays: [HolidayItem(date: "2026-06-15", name: "测试假日", type: "holiday")]
+            ),
+            CalendarTimelineDay(date: tuesday, courses: [], holidays: []),
+            CalendarTimelineDay(
+                date: wednesday,
+                courses: [],
+                holidays: [HolidayItem(date: "2026-06-17", name: "调休上班", type: "workday")]
+            )
+        ]
+
+        XCTAssertEqual(
+            MobileCalendarAllDayLayout.labels(for: days),
+            ["休 测试假日", "", "班 调休上班"]
+        )
+        XCTAssertEqual(MobileCalendarAllDayLayout.height, 40)
+        XCTAssertEqual(
+            MobileCalendarAllDayLayout.dayWidth(availableWidth: 390, dayCount: 7),
+            MobileCalendarTimelineLayout.contentWidth(
+                availableWidth: 390,
+                dayCount: 7,
+                showsWeekColumns: true
+            ) / 7
+        )
+    }
     #endif
 
     func testYearCourseDensityContinuesIncreasingPastFourCourses() {

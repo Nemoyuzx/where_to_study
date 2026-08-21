@@ -294,13 +294,14 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func timelineContent(days: [Date]) -> some View {
-        VStack(spacing: 0) {
+        let timelineDays = days.map(timelineDay)
+        return VStack(spacing: 0) {
             selectedDateSummary
                 .contentShape(Rectangle())
                 .simultaneousGesture(periodSwipeGesture)
-            allDayItems(days: days)
+            allDayItems(days: timelineDays)
             MobileCalendarTimelineView(
-                days: days.map(timelineDay),
+                days: timelineDays,
                 selectedDate: selectedDate,
                 showsWeekColumns: mode == .week,
                 isScrollEnabled: !isHorizontalPaging,
@@ -362,21 +363,21 @@ struct MobileTeachingCalendarView: View {
     }
 
     @ViewBuilder
-    private func allDayItems(days: [Date]) -> some View {
-        let items = days.flatMap { day in
-            holidayItems(on: day).map { (day, $0) }
-        }
-        if !items.isEmpty {
+    private func allDayItems(days: [CalendarTimelineDay]) -> some View {
+        let hasAllDayItems = days.contains { !$0.holidays.isEmpty }
+        if hasAllDayItems, days.count > 1 {
+            weekAllDayItems(days: days)
+        } else if hasAllDayItems, let day = days.first {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     Text("全天")
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
-                    ForEach(items, id: \.1.id) { day, item in
+                    ForEach(day.holidays) { item in
                         Button {
-                            presentHoliday(item, on: day)
+                            presentHoliday(item, on: day.date)
                         } label: {
-                            Text("\(Self.monthDayCompactFormatter.string(from: day)) · \(item.name)")
+                            Text("\(Self.monthDayCompactFormatter.string(from: day.date)) · \(item.name)")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(item.type == "holiday" ? AppTheme.danger : AppTheme.primary)
                                 .padding(.horizontal, 10)
@@ -392,6 +393,76 @@ struct MobileTeachingCalendarView: View {
             .background(AppTheme.surface)
             .overlay(alignment: .bottom) { Divider() }
         }
+    }
+
+    private func weekAllDayItems(days: [CalendarTimelineDay]) -> some View {
+        let labels = MobileCalendarAllDayLayout.labels(for: days)
+        return GeometryReader { proxy in
+            let dayWidth = MobileCalendarAllDayLayout.dayWidth(
+                availableWidth: proxy.size.width,
+                dayCount: days.count
+            )
+            HStack(spacing: 0) {
+                Text("全天")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .frame(
+                        width: MobileCalendarTimelineLayout.axisWidth,
+                        height: MobileCalendarAllDayLayout.height
+                    )
+                    .overlay(alignment: .trailing) { Divider() }
+
+                HStack(spacing: 0) {
+                    ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+                        if day.holidays.isEmpty {
+                            Color.clear
+                                .frame(width: dayWidth, height: MobileCalendarAllDayLayout.height)
+                                .accessibilityHidden(true)
+                        } else {
+                            Button {
+                                if let holiday = day.holidays.first {
+                                    presentHoliday(holiday, on: day.date)
+                                }
+                            } label: {
+                                Text(labels[index])
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .foregroundStyle(
+                                        day.holidays.contains(where: { $0.type == "holiday" })
+                                            ? AppTheme.danger
+                                            : AppTheme.primary
+                                    )
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
+                                    .padding(.horizontal, 3)
+                                    .frame(
+                                        width: max(dayWidth - 4, 1),
+                                        height: MobileCalendarAllDayLayout.height - 4
+                                    )
+                                    .background(
+                                        AppTheme.primary.opacity(0.08),
+                                        in: RoundedRectangle(cornerRadius: 4)
+                                    )
+                                    .padding(2)
+                            }
+                            .buttonStyle(.plain)
+                            .frame(width: dayWidth, height: MobileCalendarAllDayLayout.height)
+                            .accessibilityLabel(
+                                "\(Self.monthDayCompactFormatter.string(from: day.date))，全天，\(labels[index])"
+                            )
+                            .accessibilityIdentifier(
+                                "calendar.mobile.all-day.day.\(day.holidays.first?.date ?? "")"
+                            )
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
+            .frame(width: proxy.size.width, height: MobileCalendarAllDayLayout.height)
+        }
+        .frame(height: MobileCalendarAllDayLayout.height)
+        .background(AppTheme.surface)
+        .overlay(alignment: .bottom) { Divider() }
+        .accessibilityIdentifier("calendar.mobile.all-day.week")
     }
 
     private var monthView: some View {

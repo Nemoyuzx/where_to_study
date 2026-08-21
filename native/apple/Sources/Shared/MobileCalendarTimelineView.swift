@@ -37,6 +37,28 @@ enum MobileCalendarTimelineLayout {
     }
 }
 
+enum MobileCalendarAllDayLayout {
+    static let height: CGFloat = 40
+
+    static func dayWidth(availableWidth: CGFloat, dayCount: Int) -> CGFloat {
+        let timelineWidth = MobileCalendarTimelineLayout.contentWidth(
+            availableWidth: availableWidth,
+            dayCount: dayCount,
+            showsWeekColumns: dayCount > 1
+        )
+        return timelineWidth / CGFloat(max(dayCount, 1))
+    }
+
+    static func labels(for days: [CalendarTimelineDay]) -> [String] {
+        days.map { day in
+            day.holidays.map { holiday in
+                "\(holiday.type == "holiday" ? "休" : "班") \(holiday.name)"
+            }
+            .joined(separator: " · ")
+        }
+    }
+}
+
 struct MobileCalendarTimelineView: View {
     let days: [CalendarTimelineDay]
     let selectedDate: Date
