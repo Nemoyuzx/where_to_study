@@ -51,6 +51,9 @@ export struct MobileCalendarTimelineView {
   @Param days: CalendarTimelineDay[] = [];
   @Param selectedDate: DateParts = StrictDates.todayParts();
   @Param showsWeekColumns: boolean = false;
+  // 宽屏（平板/PC）形态：与 Android CalendarTimelineView 的 expanded 参数对应。
+  // 宽屏显示日头行（72vp）、课程节次轴（96vp）、小时高 68vp、最小日宽 156vp。
+  @Param expanded: boolean = false;
   // 各天课程布局缓存（BUG-046 修复）：由父组件在构造 days 时一次算好。
   @Param placements: Map<string, CoursePlacement[]> = new Map<string, CoursePlacement[]>();
   @Event onSelectDay: (day: DateParts) => void = () => {
@@ -97,6 +100,47 @@ export struct MobileCalendarTimelineView {
 
   private dayWidthValue(): number {
     return this.viewportWidth / this.dayCount();
+  }
+
+  // 宽屏布局数值（对齐 Android CalendarTimelineLogic 的 expanded 参数）：
+  // axisWidth = 48 小时轴 + 96 节次轴；小时高 68；日头高 72；最小日宽 156。
+  private axisWidth(): number {
+    return this.expanded ? 144 : MobileCalendarTimelineLayout.axisWidth;
+  }
+
+  private hourAxisWidth(): number {
+    return 48;
+  }
+
+  private slotAxisWidth(): number {
+    return this.expanded ? 96 : 0;
+  }
+
+  private hourHeight(): number {
+    return this.expanded ? 68 : MobileCalendarTimelineLayout.hourHeight;
+  }
+
+  private headerHeight(): number {
+    return this.expanded ? 72 : 0;
+  }
+
+  private bodyHeight(): number {
+    return (MobileCalendarTimelineLayout.endMinute - MobileCalendarTimelineLayout.startMinute) / 60 *
+      this.hourHeight();
+  }
+
+  private totalHeight(): number {
+    return this.headerHeight() + this.bodyHeight();
+  }
+
+  private yPos(minute: number): number {
+    const clamped: number = Math.min(Math.max(minute, MobileCalendarTimelineLayout.startMinute),
+      MobileCalendarTimelineLayout.endMinute);
+    return (clamped - MobileCalendarTimelineLayout.startMinute) / 60 * this.hourHeight();
+  }
+
+  private dayWidthMin(): number {
+    return this.expanded ? 156 : 0;
   }
 
   private shanghaiMinuteOfDay(): number {
@@ -156,135 +200,150 @@ export struct MobileCalendarTimelineView {
   }
 
   build() {
-    Stack({ alignContent: Alignment.TopStart }) {
-      // 小时轴
-      Column() {
-        ForEach(this.hours, (hour: number) => {
-          if (!this.hourLabelObscured(hour)) {
-            Text(CalendarFormatters.hourLabel(hour))
-              .fontSize(9)
-              .fontColor(AppTheme.secondaryText())
-              .width(MobileCalendarTimelineLayout.axisWidth - 8)
-              .textAlign(TextAlign.Center)
-              .position({
-                x: 0,
-                y: MobileCalendarTimelineLayout.yPosition(hour * 60) + this.adjustedHourLabelY(hour)
-              })
-          }
-        }, (hour: number) => 'hour-label.' + hour.toString())
-        if (this.isNowVisible()) {
-          Text(this.timeLabel())
-            .fontSize(10)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.onPrimary())
-            .width(40)
-            .height(18)
-            .textAlign(TextAlign.Center)
-            .borderRadius(9)
-            .backgroundColor(AppTheme.danger())
-            .position({ x: 4, y: this.indicatorY() - 9 })
-        }
+    Column() {
+      // 宽屏日头行（对齐 Android expanded 的 72vp day header + Tauri .time-day-head）
+      if (this.expanded) {
+        this.dayHeaderRow()
       }
-      .width(MobileCalendarTimelineLayout.axisWidth)
-      .height(MobileCalendarTimelineLayout.timelineHeight)
-      .alignItems(HorizontalAlign.Start)
-
-      // 右侧网格视口
       Stack({ alignContent: Alignment.TopStart }) {
-        // 小时线
-        ForEach(this.hours, (hour: number) => {
-          Divider()
-            .strokeWidth(0.5)
-            .color(AppTheme.border())
-            .width(this.viewportWidth)
-            .position({ x: 0, y: MobileCalendarTimelineLayout.yPosition(hour * 60) })
-        }, (hour: number) => 'grid-hour.' + hour.toString())
+        // 小时轴
+        Column() {
+          ForEach(this.hours, (hour: number) => {
+            if (!this.hourLabelObscured(hour)) {
+              Text(CalendarFormatters.hourLabel(hour))
+                .fontSize(9)
+                .fontColor(AppTheme.secondaryText())
+                .width(this.hourAxisWidth() - 8)
+                .textAlign(TextAlign.Center)
+                .position({
+                  x: 0,
+                  y: this.yPos(hour * 60) + this.adjustedHourLabelY(hour)
+                })
+            }
+          }, (hour: number) => 'hour-label.' + hour.toString())
+          if (this.isNowVisible()) {
+            Text(this.timeLabel())
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.onPrimary())
+              .width(40)
+              .height(18)
+              .textAlign(TextAlign.Center)
+              .borderRadius(9)
+              .backgroundColor(AppTheme.nowIndicator())
+              .position({ x: 4, y: this.indicatorY() - 9 })
+          }
+        }
+        .width(this.hourAxisWidth())
+        .height(this.bodyHeight())
+        .alignItems(HorizontalAlign.Start)
 
-        // 课程节次边界使用更清晰的虚线，避免在深色模式和周视图窄列中消失。
-        ForEach(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes(), (minute: number) => {
-          Column()
-            .width(this.viewportWidth)
-            .height(2)
-            .border({
-              width: { top: 1.2 },
-              color: AppTheme.border(),
-              style: BorderStyle.Dashed
-            })
-            .opacity(0.56)
-            .position({ x: 0, y: MobileCalendarTimelineLayout.yPosition(minute) })
-        }, (minute: number) => 'grid-slot.' + minute.toString())
+        // 宽屏课程节次轴（对应 Android 96vp slot axis / Tauri .slot-time-labels）
+        if (this.expanded) {
+          ForEach(SlotMetadata.defaults, (slot: SlotMetadata) => {
+            this.slotAxisLabel(slot)
+          }, (slot: SlotMetadata) => 'slot-axis.' + slot.index.toString())
+        }
 
-        // 周视图列分隔线
-        if (this.showsWeekColumns) {
-          ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
+        // 右侧网格视口
+        Stack({ alignContent: Alignment.TopStart }) {
+          // 小时线
+          ForEach(this.hours, (hour: number) => {
             Divider()
-              .vertical(true)
               .strokeWidth(0.5)
               .color(AppTheme.border())
-              .opacity(0.7)
-              .height(MobileCalendarTimelineLayout.timelineHeight)
-              .position({ x: index * this.dayWidthValue(), y: 0 })
-          }, (day: CalendarTimelineDay) => 'grid-column.' + this.dayKey(day))
-        }
+              .width(this.viewportWidth)
+              .position({ x: 0, y: this.yPos(hour * 60) })
+          }, (hour: number) => 'grid-hour.' + hour.toString())
 
-        // 选中列高亮
-        if (this.showsWeekColumns) {
-          ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
-            if (day.date.equals(this.selectedDate)) {
+          // 课程节次边界使用更清晰的虚线，避免在深色模式和周视图窄列中消失。
+          ForEach(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes(), (minute: number) => {
+            Column()
+              .width(this.viewportWidth)
+              .height(2)
+              .border({
+                width: { top: 1.2 },
+                color: AppTheme.border(),
+                style: BorderStyle.Dashed
+              })
+              .opacity(0.56)
+              .position({ x: 0, y: this.yPos(minute) })
+          }, (minute: number) => 'grid-slot.' + minute.toString())
+
+          // 周视图列分隔线
+          if (this.showsWeekColumns) {
+            ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
+              Divider()
+                .vertical(true)
+                .strokeWidth(0.5)
+                .color(AppTheme.border())
+                .opacity(0.7)
+                .height(this.bodyHeight())
+                .position({ x: index * this.dayWidthValue(), y: 0 })
+            }, (day: CalendarTimelineDay) => 'grid-column.' + this.dayKey(day))
+          }
+
+          // 选中列高亮
+          if (this.showsWeekColumns) {
+            ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
+              if (day.date.equals(this.selectedDate)) {
+                Column()
+                  .width(this.dayWidthValue())
+                  .height(this.bodyHeight())
+                  .backgroundColor('#0B166B5D')
+                  .hitTestBehavior(HitTestMode.None)
+                  .position({ x: index * this.dayWidthValue(), y: 0 })
+              }
+            }, (day: CalendarTimelineDay) => 'selected-column.' + this.dayKey(day))
+          }
+
+          // 单日模式的节次胶囊
+          if (!this.showsWeekColumns) {
+            ForEach(SlotMetadata.defaults, (slot: SlotMetadata) => {
+              this.slotGuide(slot)
+            }, (slot: SlotMetadata) => 'slot-guide.' + slot.index.toString())
+          }
+
+          // 课程块
+          ForEach(this.days, (day: CalendarTimelineDay, dayIndex: number) => {
+            ForEach(this.placementsOf(day), (placement: CoursePlacement) => {
+              this.courseBlock(dayIndex, placement)
+            }, (placement: CoursePlacement) => this.dayKey(day) + '|' + placement.course.id + '|' +
+              placement.track.toString())
+          }, (day: CalendarTimelineDay) => 'day-blocks.' + this.dayKey(day))
+
+          // 当前时间指示
+          if (this.isNowVisible()) {
+            this.currentTimeIndicator()
+          }
+
+          // 周视图列点击
+          if (this.showsWeekColumns) {
+            ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
               Column()
                 .width(this.dayWidthValue())
-                .height(MobileCalendarTimelineLayout.timelineHeight)
-                .backgroundColor('#0B166B5D')
-                .hitTestBehavior(HitTestMode.None)
+                .height(this.bodyHeight())
+                .backgroundColor(Color.Transparent)
                 .position({ x: index * this.dayWidthValue(), y: 0 })
-            }
-          }, (day: CalendarTimelineDay) => 'selected-column.' + this.dayKey(day))
+                .onClick(() => {
+                  this.onSelectDay(day.date);
+                })
+            }, (day: CalendarTimelineDay) => 'column-click.' + this.dayKey(day))
+          }
         }
-
-        // 单日模式的节次胶囊
-        if (!this.showsWeekColumns) {
-          ForEach(SlotMetadata.defaults, (slot: SlotMetadata) => {
-            this.slotGuide(slot)
-          }, (slot: SlotMetadata) => 'slot-guide.' + slot.index.toString())
-        }
-
-        // 课程块
-        ForEach(this.days, (day: CalendarTimelineDay, dayIndex: number) => {
-          ForEach(this.placementsOf(day), (placement: CoursePlacement) => {
-            this.courseBlock(dayIndex, placement)
-          }, (placement: CoursePlacement) => this.dayKey(day) + '|' + placement.course.id + '|' +
-            placement.track.toString())
-        }, (day: CalendarTimelineDay) => 'day-blocks.' + this.dayKey(day))
-
-        // 当前时间指示
-        if (this.isNowVisible()) {
-          this.currentTimeIndicator()
-        }
-
-        // 周视图列点击
-        if (this.showsWeekColumns) {
-          ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
-            Column()
-              .width(this.dayWidthValue())
-              .height(MobileCalendarTimelineLayout.timelineHeight)
-              .backgroundColor(Color.Transparent)
-              .position({ x: index * this.dayWidthValue(), y: 0 })
-              .onClick(() => {
-                this.onSelectDay(day.date);
-              })
-          }, (day: CalendarTimelineDay) => 'column-click.' + this.dayKey(day))
-        }
+        .width(this.viewportWidth)
+        .height(this.bodyHeight())
+        .position({ x: this.axisWidth(), y: 0 })
+        .clip(true)
       }
-      .width(this.viewportWidth)
-      .height(MobileCalendarTimelineLayout.timelineHeight)
-      .position({ x: MobileCalendarTimelineLayout.axisWidth, y: 0 })
-      .clip(true)
+      .width('100%')
+      .height(this.bodyHeight())
     }
     .width('100%')
-    .height(MobileCalendarTimelineLayout.timelineHeight)
+    .height(this.totalHeight())
     .backgroundColor(AppTheme.surface())
     .onAreaChange((oldArea: Area, newArea: Area) => {
-      this.viewportWidth = Math.max(Number(newArea.width) - MobileCalendarTimelineLayout.axisWidth, 1);
+      this.viewportWidth = Math.max(Number(newArea.width) - this.axisWidth(), 1);
     })
     .onVisibleAreaChange([0.0, 1.0], (isVisible: boolean, currentRatio: number): void => {
       this.viewVisible = isVisible;
@@ -294,6 +353,86 @@ export struct MobileCalendarTimelineView {
         this.stopTimer();
       }
     })
+  }
+
+  // 宽屏日头行：左侧角标（整点/课程节次）+ 每天日头（星期 + 月/日 + 课程数）。
+  @Builder
+  dayHeaderRow() {
+    Row({ space: 0 }) {
+      Row() {
+        Text('整点')
+          .fontSize(10)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.secondaryText())
+          .textAlign(TextAlign.Center)
+          .width(this.hourAxisWidth())
+        Text('课程节次')
+          .fontSize(10)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.secondaryText())
+          .textAlign(TextAlign.Center)
+          .width(this.slotAxisWidth())
+      }
+      .width(this.axisWidth())
+      .height(this.headerHeight())
+      .justifyContent(FlexAlign.Center)
+      .border({ width: { bottom: 1, right: 1 }, color: AppTheme.border() })
+
+      ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
+        Column({ space: 3 }) {
+          Row({ space: 4 }) {
+            Text(CalendarFormatters.weekdayLabels[StrictDates.weekdayMonday1(day.date) - 1])
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.text())
+            Text(day.date.month.toString() + '/' + day.date.day.toString())
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.text())
+          }
+          Text(day.courses.length === 0 ? '无课程' :
+            day.courses.length.toString() + ' 门课')
+            .fontSize(10)
+            .fontColor(day.courses.length > 0 ? AppTheme.primary() : AppTheme.secondaryText())
+            .maxLines(1)
+        }
+        .width(this.dayWidthValue())
+        .height(this.headerHeight())
+        .justifyContent(FlexAlign.Center)
+        .border({ width: { left: 1, bottom: 1 }, color: AppTheme.border() })
+        .backgroundColor(day.date.equals(this.selectedDate) ? '#0B166B5D' : AppTheme.surface())
+        .onClick(() => {
+          this.onSelectDay(day.date);
+        })
+      }, (day: CalendarTimelineDay) => 'day-head.' + this.dayKey(day))
+    }
+    .width('100%')
+    .height(this.headerHeight())
+  }
+
+  // 宽屏课程节次轴标签：第 N 节（bold）+ 起止时间。
+  @Builder
+  slotAxisLabel(slot: SlotMetadata) {
+    Column({ space: 1 }) {
+      Text('第' + slot.label + '节')
+        .fontSize(11)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.secondaryText())
+        .maxLines(1)
+      Text(slot.start + '-' + slot.end)
+        .fontSize(9)
+        .fontColor(AppTheme.secondaryText())
+        .maxLines(1)
+    }
+    .width(this.slotAxisWidth())
+    .alignItems(HorizontalAlign.Center)
+    .position({ x: this.hourAxisWidth(), y: this.slotAxisCenterY(slot) })
+  }
+
+  private slotAxisCenterY(slot: SlotMetadata): number {
+    const startMinute: number = CalendarTimelineLogic.minuteOf(slot.start) ?? 0;
+    const endMinute: number = CalendarTimelineLogic.minuteOf(slot.end) ?? 0;
+    return (this.yPos(startMinute) + this.yPos(endMinute)) / 2 - 10;
   }
 
   @Builder
@@ -314,8 +453,7 @@ export struct MobileCalendarTimelineView {
   private slotGuideY(slot: SlotMetadata): number {
     const startMinute: number = CalendarTimelineLogic.minuteOf(slot.start) ?? 0;
     const endMinute: number = CalendarTimelineLogic.minuteOf(slot.end) ?? 0;
-    return (MobileCalendarTimelineLayout.yPosition(startMinute) +
-      MobileCalendarTimelineLayout.yPosition(endMinute)) / 2 - 9;
+    return (this.yPos(startMinute) + this.yPos(endMinute)) / 2 - 9;
   }
 
   @Builder
@@ -419,13 +557,13 @@ export struct MobileCalendarTimelineView {
   }
 
   private blockTop(course: Course): number {
-    return MobileCalendarTimelineLayout.yPosition(this.blockStartMinute(course)) + 2;
+    return this.yPos(this.blockStartMinute(course)) + 2;
   }
 
   private blockHeight(course: Course): number {
     const top: number = this.blockTop(course);
     const bottom: number = Math.max(top + 38,
-      MobileCalendarTimelineLayout.yPosition(this.blockEndMinute(course)) - 2);
+      this.yPos(this.blockEndMinute(course)) - 2);
     return bottom - top;
   }
 
@@ -471,14 +609,14 @@ export struct MobileCalendarTimelineView {
     Column() {
       Divider()
         .strokeWidth(2)
-        .color(AppTheme.danger())
+        .color(AppTheme.nowIndicator())
         .width(this.indicatorWidth())
         .position({ x: this.indicatorLeft(), y: 0 })
       Column()
         .width(8)
         .height(8)
         .borderRadius(4)
-        .backgroundColor(AppTheme.danger())
+        .backgroundColor(AppTheme.nowIndicator())
         .position({ x: this.indicatorLeft(), y: -3 })
     }
     .width(this.viewportWidth)
@@ -505,7 +643,7 @@ export struct MobileCalendarTimelineView {
   }
 
   private indicatorY(): number {
-    return MobileCalendarTimelineLayout.yPosition(this.shanghaiMinuteOfDay());
+    return this.yPos(this.shanghaiMinuteOfDay());
   }
 
   private isNowVisible(): boolean {

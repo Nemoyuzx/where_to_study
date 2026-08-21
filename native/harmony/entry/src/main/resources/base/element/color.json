@@ -61,6 +61,18 @@
       "value": "#FFFFFF"
     },
     {
+      "name": "app_now_indicator",
+      "value": "#FF3B30"
+    },
+    {
+      "name": "app_holiday",
+      "value": "#C62835"
+    },
+    {
+      "name": "app_primary_dark",
+      "value": "#0C4A42"
+    },
+    {
       "name": "widget_primary",
       "value": "#176B5D"
     },

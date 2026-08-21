@@ -9,7 +9,7 @@ import { AppTheme } from '../../common/AppTheme';
 import { PageTitle, SurfaceCard } from '../SharedComponents';
 import {
   CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarTimelineDay,
-  CalendarTimelineLogic, TeachingCalendarLogic
+  CalendarTimelineLogic, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
 import { MobileCalendarTimelineLayout, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
@@ -39,6 +39,8 @@ export struct MobileTeachingCalendarView {
   @Local contentHeight: number = 500;
   @Local rootWidth: number = 350;
   @Local rootHeight: number = 640;
+  @Local isDarkMode: boolean = false;
+  private darkModeProbe: DarkModeProbe = new DarkModeProbe();
   @Local rootGlobalX: number = 0;
   @Local rootGlobalY: number = 0;
   @Local presentedDayAnchorX: number = 175;
@@ -61,9 +63,13 @@ export struct MobileTeachingCalendarView {
       TeachingCalendarLogic.monthSheetExpandedPosition :
       TeachingCalendarLogic.monthSheetDetailsPosition;
     this.ensureVisibleHolidays();
+    this.darkModeProbe.register((dark: boolean) => {
+      this.isDarkMode = dark;
+    });
   }
 
   aboutToDisappear(): void {
+    this.darkModeProbe.unregister();
     // 清理延迟滚动定时器，避免对已销毁 Scroller 操作（BUG-012 修复）。
     if (this.timelineScrollTimer >= 0) {
       clearTimeout(this.timelineScrollTimer);
@@ -562,7 +568,7 @@ export struct MobileTeachingCalendarView {
     if (holiday === null) {
       return AppTheme.text();
     }
-    return holiday.type === 'holiday' ? AppTheme.danger() : AppTheme.primary();
+    return holiday.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary();
   }
 
   private firstHoliday(day: DateParts): HolidayItem | null {
@@ -753,7 +759,7 @@ export struct MobileTeachingCalendarView {
   private allDayForeground(day: CalendarTimelineDay): ResourceColor {
     for (const item of day.holidays) {
       if (item.type === 'holiday') {
-        return AppTheme.danger();
+        return AppTheme.holiday();
       }
     }
     return AppTheme.primary();
@@ -935,7 +941,7 @@ export struct MobileTeachingCalendarView {
     .border({
       width: day.equals(StrictDates.todayParts()) && !day.equals(renderDate) ? 2 : 0,
       color: day.equals(StrictDates.todayParts()) && !day.equals(renderDate) ?
-        AppTheme.primary() : Color.Transparent
+        AppTheme.nowIndicator() : Color.Transparent
     })
     .clip(true)
     .onClick(() => {
@@ -1078,7 +1084,7 @@ export struct MobileTeachingCalendarView {
     if (holiday === null) {
       return AppTheme.text();
     }
-    return holiday.type === 'holiday' ? AppTheme.danger() : AppTheme.primary();
+    return holiday.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary();
   }
 
   private monthBackground(day: DateParts, renderDate: DateParts): ResourceColor {
@@ -1090,7 +1096,7 @@ export struct MobileTeachingCalendarView {
       return Color.Transparent;
     }
     const alpha: number = Math.min(0.08 + count * 0.08, 0.36);
-    return CalendarColors.primaryWithAlpha(alpha);
+    return CalendarColors.primaryWithAlpha(alpha, this.isDarkMode);
   }
 
   // ---------- 年视图 ----------
@@ -1196,10 +1202,11 @@ export struct MobileTeachingCalendarView {
         .borderRadius(4)
         .backgroundColor(this.presentedDay !== null && day.equals(this.presentedDay as DateParts) ?
           AppTheme.primaryFill() : CalendarColors.primaryWithAlpha(
-            TeachingCalendarLogic.yearCourseOpacity(this.coursesOn(day).length)))
+            TeachingCalendarLogic.yearCourseOpacity(this.coursesOn(day).length), this.isDarkMode))
         .border({
-          width: day.equals(StrictDates.todayParts()) ? 2 : 0.5,
-          color: day.equals(StrictDates.todayParts()) ? AppTheme.primary() : AppTheme.border()
+          width: day.equals(StrictDates.todayParts()) && !day.equals(this.presentedDay) ? 2 : 0,
+          color: day.equals(StrictDates.todayParts()) && !day.equals(this.presentedDay) ?
+            AppTheme.nowIndicator() : Color.Transparent
         })
         .onClick((event: ClickEvent) => {
           if (!interactive) {
@@ -1341,11 +1348,11 @@ export struct MobileTeachingCalendarView {
           SymbolGlyph(item.type === 'holiday' ? $r('sys.symbol.calendar_badge_clock') :
             $r('sys.symbol.briefcase'))
             .fontSize(14)
-            .fontColor([item.type === 'holiday' ? AppTheme.danger() : AppTheme.primary()])
+            .fontColor([item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary()])
           Text(item.name)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
-            .fontColor(item.type === 'holiday' ? AppTheme.danger() : AppTheme.primary())
+            .fontColor(item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary())
         }
         .width('100%')
       }, (item: HolidayItem) => 'summary-holiday.' + item.id())
@@ -1501,9 +1508,15 @@ class AllDayEntry {
 
 // 主题主色的透明度变体（供月/年单元格背景使用；深浅色下均可用）。
 class CalendarColors {
-  static primaryWithAlpha(alpha: number): string {
+  static primaryWithAlpha(alpha: number, dark: boolean): string {
     const clamped: number = Math.min(Math.max(alpha, 0), 1);
-    const hexAlpha: string = Math.round(clamped * 255).toString(16).padStart(2, '0');
-    return '#' + hexAlpha.toUpperCase() + '166B5D';
+    const fg: number[] = dark ? [0x5A, 0xD2, 0xB8] : [0x16, 0x6B, 0x5D];
+    const bg: number[] = dark ? [0x00, 0x00, 0x00] : [0xF2, 0xF2, 0xF7];
+    const channels: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const v: number = Math.round(bg[i] + (fg[i] - bg[i]) * clamped);
+      channels.push(v.toString(16).padStart(2, '0'));
+    }
+    return '#' + channels.join('').toUpperCase();
   }
 }

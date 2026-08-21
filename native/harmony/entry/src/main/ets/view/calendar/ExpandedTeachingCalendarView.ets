@@ -9,7 +9,7 @@ import { AppTheme } from '../../common/AppTheme';
 import { PageTitle } from '../SharedComponents';
 import {
   CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarTimelineDay,
-  CalendarTimelineLogic, TeachingCalendarLogic
+  CalendarTimelineLogic, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
 import { CoursePlacement, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
@@ -33,11 +33,20 @@ export struct ExpandedTeachingCalendarView {
   @Local presentedDay: DateParts | null = null;
   @Local contentWidth: number = 900;
   @Local contentHeight: number = 700;
+  @Local isDarkMode: boolean = false;
+  private darkModeProbe: DarkModeProbe = new DarkModeProbe();
   private timelinePlacements: Map<string, CoursePlacement[]> =
     new Map<string, CoursePlacement[]>();
 
   aboutToAppear(): void {
     this.ensureVisibleHolidays();
+    this.darkModeProbe.register((dark: boolean) => {
+      this.isDarkMode = dark;
+    });
+  }
+
+  aboutToDisappear(): void {
+    this.darkModeProbe.unregister();
   }
 
   @Monitor('session.selectedDate')
@@ -335,6 +344,7 @@ export struct ExpandedTeachingCalendarView {
           placements: this.timelinePlacements,
           selectedDate: this.selectedDate(),
           showsWeekColumns: this.mode() === CalendarMode.week,
+          expanded: true,
           onSelectDay: (day: DateParts): void => {
             this.setSelectedDate(day);
           }
@@ -373,10 +383,10 @@ export struct ExpandedTeachingCalendarView {
             Text(CalendarFormatters.monthDayCompact(entry.day) + ' · ' + entry.item.name)
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
-              .fontColor(entry.item.type === 'holiday' ? AppTheme.danger() : AppTheme.primary())
+              .fontColor(entry.item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary())
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
               .borderRadius(12)
-              .backgroundColor('#14166B5D')
+              .backgroundColor('#140C4A42')
               .onClick(() => {
                 this.setSelectedDate(entry.day);
               })
@@ -428,11 +438,9 @@ export struct ExpandedTeachingCalendarView {
           }, (day: DateParts) => 'month-day.' + StrictDates.formatDateParts(day))
       }
       .columnsTemplate('repeat(7, 1fr)')
-      .columnsGap(4)
-      .rowsGap(4)
+      .columnsGap(2)
+      .rowsGap(2)
       .width('100%')
-
-      this.daySummaryCard(this.selectedDate())
     }
     .width('100%')
   }
@@ -447,28 +455,31 @@ export struct ExpandedTeachingCalendarView {
         .width('100%')
         .textAlign(TextAlign.Center)
         .padding({ top: 3 })
-      Column({ space: 2 }) {
+      Column({ space: 1 }) {
         ForEach(this.monthEvents(day).slice(0, 2), (event: MonthEventItem) => {
           Text(event.title)
             .fontSize(10)
             .fontWeight(FontWeight.Medium)
             .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : event.tint)
             .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .padding({ left: 3, right: 3 })
             .width('100%')
             .height(14)
-            .textAlign(TextAlign.Center)
-            .backgroundColor('#C7FFFFFF')
-            .borderRadius(4)
-            .border({ width: 0.75, color: AppTheme.border() })
+            .textAlign(TextAlign.Start)
+            .backgroundColor(day.equals(this.selectedDate()) ?
+              AppTheme.primaryDark() : Color.Transparent)
+            .borderRadius(3)
         }, (event: MonthEventItem) => 'month-event.' + event.id)
         if (this.monthEvents(day).length > 2) {
           Text('+' + (this.monthEvents(day).length - 2).toString())
             .fontSize(10)
+            .fontWeight(FontWeight.Medium)
             .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : AppTheme.secondaryText())
             .width('100%')
-            .height(14)
-            .textAlign(TextAlign.Center)
+            .height(13)
+            .textAlign(TextAlign.Start)
+            .padding({ left: 2, right: 2 })
         }
       }
       .width('100%')
@@ -476,14 +487,14 @@ export struct ExpandedTeachingCalendarView {
     }
     .padding({ left: 2, right: 2, bottom: 2 })
     .width('100%')
-    .height(76)
-    .borderRadius(5)
+    .height(82)
+    .borderRadius(9)
     .backgroundColor(day.equals(this.selectedDate()) ?
       AppTheme.primaryFill() : this.monthBackground(day))
     .border({
-      width: day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ? 2 : 1,
+      width: day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ? 2 : 0,
       color: day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ?
-        AppTheme.danger() : AppTheme.border()
+        AppTheme.nowIndicator() : Color.Transparent
     })
     .clip(true)
     .onClick(() => {
@@ -496,7 +507,7 @@ export struct ExpandedTeachingCalendarView {
     for (const item of this.holidayItemsOn(day)) {
       result.push(new MonthEventItem(
         'holiday-' + item.id(), (item.type === 'holiday' ? '休 ' : '班 ') + item.name,
-        item.type === 'holiday' ? AppTheme.danger() : AppTheme.primary()));
+        item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary()));
     }
     for (const course of this.coursesOn(day)) {
       result.push(new MonthEventItem('course-' + course.id, course.name, AppTheme.primary()));
@@ -515,7 +526,7 @@ export struct ExpandedTeachingCalendarView {
     if (items.length === 0) {
       return AppTheme.text();
     }
-    return items[0].type === 'holiday' ? AppTheme.danger() : AppTheme.primary();
+    return items[0].type === 'holiday' ? AppTheme.holiday() : AppTheme.primary();
   }
 
   private monthBackground(day: DateParts): ResourceColor {
@@ -524,7 +535,7 @@ export struct ExpandedTeachingCalendarView {
       return Color.Transparent;
     }
     const alpha: number = Math.min(0.08 + count * 0.08, 0.36);
-    return CalendarColors.primaryWithAlpha(alpha);
+    return CalendarColors.primaryWithAlpha(alpha, this.isDarkMode);
   }
 
   @Builder
@@ -555,13 +566,14 @@ export struct ExpandedTeachingCalendarView {
   }
 
   private yearColumnCount(): number {
-    if (this.contentWidth >= 1080) {
-      return 5;
-    }
-    if (this.contentWidth >= 880) {
+    // 对齐 Android YearCalendarView：>=1060 -> 4，>=660 -> 3，否则 2。
+    if (this.contentWidth >= 1060) {
       return 4;
     }
-    return 3;
+    if (this.contentWidth >= 660) {
+      return 3;
+    }
+    return 2;
   }
 
   private monthsOfYear(): number[] {
@@ -611,17 +623,19 @@ export struct ExpandedTeachingCalendarView {
   yearDayButton(day: DateParts, month: number) {
     if (day.month === month) {
       Text(day.day.toString())
-        .fontSize(8)
-        .fontColor(AppTheme.text())
+        .fontSize(9)
+        .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : AppTheme.text())
         .textAlign(TextAlign.Center)
         .width('100%')
-        .height(24)
-        .borderRadius(4)
-        .backgroundColor(CalendarColors.primaryWithAlpha(
-          TeachingCalendarLogic.yearCourseOpacity(this.coursesOn(day).length)))
+        .height(30)
+        .borderRadius(3)
+        .backgroundColor(day.equals(this.selectedDate()) ?
+          AppTheme.primaryFill() : CalendarColors.primaryWithAlpha(
+            TeachingCalendarLogic.yearCourseOpacity(this.coursesOn(day).length), this.isDarkMode))
         .border({
-          width: day.equals(StrictDates.todayParts()) ? 2 : 0.5,
-          color: day.equals(StrictDates.todayParts()) ? AppTheme.primary() : AppTheme.border()
+          width: day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ? 2 : 0,
+          color: day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ?
+            AppTheme.nowIndicator() : Color.Transparent
         })
         .onClick(() => {
           this.setSelectedDate(day);
@@ -697,7 +711,7 @@ export struct ExpandedTeachingCalendarView {
         Text((item.type === 'holiday' ? '休 ' : '班 ') + item.name)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(item.type === 'holiday' ? AppTheme.danger() : AppTheme.primary())
+          .fontColor(item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary())
       }, (item: HolidayItem) => 'summary-holiday.' + item.id())
       if (this.coursesOn(day).length === 0) {
         Text('暂无课程')
@@ -743,10 +757,18 @@ class AllDayEntry {
   }
 }
 
+// 主题主色与背景的混色（对应 Android UiSupport.kt blend(primary, background, amount)）：
+// 深浅色分别用 app_primary / app_background 的十六进制计算不透明结果。
 class CalendarColors {
-  static primaryWithAlpha(alpha: number): string {
+  static primaryWithAlpha(alpha: number, dark: boolean): string {
     const clamped: number = Math.min(Math.max(alpha, 0), 1);
-    const hexAlpha: string = Math.round(clamped * 255).toString(16).padStart(2, '0');
-    return '#' + hexAlpha.toUpperCase() + '166B5D';
+    const fg: number[] = dark ? [0x5A, 0xD2, 0xB8] : [0x16, 0x6B, 0x5D];
+    const bg: number[] = dark ? [0x00, 0x00, 0x00] : [0xF2, 0xF2, 0xF7];
+    const channels: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const v: number = Math.round(bg[i] + (fg[i] - bg[i]) * clamped);
+      channels.push(v.toString(16).padStart(2, '0'));
+    }
+    return '#' + channels.join('').toUpperCase();
   }
 }

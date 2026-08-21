@@ -48,6 +48,21 @@ export class AppTheme {
     return $r('app.color.app_danger');
   }
 
+  // 当前时间/今日标记（对应 Android Palette.nowIndicator 与 Tauri --current-time）。
+  static nowIndicator(): Resource {
+    return $r('app.color.app_now_indicator');
+  }
+
+  // 法定节假日文字（对应 Android Palette.holiday）。
+  static holiday(): Resource {
+    return $r('app.color.app_holiday');
+  }
+
+  // 主色深档（对应 Android Palette.primaryDark，两模式同值）。
+  static primaryDark(): Resource {
+    return $r('app.color.app_primary_dark');
+  }
+
   // 列表选中背景（深浅色各有独立 alpha，BUG-045 修复）。
   static selection(): Resource {
     return $r('app.color.app_selection');
