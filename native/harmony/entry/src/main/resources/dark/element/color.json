@@ -59,6 +59,38 @@
     {
       "name": "app_segmented_selection",
       "value": "#636366"
+    },
+    {
+      "name": "app_now_indicator",
+      "value": "#FF453A"
+    },
+    {
+      "name": "app_holiday",
+      "value": "#FF9A9D"
+    },
+    {
+      "name": "app_primary_dark",
+      "value": "#0C4A42"
+    },
+    {
+      "name": "widget_primary",
+      "value": "#5AD2B8"
+    },
+    {
+      "name": "widget_accent",
+      "value": "#E6B048"
+    },
+    {
+      "name": "widget_background",
+      "value": "#181E1B"
+    },
+    {
+      "name": "widget_text_primary",
+      "value": "#F2F6F4"
+    },
+    {
+      "name": "widget_text_secondary",
+      "value": "#A8B2AD"
     }
   ]
 }

@@ -7,19 +7,21 @@ import { ScheduleSnapshot } from '../common/Models';
 import { JsonFile } from '../store/JsonFile';
 import { AppContext } from '../store/AppContext';
 import {
-  TodayCourseWidgetData, WidgetArchive, WidgetArchiveCourse
+  TodayCourseWidgetData, WidgetArchive, WidgetArchiveCourse, WidgetCoursePreferences
 } from './TodayCourseWidgetData';
 
 export class WidgetSync {
   // AppModel 在课表保存/清除/加载后调用；失败不影响主流程。
-  static refresh(schedule: ScheduleSnapshot | null): void {
+  static refresh(schedule: ScheduleSnapshot | null,
+    preferences: WidgetCoursePreferences = new WidgetCoursePreferences()): void {
     const work: Promise<void> = (async (): Promise<void> => {
       try {
         const path: string = TodayCourseWidgetData.archiveFilePath(AppContext.filesRoot());
         if (schedule === null) {
           await JsonFile.removeFile(path);
         } else {
-          const archive: WidgetArchive = TodayCourseWidgetData.scheduleToArchive(schedule);
+          const archive: WidgetArchive = TodayCourseWidgetData.scheduleToArchive(
+            schedule, preferences);
           const text: string = JSON.stringify(WidgetSync.archiveToJson(archive));
           await JsonFile.writeTextAtomic(path, text);
         }
@@ -95,7 +97,9 @@ export class WidgetSync {
       courses.push(new WidgetArchiveCourse(
         WidgetSync.asString(record['id']),
         WidgetSync.asString(record['name']),
+        WidgetSync.asString(record['teacher']),
         WidgetSync.asString(record['room']),
+        WidgetSync.asString(record['section_text']),
         WidgetSync.asString(record['time_range']),
         WidgetSync.asNumber(record['weekday']),
         WidgetSync.numberArray(record['week_numbers']),
@@ -103,7 +107,10 @@ export class WidgetSync {
         WidgetSync.asNumber(record['start_slot'])
       ));
     }
-    return new WidgetArchive(termStartDate, fetchedAt, courses);
+    const preferences: WidgetCoursePreferences = typeof raw['preferences'] === 'object' ?
+      WidgetCoursePreferences.fromJson(raw['preferences'] as Record<string, Object>) :
+      new WidgetCoursePreferences();
+    return new WidgetArchive(termStartDate, fetchedAt, courses, preferences);
   }
 
   private static numberArray(value: Object | undefined): number[] {
@@ -136,7 +143,9 @@ export class WidgetSync {
       const item: Record<string, Object> = {};
       item['id'] = course.id;
       item['name'] = course.name;
+      item['teacher'] = course.teacher;
       item['room'] = course.room;
+      item['section_text'] = course.sectionText;
       item['time_range'] = course.timeRange;
       item['weekday'] = course.weekday;
       item['week_numbers'] = course.weekNumbers;
@@ -145,6 +154,7 @@ export class WidgetSync {
       courses.push(item);
     }
     out['courses'] = courses;
+    out['preferences'] = archive.preferences.toJson();
     return out;
   }
 }

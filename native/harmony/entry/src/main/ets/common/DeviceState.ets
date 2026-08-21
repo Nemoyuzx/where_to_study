@@ -5,6 +5,7 @@
 // - 半折叠（FOLD_STATUS_HALF_FOLDED）时屏幕被铰链分成两半，
 //   强制使用单列紧凑布局（侧栏/双列/宽日历全部退化为紧凑形态），
 //   避免铰链遮挡内容；完全展开/双屏展开按宽度使用宽布局。
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { display } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
@@ -93,6 +94,16 @@ export class DeviceState {
   // 半折叠时铰链横贯屏幕中部，强制紧凑布局。
   allowsExpandedLayout(): boolean {
     return !this.isHalfFolded();
+  }
+
+  // 2in1/PC 设备类型判定：电脑端日历按 Windows Tauri 布局，
+  // 平板/手机按 Android 折叠屏布局（用户指定的平台映射）。
+  static isPc2in1(): boolean {
+    try {
+      return deviceInfo.deviceType === '2in1';
+    } catch (e) {
+      return false;
+    }
   }
 }
 

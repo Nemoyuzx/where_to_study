@@ -3,16 +3,17 @@
 import { formBindingData, FormExtensionAbility, formProvider } from '@kit.FormKit';
 import { Want } from '@kit.AbilityKit';
 import { WidgetSync } from './WidgetSync';
-import { TodayCourseWidgetData, WidgetArchive } from './TodayCourseWidgetData';
+import { TodayCourseWidgetData, WidgetArchive, WidgetCoursePreferences } from './TodayCourseWidgetData';
 
 export default class TodayCourseWidgetAbility extends FormExtensionAbility {
-  // 卡片尺寸 → 课程行数（2*2 两行，其余三行；未知按三行），BUG-040 修复。
-  private static courseLimitForDimension(dimension: Object | undefined): number {
+  // 卡片尺寸 → 行数上限（2*2 两行，其余按偏好上限；未知按偏好上限），BUG-040 修复。
+  private static rowLimitForDimension(dimension: Object | undefined,
+    preferences: WidgetCoursePreferences): number {
     const value: number = typeof dimension === 'number' ? dimension as number : Number(dimension);
     if (!Number.isNaN(value) && value === 1) {
-      return 2;
+      return Math.min(2, preferences.courseLimit);
     }
-    return 3;
+    return preferences.courseLimit;
   }
 
   onAddForm(want: Want): formBindingData.FormBindingData {
@@ -20,9 +21,11 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
     const archive: WidgetArchive | null = WidgetSync.loadArchiveSync(
       TodayCourseWidgetData.archiveFilePath(this.context.filesDir));
     const dimension: Object | undefined = want.parameters?.['ohos.extra.param.key.form_dimension'];
+    const preferences: WidgetCoursePreferences =
+      archive?.preferences ?? new WidgetCoursePreferences();
     return formBindingData.createFormBindingData(
-      TodayCourseWidgetData.binding(archive,
-        TodayCourseWidgetAbility.courseLimitForDimension(dimension)));
+      TodayCourseWidgetData.binding(archive, preferences,
+        undefined, TodayCourseWidgetData.nowMinute()));
   }
 
   onUpdateForm(formId: string, wantParams?: Record<string, Object>): void {
@@ -33,12 +36,15 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
     wantParams?: Record<string, Object>): void {
     const filesDir: string = this.context.filesDir;
     const dimension: Object | undefined = wantParams?.['ohos.extra.param.key.form_dimension'];
-    const courseLimit: number = TodayCourseWidgetAbility.courseLimitForDimension(dimension);
     const work: Promise<void> = (async (): Promise<void> => {
       const archive: WidgetArchive | null = await WidgetSync.loadArchive(
         TodayCourseWidgetData.archiveFilePath(filesDir));
+      const preferences: WidgetCoursePreferences =
+        archive?.preferences ?? new WidgetCoursePreferences();
       const data: formBindingData.FormBindingData =
-        formBindingData.createFormBindingData(TodayCourseWidgetData.binding(archive, courseLimit));
+        formBindingData.createFormBindingData(
+          TodayCourseWidgetData.binding(archive, preferences,
+            undefined, TodayCourseWidgetData.nowMinute()));
       if (hasFormId) {
         try {
           await formProvider.updateForm(formId, data);

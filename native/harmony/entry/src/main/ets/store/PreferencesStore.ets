@@ -29,6 +29,12 @@ export class PreferencesStore {
     return typeof value === 'boolean' ? value as boolean : fallback;
   }
 
+  async getNumber(key: string, fallback: number): Promise<number> {
+    const store: preferences.Preferences = await this.open();
+    const value: preferences.ValueType = await store.get(key, fallback);
+    return typeof value === 'number' ? value as number : fallback;
+  }
+
   async getStringArray(key: string): Promise<string[]> {
     const store: preferences.Preferences = await this.open();
     const value: preferences.ValueType = await store.get(key, []);
@@ -66,6 +72,12 @@ export class PreferencesStore {
   }
 
   async setBool(key: string, value: boolean): Promise<void> {
+    const store: preferences.Preferences = await this.open();
+    await store.put(key, value);
+    await store.flush();
+  }
+
+  async setNumber(key: string, value: number): Promise<void> {
     const store: preferences.Preferences = await this.open();
     await store.put(key, value);
     await store.flush();

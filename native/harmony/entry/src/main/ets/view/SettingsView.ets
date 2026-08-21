@@ -6,12 +6,17 @@ import { AdaptiveLayoutPolicy } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { PrivacyPolicyView } from './PrivacyPolicyView';
+import {
+  TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
+} from '../widget/TodayCourseWidgetData';
 
 @ComponentV2
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Local contentWidth: number = 350;
   @Local showingPrivacyPolicy: boolean = false;
+  // 样式预览容量（紧凑 1 / 标准 3 / 展开 6，对应 Android 预览 Spinner）。
+  @Local previewCapacity: number = 3;
   private statusDismissRevision: number = 0;
 
   private static readonly projectURL: string =
@@ -65,14 +70,16 @@ export struct SettingsView {
         this.settingsTitle()
         if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
-            Column() {
+            Column({ space: 16 }) {
               this.accountSurface()
+              this.semesterSurface()
             }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
 
             Column({ space: 16 }) {
               this.notificationSurface()
+              this.widgetSurface()
               this.localDataSurface()
             }
             .layoutWeight(1)
@@ -84,7 +91,9 @@ export struct SettingsView {
         } else {
           Column({ space: 16 }) {
             this.accountSurface()
+            this.semesterSurface()
             this.notificationSurface()
+            this.widgetSurface()
             this.localDataSurface()
             this.aboutSurface()
           }
@@ -159,58 +168,6 @@ export struct SettingsView {
           .width('100%')
           .padding({ left: 2, right: 2, top: 7 })
       }
-      Blank().height(7)
-      this.field('学期编号', this.model.termID, InputType.Normal, (value: string): void => {
-        this.model.termID = value;
-      })
-      Blank().height(7)
-      this.field('第一周周一（YYYY-MM-DD）', this.model.termStartDate, InputType.Normal,
-        (value: string): void => {
-          this.model.termStartDate = value;
-        })
-
-      Blank().height(7)
-      Button('按当前日期自动检测')
-        .type(ButtonType.Normal)
-        .stateEffect(true)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.primary())
-        .borderRadius(6)
-        .border({ width: 1, color: AppTheme.primary() })
-        .backgroundColor(AppTheme.surface())
-        .width('100%')
-        .height(36)
-        .enabled(!this.model.isSampleMode())
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onClick(() => {
-          const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
-          this.model.termID = suggested.termID;
-          this.model.termStartDate = suggested.termStartDate;
-        })
-      if (SemesterLogic.matchesCurrentPeriod(this.model.termID, this.model.termStartDate)) {
-        Text('✓ 与当前学期一致')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.primary())
-          .width('100%')
-          .padding({ left: 2, right: 2, top: 7 })
-      } else if (SemesterLogic.isValidTermID(this.model.termID) &&
-        SemesterLogic.isValidTermStartDate(this.model.termStartDate)) {
-        Text('当前设置与检测结果不同')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.accent())
-          .width('100%')
-          .padding({ left: 2, right: 2, top: 7 })
-      }
-      Text('获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。')
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .lineHeight(17)
-        .width('100%')
-        .padding({ left: 2, right: 2, top: 7 })
-
       Text('默认校区')
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
@@ -311,7 +268,7 @@ export struct SettingsView {
 
   @Builder
   field(placeholder: string, value: string, inputType: InputType,
-    onChangeValue: (value: string) => void) {
+    onChangeValue: (value: string) => void, enabled: boolean = true) {
     TextInput({ placeholder: placeholder, text: value })
       .type(inputType)
       .fontSize(15)
@@ -324,10 +281,328 @@ export struct SettingsView {
       .width('100%')
       .height(36)
       .showPasswordIcon(false)
-      .enabled(!this.model.isSampleMode())
+      .enabled(!this.model.isSampleMode() && enabled)
+      .opacity(this.model.isSampleMode() || !enabled ? 0.62 : 1)
       .onChange((text: string) => {
         onChangeValue(text);
       })
+  }
+
+  // 学期设置独立卡片（对齐 Android SettingsPage.semesterSurface）：
+  // 自动检测开关 + 手动学期字段（自动检测开启时禁用）+ 说明 + 保存学期设置。
+  @Builder
+  semesterSurface() {
+    Column() {
+      this.sectionTitle('学期设置')
+      Row({ space: 8 }) {
+        Text('自动检测当前学期')
+          .fontSize(15)
+          .fontColor(AppTheme.text())
+          .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.model.automaticTermDetection })
+          .selectedColor(AppTheme.primaryFill())
+          .width(48)
+          .height(28)
+          .enabled(!this.model.isSampleMode())
+          .onChange((value: boolean) => {
+            this.model.automaticTermDetection = value;
+          })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 36 })
+      .alignItems(VerticalAlign.Center)
+
+      Blank().height(7)
+      this.field('学期编号', this.model.termID, InputType.Normal, (value: string): void => {
+        this.model.termID = value;
+      }, !this.model.automaticTermDetection)
+      Blank().height(7)
+      this.field('第一周周一（YYYY-MM-DD）', this.model.termStartDate, InputType.Normal,
+        (value: string): void => {
+          this.model.termStartDate = value;
+        }, !this.model.automaticTermDetection)
+
+      Text(this.model.automaticTermDetection ?
+        '获取/刷新课表后会自动应用教务返回的学期与开学日期。' :
+        '关闭自动检测后，将使用手动填写的学期信息。')
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .lineHeight(17)
+        .width('100%')
+        .padding({ left: 2, right: 2, top: 8 })
+
+      Blank().height(this.isCompact() ? 10 : 12)
+      Button('保存学期设置')
+        .type(ButtonType.Normal)
+        .stateEffect(true)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.primary())
+        .borderRadius(6)
+        .border({ width: 1, color: AppTheme.primary() })
+        .backgroundColor(AppTheme.surface())
+        .width('100%')
+        .height(36)
+        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+        .onClick(() => {
+          const work: Promise<boolean> = this.model.saveSemesterSettings();
+          work.then((saved: boolean) => {
+            if (saved) {
+              this.dismissStatusMessageAfter(this.model.statusMessage);
+            }
+          }).catch(() => {
+            // 错误说明已由 AppModel 写入状态消息。
+          });
+        })
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  // 桌面小组件设置卡片（对齐 Android widgetSurface）：
+  // 显示课程地点/任课教师开关 + 课程数量 + 样式预览。
+  @Builder
+  widgetSurface() {
+    Column() {
+      this.sectionTitle('桌面小组件')
+
+      Row({ space: 8 }) {
+        Text('显示课程地点')
+          .fontSize(15)
+          .fontColor(AppTheme.text())
+          .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.model.widgetShowsLocation })
+          .selectedColor(AppTheme.primaryFill())
+          .width(48)
+          .height(28)
+          .enabled(!this.model.isSampleMode())
+          .onChange((value: boolean) => {
+            this.model.setWidgetShowsLocation(value);
+          })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 36 })
+      .alignItems(VerticalAlign.Center)
+
+      Row({ space: 8 }) {
+        Text('显示任课教师')
+          .fontSize(15)
+          .fontColor(AppTheme.text())
+          .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.model.widgetShowsTeacher })
+          .selectedColor(AppTheme.primaryFill())
+          .width(48)
+          .height(28)
+          .enabled(!this.model.isSampleMode())
+          .onChange((value: boolean) => {
+            this.model.setWidgetShowsTeacher(value);
+          })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 36 })
+      .alignItems(VerticalAlign.Center)
+
+      Text('显示课程数量')
+        .fontSize(13)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+        .padding({ top: this.isCompact() ? 10 : 14, bottom: 5 })
+      Select([{ value: '1 门' }, { value: '2 门' }, { value: '3 门' }, { value: '4 门' },
+        { value: '5 门' }, { value: '6 门' }])
+        .selected(this.model.widgetCourseLimit - 1)
+        .value(this.model.widgetCourseLimit.toString() + ' 门')
+        .font({ size: 15 })
+        .fontColor(AppTheme.text())
+        .selectedOptionBgColor(AppTheme.primaryFill())
+        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
+        .selectedOptionFontColor(AppTheme.onPrimary())
+        .optionBgColor(AppTheme.surface())
+        .optionFont({ size: 15 })
+        .optionFontColor(AppTheme.text())
+        .backgroundColor(AppTheme.surface())
+        .border({ width: 1, color: AppTheme.border() })
+        .borderRadius(6)
+        .height(36)
+        .width('100%')
+        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+        .onSelect((index: number) => {
+          this.model.setWidgetCourseLimit(index + 1);
+        })
+
+      Divider()
+        .strokeWidth(1)
+        .color(AppTheme.border())
+        .margin({ top: 14, bottom: 12 })
+
+      Text('样式预览 · 示例内容')
+        .fontSize(14)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.text())
+        .width('100%')
+      Select([{ value: '紧凑' }, { value: '标准' }, { value: '展开' }])
+        .selected(this.previewCapacity === 1 ? 0 : (this.previewCapacity === 6 ? 2 : 1))
+        .value(this.previewCapacity === 1 ? '紧凑' : (this.previewCapacity === 6 ? '展开' : '标准'))
+        .font({ size: 15 })
+        .fontColor(AppTheme.text())
+        .selectedOptionBgColor(AppTheme.primaryFill())
+        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
+        .selectedOptionFontColor(AppTheme.onPrimary())
+        .optionBgColor(AppTheme.surface())
+        .optionFont({ size: 15 })
+        .optionFontColor(AppTheme.text())
+        .backgroundColor(AppTheme.surface())
+        .border({ width: 1, color: AppTheme.border() })
+        .borderRadius(6)
+        .height(36)
+        .width('100%')
+        .margin({ top: 7 })
+        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+        .onSelect((index: number) => {
+          this.previewCapacity = index === 0 ? 1 : (index === 2 ? 6 : 3);
+        })
+
+      this.widgetPreview()
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  // 样式预览：用示例归档 + 当前偏好生成绑定数据并渲染（对应 Android 预览）。
+  @Builder
+  widgetPreview() {
+    Column() {
+      this.widgetPreviewRow(
+        this.previewString('todayTitle'), this.previewString('todayCountText'),
+        this.previewString('dateContext'), this.previewString('statusText'),
+        this.previewString('course1Name'), this.previewString('course1Details'),
+        this.previewBoolean('course1Highlighted'),
+        this.previewString('course2Name'), this.previewString('course2Details'),
+        this.previewBoolean('course2Highlighted'),
+        this.previewString('course3Name'), this.previewString('course3Details'),
+        this.previewBoolean('course3Highlighted'),
+        this.previewString('course4Name'), this.previewString('course4Details'),
+        this.previewBoolean('course4Highlighted'),
+        this.previewString('course5Name'), this.previewString('course5Details'),
+        this.previewBoolean('course5Highlighted'),
+        this.previewString('course6Name'), this.previewString('course6Details'),
+        this.previewBoolean('course6Highlighted'))
+    }
+    .padding(14)
+    .margin({ top: 8 })
+    .width('100%')
+    .height(this.previewCapacity === 1 ? 130 :
+      (this.previewCapacity === 6 ? 300 : 205))
+    .borderRadius(16)
+    .backgroundColor(AppTheme.surface())
+    .border({ width: 1, color: AppTheme.border() })
+    .alignItems(HorizontalAlign.Start)
+    .clip(true)
+  }
+
+  private previewData(): Record<string, Object> {
+    const prefs: WidgetCoursePreferences = new WidgetCoursePreferences(
+      this.model.widgetShowsLocation, this.model.widgetShowsTeacher,
+      Math.min(this.model.widgetCourseLimit, this.previewCapacity));
+    return TodayCourseWidgetData.binding(
+      TodayCourseWidgetData.previewArchive(), prefs, undefined,
+      TodayCourseWidgetData.nowMinute());
+  }
+
+  private previewString(key: string): string {
+    return String(this.previewData()[key] ?? '');
+  }
+
+  private previewBoolean(key: string): boolean {
+    return this.previewData()[key] === true;
+  }
+
+  @Builder
+  widgetPreviewRow(title: string, count: string, context: string, status: string,
+    n1: string, d1: string, h1: boolean, n2: string, d2: string, h2: boolean,
+    n3: string, d3: string, h3: boolean, n4: string, d4: string, h4: boolean,
+    n5: string, d5: string, h5: boolean, n6: string, d6: string, h6: boolean) {
+    Row() {
+      Text(title)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.text())
+      Blank()
+      Text(count)
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.secondaryText())
+    }
+    .width('100%')
+    .height(26)
+    .alignItems(VerticalAlign.Center)
+    Text(context.length > 0 && status.length > 0 ? context + ' · ' + status : context)
+      .fontSize(11)
+      .fontColor(AppTheme.secondaryText())
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .width('100%')
+      .margin({ top: 2 })
+    Blank().height(6)
+    Column({ space: 0 }) {
+      if (n1.length > 0) {
+        this.widgetPreviewRowItem(n1, d1, h1)
+      }
+      if (n2.length > 0) {
+        this.widgetPreviewRowItem(n2, d2, h2)
+      }
+      if (n3.length > 0) {
+        this.widgetPreviewRowItem(n3, d3, h3)
+      }
+      if (n4.length > 0) {
+        this.widgetPreviewRowItem(n4, d4, h4)
+      }
+      if (n5.length > 0) {
+        this.widgetPreviewRowItem(n5, d5, h5)
+      }
+      if (n6.length > 0) {
+        this.widgetPreviewRowItem(n6, d6, h6)
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  widgetPreviewRowItem(name: string, details: string, highlighted: boolean) {
+    Row() {
+      Column()
+        .width(3)
+        .height(26)
+        .borderRadius(1.5)
+        .backgroundColor(highlighted ? AppTheme.primaryFill() : AppTheme.accent())
+      Column({ space: 1 }) {
+        Text(name)
+          .fontSize(13)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.text())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Text(details)
+          .fontSize(10)
+          .fontColor(AppTheme.secondaryText())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 8 })
+    }
+    .width('100%')
+    .height(34)
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder

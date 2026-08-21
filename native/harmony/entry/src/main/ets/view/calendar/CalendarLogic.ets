@@ -1,7 +1,31 @@
 // 教学日历的纯逻辑与时间线布局，以原生 Android 实现为移动端基准。
 // TeachingCalendarLogic / CalendarTimelineLogic / CalendarTimelineDay。
+import { mediaquery } from '@kit.ArkUI';
 import { Course, HolidayItem, SlotMetadata } from '../../common/Models';
 import { StrictDates, DateParts } from '../../common/StrictDates';
+
+// 深色模式探测：Android Palette 按 uiMode 取色，月/年课程填充色需要在代码里
+// 完成混色（对应 UiSupport.kt blend(primary, background, opacity)），
+// 无法仅靠资源色，因此需要感知当前深浅色模式。
+export class DarkModeProbe {
+  private listener: mediaquery.MediaQueryListener | null = null;
+
+  register(callback: (dark: boolean) => void): void {
+    this.unregister();
+    this.listener = mediaquery.matchMediaSync('(dark-mode: true)');
+    callback(this.listener.matches);
+    this.listener.on('change', (result: mediaquery.MediaQueryResult) => {
+      callback(result.matches);
+    });
+  }
+
+  unregister(): void {
+    if (this.listener !== null) {
+      this.listener.off('change');
+      this.listener = null;
+    }
+  }
+}
 
 export enum CalendarMode {
   day = '日',

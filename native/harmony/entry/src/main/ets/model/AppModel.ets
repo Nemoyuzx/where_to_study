@@ -25,6 +25,7 @@ import {
 import { AppRuntimeMode } from './AppRuntimeMode';
 import { SampleData } from './SampleData';
 import { WidgetSync } from '../widget/WidgetSync';
+import { WidgetCoursePreferences } from '../widget/TodayCourseWidgetData';
 
 export class CredentialSettingsError extends Error {
   constructor(message: string) {
@@ -158,6 +159,13 @@ export class AppModel {
   @Trace hasSavedPassword: boolean = false;
   @Trace termID: string = ScheduleDefaults.termID;
   @Trace termStartDate: string = ScheduleDefaults.termStartDate;
+  // 自动检测当前学期（对应 Android automaticTermDetectionEnabled）：
+  // 开启时获取/刷新课表后用教务返回的学期覆盖本地，关闭时保留手动填写值。
+  @Trace automaticTermDetection: boolean = true;
+  // 桌面小组件显示偏好（对应 Android widgetShowsLocation/widgetShowsTeacher/widgetCourseLimit）。
+  @Trace widgetShowsLocation: boolean = true;
+  @Trace widgetShowsTeacher: boolean = true;
+  @Trace widgetCourseLimit: number = WidgetCoursePreferences.defaultLimit;
   @Trace campusID: string = '01';
   @Trace queryCampusID: string = '01';
   @Trace selectedSlots: Set<number> = new Set<number>();
@@ -261,6 +269,12 @@ export class AppModel {
     const savedCampusID: string | null = await this.preferences.getString('campusID');
     const notificationsEnabled: boolean = await this.preferences.getBool(
       DailyCourseNotificationSettings.enabledKey, false);
+    this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
+    this.widgetShowsLocation = await this.preferences.getBool('widgetShowsLocation', true);
+    this.widgetShowsTeacher = await this.preferences.getBool('widgetShowsTeacher', true);
+    this.widgetCourseLimit = Math.min(Math.max(
+      await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
+      1), WidgetCoursePreferences.maximumLimit);
     this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
     this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
       savedTermStart : ScheduleDefaults.termStartDate;
@@ -539,6 +553,12 @@ export class AppModel {
       const savedCampusID: string | null = await this.preferences.getString('campusID');
       const notificationsEnabled: boolean = await this.preferences.getBool(
         DailyCourseNotificationSettings.enabledKey, false);
+      this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
+      this.widgetShowsLocation = await this.preferences.getBool('widgetShowsLocation', true);
+      this.widgetShowsTeacher = await this.preferences.getBool('widgetShowsTeacher', true);
+      this.widgetCourseLimit = Math.min(Math.max(
+        await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
+        1), WidgetCoursePreferences.maximumLimit);
       this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
       this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
         savedTermStart : ScheduleDefaults.termStartDate;
@@ -621,12 +641,65 @@ export class AppModel {
       await this.preferences.setString('campusID', this.campusID);
       await this.preferences.setString('termID', this.termID);
       await this.preferences.setString('termStartDate', this.termStartDate);
+      await this.preferences.setBool('automaticTermDetection', this.automaticTermDetection);
       this.statusMessage = '设置已保存';
       return true;
     } catch (e) {
       this.statusMessage = e instanceof Error ? e.message : '设置保存失败。';
       return false;
     }
+  }
+
+  // 仅保存学期设置（学期编号/第一周周一/自动检测开关），不涉及账号密码
+  // （对应 Android SettingsPage.semesterSurface 的"保存学期设置"按钮）。
+  async saveSemesterSettings(): Promise<boolean> {
+    if (this.isSampleMode()) {
+      this.statusMessage = '示例模式不会保存账户或设置';
+      return false;
+    }
+    const normalizedTermID: string = this.termID.trim();
+    const normalizedTermStartDate: string = this.termStartDate.trim();
+    const nextTermID: string = normalizedTermID.length === 0 ?
+      ScheduleDefaults.termID : normalizedTermID;
+    const nextTermStartDate: string = normalizedTermStartDate.length === 0 ?
+      ScheduleDefaults.termStartDate : normalizedTermStartDate;
+    if (StrictDates.parseDateString(nextTermStartDate) === null) {
+      this.statusMessage = CredentialSettingsError.invalidTermStartDate().message;
+      return false;
+    }
+    this.termID = nextTermID;
+    this.termStartDate = nextTermStartDate;
+    try {
+      await this.preferences.setString('termID', this.termID);
+      await this.preferences.setString('termStartDate', this.termStartDate);
+      await this.preferences.setBool('automaticTermDetection', this.automaticTermDetection);
+      this.statusMessage = '学期设置已保存';
+      return true;
+    } catch (e) {
+      this.statusMessage = e instanceof Error ? e.message : '学期设置保存失败。';
+      return false;
+    }
+  }
+
+  // 桌面小组件偏好：设置页即时生效并刷新全部卡片（对应 Android
+  // widgetSurface 的 Switch/Spinner 直接写偏好）。
+  async setWidgetShowsLocation(value: boolean): Promise<void> {
+    this.widgetShowsLocation = value;
+    await this.preferences.setBool('widgetShowsLocation', value);
+    this.synchronizeWidgetSchedule();
+  }
+
+  async setWidgetShowsTeacher(value: boolean): Promise<void> {
+    this.widgetShowsTeacher = value;
+    await this.preferences.setBool('widgetShowsTeacher', value);
+    this.synchronizeWidgetSchedule();
+  }
+
+  async setWidgetCourseLimit(value: number): Promise<void> {
+    const clamped: number = Math.min(Math.max(value, 1), WidgetCoursePreferences.maximumLimit);
+    this.widgetCourseLimit = clamped;
+    await this.preferences.setNumber('widgetCourseLimit', clamped);
+    this.synchronizeWidgetSchedule();
   }
 
   // ---------- 每日课程摘要 ----------
@@ -787,6 +860,14 @@ export class AppModel {
     await this.preferences.remove('campusID');
     await this.preferences.remove('termID');
     await this.preferences.remove('termStartDate');
+    await this.preferences.remove('automaticTermDetection');
+    this.automaticTermDetection = true;
+    await this.preferences.remove('widgetShowsLocation');
+    await this.preferences.remove('widgetShowsTeacher');
+    await this.preferences.remove('widgetCourseLimit');
+    this.widgetShowsLocation = true;
+    this.widgetShowsTeacher = true;
+    this.widgetCourseLimit = WidgetCoursePreferences.defaultLimit;
     this.campusID = '01';
     this.queryCampusID = '01';
     this.termID = ScheduleDefaults.termID;
@@ -843,10 +924,14 @@ export class AppModel {
         this.schedule = fetched;
         this.synchronizeWidgetSchedule();
         this.calendarImportStatusMessage = '';
-        this.termID = fetched.termID;
-        this.termStartDate = fetched.termStartDate;
-        await this.preferences.setString('termID', this.termID);
-        await this.preferences.setString('termStartDate', this.termStartDate);
+        if (this.automaticTermDetection) {
+          // 自动检测开启时用教务返回的学期覆盖本地（对应 Android
+          // automaticTermDetectionEnabled）；关闭时保留手动填写值。
+          this.termID = fetched.termID;
+          this.termStartDate = fetched.termStartDate;
+          await this.preferences.setString('termID', this.termID);
+          await this.preferences.setString('termStartDate', this.termStartDate);
+        }
         this.synchronizeSelectedSlots();
         this.dailyCourseNotificationDirty = true;
         this.reconcileDailyCourseNotifications(false);
@@ -1223,7 +1308,8 @@ export class AppModel {
 
   // 对应 iOS 端 synchronizeWidgetSchedule：课表变化后同步“今日课程”卡片。
   private synchronizeWidgetSchedule(): void {
-    WidgetSync.refresh(this.schedule);
+    WidgetSync.refresh(this.schedule, new WidgetCoursePreferences(
+    this.widgetShowsLocation, this.widgetShowsTeacher, this.widgetCourseLimit));
   }
 
   private static todayString(): string {
