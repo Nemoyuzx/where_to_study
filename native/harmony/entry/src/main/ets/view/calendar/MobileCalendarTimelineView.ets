@@ -410,6 +410,14 @@ export struct MobileCalendarTimelineView {
             .fontSize(10)
             .fontColor(day.courses.length > 0 ? AppTheme.primary() : AppTheme.secondaryText())
             .maxLines(1)
+          // 今日红条：日头底部 3vp systemRed 横条（对应 Tauri inset 0 -3px 0 #FF3B30）。
+          if (day.date.equals(StrictDates.todayParts())) {
+            Column()
+              .width('100%')
+              .height(3)
+              .backgroundColor(AppTheme.nowIndicator())
+              .position({ x: 0, y: this.headerHeight() - 3 })
+          }
         }
         .width(this.dayWidthValue())
         .height(this.headerHeight())

@@ -496,8 +496,11 @@ export struct ExpandedTeachingCalendarView {
     .backgroundColor(day.equals(this.selectedDate()) ?
       AppTheme.primaryFill() : this.monthBackground(day))
     .border({
-      width: day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ? 2 : 0,
-      color: day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ?
+      // PC（Tauri）今日环在选中时也显示；平板（Android）仅未选中时显示红环。
+      width: day.equals(StrictDates.todayParts()) &&
+        (this.isPc || !day.equals(this.selectedDate())) ? 2 : 0,
+      color: day.equals(StrictDates.todayParts()) &&
+        (this.isPc || !day.equals(this.selectedDate())) ?
         AppTheme.nowIndicator() : Color.Transparent
     })
     .clip(true)
@@ -534,6 +537,10 @@ export struct ExpandedTeachingCalendarView {
   }
 
   private monthBackground(day: DateParts): ResourceColor {
+    // PC（Tauri）格底为 surface 白底；平板（Android）无课时为透明（页面背景透出）。
+    if (this.isPc && this.coursesOn(day).length <= 0) {
+      return AppTheme.surface();
+    }
     const count: number = this.coursesOn(day).length;
     if (count <= 0) {
       return Color.Transparent;
