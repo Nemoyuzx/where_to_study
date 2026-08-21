@@ -20,6 +20,8 @@ IOS_PROFILE_SPECIFIER="${APPLE_IOS_PROFILE_SPECIFIER:-Where To Study iOS App Sto
 MACOS_PROFILE_SPECIFIER="${APPLE_MACOS_PROFILE_SPECIFIER:-Where To Study macOS App Store}"
 IOS_WIDGET_PROFILE_SPECIFIER="${APPLE_IOS_WIDGET_PROFILE_SPECIFIER:-Where To Study iOS Widget App Store}"
 WIDGET_PROFILE_SPECIFIER="${APPLE_WIDGET_PROFILE_SPECIFIER:-Where To Study Widget App Store}"
+IOS_SIGNING_STYLE="${APPLE_IOS_SIGNING_STYLE:-Manual}"
+MACOS_SIGNING_STYLE="${APPLE_MACOS_SIGNING_STYLE:-Manual}"
 INSTALLER_SIGNING_CERTIFICATE="${APPLE_INSTALLER_SIGNING_CERTIFICATE:-}"
 MAIN_BUNDLE_IDENTIFIER="com.nemoyu.wheretostudy.native.macos"
 WIDGET_BUNDLE_IDENTIFIER="com.nemoyu.wheretostudy.native.macos.widget"
@@ -56,6 +58,10 @@ Optional provisioning profile overrides:
                                   Defaults to Where To Study iOS Widget App Store
   APPLE_WIDGET_PROFILE_SPECIFIER  Defaults to Where To Study Widget App Store
 
+Optional signing-style overrides:
+  APPLE_IOS_SIGNING_STYLE         Manual (default) or Automatic
+  APPLE_MACOS_SIGNING_STYLE       Manual (default) or Automatic
+
 Optional macOS installer signing override:
   APPLE_INSTALLER_SIGNING_CERTIFICATE
     Certificate name or SHA-1 hash. Defaults to the current team's installed
@@ -91,6 +97,12 @@ if [[ ! "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
   echo "APPLE_BUILD_NUMBER must be a positive integer: $BUILD_NUMBER" >&2
   exit 1
 fi
+for signing_style in "$IOS_SIGNING_STYLE" "$MACOS_SIGNING_STYLE"; do
+  if [[ "$signing_style" != "Manual" && "$signing_style" != "Automatic" ]]; then
+    echo "Apple signing styles must be Manual or Automatic: $signing_style" >&2
+    exit 1
+  fi
+done
 
 AUTH_ARGUMENTS=()
 auth_value_count=0
@@ -222,15 +234,17 @@ app_path() {
 }
 
 validate_archive() {
-  local platform="$1" archive app info resources entitlements signature_details actual_identifier actual_version actual_build
+  local platform="$1" archive app info resources entitlements signature_details actual_identifier actual_version actual_build signing_style
   archive="$(archive_path "$platform")"
   app="$(app_path "$platform")"
   if [[ "$platform" == "macos" ]]; then
     info="$app/Contents/Info.plist"
     resources="$app/Contents/Resources"
+    signing_style="$MACOS_SIGNING_STYLE"
   else
     info="$app/Info.plist"
     resources="$app"
+    signing_style="$IOS_SIGNING_STYLE"
   fi
 
   if [[ ! -d "$app" ]]; then
@@ -276,7 +290,8 @@ validate_archive() {
 
   entitlements="$(mktemp "${TMPDIR:-/tmp}/where-to-study-entitlements.plist.XXXXXX")"
   codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
-  if [[ "$(plutil -extract get-task-allow raw "$entitlements" 2>/dev/null || true)" == "true" ]]; then
+  if [[ "$signing_style" == "Manual" \
+    && "$(plutil -extract get-task-allow raw "$entitlements" 2>/dev/null || true)" == "true" ]]; then
     echo "Archive unexpectedly includes get-task-allow." >&2
     rm -f "$entitlements"
     exit 1
@@ -338,17 +353,19 @@ validate_archive() {
 }
 
 archive_platform() {
-  local platform="$1" scheme destination archive platform_derived
+  local platform="$1" scheme destination archive platform_derived signing_style
   archive="$(archive_path "$platform")"
   platform_derived="$DERIVED_DATA/$platform/Build"
   case "$platform" in
     ios)
       scheme="WhereToStudyiOS"
       destination="generic/platform=iOS"
+      signing_style="$IOS_SIGNING_STYLE"
       ;;
     macos)
       scheme="WhereToStudyMac"
       destination="generic/platform=macOS"
+      signing_style="$MACOS_SIGNING_STYLE"
       ;;
   esac
   rm -rf "$archive" "$platform_derived"
@@ -367,12 +384,7 @@ archive_platform() {
     -archivePath "$archive"
     -derivedDataPath "$platform_derived"
     DEVELOPMENT_TEAM="$TEAM_ID"
-    CODE_SIGN_STYLE=Manual
-    CODE_SIGN_IDENTITY="Apple Distribution"
-    APPLE_IOS_PROFILE_SPECIFIER="$IOS_PROFILE_SPECIFIER"
-    APPLE_IOS_WIDGET_PROFILE_SPECIFIER="$IOS_WIDGET_PROFILE_SPECIFIER"
-    APPLE_MACOS_PROFILE_SPECIFIER="$MACOS_PROFILE_SPECIFIER"
-    APPLE_WIDGET_PROFILE_SPECIFIER="$WIDGET_PROFILE_SPECIFIER"
+    CODE_SIGN_STYLE="$signing_style"
     MARKETING_VERSION="$VERSION"
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
     SWIFT_ACTIVE_COMPILATION_CONDITIONS=APP_STORE_BUILD
@@ -381,6 +393,17 @@ archive_platform() {
     SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO
     "OTHER_SWIFT_FLAGS=-debug-prefix-map $ROOT_DIR=. -file-prefix-map $ROOT_DIR=."
   )
+  if [[ "$signing_style" == "Manual" ]]; then
+    command+=(
+      CODE_SIGN_IDENTITY="Apple Distribution"
+      APPLE_IOS_PROFILE_SPECIFIER="$IOS_PROFILE_SPECIFIER"
+      APPLE_IOS_WIDGET_PROFILE_SPECIFIER="$IOS_WIDGET_PROFILE_SPECIFIER"
+      APPLE_MACOS_PROFILE_SPECIFIER="$MACOS_PROFILE_SPECIFIER"
+      APPLE_WIDGET_PROFILE_SPECIFIER="$WIDGET_PROFILE_SPECIFIER"
+    )
+  else
+    command+=(CODE_SIGN_IDENTITY="Apple Development" PROVISIONING_PROFILE_SPECIFIER=)
+  fi
   if [[ "$platform" == "macos" ]]; then
     command+=("ARCHS=arm64 x86_64" ONLY_ACTIVE_ARCH=NO)
   fi
@@ -390,33 +413,37 @@ archive_platform() {
 }
 
 write_export_options() {
-  local destination="$1" file="$2" platform="$3" main_profile widget_profile installer_certificate
+  local destination="$1" file="$2" platform="$3" main_profile widget_profile installer_certificate signing_style
   if [[ "$platform" == "ios" ]]; then
     main_profile="$IOS_PROFILE_SPECIFIER"
     widget_profile="$IOS_WIDGET_PROFILE_SPECIFIER"
+    signing_style="$IOS_SIGNING_STYLE"
   else
     main_profile="$MACOS_PROFILE_SPECIFIER"
     widget_profile="$WIDGET_PROFILE_SPECIFIER"
+    signing_style="$MACOS_SIGNING_STYLE"
   fi
   plutil -create xml1 "$file"
   plutil -insert method -string app-store-connect "$file"
   plutil -insert destination -string "$destination" "$file"
-  plutil -insert signingStyle -string manual "$file"
-  plutil -insert signingCertificate -string "Apple Distribution" "$file"
+  plutil -insert signingStyle -string "$(printf '%s' "$signing_style" | tr '[:upper:]' '[:lower:]')" "$file"
   plutil -insert teamID -string "$TEAM_ID" "$file"
-  plutil -insert provisioningProfiles -xml '<dict/>' "$file"
-  /usr/libexec/PlistBuddy -c \
-    "Add :provisioningProfiles:$MAIN_BUNDLE_IDENTIFIER string $main_profile" "$file"
-  /usr/libexec/PlistBuddy -c \
-    "Add :provisioningProfiles:$WIDGET_BUNDLE_IDENTIFIER string $widget_profile" "$file"
-  if [[ "$platform" == "macos" ]]; then
-    installer_certificate="$(installer_signing_certificate)"
-    if [[ -z "$installer_certificate" ]]; then
-      echo "No Mac Installer Distribution identity was found for team $TEAM_ID." >&2
-      echo "Install one or set APPLE_INSTALLER_SIGNING_CERTIFICATE explicitly." >&2
-      return 1
+  if [[ "$signing_style" == "Manual" ]]; then
+    plutil -insert signingCertificate -string "Apple Distribution" "$file"
+    plutil -insert provisioningProfiles -xml '<dict/>' "$file"
+    /usr/libexec/PlistBuddy -c \
+      "Add :provisioningProfiles:$MAIN_BUNDLE_IDENTIFIER string $main_profile" "$file"
+    /usr/libexec/PlistBuddy -c \
+      "Add :provisioningProfiles:$WIDGET_BUNDLE_IDENTIFIER string $widget_profile" "$file"
+    if [[ "$platform" == "macos" ]]; then
+      installer_certificate="$(installer_signing_certificate)"
+      if [[ -z "$installer_certificate" ]]; then
+        echo "No Mac Installer Distribution identity was found for team $TEAM_ID." >&2
+        echo "Install one or set APPLE_INSTALLER_SIGNING_CERTIFICATE explicitly." >&2
+        return 1
+      fi
+      plutil -insert installerSigningCertificate -string "$installer_certificate" "$file"
     fi
-    plutil -insert installerSigningCertificate -string "$installer_certificate" "$file"
   fi
   plutil -insert manageAppVersionAndBuildNumber -bool NO "$file"
   plutil -insert uploadSymbols -bool YES "$file"
