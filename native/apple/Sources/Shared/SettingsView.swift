@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 
 struct SettingsView: View {
     private enum AccountField: Hashable {
@@ -8,9 +9,48 @@ struct SettingsView: View {
         case termStartDate
     }
 
+    private enum WidgetPreviewSize: String, CaseIterable, Identifiable {
+        case small
+        case medium
+        case large
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .small: "小号"
+            case .medium: "中号"
+            case .large: "大号"
+            }
+        }
+
+        var family: WidgetFamily {
+            switch self {
+            case .small: .systemSmall
+            case .medium: .systemMedium
+            case .large: .systemLarge
+            }
+        }
+
+        var aspectRatio: CGFloat {
+            switch self {
+            case .small, .large: 1
+            case .medium: 2.12
+            }
+        }
+
+        var maximumWidth: CGFloat {
+            switch self {
+            case .small: 174
+            case .medium, .large: 360
+            }
+        }
+    }
+
     @EnvironmentObject private var model: AppModel
     @State private var showingClearDataConfirmation = false
     @State private var showingPrivacyPolicy = false
+    @State private var widgetPreviewSize: WidgetPreviewSize = .medium
     @FocusState private var focusedAccountField: AccountField?
 
     var body: some View {
@@ -365,6 +405,23 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .tint(AppTheme.primary)
                 .disabled(model.isSampleMode)
+                Toggle(
+                    "显示任课教师",
+                    isOn: Binding(
+                        get: { model.widgetShowsTeacher },
+                        set: { enabled in
+                            AppHaptics.selection()
+                            model.setWidgetShowsTeacher(enabled)
+                        }
+                    )
+                )
+                .toggleStyle(.switch)
+                .tint(AppTheme.primary)
+                .disabled(model.isSampleMode)
+
+                Text("最多显示课程")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
                 Picker(
                     "最多显示课程",
                     selection: Binding(
@@ -375,13 +432,50 @@ struct SettingsView: View {
                         }
                     )
                 ) {
-                    ForEach(1 ... 3, id: \.self) { count in
-                        Text("\(count) 门").tag(count)
+                    ForEach(1 ... TodayCourseWidgetData.maximumCourseLimit, id: \.self) { count in
+                        Text("\(count)").tag(count)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .disabled(model.isSampleMode)
-                Text("设置会同步到 iPhone、iPad 与 Mac 的“今日课程”小组件；无课时显示“今日无课”。")
+
+                Divider()
+                HStack {
+                    Label("样式预览", systemImage: "eye")
+                        .font(.callout.weight(.semibold))
+                    Spacer()
+                    Text("示例内容")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                }
+                Picker("预览尺寸", selection: $widgetPreviewSize) {
+                    ForEach(WidgetPreviewSize.allCases) { size in
+                        Text(size.title).tag(size)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                TodayCourseWidgetCard(
+                    date: .now,
+                    courses: TodayCourseWidgetData.previewCourses(),
+                    preferences: TodayCourseWidgetData.Preferences(
+                        showsLocation: model.widgetShowsLocation,
+                        showsTeacher: model.widgetShowsTeacher,
+                        courseLimit: model.widgetCourseLimit
+                    ),
+                    weekNumber: 8,
+                    family: widgetPreviewSize.family,
+                    usesWidgetContainer: false
+                )
+                .aspectRatio(widgetPreviewSize.aspectRatio, contentMode: .fit)
+                .frame(maxWidth: widgetPreviewSize.maximumWidth)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("今日课程小组件\(widgetPreviewSize.title)样式预览")
+                .accessibilityIdentifier("widget.preview")
+
+                Text("小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；大号样式最多展示 6 门课程。设置会同步到 iPhone、iPad 与 Mac。")
                     .font(.callout)
                     .foregroundStyle(AppTheme.secondaryText)
             }

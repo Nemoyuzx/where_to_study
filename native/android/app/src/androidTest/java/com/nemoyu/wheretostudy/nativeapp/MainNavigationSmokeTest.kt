@@ -601,6 +601,19 @@ class MainNavigationSmokeTest {
                 hapticCount(scenario),
             )
             assertVisible(device, "page_settings")
+            scrollUntilVisible(device, "widget_root")
+            assertVisible(device, "widget_root")
+            scenario.onActivity { activity ->
+                val preview = activity.findViewById<View>(R.id.widget_root)
+                assertEquals(activity.dp(205), preview.height)
+                assertTrue(
+                    activity.findViewById<TextView>(R.id.widget_day_context).text.isNotBlank(),
+                )
+                assertTrue(
+                    activity.findViewById<TextView>(R.id.widget_course_details_1)
+                        .text.contains("示例教师"),
+                )
+            }
             scrollUntilVisible(device, "privacy_policy_button")
             assertVisible(device, "settings_github_link")
             scenario.onActivity { activity ->

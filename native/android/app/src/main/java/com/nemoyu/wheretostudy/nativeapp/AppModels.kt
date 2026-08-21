@@ -174,6 +174,15 @@ object ScheduleLogic {
             .sortedWith(compareBy(Course::startSlot, Course::name))
     }
 
+    fun weekNumber(
+        schedule: ScheduleSnapshot?,
+        target: Calendar,
+    ): Int? {
+        schedule ?: return null
+        val start = parseContractDate(schedule.termStartDate) ?: return null
+        return weekNumber(start, target).takeIf { it > 0 }
+    }
+
     fun busySlots(
         schedule: ScheduleSnapshot?,
         target: Calendar,

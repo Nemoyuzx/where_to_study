@@ -12,6 +12,7 @@ import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
@@ -452,6 +453,42 @@ class SettingsPage(
     private fun widgetSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "桌面小组件"))
+
+        val previewContent = TodayCourseWidgetLogic.previewContent()
+        val preview = LayoutInflater.from(activity).inflate(
+            R.layout.widget_today_course,
+            this,
+            false,
+        ).apply {
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(205),
+            )
+        }
+        var previewCapacity = 3
+        fun updatePreview() {
+            TodayCourseWidgetPreviewBinder.bind(
+                root = preview,
+                content = previewContent,
+                showsLocation = preferences.widgetShowsLocation,
+                showsTeacher = preferences.widgetShowsTeacher,
+                rowLimit = minOf(previewCapacity, preferences.widgetCourseLimit),
+            )
+            val height = when (previewCapacity) {
+                1 -> 122
+                3 -> 205
+                else -> 328
+            }
+            preview.layoutParams = (preview.layoutParams as LinearLayout.LayoutParams).apply {
+                this.height = activity.dp(height)
+                topMargin = activity.dp(8)
+            }
+            preview.requestLayout()
+        }
+
         addView(Switch(activity).apply {
             text = "显示课程地点"
             textSize = 15f
@@ -463,6 +500,21 @@ class SettingsPage(
                 activity.performControlHaptic(button)
                 preferences.widgetShowsLocation = checked
                 TodayCourseWidgetProvider.refresh(activity)
+                updatePreview()
+            }
+        })
+        addView(Switch(activity).apply {
+            text = "显示任课教师"
+            textSize = 15f
+            setTextColor(Palette.text)
+            isChecked = preferences.widgetShowsTeacher
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
+            setPadding(0, 0, 0, 0)
+            setOnCheckedChangeListener { button, checked ->
+                activity.performControlHaptic(button)
+                preferences.widgetShowsTeacher = checked
+                TodayCourseWidgetProvider.refresh(activity)
+                updatePreview()
             }
         })
         addView(TextView(activity).apply {
@@ -471,7 +523,7 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(8), 0, activity.dp(5))
         })
-        val labels = listOf("1 门", "2 门", "3 门")
+        val labels = (1..6).map { "$it 门" }
         addView(Spinner(activity).apply {
             adapter = ArrayAdapter(
                 activity,
@@ -497,14 +549,63 @@ class SettingsPage(
                         activity.performControlHaptic(view)
                         preferences.widgetCourseLimit = limit
                         TodayCourseWidgetProvider.refresh(activity)
+                        updatePreview()
                     }
                 }
 
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
             }
         })
+
+        addView(View(activity).apply {
+            setBackgroundColor(Palette.border)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
+            topMargin = activity.dp(14)
+            bottomMargin = activity.dp(12)
+        })
         addView(TextView(activity).apply {
-            text = "设置会同步到“今日课程”桌面小组件；无课时显示“今日无课”。"
+            text = "样式预览 · 示例内容"
+            textSize = 14f
+            setTextColor(Palette.text)
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        val previewLabels = listOf("紧凑", "标准", "展开")
+        val previewCapacities = listOf(1, 3, 6)
+        addView(Spinner(activity).apply {
+            adapter = ArrayAdapter(
+                activity,
+                android.R.layout.simple_spinner_item,
+                previewLabels,
+            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            setSelection(1)
+            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            setPadding(activity.dp(12), 0, activity.dp(12), 0)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(UiMetrics.controlHeightDp),
+            ).apply { topMargin = activity.dp(7) }
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long,
+                ) {
+                    val capacity = previewCapacities[position]
+                    if (capacity != previewCapacity) {
+                        activity.performControlHaptic(view)
+                        previewCapacity = capacity
+                        updatePreview()
+                    }
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+        })
+        updatePreview()
+        addView(preview)
+        addView(TextView(activity).apply {
+            text = "小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；展开样式最多展示 6 门课程。预览使用虚构示例，不会写入课表。"
             textSize = 12f
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(8), 0, 0)

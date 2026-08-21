@@ -46,7 +46,38 @@ final class TodayCourseWidgetDataTests: XCTestCase {
         )
         XCTAssertEqual(
             TodayCourseWidgetData.Preferences(showsLocation: true, courseLimit: 8).normalized,
-            .init(showsLocation: true, courseLimit: 3)
+            .init(showsLocation: true, courseLimit: 6)
+        )
+    }
+
+    func testLegacyWidgetPreferencesDefaultToShowingTeacher() throws {
+        let data = try XCTUnwrap(#"{"showsLocation":false,"courseLimit":9}"#.data(using: .utf8))
+        let preferences = try JSONDecoder().decode(TodayCourseWidgetData.Preferences.self, from: data)
+
+        XCTAssertTrue(preferences.showsTeacher)
+        XCTAssertEqual(preferences.normalized.courseLimit, 6)
+    }
+
+    func testWidgetStatusHighlightsCurrentThenUpcomingCourse() throws {
+        let courses = TodayCourseWidgetData.previewCourses()
+        let duringFirstCourse = try date(hour: 10, minute: 0)
+        let betweenCourses = try date(hour: 12, minute: 30)
+
+        XCTAssertEqual(
+            TodayCourseWidgetData.highlightedCourseID(in: courses, at: duringFirstCourse),
+            "widget-preview-data-mining"
+        )
+        XCTAssertEqual(
+            TodayCourseWidgetData.statusSummary(for: courses, at: duringFirstCourse),
+            "进行中 · 12:15 下课"
+        )
+        XCTAssertEqual(
+            TodayCourseWidgetData.highlightedCourseID(in: courses, at: betweenCourses),
+            "widget-preview-network"
+        )
+        XCTAssertEqual(
+            TodayCourseWidgetData.statusSummary(for: courses, at: betweenCourses),
+            "下一节 · 13:00"
         )
     }
 
@@ -67,5 +98,16 @@ final class TodayCourseWidgetDataTests: XCTestCase {
             examWeekNumbers: [],
             startSlot: startSlot
         )
+    }
+
+    private func date(hour: Int, minute: Int) throws -> Date {
+        try XCTUnwrap(Calendar.shanghai.date(from: DateComponents(
+            timeZone: Calendar.shanghai.timeZone,
+            year: 2026,
+            month: 3,
+            day: 2,
+            hour: hour,
+            minute: minute
+        )))
     }
 }

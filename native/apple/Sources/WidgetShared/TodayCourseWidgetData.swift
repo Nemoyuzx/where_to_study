@@ -5,15 +5,45 @@ enum TodayCourseWidgetData {
     static let archiveFileName = "widget-schedule.json"
     static let preferencesFileName = "widget-preferences.json"
     static let emptyMessage = "今日无课"
+    static let maximumCourseLimit = 6
 
     struct Preferences: Codable, Equatable, Sendable {
         let showsLocation: Bool
+        let showsTeacher: Bool
         let courseLimit: Int
 
-        static let `default` = Preferences(showsLocation: true, courseLimit: 3)
+        static let `default` = Preferences(
+            showsLocation: true,
+            showsTeacher: true,
+            courseLimit: 4
+        )
+
+        init(showsLocation: Bool, showsTeacher: Bool = true, courseLimit: Int) {
+            self.showsLocation = showsLocation
+            self.showsTeacher = showsTeacher
+            self.courseLimit = courseLimit
+        }
 
         var normalized: Preferences {
-            Preferences(showsLocation: showsLocation, courseLimit: min(max(courseLimit, 1), 3))
+            Preferences(
+                showsLocation: showsLocation,
+                showsTeacher: showsTeacher,
+                courseLimit: min(max(courseLimit, 1), maximumCourseLimit)
+            )
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case showsLocation
+            case showsTeacher
+            case courseLimit
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            showsLocation = try container.decodeIfPresent(Bool.self, forKey: .showsLocation) ?? true
+            showsTeacher = try container.decodeIfPresent(Bool.self, forKey: .showsTeacher) ?? true
+            courseLimit = try container.decodeIfPresent(Int.self, forKey: .courseLimit)
+                ?? Self.default.courseLimit
         }
     }
 
@@ -26,12 +56,55 @@ enum TodayCourseWidgetData {
     struct Course: Codable, Equatable, Identifiable, Sendable {
         let id: String
         let name: String
+        let teacher: String?
         let room: String
         let timeRange: String
+        let sectionText: String?
         let weekday: Int
         let weekNumbers: [Int]
         let examWeekNumbers: [Int]
         let startSlot: Int
+        let endSlot: Int?
+
+        init(
+            id: String,
+            name: String,
+            teacher: String? = nil,
+            room: String,
+            timeRange: String,
+            sectionText: String? = nil,
+            weekday: Int,
+            weekNumbers: [Int],
+            examWeekNumbers: [Int],
+            startSlot: Int,
+            endSlot: Int? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.teacher = teacher
+            self.room = room
+            self.timeRange = timeRange
+            self.sectionText = sectionText
+            self.weekday = weekday
+            self.weekNumbers = weekNumbers
+            self.examWeekNumbers = examWeekNumbers
+            self.startSlot = startSlot
+            self.endSlot = endSlot
+        }
+    }
+
+    enum CoursePhase: Equatable, Sendable {
+        case upcoming
+        case inProgress
+        case finished
+
+        var badgeText: String {
+            switch self {
+            case .upcoming: "下一节"
+            case .inProgress: "进行中"
+            case .finished: "已结束"
+            }
+        }
     }
 
     static func save(schedule: ScheduleSnapshot) throws {
@@ -42,12 +115,15 @@ enum TodayCourseWidgetData {
                 Course(
                     id: $0.id,
                     name: $0.name,
+                    teacher: $0.teacher,
                     room: $0.room,
                     timeRange: $0.timeRange,
+                    sectionText: $0.sectionText,
                     weekday: $0.weekday,
                     weekNumbers: $0.weekNumbers,
                     examWeekNumbers: $0.examWeekNumbers,
-                    startSlot: $0.startSlot
+                    startSlot: $0.startSlot,
+                    endSlot: $0.endSlot
                 )
             }
         )
@@ -133,9 +209,211 @@ enum TodayCourseWidgetData {
             }
     }
 
+    static func weekNumber(
+        on date: Date,
+        archive: Archive?,
+        calendar: Calendar = .shanghai
+    ) -> Int? {
+        guard
+            let archive,
+            let termStart = StrictContractDateParser.date(from: archive.termStartDate, calendar: calendar)
+        else { return nil }
+        let week = ScheduleLogic.weekNumber(on: date, termStart: termStart, calendar: calendar)
+        return week > 0 ? week : nil
+    }
+
+    static func dayContext(
+        on date: Date,
+        weekNumber: Int?,
+        calendar: Calendar = .shanghai
+    ) -> String {
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+        let weekdayIndex = ((calendar.component(.weekday, from: date) + 5) % 7)
+        let weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        var values = ["\(month)月\(day)日", weekdays[weekdayIndex]]
+        if let weekNumber, weekNumber > 0 {
+            values.append("第\(weekNumber)周")
+        }
+        return values.joined(separator: " · ")
+    }
+
+    static func coursePhase(
+        _ course: Course,
+        at date: Date,
+        calendar: Calendar = .shanghai
+    ) -> CoursePhase? {
+        guard let range = minuteRange(for: course) else { return nil }
+        let minute = calendar.component(.hour, from: date) * 60
+            + calendar.component(.minute, from: date)
+        if minute < range.lowerBound { return .upcoming }
+        if minute <= range.upperBound { return .inProgress }
+        return .finished
+    }
+
+    static func highlightedCourseID(
+        in courses: [Course],
+        at date: Date,
+        calendar: Calendar = .shanghai
+    ) -> String? {
+        courses.first { coursePhase($0, at: date, calendar: calendar) == .inProgress }?.id
+            ?? courses.first { coursePhase($0, at: date, calendar: calendar) == .upcoming }?.id
+    }
+
+    static func statusSummary(
+        for courses: [Course],
+        at date: Date,
+        calendar: Calendar = .shanghai
+    ) -> String {
+        guard !courses.isEmpty else { return emptyMessage }
+        if let course = courses.first(where: {
+            coursePhase($0, at: date, calendar: calendar) == .inProgress
+        }) {
+            let end = timeParts(course.timeRange)?.end ?? ""
+            return end.isEmpty ? "课程进行中" : "进行中 · \(end) 下课"
+        }
+        if let course = courses.first(where: {
+            coursePhase($0, at: date, calendar: calendar) == .upcoming
+        }) {
+            let start = timeParts(course.timeRange)?.start ?? ""
+            return start.isEmpty ? "还有待上课程" : "下一节 · \(start)"
+        }
+        return "今日课程已结束"
+    }
+
+    static func timelineDates(
+        after date: Date,
+        archive: Archive?,
+        calendar: Calendar = .shanghai
+    ) -> [Date] {
+        let midnight = nextMidnight(after: date, calendar: calendar)
+        var dates = [date, midnight]
+        for course in courses(on: date, archive: archive, calendar: calendar) {
+            guard let range = minuteRange(for: course) else { continue }
+            for minute in [range.lowerBound, range.upperBound + 1] {
+                var components = calendar.dateComponents([.year, .month, .day], from: date)
+                components.hour = minute / 60
+                components.minute = minute % 60
+                components.second = 0
+                if let boundary = calendar.date(from: components), boundary > date, boundary < midnight {
+                    dates.append(boundary)
+                }
+            }
+        }
+        return Array(Set(dates)).sorted()
+    }
+
+    static func previewCourses() -> [Course] {
+        [
+            Course(
+                id: "widget-preview-calculus",
+                name: "高等数学",
+                teacher: "示例教师",
+                room: "教2-101",
+                timeRange: "08:00-09:35",
+                sectionText: "1-2节",
+                weekday: 1,
+                weekNumbers: [8],
+                examWeekNumbers: [],
+                startSlot: 0,
+                endSlot: 1
+            ),
+            Course(
+                id: "widget-preview-data-mining",
+                name: "数据挖掘",
+                teacher: "示例教师",
+                room: "教3-335",
+                timeRange: "09:50-12:15",
+                sectionText: "3-5节",
+                weekday: 1,
+                weekNumbers: [8],
+                examWeekNumbers: [],
+                startSlot: 2,
+                endSlot: 4
+            ),
+            Course(
+                id: "widget-preview-network",
+                name: "计算机网络",
+                teacher: "示例教师",
+                room: "教4-201",
+                timeRange: "13:00-14:35",
+                sectionText: "6-7节",
+                weekday: 1,
+                weekNumbers: [8],
+                examWeekNumbers: [],
+                startSlot: 5,
+                endSlot: 6
+            ),
+            Course(
+                id: "widget-preview-neural-network",
+                name: "神经网络与深度学习",
+                teacher: "示例教师",
+                room: "教3-539",
+                timeRange: "14:45-16:25",
+                sectionText: "8-9节",
+                weekday: 1,
+                weekNumbers: [8],
+                examWeekNumbers: [],
+                startSlot: 7,
+                endSlot: 8
+            ),
+            Course(
+                id: "widget-preview-sports",
+                name: "体育",
+                teacher: "示例教师",
+                room: "体育馆",
+                timeRange: "16:35-18:10",
+                sectionText: "10-11节",
+                weekday: 1,
+                weekNumbers: [8],
+                examWeekNumbers: [],
+                startSlot: 9,
+                endSlot: 10
+            ),
+            Course(
+                id: "widget-preview-english",
+                name: "学术英语",
+                teacher: "示例教师",
+                room: "主楼-201",
+                timeRange: "18:30-20:05",
+                sectionText: "12-13节",
+                weekday: 1,
+                weekNumbers: [8],
+                examWeekNumbers: [],
+                startSlot: 11,
+                endSlot: 12
+            )
+        ]
+    }
+
     static func nextMidnight(after date: Date, calendar: Calendar = .shanghai) -> Date {
         calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: date))
             ?? date.addingTimeInterval(24 * 60 * 60)
+    }
+
+    private static func minuteRange(for course: Course) -> ClosedRange<Int>? {
+        guard let parts = timeParts(course.timeRange) else { return nil }
+        guard let start = minutes(parts.start), let end = minutes(parts.end), end >= start else {
+            return nil
+        }
+        return start ... end
+    }
+
+    private static func timeParts(_ value: String) -> (start: String, end: String)? {
+        let normalized = value
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+        let parts = normalized.split(separator: "-", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    private static func minutes(_ value: String) -> Int? {
+        let parts = value.split(separator: ":", maxSplits: 1).compactMap { Int($0) }
+        guard parts.count == 2, (0 ... 23).contains(parts[0]), (0 ... 59).contains(parts[1]) else {
+            return nil
+        }
+        return parts[0] * 60 + parts[1]
     }
 
     private static func readableFileURLs(named fileName: String) -> [URL] {

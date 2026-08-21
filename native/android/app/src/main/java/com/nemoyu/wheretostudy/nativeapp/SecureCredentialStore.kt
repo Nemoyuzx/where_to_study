@@ -161,10 +161,16 @@ class AppPreferences(context: Context) {
             save(WIDGET_SHOWS_LOCATION_KEY, value)
         }
 
-    var widgetCourseLimit: Int
-        get() = preferences.getInt(WIDGET_COURSE_LIMIT_KEY, 3).coerceIn(1, 3)
+    var widgetShowsTeacher: Boolean
+        get() = preferences.getBoolean(WIDGET_SHOWS_TEACHER_KEY, true)
         set(value) {
-            save(WIDGET_COURSE_LIMIT_KEY, value.coerceIn(1, 3))
+            save(WIDGET_SHOWS_TEACHER_KEY, value)
+        }
+
+    var widgetCourseLimit: Int
+        get() = preferences.getInt(WIDGET_COURSE_LIMIT_KEY, 4).coerceIn(1, 6)
+        set(value) {
+            save(WIDGET_COURSE_LIMIT_KEY, value.coerceIn(1, 6))
         }
 
     var dailyCourseNotificationsEnabled: Boolean
@@ -207,6 +213,7 @@ class AppPreferences(context: Context) {
         const val DAILY_COURSE_NOTIFICATIONS_KEY = "daily_course_notifications_enabled"
         const val AUTOMATIC_TERM_DETECTION_KEY = "automatic_term_detection_enabled"
         const val WIDGET_SHOWS_LOCATION_KEY = "widget_shows_location"
+        const val WIDGET_SHOWS_TEACHER_KEY = "widget_shows_teacher"
         const val WIDGET_COURSE_LIMIT_KEY = "widget_course_limit"
     }
 }

@@ -113,6 +113,7 @@ fn main() -> io::Result<()> {
             app.credentials_saved =
                 !credentials.account.trim().is_empty() && !credentials.password.is_empty();
             app.saved_account = credentials.account.clone();
+            app.login_account = credentials.account.trim().to_string();
         }
         Ok(None) => {}
         Err(error) => app.set_error(error.message),
@@ -443,10 +444,16 @@ fn login_with_form(app: &mut App, tx: &mpsc::Sender<Message>) {
         return;
     }
     if app.login_password.is_empty() {
+        if app.credentials_saved && app.saved_account.trim() == account {
+            app.settings_editing = false;
+            app.set_status("已沿用本地保存的密码".to_string());
+            return;
+        }
         app.set_error("请输入密码。".to_string());
         return;
     }
 
+    app.clear_error();
     let password = Zeroizing::new(std::mem::take(&mut *app.login_password));
     app.settings_editing = false;
     let tx = tx.clone();
@@ -608,5 +615,21 @@ mod tests {
             chrono::NaiveDate::from_ymd_opt(2025, 12, 1).unwrap()
         );
         assert!(app.holiday_requests.contains(&2025));
+    }
+
+    #[test]
+    fn saved_credentials_allow_the_password_field_to_remain_empty() {
+        let (tx, _rx) = mpsc::channel();
+        let mut app = App::new(false);
+        app.login_account = "2023000000".to_string();
+        app.saved_account = "2023000000".to_string();
+        app.credentials_saved = true;
+        app.settings_editing = true;
+
+        login_with_form(&mut app, &tx);
+
+        assert!(!app.settings_editing);
+        assert!(app.error_message.is_none());
+        assert_eq!(app.status_message.as_deref(), Some("已沿用本地保存的密码"));
     }
 }

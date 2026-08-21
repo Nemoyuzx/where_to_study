@@ -83,6 +83,7 @@ impl App {
     }
 
     pub fn set_error(&mut self, message: String) {
+        self.status_message = None;
         self.error_message = Some(message);
     }
 
@@ -91,6 +92,7 @@ impl App {
     }
 
     pub fn set_status(&mut self, message: String) {
+        self.error_message = None;
         self.status_message = Some(message);
     }
 
@@ -436,5 +438,21 @@ mod tests {
         app.building_cursor = 1;
         app.toggle_current_building();
         assert_eq!(app.selected_buildings, vec!["教1".to_string()]);
+    }
+
+    #[test]
+    fn success_and_error_messages_are_mutually_exclusive() {
+        let mut app = App::new(false);
+        app.set_error("请输入密码。".to_string());
+        assert_eq!(app.error_message.as_deref(), Some("请输入密码。"));
+        assert!(app.status_message.is_none());
+
+        app.set_status("凭据已保存到本地文件".to_string());
+        assert!(app.error_message.is_none());
+        assert_eq!(app.status_message.as_deref(), Some("凭据已保存到本地文件"));
+
+        app.set_error("网络错误".to_string());
+        assert_eq!(app.error_message.as_deref(), Some("网络错误"));
+        assert!(app.status_message.is_none());
     }
 }
