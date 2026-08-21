@@ -86,22 +86,29 @@ export class AssetCredentialStore implements CredentialStoring {
     const updateAttr: asset.AssetMap = credentialUpdateAttributes(credentials);
     try {
       await asset.update(AssetCredentialStore.aliasAttr(), updateAttr);
-      return;
     } catch (e) {
       const err: BusinessError = e as BusinessError;
       if (err.code !== ASSET_NOT_FOUND) {
         throw new Error('系统安全存储操作失败（' + err.code.toString() + '）。');
       }
+      const addAttr: asset.AssetMap = AssetCredentialStore.aliasAttr();
+      const encoder: util.TextEncoder = new util.TextEncoder();
+      addAttr.set(asset.Tag.SECRET, encoder.encodeInto(credentials.toJsonText()));
+      addAttr.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_FIRST_UNLOCKED);
+      try {
+        await asset.add(addAttr);
+      } catch (e2) {
+        const err2: BusinessError = e2 as BusinessError;
+        throw new Error('系统安全存储操作失败（' + err2.code.toString() + '）。');
+      }
     }
-    const addAttr: asset.AssetMap = AssetCredentialStore.aliasAttr();
-    const encoder: util.TextEncoder = new util.TextEncoder();
-    addAttr.set(asset.Tag.SECRET, encoder.encodeInto(credentials.toJsonText()));
-    addAttr.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_FIRST_UNLOCKED);
-    try {
-      await asset.add(addAttr);
-    } catch (e) {
-      const err: BusinessError = e as BusinessError;
-      throw new Error('系统安全存储操作失败（' + err.code.toString() + '）。');
+    // 往返校验：部分模拟器/系统镜像缺少 ASSET 扩展库（libasset_ext_ffi.z.so），
+    // update/add 不报错但实际未持久化。若不校验，后续保存会误判为"未保存过
+    // 账号"并提示"更换教务账号时必须输入新密码"。这里读回验证，未落盘即报错。
+    const stored: Credentials | null = await this.load();
+    if (stored === null || stored.account !== credentials.account ||
+      stored.password !== credentials.password) {
+      throw new Error('系统安全存储不可用，账号密码未能保存，请稍后重试。');
     }
   }
 
