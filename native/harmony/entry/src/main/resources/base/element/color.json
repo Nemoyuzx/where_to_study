@@ -59,6 +59,26 @@
     {
       "name": "app_segmented_selection",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "widget_primary",
+      "value": "#176B5D"
+    },
+    {
+      "name": "widget_accent",
+      "value": "#E6B048"
+    },
+    {
+      "name": "widget_background",
+      "value": "#F4F7F4"
+    },
+    {
+      "name": "widget_text_primary",
+      "value": "#15201D"
+    },
+    {
+      "name": "widget_text_secondary",
+      "value": "#687670"
     }
   ]
 }

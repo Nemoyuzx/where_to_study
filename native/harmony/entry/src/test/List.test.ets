@@ -10,6 +10,7 @@ import dailyCoursePlanningTest from './DailyCoursePlanning.test';
 import adaptivePolicyTest from './AdaptivePolicy.test';
 import robustnessTest from './Robustness.test';
 import credentialStoreTest from './CredentialStore.test';
+import todayCourseWidgetDataTest from './TodayCourseWidgetData.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -23,4 +24,5 @@ export default function testsuite() {
   adaptivePolicyTest();
   robustnessTest();
   credentialStoreTest();
+  todayCourseWidgetDataTest();
 }

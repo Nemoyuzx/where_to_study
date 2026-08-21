@@ -84,25 +84,33 @@ export class TodayCourseWidgetData {
 
   // 卡片绑定数据：今天课程条目 + 明日提示 + 空态文案。
   // courseLimit 按卡片尺寸传入（2*2 两行，其余三行），BUG-040 修复。
-  static binding(archive: WidgetArchive | null, courseLimit: number = 3): Record<string, Object> {
-    const today: DateParts = StrictDates.todayParts();
+  // today 可注入便于测试（默认取上海时区当天）。
+  static binding(archive: WidgetArchive | null, courseLimit: number = 3,
+    today: DateParts = StrictDates.todayParts()): Record<string, Object> {
     const todayCourses: WidgetArchiveCourse[] = TodayCourseWidgetData.coursesOn(today, archive);
     const tomorrowCourses: WidgetArchiveCourse[] = TodayCourseWidgetData.coursesOn(
       StrictDates.addDays(today, 1), archive);
-    const lines: string[] = [];
     const limit: number = Math.max(1, courseLimit);
+    // 逐行课程数据：对应 Android 卡片的 WidgetCourseName/WidgetCourseDetails，
+    // 详情为 "时间 · 教室"（无教室则仅时间），最多 3 行由卡片渲染。
+    const rows: string[][] = [];
     for (let i = 0; i < Math.min(todayCourses.length, limit); i++) {
       const course: WidgetArchiveCourse = todayCourses[i];
-      const parts: string[] = [course.timeRange, course.name];
+      const details: string[] = [course.timeRange];
       if (course.room.length > 0) {
-        parts.push('@ ' + course.room);
+        details.push(course.room);
       }
-      lines.push(parts.join(' '));
+      rows.push([course.name, details.join(' · ')]);
     }
     const out: Record<string, Object> = {};
     out['todayTitle'] = '今日课程';
     out['todayCountText'] = todayCourses.length === 0 ? '' : todayCourses.length.toString() + ' 门';
-    out['todayLines'] = lines.join('\n');
+    out['course1Name'] = rows.length > 0 ? rows[0][0] : '';
+    out['course1Details'] = rows.length > 0 ? rows[0][1] : '';
+    out['course2Name'] = rows.length > 1 ? rows[1][0] : '';
+    out['course2Details'] = rows.length > 1 ? rows[1][1] : '';
+    out['course3Name'] = rows.length > 2 ? rows[2][0] : '';
+    out['course3Details'] = rows.length > 2 ? rows[2][1] : '';
     out['moreHint'] = todayCourses.length > limit ?
       '另有 ' + (todayCourses.length - limit).toString() + ' 门课程' : '';
     out['tomorrowHint'] = tomorrowCourses.length === 0 ?

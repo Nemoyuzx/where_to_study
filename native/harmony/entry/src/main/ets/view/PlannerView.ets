@@ -17,6 +17,8 @@ export class PlannerLayoutMetrics {
 export struct PlannerView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Local contentWidth: number = 350;
+  // 宽屏双列时左列（查询/节次/教学楼）实际宽度，用于节次/教学楼列数计算。
+  @Local leftColumnWidth: number = 300;
   // 当天日期文本：跨午夜自动刷新（BUG-024 修复）。
   @Local todayText: string = StrictDates.formatDateParts(StrictDates.todayParts());
   // 派生数据缓存（BUG-015/023 修复）：由 @Monitor 在依赖状态变化时刷新。
@@ -59,7 +61,7 @@ export struct PlannerView {
   }
 
   private slotColumnCount(): number {
-    const available: number = Math.max(this.contentWidth, 200);
+    const available: number = Math.max(this.sectionWidth(), 200);
     const count: number = Math.floor(
       (available + PlannerLayoutMetrics.slotSpacing) /
       (PlannerLayoutMetrics.slotMinimumWidth + PlannerLayoutMetrics.slotSpacing));
@@ -67,7 +69,7 @@ export struct PlannerView {
   }
 
   private buildingColumnCount(): number {
-    const available: number = Math.max(this.contentWidth, 200);
+    const available: number = Math.max(this.sectionWidth(), 200);
     const count: number = Math.floor(
       (available + PlannerLayoutMetrics.buildingSpacing) /
       (PlannerLayoutMetrics.buildingMinimumWidth + PlannerLayoutMetrics.buildingSpacing));
@@ -76,6 +78,17 @@ export struct PlannerView {
 
   private isCompact(): boolean {
     return this.contentWidth < 700;
+  }
+
+  // 宽屏（>= 760vp，对应 AdaptiveLayoutPolicy.useTwoColumn）双列布局，
+  // 与 iOS PlannerView 的 HStack 双列一致：左列 1/3、右列 2/3。
+  private twoColumn(): boolean {
+    return this.contentWidth >= 760;
+  }
+
+  // 节次/教学楼网格按所在列的实际宽度计算（双列时用左列宽度）。
+  private sectionWidth(): number {
+    return this.twoColumn() ? this.leftColumnWidth : this.contentWidth;
   }
 
   private sectionSpacing(): number {
@@ -94,14 +107,46 @@ export struct PlannerView {
     Scroll() {
       Column({ space: this.sectionSpacing() }) {
         this.header()
-        this.querySurface()
-        this.slotSurface()
-        this.todayCoursesSurface()
-        this.buildingsSurface()
-        this.resultsSurface()
-        this.summarySurface()
-        if (this.isCompact()) {
-          Blank().height(72)
+        if (this.twoColumn()) {
+          // 宽屏双列：左列 = 查询条件/节次筛选/教学楼（1/3），
+          // 右列 = 当天课程/空教室结果/查询概览（2/3），对应 iOS HStack。
+          Row({ space: 16 }) {
+            Column({ space: 16 }) {
+              this.querySurface()
+              this.slotSurface()
+              this.buildingsSurface()
+            }
+            .layoutWeight(1)
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+            .onAreaChange((oldArea: Area, newArea: Area) => {
+              this.leftColumnWidth = Number(newArea.width);
+            })
+            Column({ space: 16 }) {
+              this.todayCoursesSurface()
+              this.resultsSurface()
+              this.summarySurface()
+            }
+            .layoutWeight(2)
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Top)
+        } else {
+          Column({ space: this.sectionSpacing() }) {
+            this.querySurface()
+            this.slotSurface()
+            this.todayCoursesSurface()
+            this.buildingsSurface()
+            this.resultsSurface()
+            this.summarySurface()
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          if (this.isCompact()) {
+            Blank().height(72)
+          }
         }
       }
       .padding({ left: 20, right: 20, top: 20, bottom: 28 })
