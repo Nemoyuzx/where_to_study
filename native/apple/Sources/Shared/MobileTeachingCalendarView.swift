@@ -31,6 +31,7 @@ private struct MobileMonthEvent: Identifiable {
 
 struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var dailyInfo: DailyInfoStore
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var session: TeachingCalendarSessionState
     @State private var presentedDetail: MobileCalendarDetailSelection?
@@ -94,10 +95,17 @@ struct MobileTeachingCalendarView: View {
         }
         .onAppear {
             ensureVisibleHolidays()
+            ensureVisibleAlmanac()
             normalizeMonthPositionForLayout()
         }
-        .onChange(of: selectedDate) { _ in ensureVisibleHolidays() }
-        .onChange(of: mode) { _ in ensureVisibleHolidays() }
+        .onChange(of: selectedDate) { _ in
+            ensureVisibleHolidays()
+            ensureVisibleAlmanac()
+        }
+        .onChange(of: mode) { _ in
+            ensureVisibleHolidays()
+            ensureVisibleAlmanac()
+        }
         .onChange(of: verticalSizeClass) { _ in
             normalizeMonthPositionForLayout()
         }
@@ -528,9 +536,12 @@ struct MobileTeachingCalendarView: View {
 
                 if expansionProgress < 0.999, summaryHeight > 0 {
                     ScrollView(.vertical, showsIndicators: false) {
-                        daySummaryCard(selectedDate)
-                            .padding(.horizontal, 1)
-                            .padding(.vertical, 2)
+                        VStack(spacing: 10) {
+                            daySummaryCard(selectedDate)
+                            mobileAlmanacCard(selectedDate)
+                        }
+                        .padding(.horizontal, 1)
+                        .padding(.vertical, 2)
                     }
                     .frame(height: summaryHeight)
                     .opacity(1 - expansionProgress)
@@ -909,6 +920,59 @@ struct MobileTeachingCalendarView: View {
         .accessibilityIdentifier("calendar.mobile.month-day-summary-card")
     }
 
+    private func mobileAlmanacCard(_ day: Date) -> some View {
+        let date = StrictContractDateParser.string(from: day)
+        return VStack(alignment: .leading, spacing: 10) {
+            Label("黄历信息", systemImage: "calendar.badge.clock")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.secondaryText)
+            if dailyInfo.loadingAlmanacDates.contains(date), dailyInfo.almanacByDate[date] == nil {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("正在查询…")
+                }
+                .foregroundStyle(AppTheme.secondaryText)
+            } else if let error = dailyInfo.almanacErrors[date], dailyInfo.almanacByDate[date] == nil {
+                Button {
+                    Task {
+                        await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode, force: true)
+                    }
+                } label: {
+                    Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
+            } else if let info = dailyInfo.almanacByDate[date] {
+                Text("农历 \(info.lunarDate) · \(info.weekday)")
+                    .font(.headline)
+                Text("\(info.ganzhiYear)年 · \(info.ganzhiMonth)月 · \(info.ganzhiDay)日 · 肖\(info.zodiac)")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.secondaryText)
+                let festival = [info.solarTerm, info.lunarFestival, info.solarFestival]
+                    .compactMap { $0 }
+                    .joined(separator: " · ")
+                if !festival.isEmpty {
+                    Text(festival)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+            HStack {
+                Text("民俗信息仅供参考")
+                Spacer()
+                Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-lunartime")!)
+            }
+            .font(.caption2)
+            .foregroundStyle(AppTheme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("calendar.mobile.almanac")
+    }
+
     private func detailSheet(_ selection: MobileCalendarDetailSelection) -> some View {
         NavigationStack {
             ScrollView {
@@ -1134,6 +1198,14 @@ struct MobileTeachingCalendarView: View {
 
     private func ensureVisibleHolidays() {
         visibleHolidayYears.forEach { model.ensureHolidays(for: $0) }
+    }
+
+    private func ensureVisibleAlmanac() {
+        guard mode == .month else { return }
+        let date = StrictContractDateParser.string(from: selectedDate)
+        Task {
+            await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode)
+        }
     }
 
     private func moveDate(_ direction: Int) {

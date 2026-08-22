@@ -12,8 +12,8 @@ fn main() {
         "import_schedule_to_calendar",
         "fetch_classrooms",
         "fetch_holidays",
-        "show_desktop_widget",
-        "hide_desktop_widget",
+        "fetch_weather",
+        "fetch_almanac",
     ];
 
     tauri_build::try_build(

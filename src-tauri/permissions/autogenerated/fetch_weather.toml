@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-weather"
+description = "Enables the fetch_weather command without any pre-configured scope."
+commands.allow = ["fetch_weather"]
+
+[[permission]]
+identifier = "deny-fetch-weather"
+description = "Denies the fetch_weather command without any pre-configured scope."
+commands.deny = ["fetch_weather"]

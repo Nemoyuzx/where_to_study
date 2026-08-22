@@ -44,6 +44,7 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
+    @StateObject private var dailyInfo = DailyInfoStore()
     #if os(macOS)
     @State private var macSidebarVisibility: NavigationSplitViewVisibility = .all
     #endif
@@ -92,6 +93,7 @@ struct RootView: View {
                 model.refreshDailyCourseNotificationAuthorization()
             }
         }
+        .environmentObject(dailyInfo)
     }
 
     private var sampleModeBanner: some View {

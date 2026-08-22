@@ -4,6 +4,7 @@ pub mod classrooms;
 mod classrooms_store;
 pub mod config;
 pub mod credential_store;
+pub mod daily_info;
 pub mod error;
 pub mod holidays;
 pub mod models;
@@ -41,8 +42,9 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::models::{
-    ClassroomsCacheResponse, ClassroomsRequest, HolidaysRequest, HolidaysResponse,
-    MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest, ScheduleResponse,
+    AlmanacRequest, AlmanacResponse, ClassroomsCacheResponse, ClassroomsRequest, HolidaysRequest,
+    HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest,
+    ScheduleResponse, WeatherRequest, WeatherResponse,
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
@@ -252,12 +254,10 @@ fn finalize_local_data_clear<T>(
 #[cfg(not(mobile))]
 fn reset_account_scope_surfaces<EmitError, TrayError>(
     emit_clear: impl FnOnce() -> Result<(), EmitError>,
-    hide_widget: impl FnOnce(),
     reset_tray: impl FnOnce() -> Result<(), TrayError>,
     hide_tray: impl FnOnce(),
 ) {
     let _ = emit_clear();
-    hide_widget();
     if reset_tray().is_err() {
         hide_tray();
     }
@@ -267,12 +267,6 @@ fn notify_account_scope_cleared(app: &tauri::AppHandle) {
     #[cfg(not(mobile))]
     reset_account_scope_surfaces(
         || app.emit(ACCOUNT_SCOPE_CLEARED_EVENT, ()),
-        || {
-            if let Some(window) = app.get_webview_window("course-widget") {
-                let _ = window.hide();
-                let _ = window.close();
-            }
-        },
         || {
             set_tray_menu(
                 app,
@@ -762,40 +756,28 @@ mod local_data_coordination_tests {
 
     #[cfg(not(mobile))]
     #[test]
-    fn account_scope_surface_failures_hide_stale_widget_and_tray_content() {
-        let widget_hides = AtomicUsize::new(0);
+    fn account_scope_surface_failures_hide_stale_tray_content() {
         let tray_hides = AtomicUsize::new(0);
 
         reset_account_scope_surfaces(
             || Err::<(), _>("event unavailable"),
-            || {
-                widget_hides.fetch_add(1, Ordering::Relaxed);
-            },
             || Err::<(), _>("tray menu unavailable"),
             || {
                 tray_hides.fetch_add(1, Ordering::Relaxed);
             },
         );
 
-        assert_eq!(widget_hides.load(Ordering::Relaxed), 1);
         assert_eq!(tray_hides.load(Ordering::Relaxed), 1);
     }
 
     #[cfg(not(mobile))]
     #[test]
-    fn successful_clear_event_also_hides_the_widget_immediately() {
-        let widget_hides = AtomicUsize::new(0);
-
+    fn successful_clear_event_resets_the_tray_without_hiding_it() {
         reset_account_scope_surfaces(
             || Ok::<(), ()>(()),
-            || {
-                widget_hides.fetch_add(1, Ordering::Relaxed);
-            },
             || Ok::<(), ()>(()),
             || panic!("successful tray reset must not hide the tray"),
         );
-
-        assert_eq!(widget_hides.load(Ordering::Relaxed), 1);
     }
 }
 
@@ -974,6 +956,9 @@ async fn fetch_schedule(
     app: tauri::AppHandle,
     mut payload: ScheduleRequest,
 ) -> Result<ScheduleResponse, String> {
+    let automatic_term_detection_enabled = payload.automatic_term_detection_enabled.unwrap_or(true);
+    let manual_term_id = payload.term_id.clone();
+    let manual_term_start_date = payload.term_start_date.clone();
     let generation = LOCAL_DATA.begin();
     let account_scope = LOCAL_DATA
         .with_current_account(generation, || {
@@ -985,9 +970,19 @@ async fn fetch_schedule(
             Ok(request_scope)
         })
         .map_err(LocalDataAccessError::message)?;
-    let schedule = schedule::fetch_schedule(&payload)
+    let mut schedule = schedule::fetch_schedule(&payload)
         .await
         .map_err(|error| error.message)?;
+    if !automatic_term_detection_enabled {
+        if let Some(term_id) = manual_term_id.filter(|value| !value.trim().is_empty()) {
+            schedule.term_id = term_id;
+        }
+        if let Some(term_start_date) = manual_term_start_date
+            .filter(|value| chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok())
+        {
+            schedule.term_start_date = term_start_date;
+        }
+    }
     LOCAL_DATA
         .with_current_account(generation, || {
             schedule_store::save(&app, &account_scope, &schedule).map_err(|error| error.message)?;
@@ -1092,35 +1087,17 @@ async fn fetch_holidays(
 }
 
 #[tauri::command]
-async fn show_desktop_widget(app: tauri::AppHandle) -> Result<bool, String> {
-    #[cfg(not(mobile))]
-    {
-        show_course_widget(&app).map_err(|error| error.to_string())?;
-        Ok(true)
-    }
-
-    #[cfg(mobile)]
-    {
-        let _ = app;
-        Err("桌面课程小组件仅支持 macOS、Windows 和 Linux。".to_string())
-    }
+async fn fetch_weather(payload: WeatherRequest) -> Result<WeatherResponse, String> {
+    daily_info::fetch_weather(&payload)
+        .await
+        .map_err(|error| error.message)
 }
 
 #[tauri::command]
-async fn hide_desktop_widget(app: tauri::AppHandle) -> Result<bool, String> {
-    #[cfg(not(mobile))]
-    {
-        if let Some(window) = app.get_webview_window("course-widget") {
-            window.close().map_err(|error| error.to_string())?;
-        }
-        Ok(true)
-    }
-
-    #[cfg(mobile)]
-    {
-        let _ = app;
-        Err("桌面课程小组件仅支持 macOS、Windows 和 Linux。".to_string())
-    }
+async fn fetch_almanac(payload: AlmanacRequest) -> Result<AlmanacResponse, String> {
+    daily_info::fetch_almanac(&payload)
+        .await
+        .map_err(|error| error.message)
 }
 
 #[cfg(not(mobile))]
@@ -1130,37 +1107,6 @@ fn show_main_window(app: &tauri::AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
-}
-
-#[cfg(not(mobile))]
-fn show_course_widget(app: &tauri::AppHandle) -> tauri::Result<()> {
-    if let Some(window) = app.get_webview_window("course-widget") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-        return Ok(());
-    }
-
-    let builder = tauri::WebviewWindowBuilder::new(
-        app,
-        "course-widget",
-        tauri::WebviewUrl::App("index.html?widget=course".into()),
-    )
-    .title("今日课程")
-    .inner_size(320.0, 420.0)
-    .min_inner_size(280.0, 320.0)
-    .max_inner_size(420.0, 620.0)
-    .position(24.0, 80.0)
-    .decorations(false)
-    .resizable(false)
-    .always_on_top(true);
-    // tao's visible_on_all_workspaces is macOS/Linux-only; calling it on
-    // Windows is a silent no-op, so keep it off that platform.
-    #[cfg(not(target_os = "windows"))]
-    let builder = builder.visible_on_all_workspaces(true);
-    let window = builder.focused(false).shadow(true).build()?;
-    let _ = window.show();
-    Ok(())
 }
 
 #[cfg(not(mobile))]
@@ -1482,13 +1428,12 @@ fn build_tray_menu<M: Manager<tauri::Wry>>(
 
     append_separator(&menu, app)?;
     let open = MenuItem::with_id(app, "open", "打开主窗口", true, None::<&str>)?;
-    let widget = MenuItem::with_id(app, "show_widget", "显示课程小组件", true, None::<&str>)?;
     let planner = MenuItem::with_id(app, "planner", "查看空教室", true, None::<&str>)?;
     let calendar = MenuItem::with_id(app, "calendar", "教学日历", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "设置", true, Some("CmdOrCtrl+,"))?;
     let refresh = MenuItem::with_id(app, "refresh_today", "刷新课程", true, Some("CmdOrCtrl+R"))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, Some("CmdOrCtrl+Q"))?;
-    menu.append_items(&[&open, &widget, &planner, &calendar, &settings])?;
+    menu.append_items(&[&open, &planner, &calendar, &settings])?;
     append_separator(&menu, app)?;
     menu.append_items(&[&refresh, &quit])?;
     Ok(menu)
@@ -1535,6 +1480,7 @@ async fn load_today_course_content(
             password: None,
             term_id: non_empty_option(settings.term_id),
             term_start_date: non_empty_option(settings.term_start_date),
+            automatic_term_detection_enabled: Some(settings.automatic_term_detection_enabled),
         };
         settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
             .map_err(|error| error.message)?;
@@ -1622,9 +1568,6 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" | "tray_title" | "tray_status" => show_main_window(app),
-            "show_widget" => {
-                let _ = show_course_widget(app);
-            }
             "planner" => {
                 show_main_window(app);
                 let _ = app.emit("tray:navigate", "planner");
@@ -2425,8 +2368,8 @@ pub fn run() {
             import_schedule_to_calendar,
             fetch_classrooms,
             fetch_holidays,
-            show_desktop_widget,
-            hide_desktop_widget
+            fetch_weather,
+            fetch_almanac
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -19,7 +19,7 @@ struct PrivacyPolicyView: View {
                             .font(.largeTitle.bold())
                             .foregroundStyle(AppTheme.text)
                             .accessibilityIdentifier("screen.privacy-policy")
-                        Text("生效日期：2026 年 8 月 9 日")
+                        Text("生效日期：2026 年 8 月 22 日")
                             .font(.callout)
                             .foregroundStyle(AppTheme.secondaryText)
                     }
@@ -40,12 +40,16 @@ struct PrivacyPolicyView: View {
                         body: "应用在启动、切换日历年份或缓存需要更新时，可能通过 unpkg 自动获取 holiday-calendar 数据集中的中国法定节假日和调休信息。请求只包含 CN 地区和年份，不包含你的凭据、课表或空教室数据。"
                     )
                     privacySection(
+                        title: "天气与黄历数据",
+                        body: "应用会通过 UAPI 获取所选校区所在行政区的今日、明日天气，并为教学日历中选中的日期获取农历与干支信息。天气请求只包含海淀区或昌平区的行政区划代码，黄历请求只包含所选日期和 Asia/Shanghai 时区；两类请求都不包含教务凭据、课表或空教室数据。"
+                    )
+                    privacySection(
                         title: "系统日历与课程提醒",
                         body: "只有在你主动操作并授予系统权限后，应用才会向系统日历写入课程或在本地安排课程摘要通知。应用只管理带有 Where To Study 标记的日历事件，相关数据不会上传给项目维护者。"
                     )
                     privacySection(
                         title: "不收集的数据",
-                        body: "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务和节假日数据的 CDN 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。"
+                        body: "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据的 CDN 与 UAPI 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。"
                     )
                     privacySection(
                         title: "保留与删除",

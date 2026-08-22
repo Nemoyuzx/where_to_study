@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS = {
   campusId: '01',
   defaultMinSeats: 0,
   dailyCourseNotificationsEnabled: false,
+  automaticTermDetectionEnabled: true,
 }
 
 export const CAMPUS_BUILDINGS = Object.freeze({
@@ -338,6 +339,11 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
       ?? fallback.dailyCourseNotificationsEnabled
       ?? false,
     ),
+    automaticTermDetectionEnabled: Boolean(
+      data.automatic_term_detection_enabled
+      ?? fallback.automaticTermDetectionEnabled
+      ?? true,
+    ),
   }
 }
 
@@ -362,6 +368,7 @@ export function settingsToPayload(settings) {
     campus_id: settings.campusId,
     default_min_seats: normalizeMinSeats(settings.defaultMinSeats),
     daily_course_notifications_enabled: Boolean(settings.dailyCourseNotificationsEnabled),
+    automatic_term_detection_enabled: Boolean(settings.automaticTermDetectionEnabled),
   }
 }
 

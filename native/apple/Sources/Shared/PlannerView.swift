@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlannerView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var dailyInfo: DailyInfoStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var slotColumns: [GridItem] {
@@ -38,6 +39,8 @@ struct PlannerView: View {
                         todayLabel
                     }
                 }
+
+                weatherSurface
 
                 if columnCount == 2 {
                     #if os(macOS)
@@ -102,6 +105,12 @@ struct PlannerView: View {
         }
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.planner")
+        .task(id: model.queryCampusID) {
+            await dailyInfo.loadWeather(
+                campusID: model.queryCampusID,
+                sampleMode: model.isSampleMode
+            )
+        }
     }
 
     private func plannerTitle(compact: Bool) -> some View {
@@ -113,6 +122,119 @@ struct PlannerView: View {
             .font(.subheadline.monospacedDigit())
             .foregroundStyle(AppTheme.secondaryText)
             .fixedSize()
+    }
+
+    private var weatherSurface: some View {
+        let campusID = model.queryCampusID
+        let weather = dailyInfo.weatherByCampus[campusID]
+        let error = dailyInfo.weatherErrors[campusID]
+        let isLoading = dailyInfo.loadingWeatherCampuses.contains(campusID)
+        return Surface {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Label("校区天气", systemImage: "cloud.sun")
+                        .font(.headline)
+                    Spacer(minLength: 8)
+                    if let weather {
+                        Text("\(weather.campusName) · \(weather.district) · \(weather.currentWeather) \(weather.currentTemperature)°")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
+
+                if isLoading, weather == nil {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("正在更新今日与明日天气…")
+                    }
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                } else if let error, weather == nil {
+                    Button {
+                        Task {
+                            await dailyInfo.loadWeather(
+                                campusID: campusID,
+                                sampleMode: model.isSampleMode,
+                                force: true
+                            )
+                        }
+                    } label: {
+                        Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                } else if let weather {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) {
+                            ForEach(Array(weather.days.enumerated()), id: \.element.id) { index, day in
+                                weatherDayCard(day, label: index == 0 ? "今日" : "明日")
+                            }
+                        }
+                        VStack(spacing: 8) {
+                            ForEach(Array(weather.days.enumerated()), id: \.element.id) { index, day in
+                                weatherDayCard(day, label: index == 0 ? "今日" : "明日")
+                            }
+                        }
+                    }
+                    HStack {
+                        Text(weather.reportTime)
+                        Spacer()
+                        Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-weather")!)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+        }
+        .accessibilityIdentifier("weather.summary")
+    }
+
+    private func weatherDayCard(_ day: CampusWeatherDay, label: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: weatherSymbol(day.weatherDay))
+                .font(.title3)
+                .foregroundStyle(AppTheme.primary)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("\(label) · \(shortDate(day.date))")
+                    .font(.subheadline.weight(.semibold))
+                Text(day.weatherDay == day.weatherNight ? day.weatherDay : "\(day.weatherDay)转\(day.weatherNight)")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text("\(day.temperatureMinimum)° / \(day.temperatureMaximum)°")
+                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                if let probability = day.precipitationProbability {
+                    Text("降水 \(probability)%")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity)
+        .background(AppTheme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+    }
+
+    private func weatherSymbol(_ text: String) -> String {
+        if text.contains("雷") { return "cloud.bolt.rain" }
+        if text.contains("雪") || text.contains("冰") { return "cloud.snow" }
+        if text.contains("雨") { return "cloud.rain" }
+        if text.contains("雾") || text.contains("霾") || text.contains("沙") { return "cloud.fog" }
+        if text.contains("多云") || text.contains("阴") { return "cloud" }
+        return "sun.max"
+    }
+
+    private func shortDate(_ value: String) -> String {
+        guard let date = StrictContractDateParser.date(from: value) else { return value }
+        let components = Calendar.shanghai.dateComponents([.month, .day], from: date)
+        return "\(components.month ?? 0)/\(components.day ?? 0)"
     }
 
     private var querySurface: some View {

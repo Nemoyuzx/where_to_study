@@ -9,10 +9,13 @@ import {
   CalendarPlus,
   CalendarRange,
   CheckCircle2,
+  Cloud,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
   Clock3,
   ExternalLink,
-  Eye,
-  EyeOff,
   Home,
   HardDrive,
   Info,
@@ -23,6 +26,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react'
@@ -86,9 +90,6 @@ const NAV_ITEMS = [
   { id: 'settings', label: '设置', Icon: Settings },
 ]
 
-const APP_WIDGET_MODE = typeof window === 'undefined'
-  ? ''
-  : new URLSearchParams(window.location.search).get('widget') || ''
 const BROWSER_PREVIEW_ENABLED = import.meta.env.DEV
 const PROJECT_URL = 'https://github.com/Nemoyuzx/where_to_study'
 const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md'
@@ -146,7 +147,7 @@ function PrivacyPolicyDialog({ onClose }) {
           <div>
             <p className="eyebrow">Where To Study</p>
             <h2 id="privacy-dialog-title">隐私声明</h2>
-            <span>生效日期：2026 年 8 月 9 日</span>
+            <span>生效日期：2026 年 8 月 22 日</span>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
@@ -169,12 +170,16 @@ function PrivacyPolicyDialog({ onClose }) {
             <p>应用在启动、切换日历年份或缓存需要更新时，可能通过 unpkg 自动获取 holiday-calendar 数据集中的中国法定节假日和调休信息。请求只包含 CN 地区和年份，不包含你的凭据、课表或空教室数据。</p>
           </section>
           <section>
+            <h3>天气与黄历数据</h3>
+            <p>应用会通过 UAPI 获取所选校区所在行政区的今日、明日天气，并为教学日历中选中的日期获取农历与干支信息。天气请求只包含海淀区或昌平区的行政区划代码，黄历请求只包含所选日期和 Asia/Shanghai 时区；两类请求都不包含教务凭据、课表或空教室数据。</p>
+          </section>
+          <section>
             <h3>系统日历与课程提醒</h3>
             <p>只有在你主动操作并授予系统权限后，应用才会向系统日历写入课程或在本地安排课程摘要通知。应用只管理带有 Where To Study 标记的日历事件，相关数据不会上传给项目维护者。</p>
           </section>
           <section>
             <h3>不收集的数据</h3>
-            <p>本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务和节假日数据的 CDN 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。</p>
+            <p>本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据的 CDN 与 UAPI 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。</p>
           </section>
           <section>
             <h3>保留、删除与联系</h3>
@@ -217,6 +222,7 @@ function browserPreviewCommand(name, payload = {}) {
       campus_id: DEFAULT_SETTINGS.campusId,
       default_min_seats: DEFAULT_SETTINGS.defaultMinSeats,
       daily_course_notifications_enabled: DEFAULT_SETTINGS.dailyCourseNotificationsEnabled,
+      automatic_term_detection_enabled: DEFAULT_SETTINGS.automaticTermDetectionEnabled,
     }
   }
   if (name === 'save_saved_settings') {
@@ -228,6 +234,7 @@ function browserPreviewCommand(name, payload = {}) {
       campus_id: payload.campus_id || DEFAULT_SETTINGS.campusId,
       default_min_seats: Number(payload.default_min_seats) || 0,
       daily_course_notifications_enabled: Boolean(payload.daily_course_notifications_enabled),
+      automatic_term_detection_enabled: Boolean(payload.automatic_term_detection_enabled),
     }
   }
   if (
@@ -286,8 +293,40 @@ function browserPreviewCommand(name, payload = {}) {
   if (name === 'import_schedule_to_calendar') {
     throw new Error('手机浏览器预览不支持导入苹果日历，请在 macOS App 中使用。')
   }
-  if (name === 'show_desktop_widget' || name === 'hide_desktop_widget') {
-    return true
+  if (name === 'fetch_weather') {
+    const campusId = payload.campus_id || '01'
+    const campusName = campusId === '04' ? '沙河' : '西土城'
+    const district = campusId === '04' ? '昌平区' : '海淀区'
+    const today = localDateString()
+    const tomorrow = addDays(today, 1)
+    return {
+      campus_id: campusId,
+      campus_name: campusName,
+      district,
+      current_weather: '多云',
+      current_temperature: 27,
+      report_time: '刚刚发布',
+      source: 'https://uapis.cn',
+      days: [
+        { date: today, weekday: '今天', weather_day: '多云', weather_night: '雷阵雨', temp_max: 32, temp_min: 23, precipitation_probability: 40 },
+        { date: tomorrow, weekday: '明天', weather_day: '晴', weather_night: '多云', temp_max: 33, temp_min: 22, precipitation_probability: 10 },
+      ],
+    }
+  }
+  if (name === 'fetch_almanac') {
+    return {
+      date: payload.date,
+      weekday: '星期六',
+      lunar_date: '七月初十',
+      ganzhi_year: '丙午',
+      ganzhi_month: '丙申',
+      ganzhi_day: '戊辰',
+      zodiac: '马',
+      solar_term: null,
+      lunar_festival: null,
+      solar_festival: null,
+      source: 'https://uapis.cn',
+    }
   }
   if (name === 'clear_local_data') {
     return true
@@ -310,6 +349,115 @@ function PlannerSummary({ dayCoursesCount, freeSlotsCount, matchingRoomsCount, c
         <span>匹配教室</span>
         <strong>{matchingRoomsCount}</strong>
       </div>
+    </section>
+  )
+}
+
+function WeatherGlyph({ weather, size = 22 }) {
+  const text = String(weather || '')
+  if (/雷/.test(text)) return <CloudLightning size={size} />
+  if (/雪|冰|冻/.test(text)) return <CloudSnow size={size} />
+  if (/雨/.test(text)) return <CloudRain size={size} />
+  if (/雾|霾|沙|尘/.test(text)) return <CloudFog size={size} />
+  if (/多云|阴/.test(text)) return <Cloud size={size} />
+  return <Sun size={size} />
+}
+
+function WeatherStrip({ weather, loading, error, onRetry }) {
+  return (
+    <section className="weather-strip" aria-label="校区今日与明日天气">
+      <div className="weather-strip-heading">
+        <div>
+          <span>校区天气</span>
+          <strong>{weather ? `${weather.campus_name} · ${weather.district}` : '今日与明日'}</strong>
+        </div>
+        {weather ? <small>{weather.current_weather} {weather.current_temperature}° · {weather.report_time}</small> : null}
+      </div>
+      {loading ? (
+        <div className="weather-strip-state"><Loader2 className="spin" size={18} /> 正在更新天气…</div>
+      ) : error ? (
+        <button type="button" className="weather-strip-state weather-retry" onClick={onRetry}>
+          <AlertTriangle size={17} /> {error}，点击重试
+        </button>
+      ) : (
+        <div className="weather-days">
+          {(weather?.days || []).map((day, index) => (
+            <article key={day.date}>
+              <WeatherGlyph weather={day.weather_day} />
+              <div>
+                <strong>{index === 0 ? '今日' : '明日'} · {formatShortDate(day.date)}</strong>
+                <span>{day.weather_day}{day.weather_night !== day.weather_day ? `转${day.weather_night}` : ''}</span>
+              </div>
+              <b>{day.temp_min}° / {day.temp_max}°</b>
+              {day.precipitation_probability != null ? <small>降水 {day.precipitation_probability}%</small> : null}
+            </article>
+          ))}
+        </div>
+      )}
+      <a href="https://uapis.cn/docs/api-reference/get-misc-weather" target="_blank" rel="noreferrer">数据：UAPI</a>
+    </section>
+  )
+}
+
+function SelectedDaySchedule({ date, weekState, slotMeta }) {
+  return (
+    <section className="panel selected-day-schedule">
+      <div className="panel-title selected-day-title">
+        <CalendarDays size={18} />
+        <div>
+          <h2>{formatCourseDate(date)}</h2>
+          <span>{formatTeachingWeek(weekState.weekNumber)} · {weekState.dayCourses.length} 门课</span>
+        </div>
+      </div>
+      <div className="selected-day-course-list">
+        {weekState.dayCourses.length ? weekState.dayCourses.map((course) => {
+          const bounds = courseTimeBounds(course, slotMeta)
+          return (
+            <article key={`${date}-${course.id}`}>
+              <time>{bounds.start}</time>
+              <div>
+                <strong><CourseName course={course} /></strong>
+                <span>{bounds.start}-{bounds.end} · {course.room || '地点未标注'}</span>
+              </div>
+            </article>
+          )
+        }) : <div className="empty-state">当天没有课程</div>}
+      </div>
+    </section>
+  )
+}
+
+function AlmanacCard({ date, almanac, loading, error, onRetry }) {
+  const festival = [almanac?.solar_term, almanac?.lunar_festival, almanac?.solar_festival]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <section className="panel almanac-card" aria-label={`${date} 黄历信息`}>
+      <div className="panel-title">
+        <CalendarRange size={18} />
+        <h2>黄历信息</h2>
+      </div>
+      {loading ? (
+        <div className="almanac-state"><Loader2 className="spin" size={18} /> 正在查询…</div>
+      ) : error ? (
+        <button type="button" className="almanac-state almanac-retry" onClick={onRetry}>
+          <AlertTriangle size={17} /> {error}，点击重试
+        </button>
+      ) : almanac ? (
+        <div className="almanac-content">
+          <div className="almanac-date">
+            <span>{almanac.weekday}</span>
+            <strong>农历 {almanac.lunar_date}</strong>
+            {festival ? <small>{festival}</small> : null}
+          </div>
+          <div className="almanac-grid">
+            <div><span>岁次</span><strong>{almanac.ganzhi_year}年 · 肖{almanac.zodiac}</strong></div>
+            <div><span>月柱</span><strong>{almanac.ganzhi_month}月</strong></div>
+            <div><span>日柱</span><strong>{almanac.ganzhi_day}日</strong></div>
+          </div>
+        </div>
+      ) : null}
+      <p>民俗信息仅供参考 · <a href="https://uapis.cn/docs/api-reference/get-misc-lunartime" target="_blank" rel="noreferrer">数据：UAPI</a></p>
     </section>
   )
 }
@@ -341,187 +489,7 @@ async function command(name, payload) {
   }
 }
 
-function CourseWidget() {
-  const [metadata, setMetadata] = useState({ slots: FALLBACK_SLOTS })
-  const [schedule, setSchedule] = useState(null)
-  const [now, setNow] = useState(() => new Date())
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const scheduleRevision = useRef(0)
-
-  const todayDate = shanghaiDateString(now)
-  const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
-  const courses = schedule?.courses || []
-  const weekState = useMemo(
-    () => getWeekState(courses, schedule?.term_start_date || DEFAULT_SETTINGS.termStartDate, todayDate),
-    [courses, schedule?.term_start_date, todayDate],
-  )
-  const nowMinutes = now.getHours() * 60 + now.getMinutes()
-  const upcomingCourse = weekState.dayCourses.find((course) => courseTimeBounds(course, slotMeta).endMinutes >= nowMinutes) || null
-
-  async function loadWidgetSchedule(expectedAccountScope = '') {
-    const revision = scheduleRevision.current + 1
-    scheduleRevision.current = revision
-    setLoading(true)
-    setError('')
-    try {
-      const [nextMetadata, savedSchedule] = await Promise.all([
-        command('get_metadata'),
-        expectedAccountScope
-          ? command('load_saved_schedule_for_scope', { account_scope: expectedAccountScope })
-          : command('load_saved_schedule'),
-      ])
-      if (revision !== scheduleRevision.current) return
-      setMetadata(nextMetadata || { slots: FALLBACK_SLOTS })
-      setSchedule(savedSchedule)
-    } catch (widgetError) {
-      if (revision === scheduleRevision.current) setError(widgetError.message)
-    } finally {
-      if (revision === scheduleRevision.current) setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    let disposed = false
-    let unlistenUpdated = null
-    let unlistenCleared = null
-
-    async function startWidget() {
-      if (hasTauriRuntime()) {
-        try {
-          unlistenCleared = await listen('account-scope:cleared', () => {
-            scheduleRevision.current += 1
-            setSchedule(null)
-            setLoading(false)
-            setError('')
-          })
-          if (disposed) {
-            unlistenCleared()
-            unlistenCleared = null
-            return
-          }
-          unlistenUpdated = await listen('schedule:updated', (event) => {
-            const accountScope = event.payload?.account_scope
-            setSchedule(null)
-            if (!isValidAccountScope(accountScope)) {
-              scheduleRevision.current += 1
-              setLoading(false)
-              setError('课程更新的账号作用域无效，已拒绝显示。')
-              return
-            }
-            void loadWidgetSchedule(accountScope)
-          })
-          if (disposed) {
-            unlistenUpdated()
-            unlistenUpdated = null
-            return
-          }
-        } catch (listenError) {
-          if (!disposed) setError(normalizeError(listenError))
-          return
-        }
-      }
-      if (!disposed) await loadWidgetSchedule()
-    }
-
-    startWidget()
-    return () => {
-      disposed = true
-      scheduleRevision.current += 1
-      if (unlistenUpdated) unlistenUpdated()
-      if (unlistenCleared) unlistenCleared()
-    }
-  }, [])
-
-  useEffect(() => {
-    const current = new Date()
-    const currentMinutes = current.getHours() * 60 + current.getMinutes()
-    const nextMidnight = new Date(current)
-    nextMidnight.setHours(24, 0, 0, 0)
-    const wakeTimes = [nextMidnight.getTime()]
-
-    weekState.dayCourses.forEach((course) => {
-      const { endMinutes } = courseTimeBounds(course, slotMeta)
-      if (endMinutes < currentMinutes) return
-      const wake = new Date(current)
-      const nextMinute = endMinutes + 1
-      wake.setHours(Math.floor(nextMinute / 60), nextMinute % 60, 0, 0)
-      wakeTimes.push(wake.getTime())
-    })
-
-    const delay = Math.max(1000, Math.min(...wakeTimes) - current.getTime())
-    const timer = window.setTimeout(() => setNow(new Date()), delay)
-    return () => window.clearTimeout(timer)
-  }, [now, slotMeta, weekState.dayCourses])
-
-  async function hideWidget() {
-    try {
-      await command('hide_desktop_widget')
-    } catch (hideError) {
-      setError(hideError.message)
-    }
-  }
-
-  return (
-    <main className="course-widget-shell">
-      <section className="course-widget-card">
-        <header className="course-widget-header">
-          <div className="course-widget-drag" data-tauri-drag-region>
-            <span>{formatCourseDate(todayDate)}</span>
-            <strong>{weekState.dayCourses.length ? `${weekState.dayCourses.length} 门课` : '今日无课'}</strong>
-          </div>
-          <div className="course-widget-actions">
-            <button type="button" onClick={loadWidgetSchedule} aria-label="刷新课程" title="刷新课程" disabled={loading}>
-              {loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-            </button>
-            <button type="button" onClick={hideWidget} aria-label="隐藏小组件" title="隐藏小组件">
-              <X size={16} />
-            </button>
-          </div>
-        </header>
-
-        <div className="course-widget-overview">
-          <span>{formatTeachingWeek(weekState.weekNumber)}</span>
-          <strong>{upcomingCourse ? <CourseName course={upcomingCourse} /> : schedule ? '没有待上课程' : '课表未载入'}</strong>
-          {upcomingCourse ? (
-            <small>{courseTimeBounds(upcomingCourse, slotMeta).start}-{courseTimeBounds(upcomingCourse, slotMeta).end} · {upcomingCourse.room || '地点未标注'}</small>
-          ) : (
-            <small>{schedule ? '今天可以自由安排' : '打开主应用刷新个人课表后显示'}</small>
-          )}
-        </div>
-
-        {error ? <p className="course-widget-error">{error}</p> : null}
-
-        <div className="course-widget-list">
-          {schedule ? (
-            weekState.dayCourses.length ? weekState.dayCourses.map((course) => {
-              const bounds = courseTimeBounds(course, slotMeta)
-              return (
-                <article key={course.id}>
-                  <time>{bounds.start}</time>
-                  <div>
-                    <strong><CourseName course={course} /></strong>
-                    <span>{bounds.start}-{bounds.end} · {course.room || '地点未标注'}</span>
-                  </div>
-                </article>
-              )
-            }) : (
-              <div className="course-widget-empty">今日暂无课程</div>
-            )
-          ) : (
-            <div className="course-widget-empty">暂无本地课表</div>
-          )}
-        </div>
-      </section>
-    </main>
-  )
-}
-
 function App() {
-  if (APP_WIDGET_MODE === 'course') {
-    return <CourseWidget />
-  }
-
   const [activePage, setActivePage] = useState('planner')
   const [metadata, setMetadata] = useState({
     campuses: [],
@@ -562,6 +530,12 @@ function App() {
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
   const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false)
+  const [weather, setWeather] = useState(null)
+  const [weatherLoading, setWeatherLoading] = useState(false)
+  const [weatherError, setWeatherError] = useState('')
+  const [almanacByDate, setAlmanacByDate] = useState({})
+  const [almanacLoadingDate, setAlmanacLoadingDate] = useState('')
+  const [almanacErrorByDate, setAlmanacErrorByDate] = useState({})
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
   const calendarGestureRef = useRef(null)
@@ -579,6 +553,8 @@ function App() {
   const privacyTriggerRef = useRef(null)
   const yearClickTimerRef = useRef(null)
   const clearCancelButtonRef = useRef(null)
+  const weatherRevisionRef = useRef(0)
+  const almanacRevisionRef = useRef(0)
 
   useEffect(() => {
     const page = pageContentRef.current
@@ -849,6 +825,21 @@ function App() {
     )
     return () => window.clearTimeout(timer)
   }, [todayDate])
+
+  useEffect(() => {
+    void loadWeather(queryCampusId)
+    return () => {
+      weatherRevisionRef.current += 1
+    }
+  }, [queryCampusId, todayDate])
+
+  useEffect(() => {
+    if (activePage !== 'calendar' || calendarView !== 'month') return undefined
+    void loadAlmanac(calendarDate)
+    return () => {
+      almanacRevisionRef.current += 1
+    }
+  }, [activePage, calendarDate, calendarView])
 
   useEffect(() => {
     const todayVisible = calendarView === 'day'
@@ -1694,6 +1685,7 @@ function App() {
       const data = await command('fetch_schedule', requestBody(settings, {
         term_id: settings.termId,
         term_start_date: settings.termStartDate,
+        automatic_term_detection_enabled: settings.automaticTermDetectionEnabled,
       }))
       if (accountDataRevision !== localDataClearRevision.current) return
       setSchedule(data)
@@ -1701,7 +1693,7 @@ function App() {
       setUsePersonalSchedule(true)
       // Auto-apply the authoritative term info returned by the backend so
       // users never need to hand-enter the semester id or start date.
-      if (isValidTermId(data.term_id) && isValidTermStartDate(data.term_start_date)) {
+      if (settings.automaticTermDetectionEnabled && isValidTermId(data.term_id) && isValidTermStartDate(data.term_start_date)) {
         const termChanged = settings.termId !== data.term_id
           || settings.termStartDate !== data.term_start_date
         if (termChanged) {
@@ -1751,23 +1743,47 @@ function App() {
     return succeeded
   }
 
+  async function loadWeather(campusId = queryCampusId) {
+    const revision = weatherRevisionRef.current + 1
+    weatherRevisionRef.current = revision
+    setWeatherLoading(true)
+    setWeatherError('')
+    try {
+      const data = await command('fetch_weather', { campus_id: campusId })
+      if (revision !== weatherRevisionRef.current) return
+      setWeather(data)
+    } catch (weatherFetchError) {
+      if (revision !== weatherRevisionRef.current) return
+      setWeather(null)
+      setWeatherError(weatherFetchError.message)
+    } finally {
+      if (revision === weatherRevisionRef.current) setWeatherLoading(false)
+    }
+  }
+
+  async function loadAlmanac(date = calendarDate, force = false) {
+    if (!force && almanacByDate[date]) return
+    const revision = almanacRevisionRef.current + 1
+    almanacRevisionRef.current = revision
+    setAlmanacLoadingDate(date)
+    setAlmanacErrorByDate((current) => ({ ...current, [date]: '' }))
+    try {
+      const data = await command('fetch_almanac', { date })
+      if (revision !== almanacRevisionRef.current) return
+      setAlmanacByDate((current) => ({ ...current, [date]: data }))
+    } catch (almanacFetchError) {
+      if (revision !== almanacRevisionRef.current) return
+      setAlmanacErrorByDate((current) => ({ ...current, [date]: almanacFetchError.message }))
+    } finally {
+      if (revision === almanacRevisionRef.current) setAlmanacLoadingDate('')
+    }
+  }
+
   async function importSystemCalendar() {
     if (settingsSaving) return
     await runTask('calendar-import', async () => {
       const path = await command('import_schedule_to_calendar')
       setCalendarImportedPath(path)
-    })
-  }
-
-  async function openDesktopWidget() {
-    await runTask('widget', async () => {
-      await command('show_desktop_widget')
-    })
-  }
-
-  async function hideDesktopWidget() {
-    await runTask('widget-hide', async () => {
-      await command('hide_desktop_widget')
     })
   }
 
@@ -1839,7 +1855,7 @@ function App() {
         >
           <header className={`topbar ${activePage}-topbar`}>
             <div>
-              <p className="eyebrow">BUPT Classroom Planner</p>
+              <p className="eyebrow">{activePage === 'calendar' ? 'BUPT Classroom Planner' : 'Where To Study'}</p>
               <h1>{activePage === 'calendar' ? calendarHeaderTitle : activePage === 'settings' ? '设置' : '联动查询'}</h1>
             </div>
             {activePage === 'calendar' ? (
@@ -1856,16 +1872,13 @@ function App() {
                     </button>
                   ))}
                 </div>
-                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
-                <button type="button" className="calendar-today-button" onClick={() => chooseCalendarDate(todayDate)}>今天</button>
-                <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
               </div>
-            ) : (
+            ) : activePage === 'planner' ? (
               <div className="status-pill">
                 <Clock3 size={16} />
                 <span>{todayDate}</span>
               </div>
-            )}
+            ) : null}
           </header>
 
           {error ? (
@@ -1876,6 +1889,13 @@ function App() {
           ) : null}
 
           {activePage === 'planner' ? (
+        <>
+        <WeatherStrip
+          weather={weather}
+          loading={weatherLoading}
+          error={weatherError}
+          onRetry={() => loadWeather(queryCampusId)}
+        />
         <div className="workspace planner-workspace">
           <aside className="control-panel">
             <section className="panel planner-query-panel">
@@ -1982,7 +2002,7 @@ function App() {
               </p>
             </section>
 
-            <section className="panel">
+            <section className="panel planner-courses-panel">
               <div className="panel-title">
                 <CalendarDays size={18} />
                 <h2>当天课程</h2>
@@ -2005,7 +2025,7 @@ function App() {
               </div>
             </section>
 
-            <section className="panel">
+            <section className="panel planner-buildings-panel">
               <div className="panel-title">
                 <Building2 size={18} />
                 <h2>教学楼</h2>
@@ -2025,7 +2045,7 @@ function App() {
               </div>
             </section>
 
-            <section className="panel wide">
+            <section className="panel wide planner-results-panel">
               <div className="panel-title">
                 <CheckCircle2 size={18} />
                 <h2>空教室结果</h2>
@@ -2059,6 +2079,7 @@ function App() {
             matchingRoomsCount={needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}
           />
         </div>
+        </>
           ) : null}
 
           {activePage === 'calendar' ? (
@@ -2088,23 +2109,30 @@ function App() {
             ) : null}
             <section className="teaching-calendar-main">
               <div className="calendar-action-strip">
-                <input
-                  type="date"
-                  value={calendarDate}
-                  min="2024-01-01"
-                  max="2030-12-31"
-                  onChange={chooseCalendarDateFromInput}
-                />
-                <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
-                  {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-                  获取/刷新个人课表
-                </button>
-                {metadata.supports_calendar_import ? (
-                  <button type="button" onClick={importSystemCalendar} disabled={settingsSaving || !!loading || !courses.length}>
-                    {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
-                    导入苹果日历
+                <div className="calendar-navigation-actions">
+                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
+                  <input
+                    type="date"
+                    value={calendarDate}
+                    min="2024-01-01"
+                    max="2030-12-31"
+                    onChange={chooseCalendarDateFromInput}
+                  />
+                  <button type="button" className="calendar-today-button" onClick={() => chooseCalendarDate(todayDate)}>今天</button>
+                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
+                </div>
+                <div className="calendar-data-actions">
+                  <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
+                    {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+                    获取/刷新个人课表
                   </button>
-                ) : null}
+                  {metadata.supports_calendar_import ? (
+                    <button type="button" onClick={importSystemCalendar} disabled={settingsSaving || !!loading || !courses.length}>
+                      {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
+                      导入苹果日历
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {calendarImportedPath ? (
                 <p className="calendar-export-note">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
@@ -2312,6 +2340,16 @@ function App() {
                         <span aria-hidden="true" />
                       </button>
                     ) : null}
+                    <div className="month-detail-stack">
+                      <SelectedDaySchedule date={calendarDate} weekState={calendarWeekState} slotMeta={slotMeta} />
+                      <AlmanacCard
+                        date={calendarDate}
+                        almanac={almanacByDate[calendarDate]}
+                        loading={almanacLoadingDate === calendarDate}
+                        error={almanacErrorByDate[calendarDate] || ''}
+                        onRetry={() => loadAlmanac(calendarDate, true)}
+                      />
+                    </div>
                   </div>
                 ) : null}
 
@@ -2409,179 +2447,128 @@ function App() {
 
           {activePage === 'settings' ? (
         <section className="settings-layout">
-          <div className="settings-column">
-          <section className="panel">
-            <div className="panel-title">
-              <KeyRound size={18} />
-              <h2>个人账号</h2>
-            </div>
-            <label>
-              学号
-              <input
-                value={settings.account}
-                onChange={(event) => updateSetting('account', event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') saveCurrentSettings()
-                }}
-                inputMode="numeric"
-                placeholder="可使用环境变量"
-              />
-            </label>
-            <label>
-              教务密码
-              <input
-                value={settings.password}
-                onChange={(event) => updateSetting('password', event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') saveCurrentSettings()
-                }}
-                type="password"
-                placeholder={settings.hasSavedPassword ? '已安全保存，留空保持不变' : '输入后保存到系统凭据存储'}
-                autoComplete="new-password"
-              />
-            </label>
-          </section>
-
-          <section className="panel">
-            <div className="panel-title">
-              <CalendarDays size={18} />
-              <h2>学期设置</h2>
-            </div>
-            <label>
-              学期
-              <input
-                value={settings.termId}
-                onChange={(event) => updateSetting('termId', event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') saveCurrentSettings()
-                }}
-              />
-            </label>
-            <label>
-              第一周周一
-              <input
-                type="date"
-                value={settings.termStartDate}
-                min="2020-01-01"
-                max="2035-12-31"
-                onChange={(event) => updateSetting('termStartDate', event.target.value)}
-              />
-            </label>
-            <div className="mini-actions term-detect-actions">
-              <button
-                type="button"
-                className="secondary compact-button"
-                onClick={() => {
-                  const suggested = suggestTermForDate()
-                  updateSetting('termId', suggested.termId)
-                  updateSetting('termStartDate', suggested.termStartDate)
-                  setError('')
-                }}
-              >
-                <CalendarDays size={15} />
-                按当前日期自动检测
-              </button>
-              {termMatchesCurrentPeriod(settings.termId, settings.termStartDate) ? (
-                <span className="term-detect-ok">✓ 与当前学期一致</span>
-              ) : isValidTermId(settings.termId) && isValidTermStartDate(settings.termStartDate) ? (
-                <span className="term-detect-hint">当前设置与检测结果不同</span>
-              ) : null}
-            </div>
-            <p className="term-detect-note">
-              获取/刷新课表后会自动应用教务返回的学期与开学日期，无需手动填写。
-            </p>
-          </section>
-
-          <section className="panel">
-            <div className="panel-title">
-              <Building2 size={18} />
-              <h2>查询默认值</h2>
-            </div>
-            <div className="field-group">
-              默认校区
-              <div className="campus-options">
-                {(metadata.campuses || []).map((campus) => (
-                  <button
-                    key={campus.id}
-                    type="button"
-                    className={settings.campusId === campus.id ? 'active' : ''}
-                    onClick={() => updateSetting('campusId', campus.id)}
-                  >
-                    <MapPin size={15} />
-                    {campus.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <label>
-              默认最少座位
-              <input
-                type="number"
-                min="0"
-                value={settings.defaultMinSeats}
-                onChange={(event) => updateSetting('defaultMinSeats', Number(event.target.value))}
-              />
+          <div className="settings-column settings-primary-column">
+            <section className="panel">
+              <div className="panel-title"><KeyRound size={18} /><h2>个人账号</h2></div>
+              <label>
+                学号
+                <input
+                  value={settings.account}
+                  onChange={(event) => updateSetting('account', event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentSettings() }}
+                  inputMode="numeric"
+                  placeholder="请输入教务学号"
+                />
               </label>
-          </section>
-
-          </div>
-          <div className="settings-column settings-secondary-column">
-
-          <section className="panel settings-reminder">
-            <div className="panel-title">
-              <BellRing size={18} />
-              <h2>课程提醒</h2>
-            </div>
-            <div className="settings-switch-row">
-              <div>
-                <strong>每天 07:30 发送当日课程摘要</strong>
-                <span>仅在当天有课时发送；课表更新或账号变更后会自动重排。</span>
+              <label>
+                教务密码
+                <input
+                  value={settings.password}
+                  onChange={(event) => updateSetting('password', event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentSettings() }}
+                  type="password"
+                  placeholder={settings.hasSavedPassword ? '已安全保存，留空保持不变' : '输入后保存到系统凭据存储'}
+                  autoComplete="new-password"
+                />
+              </label>
+              <div className="field-group">
+                默认校区
+                <div className="campus-options">
+                  {(metadata.campuses || []).map((campus) => (
+                    <button
+                      key={campus.id}
+                      type="button"
+                      className={settings.campusId === campus.id ? 'active' : ''}
+                      onClick={() => updateSetting('campusId', campus.id)}
+                    >
+                      {campus.name}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <button
-                type="button"
-                className="settings-switch"
-                role="switch"
-                aria-checked={settings.dailyCourseNotificationsEnabled}
-                aria-label="每天 07:30 发送当日课程摘要"
-                onClick={() => updateSetting(
-                  'dailyCourseNotificationsEnabled',
-                  !settings.dailyCourseNotificationsEnabled,
-                )}
-              >
-                <span aria-hidden="true" />
+              <button type="button" className="primary settings-full-button" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
+                {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />} 保存设置
               </button>
-            </div>
-          </section>
+              <button type="button" className="secondary settings-full-button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
+                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />} 获取/刷新个人课表
+              </button>
+              {settingsSaved ? <span className="settings-saved-note">已保存</span> : null}
+            </section>
 
-          <section className="panel settings-actions">
-            <button type="button" className="primary" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
-              {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />}
-              保存设置
-            </button>
-            <button type="button" className="secondary" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
-              {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-              获取/刷新个人课表
-            </button>
-            {settingsSaved ? <span>已保存</span> : null}
-          </section>
+            <section className="panel">
+              <div className="panel-title"><CalendarDays size={18} /><h2>学期设置</h2></div>
+              <div className="settings-switch-row compact-switch-row">
+                <strong>自动检测当前学期</strong>
+                <button
+                  type="button"
+                  className="settings-switch"
+                  role="switch"
+                  aria-checked={settings.automaticTermDetectionEnabled}
+                  onClick={() => updateSetting('automaticTermDetectionEnabled', !settings.automaticTermDetectionEnabled)}
+                ><span aria-hidden="true" /></button>
+              </div>
+              <label>
+                学期编号
+                <input
+                  value={settings.termId}
+                  disabled={settings.automaticTermDetectionEnabled}
+                  onChange={(event) => updateSetting('termId', event.target.value)}
+                />
+              </label>
+              <label>
+                第一周周一
+                <input
+                  type="date"
+                  value={settings.termStartDate}
+                  min="2020-01-01"
+                  max="2035-12-31"
+                  disabled={settings.automaticTermDetectionEnabled}
+                  onChange={(event) => updateSetting('termStartDate', event.target.value)}
+                />
+              </label>
+              <p className="term-detect-note">
+                {settings.automaticTermDetectionEnabled
+                  ? '获取/刷新课表后会自动应用教务返回的学期与开学日期。'
+                  : '已关闭自动检测，将使用上方手动填写的学期信息。'}
+              </p>
+              {!settings.automaticTermDetectionEnabled ? (
+                <div className="mini-actions term-detect-actions">
+                  <button type="button" className="secondary compact-button" onClick={() => {
+                    const suggested = suggestTermForDate()
+                    updateSetting('termId', suggested.termId)
+                    updateSetting('termStartDate', suggested.termStartDate)
+                  }}><CalendarDays size={15} />按当前日期填写</button>
+                  {termMatchesCurrentPeriod(settings.termId, settings.termStartDate) ? (
+                    <span className="term-detect-ok">✓ 与当前学期一致</span>
+                  ) : isValidTermId(settings.termId) && isValidTermStartDate(settings.termStartDate) ? (
+                    <span className="term-detect-hint">当前设置与检测结果不同</span>
+                  ) : null}
+                </div>
+              ) : null}
+              <button type="button" className="secondary settings-full-button" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
+                <CheckCircle2 size={17} /> 保存学期设置
+              </button>
+            </section>
+          </div>
 
-          <section className="panel settings-widget">
-            <div className="panel-title">
-              <CalendarDays size={18} />
-              <h2>课程小组件</h2>
-            </div>
-            <p>控制桌面悬浮课程小组件。小组件只读取已保存在本机的个人课表。</p>
-            <div className="settings-widget-actions">
-              <button type="button" className="secondary" onClick={openDesktopWidget} disabled={settingsSaving || !!loading}>
-                {loading === 'widget' ? <Loader2 className="spin" size={17} /> : <Eye size={17} />}
-                显示小组件
-              </button>
-              <button type="button" className="secondary" onClick={hideDesktopWidget} disabled={settingsSaving || !!loading}>
-                {loading === 'widget-hide' ? <Loader2 className="spin" size={17} /> : <EyeOff size={17} />}
-                隐藏小组件
-              </button>
-            </div>
-          </section>
+          <div className="settings-column settings-secondary-column">
+            <section className="panel settings-reminder">
+              <div className="panel-title"><BellRing size={18} /><h2>课程提醒</h2></div>
+              <div className="settings-switch-row">
+                <div>
+                  <strong>每天 07:30 发送当日课程摘要</strong>
+                  <span>仅在当天有课时发送；课表更新或账号变更后会自动重排。</span>
+                </div>
+                <button
+                  type="button"
+                  className="settings-switch"
+                  role="switch"
+                  aria-checked={settings.dailyCourseNotificationsEnabled}
+                  aria-label="每天 07:30 发送当日课程摘要"
+                  onClick={() => updateSetting('dailyCourseNotificationsEnabled', !settings.dailyCourseNotificationsEnabled)}
+                ><span aria-hidden="true" /></button>
+              </div>
+            </section>
 
           <section className="panel settings-actions settings-local-data">
             <div className="panel-title">

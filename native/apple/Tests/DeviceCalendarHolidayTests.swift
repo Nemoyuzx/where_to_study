@@ -6,6 +6,17 @@ import XCTest
 #endif
 
 final class DeviceCalendarHolidayTests: XCTestCase {
+    func testDeviceCalendarSnapshotIsNotAuthoritativeForRestDayMarkings() {
+        let snapshot = HolidaysSnapshot(
+            year: 2026,
+            source: DeviceCalendarHolidayLogic.sourceLabel,
+            fetchedAt: "2026-08-22T12:00:00+08:00",
+            items: [HolidayItem(date: "2026-02-14", name: "情人节", type: "holiday")]
+        )
+
+        XCTAssertFalse(HolidayDisplayLogic.isAuthoritativeRestDaySource(snapshot))
+    }
+
     func testNormalizedNameTrimsAndRejectsEmptyTitles() {
         XCTAssertEqual(DeviceCalendarHolidayLogic.normalizedName("  国庆节  "), "国庆节")
         XCTAssertNil(DeviceCalendarHolidayLogic.normalizedName("   "))

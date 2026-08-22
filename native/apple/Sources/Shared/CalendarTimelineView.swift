@@ -109,8 +109,12 @@ struct CalendarTimelineView: View {
         .frame(height: min(totalHeight, mobileViewportHeight))
         .accessibilityElement(children: .contain)
         #else
-        timelineContent
-            .accessibilityElement(children: .contain)
+        ScrollView(.vertical, showsIndicators: true) {
+            timelineContent
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityIdentifier("calendar.desktop.timeline-scroll")
+        .accessibilityElement(children: .contain)
         #endif
     }
 

@@ -1,5 +1,12 @@
 # Third-Party Notices
 
+## UAPI weather and lunar-calendar service
+
+Where To Study uses the public HTTPS APIs documented by [UAPI](https://uapis.cn/docs/) to display
+campus-district weather and selected-date lunar-calendar information. UAPI is an external data service;
+no UAPI source code or data file is redistributed with this project. Availability and returned data are
+subject to the service provider's terms and policies.
+
 ## holiday-calendar
 
 Where To Study retrieves Chinese public-holiday and transfer-workday data from

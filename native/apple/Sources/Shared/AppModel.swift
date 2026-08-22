@@ -133,6 +133,12 @@ struct HolidayLoadState {
     }
 }
 
+enum HolidayDisplayLogic {
+    static func isAuthoritativeRestDaySource(_ snapshot: HolidaysSnapshot) -> Bool {
+        snapshot.source != DeviceCalendarHolidayLogic.sourceLabel
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var selectedSection: AppSection = .planner
@@ -172,7 +178,6 @@ final class AppModel: ObservableObject {
     private let classroomClient: any ClassroomFetching
     private let holidayStore: any HolidayStoring
     private let holidayClient: any HolidayFetching
-    private let deviceCalendarHolidayClient: any HolidayFetching
     private let calendarImporter: any CalendarImporting
     private let dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling
     private let dailyCourseNotificationAuthorizationTimeout: Duration
@@ -199,7 +204,6 @@ final class AppModel: ObservableObject {
         classroomClient: any ClassroomFetching = SJDClassroomClient(),
         holidayStore: any HolidayStoring = FileHolidayStore(),
         holidayClient: any HolidayFetching = HolidayClient(),
-        deviceCalendarHolidayClient: any HolidayFetching = DeviceCalendarHolidayClient(),
         calendarImporter: any CalendarImporting = EventKitCalendarImporter(),
         dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling = UserNotificationCourseScheduler(),
         dailyCourseNotificationAuthorizationTimeout: Duration = .seconds(8),
@@ -215,7 +219,6 @@ final class AppModel: ObservableObject {
         self.classroomClient = classroomClient
         self.holidayStore = holidayStore
         self.holidayClient = holidayClient
-        self.deviceCalendarHolidayClient = deviceCalendarHolidayClient
         self.calendarImporter = calendarImporter
         self.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler
         self.dailyCourseNotificationAuthorizationTimeout = dailyCourseNotificationAuthorizationTimeout
@@ -837,31 +840,10 @@ final class AppModel: ObservableObject {
     }
 
     private func fetchHolidaySnapshot(year: Int) async throws -> HolidaysSnapshot {
-        // Prefer the device calendar when calendar access is already granted
-        // (never prompts). The system calendar marks rest days but not makeup
-        // workdays, so supplement those from the remote/offline source.
-        if DeviceCalendarHolidayClient.isAuthorized() {
-            if let device = try? await deviceCalendarHolidayClient.fetch(year: year) {
-                return await Self.mergingWorkdays(into: device, year: year, remoteClient: holidayClient)
-            }
-        }
+        // Only the statutory-holiday dataset is authoritative for 休/班.
+        // Device holiday calendars also contain ordinary festivals, so using
+        // them here incorrectly labels every festival as a rest day on iOS.
         return try await holidayClient.fetch(year: year)
-    }
-
-    private static func mergingWorkdays(
-        into device: HolidaysSnapshot,
-        year: Int,
-        remoteClient: any HolidayFetching
-    ) async -> HolidaysSnapshot {
-        guard !device.items.contains(where: { $0.type == "workday" }) else { return device }
-        let workdays: [HolidayItem]
-        if let remote = try? await remoteClient.fetch(year: year) {
-            workdays = remote.items.filter { $0.type == "workday" }
-        } else {
-            workdays = HolidayOfflineFallback.snapshot(year: year)?
-                .items.filter { $0.type == "workday" } ?? []
-        }
-        return DeviceCalendarHolidayLogic.mergingWorkdays(into: device, workdays: workdays)
     }
 
     func ensureHolidays(for year: Int, force: Bool = false) {
@@ -874,7 +856,10 @@ final class AppModel: ObservableObject {
         }
         if holidaysByYear[year] == nil {
             do {
-                holidaysByYear[year] = try holidayStore.load(year: year)
+                let stored = try holidayStore.load(year: year)
+                if stored.map(HolidayDisplayLogic.isAuthoritativeRestDaySource) ?? true {
+                    holidaysByYear[year] = stored
+                }
             } catch {
                 holidayStatusByYear[year] = "本地节假日读取失败"
             }
@@ -1100,6 +1085,7 @@ final class AppModel: ObservableObject {
     }
 
     private static func isFreshHolidaySnapshot(_ snapshot: HolidaysSnapshot, now: Date = .now) -> Bool {
+        guard HolidayDisplayLogic.isAuthoritativeRestDaySource(snapshot) else { return false }
         guard let fetchedAt = ISO8601DateFormatter().date(from: snapshot.fetchedAt) else { return false }
         let age = now.timeIntervalSince(fetchedAt)
         return age >= 0 && age <= HolidayDefaults.refreshInterval

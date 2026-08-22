@@ -511,6 +511,7 @@ fn refresh_schedule(app: &mut App, tx: &mpsc::Sender<Message>) {
             password: Some(std::mem::take(&mut credentials.password)),
             term_id: None,
             term_start_date: None,
+            automatic_term_detection_enabled: None,
         };
         let result = block_on(where_to_study_lib::schedule::fetch_schedule(&request));
         if let Some(password) = request.password.as_mut() {

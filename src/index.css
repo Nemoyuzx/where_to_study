@@ -7,7 +7,6 @@
   --surface-muted: #F2F2F2;
   --segmented-selection: #ffffff;
   --surface-cool: #EDEDED;
-  --surface-widget: #ECECEC;
   --text-primary: #000000;
   --text-strong: #000000;
   --text-heading: #000000;
@@ -76,7 +75,6 @@
   --modal-backdrop: rgba(0, 0, 0, 0.48);
   --shadow-soft: 0 12px 32px rgba(31, 41, 36, 0.07);
   --shadow-popover: 0 18px 42px rgba(31, 41, 36, 0.18);
-  --shadow-widget: 0 16px 38px rgba(31, 41, 36, 0.16);
   --switch-shadow: 0 1px 3px rgba(23, 32, 27, 0.2);
   --mobile-nav-background: rgba(255, 255, 255, 0.92);
   --mobile-nav-shadow: 0 -10px 28px rgba(18, 31, 27, 0.08);
@@ -104,7 +102,6 @@
     --surface-muted: #2A2A2A;
     --segmented-selection: #636366;
     --surface-cool: #232323;
-    --surface-widget: #1E1E1E;
     --text-primary: #FFFFFF;
     --text-strong: #FFFFFF;
     --text-heading: #FFFFFF;
@@ -169,7 +166,6 @@
     --modal-backdrop: rgba(0, 0, 0, 0.68);
     --shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.3);
     --shadow-popover: 0 18px 42px rgba(0, 0, 0, 0.5);
-    --shadow-widget: 0 16px 38px rgba(0, 0, 0, 0.48);
     --switch-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
     --mobile-nav-background: rgba(26, 32, 29, 0.94);
     --mobile-nav-shadow: 0 -10px 28px rgba(0, 0, 0, 0.38);
@@ -200,8 +196,7 @@ body,
   .panel,
   .summary-band,
   .privacy-dialog,
-  .year-day-popover,
-  .course-widget-card {
+  .year-day-popover {
     transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 }

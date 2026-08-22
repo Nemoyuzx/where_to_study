@@ -19,7 +19,7 @@
 | 10 | 🟢 | lib.rs:1650 | .icon_as_template(true) 是 macOS-only（tray-icon 标注），Windows/Linux 上为静默 no-op |
 | 11 | ✅ | lib.rs:1039 | fetch_classrooms 现在明确拒绝非今天日期，不再静默覆盖 |
 | 12 | 🟡 | lib.rs:1658 | keep_main_window_in_tray 关闭窗口直接隐藏到托盘，无二次确认；若托盘初始化失败用户无法恢复窗口 |
-| 13 | 🟢 | lib.rs:1140 | 课程小组件窗口 .position(24.0, 80.0) 硬编码，多显示器/高分屏下位置固定不跟随主窗口 |
+| 13 | ✅ | lib.rs | Windows/Linux 课程小组件窗口已删除，不再存在固定坐标问题 |
 
 ## Web 前端（src/）
 
@@ -38,7 +38,7 @@
 | 24 | 🟢 | App.jsx:547 | touchmove 监听 effect 空依赖，updateCalendarSwipe 闭包捕获首次渲染值（当前依赖 ref 恰好安全，但脆弱） |
 | 25 | 🟢 | App.jsx:1955+ | day/week 视图渲染中每个日期调用 getWeekState（7 次/渲染），无 useMemo 缓存 |
 | 26 | 🟢 | App.css | 重复选择器：.summary-band x4、.campus-options button x4、.calendar-today-button x2、.settings-layout x2 等，维护风险 |
-| 27 | 🟢 | App.jsx:1448 | 小组件隐藏按钮无确认，误点直接关闭 |
+| 27 | ✅ | App.jsx | Windows/Linux 课程小组件界面已删除，该按钮不再存在 |
 | 28 | 🟡 | App.jsx:1017 | 保存设置成功后 setQueryCampusId(nextSettings.campusId) 同步查询校区；Swift 端 saveSettings 不更新 queryCampusID——跨端行为不一致 |
 | 29 | 🟢 | App.jsx:556 | 并发任务时 loading 显示最后一个任务名，被禁用按钮的文本与禁用态不一致（显示"获取空教室信息"但已禁用） |
 

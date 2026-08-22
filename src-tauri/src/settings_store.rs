@@ -16,7 +16,11 @@ use crate::models::{SaveSettingsRequest, SavedSettings};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 3;
+const SETTINGS_SCHEMA_VERSION: u32 = 4;
+
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Default, Deserialize, Zeroize, ZeroizeOnDrop)]
 struct SettingsFile {
@@ -34,6 +38,8 @@ struct SettingsFile {
     default_min_seats: usize,
     #[serde(default)]
     daily_course_notifications_enabled: bool,
+    #[serde(default = "default_true")]
+    automatic_term_detection_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -44,6 +50,7 @@ struct PersistedSettings<'a> {
     campus_id: &'a str,
     default_min_seats: usize,
     daily_course_notifications_enabled: bool,
+    automatic_term_detection_enabled: bool,
 }
 
 fn settings_path(app: &AppHandle) -> ServiceResult<PathBuf> {
@@ -176,6 +183,7 @@ where
         campus_id: file.campus_id.clone(),
         default_min_seats: file.default_min_seats,
         daily_course_notifications_enabled: file.daily_course_notifications_enabled,
+        automatic_term_detection_enabled: file.automatic_term_detection_enabled,
     };
     settings.apply_defaults();
 
@@ -260,6 +268,7 @@ where
         campus_id: request.campus_id.clone(),
         default_min_seats: request.default_min_seats,
         daily_course_notifications_enabled: request.daily_course_notifications_enabled,
+        automatic_term_detection_enabled: request.automatic_term_detection_enabled,
     };
 
     let existing_account = existing
@@ -385,6 +394,7 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         campus_id: &settings.campus_id,
         default_min_seats: settings.default_min_seats,
         daily_course_notifications_enabled: settings.daily_course_notifications_enabled,
+        automatic_term_detection_enabled: settings.automatic_term_detection_enabled,
     };
     let bytes = Zeroizing::new(
         serde_json::to_vec_pretty(&persisted)
@@ -535,6 +545,7 @@ mod tests {
             campus_id: "01".to_string(),
             default_min_seats: 20,
             daily_course_notifications_enabled: true,
+            automatic_term_detection_enabled: true,
         }
     }
 
@@ -547,6 +558,7 @@ mod tests {
             campus_id: "01".to_string(),
             default_min_seats: 20,
             daily_course_notifications_enabled: true,
+            automatic_term_detection_enabled: true,
         }
     }
 
@@ -561,6 +573,7 @@ mod tests {
 
         assert_eq!(value["schema_version"], SETTINGS_SCHEMA_VERSION);
         assert_eq!(value["daily_course_notifications_enabled"], true);
+        assert_eq!(value["automatic_term_detection_enabled"], true);
         assert!(value.get("account").is_none());
         assert!(value.get("password").is_none());
         assert!(!content.contains("fixture-account"));
@@ -602,6 +615,7 @@ mod tests {
         assert_eq!(loaded.account, "legacy-user");
         assert!(loaded.has_saved_password);
         assert!(!loaded.daily_course_notifications_enabled);
+        assert!(loaded.automatic_term_detection_enabled);
     }
 
     #[test]

@@ -17,7 +17,7 @@
     "allow-import-schedule-to-calendar",
     "allow-fetch-classrooms",
     "allow-fetch-holidays",
-    "allow-show-desktop-widget",
-    "allow-hide-desktop-widget"
+    "allow-fetch-weather",
+    "allow-fetch-almanac"
   ]
 }

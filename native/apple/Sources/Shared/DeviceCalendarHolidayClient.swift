@@ -1,12 +1,9 @@
 import EventKit
 import Foundation
 
-// Reads China statutory holidays from the device's OS-provided holiday
-// calendar. It is a read-only source that never prompts for permission: it
-// only proceeds when calendar access was already granted (for example by the
-// schedule-import feature). The system calendar marks rest days but does not
-// reliably list makeup-workday adjustments, so the caller merges those from
-// the remote/offline source (see AppModel.fetchHolidaySnapshot).
+// Reads entries from the device's China holiday calendar for diagnostics.
+// These calendars include ordinary festivals as well as statutory holidays,
+// so AppModel deliberately does not use this source for 休/班 markings.
 
 enum DeviceCalendarHolidayLogic {
     static let sourceLabel = "device-calendar"

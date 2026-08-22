@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlotMetadata {
     pub index: usize,
@@ -40,6 +44,8 @@ pub struct SavedSettings {
     pub default_min_seats: usize,
     #[serde(default)]
     pub daily_course_notifications_enabled: bool,
+    #[serde(default = "default_true")]
+    pub automatic_term_detection_enabled: bool,
 }
 
 impl SavedSettings {
@@ -52,6 +58,7 @@ impl SavedSettings {
             campus_id: crate::config::CAMPUSES[0].id.to_string(),
             default_min_seats: 0,
             daily_course_notifications_enabled: false,
+            automatic_term_detection_enabled: true,
         }
     }
 
@@ -84,6 +91,8 @@ pub struct SaveSettingsRequest {
     pub default_min_seats: usize,
     #[serde(default)]
     pub daily_course_notifications_enabled: bool,
+    #[serde(default = "default_true")]
+    pub automatic_term_detection_enabled: bool,
 }
 
 impl SaveSettingsRequest {
@@ -106,6 +115,56 @@ pub struct ScheduleRequest {
     pub password: Option<String>,
     pub term_id: Option<String>,
     pub term_start_date: Option<String>,
+    #[serde(default)]
+    pub automatic_term_detection_enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeatherRequest {
+    pub campus_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WeatherDay {
+    pub date: String,
+    pub weekday: String,
+    pub weather_day: String,
+    pub weather_night: String,
+    pub temp_max: i32,
+    pub temp_min: i32,
+    pub precipitation_probability: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WeatherResponse {
+    pub campus_id: String,
+    pub campus_name: String,
+    pub district: String,
+    pub current_weather: String,
+    pub current_temperature: i32,
+    pub report_time: String,
+    pub source: String,
+    pub days: Vec<WeatherDay>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlmanacRequest {
+    pub date: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AlmanacResponse {
+    pub date: String,
+    pub weekday: String,
+    pub lunar_date: String,
+    pub ganzhi_year: String,
+    pub ganzhi_month: String,
+    pub ganzhi_day: String,
+    pub zodiac: String,
+    pub solar_term: Option<String>,
+    pub lunar_festival: Option<String>,
+    pub solar_festival: Option<String>,
+    pub source: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]

@@ -355,6 +355,7 @@ enum TeachingCalendarLogic {
 
 struct TeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var dailyInfo: DailyInfoStore
     @ObservedObject var session: TeachingCalendarSessionState
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
@@ -378,7 +379,7 @@ struct TeachingCalendarView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             #if os(macOS)
             VStack(alignment: .leading, spacing: 16) {
                 titleBar
@@ -408,11 +409,18 @@ struct TeachingCalendarView: View {
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.calendar")
         .coordinateSpace(name: Self.calendarCoordinateSpace)
-        .onAppear(perform: ensureVisibleHolidays)
-        .onChange(of: selectedDate) { _ in ensureVisibleHolidays() }
+        .onAppear {
+            ensureVisibleHolidays()
+            ensureVisibleAlmanac()
+        }
+        .onChange(of: selectedDate) { _ in
+            ensureVisibleHolidays()
+            ensureVisibleAlmanac()
+        }
         .onChange(of: mode) { _ in
             dismissYearPopover()
             ensureVisibleHolidays()
+            ensureVisibleAlmanac()
         }
     }
 
@@ -656,6 +664,8 @@ struct TeachingCalendarView: View {
                 }
             }
             selectedDaySummary(selectedDate)
+            Divider()
+            almanacSummary
         }
         .contentShape(Rectangle())
         .simultaneousGesture(periodSwipeGesture)
@@ -674,31 +684,39 @@ struct TeachingCalendarView: View {
             let availableGridHeight = max(proxy.size.height - weekdayHeight, 0)
             let cellHeight = max(floor(availableGridHeight / 6), 70)
 
-            VStack(alignment: .leading, spacing: 0) {
-                LazyVGrid(columns: columns, spacing: 0) {
-                    ForEach(Self.weekdayLabels, id: \.self) { label in
-                        Text("周\(label)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppTheme.secondaryText)
-                            .frame(maxWidth: .infinity, minHeight: weekdayHeight)
-                            .overlay(alignment: .bottom) {
-                                Rectangle()
-                                    .fill(AppTheme.border)
-                                    .frame(height: 0.5)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        LazyVGrid(columns: columns, spacing: 0) {
+                            ForEach(Self.weekdayLabels, id: \.self) { label in
+                                Text("周\(label)")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(AppTheme.secondaryText)
+                                    .frame(maxWidth: .infinity, minHeight: weekdayHeight)
+                                    .overlay(alignment: .bottom) {
+                                        Rectangle()
+                                            .fill(AppTheme.border)
+                                            .frame(height: 0.5)
+                                    }
                             }
-                    }
 
-                    ForEach(days, id: \.self) { day in
-                        desktopMonthDay(day, month: first, cellHeight: cellHeight)
+                            ForEach(days, id: \.self) { day in
+                                desktopMonthDay(day, month: first, cellHeight: cellHeight)
+                            }
+                        }
+                        .overlay {
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: 0.5)
+                                .allowsHitTesting(false)
+                        }
                     }
+                    .frame(height: max(proxy.size.height, 520), alignment: .top)
+
+                    Surface { selectedDaySummary(selectedDate) }
+                    Surface { almanacSummary }
                 }
-                .overlay {
-                    Rectangle()
-                        .stroke(AppTheme.border, lineWidth: 0.5)
-                        .allowsHitTesting(false)
-                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
@@ -1336,6 +1354,82 @@ struct TeachingCalendarView: View {
     }
 
     @ViewBuilder
+    private var almanacSummary: some View {
+        let date = StrictContractDateParser.string(from: selectedDate)
+        VStack(alignment: .leading, spacing: 10) {
+            Label("黄历信息", systemImage: "calendar.badge.clock")
+                .font(.headline)
+            if dailyInfo.loadingAlmanacDates.contains(date), dailyInfo.almanacByDate[date] == nil {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("正在查询…")
+                }
+                .foregroundStyle(AppTheme.secondaryText)
+            } else if let error = dailyInfo.almanacErrors[date], dailyInfo.almanacByDate[date] == nil {
+                Button {
+                    Task {
+                        await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode, force: true)
+                    }
+                } label: {
+                    Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
+                }
+                .buttonStyle(.bordered)
+            } else if let info = dailyInfo.almanacByDate[date] {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 16) {
+                        almanacDateBlock(info)
+                        almanacPill("岁次", value: "\(info.ganzhiYear)年 · 肖\(info.zodiac)")
+                        almanacPill("月柱", value: "\(info.ganzhiMonth)月")
+                        almanacPill("日柱", value: "\(info.ganzhiDay)日")
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        almanacDateBlock(info)
+                        HStack(spacing: 8) {
+                            almanacPill("岁次", value: "\(info.ganzhiYear)年 · 肖\(info.zodiac)")
+                            almanacPill("月柱", value: "\(info.ganzhiMonth)月")
+                            almanacPill("日柱", value: "\(info.ganzhiDay)日")
+                        }
+                    }
+                }
+            }
+            HStack {
+                Text("民俗信息仅供参考")
+                Spacer()
+                Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-lunartime")!)
+            }
+            .font(.caption2)
+            .foregroundStyle(AppTheme.secondaryText)
+        }
+    }
+
+    private func almanacDateBlock(_ info: AlmanacInfo) -> some View {
+        let festival = [info.solarTerm, info.lunarFestival, info.solarFestival]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(info.weekday).font(.caption).foregroundStyle(AppTheme.secondaryText)
+            Text("农历 \(info.lunarDate)").font(.subheadline.weight(.semibold))
+            if !festival.isEmpty {
+                Text(festival).font(.caption2).foregroundStyle(AppTheme.secondaryText)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func almanacPill(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption2).foregroundStyle(AppTheme.secondaryText)
+            Text(value).font(.caption.weight(.semibold)).lineLimit(1)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+    }
+
+    @ViewBuilder
     private func allDayItems(days: [Date]) -> some View {
         let items = days.flatMap { day in
             holidayItems(on: day).map { (day, $0) }
@@ -1427,6 +1521,14 @@ struct TeachingCalendarView: View {
 
     private func ensureVisibleHolidays() {
         visibleHolidayYears.forEach { model.ensureHolidays(for: $0) }
+    }
+
+    private func ensureVisibleAlmanac() {
+        guard mode == .month else { return }
+        let date = StrictContractDateParser.string(from: selectedDate)
+        Task {
+            await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode)
+        }
     }
 
     private func moveDate(_ direction: Int) {

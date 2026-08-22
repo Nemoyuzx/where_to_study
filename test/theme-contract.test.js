@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import test from 'node:test'
 
 const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 const appCss = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
 const appSource = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
+const tauriSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8')
+const tauriConfig = readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8')
+const tauriCapabilities = readFileSync(
+  new URL('../src-tauri/capabilities/default.json', import.meta.url),
+  'utf8',
+)
 const applePlannerSource = readFileSync(
   new URL('../native/apple/Sources/Shared/PlannerView.swift', import.meta.url),
   'utf8',
@@ -150,6 +156,25 @@ test('Windows workspace follows the native Apple layout metrics', () => {
   assert.match(appCss, /\.app-nav\s*\{[^}]*grid-auto-rows:\s*32px/s)
   assert.match(appCss, /h1\s*\{[^}]*font-size:\s*34px/s)
   assert.match(appCss, /\.settings-layout\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
+})
+
+test('Windows and Linux keep native-style daily information without a faux course widget', () => {
+  assert.match(appSource, /<WeatherStrip[\s\S]*className="workspace planner-workspace"/)
+  assert.match(
+    appSource,
+    /className="month-detail-stack"[\s\S]*<SelectedDaySchedule[\s\S]*<AlmanacCard/,
+  )
+  assert.match(tauriSource, /fetch_weather/)
+  assert.match(tauriSource, /fetch_almanac/)
+  assert.doesNotMatch(appSource, /APP_WIDGET_MODE|show_desktop_widget|hide_desktop_widget|course-widget/)
+  assert.doesNotMatch(appCss, /course-widget|settings-widget/)
+  assert.doesNotMatch(tauriSource, /show_desktop_widget|hide_desktop_widget/)
+  assert.doesNotMatch(tauriConfig, /course-widget/)
+  assert.doesNotMatch(tauriCapabilities, /show-desktop-widget|hide-desktop-widget/)
+  assert.equal(
+    existsSync(new URL('../src-tauri/capabilities/course-widget.json', import.meta.url)),
+    false,
+  )
 })
 
 test('scrolling content reserves scrollbar space without shifting the layout', () => {

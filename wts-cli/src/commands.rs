@@ -41,6 +41,7 @@ fn schedule_request(
         password: Some(std::mem::take(&mut credentials.password)),
         term_id: None,
         term_start_date: None,
+        automatic_term_detection_enabled: None,
     }
 }
 
