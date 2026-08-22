@@ -4,6 +4,7 @@ struct PlannerView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var isWeatherExpanded = false
 
     private var slotColumns: [GridItem] {
         [GridItem(
@@ -40,7 +41,9 @@ struct PlannerView: View {
                     }
                 }
 
-                weatherSurface
+                if model.weatherEnabled {
+                    weatherSurface
+                }
 
                 if columnCount == 2 {
                     #if os(macOS)
@@ -105,7 +108,8 @@ struct PlannerView: View {
         }
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.planner")
-        .task(id: model.queryCampusID) {
+        .task(id: "\(model.queryCampusID)-\(model.weatherEnabled)") {
+            guard model.weatherEnabled else { return }
             await dailyInfo.loadWeather(
                 campusID: model.queryCampusID,
                 sampleMode: model.isSampleMode
@@ -131,64 +135,87 @@ struct PlannerView: View {
         let isLoading = dailyInfo.loadingWeatherCampuses.contains(campusID)
         return Surface {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Label("校区天气", systemImage: "cloud.sun")
-                        .font(.headline)
-                    Spacer(minLength: 8)
-                    if let weather {
-                        Text("\(weather.campusName) · \(weather.district) · \(weather.currentWeather) \(weather.currentTemperature)°")
-                            .font(.caption)
+                Button {
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        isWeatherExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Label("校区天气", systemImage: "cloud.sun")
+                            .font(.headline)
+                        Spacer(minLength: 8)
+                        if let weather {
+                            Text("\(weather.campusName) · \(weather.district) · \(weather.currentWeather) \(weather.currentTemperature)°")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.secondaryText)
+                                .lineLimit(1)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(AppTheme.secondaryText)
-                            .lineLimit(1)
+                            .rotationEffect(.degrees(isWeatherExpanded ? 90 : 0))
                     }
+                    .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("weather.toggle")
+                .accessibilityValue(isWeatherExpanded ? "已展开" : "已折叠")
 
-                if isLoading, weather == nil {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("正在更新今日与明日天气…")
-                    }
-                    .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
-                    .frame(maxWidth: .infinity, minHeight: 54)
-                } else if let error, weather == nil {
-                    Button {
-                        Task {
-                            await dailyInfo.loadWeather(
-                                campusID: campusID,
-                                sampleMode: model.isSampleMode,
-                                force: true
-                            )
-                        }
-                    } label: {
-                        Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
+                if isWeatherExpanded {
+                    Divider()
+                    Group {
+                        if isLoading, weather == nil {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("正在更新今日与明日天气…")
+                            }
                             .font(.callout)
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    .buttonStyle(.bordered)
-                } else if let weather {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) {
-                            ForEach(Array(weather.days.enumerated()), id: \.element.id) { index, day in
-                                weatherDayCard(day, label: index == 0 ? "今日" : "明日")
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                        } else if let error, weather == nil {
+                            Button {
+                                Task {
+                                    await dailyInfo.loadWeather(
+                                        campusID: campusID,
+                                        sampleMode: model.isSampleMode,
+                                        force: true
+                                    )
+                                }
+                            } label: {
+                                Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
+                                    .font(.callout)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
                             }
-                        }
-                        VStack(spacing: 8) {
-                            ForEach(Array(weather.days.enumerated()), id: \.element.id) { index, day in
-                                weatherDayCard(day, label: index == 0 ? "今日" : "明日")
+                            .buttonStyle(.bordered)
+                        } else if let weather {
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 10) {
+                                    ForEach(Array(weather.days.enumerated()), id: \.element.id) { index, day in
+                                        weatherDayCard(day, label: index == 0 ? "今日" : "明日")
+                                    }
+                                }
+                                VStack(spacing: 8) {
+                                    ForEach(Array(weather.days.enumerated()), id: \.element.id) { index, day in
+                                        weatherDayCard(day, label: index == 0 ? "今日" : "明日")
+                                    }
+                                }
                             }
+                            HStack {
+                                Text(weather.reportTime)
+                                Spacer()
+                                Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-weather")!)
+                            }
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.secondaryText)
                         }
                     }
-                    HStack {
-                        Text(weather.reportTime)
-                        Spacer()
-                        Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-weather")!)
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityIdentifier("weather.details")
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("weather.summary")
     }
 

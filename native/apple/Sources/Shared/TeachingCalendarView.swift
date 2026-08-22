@@ -356,6 +356,7 @@ enum TeachingCalendarLogic {
 struct TeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
+    @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @ObservedObject var session: TeachingCalendarSessionState
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
@@ -411,16 +412,16 @@ struct TeachingCalendarView: View {
         .coordinateSpace(name: Self.calendarCoordinateSpace)
         .onAppear {
             ensureVisibleHolidays()
-            ensureVisibleAlmanac()
+            ensureVisibleDailyDetails()
         }
         .onChange(of: selectedDate) { _ in
             ensureVisibleHolidays()
-            ensureVisibleAlmanac()
+            ensureVisibleDailyDetails()
         }
         .onChange(of: mode) { _ in
             dismissYearPopover()
             ensureVisibleHolidays()
-            ensureVisibleAlmanac()
+            ensureVisibleDailyDetails()
         }
     }
 
@@ -664,8 +665,14 @@ struct TeachingCalendarView: View {
                 }
             }
             selectedDaySummary(selectedDate)
+            assignmentSummary
             Divider()
-            almanacSummary
+            if model.almanacEnabled {
+                almanacSummary
+            }
+            if model.hasEnabledPublicDeadlines {
+                deadlineSummary
+            }
         }
         .contentShape(Rectangle())
         .simultaneousGesture(periodSwipeGesture)
@@ -713,7 +720,13 @@ struct TeachingCalendarView: View {
                     .frame(height: max(proxy.size.height, 520), alignment: .top)
 
                     Surface { selectedDaySummary(selectedDate) }
-                    Surface { almanacSummary }
+                    Surface { assignmentSummary }
+                    if model.almanacEnabled {
+                        Surface { almanacSummary }
+                    }
+                    if model.hasEnabledPublicDeadlines {
+                        Surface { deadlineSummary }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
@@ -1391,15 +1404,205 @@ struct TeachingCalendarView: View {
                         }
                     }
                 }
+                if let yi = info.yi {
+                    almanacAdvice("宜", value: yi, color: AppTheme.primary)
+                }
+                if let ji = info.ji {
+                    almanacAdvice("忌", value: ji, color: AppTheme.danger)
+                }
             }
-            HStack {
-                Text("民俗信息仅供参考")
-                Spacer()
-                Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-lunartime")!)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text("民俗信息仅供参考")
+                    Spacer()
+                    Link("农历：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-lunartime")!)
+                    Link("宜忌：Timeless", destination: URL(string: "https://api.timelessq.com/docs/api-15277838")!)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("民俗信息仅供参考")
+                    HStack {
+                        Link("农历：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-lunartime")!)
+                        Link("宜忌：Timeless", destination: URL(string: "https://api.timelessq.com/docs/api-15277838")!)
+                    }
+                }
             }
             .font(.caption2)
             .foregroundStyle(AppTheme.secondaryText)
         }
+    }
+
+    private func almanacAdvice(_ title: String, value: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(color)
+                .frame(width: 20, height: 20)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+            Text(value)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(10)
+        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private var assignmentSummary: some View {
+        let date = StrictContractDateParser.string(from: selectedDate)
+        let items = calendarDeadlines.assignmentsByDate[date] ?? []
+        VStack(alignment: .leading, spacing: 10) {
+            Label("课程作业 DDL", systemImage: "checklist")
+                .font(.headline)
+            if items.isEmpty {
+                if let reason = calendarDeadlines.assignmentUnavailableByDate[date] {
+                    Text(reason)
+                        .font(.callout)
+                        .foregroundStyle(AppTheme.secondaryText)
+                } else {
+                    Text("当天没有课程作业截止事项")
+                        .font(.callout)
+                        .foregroundStyle(AppTheme.secondaryText)
+                }
+            } else {
+                ForEach(items) { item in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "doc.text")
+                            .foregroundStyle(AppTheme.primary)
+                            .frame(width: 22)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.title).font(.subheadline.weight(.semibold))
+                            Text(
+                                [item.courseName, item.status]
+                                    .compactMap { $0 }
+                                    .joined(separator: " · ")
+                            )
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                        }
+                        Spacer(minLength: 8)
+                        Text(deadlineTime(item.deadline))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(AppTheme.secondaryText)
+                    }
+                    .padding(10)
+                    .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            HStack {
+                Text("第三方来源：北京邮电大学云课堂")
+                Spacer()
+                Link("打开作业列表", destination: CalendarDeadlineSources.assignments)
+            }
+            .font(.caption2)
+            .foregroundStyle(AppTheme.secondaryText)
+        }
+    }
+
+    @ViewBuilder
+    private var deadlineSummary: some View {
+        let date = StrictContractDateParser.string(from: selectedDate)
+        let snapshot = calendarDeadlines.publicByDate[date]
+        let items = (snapshot?.items ?? []).filter(deadlineIsEnabled)
+        VStack(alignment: .leading, spacing: 10) {
+            Label("活动 DDL", systemImage: "flag.checkered")
+                .font(.headline)
+            if calendarDeadlines.loadingPublicDates.contains(date), snapshot == nil {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("正在同步竞赛、夏令营与黑客松…")
+                }
+                .foregroundStyle(AppTheme.secondaryText)
+            } else if let error = calendarDeadlines.publicErrors[date], snapshot == nil {
+                Button {
+                    Task {
+                        await calendarDeadlines.loadPublic(
+                            date: date,
+                            sampleMode: model.isSampleMode,
+                            force: true
+                        )
+                    }
+                } label: {
+                    Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
+                }
+                .buttonStyle(.bordered)
+            } else if items.isEmpty {
+                Text("当天没有已收录的活动截止事项")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+            } else {
+                ForEach(items) { item in
+                    publicDeadlineRow(item)
+                }
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Text("第三方来源")
+                    Spacer()
+                    Link("主数据：Contest DDL", destination: CalendarDeadlineSources.primaryPage)
+                    Link("备用 API", destination: CalendarDeadlineSources.backup)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("第三方来源")
+                    HStack {
+                        Link("主数据：Contest DDL", destination: CalendarDeadlineSources.primaryPage)
+                        Link("备用 API", destination: CalendarDeadlineSources.backup)
+                    }
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(AppTheme.secondaryText)
+        }
+    }
+
+    @ViewBuilder
+    private func publicDeadlineRow(_ item: PublicDeadlineItem) -> some View {
+        if let url = item.officialURL {
+            Link(destination: url) {
+                publicDeadlineRowContent(item)
+            }
+            .buttonStyle(.plain)
+        } else {
+            publicDeadlineRowContent(item)
+        }
+    }
+
+    private func publicDeadlineRowContent(_ item: PublicDeadlineItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.kind.systemImage)
+                .foregroundStyle(AppTheme.primary)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.name)
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.leading)
+                Text([item.kind.title, item.organizer].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+            Spacer(minLength: 8)
+            Text(deadlineTime(item.deadline))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(AppTheme.secondaryText)
+        }
+        .padding(10)
+        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+    }
+
+    private func deadlineIsEnabled(_ item: PublicDeadlineItem) -> Bool {
+        switch item.kind {
+        case .competition: model.competitionDeadlinesEnabled
+        case .summerCamp: model.summerCampDeadlinesEnabled
+        case .hackathon: model.hackathonDeadlinesEnabled
+        }
+    }
+
+    private func deadlineTime(_ value: String) -> String {
+        guard value.count >= 16 else { return value }
+        let start = value.index(value.startIndex, offsetBy: 11)
+        return String(value[start...].prefix(5))
     }
 
     private func almanacDateBlock(_ info: AlmanacInfo) -> some View {
@@ -1523,11 +1726,21 @@ struct TeachingCalendarView: View {
         visibleHolidayYears.forEach { model.ensureHolidays(for: $0) }
     }
 
-    private func ensureVisibleAlmanac() {
+    private func ensureVisibleDailyDetails() {
         guard mode == .month else { return }
         let date = StrictContractDateParser.string(from: selectedDate)
         Task {
-            await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode)
+            await calendarDeadlines.loadAssignments(date: date, sampleMode: model.isSampleMode)
+        }
+        if model.almanacEnabled {
+            Task {
+                await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode)
+            }
+        }
+        if model.hasEnabledPublicDeadlines {
+            Task {
+                await calendarDeadlines.loadPublic(date: date, sampleMode: model.isSampleMode)
+            }
         }
     }
 

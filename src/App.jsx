@@ -9,12 +9,14 @@ import {
   CalendarPlus,
   CalendarRange,
   CheckCircle2,
+  ClipboardList,
   Cloud,
   CloudFog,
   CloudLightning,
   CloudRain,
   CloudSnow,
   Clock3,
+  ChevronDown,
   ExternalLink,
   Home,
   HardDrive,
@@ -22,12 +24,15 @@ import {
   KeyRound,
   Loader2,
   MapPin,
+  Code2,
   RefreshCw,
   Search,
   Settings,
   ShieldCheck,
   Sun,
+  TentTree,
   Trash2,
+  Trophy,
   X,
 } from 'lucide-react'
 import {
@@ -170,8 +175,12 @@ function PrivacyPolicyDialog({ onClose }) {
             <p>应用在启动、切换日历年份或缓存需要更新时，可能通过 unpkg 自动获取 holiday-calendar 数据集中的中国法定节假日和调休信息。请求只包含 CN 地区和年份，不包含你的凭据、课表或空教室数据。</p>
           </section>
           <section>
-            <h3>天气与黄历数据</h3>
-            <p>应用会通过 UAPI 获取所选校区所在行政区的今日、明日天气，并为教学日历中选中的日期获取农历与干支信息。天气请求只包含海淀区或昌平区的行政区划代码，黄历请求只包含所选日期和 Asia/Shanghai 时区；两类请求都不包含教务凭据、课表或空教室数据。</p>
+            <h3>天气、黄历与公开 DDL</h3>
+            <p>应用会通过 UAPI 获取今日、明日校区天气和所选日期的基础黄历，并可能通过 Timeless API 补充“宜/忌”。启用对应类别时，应用会从 Contest DDL 主源下载公开竞赛、夏令营与黑客松数据并在本地按日期筛选；主源不可用时可能尝试固定的 HTTP 备用 API。备用请求只向指定 IP 发送不含凭据、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。所有相关功能均可在设置中关闭。</p>
+          </section>
+          <section>
+            <h3>云课堂作业</h3>
+            <p>查看日期详情中的课程作业时，应用会从系统安全存储临时读取已保存的教务账号和密码，仅通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存中的云课堂令牌并读取课程作业。应用不会读取浏览器 Cookie 或 token，不会把密码发送给 ucloud.bupt.edu.cn 或 apiucloud.bupt.edu.cn，也不会把认证票据、Cookie、令牌或作业写入磁盘；用于跨日期查询的全量结果最多复用 10 分钟，已显示结果只保留在当前进程内，并在切换账号或清除本地数据时失效。</p>
           </section>
           <section>
             <h3>系统日历与课程提醒</h3>
@@ -179,7 +188,7 @@ function PrivacyPolicyDialog({ onClose }) {
           </section>
           <section>
             <h3>不收集的数据</h3>
-            <p>本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据的 CDN 与 UAPI 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。</p>
+            <p>本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据 CDN、UAPI、Timeless、GitHub Pages 与可选 DDL 备用服务可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。</p>
           </section>
           <section>
             <h3>保留、删除与联系</h3>
@@ -223,6 +232,11 @@ function browserPreviewCommand(name, payload = {}) {
       default_min_seats: DEFAULT_SETTINGS.defaultMinSeats,
       daily_course_notifications_enabled: DEFAULT_SETTINGS.dailyCourseNotificationsEnabled,
       automatic_term_detection_enabled: DEFAULT_SETTINGS.automaticTermDetectionEnabled,
+      weather_enabled: DEFAULT_SETTINGS.weatherEnabled,
+      almanac_enabled: DEFAULT_SETTINGS.almanacEnabled,
+      competition_deadlines_enabled: DEFAULT_SETTINGS.competitionDeadlinesEnabled,
+      summer_camp_deadlines_enabled: DEFAULT_SETTINGS.summerCampDeadlinesEnabled,
+      hackathon_deadlines_enabled: DEFAULT_SETTINGS.hackathonDeadlinesEnabled,
     }
   }
   if (name === 'save_saved_settings') {
@@ -235,6 +249,11 @@ function browserPreviewCommand(name, payload = {}) {
       default_min_seats: Number(payload.default_min_seats) || 0,
       daily_course_notifications_enabled: Boolean(payload.daily_course_notifications_enabled),
       automatic_term_detection_enabled: Boolean(payload.automatic_term_detection_enabled),
+      weather_enabled: Boolean(payload.weather_enabled),
+      almanac_enabled: Boolean(payload.almanac_enabled),
+      competition_deadlines_enabled: Boolean(payload.competition_deadlines_enabled),
+      summer_camp_deadlines_enabled: Boolean(payload.summer_camp_deadlines_enabled),
+      hackathon_deadlines_enabled: Boolean(payload.hackathon_deadlines_enabled),
     }
   }
   if (
@@ -325,7 +344,29 @@ function browserPreviewCommand(name, payload = {}) {
       solar_term: null,
       lunar_festival: null,
       solar_festival: null,
+      yi: '祭祀 祈福 出行',
+      ji: '嫁娶 掘井',
       source: 'https://uapis.cn',
+    }
+  }
+  if (name === 'fetch_deadlines') {
+    return {
+      date: payload.date,
+      fetched_at: contractTimestamp(),
+      source: 'https://nemoyuzx.github.io/contest-ddl/data/competitions.json',
+      used_backup: false,
+      items: [
+        { id: 'preview-competition', name: '大学生创新竞赛', event_type: 'competition', primary_deadline: `${payload.date}T18:00:00+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
+        { id: 'preview-hackathon', name: '校园黑客松', event_type: 'hackathon', primary_deadline: `${payload.date}T23:59:59+08:00`, organizer: null, official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
+      ],
+    }
+  }
+  if (name === 'fetch_assignments') {
+    return {
+      date: payload.date,
+      source: 'https://ucloud.bupt.edu.cn/uclass/',
+      items: [],
+      unavailable_reason: '浏览器预览不连接个人云课堂作业。',
     }
   }
   if (name === 'clear_local_data') {
@@ -364,37 +405,51 @@ function WeatherGlyph({ weather, size = 22 }) {
 }
 
 function WeatherStrip({ weather, loading, error, onRetry }) {
+  const [expanded, setExpanded] = useState(false)
+
   return (
     <section className="weather-strip" aria-label="校区今日与明日天气">
-      <div className="weather-strip-heading">
-        <div>
+      <button
+        type="button"
+        className="weather-strip-toggle"
+        aria-expanded={expanded}
+        aria-controls="weather-strip-details"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <WeatherGlyph weather={weather?.current_weather} size={20} />
+        <div className="weather-strip-heading">
           <span>校区天气</span>
           <strong>{weather ? `${weather.campus_name} · ${weather.district}` : '今日与明日'}</strong>
         </div>
         {weather ? <small>{weather.current_weather} {weather.current_temperature}° · {weather.report_time}</small> : null}
-      </div>
-      {loading ? (
-        <div className="weather-strip-state"><Loader2 className="spin" size={18} /> 正在更新天气…</div>
-      ) : error ? (
-        <button type="button" className="weather-strip-state weather-retry" onClick={onRetry}>
-          <AlertTriangle size={17} /> {error}，点击重试
-        </button>
-      ) : (
-        <div className="weather-days">
-          {(weather?.days || []).map((day, index) => (
-            <article key={day.date}>
-              <WeatherGlyph weather={day.weather_day} />
-              <div>
-                <strong>{index === 0 ? '今日' : '明日'} · {formatShortDate(day.date)}</strong>
-                <span>{day.weather_day}{day.weather_night !== day.weather_day ? `转${day.weather_night}` : ''}</span>
-              </div>
-              <b>{day.temp_min}° / {day.temp_max}°</b>
-              {day.precipitation_probability != null ? <small>降水 {day.precipitation_probability}%</small> : null}
-            </article>
-          ))}
+        <ChevronDown className="weather-strip-chevron" size={18} aria-hidden="true" />
+      </button>
+      {expanded ? (
+        <div className="weather-strip-details" id="weather-strip-details">
+          {loading ? (
+            <div className="weather-strip-state"><Loader2 className="spin" size={18} /> 正在更新天气…</div>
+          ) : error ? (
+            <button type="button" className="weather-strip-state weather-retry" onClick={onRetry}>
+              <AlertTriangle size={17} /> {error}，点击重试
+            </button>
+          ) : (
+            <div className="weather-days">
+              {(weather?.days || []).map((day, index) => (
+                <article key={day.date}>
+                  <WeatherGlyph weather={day.weather_day} />
+                  <div>
+                    <strong>{index === 0 ? '今日' : '明日'} · {formatShortDate(day.date)}</strong>
+                    <span>{day.weather_day}{day.weather_night !== day.weather_day ? `转${day.weather_night}` : ''}</span>
+                  </div>
+                  <b>{day.temp_min}° / {day.temp_max}°</b>
+                  {day.precipitation_probability != null ? <small>降水 {day.precipitation_probability}%</small> : null}
+                </article>
+              ))}
+            </div>
+          )}
+          <a href="https://uapis.cn/docs/api-reference/get-misc-weather" target="_blank" rel="noreferrer">数据：UAPI</a>
         </div>
-      )}
-      <a href="https://uapis.cn/docs/api-reference/get-misc-weather" target="_blank" rel="noreferrer">数据：UAPI</a>
+      ) : null}
     </section>
   )
 }
@@ -455,9 +510,110 @@ function AlmanacCard({ date, almanac, loading, error, onRetry }) {
             <div><span>月柱</span><strong>{almanac.ganzhi_month}月</strong></div>
             <div><span>日柱</span><strong>{almanac.ganzhi_day}日</strong></div>
           </div>
+          <div className="almanac-advice" aria-label="黄历宜忌">
+            <div className="almanac-yi"><strong>宜：</strong><span>{almanac.yi || '暂无数据'}</span></div>
+            <div className="almanac-ji"><strong>忌：</strong><span>{almanac.ji || '暂无数据'}</span></div>
+          </div>
         </div>
       ) : null}
-      <p>民俗信息仅供参考 · <a href="https://uapis.cn/docs/api-reference/get-misc-lunartime" target="_blank" rel="noreferrer">数据：UAPI</a></p>
+      <p>
+        民俗信息仅供参考 · 数据：
+        <a href="https://uapis.cn/docs/api-reference/get-misc-lunartime" target="_blank" rel="noreferrer">UAPI 农历</a>
+        {' · '}
+        <a href="https://api.timelessq.com/docs/api-15277838" target="_blank" rel="noreferrer">Timeless 万年历</a>
+      </p>
+    </section>
+  )
+}
+
+const DEADLINE_TYPE_META = {
+  competition: { label: '学科竞赛', Icon: Trophy },
+  summer_camp: { label: '夏令营', Icon: TentTree },
+  hackathon: { label: '黑客松', Icon: Code2 },
+}
+
+function deadlineClock(value) {
+  const match = String(value || '').match(/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/)
+  return match?.[1] || '时间待定'
+}
+
+function AssignmentDeadlineCard({ date, response, loading, error, onRetry }) {
+  return (
+    <section className="panel assignment-deadline-card" aria-label={`${date} 云课堂作业截止`}>
+      <div className="panel-title">
+        <ClipboardList size={18} />
+        <h2>课程作业 DDL</h2>
+      </div>
+      {loading ? (
+        <div className="deadline-state"><Loader2 className="spin" size={18} /> 正在同步云课堂作业…</div>
+      ) : error ? (
+        <button type="button" className="deadline-state deadline-retry" onClick={onRetry}>
+          <AlertTriangle size={17} /> {error}，点击重试
+        </button>
+      ) : response?.items?.length ? (
+        <div className="deadline-list">
+          {response.items.map((item) => (
+            <article key={item.id}>
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.course_name || '课程名称未标注'}{item.status ? ` · ${item.status}` : ''}</span>
+              </div>
+              <time>{deadlineClock(item.deadline)}</time>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="deadline-empty">{response?.unavailable_reason || '当天没有课程作业截止'}</div>
+      )}
+      <p>第三方来源：<a href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer">北京邮电大学云邮教学空间</a></p>
+    </section>
+  )
+}
+
+function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onRetry }) {
+  const items = (response?.items || []).filter((item) => enabledTypes[item.event_type])
+  return (
+    <section className="panel contest-deadline-card" aria-label={`${date} 竞赛与活动截止`}>
+      <div className="panel-title">
+        <Trophy size={18} />
+        <h2>竞赛与活动 DDL</h2>
+      </div>
+      {loading ? (
+        <div className="deadline-state"><Loader2 className="spin" size={18} /> 正在更新实时 DDL…</div>
+      ) : error ? (
+        <button type="button" className="deadline-state deadline-retry" onClick={onRetry}>
+          <AlertTriangle size={17} /> {error}，点击重试
+        </button>
+      ) : items.length ? (
+        <div className="deadline-list">
+          {items.map((item) => {
+            const meta = DEADLINE_TYPE_META[item.event_type] || DEADLINE_TYPE_META.competition
+            const ItemIcon = meta.Icon
+            const body = (
+              <>
+                <ItemIcon size={17} />
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{meta.label}{item.organizer ? ` · ${item.organizer}` : ''}</span>
+                </div>
+                <time>{deadlineClock(item.primary_deadline)}</time>
+              </>
+            )
+            return item.official_url ? (
+              <a key={item.id} href={item.official_url} target="_blank" rel="noreferrer">{body}</a>
+            ) : <article key={item.id}>{body}</article>
+          })}
+        </div>
+      ) : (
+        <div className="deadline-empty">当天没有已启用类型的报名或提交截止</div>
+      )}
+      <p>
+        第三方来源：
+        <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a>
+        {' · 备用：'}
+        <a href="http://101.201.29.29/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
+        {response?.used_backup ? '（本次已使用备用源）' : ''}
+      </p>
     </section>
   )
 }
@@ -536,6 +692,12 @@ function App() {
   const [almanacByDate, setAlmanacByDate] = useState({})
   const [almanacLoadingDate, setAlmanacLoadingDate] = useState('')
   const [almanacErrorByDate, setAlmanacErrorByDate] = useState({})
+  const [deadlinesByDate, setDeadlinesByDate] = useState({})
+  const [deadlinesLoadingDate, setDeadlinesLoadingDate] = useState('')
+  const [deadlinesErrorByDate, setDeadlinesErrorByDate] = useState({})
+  const [assignmentsByDate, setAssignmentsByDate] = useState({})
+  const [assignmentsLoadingDate, setAssignmentsLoadingDate] = useState('')
+  const [assignmentsErrorByDate, setAssignmentsErrorByDate] = useState({})
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
   const calendarGestureRef = useRef(null)
@@ -555,6 +717,8 @@ function App() {
   const clearCancelButtonRef = useRef(null)
   const weatherRevisionRef = useRef(0)
   const almanacRevisionRef = useRef(0)
+  const deadlinesRevisionRef = useRef(0)
+  const assignmentsRevisionRef = useRef(0)
 
   useEffect(() => {
     const page = pageContentRef.current
@@ -827,17 +991,50 @@ function App() {
   }, [todayDate])
 
   useEffect(() => {
+    if (!settings.weatherEnabled) {
+      weatherRevisionRef.current += 1
+      setWeather(null)
+      setWeatherLoading(false)
+      setWeatherError('')
+      return undefined
+    }
     void loadWeather(queryCampusId)
     return () => {
       weatherRevisionRef.current += 1
     }
-  }, [queryCampusId, todayDate])
+  }, [queryCampusId, settings.weatherEnabled, todayDate])
 
   useEffect(() => {
-    if (activePage !== 'calendar' || calendarView !== 'month') return undefined
+    if (activePage !== 'calendar' || calendarView !== 'month' || !settings.almanacEnabled) return undefined
     void loadAlmanac(calendarDate)
     return () => {
       almanacRevisionRef.current += 1
+    }
+  }, [activePage, calendarDate, calendarView, settings.almanacEnabled])
+
+  useEffect(() => {
+    const anyDeadlineTypeEnabled = settings.competitionDeadlinesEnabled
+      || settings.summerCampDeadlinesEnabled
+      || settings.hackathonDeadlinesEnabled
+    if (activePage !== 'calendar' || calendarView !== 'month' || !anyDeadlineTypeEnabled) return undefined
+    void loadDeadlines(calendarDate)
+    return () => {
+      deadlinesRevisionRef.current += 1
+    }
+  }, [
+    activePage,
+    calendarDate,
+    calendarView,
+    settings.competitionDeadlinesEnabled,
+    settings.summerCampDeadlinesEnabled,
+    settings.hackathonDeadlinesEnabled,
+  ])
+
+  useEffect(() => {
+    if (activePage !== 'calendar' || calendarView !== 'month') return undefined
+    void loadAssignments(calendarDate)
+    return () => {
+      assignmentsRevisionRef.current += 1
     }
   }, [activePage, calendarDate, calendarView])
 
@@ -1779,6 +1976,42 @@ function App() {
     }
   }
 
+  async function loadDeadlines(date = calendarDate, force = false) {
+    if (!force && deadlinesByDate[date]) return
+    const revision = deadlinesRevisionRef.current + 1
+    deadlinesRevisionRef.current = revision
+    setDeadlinesLoadingDate(date)
+    setDeadlinesErrorByDate((current) => ({ ...current, [date]: '' }))
+    try {
+      const data = await command('fetch_deadlines', { date })
+      if (revision !== deadlinesRevisionRef.current) return
+      setDeadlinesByDate((current) => ({ ...current, [date]: data }))
+    } catch (deadlineError) {
+      if (revision !== deadlinesRevisionRef.current) return
+      setDeadlinesErrorByDate((current) => ({ ...current, [date]: deadlineError.message }))
+    } finally {
+      if (revision === deadlinesRevisionRef.current) setDeadlinesLoadingDate('')
+    }
+  }
+
+  async function loadAssignments(date = calendarDate, force = false) {
+    if (!force && assignmentsByDate[date]) return
+    const revision = assignmentsRevisionRef.current + 1
+    assignmentsRevisionRef.current = revision
+    setAssignmentsLoadingDate(date)
+    setAssignmentsErrorByDate((current) => ({ ...current, [date]: '' }))
+    try {
+      const data = await command('fetch_assignments', { date })
+      if (revision !== assignmentsRevisionRef.current) return
+      setAssignmentsByDate((current) => ({ ...current, [date]: data }))
+    } catch (assignmentError) {
+      if (revision !== assignmentsRevisionRef.current) return
+      setAssignmentsErrorByDate((current) => ({ ...current, [date]: assignmentError.message }))
+    } finally {
+      if (revision === assignmentsRevisionRef.current) setAssignmentsLoadingDate('')
+    }
+  }
+
   async function importSystemCalendar() {
     if (settingsSaving) return
     await runTask('calendar-import', async () => {
@@ -1814,8 +2047,12 @@ function App() {
   }
 
   function clearAccountScopedViewState() {
+    assignmentsRevisionRef.current += 1
     setSchedule(null)
     setClassroomsCache(null)
+    setAssignmentsByDate({})
+    setAssignmentsErrorByDate({})
+    setAssignmentsLoadingDate('')
     setSelectedSlots([])
     setSelectedBuildings([])
     setUsePersonalSchedule(true)
@@ -1890,12 +2127,14 @@ function App() {
 
           {activePage === 'planner' ? (
         <>
-        <WeatherStrip
-          weather={weather}
-          loading={weatherLoading}
-          error={weatherError}
-          onRetry={() => loadWeather(queryCampusId)}
-        />
+        {settings.weatherEnabled ? (
+          <WeatherStrip
+            weather={weather}
+            loading={weatherLoading}
+            error={weatherError}
+            onRetry={() => loadWeather(queryCampusId)}
+          />
+        ) : null}
         <div className="workspace planner-workspace">
           <aside className="control-panel">
             <section className="panel planner-query-panel">
@@ -2342,13 +2581,38 @@ function App() {
                     ) : null}
                     <div className="month-detail-stack">
                       <SelectedDaySchedule date={calendarDate} weekState={calendarWeekState} slotMeta={slotMeta} />
-                      <AlmanacCard
+                      <AssignmentDeadlineCard
                         date={calendarDate}
-                        almanac={almanacByDate[calendarDate]}
-                        loading={almanacLoadingDate === calendarDate}
-                        error={almanacErrorByDate[calendarDate] || ''}
-                        onRetry={() => loadAlmanac(calendarDate, true)}
+                        response={assignmentsByDate[calendarDate]}
+                        loading={assignmentsLoadingDate === calendarDate}
+                        error={assignmentsErrorByDate[calendarDate] || ''}
+                        onRetry={() => loadAssignments(calendarDate, true)}
                       />
+                      {settings.almanacEnabled ? (
+                        <AlmanacCard
+                          date={calendarDate}
+                          almanac={almanacByDate[calendarDate]}
+                          loading={almanacLoadingDate === calendarDate}
+                          error={almanacErrorByDate[calendarDate] || ''}
+                          onRetry={() => loadAlmanac(calendarDate, true)}
+                        />
+                      ) : null}
+                      {settings.competitionDeadlinesEnabled
+                        || settings.summerCampDeadlinesEnabled
+                        || settings.hackathonDeadlinesEnabled ? (
+                          <ContestDeadlineCard
+                            date={calendarDate}
+                            response={deadlinesByDate[calendarDate]}
+                            loading={deadlinesLoadingDate === calendarDate}
+                            error={deadlinesErrorByDate[calendarDate] || ''}
+                            enabledTypes={{
+                              competition: settings.competitionDeadlinesEnabled,
+                              summer_camp: settings.summerCampDeadlinesEnabled,
+                              hackathon: settings.hackathonDeadlinesEnabled,
+                            }}
+                            onRetry={() => loadDeadlines(calendarDate, true)}
+                          />
+                        ) : null}
                     </div>
                   </div>
                 ) : null}
@@ -2568,6 +2832,33 @@ function App() {
                   onClick={() => updateSetting('dailyCourseNotificationsEnabled', !settings.dailyCourseNotificationsEnabled)}
                 ><span aria-hidden="true" /></button>
               </div>
+            </section>
+
+            <section className="panel settings-daily-info">
+              <div className="panel-title"><CalendarRange size={18} /><h2>生活信息与 DDL</h2></div>
+              {[
+                ['weatherEnabled', '校区天气', '在空教室联动查询上方显示默认折叠的今日、明日天气。'],
+                ['almanacEnabled', '黄历信息', '在月视图日期详情中显示农历、干支与宜忌。'],
+                ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示学科竞赛截止日期。'],
+                ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。'],
+                ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。'],
+              ].map(([field, title, description]) => (
+                <div className="settings-switch-row" key={field}>
+                  <div>
+                    <strong>{title}</strong>
+                    <span>{description}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-switch"
+                    role="switch"
+                    aria-checked={settings[field]}
+                    aria-label={title}
+                    onClick={() => updateSetting(field, !settings[field])}
+                  ><span aria-hidden="true" /></button>
+                </div>
+              ))}
+              <p className="settings-source-note">天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；关闭后不会发起对应网络请求。</p>
             </section>
 
           <section className="panel settings-actions settings-local-data">

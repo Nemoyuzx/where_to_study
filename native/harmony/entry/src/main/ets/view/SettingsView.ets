@@ -79,6 +79,7 @@ export struct SettingsView {
 
             Column({ space: 16 }) {
               this.notificationSurface()
+              this.dailyInfoSurface()
               this.widgetSurface()
               this.localDataSurface()
             }
@@ -93,6 +94,7 @@ export struct SettingsView {
             this.accountSurface()
             this.semesterSurface()
             this.notificationSurface()
+            this.dailyInfoSurface()
             this.widgetSurface()
             this.localDataSurface()
             this.aboutSurface()
@@ -602,6 +604,64 @@ export struct SettingsView {
     }
     .width('100%')
     .height(34)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  dailyInfoSurface() {
+    Column() {
+      this.sectionTitle('日期详情与生活信息')
+      this.featureToggle('校区天气', this.model.weatherEnabled, (value: boolean): void => {
+        this.model.setWeatherEnabled(value);
+      })
+      this.featureToggle('黄历与宜忌', this.model.almanacEnabled, (value: boolean): void => {
+        this.model.setAlmanacEnabled(value);
+      })
+      this.featureToggle('学科竞赛 DDL', this.model.competitionDeadlinesEnabled,
+        (value: boolean): void => {
+          this.model.setCompetitionDeadlinesEnabled(value);
+        })
+      this.featureToggle('夏令营 DDL', this.model.summerCampDeadlinesEnabled,
+        (value: boolean): void => {
+          this.model.setSummerCampDeadlinesEnabled(value);
+        })
+      this.featureToggle('黑客松 DDL', this.model.hackathonDeadlinesEnabled,
+        (value: boolean): void => {
+          this.model.setHackathonDeadlinesEnabled(value);
+        })
+
+      Text('天气、黄历和 DDL 来自第三方公开服务；各卡片底部会标明具体来源。')
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .lineHeight(17)
+        .width('100%')
+        .padding({ top: 7 })
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  featureToggle(label: string, isOn: boolean, onChangeValue: (value: boolean) => void) {
+    Row({ space: 8 }) {
+      Text(label)
+        .fontSize(15)
+        .fontColor(AppTheme.text())
+        .layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: isOn })
+        .selectedColor(AppTheme.primaryFill())
+        .width(48)
+        .height(28)
+        .enabled(!this.model.isSampleMode())
+        .onChange((value: boolean) => {
+          onChangeValue(value);
+        })
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 36 })
     .alignItems(VerticalAlign.Center)
   }
 

@@ -46,6 +46,16 @@ pub struct SavedSettings {
     pub daily_course_notifications_enabled: bool,
     #[serde(default = "default_true")]
     pub automatic_term_detection_enabled: bool,
+    #[serde(default = "default_true")]
+    pub weather_enabled: bool,
+    #[serde(default = "default_true")]
+    pub almanac_enabled: bool,
+    #[serde(default = "default_true")]
+    pub competition_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    pub summer_camp_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    pub hackathon_deadlines_enabled: bool,
 }
 
 impl SavedSettings {
@@ -59,6 +69,11 @@ impl SavedSettings {
             default_min_seats: 0,
             daily_course_notifications_enabled: false,
             automatic_term_detection_enabled: true,
+            weather_enabled: true,
+            almanac_enabled: true,
+            competition_deadlines_enabled: true,
+            summer_camp_deadlines_enabled: true,
+            hackathon_deadlines_enabled: true,
         }
     }
 
@@ -93,6 +108,16 @@ pub struct SaveSettingsRequest {
     pub daily_course_notifications_enabled: bool,
     #[serde(default = "default_true")]
     pub automatic_term_detection_enabled: bool,
+    #[serde(default = "default_true")]
+    pub weather_enabled: bool,
+    #[serde(default = "default_true")]
+    pub almanac_enabled: bool,
+    #[serde(default = "default_true")]
+    pub competition_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    pub summer_camp_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    pub hackathon_deadlines_enabled: bool,
 }
 
 impl SaveSettingsRequest {
@@ -164,7 +189,55 @@ pub struct AlmanacResponse {
     pub solar_term: Option<String>,
     pub lunar_festival: Option<String>,
     pub solar_festival: Option<String>,
+    pub yi: Option<String>,
+    pub ji: Option<String>,
     pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeadlinesRequest {
+    pub date: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeadlineItem {
+    pub id: String,
+    pub name: String,
+    pub event_type: String,
+    pub primary_deadline: String,
+    pub organizer: Option<String>,
+    pub official_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeadlinesResponse {
+    pub date: String,
+    pub fetched_at: String,
+    pub source: String,
+    pub used_backup: bool,
+    pub items: Vec<DeadlineItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssignmentsRequest {
+    pub date: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssignmentDeadlineItem {
+    pub id: String,
+    pub title: String,
+    pub course_name: Option<String>,
+    pub deadline: String,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssignmentsResponse {
+    pub date: String,
+    pub source: String,
+    pub items: Vec<AssignmentDeadlineItem>,
+    pub unavailable_reason: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]

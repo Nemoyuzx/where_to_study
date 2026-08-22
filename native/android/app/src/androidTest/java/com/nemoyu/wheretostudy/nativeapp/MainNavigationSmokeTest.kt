@@ -129,6 +129,21 @@ class MainNavigationSmokeTest {
                     resultsContent.childCount > 0,
                 )
 
+                assertNotNull(
+                    "Planner must expose the campus weather card",
+                    activity.findViewById<View?>(R.id.planner_weather_surface),
+                )
+                assertNull(
+                    "Campus weather details must be absent before the user expands the card",
+                    activity.findViewById<View?>(R.id.planner_weather_details),
+                )
+                val weatherToggle = activity.findViewById<View>(R.id.planner_weather_toggle)
+                assertTrue(weatherToggle.performClick())
+                assertNotNull(
+                    "Campus weather details must appear after the user expands the card",
+                    activity.findViewById<View?>(R.id.planner_weather_details),
+                )
+
                 val query = activity.findViewById<ViewGroup>(R.id.planner_query_surface)
                 val campusControl = findClickableText(
                     query,

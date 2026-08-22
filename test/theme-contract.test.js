@@ -162,6 +162,11 @@ test('Windows and Linux keep native-style daily information without a faux cours
   assert.match(appSource, /<WeatherStrip[\s\S]*className="workspace planner-workspace"/)
   assert.match(
     appSource,
+    /function WeatherStrip[\s\S]*useState\(false\)[\s\S]*aria-expanded=\{expanded\}/,
+  )
+  assert.match(appCss, /\.weather-strip-toggle\[aria-expanded='true'\][^}]*weather-strip-chevron/s)
+  assert.match(
+    appSource,
     /className="month-detail-stack"[\s\S]*<SelectedDaySchedule[\s\S]*<AlmanacCard/,
   )
   assert.match(tauriSource, /fetch_weather/)

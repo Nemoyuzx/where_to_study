@@ -67,6 +67,7 @@ export class HttpUtil {
           continue;
         }
         const body: string = HttpUtil.responseBody(response.result, spec.maxBytes);
+        return new HttpResult(code, body);
       } catch (e) {
         if (e instanceof HttpTooLargeError) {
           throw e;

@@ -9,6 +9,8 @@ use crate::models::{AlmanacRequest, AlmanacResponse, WeatherDay, WeatherRequest,
 
 const UAPI_ORIGIN: &str = "https://uapis.cn";
 const UAPI_HOST: &str = "uapis.cn";
+const TIMELESS_ORIGIN: &str = "https://api.timelessq.com";
+const TIMELESS_HOST: &str = "api.timelessq.com";
 const USER_AGENT: &str = concat!("WhereToStudy/", env!("CARGO_PKG_VERSION"));
 const MAX_RESPONSE_BYTES: usize = 128 * 1024;
 const MAX_REDIRECTS: usize = 5;
@@ -52,6 +54,28 @@ struct SourceAlmanac {
     solar_festival: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct SourceTimelessResponse {
+    errno: i64,
+    #[serde(default)]
+    errmsg: String,
+    data: SourceTimelessDay,
+}
+
+#[derive(Debug, Deserialize)]
+struct SourceTimelessDay {
+    year: i32,
+    month: u32,
+    day: u32,
+    almanac: SourceTimelessAlmanac,
+}
+
+#[derive(Debug, Deserialize)]
+struct SourceTimelessAlmanac {
+    yi: String,
+    ji: String,
+}
+
 fn campus_weather_target(
     campus_id: &str,
 ) -> ServiceResult<(&'static str, &'static str, &'static str)> {
@@ -87,11 +111,15 @@ fn rounded_probability(value: f64) -> ServiceResult<u8> {
     Ok(value.round() as u8)
 }
 
-fn validate_redirect_target(url: &reqwest::Url, previous_count: usize) -> ServiceResult<()> {
+fn validate_redirect_target(
+    url: &reqwest::Url,
+    previous_count: usize,
+    allowed_host: &str,
+) -> ServiceResult<()> {
     if previous_count > MAX_REDIRECTS {
         return Err(ServiceError::new("生活信息接口重定向次数过多。"));
     }
-    if url.scheme() != "https" || url.host_str() != Some(UAPI_HOST) {
+    if url.scheme() != "https" || url.host_str() != Some(allowed_host) {
         return Err(ServiceError::new("生活信息接口重定向目标不受信任。"));
     }
     if !url.username().is_empty() || url.password().is_some() {
@@ -100,21 +128,21 @@ fn validate_redirect_target(url: &reqwest::Url, previous_count: usize) -> Servic
     Ok(())
 }
 
-fn redirect_policy() -> reqwest::redirect::Policy {
-    reqwest::redirect::Policy::custom(|attempt| {
-        match validate_redirect_target(attempt.url(), attempt.previous().len()) {
+fn redirect_policy(allowed_host: &'static str) -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(move |attempt| {
+        match validate_redirect_target(attempt.url(), attempt.previous().len(), allowed_host) {
             Ok(()) => attempt.follow(),
             Err(error) => attempt.error(error),
         }
     })
 }
 
-async fn fetch_json(url: reqwest::Url) -> ServiceResult<Vec<u8>> {
-    validate_redirect_target(&url, 0)?;
+async fn fetch_json(url: reqwest::Url, allowed_host: &'static str) -> ServiceResult<Vec<u8>> {
+    validate_redirect_target(&url, 0, allowed_host)?;
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(15))
-        .redirect(redirect_policy())
+        .redirect(redirect_policy(allowed_host))
         .build()
         .map_err(|error| ServiceError::new(format!("无法创建生活信息请求：{error}")))?;
     let mut response = client
@@ -220,8 +248,37 @@ fn decode_almanac(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Alma
         solar_festival: source
             .solar_festival
             .filter(|value| !value.trim().is_empty()),
+        yi: None,
+        ji: None,
         source: UAPI_ORIGIN.to_string(),
     })
+}
+
+fn decode_almanac_advice(
+    bytes: &[u8],
+    requested_date: NaiveDate,
+) -> ServiceResult<(String, String)> {
+    let source: SourceTimelessResponse = serde_json::from_slice(bytes)
+        .map_err(|error| ServiceError::new(format!("黄历宜忌解析失败：{error}")))?;
+    if source.errno != 0 {
+        let message = if source.errmsg.trim().is_empty() {
+            "黄历宜忌接口返回失败。".to_string()
+        } else {
+            format!("黄历宜忌接口返回失败：{}", source.errmsg)
+        };
+        return Err(ServiceError::new(message));
+    }
+    let source_date = NaiveDate::from_ymd_opt(source.data.year, source.data.month, source.data.day)
+        .ok_or_else(|| ServiceError::new("黄历宜忌返回了无效日期。"))?;
+    if source_date != requested_date {
+        return Err(ServiceError::new("黄历宜忌日期与请求不一致。"));
+    }
+    let yi = source.data.almanac.yi.trim().to_string();
+    let ji = source.data.almanac.ji.trim().to_string();
+    if yi.is_empty() || ji.is_empty() {
+        return Err(ServiceError::new("黄历宜忌缺少必要字段。"));
+    }
+    Ok((yi, ji))
 }
 
 pub async fn fetch_weather(payload: &WeatherRequest) -> ServiceResult<WeatherResponse> {
@@ -232,7 +289,7 @@ pub async fn fetch_weather(payload: &WeatherRequest) -> ServiceResult<WeatherRes
         .append_pair("adcode", adcode)
         .append_pair("lang", "zh")
         .append_pair("forecast", "true");
-    let bytes = fetch_json(url).await?;
+    let bytes = fetch_json(url, UAPI_HOST).await?;
     decode_weather(&bytes, campus_id, campus_name)
 }
 
@@ -247,8 +304,22 @@ pub async fn fetch_almanac(payload: &AlmanacRequest) -> ServiceResult<AlmanacRes
     url.query_pairs_mut()
         .append_pair("ts", &noon.timestamp().to_string())
         .append_pair("timezone", "Asia/Shanghai");
-    let bytes = fetch_json(url).await?;
-    decode_almanac(&bytes, date)
+    let bytes = fetch_json(url, UAPI_HOST).await?;
+    let mut response = decode_almanac(&bytes, date)?;
+
+    let mut advice_url = reqwest::Url::parse(&format!("{TIMELESS_ORIGIN}/time"))
+        .map_err(|error| ServiceError::new(format!("黄历宜忌接口地址无效：{error}")))?;
+    advice_url
+        .query_pairs_mut()
+        .append_pair("datetime", &date.to_string());
+    if let Ok(advice_bytes) = fetch_json(advice_url, TIMELESS_HOST).await {
+        if let Ok((yi, ji)) = decode_almanac_advice(&advice_bytes, date) {
+            response.yi = Some(yi);
+            response.ji = Some(ji);
+            response.source = format!("{UAPI_ORIGIN} · {TIMELESS_ORIGIN}");
+        }
+    }
+    Ok(response)
 }
 
 #[cfg(test)]
@@ -297,18 +368,41 @@ mod tests {
 
     #[test]
     fn redirects_reject_plaintext_and_foreign_hosts() {
-        assert!(
-            validate_redirect_target(&reqwest::Url::parse("https://uapis.cn/api").unwrap(), 1)
-                .is_ok()
-        );
-        assert!(
-            validate_redirect_target(&reqwest::Url::parse("http://uapis.cn/api").unwrap(), 1)
-                .is_err()
-        );
         assert!(validate_redirect_target(
-            &reqwest::Url::parse("https://example.com/api").unwrap(),
-            1
+            &reqwest::Url::parse("https://uapis.cn/api").unwrap(),
+            1,
+            UAPI_HOST,
+        )
+        .is_ok());
+        assert!(validate_redirect_target(
+            &reqwest::Url::parse("http://uapis.cn/api").unwrap(),
+            1,
+            UAPI_HOST,
         )
         .is_err());
+        assert!(validate_redirect_target(
+            &reqwest::Url::parse("https://example.com/api").unwrap(),
+            1,
+            UAPI_HOST,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn almanac_advice_parser_keeps_yi_and_ji_for_requested_date() {
+        let data = r#"{
+          "errno":0,"errmsg":"","data":{
+            "year":2026,"month":8,"day":22,
+            "almanac":{"yi":"祭祀 祈福","ji":"嫁娶 掘井"}
+          }
+        }"#
+        .as_bytes();
+        let date = NaiveDate::from_ymd_opt(2026, 8, 22).unwrap();
+        let (yi, ji) = decode_almanac_advice(data, date).unwrap();
+        assert_eq!(yi, "祭祀 祈福");
+        assert_eq!(ji, "嫁娶 掘井");
+        assert!(
+            decode_almanac_advice(data, NaiveDate::from_ymd_opt(2026, 8, 23).unwrap()).is_err()
+        );
     }
 }

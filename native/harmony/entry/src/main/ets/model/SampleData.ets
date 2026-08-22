@@ -3,6 +3,8 @@ import { Classroom, CampusClassrooms, ClassroomsCache, ClassroomDefaults, Course
   HolidaysSnapshot, ScheduleSnapshot, SlotMetadata } from '../common/Models';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
+import { CampusWeather, CampusWeatherDay, CampusWeatherTarget,
+  WeatherSourceParser } from '../net/DailyInfoClient';
 
 export class SampleData {
   static readonly timestamp: string = '2026-01-01T00:00:00+08:00';
@@ -57,6 +59,26 @@ export class SampleData {
 
   static holidaysOrNull(year: number): HolidaysSnapshot | null {
     return HolidayOfflineFallback.snapshot(year);
+  }
+
+  static weather(campusID: string): CampusWeather {
+    const target: CampusWeatherTarget = WeatherSourceParser.target(campusID);
+    const today: DateParts = StrictDates.todayParts();
+    const tomorrow: DateParts = StrictDates.addDays(today, 1);
+    return new CampusWeather(
+      target.campusID,
+      target.campusName,
+      target.campusID === '01' ? '海淀区' : '昌平区',
+      '多云',
+      27,
+      '示例数据',
+      [
+        new CampusWeatherDay(
+          StrictDates.formatDateParts(today), '今天', '多云', '雷阵雨', 32, 23, 40),
+        new CampusWeatherDay(
+          StrictDates.formatDateParts(tomorrow), '明天', '晴', '多云', 33, 22, 10)
+      ]
+    );
   }
 
   private static room(building: string, number: string, size: number, slots: number[]): Classroom {

@@ -13,6 +13,7 @@ import {
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
 import { MobileCalendarTimelineLayout, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
+import { CalendarDailyInfoCards } from './CalendarDailyInfoCards';
 import { vibrator } from '@kit.SensorServiceKit';
 
 class MonthEvent {
@@ -801,10 +802,11 @@ export struct MobileTeachingCalendarView {
       if (this.monthSheetPosition > 0.01) {
         List({ space: 0 }) {
           ListItem() {
-            Column() {
+            Column({ space: 10 }) {
               // ArkUI 会复用 Builder 子树；按日期设置 key，翻月后强制刷新详情内容。
               ForEach([renderDate], (day: DateParts) => {
                 this.daySummaryCard(day)
+                CalendarDailyInfoCards({ day: day })
               }, (day: DateParts) => 'month-summary.' + StrictDates.formatDateParts(day))
             }
             .width('100%')

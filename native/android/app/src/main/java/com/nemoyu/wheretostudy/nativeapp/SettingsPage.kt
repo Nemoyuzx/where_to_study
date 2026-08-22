@@ -80,6 +80,8 @@ class SettingsPage(
                         orientation = LinearLayout.VERTICAL
                         addView(notificationSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(informationSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(widgetSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(localDataSurface())
@@ -95,6 +97,8 @@ class SettingsPage(
                 addView(semesterSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(notificationSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(informationSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(widgetSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
@@ -220,6 +224,7 @@ class SettingsPage(
                 }
                 if (accountChanged) {
                     credentialTransactionStarted = true
+                    activity.clearCalendarAssignmentData()
                     check(DailyClassroomRefreshScheduler.cancel(activity)) {
                         "无法可靠撤销旧账号的空教室后台刷新，设置未保存。"
                     }
@@ -612,6 +617,54 @@ class SettingsPage(
         })
     }
 
+    private fun informationSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        applyCompactSurfacePadding()
+        addView(sectionTitle(activity, "日期详情与生活信息"))
+        addView(featureSwitch("校区天气", preferences.weatherEnabled) {
+            preferences.weatherEnabled = it
+        })
+        addView(featureSwitch("黄历与宜忌", preferences.almanacEnabled) {
+            preferences.almanacEnabled = it
+        })
+        addView(View(activity).apply { setBackgroundColor(Palette.border) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
+                topMargin = activity.dp(8)
+                bottomMargin = activity.dp(8)
+            })
+        addView(featureSwitch("学科竞赛 DDL", preferences.competitionDeadlinesEnabled) {
+            preferences.competitionDeadlinesEnabled = it
+        })
+        addView(featureSwitch("夏令营 DDL", preferences.summerCampDeadlinesEnabled) {
+            preferences.summerCampDeadlinesEnabled = it
+        })
+        addView(featureSwitch("黑客松 DDL", preferences.hackathonDeadlinesEnabled) {
+            preferences.hackathonDeadlinesEnabled = it
+        })
+        addView(TextView(activity).apply {
+            text = "天气、黄历和 DDL 来自第三方公开服务；各卡片底部会标明具体来源。"
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setPadding(0, activity.dp(6), 0, 0)
+        })
+    }
+
+    private fun featureSwitch(
+        label: String,
+        checked: Boolean,
+        save: (Boolean) -> Unit,
+    ): Switch = Switch(activity).apply {
+        text = label
+        textSize = 15f
+        setTextColor(Palette.text)
+        isChecked = checked
+        minHeight = activity.dp(UiMetrics.controlHeightDp)
+        setPadding(0, 0, 0, 0)
+        setOnCheckedChangeListener { button, enabled ->
+            activity.performControlHaptic(button)
+            save(enabled)
+        }
+    }
+
     private fun settingsActionButton(
         label: String,
         primary: Boolean,
@@ -831,7 +884,7 @@ class SettingsPage(
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
-                text = "生效日期：2026 年 8 月 9 日"
+                text = "生效日期：2026 年 8 月 22 日"
                 textSize = 13f
                 setTextColor(Palette.muted)
                 setPadding(0, activity.dp(4), 0, activity.dp(14))
@@ -852,12 +905,20 @@ class SettingsPage(
                 "应用在启动、切换日历年份或缓存需要更新时，可能通过 unpkg 自动获取 holiday-calendar 数据集中的中国法定节假日和调休信息。请求只包含 CN 地区和年份，不包含你的凭据、课表或空教室数据。",
             ))
             addView(privacySection(
+                "天气、黄历与公开 DDL",
+                "应用会通过 UAPI 获取所选校区所在行政区的今日、明日天气和所选日期的基础黄历，并可能通过 Timeless API 补充“宜/忌”。启用对应类别时，应用会从 Contest DDL 的 GitHub Pages 主源下载公开竞赛、夏令营与黑客松数据并在本地按日期筛选；主源不可用时可能尝试固定的 HTTP 备用 API。备用请求只向指定 IP 发送不含凭据、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。所有相关功能均可在设置中关闭。",
+            ))
+            addView(privacySection(
+                "云课堂作业",
+                "查看日期详情中的课程作业时，应用会从系统安全存储临时读取已保存的教务账号和密码，仅通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存中的云课堂令牌并读取课程作业。应用不会读取浏览器 Cookie 或 token，不会把密码发送给 ucloud.bupt.edu.cn 或 apiucloud.bupt.edu.cn，也不会把认证票据、Cookie、令牌或作业写入磁盘；用于跨日期查询的全量结果最多复用 10 分钟，已显示结果只保留在当前进程内，并在切换账号或清除本地数据时失效。",
+            ))
+            addView(privacySection(
                 "系统日历与课程提醒",
                 "只有在你主动操作并授予系统权限后，应用才会向系统日历写入课程或在本地安排课程摘要通知。应用只管理带有 Where To Study 标记的日历事件，相关数据不会上传给项目维护者。",
             ))
             addView(privacySection(
                 "不收集的数据",
-                "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务和节假日数据的 CDN 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。",
+                "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据 CDN、UAPI、Timeless、GitHub Pages 与可选 DDL 备用服务可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。",
             ))
             addView(privacySection(
                 "保留与删除",

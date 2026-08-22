@@ -14,6 +14,7 @@ import {
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
 import { CoursePlacement, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
+import { CalendarDailyInfoCards } from './CalendarDailyInfoCards';
 
 class MonthEventItem {
   readonly id: string;
@@ -445,6 +446,13 @@ export struct ExpandedTeachingCalendarView {
       .columnsGap(this.isPc ? 4 : 2)
       .rowsGap(this.isPc ? 4 : 2)
       .width('100%')
+
+      Column({ space: 10 }) {
+        this.daySummaryCard(this.selectedDate())
+        CalendarDailyInfoCards({ day: this.selectedDate() })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
   }

@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.Spanned
+import android.text.TextUtils
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
 import android.view.Gravity
@@ -25,9 +26,15 @@ import java.util.TimeZone
 class PlannerQueryState(defaultCampusID: String) {
     var campusID: String = defaultCampusID
         private set
+    var weatherExpanded: Boolean = false
+        private set
 
     fun selectCampus(campusID: String) {
         this.campusID = campusID
+    }
+
+    fun toggleWeather() {
+        weatherExpanded = !weatherExpanded
     }
 }
 
@@ -36,6 +43,8 @@ class PlannerPage(
     private val queryState: PlannerQueryState,
     private val scheduleRepository: ScheduleRepository,
     private val classroomRepository: ClassroomRepository,
+    private val weatherRepository: WeatherRepository,
+    private val preferences: AppPreferences,
     private val availableWidthDp: Int,
     private val usesBottomNavigation: Boolean,
 ) {
@@ -50,41 +59,49 @@ class PlannerPage(
     private lateinit var resultsContainer: LinearLayout
     private lateinit var summaryContainer: LinearLayout
 
-    fun build(): ScrollView = ScrollView(activity).apply {
-        isFillViewport = true
-        clipToPadding = false
-        setBackgroundColor(Palette.background)
-        isVerticalScrollBarEnabled = true
-        scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-        addView(verticalPage(activity).apply {
-            val date = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
-                timeZone = shanghai
-            }.format(Date())
-            addView(if (availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP) {
-                compactPlannerTitle(date)
-            } else {
-                pageTitle(activity, "联动查询", date, R.drawable.ic_section_clock)
+    fun build(): ScrollView {
+        if (preferences.weatherEnabled) {
+            weatherRepository.load(queryState.campusID) {
+                activity.refreshPlannerIfVisible()
+            }
+        }
+        return ScrollView(activity).apply {
+            isFillViewport = true
+            clipToPadding = false
+            setBackgroundColor(Palette.background)
+            isVerticalScrollBarEnabled = true
+            scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+            addView(verticalPage(activity).apply {
+                val date = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).apply {
+                    timeZone = shanghai
+                }.format(Date())
+                addView(if (availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP) {
+                    compactPlannerTitle(date)
+                } else {
+                    pageTitle(activity, "联动查询", date, R.drawable.ic_section_clock)
+                })
+                if (preferences.weatherEnabled) addSection(weatherSurface())
+                addSection(querySurface())
+                addSection(slotSurface())
+                addSection(todayCoursesSurface())
+                addSection(buildingsSurface())
+                addSection(resultsSurface())
+                summaryContainer = surface(activity, showsBorder = false).apply {
+                    id = R.id.planner_summary
+                    setPadding(
+                        activity.dp(10),
+                        activity.dp(UiMetrics.surfacePaddingDp),
+                        activity.dp(10),
+                        activity.dp(UiMetrics.surfacePaddingDp),
+                    )
+                }
+                addView(summaryContainer)
+                if (usesBottomNavigation) {
+                    addView(spacer(activity, 72))
+                }
             })
-            addSection(querySurface())
-            addSection(slotSurface())
-            addSection(todayCoursesSurface())
-            addSection(buildingsSurface())
-            addSection(resultsSurface())
-            summaryContainer = surface(activity, showsBorder = false).apply {
-                id = R.id.planner_summary
-                setPadding(
-                    activity.dp(10),
-                    activity.dp(UiMetrics.surfacePaddingDp),
-                    activity.dp(10),
-                    activity.dp(UiMetrics.surfacePaddingDp),
-                )
-            }
-            addView(summaryContainer)
-            if (usesBottomNavigation) {
-                addView(spacer(activity, 72))
-            }
-        })
-        renderResultsAndSummary()
+            renderResultsAndSummary()
+        }
     }
 
     private fun LinearLayout.addSection(view: LinearLayout) {
@@ -94,6 +111,225 @@ class PlannerPage(
 
     private val isCompact: Boolean
         get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
+
+    private fun weatherSurface(): LinearLayout = surface(activity, showsBorder = true).apply {
+        id = R.id.planner_weather_surface
+        setPadding(
+            activity.dp(if (isCompact) 12 else UiMetrics.surfacePaddingDp),
+            activity.dp(if (isCompact) 10 else 12),
+            activity.dp(if (isCompact) 12 else UiMetrics.surfacePaddingDp),
+            activity.dp(if (isCompact) 10 else 12),
+        )
+        val campusID = queryState.campusID
+        val weather = weatherRepository.weather(campusID)
+        val header = LinearLayout(activity).apply {
+            id = R.id.planner_weather_toggle
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            contentDescription = if (queryState.weatherExpanded) {
+                "校区天气，已展开，点击折叠"
+            } else {
+                "校区天气，已折叠，点击展开"
+            }
+            addView(ImageView(activity).apply {
+                setImageResource(R.drawable.ic_section_weather)
+                imageTintList = ColorStateList.valueOf(Palette.primaryText)
+                layoutParams = LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
+                    marginEnd = activity.dp(10)
+                }
+            })
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(activity).apply {
+                    text = "校区天气"
+                    textSize = if (isCompact) 15f else 17f
+                    setTextColor(Palette.text)
+                    setTypeface(typeface, Typeface.BOLD)
+                    includeFontPadding = false
+                })
+                addView(TextView(activity).apply {
+                    text = weather?.let {
+                        "${it.campusName} · ${it.district} · ${it.currentWeather} ${it.currentTemperature}°"
+                    } ?: "今日与明日"
+                    textSize = 12f
+                    setTextColor(Palette.muted)
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    includeFontPadding = false
+                    setPadding(0, activity.dp(3), 0, 0)
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(ImageView(activity).apply {
+                setImageResource(R.drawable.ic_chevron_down)
+                imageTintList = ColorStateList.valueOf(Palette.muted)
+                rotation = if (queryState.weatherExpanded) 180f else 0f
+                layoutParams = LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
+                    marginStart = activity.dp(8)
+                }
+            })
+            setOnClickListener {
+                activity.performControlHaptic(it)
+                queryState.toggleWeather()
+                activity.refreshCurrentPage()
+            }
+        }
+        addView(header, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+
+        if (queryState.weatherExpanded) {
+            addView(View(activity).apply {
+                setBackgroundColor(Palette.border)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    activity.dp(1),
+                ).apply {
+                    topMargin = activity.dp(10)
+                    bottomMargin = activity.dp(10)
+                }
+            })
+            addView(weatherDetails(campusID, weather))
+        }
+    }
+
+    private fun weatherDetails(campusID: String, weather: CampusWeather?): LinearLayout =
+        LinearLayout(activity).apply {
+            id = R.id.planner_weather_details
+            orientation = LinearLayout.VERTICAL
+            when {
+                weatherRepository.isLoading(campusID) && weather == null -> {
+                    addView(emptyMessage("正在更新今日与明日天气…"))
+                }
+                weatherRepository.error(campusID) != null && weather == null -> {
+                    addView(TextView(activity).apply {
+                        text = "${weatherRepository.error(campusID)}，点击重试"
+                        textSize = if (isCompact) 12.5f else 14f
+                        gravity = Gravity.CENTER
+                        setTextColor(Palette.danger)
+                        isClickable = true
+                        isFocusable = true
+                        minHeight = activity.dp(if (isCompact) 48 else 56)
+                        background = roundedBackground(
+                            activity,
+                            Palette.dangerSurface,
+                            Palette.dangerBorder,
+                            radius = 7,
+                        )
+                        setOnClickListener {
+                            activity.performControlHaptic(it)
+                            weatherRepository.load(campusID, force = true) {
+                                activity.refreshPlannerIfVisible()
+                            }
+                            activity.refreshCurrentPage()
+                        }
+                    })
+                }
+                weather != null -> {
+                    addView(LinearLayout(activity).apply {
+                        orientation = if (availableWidthDp >= 600) {
+                            LinearLayout.HORIZONTAL
+                        } else {
+                            LinearLayout.VERTICAL
+                        }
+                        weather.days.forEachIndexed { index, day ->
+                            addView(weatherDayCard(day, if (index == 0) "今日" else "明日"),
+                                if (orientation == LinearLayout.HORIZONTAL) {
+                                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                                        if (index > 0) marginStart = activity.dp(8)
+                                    }
+                                } else {
+                                    LinearLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ).apply {
+                                        if (index > 0) topMargin = activity.dp(8)
+                                    }
+                                },
+                            )
+                        }
+                    })
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(0, activity.dp(8), 0, 0)
+                        addView(TextView(activity).apply {
+                            text = weather.reportTime
+                            textSize = 11f
+                            setTextColor(Palette.muted)
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        addView(TextView(activity).apply {
+                            text = "数据：UAPI"
+                            textSize = 11f
+                            setTextColor(Palette.muted)
+                        })
+                    })
+                }
+                else -> addView(emptyMessage("暂无天气数据"))
+            }
+        }
+
+    private fun weatherDayCard(day: CampusWeatherDay, label: String): LinearLayout =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(activity.dp(10), activity.dp(9), activity.dp(10), activity.dp(9))
+            background = roundedBackground(
+                activity,
+                Palette.surfaceVariant,
+                Palette.border,
+                radius = 7,
+            )
+            addView(ImageView(activity).apply {
+                setImageResource(R.drawable.ic_section_weather)
+                imageTintList = ColorStateList.valueOf(Palette.primaryText)
+                layoutParams = LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
+                    marginEnd = activity.dp(8)
+                }
+            })
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(activity).apply {
+                    text = "$label · ${shortWeatherDate(day.date)}"
+                    textSize = 13f
+                    setTextColor(Palette.text)
+                    setTypeface(typeface, Typeface.BOLD)
+                })
+                addView(TextView(activity).apply {
+                    text = if (day.weatherDay == day.weatherNight) {
+                        day.weatherDay
+                    } else {
+                        "${day.weatherDay}转${day.weatherNight}"
+                    }
+                    textSize = 12f
+                    setTextColor(Palette.muted)
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.END
+                addView(TextView(activity).apply {
+                    text = "${day.temperatureMinimum}° / ${day.temperatureMaximum}°"
+                    textSize = 13f
+                    setTextColor(Palette.text)
+                    setTypeface(typeface, Typeface.BOLD)
+                    gravity = Gravity.END
+                })
+                day.precipitationProbability?.let { probability ->
+                    addView(TextView(activity).apply {
+                        text = "降水 $probability%"
+                        textSize = 11f
+                        setTextColor(Palette.muted)
+                        gravity = Gravity.END
+                    })
+                }
+            })
+        }
+
+    private fun shortWeatherDate(value: String): String =
+        value.takeIf { it.length == 10 }?.substring(5)?.replace('-', '/') ?: value
 
     private fun querySurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.planner_query_surface

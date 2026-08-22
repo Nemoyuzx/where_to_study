@@ -16,7 +16,7 @@ use crate::models::{SaveSettingsRequest, SavedSettings};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 4;
+const SETTINGS_SCHEMA_VERSION: u32 = 5;
 
 fn default_true() -> bool {
     true
@@ -40,6 +40,16 @@ struct SettingsFile {
     daily_course_notifications_enabled: bool,
     #[serde(default = "default_true")]
     automatic_term_detection_enabled: bool,
+    #[serde(default = "default_true")]
+    weather_enabled: bool,
+    #[serde(default = "default_true")]
+    almanac_enabled: bool,
+    #[serde(default = "default_true")]
+    competition_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    summer_camp_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    hackathon_deadlines_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -51,6 +61,11 @@ struct PersistedSettings<'a> {
     default_min_seats: usize,
     daily_course_notifications_enabled: bool,
     automatic_term_detection_enabled: bool,
+    weather_enabled: bool,
+    almanac_enabled: bool,
+    competition_deadlines_enabled: bool,
+    summer_camp_deadlines_enabled: bool,
+    hackathon_deadlines_enabled: bool,
 }
 
 fn settings_path(app: &AppHandle) -> ServiceResult<PathBuf> {
@@ -184,6 +199,11 @@ where
         default_min_seats: file.default_min_seats,
         daily_course_notifications_enabled: file.daily_course_notifications_enabled,
         automatic_term_detection_enabled: file.automatic_term_detection_enabled,
+        weather_enabled: file.weather_enabled,
+        almanac_enabled: file.almanac_enabled,
+        competition_deadlines_enabled: file.competition_deadlines_enabled,
+        summer_camp_deadlines_enabled: file.summer_camp_deadlines_enabled,
+        hackathon_deadlines_enabled: file.hackathon_deadlines_enabled,
     };
     settings.apply_defaults();
 
@@ -269,6 +289,11 @@ where
         default_min_seats: request.default_min_seats,
         daily_course_notifications_enabled: request.daily_course_notifications_enabled,
         automatic_term_detection_enabled: request.automatic_term_detection_enabled,
+        weather_enabled: request.weather_enabled,
+        almanac_enabled: request.almanac_enabled,
+        competition_deadlines_enabled: request.competition_deadlines_enabled,
+        summer_camp_deadlines_enabled: request.summer_camp_deadlines_enabled,
+        hackathon_deadlines_enabled: request.hackathon_deadlines_enabled,
     };
 
     let existing_account = existing
@@ -395,6 +420,11 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         default_min_seats: settings.default_min_seats,
         daily_course_notifications_enabled: settings.daily_course_notifications_enabled,
         automatic_term_detection_enabled: settings.automatic_term_detection_enabled,
+        weather_enabled: settings.weather_enabled,
+        almanac_enabled: settings.almanac_enabled,
+        competition_deadlines_enabled: settings.competition_deadlines_enabled,
+        summer_camp_deadlines_enabled: settings.summer_camp_deadlines_enabled,
+        hackathon_deadlines_enabled: settings.hackathon_deadlines_enabled,
     };
     let bytes = Zeroizing::new(
         serde_json::to_vec_pretty(&persisted)
@@ -546,6 +576,11 @@ mod tests {
             default_min_seats: 20,
             daily_course_notifications_enabled: true,
             automatic_term_detection_enabled: true,
+            weather_enabled: true,
+            almanac_enabled: true,
+            competition_deadlines_enabled: true,
+            summer_camp_deadlines_enabled: true,
+            hackathon_deadlines_enabled: true,
         }
     }
 
@@ -559,6 +594,11 @@ mod tests {
             default_min_seats: 20,
             daily_course_notifications_enabled: true,
             automatic_term_detection_enabled: true,
+            weather_enabled: true,
+            almanac_enabled: true,
+            competition_deadlines_enabled: true,
+            summer_camp_deadlines_enabled: true,
+            hackathon_deadlines_enabled: true,
         }
     }
 
@@ -574,6 +614,11 @@ mod tests {
         assert_eq!(value["schema_version"], SETTINGS_SCHEMA_VERSION);
         assert_eq!(value["daily_course_notifications_enabled"], true);
         assert_eq!(value["automatic_term_detection_enabled"], true);
+        assert_eq!(value["weather_enabled"], true);
+        assert_eq!(value["almanac_enabled"], true);
+        assert_eq!(value["competition_deadlines_enabled"], true);
+        assert_eq!(value["summer_camp_deadlines_enabled"], true);
+        assert_eq!(value["hackathon_deadlines_enabled"], true);
         assert!(value.get("account").is_none());
         assert!(value.get("password").is_none());
         assert!(!content.contains("fixture-account"));

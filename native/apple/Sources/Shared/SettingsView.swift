@@ -70,6 +70,7 @@ struct SettingsView: View {
                             .frame(width: widths.leading, alignment: .top)
                             VStack(spacing: 16) {
                                 notificationSurface
+                                informationSurface
                                 widgetSurface
                                 localDataSurface
                                 aboutSurface
@@ -81,6 +82,7 @@ struct SettingsView: View {
                             accountSurface
                             semesterSurface
                             notificationSurface
+                            informationSurface
                             widgetSurface
                             localDataSurface
                             aboutSurface
@@ -108,6 +110,7 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .top)
                             VStack(spacing: 16) {
                                 notificationSurface
+                                informationSurface
                                 widgetSurface
                                 localDataSurface
                             }
@@ -119,6 +122,7 @@ struct SettingsView: View {
                             accountSurface
                             semesterSurface
                             notificationSurface
+                            informationSurface
                             widgetSurface
                             localDataSurface
                             aboutSurface
@@ -385,6 +389,65 @@ struct SettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var informationSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("日期详情与生活信息", systemImage: "rectangle.stack.badge.plus")
+                    .font(.headline)
+                featureToggle(
+                    "校区天气",
+                    isOn: model.weatherEnabled,
+                    set: model.setWeatherEnabled
+                )
+                featureToggle(
+                    "黄历与宜忌",
+                    isOn: model.almanacEnabled,
+                    set: model.setAlmanacEnabled
+                )
+                Divider()
+                featureToggle(
+                    "学科竞赛 DDL",
+                    isOn: model.competitionDeadlinesEnabled,
+                    set: model.setCompetitionDeadlinesEnabled
+                )
+                featureToggle(
+                    "夏令营 DDL",
+                    isOn: model.summerCampDeadlinesEnabled,
+                    set: model.setSummerCampDeadlinesEnabled
+                )
+                featureToggle(
+                    "黑客松 DDL",
+                    isOn: model.hackathonDeadlinesEnabled,
+                    set: model.setHackathonDeadlinesEnabled
+                )
+                Text("天气、黄历和 DDL 来自第三方公开服务；各卡片底部会标明具体来源。")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func featureToggle(
+        _ title: String,
+        isOn: Bool,
+        set: @escaping (Bool) -> Void
+    ) -> some View {
+        Toggle(
+            title,
+            isOn: Binding(
+                get: { isOn },
+                set: { enabled in
+                    AppHaptics.selection()
+                    set(enabled)
+                }
+            )
+        )
+        .toggleStyle(.switch)
+        .tint(AppTheme.primary)
+        .disabled(model.isSampleMode)
     }
 
     private var widgetSurface: some View {

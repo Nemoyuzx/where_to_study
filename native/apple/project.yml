@@ -39,6 +39,11 @@ targets:
         LSApplicationCategoryType: public.app-category.education
         NSCalendarsFullAccessUsageDescription: 将个人课表中的课程写入系统日历，并在重复导入时更新已有课程。
         NSCalendarsUsageDescription: 将个人课表中的课程写入系统日历。
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            101.201.29.29:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
@@ -113,6 +118,11 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSCalendarsFullAccessUsageDescription: 将个人课表中的课程写入系统日历，并在重复导入时更新已有课程。
         NSCalendarsUsageDescription: 将个人课表中的课程写入系统日历。
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            101.201.29.29:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

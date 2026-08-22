@@ -14,6 +14,14 @@ import { PreferencesStore } from '../store/PreferencesStore';
 import { ScheduleFetching, SJDScheduleClient } from '../net/SjdScheduleClient';
 import { ClassroomFetching, SJDClassroomClient } from '../net/SjdClassroomClient';
 import { HolidayFetching, HolidayClient } from '../net/HolidayClient';
+import { CampusWeather, WeatherFetching, UAPIWeatherClient } from '../net/DailyInfoClient';
+import {
+  AlmanacInfo, AssignmentDeadlineItem, CalendarDailyInfoClient, CalendarDailyInfoFetching,
+  PublicDeadlineItem, PublicDeadlineKind, PublicDeadlineSnapshot
+} from '../net/CalendarDailyInfoClient';
+import {
+  AssignmentDeadlineFetching, UCloudAssignmentClient
+} from '../net/UCloudAssignmentClient';
 import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
 import { CalendarImporting, HarmonyCalendarImporter } from '../calendar/CalendarImporter';
 import { CalendarImportError, CalendarImportLogic, CalendarImportResult } from '../calendar/CalendarImportLogic';
@@ -166,6 +174,12 @@ export class AppModel {
   @Trace widgetShowsLocation: boolean = true;
   @Trace widgetShowsTeacher: boolean = true;
   @Trace widgetCourseLimit: number = WidgetCoursePreferences.defaultLimit;
+  // 日期详情与生活信息开关：与 Apple/Android/Tauri 默认值保持一致。
+  @Trace weatherEnabled: boolean = true;
+  @Trace almanacEnabled: boolean = true;
+  @Trace competitionDeadlinesEnabled: boolean = true;
+  @Trace summerCampDeadlinesEnabled: boolean = true;
+  @Trace hackathonDeadlinesEnabled: boolean = true;
   @Trace campusID: string = '01';
   @Trace queryCampusID: string = '01';
   @Trace selectedSlots: Set<number> = new Set<number>();
@@ -174,6 +188,20 @@ export class AppModel {
   @Trace schedule: ScheduleSnapshot | null = null;
   @Trace classroomsCache: ClassroomsCache | null = null;
   @Trace holidaysByYear: Map<number, HolidaysSnapshot> = new Map<number, HolidaysSnapshot>();
+  @Trace weatherByCampus: Map<string, CampusWeather> = new Map<string, CampusWeather>();
+  @Trace weatherErrors: Map<string, string> = new Map<string, string>();
+  @Trace loadingWeatherCampuses: Set<string> = new Set<string>();
+  @Trace almanacByDate: Map<string, AlmanacInfo> = new Map<string, AlmanacInfo>();
+  @Trace almanacErrors: Map<string, string> = new Map<string, string>();
+  @Trace loadingAlmanacDates: Set<string> = new Set<string>();
+  @Trace publicDeadlinesByDate: Map<string, PublicDeadlineSnapshot> =
+    new Map<string, PublicDeadlineSnapshot>();
+  @Trace publicDeadlineErrors: Map<string, string> = new Map<string, string>();
+  @Trace loadingPublicDeadlineDates: Set<string> = new Set<string>();
+  @Trace assignmentDeadlinesByDate: Map<string, AssignmentDeadlineItem[]> =
+    new Map<string, AssignmentDeadlineItem[]>();
+  @Trace assignmentUnavailableByDate: Map<string, string> = new Map<string, string>();
+  @Trace loadingAssignmentDates: Set<string> = new Set<string>();
   @Trace statusMessage: string = '';
   @Trace classroomStatusMessage: string = '';
   @Trace calendarImportStatusMessage: string = '';
@@ -194,6 +222,9 @@ export class AppModel {
   private readonly classroomClient: ClassroomFetching;
   private readonly holidayStore: HolidayStoring;
   private readonly holidayClient: HolidayFetching;
+  private readonly weatherClient: WeatherFetching;
+  private readonly calendarDailyInfoClient: CalendarDailyInfoFetching = new CalendarDailyInfoClient();
+  private readonly assignmentClient: AssignmentDeadlineFetching;
   private readonly calendarImporter: CalendarImporting;
   private readonly dailyCourseNotificationScheduler: DailyCourseNotificationScheduling;
   private readonly dailyCourseNotificationAuthorizationTimeoutMs: number;
@@ -213,6 +244,8 @@ export class AppModel {
   private launchPromise: Promise<void> | null = null;
   private readonly preferencesName: string;
   private classroomRefreshInFlight: boolean = false;
+  private weatherRevision: number = 0;
+  private calendarDailyInfoRevision: number = 0;
   // 每日课程摘要对账门控（BUG-050 修复）：当日已对账且无变化时不再全量重排提醒。
   private dailyCourseNotificationReconciledDay: string = '';
   private dailyCourseNotificationDirty: boolean = true;
@@ -228,7 +261,9 @@ export class AppModel {
     holidayClient: HolidayFetching = new HolidayClient(),
     calendarImporter: CalendarImporting = new HarmonyCalendarImporter(),
     dailyCourseNotificationScheduler: DailyCourseNotificationScheduling = new HarmonyReminderScheduler(),
-    preferencesName: string = 'where-to-study'
+    preferencesName: string = 'where-to-study',
+    weatherClient: WeatherFetching = new UAPIWeatherClient(),
+    assignmentClient: AssignmentDeadlineFetching = new UCloudAssignmentClient()
   ) {
     this.runtimeMode = runtimeMode;
     this.supportsRuntimeModeSwitching = !runtimeMode.isSample;
@@ -239,6 +274,8 @@ export class AppModel {
     this.classroomClient = classroomClient;
     this.holidayStore = holidayStore;
     this.holidayClient = holidayClient;
+    this.weatherClient = weatherClient;
+    this.assignmentClient = assignmentClient;
     this.calendarImporter = calendarImporter;
     this.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler;
     this.dailyCourseNotificationAuthorizationTimeoutMs = 8000;
@@ -275,6 +312,14 @@ export class AppModel {
     this.widgetCourseLimit = Math.min(Math.max(
       await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
       1), WidgetCoursePreferences.maximumLimit);
+    this.weatherEnabled = await this.preferences.getBool('weatherEnabled', true);
+    this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
+    this.competitionDeadlinesEnabled = await this.preferences.getBool(
+      'competitionDeadlinesEnabled', true);
+    this.summerCampDeadlinesEnabled = await this.preferences.getBool(
+      'summerCampDeadlinesEnabled', true);
+    this.hackathonDeadlinesEnabled = await this.preferences.getBool(
+      'hackathonDeadlinesEnabled', true);
     this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
     this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
       savedTermStart : ScheduleDefaults.termStartDate;
@@ -507,6 +552,9 @@ export class AppModel {
     this.selectedBuildings.clear();
     this.usePersonalSchedule = true;
     this.synchronizeSelectedSlots();
+    this.resetWeatherState();
+    this.resetCalendarDailyInfoState();
+    this.loadWeather(this.queryCampusID);
     this.holidaysByYear.clear();
     this.holidayStatusByYear.clear();
     this.holidayLoads.reset();
@@ -532,6 +580,8 @@ export class AppModel {
     this.password = '';
     this.schedule = null;
     this.classroomsCache = null;
+    this.resetWeatherState();
+    this.resetCalendarDailyInfoState();
     this.holidaysByYear.clear();
     this.holidayStatusByYear.clear();
     this.holidayLoads.reset();
@@ -559,6 +609,14 @@ export class AppModel {
       this.widgetCourseLimit = Math.min(Math.max(
         await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
         1), WidgetCoursePreferences.maximumLimit);
+      this.weatherEnabled = await this.preferences.getBool('weatherEnabled', true);
+      this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
+      this.competitionDeadlinesEnabled = await this.preferences.getBool(
+        'competitionDeadlinesEnabled', true);
+      this.summerCampDeadlinesEnabled = await this.preferences.getBool(
+        'summerCampDeadlinesEnabled', true);
+      this.hackathonDeadlinesEnabled = await this.preferences.getBool(
+        'hackathonDeadlinesEnabled', true);
       this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
       this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
         savedTermStart : ScheduleDefaults.termStartDate;
@@ -584,6 +642,7 @@ export class AppModel {
     this.synchronizeSelectedSlots();
     const year: number = StrictDates.todayParts().year;
     this.ensureHolidays(year, false);
+    this.loadWeather(this.queryCampusID);
     this.reconcileDailyCourseNotifications(false);
   }
 
@@ -700,6 +759,52 @@ export class AppModel {
     this.widgetCourseLimit = clamped;
     await this.preferences.setNumber('widgetCourseLimit', clamped);
     this.synchronizeWidgetSchedule();
+  }
+
+  // 日期详情与生活信息偏好即时保存；关闭后不再发起对应公开请求。
+  async setWeatherEnabled(value: boolean): Promise<void> {
+    this.weatherEnabled = value;
+    await this.preferences.setBool('weatherEnabled', value);
+    if (value) {
+      this.loadWeather(this.queryCampusID);
+    } else {
+      this.resetWeatherState();
+    }
+  }
+
+  async setAlmanacEnabled(value: boolean): Promise<void> {
+    this.almanacEnabled = value;
+    await this.preferences.setBool('almanacEnabled', value);
+  }
+
+  async setCompetitionDeadlinesEnabled(value: boolean): Promise<void> {
+    this.competitionDeadlinesEnabled = value;
+    await this.preferences.setBool('competitionDeadlinesEnabled', value);
+  }
+
+  async setSummerCampDeadlinesEnabled(value: boolean): Promise<void> {
+    this.summerCampDeadlinesEnabled = value;
+    await this.preferences.setBool('summerCampDeadlinesEnabled', value);
+  }
+
+  async setHackathonDeadlinesEnabled(value: boolean): Promise<void> {
+    this.hackathonDeadlinesEnabled = value;
+    await this.preferences.setBool('hackathonDeadlinesEnabled', value);
+  }
+
+  hasEnabledPublicDeadlines(): boolean {
+    return this.competitionDeadlinesEnabled || this.summerCampDeadlinesEnabled ||
+      this.hackathonDeadlinesEnabled;
+  }
+
+  deadlineKindEnabled(kind: PublicDeadlineKind): boolean {
+    if (kind === PublicDeadlineKind.competition) {
+      return this.competitionDeadlinesEnabled;
+    }
+    if (kind === PublicDeadlineKind.summerCamp) {
+      return this.summerCampDeadlinesEnabled;
+    }
+    return this.hackathonDeadlinesEnabled;
   }
 
   // ---------- 每日课程摘要 ----------
@@ -857,6 +962,9 @@ export class AppModel {
       failures.push('节假日缓存');
     }
 
+    this.resetWeatherState();
+    this.resetCalendarDailyInfoState();
+
     await this.preferences.remove('campusID');
     await this.preferences.remove('termID');
     await this.preferences.remove('termStartDate');
@@ -865,9 +973,19 @@ export class AppModel {
     await this.preferences.remove('widgetShowsLocation');
     await this.preferences.remove('widgetShowsTeacher');
     await this.preferences.remove('widgetCourseLimit');
+    await this.preferences.remove('weatherEnabled');
+    await this.preferences.remove('almanacEnabled');
+    await this.preferences.remove('competitionDeadlinesEnabled');
+    await this.preferences.remove('summerCampDeadlinesEnabled');
+    await this.preferences.remove('hackathonDeadlinesEnabled');
     this.widgetShowsLocation = true;
     this.widgetShowsTeacher = true;
     this.widgetCourseLimit = WidgetCoursePreferences.defaultLimit;
+    this.weatherEnabled = true;
+    this.almanacEnabled = true;
+    this.competitionDeadlinesEnabled = true;
+    this.summerCampDeadlinesEnabled = true;
+    this.hackathonDeadlinesEnabled = true;
     this.campusID = '01';
     this.queryCampusID = '01';
     this.termID = ScheduleDefaults.termID;
@@ -1093,6 +1211,269 @@ export class AppModel {
     });
   }
 
+  // ---------- 校区天气 ----------
+
+  private resetWeatherState(): void {
+    this.weatherRevision++;
+    this.weatherByCampus = new Map<string, CampusWeather>();
+    this.weatherErrors = new Map<string, string>();
+    this.loadingWeatherCampuses = new Set<string>();
+  }
+
+  loadWeather(campusID: string, force: boolean = false): void {
+    if (!this.weatherEnabled) {
+      return;
+    }
+    if (!force && this.weatherByCampus.has(campusID)) {
+      return;
+    }
+    if (this.loadingWeatherCampuses.has(campusID)) {
+      return;
+    }
+    if (this.isSampleMode()) {
+      const sampleWeather: Map<string, CampusWeather> =
+        new Map<string, CampusWeather>(this.weatherByCampus);
+      sampleWeather.set(campusID, SampleData.weather(campusID));
+      this.weatherByCampus = sampleWeather;
+      return;
+    }
+
+    const loading: Set<string> = new Set<string>(this.loadingWeatherCampuses);
+    loading.add(campusID);
+    this.loadingWeatherCampuses = loading;
+    const errors: Map<string, string> = new Map<string, string>(this.weatherErrors);
+    errors.delete(campusID);
+    this.weatherErrors = errors;
+    const revision: number = this.weatherRevision;
+
+    const work: Promise<void> = (async (): Promise<void> => {
+      try {
+        const fetched: CampusWeather = await this.weatherClient.fetchWeather(campusID);
+        if (revision !== this.weatherRevision) {
+          return;
+        }
+        const next: Map<string, CampusWeather> = new Map<string, CampusWeather>(this.weatherByCampus);
+        next.set(campusID, fetched);
+        this.weatherByCampus = next;
+      } catch (e) {
+        if (revision !== this.weatherRevision) {
+          return;
+        }
+        const nextErrors: Map<string, string> = new Map<string, string>(this.weatherErrors);
+        nextErrors.set(campusID, e instanceof Error ? e.message : '天气获取失败。');
+        this.weatherErrors = nextErrors;
+      } finally {
+        if (revision === this.weatherRevision) {
+          const nextLoading: Set<string> = new Set<string>(this.loadingWeatherCampuses);
+          nextLoading.delete(campusID);
+          this.loadingWeatherCampuses = nextLoading;
+        }
+      }
+    })();
+    work.catch(() => {
+      // 已在内部处理。
+    });
+  }
+
+  // ---------- 月视图日期详情（作业 / 黄历 / DDL） ----------
+
+  private resetCalendarDailyInfoState(): void {
+    this.calendarDailyInfoRevision++;
+    this.almanacByDate = new Map<string, AlmanacInfo>();
+    this.almanacErrors = new Map<string, string>();
+    this.loadingAlmanacDates = new Set<string>();
+    this.publicDeadlinesByDate = new Map<string, PublicDeadlineSnapshot>();
+    this.publicDeadlineErrors = new Map<string, string>();
+    this.loadingPublicDeadlineDates = new Set<string>();
+    this.assignmentDeadlinesByDate = new Map<string, AssignmentDeadlineItem[]>();
+    this.assignmentUnavailableByDate = new Map<string, string>();
+    this.loadingAssignmentDates = new Set<string>();
+    this.assignmentClient.reset();
+  }
+
+  loadCalendarDailyInfo(date: string, forceAlmanac: boolean = false,
+    forceDeadlines: boolean = false): void {
+    if (StrictDates.parseDateString(date) === null) {
+      return;
+    }
+    this.loadAssignments(date, false);
+    if (this.almanacEnabled) {
+      this.loadAlmanac(date, forceAlmanac);
+    }
+    if (this.hasEnabledPublicDeadlines()) {
+      this.loadPublicDeadlines(date, forceDeadlines);
+    }
+  }
+
+  retryAssignments(date: string): void {
+    this.loadAssignments(date, true);
+  }
+
+  private loadAssignments(date: string, force: boolean): void {
+    if ((!force && (this.assignmentDeadlinesByDate.has(date) ||
+      this.assignmentUnavailableByDate.has(date))) || this.loadingAssignmentDates.has(date)) {
+      return;
+    }
+    const assignments: Map<string, AssignmentDeadlineItem[]> =
+      new Map<string, AssignmentDeadlineItem[]>(this.assignmentDeadlinesByDate);
+    const unavailable: Map<string, string> = new Map<string, string>(this.assignmentUnavailableByDate);
+    if (this.isSampleMode()) {
+      assignments.set(date, [new AssignmentDeadlineItem(
+        'sample-assignment', '示例课程作业', '示例课程', date + ' 23:59:00', '未提交')]);
+      unavailable.delete(date);
+      this.assignmentDeadlinesByDate = assignments;
+      this.assignmentUnavailableByDate = unavailable;
+      return;
+    }
+    this.assignmentDeadlinesByDate = assignments;
+    unavailable.set(date, '正在同步云课堂作业…');
+    this.assignmentUnavailableByDate = unavailable;
+    const loading: Set<string> = new Set<string>(this.loadingAssignmentDates);
+    loading.add(date);
+    this.loadingAssignmentDates = loading;
+    const revision: number = this.calendarDailyInfoRevision;
+    const work: Promise<void> = (async (): Promise<void> => {
+      try {
+        const credentials: Credentials = await this.credentialsForRequest();
+        const fetched: AssignmentDeadlineItem[] = await this.assignmentClient.fetch(credentials, date);
+        if (revision !== this.calendarDailyInfoRevision) {
+          return;
+        }
+        const nextAssignments: Map<string, AssignmentDeadlineItem[]> =
+          new Map<string, AssignmentDeadlineItem[]>(this.assignmentDeadlinesByDate);
+        nextAssignments.set(date, fetched);
+        this.assignmentDeadlinesByDate = nextAssignments;
+        const nextUnavailable: Map<string, string> =
+          new Map<string, string>(this.assignmentUnavailableByDate);
+        nextUnavailable.delete(date);
+        this.assignmentUnavailableByDate = nextUnavailable;
+      } catch (e) {
+        if (revision !== this.calendarDailyInfoRevision) {
+          return;
+        }
+        const nextAssignments: Map<string, AssignmentDeadlineItem[]> =
+          new Map<string, AssignmentDeadlineItem[]>(this.assignmentDeadlinesByDate);
+        nextAssignments.set(date, []);
+        this.assignmentDeadlinesByDate = nextAssignments;
+        const nextUnavailable: Map<string, string> =
+          new Map<string, string>(this.assignmentUnavailableByDate);
+        nextUnavailable.set(date, e instanceof Error ? e.message : '课程作业获取失败。');
+        this.assignmentUnavailableByDate = nextUnavailable;
+      } finally {
+        if (revision === this.calendarDailyInfoRevision) {
+          const nextLoading: Set<string> = new Set<string>(this.loadingAssignmentDates);
+          nextLoading.delete(date);
+          this.loadingAssignmentDates = nextLoading;
+        }
+      }
+    })();
+    work.catch(() => {
+      // 已在内部处理。
+    });
+  }
+
+  private loadAlmanac(date: string, force: boolean): void {
+    if (!this.almanacEnabled || (!force && this.almanacByDate.has(date)) ||
+      this.loadingAlmanacDates.has(date)) {
+      return;
+    }
+    if (this.isSampleMode()) {
+      const sample: Map<string, AlmanacInfo> = new Map<string, AlmanacInfo>(this.almanacByDate);
+      sample.set(date, new AlmanacInfo(
+        date, '星期六', '七月初十', '丙午', '丙申', '戊辰', '马',
+        null, null, null, '学习、交流、制定计划', '拖延、熬夜'));
+      this.almanacByDate = sample;
+      return;
+    }
+    const loading: Set<string> = new Set<string>(this.loadingAlmanacDates);
+    loading.add(date);
+    this.loadingAlmanacDates = loading;
+    const errors: Map<string, string> = new Map<string, string>(this.almanacErrors);
+    errors.delete(date);
+    this.almanacErrors = errors;
+    const revision: number = this.calendarDailyInfoRevision;
+    const work: Promise<void> = (async (): Promise<void> => {
+      try {
+        const fetched: AlmanacInfo = await this.calendarDailyInfoClient.fetchAlmanac(date);
+        if (revision !== this.calendarDailyInfoRevision) {
+          return;
+        }
+        const next: Map<string, AlmanacInfo> = new Map<string, AlmanacInfo>(this.almanacByDate);
+        next.set(date, fetched);
+        this.almanacByDate = next;
+      } catch (e) {
+        if (revision !== this.calendarDailyInfoRevision) {
+          return;
+        }
+        const nextErrors: Map<string, string> = new Map<string, string>(this.almanacErrors);
+        nextErrors.set(date, e instanceof Error ? e.message : '黄历获取失败。');
+        this.almanacErrors = nextErrors;
+      } finally {
+        if (revision === this.calendarDailyInfoRevision) {
+          const nextLoading: Set<string> = new Set<string>(this.loadingAlmanacDates);
+          nextLoading.delete(date);
+          this.loadingAlmanacDates = nextLoading;
+        }
+      }
+    })();
+    work.catch(() => {
+      // 已在内部处理。
+    });
+  }
+
+  private loadPublicDeadlines(date: string, force: boolean): void {
+    if (!this.hasEnabledPublicDeadlines() ||
+      (!force && this.publicDeadlinesByDate.has(date)) ||
+      this.loadingPublicDeadlineDates.has(date)) {
+      return;
+    }
+    if (this.isSampleMode()) {
+      const sample: Map<string, PublicDeadlineSnapshot> =
+        new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
+      sample.set(date, new PublicDeadlineSnapshot(date, [new PublicDeadlineItem(
+        'sample-competition', '全国大学生示例竞赛', PublicDeadlineKind.competition,
+        date + 'T23:59:00+08:00', '示例组委会', null)],
+      'https://nemoyuzx.github.io/contest-ddl/data/competitions.json', false));
+      this.publicDeadlinesByDate = sample;
+      return;
+    }
+    const loading: Set<string> = new Set<string>(this.loadingPublicDeadlineDates);
+    loading.add(date);
+    this.loadingPublicDeadlineDates = loading;
+    const errors: Map<string, string> = new Map<string, string>(this.publicDeadlineErrors);
+    errors.delete(date);
+    this.publicDeadlineErrors = errors;
+    const revision: number = this.calendarDailyInfoRevision;
+    const work: Promise<void> = (async (): Promise<void> => {
+      try {
+        const fetched: PublicDeadlineSnapshot = await this.calendarDailyInfoClient.fetchDeadlines(date);
+        if (revision !== this.calendarDailyInfoRevision) {
+          return;
+        }
+        const next: Map<string, PublicDeadlineSnapshot> =
+          new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
+        next.set(date, fetched);
+        this.publicDeadlinesByDate = next;
+      } catch (e) {
+        if (revision !== this.calendarDailyInfoRevision) {
+          return;
+        }
+        const nextErrors: Map<string, string> = new Map<string, string>(this.publicDeadlineErrors);
+        nextErrors.set(date, e instanceof Error ? e.message : 'DDL 获取失败。');
+        this.publicDeadlineErrors = nextErrors;
+      } finally {
+        if (revision === this.calendarDailyInfoRevision) {
+          const nextLoading: Set<string> = new Set<string>(this.loadingPublicDeadlineDates);
+          nextLoading.delete(date);
+          this.loadingPublicDeadlineDates = nextLoading;
+        }
+      }
+    })();
+    work.catch(() => {
+      // 已在内部处理。
+    });
+  }
+
   // ---------- 节假日 ----------
 
   holidayItems(year: number): HolidayItem[] {
@@ -1227,6 +1608,7 @@ export class AppModel {
     }
     this.classroomsCache = null;
     this.classroomStatusMessage = '';
+    this.resetCalendarDailyInfoState();
     this.selectedBuildings.clear();
     this.synchronizeSelectedSlots();
     if (failed) {

@@ -59,4 +59,31 @@ final class DailyInfoClientTests: XCTestCase {
             try UAPIDailyInfoClient.parseAlmanac(data: data, requestedDate: "2026-08-23")
         )
     }
+
+    func testTimelessAdviceParserKeepsYiJiAndValidatesDate() throws {
+        let data = Data(#"""
+        {
+          "errno":0,
+          "data":{
+            "year":2026,
+            "month":8,
+            "day":22,
+            "almanac":{"yi":"学习、交流","ji":"拖延、熬夜"}
+          }
+        }
+        """#.utf8)
+
+        let parsed = try UAPIDailyInfoClient.parseTimelessAdvice(
+            data: data,
+            requestedDate: "2026-08-22"
+        )
+        XCTAssertEqual(parsed.yi, "学习、交流")
+        XCTAssertEqual(parsed.ji, "拖延、熬夜")
+        XCTAssertThrowsError(
+            try UAPIDailyInfoClient.parseTimelessAdvice(
+                data: data,
+                requestedDate: "2026-08-23"
+            )
+        )
+    }
 }

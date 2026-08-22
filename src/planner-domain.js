@@ -36,6 +36,11 @@ export const DEFAULT_SETTINGS = {
   defaultMinSeats: 0,
   dailyCourseNotificationsEnabled: false,
   automaticTermDetectionEnabled: true,
+  weatherEnabled: true,
+  almanacEnabled: true,
+  competitionDeadlinesEnabled: true,
+  summerCampDeadlinesEnabled: true,
+  hackathonDeadlinesEnabled: true,
 }
 
 export const CAMPUS_BUILDINGS = Object.freeze({
@@ -344,6 +349,17 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
       ?? fallback.automaticTermDetectionEnabled
       ?? true,
     ),
+    weatherEnabled: Boolean(data.weather_enabled ?? fallback.weatherEnabled ?? true),
+    almanacEnabled: Boolean(data.almanac_enabled ?? fallback.almanacEnabled ?? true),
+    competitionDeadlinesEnabled: Boolean(
+      data.competition_deadlines_enabled ?? fallback.competitionDeadlinesEnabled ?? true,
+    ),
+    summerCampDeadlinesEnabled: Boolean(
+      data.summer_camp_deadlines_enabled ?? fallback.summerCampDeadlinesEnabled ?? true,
+    ),
+    hackathonDeadlinesEnabled: Boolean(
+      data.hackathon_deadlines_enabled ?? fallback.hackathonDeadlinesEnabled ?? true,
+    ),
   }
 }
 
@@ -369,6 +385,11 @@ export function settingsToPayload(settings) {
     default_min_seats: normalizeMinSeats(settings.defaultMinSeats),
     daily_course_notifications_enabled: Boolean(settings.dailyCourseNotificationsEnabled),
     automatic_term_detection_enabled: Boolean(settings.automaticTermDetectionEnabled),
+    weather_enabled: Boolean(settings.weatherEnabled),
+    almanac_enabled: Boolean(settings.almanacEnabled),
+    competition_deadlines_enabled: Boolean(settings.competitionDeadlinesEnabled),
+    summer_camp_deadlines_enabled: Boolean(settings.summerCampDeadlinesEnabled),
+    hackathon_deadlines_enabled: Boolean(settings.hackathonDeadlinesEnabled),
   }
 }
 

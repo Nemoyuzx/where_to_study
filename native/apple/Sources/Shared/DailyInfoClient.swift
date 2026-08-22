@@ -33,6 +33,8 @@ struct AlmanacInfo: Equatable, Sendable {
     let solarTerm: String?
     let lunarFestival: String?
     let solarFestival: String?
+    let yi: String?
+    let ji: String?
 }
 
 protocol DailyInfoFetching: Sendable {
@@ -54,6 +56,8 @@ enum DailyInfoLimits {
     static let maximumPayloadBytes = 128 * 1024
     static let source = "https://uapis.cn"
     static let sourceHost = "uapis.cn"
+    static let timelessSource = "https://api.timelessq.com"
+    static let timelessSourceHost = "api.timelessq.com"
 }
 
 struct UAPIDailyInfoClient: DailyInfoFetching {
@@ -67,7 +71,9 @@ struct UAPIDailyInfoClient: DailyInfoFetching {
             configuration.timeoutIntervalForRequest = 15
             self.session = URLSession(
                 configuration: configuration,
-                delegate: DailyInfoRedirectDelegate(),
+                delegate: DailyInfoRedirectDelegate(
+                    allowedHosts: [DailyInfoLimits.sourceHost, DailyInfoLimits.timelessSourceHost]
+                ),
                 delegateQueue: nil
             )
         }
@@ -83,7 +89,7 @@ struct UAPIDailyInfoClient: DailyInfoFetching {
                 URLQueryItem(name: "forecast", value: "true")
             ]
         )
-        let data = try await fetch(url: url)
+        let data = try await fetch(url: url, allowedHost: DailyInfoLimits.sourceHost)
         return try Self.parseWeather(
             data: data,
             campusID: target.id,
@@ -105,11 +111,37 @@ struct UAPIDailyInfoClient: DailyInfoFetching {
                 URLQueryItem(name: "timezone", value: "Asia/Shanghai")
             ]
         )
-        let data = try await fetch(url: url)
-        return try Self.parseAlmanac(data: data, requestedDate: date)
+        let data = try await fetch(url: url, allowedHost: DailyInfoLimits.sourceHost)
+        let base = try Self.parseAlmanac(data: data, requestedDate: date)
+        do {
+            let adviceURL = try Self.timelessURL(date: date)
+            let adviceData = try await fetch(
+                url: adviceURL,
+                allowedHost: DailyInfoLimits.timelessSourceHost
+            )
+            let advice = try Self.parseTimelessAdvice(data: adviceData, requestedDate: date)
+            return AlmanacInfo(
+                date: base.date,
+                weekday: base.weekday,
+                lunarDate: base.lunarDate,
+                ganzhiYear: base.ganzhiYear,
+                ganzhiMonth: base.ganzhiMonth,
+                ganzhiDay: base.ganzhiDay,
+                zodiac: base.zodiac,
+                solarTerm: base.solarTerm,
+                lunarFestival: base.lunarFestival,
+                solarFestival: base.solarFestival,
+                yi: advice.yi,
+                ji: advice.ji
+            )
+        } catch {
+            // The base lunar calendar remains useful if the optional folk
+            // advice provider is unavailable.
+            return base
+        }
     }
 
-    private func fetch(url: URL) async throws -> Data {
+    private func fetch(url: URL, allowedHost: String) async throws -> Data {
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -119,7 +151,7 @@ struct UAPIDailyInfoClient: DailyInfoFetching {
             let http = response as? HTTPURLResponse,
             (200 ... 299).contains(http.statusCode),
             response.url?.scheme == "https",
-            response.url?.host == DailyInfoLimits.sourceHost
+            response.url?.host == allowedHost
         else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             throw DailyInfoError.service("生活信息接口返回错误，HTTP \(status)。")
@@ -148,6 +180,16 @@ struct UAPIDailyInfoClient: DailyInfoFetching {
         components?.queryItems = queryItems
         guard let url = components?.url else {
             throw DailyInfoError.service("生活信息接口地址不正确。")
+        }
+        return url
+    }
+
+    private static func timelessURL(date: String) throws -> URL {
+        var components = URLComponents(string: DailyInfoLimits.timelessSource)
+        components?.path = "/time"
+        components?.queryItems = [URLQueryItem(name: "datetime", value: date)]
+        guard let url = components?.url else {
+            throw DailyInfoError.service("宜忌接口地址不正确。")
         }
         return url
     }
@@ -280,8 +322,57 @@ struct UAPIDailyInfoClient: DailyInfoFetching {
             zodiac: source.zodiac,
             solarTerm: source.solarTerm?.nilIfBlank,
             lunarFestival: source.lunarFestival?.nilIfBlank,
-            solarFestival: source.solarFestival?.nilIfBlank
+            solarFestival: source.solarFestival?.nilIfBlank,
+            yi: nil,
+            ji: nil
         )
+    }
+
+    static func parseTimelessAdvice(
+        data: Data,
+        requestedDate: String
+    ) throws -> (yi: String, ji: String) {
+        struct Source: Decodable {
+            struct Day: Decodable {
+                struct Almanac: Decodable {
+                    let yi: String
+                    let ji: String
+                }
+
+                let year: Int
+                let month: Int
+                let day: Int
+                let almanac: Almanac
+            }
+
+            let errno: Int
+            let errmsg: String?
+            let data: Day
+        }
+
+        guard let requested = StrictContractDateParser.date(from: requestedDate) else {
+            throw DailyInfoError.service("宜忌日期格式不正确。")
+        }
+        let source: Source
+        do {
+            source = try JSONDecoder().decode(Source.self, from: data)
+        } catch {
+            throw DailyInfoError.service("宜忌数据格式不正确。")
+        }
+        guard source.errno == 0 else {
+            throw DailyInfoError.service(source.errmsg?.nilIfBlank ?? "宜忌接口返回错误。")
+        }
+        let components = Calendar.shanghai.dateComponents([.year, .month, .day], from: requested)
+        guard
+            source.data.year == components.year,
+            source.data.month == components.month,
+            source.data.day == components.day,
+            let yi = source.data.almanac.yi.nilIfBlank,
+            let ji = source.data.almanac.ji.nilIfBlank
+        else {
+            throw DailyInfoError.service("宜忌数据日期不一致或缺少必要字段。")
+        }
+        return (yi, ji)
     }
 
     private static func roundedTemperature(_ value: Double) throws -> Int {
@@ -300,6 +391,12 @@ struct UAPIDailyInfoClient: DailyInfoFetching {
 }
 
 private final class DailyInfoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+    private let allowedHosts: Set<String>
+
+    init(allowedHosts: Set<String>) {
+        self.allowedHosts = allowedHosts
+    }
+
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
@@ -309,7 +406,7 @@ private final class DailyInfoRedirectDelegate: NSObject, URLSessionTaskDelegate 
     ) {
         guard
             request.url?.scheme == "https",
-            request.url?.host == DailyInfoLimits.sourceHost
+            request.url?.host.map(allowedHosts.contains) == true
         else {
             completionHandler(nil)
             return
@@ -386,7 +483,7 @@ final class DailyInfoStore: ObservableObject {
     }
 
     private static func sampleAlmanac(date: String) -> AlmanacInfo {
-        AlmanacInfo(date: date, weekday: "星期六", lunarDate: "七月初十", ganzhiYear: "丙午", ganzhiMonth: "丙申", ganzhiDay: "戊辰", zodiac: "马", solarTerm: nil, lunarFestival: nil, solarFestival: nil)
+        AlmanacInfo(date: date, weekday: "星期六", lunarDate: "七月初十", ganzhiYear: "丙午", ganzhiMonth: "丙申", ganzhiDay: "戊辰", zodiac: "马", solarTerm: nil, lunarFestival: nil, solarFestival: nil, yi: "学习、交流、制定计划", ji: "拖延、熬夜")
     }
 }
 

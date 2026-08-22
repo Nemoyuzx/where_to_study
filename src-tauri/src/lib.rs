@@ -1,3 +1,4 @@
+pub mod assignments;
 pub mod auth;
 mod calendar_export;
 pub mod classrooms;
@@ -5,6 +6,7 @@ mod classrooms_store;
 pub mod config;
 pub mod credential_store;
 pub mod daily_info;
+pub mod deadlines;
 pub mod error;
 pub mod holidays;
 pub mod models;
@@ -42,9 +44,10 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::models::{
-    AlmanacRequest, AlmanacResponse, ClassroomsCacheResponse, ClassroomsRequest, HolidaysRequest,
-    HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest,
-    ScheduleResponse, WeatherRequest, WeatherResponse,
+    AlmanacRequest, AlmanacResponse, AssignmentsRequest, AssignmentsResponse,
+    ClassroomsCacheResponse, ClassroomsRequest, DeadlinesRequest, DeadlinesResponse,
+    HolidaysRequest, HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings,
+    ScheduleRequest, ScheduleResponse, WeatherRequest, WeatherResponse,
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
@@ -849,6 +852,7 @@ fn save_saved_settings(
 
 fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
     let mut errors = Vec::new();
+    assignments::clear_cache();
     if let Err(error) = schedule_store::clear(app) {
         errors.push(error.message);
     }
@@ -875,6 +879,7 @@ fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
         || settings_store::mark_account_access_revoked(&app).map_err(|error| error.message),
         || {
             let mut errors = Vec::new();
+            assignments::clear_cache();
             if let Err(error) = credential_store::save(&credential_store::Credentials::default()) {
                 errors.push(error.message);
             }
@@ -1098,6 +1103,35 @@ async fn fetch_almanac(payload: AlmanacRequest) -> Result<AlmanacResponse, Strin
     daily_info::fetch_almanac(&payload)
         .await
         .map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_deadlines(payload: DeadlinesRequest) -> Result<DeadlinesResponse, String> {
+    deadlines::fetch_deadlines(&payload)
+        .await
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_assignments(payload: AssignmentsRequest) -> Result<AssignmentsResponse, String> {
+    let generation = LOCAL_DATA.begin();
+    let credentials = LOCAL_DATA
+        .with_current_account(generation, || {
+            load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())
+        })
+        .map_err(LocalDataAccessError::message)?;
+    let response = assignments::fetch_assignments(
+        &payload,
+        &credentials.account,
+        &credentials.password,
+        &credentials.account_scope,
+    )
+    .await
+    .map_err(|error| error.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || Ok(response))
+        .map_err(LocalDataAccessError::message)
 }
 
 #[cfg(not(mobile))]
@@ -2369,7 +2403,9 @@ pub fn run() {
             fetch_classrooms,
             fetch_holidays,
             fetch_weather,
-            fetch_almanac
+            fetch_almanac,
+            fetch_deadlines,
+            fetch_assignments
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

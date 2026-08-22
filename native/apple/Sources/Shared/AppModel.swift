@@ -168,6 +168,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var widgetShowsLocation: Bool
     @Published private(set) var widgetShowsTeacher: Bool
     @Published private(set) var widgetCourseLimit: Int
+    @Published private(set) var weatherEnabled: Bool
+    @Published private(set) var almanacEnabled: Bool
+    @Published private(set) var competitionDeadlinesEnabled: Bool
+    @Published private(set) var summerCampDeadlinesEnabled: Bool
+    @Published private(set) var hackathonDeadlinesEnabled: Bool
 
     let slots = SlotMetadata.defaults
     @Published private(set) var runtimeMode: AppRuntimeMode
@@ -237,6 +242,17 @@ final class AppModel: ObservableObject {
         widgetCourseLimit = savedWidgetCourseLimit == 0
             ? TodayCourseWidgetData.Preferences.default.courseLimit
             : min(max(savedWidgetCourseLimit, 1), TodayCourseWidgetData.maximumCourseLimit)
+        weatherEnabled = defaults.object(forKey: Self.weatherEnabledKey) as? Bool ?? true
+        almanacEnabled = defaults.object(forKey: Self.almanacEnabledKey) as? Bool ?? true
+        competitionDeadlinesEnabled = defaults.object(
+            forKey: Self.competitionDeadlinesEnabledKey
+        ) as? Bool ?? true
+        summerCampDeadlinesEnabled = defaults.object(
+            forKey: Self.summerCampDeadlinesEnabledKey
+        ) as? Bool ?? true
+        hackathonDeadlinesEnabled = defaults.object(
+            forKey: Self.hackathonDeadlinesEnabledKey
+        ) as? Bool ?? true
         loadCredentials()
         loadSchedule()
         loadClassrooms()
@@ -559,6 +575,40 @@ final class AppModel: ObservableObject {
         synchronizeWidgetSchedule()
     }
 
+    func setWeatherEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        weatherEnabled = enabled
+        defaults.set(enabled, forKey: Self.weatherEnabledKey)
+    }
+
+    func setAlmanacEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        almanacEnabled = enabled
+        defaults.set(enabled, forKey: Self.almanacEnabledKey)
+    }
+
+    func setCompetitionDeadlinesEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        competitionDeadlinesEnabled = enabled
+        defaults.set(enabled, forKey: Self.competitionDeadlinesEnabledKey)
+    }
+
+    func setSummerCampDeadlinesEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        summerCampDeadlinesEnabled = enabled
+        defaults.set(enabled, forKey: Self.summerCampDeadlinesEnabledKey)
+    }
+
+    func setHackathonDeadlinesEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        hackathonDeadlinesEnabled = enabled
+        defaults.set(enabled, forKey: Self.hackathonDeadlinesEnabledKey)
+    }
+
+    var hasEnabledPublicDeadlines: Bool {
+        competitionDeadlinesEnabled || summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
+    }
+
     func refreshDailyCourseNotificationAuthorization() {
         reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
     }
@@ -619,6 +669,11 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: Self.widgetShowsLocationKey)
         defaults.removeObject(forKey: Self.widgetShowsTeacherKey)
         defaults.removeObject(forKey: Self.widgetCourseLimitKey)
+        defaults.removeObject(forKey: Self.weatherEnabledKey)
+        defaults.removeObject(forKey: Self.almanacEnabledKey)
+        defaults.removeObject(forKey: Self.competitionDeadlinesEnabledKey)
+        defaults.removeObject(forKey: Self.summerCampDeadlinesEnabledKey)
+        defaults.removeObject(forKey: Self.hackathonDeadlinesEnabledKey)
         campusID = "01"
         queryCampusID = "01"
         termID = ScheduleDefaults.termID
@@ -627,6 +682,11 @@ final class AppModel: ObservableObject {
         widgetShowsLocation = true
         widgetShowsTeacher = true
         widgetCourseLimit = TodayCourseWidgetData.Preferences.default.courseLimit
+        weatherEnabled = true
+        almanacEnabled = true
+        competitionDeadlinesEnabled = true
+        summerCampDeadlinesEnabled = true
+        hackathonDeadlinesEnabled = true
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         synchronizeSelectedSlots()
@@ -1096,6 +1156,11 @@ final class AppModel: ObservableObject {
     private static let widgetShowsLocationKey = "widgetShowsLocation"
     private static let widgetShowsTeacherKey = "widgetShowsTeacher"
     private static let widgetCourseLimitKey = "widgetCourseLimit"
+    private static let weatherEnabledKey = "weatherEnabled"
+    private static let almanacEnabledKey = "almanacEnabled"
+    private static let competitionDeadlinesEnabledKey = "competitionDeadlinesEnabled"
+    private static let summerCampDeadlinesEnabledKey = "summerCampDeadlinesEnabled"
+    private static let hackathonDeadlinesEnabledKey = "hackathonDeadlinesEnabled"
 }
 
 enum DailyRefreshLogic {

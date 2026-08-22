@@ -1,0 +1,109 @@
+import { describe, it, expect } from '@ohos/hypium';
+import {
+  AlmanacInfo, AlmanacResponseParser, AssignmentDeadlineItem,
+  AssignmentDeadlineResponseParser, PublicDeadlineItem, PublicDeadlineResponseParser
+} from '../main/ets/net/CalendarDailyInfoClient';
+import { UCloudAssignmentClient } from '../main/ets/net/UCloudAssignmentClient';
+
+export default function calendarDailyInfoClientTest() {
+  describe('CalendarDailyInfoClientTest', () => {
+    it('almanac_parsers_keep_yi_ji_and_validate_date', 0, () => {
+      const base: AlmanacInfo = AlmanacResponseParser.parseBase('{' +
+        '"datetime":"2026-08-22 12:00:00","weekday_cn":"星期六",' +
+        '"lunar_month_cn":"七月","lunar_day_cn":"初十",' +
+        '"ganzhi_year":"丙午","ganzhi_month":"丙申","ganzhi_day":"戊辰",' +
+        '"zodiac":"马"}', '2026-08-22');
+      const advice: string[] = AlmanacResponseParser.parseAdvice('{' +
+        '"errno":0,"data":{"year":2026,"month":8,"day":22,' +
+        '"almanac":{"yi":"学习、交流","ji":"拖延、熬夜"}}}', '2026-08-22');
+      expect(base.lunarDate).assertEqual('七月初十');
+      expect(advice[0]).assertEqual('学习、交流');
+      expect(advice[1]).assertEqual('拖延、熬夜');
+      let threw: boolean = false;
+      try {
+        AlmanacResponseParser.parseAdvice('{' +
+          '"errno":0,"data":{"year":2026,"month":8,"day":22,' +
+          '"almanac":{"yi":"宜","ji":"忌"}}}', '2026-08-23');
+      } catch (e) {
+        threw = true;
+      }
+      expect(threw).assertTrue();
+    });
+
+    it('public_deadline_parser_filters_date_kinds_and_unsafe_links', 0, () => {
+      const parsed: PublicDeadlineItem[] = PublicDeadlineResponseParser.parse('{' +
+        '"items":[' +
+        '{"id":"c1","name":"数据库竞赛","event_type":"competition",' +
+        '"primary_deadline":"2026-08-22T18:00:00+08:00",' +
+        '"official_url":"https://example.com/c1"},' +
+        '{"id":"h1","name":"校园黑客松","event_type":"hackathon",' +
+        '"primary_deadline":"2026-08-22T23:59:59+08:00",' +
+        '"official_url":"http://example.com"},' +
+        '{"id":"s1","name":"夏令营","event_type":"summer_camp",' +
+        '"primary_deadline":"2026-08-23T23:59:59+08:00"},' +
+        '{"id":"x1","name":"未知","event_type":"other",' +
+        '"primary_deadline":"2026-08-22T12:00:00+08:00"}' +
+        ']}', '2026-08-22');
+      expect(parsed.length).assertEqual(2);
+      expect(parsed[0].id).assertEqual('c1');
+      expect(parsed[0].officialURL).assertEqual('https://example.com/c1');
+      expect(parsed[1].id).assertEqual('h1');
+      expect(parsed[1].officialURL).assertNull();
+    });
+
+    it('assignment_parser_supports_course_and_homepage_contracts', 0, () => {
+      const courseItems: AssignmentDeadlineItem[] = AssignmentDeadlineResponseParser.parse('{' +
+        '"data":{"records":[' +
+        '{"id":7,"assignmentTitle":"第四次作业","siteName":"课程",' +
+        '"assignmentEndTime":"2026-06-30 23:59:00","assignmentStatus":99},' +
+        '{"id":8,"assignmentTitle":"第三次作业",' +
+        '"assignmentEndTime":"2026-06-21 23:59:00","assignmentStatus":0}' +
+        ']}}', '2026-06-30');
+      expect(courseItems.length).assertEqual(1);
+      expect(courseItems[0].id).assertEqual('7');
+      expect(courseItems[0].status).assertEqual('未提交');
+
+      const undone: AssignmentDeadlineItem[] = AssignmentDeadlineResponseParser.parse('{' +
+        '"data":{"undoneList":[' +
+        '{"activityId":"a1","activityName":"课程作业","type":3,' +
+        '"endTime":"2026-08-22 18:00:00"},' +
+        '{"activityId":"q1","activityName":"课程测验","type":4,' +
+        '"endTime":"2026-08-22 20:00:00"}' +
+        ']}}', '2026-08-22');
+      expect(undone.length).assertEqual(1);
+      expect(undone[0].id).assertEqual('a1');
+    });
+
+    it('assignment_parser_injects_course_name', 0, () => {
+      const root: Record<string, Object> = JSON.parse('{' +
+        '"data":{"records":[{"id":"a1","assignmentTitle":"作业一",' +
+        '"assignmentEndTime":"2026-08-22 23:59:00","assignmentStatus":99}]}}') as
+        Record<string, Object>;
+      const items: AssignmentDeadlineItem[] =
+        AssignmentDeadlineResponseParser.parseAll(root, '示例课程');
+      expect(items.length).assertEqual(1);
+      expect(items[0].courseName).assertEqual('示例课程');
+    });
+
+    it('ucloud_cas_parser_pins_host_and_supports_attribute_order', 0, () => {
+      expect(UCloudAssignmentClient.parseExecution(
+        '<input value=\'e1&amp;s1\' type=\'hidden\' name=\'execution\'>')).assertEqual('e1&s1');
+      expect(UCloudAssignmentClient.parseExecution(
+        '<input name=execution value=token-2>')).assertEqual('token-2');
+      expect(UCloudAssignmentClient.ticketFrom(
+        'https://ucloud.bupt.edu.cn/?ticket=ST-test')).assertEqual('ST-test');
+      expect(UCloudAssignmentClient.ticketFrom(
+        'http://ucloud.bupt.edu.cn/?ticket=ST-test')).assertNull();
+      expect(UCloudAssignmentClient.ticketFrom(
+        'https://evil.example/?ticket=ST-test')).assertNull();
+    });
+
+    it('ucloud_cookie_parser_keeps_repeated_cookie_pairs', 0, () => {
+      const headers: Record<string, Object> = {};
+      headers['Set-Cookie'] = '_route=first; Path=/, SESSION=second; Path=/; ' +
+        'expires=Tue, 19 Aug 2036 15:07:51 GMT; HttpOnly';
+      expect(UCloudAssignmentClient.cookieHeaderFrom(headers))
+        .assertEqual('_route=first; SESSION=second');
+    });
+  });
+}

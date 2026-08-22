@@ -5,6 +5,7 @@ import android.app.DatePickerDialog
 import android.app.Dialog
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -13,6 +14,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.net.Uri
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -517,6 +519,8 @@ internal class TeachingCalendarPage(
     private val activity: MainActivity,
     private val scheduleRepository: ScheduleRepository,
     private val holidayRepository: HolidayRepository,
+    private val dailyInfoRepository: CalendarDailyInfoRepository,
+    private val preferences: AppPreferences,
     private val availableWidthDp: Int,
     private val sessionState: TeachingCalendarSessionState,
     private val usesBottomNavigation: Boolean,
@@ -1500,7 +1504,7 @@ internal class TeachingCalendarPage(
             isFillViewport = false
             clipToPadding = false
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            addView(selectedDayDetails(selectedDate, asCard = true))
+            addView(monthSelectedDetails(selectedDate))
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0,
@@ -2068,6 +2072,302 @@ internal class TeachingCalendarPage(
         }
         activePopup = popup
         popup.showAtLocation(anchor, Gravity.TOP or Gravity.START, popupX, popupY)
+    }
+
+    private fun monthSelectedDetails(day: Calendar): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = shanghai }
+            .format(day.time)
+        if (preferences.almanacEnabled) {
+            dailyInfoRepository.loadAlmanac(date) { activity.refreshCalendarIfVisible() }
+        }
+        if (preferences.hasEnabledPublicDeadlines) {
+            dailyInfoRepository.loadDeadlines(date) { activity.refreshCalendarIfVisible() }
+        }
+        dailyInfoRepository.loadAssignments(date) { activity.refreshCalendarIfVisible() }
+        addView(selectedDayDetails(day, asCard = true))
+        addView(spacer(activity, 10))
+        addView(assignmentDeadlineCard(date))
+        if (preferences.almanacEnabled) {
+            addView(spacer(activity, 10))
+            addView(almanacCard(date))
+        }
+        if (preferences.hasEnabledPublicDeadlines) {
+            addView(spacer(activity, 10))
+            addView(publicDeadlineCard(date))
+        }
+        setPadding(0, 0, 0, activity.dp(4))
+    }
+
+    private fun assignmentDeadlineCard(date: String): LinearLayout =
+        dailyDetailCard("课程作业 DDL").apply {
+            val items = dailyInfoRepository.assignments(date).orEmpty()
+            when {
+                items.isNotEmpty() -> items.forEach { item ->
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(0, activity.dp(7), 0, activity.dp(7))
+                        addView(LinearLayout(activity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            addView(TextView(activity).apply {
+                                text = item.title
+                                textSize = 14f
+                                setTextColor(Palette.text)
+                                setTypeface(typeface, Typeface.BOLD)
+                            })
+                            addView(TextView(activity).apply {
+                                text = listOfNotNull(item.courseName, item.status).joinToString(" · ")
+                                    .ifEmpty { "课程名称未标注" }
+                                textSize = 12f
+                                setTextColor(Palette.muted)
+                                setPadding(0, activity.dp(2), 0, 0)
+                            })
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                        addView(TextView(activity).apply {
+                            text = item.deadline.substringAfter(' ').take(5)
+                            textSize = 13f
+                            setTextColor(Palette.primaryText)
+                            setTypeface(typeface, Typeface.BOLD)
+                        })
+                    })
+                }
+                dailyInfoRepository.isLoadingAssignments(date) ->
+                    addView(statusText("正在同步云课堂作业…"))
+                dailyInfoRepository.assignmentError(date) != null -> addView(TextView(activity).apply {
+                    text = "${dailyInfoRepository.assignmentError(date)}，点击重试"
+                    textSize = 13f
+                    setTextColor(Palette.danger)
+                    setPadding(0, activity.dp(6), 0, activity.dp(6))
+                    setOnClickListener {
+                        activity.performControlHaptic(this)
+                        dailyInfoRepository.loadAssignments(date, force = true) {
+                            activity.refreshCalendarIfVisible()
+                        }
+                    }
+                })
+                else -> addView(statusText("当天暂无课程作业 DDL"))
+            }
+            addView(thirdPartyFooter(
+                "第三方来源：北京邮电大学云课堂",
+                listOf("打开作业列表" to CalendarDailyInfoSources.assignments),
+            ))
+        }
+
+    private fun almanacCard(date: String): LinearLayout = dailyDetailCard("黄历信息").apply {
+        val info = dailyInfoRepository.almanac(date)
+        when {
+            info != null -> {
+                addView(TextView(activity).apply {
+                    text = "农历 ${info.lunarDate} · ${info.weekday}"
+                    textSize = 16f
+                    setTextColor(Palette.text)
+                    setTypeface(typeface, Typeface.BOLD)
+                })
+                addView(TextView(activity).apply {
+                    text = "${info.ganzhiYear}年 · ${info.ganzhiMonth}月 · " +
+                        "${info.ganzhiDay}日 · 肖${info.zodiac}"
+                    textSize = 13f
+                    setTextColor(Palette.muted)
+                    setPadding(0, activity.dp(4), 0, 0)
+                })
+                listOfNotNull(info.solarTerm, info.lunarFestival, info.solarFestival)
+                    .takeIf(List<String>::isNotEmpty)
+                    ?.let { festivals ->
+                        addView(TextView(activity).apply {
+                            text = festivals.joinToString(" · ")
+                            textSize = 12f
+                            setTextColor(Palette.muted)
+                            setPadding(0, activity.dp(4), 0, 0)
+                        })
+                    }
+                info.yi?.let { addView(almanacAdviceRow("宜", it, Palette.primaryText)) }
+                info.ji?.let { addView(almanacAdviceRow("忌", it, Palette.danger)) }
+            }
+            dailyInfoRepository.isLoadingAlmanac(date) -> addView(statusText("正在查询黄历…"))
+            dailyInfoRepository.almanacError(date) != null -> addView(TextView(activity).apply {
+                text = "${dailyInfoRepository.almanacError(date)}，点击重试"
+                textSize = 13f
+                setTextColor(Palette.danger)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    dailyInfoRepository.loadAlmanac(date, force = true) {
+                        activity.refreshCalendarIfVisible()
+                    }
+                }
+            })
+            else -> addView(statusText("正在查询黄历…"))
+        }
+        addView(thirdPartyFooter(
+            "民俗信息仅供参考 · 第三方来源",
+            listOf(
+                "农历：UAPI" to "https://uapis.cn/docs/api-reference/get-misc-lunartime",
+                "宜忌：Timeless" to "https://api.timelessq.com/docs/api-15277838",
+            ),
+        ))
+    }
+
+    private fun publicDeadlineCard(date: String): LinearLayout = dailyDetailCard("活动 DDL").apply {
+        val snapshot = dailyInfoRepository.deadlines(date)
+        val items = snapshot?.items.orEmpty().filter(::deadlineIsEnabled)
+        when {
+            items.isNotEmpty() -> items.forEach { addView(publicDeadlineRow(it)) }
+            dailyInfoRepository.isLoadingDeadlines(date) ->
+                addView(statusText("正在同步竞赛、夏令营与黑客松…"))
+            dailyInfoRepository.deadlineError(date) != null -> addView(TextView(activity).apply {
+                text = "${dailyInfoRepository.deadlineError(date)}，点击重试"
+                textSize = 13f
+                setTextColor(Palette.danger)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    dailyInfoRepository.loadDeadlines(date, force = true) {
+                        activity.refreshCalendarIfVisible()
+                    }
+                }
+            })
+            else -> addView(statusText("当天没有已收录的活动截止事项"))
+        }
+        addView(thirdPartyFooter(
+            "第三方来源",
+            listOf(
+                "主数据：Contest DDL" to CalendarDailyInfoSources.deadlinePrimaryPage,
+                "备用 API" to CalendarDailyInfoSources.deadlineBackup,
+            ),
+        ))
+    }
+
+    private fun dailyDetailCard(title: String): LinearLayout =
+        surface(activity, showsBorder = false).apply {
+            orientation = LinearLayout.VERTICAL
+            background = roundedBackground(activity, Palette.surface, radius = 10)
+            setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
+            addView(TextView(activity).apply {
+                text = title
+                textSize = 14f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+                includeFontPadding = false
+                setPadding(0, 0, 0, activity.dp(8))
+            })
+        }
+
+    private fun statusText(value: String): TextView = TextView(activity).apply {
+        text = value
+        textSize = 13f
+        setTextColor(Palette.muted)
+    }
+
+    private fun almanacAdviceRow(label: String, value: String, color: Int): LinearLayout =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            background = roundedBackground(activity, Palette.background, Palette.border, radius = 7)
+            setPadding(activity.dp(9), activity.dp(8), activity.dp(9), activity.dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = activity.dp(7) }
+            addView(TextView(activity).apply {
+                text = label
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(color)
+                setTypeface(typeface, Typeface.BOLD)
+            }, LinearLayout.LayoutParams(activity.dp(24), activity.dp(24)).apply {
+                marginEnd = activity.dp(7)
+            })
+            addView(TextView(activity).apply {
+                text = value
+                textSize = 12f
+                setTextColor(Palette.muted)
+                setLineSpacing(0f, 1.12f)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+
+    private fun publicDeadlineRow(item: PublicDeadlineItem): LinearLayout =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+            background = roundedBackground(activity, Palette.background, Palette.border, radius = 7)
+            setPadding(activity.dp(10), activity.dp(9), activity.dp(10), activity.dp(9))
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = activity.dp(7) }
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(activity).apply {
+                    text = item.name
+                    textSize = 13f
+                    setTextColor(Palette.text)
+                    setTypeface(typeface, Typeface.BOLD)
+                    maxLines = 2
+                    ellipsize = TextUtils.TruncateAt.END
+                })
+                addView(TextView(activity).apply {
+                    text = listOfNotNull(item.kind.title, item.organizer).joinToString(" · ")
+                    textSize = 11f
+                    setTextColor(Palette.muted)
+                    setPadding(0, activity.dp(2), 0, 0)
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(activity).apply {
+                text = deadlineTime(item.deadline)
+                textSize = 11f
+                setTextColor(Palette.muted)
+                setPadding(activity.dp(8), 0, 0, 0)
+            })
+            item.officialURL?.let { url ->
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { openExternalURL(url) }
+            }
+        }
+
+    private fun thirdPartyFooter(
+        label: String,
+        links: List<Pair<String, String>>,
+    ): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(0, activity.dp(9), 0, 0)
+        addView(TextView(activity).apply {
+            text = label
+            textSize = 10.5f
+            setTextColor(Palette.muted)
+        })
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            links.forEachIndexed { index, (title, url) ->
+                addView(TextView(activity).apply {
+                    text = title
+                    textSize = 10.5f
+                    setTextColor(Palette.primaryText)
+                    isClickable = true
+                    isFocusable = true
+                    setPadding(0, activity.dp(3), activity.dp(if (index == links.lastIndex) 0 else 12), 0)
+                    setOnClickListener { openExternalURL(url) }
+                })
+            }
+        })
+    }
+
+    private fun deadlineIsEnabled(item: PublicDeadlineItem): Boolean = when (item.kind) {
+        PublicDeadlineKind.COMPETITION -> preferences.competitionDeadlinesEnabled
+        PublicDeadlineKind.SUMMER_CAMP -> preferences.summerCampDeadlinesEnabled
+        PublicDeadlineKind.HACKATHON -> preferences.hackathonDeadlinesEnabled
+    }
+
+    private fun deadlineTime(value: String): String =
+        if (value.length >= 16) value.substring(11, 16) else value
+
+    private fun openExternalURL(url: String) {
+        runCatching {
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.onFailure {
+            Toast.makeText(activity, "无法打开链接", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun selectedDayDetails(

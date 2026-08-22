@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- The app transports credentials and only talks to pinned HTTPS
-         endpoints; trust only the platform CA set so user-installed CAs
-         (enterprise proxies, local debugging roots) cannot MITM login. -->
+    <!-- Credential-bearing requests remain HTTPS-only and trust only the
+         platform CA set so user-installed roots cannot MITM login. -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <!-- The user-supplied contest feed exposes a plaintext backup only. The
+         exception is pinned to that one IP; no account data is sent to it. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">101.201.29.29</domain>
+    </domain-config>
 </network-security-config>

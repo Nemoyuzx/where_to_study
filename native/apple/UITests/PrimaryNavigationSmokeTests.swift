@@ -54,6 +54,26 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             .waitForExistence(timeout: 5))
     }
 
+    func testWeatherCardStartsCollapsedAndExpandsOnDemand() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer { app.terminate() }
+
+        let toggle = app.descendants(matching: .any)["weather.toggle"].firstMatch
+        revealByScrolling(visibleElement: toggle, in: app)
+        XCTAssertEqual(toggle.value as? String, "已折叠")
+        XCTAssertFalse(app.descendants(matching: .any)["weather.details"].firstMatch.exists)
+
+        toggle.tap()
+
+        XCTAssertTrue(waitForValue("已展开", of: toggle))
+        let details = app.descendants(matching: .any)["weather.details"].firstMatch
+        revealByScrolling(visibleElement: details, in: app)
+        attachScreenshot(named: "planner-weather-expanded")
+    }
+
     func testMobileCalendarPagingMonthExpansionAndYearJump() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false

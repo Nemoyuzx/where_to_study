@@ -12,6 +12,7 @@ Silicon 兼容构建。
 - macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知；仅在原生 iOS、macOS 与 Android 等具备系统小组件能力的平台保留今日课程小组件，Windows 与 Linux 不提供应用内课程浮窗。
 - SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
 - 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
+- 联动查询顶部提供默认折叠的今日/明日校区天气卡片；月视图日期详情按“课程日程 → 云课堂作业 DDL → 黄历宜忌 → 竞赛/夏令营/黑客松 DDL”排列，并可在设置中分别关闭天气、黄历及三类公开 DDL。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
@@ -27,7 +28,7 @@ Silicon 兼容构建。
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.1.9 (49)` 正式签名构建通过 TestFlight 分发；不再作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 69 项单元测试；发布签名与 AGC 上架尚待配置 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 79 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
@@ -72,7 +73,11 @@ Tauri、SwiftUI 和 Android 客户端都保留一份仅用于首次离线展示�
 
 Android 原生客户端在用户已授权系统日历访问时，可从设备自带的“中国（大陆）节假日”日历读取休息日，并仍以远端数据补充“调休/补班”上班日。iOS/macOS 设备日历会混入不等于休息日的普通节日，因此 Apple 客户端与 Tauri 桌面端都只使用上述固定版本权威数据源标记“休/班”。
 
-校区天气和黄历信息来自 [UAPI 天气接口](https://uapis.cn/docs/api-reference/get-misc-weather)与[农历接口](https://uapis.cn/docs/api-reference/get-misc-lunartime)。西土城按海淀区行政区划代码查询，沙河按昌平区查询；黄历请求只提交所选日期换算的时间戳和上海时区，不会附带教务凭据、课表或空教室数据。
+校区天气和基础黄历信息来自 [UAPI 天气接口](https://uapis.cn/docs/api-reference/get-misc-weather)与[农历接口](https://uapis.cn/docs/api-reference/get-misc-lunartime)，黄历中的“宜/忌”由 [Timeless API](https://api.timelessq.com/docs/api-15277838)补充。西土城按海淀区行政区划代码查询，沙河按昌平区查询；黄历请求只提交所选日期或由其换算的时间戳和上海时区，不会附带教务凭据、课表或空教室数据。Windows、Linux、iOS、macOS、Android 与 HarmonyOS 图形客户端的天气区域统一为默认折叠卡片，折叠时保留校区与当前天气摘要，展开后显示今日、明日详情和数据来源；设置中可以完全关闭天气或黄历卡片。
+
+学科竞赛、夏令营与黑客松 DDL 的主数据来自 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) 的[公开 JSON](https://nemoyuzx.github.io/contest-ddl/data/competitions.json)，应用下载后仅在本地按所选日期和已开启类别筛选。主源不可用时，支持的平台会尝试固定备用地址 `http://101.201.29.29/api/contest-events`；该明文例外只允许向这个 IP 发送不含账号、密码、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。三类 DDL 均有独立开关，卡片底部会标明主、备用第三方来源。
+
+课程作业解析以[北邮云课堂官方作业页](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)的真实 `records` / `undoneList` 响应契约为准。启用日期详情中的作业卡时，客户端从系统安全存储临时读取已保存的教务账号和密码，仅通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再以内存中的一次性票据换取云课堂访问令牌并读取当前课程和作业；不会读取浏览器 Cookie/token，也不会把密码发送给 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn`。票据、Cookie 和令牌不写入磁盘；用于跨日期查询的全量作业结果最多复用 10 分钟，已显示的日期结果只保留在当前进程内，并在切换账号或清除本地数据时立即失效。
 
 ## 开发与运行
 

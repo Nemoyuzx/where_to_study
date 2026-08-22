@@ -32,6 +32,7 @@ private struct MobileMonthEvent: Identifiable {
 struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
+    @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var session: TeachingCalendarSessionState
     @State private var presentedDetail: MobileCalendarDetailSelection?
@@ -95,16 +96,16 @@ struct MobileTeachingCalendarView: View {
         }
         .onAppear {
             ensureVisibleHolidays()
-            ensureVisibleAlmanac()
+            ensureVisibleDailyDetails()
             normalizeMonthPositionForLayout()
         }
         .onChange(of: selectedDate) { _ in
             ensureVisibleHolidays()
-            ensureVisibleAlmanac()
+            ensureVisibleDailyDetails()
         }
         .onChange(of: mode) { _ in
             ensureVisibleHolidays()
-            ensureVisibleAlmanac()
+            ensureVisibleDailyDetails()
         }
         .onChange(of: verticalSizeClass) { _ in
             normalizeMonthPositionForLayout()
@@ -538,7 +539,13 @@ struct MobileTeachingCalendarView: View {
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 10) {
                             daySummaryCard(selectedDate)
-                            mobileAlmanacCard(selectedDate)
+                            mobileAssignmentCard(selectedDate)
+                            if model.almanacEnabled {
+                                mobileAlmanacCard(selectedDate)
+                            }
+                            if model.hasEnabledPublicDeadlines {
+                                mobileDeadlineCard(selectedDate)
+                            }
                         }
                         .padding(.horizontal, 1)
                         .padding(.vertical, 2)
@@ -956,11 +963,19 @@ struct MobileTeachingCalendarView: View {
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
                 }
+                if let yi = info.yi {
+                    mobileAdviceRow("宜", value: yi, color: AppTheme.primary)
+                }
+                if let ji = info.ji {
+                    mobileAdviceRow("忌", value: ji, color: AppTheme.danger)
+                }
             }
-            HStack {
-                Text("民俗信息仅供参考")
-                Spacer()
-                Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-lunartime")!)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("民俗信息仅供参考 · 第三方来源")
+                HStack {
+                    Link("农历：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-lunartime")!)
+                    Link("宜忌：Timeless", destination: URL(string: "https://api.timelessq.com/docs/api-15277838")!)
+                }
             }
             .font(.caption2)
             .foregroundStyle(AppTheme.secondaryText)
@@ -971,6 +986,171 @@ struct MobileTeachingCalendarView: View {
         .background(AppTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.almanac")
+    }
+
+    private func mobileAdviceRow(_ title: String, value: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(color)
+                .frame(width: 20, height: 20)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+            Text(value)
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(9)
+        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func mobileAssignmentCard(_ day: Date) -> some View {
+        let date = StrictContractDateParser.string(from: day)
+        let items = calendarDeadlines.assignmentsByDate[date] ?? []
+        return VStack(alignment: .leading, spacing: 10) {
+            Label("课程作业 DDL", systemImage: "checklist")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.secondaryText)
+            if items.isEmpty {
+                Text(
+                    calendarDeadlines.assignmentUnavailableByDate[date]
+                        ?? "当天没有课程作业截止事项"
+                )
+                .font(.callout)
+                .foregroundStyle(AppTheme.secondaryText)
+            } else {
+                ForEach(items) { item in
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "doc.text")
+                            .foregroundStyle(AppTheme.primary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.title).font(.subheadline.weight(.semibold))
+                            Text([item.courseName, item.status].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.secondaryText)
+                        }
+                        Spacer(minLength: 8)
+                        Text(deadlineTime(item.deadline))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(AppTheme.secondaryText)
+                    }
+                }
+            }
+            HStack {
+                Text("第三方来源：北邮云课堂")
+                Spacer()
+                Link("打开作业列表", destination: CalendarDeadlineSources.assignments)
+            }
+            .font(.caption2)
+            .foregroundStyle(AppTheme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("calendar.mobile.assignments")
+    }
+
+    private func mobileDeadlineCard(_ day: Date) -> some View {
+        let date = StrictContractDateParser.string(from: day)
+        let snapshot = calendarDeadlines.publicByDate[date]
+        let items = (snapshot?.items ?? []).filter(deadlineIsEnabled)
+        return VStack(alignment: .leading, spacing: 10) {
+            Label("活动 DDL", systemImage: "flag.checkered")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.secondaryText)
+            if calendarDeadlines.loadingPublicDates.contains(date), snapshot == nil {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("正在同步活动截止信息…")
+                }
+                .foregroundStyle(AppTheme.secondaryText)
+            } else if let error = calendarDeadlines.publicErrors[date], snapshot == nil {
+                Button {
+                    Task {
+                        await calendarDeadlines.loadPublic(
+                            date: date,
+                            sampleMode: model.isSampleMode,
+                            force: true
+                        )
+                    }
+                } label: {
+                    Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                }
+                .buttonStyle(.bordered)
+            } else if items.isEmpty {
+                Text("当天没有已收录的活动截止事项")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+            } else {
+                ForEach(items) { item in
+                    mobileDeadlineRow(item)
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("第三方来源")
+                HStack {
+                    Link("主数据：Contest DDL", destination: CalendarDeadlineSources.primaryPage)
+                    Link("备用 API", destination: CalendarDeadlineSources.backup)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(AppTheme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(AppTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("calendar.mobile.deadlines")
+    }
+
+    @ViewBuilder
+    private func mobileDeadlineRow(_ item: PublicDeadlineItem) -> some View {
+        if let url = item.officialURL {
+            Link(destination: url) { mobileDeadlineRowContent(item) }
+                .buttonStyle(.plain)
+        } else {
+            mobileDeadlineRowContent(item)
+        }
+    }
+
+    private func mobileDeadlineRowContent(_ item: PublicDeadlineItem) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: item.kind.systemImage)
+                .foregroundStyle(AppTheme.primary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.name)
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.leading)
+                Text([item.kind.title, item.organizer].compactMap { $0 }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+            Spacer(minLength: 8)
+            Text(deadlineTime(item.deadline))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(AppTheme.secondaryText)
+        }
+        .padding(9)
+        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func deadlineIsEnabled(_ item: PublicDeadlineItem) -> Bool {
+        switch item.kind {
+        case .competition: model.competitionDeadlinesEnabled
+        case .summerCamp: model.summerCampDeadlinesEnabled
+        case .hackathon: model.hackathonDeadlinesEnabled
+        }
+    }
+
+    private func deadlineTime(_ value: String) -> String {
+        guard value.count >= 16 else { return value }
+        let start = value.index(value.startIndex, offsetBy: 11)
+        return String(value[start...].prefix(5))
     }
 
     private func detailSheet(_ selection: MobileCalendarDetailSelection) -> some View {
@@ -1200,11 +1380,21 @@ struct MobileTeachingCalendarView: View {
         visibleHolidayYears.forEach { model.ensureHolidays(for: $0) }
     }
 
-    private func ensureVisibleAlmanac() {
+    private func ensureVisibleDailyDetails() {
         guard mode == .month else { return }
         let date = StrictContractDateParser.string(from: selectedDate)
         Task {
-            await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode)
+            await calendarDeadlines.loadAssignments(date: date, sampleMode: model.isSampleMode)
+        }
+        if model.almanacEnabled {
+            Task {
+                await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode)
+            }
+        }
+        if model.hasEnabledPublicDeadlines {
+            Task {
+                await calendarDeadlines.loadPublic(date: date, sampleMode: model.isSampleMode)
+            }
         }
     }
 

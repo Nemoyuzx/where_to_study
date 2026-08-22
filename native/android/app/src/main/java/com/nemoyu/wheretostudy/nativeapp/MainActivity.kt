@@ -62,6 +62,12 @@ class MainActivity : Activity() {
     private val classroomRepository by lazy {
         ClassroomRepository(this, credentialStore)
     }
+    private val weatherRepository by lazy { WeatherRepository() }
+    private val calendarDailyInfoRepository by lazy {
+        CalendarDailyInfoRepository(
+            assignmentClient = UCloudAssignmentClient(credentialStore),
+        )
+    }
     private val holidayRepositoryDelegate = lazy {
         HolidayRepository(this)
     }
@@ -561,6 +567,8 @@ class MainActivity : Activity() {
                 plannerQueryState,
                 scheduleRepository,
                 classroomRepository,
+                weatherRepository,
+                preferences,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
                 currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
@@ -568,6 +576,8 @@ class MainActivity : Activity() {
                 this,
                 scheduleRepository,
                 holidayRepository,
+                calendarDailyInfoRepository,
+                preferences,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
                 teachingCalendarSessionState,
                 currentLayoutSpec?.usesBottomNavigation == true,
@@ -595,6 +605,14 @@ class MainActivity : Activity() {
 
     fun refreshCurrentPage() {
         navigate(selectedDestination)
+    }
+
+    fun refreshPlannerIfVisible() {
+        if (selectedDestination == Destination.PLANNER) refreshCurrentPage()
+    }
+
+    fun refreshCalendarIfVisible() {
+        if (selectedDestination == Destination.CALENDAR) refreshCurrentPage()
     }
 
     fun performControlHaptic(source: View? = null) {
@@ -779,6 +797,7 @@ class MainActivity : Activity() {
             return LocalDataClearResult(failures)
         }
         LocalDataCoordinator.clear {
+            calendarDailyInfoRepository.clearAssignments()
             clearItem("账号和密码") { credentialStore.clear() }
             clearItem("应用设置") { preferences.clear() }
             clearItem("后台刷新状态") { DailyClassroomRetryStore(this).clear() }
@@ -799,6 +818,10 @@ class MainActivity : Activity() {
         return LocalDataClearResult(failures)
     }
 
+    fun clearCalendarAssignmentData() {
+        calendarDailyInfoRepository.clearAssignments()
+    }
+
     private fun refreshClassroomsAtStartup() {
         classroomRepository.refresh(force = false) { result ->
             if (result.isSuccess && selectedDestination == Destination.PLANNER) {
@@ -814,6 +837,8 @@ class MainActivity : Activity() {
         pendingNotificationPermissionCompletion = null
         scheduleRepository.close()
         classroomRepository.close()
+        weatherRepository.close()
+        calendarDailyInfoRepository.close()
         if (holidayRepositoryDelegate.isInitialized()) {
             holidayRepository.close()
         }

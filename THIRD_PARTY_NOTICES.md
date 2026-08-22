@@ -7,6 +7,31 @@ campus-district weather and selected-date lunar-calendar information. UAPI is an
 no UAPI source code or data file is redistributed with this project. Availability and returned data are
 subject to the service provider's terms and policies.
 
+## Timeless almanac advice service
+
+Where To Study may use the public HTTPS API documented by
+[Timeless API](https://api.timelessq.com/docs/api-15277838) to supplement the selected date's
+`宜` and `忌` text. Timeless is an external data service; no Timeless source code or data file is
+redistributed with this project. If the service is unavailable, the app retains the base lunar-calendar
+information returned by UAPI.
+
+## Contest DDL public event data
+
+Where To Study reads public competition, summer-camp, and hackathon deadline data from
+[Contest DDL](https://nemoyuzx.github.io/contest-ddl/) and may use its fixed backup API when the
+primary endpoint is unavailable. These are external data services; no service source code or complete
+event dataset is redistributed with the application. Every corresponding card identifies the external
+source, and users can disable each event category separately.
+
+## Beijing University of Posts and Telecommunications UCloud
+
+The teaching-calendar assignment card links to the university's official
+[UCloud assignment page](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)
+and reads its assignment response format after the user has saved valid BUPT credentials. Authentication
+is performed natively through the university's HTTPS CAS service; the app does not redistribute UCloud
+code or read browser sessions. UCloud and the BUPT authentication service are external university
+services and may process ordinary network metadata under their own policies.
+
 ## holiday-calendar
 
 Where To Study retrieves Chinese public-holiday and transfer-workday data from

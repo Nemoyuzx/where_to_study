@@ -181,6 +181,40 @@ class AppPreferences(context: Context) {
             }
         }
 
+    var weatherEnabled: Boolean
+        get() = preferences.getBoolean(WEATHER_ENABLED_KEY, true)
+        set(value) {
+            save(WEATHER_ENABLED_KEY, value)
+        }
+
+    var almanacEnabled: Boolean
+        get() = preferences.getBoolean(ALMANAC_ENABLED_KEY, true)
+        set(value) {
+            save(ALMANAC_ENABLED_KEY, value)
+        }
+
+    var competitionDeadlinesEnabled: Boolean
+        get() = preferences.getBoolean(COMPETITION_DEADLINES_ENABLED_KEY, true)
+        set(value) {
+            save(COMPETITION_DEADLINES_ENABLED_KEY, value)
+        }
+
+    var summerCampDeadlinesEnabled: Boolean
+        get() = preferences.getBoolean(SUMMER_CAMP_DEADLINES_ENABLED_KEY, true)
+        set(value) {
+            save(SUMMER_CAMP_DEADLINES_ENABLED_KEY, value)
+        }
+
+    var hackathonDeadlinesEnabled: Boolean
+        get() = preferences.getBoolean(HACKATHON_DEADLINES_ENABLED_KEY, true)
+        set(value) {
+            save(HACKATHON_DEADLINES_ENABLED_KEY, value)
+        }
+
+    val hasEnabledPublicDeadlines: Boolean
+        get() = competitionDeadlinesEnabled || summerCampDeadlinesEnabled ||
+            hackathonDeadlinesEnabled
+
     fun clear() {
         if (!preferences.edit().clear().commit()) {
             throw IllegalStateException("无法清除本地偏好。")
@@ -215,5 +249,10 @@ class AppPreferences(context: Context) {
         const val WIDGET_SHOWS_LOCATION_KEY = "widget_shows_location"
         const val WIDGET_SHOWS_TEACHER_KEY = "widget_shows_teacher"
         const val WIDGET_COURSE_LIMIT_KEY = "widget_course_limit"
+        const val WEATHER_ENABLED_KEY = "weather_enabled"
+        const val ALMANAC_ENABLED_KEY = "almanac_enabled"
+        const val COMPETITION_DEADLINES_ENABLED_KEY = "competition_deadlines_enabled"
+        const val SUMMER_CAMP_DEADLINES_ENABLED_KEY = "summer_camp_deadlines_enabled"
+        const val HACKATHON_DEADLINES_ENABLED_KEY = "hackathon_deadlines_enabled"
     }
 }

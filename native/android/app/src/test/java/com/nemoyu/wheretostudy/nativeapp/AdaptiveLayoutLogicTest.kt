@@ -219,6 +219,17 @@ class AdaptiveLayoutLogicTest {
     }
 
     @Test
+    fun plannerWeatherCardStartsCollapsedAndOnlyChangesAfterUserToggle() {
+        val queryState = PlannerQueryState("01")
+
+        assertFalse(queryState.weatherExpanded)
+        queryState.toggleWeather()
+        assertTrue(queryState.weatherExpanded)
+        queryState.toggleWeather()
+        assertFalse(queryState.weatherExpanded)
+    }
+
+    @Test
     fun compactYearCalendarAlwaysUsesTwoMonthColumns() {
         assertEquals(2, YearCalendarLogic.columns(320))
         assertEquals(2, YearCalendarLogic.columns(699))

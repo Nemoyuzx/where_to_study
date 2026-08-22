@@ -9,6 +9,7 @@ import { HolidayStoring } from '../store/HolidayStore';
 import { ScheduleFetching } from '../net/SjdScheduleClient';
 import { ClassroomFetching } from '../net/SjdClassroomClient';
 import { HolidayFetching } from '../net/HolidayClient';
+import { CampusWeather, WeatherFetching } from '../net/DailyInfoClient';
 import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
 import { CalendarImporting } from '../calendar/CalendarImporter';
 import { CalendarImportResult } from '../calendar/CalendarImportLogic';
@@ -70,7 +71,8 @@ export class AppLaunchConfiguration {
         new SampleHolidayClient(),
         new SampleCalendarImporter(),
         new SampleDailyCourseNotificationScheduler(),
-        'ui-tests-live'
+        'ui-tests-live',
+        new SampleWeatherClient()
       );
     }
     return new AppModel(
@@ -84,7 +86,8 @@ export class AppLaunchConfiguration {
       new SampleHolidayClient(),
       new SampleCalendarImporter(),
       new SampleDailyCourseNotificationScheduler(),
-      'ui-tests'
+      'ui-tests',
+      new SampleWeatherClient()
     );
   }
 
@@ -179,6 +182,12 @@ class SampleHolidayStore implements HolidayStoring {
 class SampleHolidayClient implements HolidayFetching {
   async fetch(year: number): Promise<HolidaysSnapshot> {
     throw new Error('示例模式不会访问外部服务或系统数据。');
+  }
+}
+
+class SampleWeatherClient implements WeatherFetching {
+  async fetchWeather(campusID: string): Promise<CampusWeather> {
+    return SampleData.weather(campusID);
   }
 }
 

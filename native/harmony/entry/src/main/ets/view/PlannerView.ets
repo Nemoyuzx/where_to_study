@@ -3,6 +3,8 @@ import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 import { Classroom, Course, SlotMetadata } from '../common/Models';
 import { StrictDates } from '../common/StrictDates';
+import { CampusWeather, CampusWeatherDay } from '../net/DailyInfoClient';
+import { WeatherCardPolicy } from '../common/WeatherCardPolicy';
 
 export class PlannerLayoutMetrics {
   static readonly slotMinimumWidth: number = 104;
@@ -25,11 +27,19 @@ export struct PlannerView {
   @Local todayCoursesValue: Course[] = [];
   @Local busySlotsValue: Set<number> = new Set<number>();
   @Local pageVisible: boolean = false;
+  @Local weatherExpanded: boolean = WeatherCardPolicy.startsExpanded;
   private dayRefreshTimer: number = -1;
 
   @Monitor('model.schedule', 'model.usePersonalSchedule')
   onDerivedStateChange(monitor: IMonitor): void {
     this.refreshDerivedState();
+  }
+
+  @Monitor('model.queryCampusID', 'model.weatherEnabled')
+  onWeatherCampusChange(monitor: IMonitor): void {
+    if (this.model.weatherEnabled) {
+      this.model.loadWeather(this.model.queryCampusID);
+    }
   }
 
   private refreshDerivedState(): void {
@@ -40,6 +50,9 @@ export struct PlannerView {
 
   aboutToAppear(): void {
     this.refreshDerivedState();
+    if (this.model.weatherEnabled) {
+      this.model.loadWeather(this.model.queryCampusID);
+    }
     this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
       this.pageVisible = true;
     });
@@ -107,6 +120,9 @@ export struct PlannerView {
     Scroll() {
       Column({ space: this.sectionSpacing() }) {
         this.header()
+        if (this.model.weatherEnabled) {
+          this.weatherSurface()
+        }
         if (this.twoColumn()) {
           // 宽屏双列：左列 = 查询条件/节次筛选/教学楼（1/3），
           // 右列 = 当天课程/空教室结果/查询概览（2/3），对应 iOS HStack。
@@ -195,6 +211,147 @@ export struct PlannerView {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding({ bottom: this.isCompact() ? 2 : 6 })
+  }
+
+  @Builder
+  weatherSurface() {
+    Column() {
+      Row({ space: 10 }) {
+        Text('☁')
+          .fontSize(20)
+          .fontColor(AppTheme.primary())
+          .width(24)
+          .textAlign(TextAlign.Center)
+        Column({ space: 2 }) {
+          Text('校区天气')
+            .fontSize(this.sectionTitleSize())
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.text())
+          Text(this.weatherSummary())
+            .fontSize(12)
+            .fontColor(AppTheme.secondaryText())
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Text(this.weatherExpanded ? '⌃' : '⌄')
+          .fontSize(18)
+          .fontColor(AppTheme.secondaryText())
+          .width(24)
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .height(38)
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.weatherExpanded = WeatherCardPolicy.toggled(this.weatherExpanded);
+      })
+
+      if (this.weatherExpanded) {
+        Divider()
+          .color(AppTheme.border())
+          .margin({ top: 10, bottom: 10 })
+        if (this.model.loadingWeatherCampuses.has(this.model.queryCampusID) &&
+          !this.model.weatherByCampus.has(this.model.queryCampusID)) {
+          this.emptyMessage('正在更新今日与明日天气…')
+        } else if (this.model.weatherErrors.has(this.model.queryCampusID) &&
+          !this.model.weatherByCampus.has(this.model.queryCampusID)) {
+          Button((this.model.weatherErrors.get(this.model.queryCampusID) ?? '天气获取失败') + '，点击重试')
+            .fontSize(this.isCompact() ? 12.5 : 14)
+            .fontColor(AppTheme.danger())
+            .height(this.isCompact() ? 48 : 56)
+            .width('100%')
+            .borderRadius(7)
+            .border({ width: 1, color: AppTheme.border() })
+            .backgroundColor(AppTheme.surfaceVariant())
+            .onClick(() => {
+              this.model.loadWeather(this.model.queryCampusID, true);
+            })
+        } else if (this.model.weatherByCampus.has(this.model.queryCampusID)) {
+          this.weatherContent(this.model.weatherByCampus.get(this.model.queryCampusID) as CampusWeather)
+        } else {
+          this.emptyMessage('暂无天气数据')
+        }
+      }
+    }
+    .padding({
+      left: this.surfacePadding(), right: this.surfacePadding(),
+      top: this.isCompact() ? 10 : 12, bottom: this.isCompact() ? 10 : 12
+    })
+    .width('100%')
+    .borderRadius(8)
+    .border({ width: 1, color: AppTheme.border() })
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  weatherContent(weather: CampusWeather) {
+    Grid() {
+      ForEach(weather.days, (day: CampusWeatherDay, index: number) => {
+        GridItem() {
+          this.weatherDayCard(day, index === 0 ? '今日' : '明日')
+        }
+      }, (day: CampusWeatherDay) => 'weather.' + day.date)
+    }
+    .columnsTemplate(this.contentWidth >= 600 ? '1fr 1fr' : '1fr')
+    .columnsGap(8)
+    .rowsGap(8)
+    .width('100%')
+
+    Row() {
+      Text(weather.reportTime)
+        .fontSize(11)
+        .fontColor(AppTheme.secondaryText())
+        .layoutWeight(1)
+      Text('数据：UAPI')
+        .fontSize(11)
+        .fontColor(AppTheme.secondaryText())
+    }
+    .width('100%')
+    .margin({ top: 8 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  weatherDayCard(day: CampusWeatherDay, label: string) {
+    Row({ space: 8 }) {
+      Text(this.weatherSymbol(day.weatherDay))
+        .fontSize(20)
+        .width(24)
+        .textAlign(TextAlign.Center)
+      Column({ space: 2 }) {
+        Text(label + ' · ' + this.shortWeatherDate(day.date))
+          .fontSize(13)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.text())
+        Text(day.weatherDay === day.weatherNight ? day.weatherDay :
+          day.weatherDay + '转' + day.weatherNight)
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Column({ space: 2 }) {
+        Text(day.temperatureMinimum.toString() + '° / ' + day.temperatureMaximum.toString() + '°')
+          .fontSize(13)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.text())
+        if (day.precipitationProbability !== null) {
+          Text('降水 ' + (day.precipitationProbability as number).toString() + '%')
+            .fontSize(11)
+            .fontColor(AppTheme.secondaryText())
+        }
+      }
+      .alignItems(HorizontalAlign.End)
+    }
+    .width('100%')
+    .padding({ left: 10, right: 10, top: 9, bottom: 9 })
+    .borderRadius(7)
+    .border({ width: 1, color: AppTheme.border() })
+    .backgroundColor(AppTheme.surfaceVariant())
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -603,6 +760,41 @@ export struct PlannerView {
     .padding({ left: 2, right: 2, top: 10, bottom: 10 })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
+  }
+
+  private weatherSummary(): string {
+    const weather: CampusWeather | undefined = this.model.weatherByCampus.get(this.model.queryCampusID);
+    if (weather === undefined) {
+      return '今日与明日';
+    }
+    return weather.campusName + ' · ' + weather.district + ' · ' + weather.currentWeather + ' ' +
+      weather.currentTemperature.toString() + '°';
+  }
+
+  private weatherSymbol(value: string): string {
+    if (value.includes('雷')) {
+      return '⛈';
+    }
+    if (value.includes('雪') || value.includes('冰')) {
+      return '❄';
+    }
+    if (value.includes('雨')) {
+      return '☂';
+    }
+    if (value.includes('雾') || value.includes('霾') || value.includes('沙')) {
+      return '≋';
+    }
+    if (value.includes('多云') || value.includes('阴')) {
+      return '☁';
+    }
+    return '☀';
+  }
+
+  private shortWeatherDate(value: string): string {
+    if (value.length !== 10) {
+      return value;
+    }
+    return value.substring(5).replace('-', '/');
   }
 
   private freeSlotCount(): number {
