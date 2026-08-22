@@ -26,12 +26,12 @@ Silicon 兼容构建。
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.1.9 (48)` 正式签名构建通过 TestFlight 分发；不再作为 GitHub Release 附件 |
+| iOS | SwiftUI 原生 | `0.1.9 (49)` 正式签名构建通过 TestFlight 分发；不再作为 GitHub Release 附件 |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 69 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-稳定版 [v0.1.9](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.9) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版丰富 Android、iOS、macOS 与 HarmonyOS 的今日课程小组件，增加课程数量和教师信息等展示偏好；同时完善 HarmonyOS 平板/PC 日历与设置布局，并修复 TUI 已保存凭据的复用提示。Debian 包会在 Ubuntu 环境中实际安装验证运行时依赖。构建流程仍会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS `0.1.9 (48)` 与 macOS `0.1.9 (49)` 仅通过 TestFlight 分发。
+稳定版 [v0.1.9](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.1.9) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版丰富 Android、iOS、macOS 与 HarmonyOS 的今日课程小组件，增加课程数量和教师信息等展示偏好；同时完善 HarmonyOS 平板/PC 日历与设置布局，并修复 TUI 已保存凭据的复用提示。Debian 包会在 Ubuntu 环境中实际安装验证运行时依赖。构建流程仍会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.1.9 (49)` 仅通过 TestFlight 分发。
 
 ## 许可证状态
 
