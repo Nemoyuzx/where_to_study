@@ -863,6 +863,41 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testMonthDetentsHonorDeliberateLowVelocityDrags() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.settledMonthPosition(
+                position: 0.15,
+                verticalTranslation: 29,
+                predictedVerticalTranslation: 29
+            ),
+            .collapsed
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.settledMonthPosition(
+                position: 1.15,
+                verticalTranslation: 29,
+                predictedVerticalTranslation: 29
+            ),
+            .expanded
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.settledMonthPosition(
+                position: 0.85,
+                verticalTranslation: -29,
+                predictedVerticalTranslation: -29
+            ),
+            .detailRaised
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.settledMonthPosition(
+                position: 0.09,
+                verticalTranslation: 18,
+                predictedVerticalTranslation: 18
+            ),
+            .detailRaised
+        )
+    }
+
     func testLandscapeMonthPositionOnlySettlesAtTwoStops() {
         XCTAssertEqual(
             TeachingCalendarLogic.normalizedMonthPosition(

@@ -282,6 +282,12 @@ enum TeachingCalendarLogic {
         let target: Int
         if abs(projectedDelta) >= 42 {
             target = projectedDelta > 0 ? Int(ceil(clamped)) : Int(floor(clamped))
+        } else if abs(verticalTranslation) >= 24 {
+            // A deliberate low-velocity drag must still cross one detent. XCTest
+            // and accessibility-driven drags often have little projected
+            // momentum even though the finger travelled far enough to express
+            // intent; rounding here would otherwise snap the sheet backwards.
+            target = verticalTranslation > 0 ? Int(ceil(clamped)) : Int(floor(clamped))
         } else {
             target = Int(clamped.rounded())
         }
