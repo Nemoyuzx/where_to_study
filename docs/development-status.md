@@ -8,7 +8,7 @@
 - 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=49`；Android `versionCode=27`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：仅保留最新 SwiftUI Universal 应用 `/Applications/Where To Study.app`；未再检测到其他 Where To Study 安装副本
-- 发布边界：`v0.1.9` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS 正式构建均使用 build 48 并只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.1.9` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS build 48 与 macOS build 49 已上传并只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -85,8 +85,8 @@
 | Android UI | Medium Phone、WhereToStudy Fold 与 Pixel Tablet 各 4/4 导航及布局测试通过，共 12/12 |
 | 浏览器视觉检查 | 日/周/月真实触摸翻页、年视图日/周/月跳转、校区状态隔离通过；手机、折叠屏、平板、桌面深浅色均无横向溢出或文本裁切，控制台 0 错误 |
 | HarmonyOS | HAP 构建、69/69 ArkTS 单元测试和宽屏布局静态契约通过 |
-| macOS 安装检查 | SwiftUI Universal `0.1.9 (48)` 的 x86_64/arm64、WidgetKit 扩展、版本与统一应用图标复核通过；本机安装目录只保留一个最新副本 |
-| App Store Connect | iOS 与 macOS `0.1.9 (48)` 均完成正式归档；两个平台的上传任务均收到 Xcode `Upload succeeded`，未额外打开浏览器复核 |
+| macOS 归档检查 | SwiftUI Universal `0.1.9 (49)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、权限与统一应用图标复核通过 |
+| App Store Connect | iOS `0.1.9 (48)` 与 macOS `0.1.9 (49)` 均完成正式归档；两个平台的上传任务均收到 Xcode `Upload succeeded`，未额外打开浏览器复核 |
 | CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
 | Linux 发布 | arm64 在 Ubuntu 26.04 虚拟机、x86_64 在 Ubuntu 22.04 服务器完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、空教室、教学日历、设置、刷新与退出；Windows/Linux 无课程小组件入口 |

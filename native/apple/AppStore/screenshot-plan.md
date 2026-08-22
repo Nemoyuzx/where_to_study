@@ -47,7 +47,7 @@
 
 ## 当前待提交素材
 
-当前发布构建为 iOS 与 macOS `0.1.9 (48)`。正式提交前必须按本方案重新生成并检查 iPhone、iPad 与 macOS 截图，随后用对应平台最新构建的文件替换 `screenshot-manifest.md` 中的历史清单。不得复用 Build 25 截图作为当前商店素材。
+当前发布构建为 iOS `0.1.9 (48)` 与 macOS `0.1.9 (49)`。正式提交前必须按本方案重新生成并检查 iPhone、iPad 与 macOS 截图，随后用对应平台最新构建的文件替换 `screenshot-manifest.md` 中的历史清单。不得复用 Build 25 截图作为当前商店素材。
 
 ## 历史 Build 25 素材（不可用于当前提交）
 
