@@ -41,7 +41,7 @@ struct PrivacyPolicyView: View {
                     )
                     privacySection(
                         title: "天气、黄历与公开 DDL",
-                        body: "应用会通过 UAPI 获取所选校区所在行政区的今日、明日天气和所选日期的基础黄历，并可能通过 Timeless API 补充“宜/忌”。启用对应类别时，应用会从 Contest DDL 的 GitHub Pages 主源下载公开竞赛、夏令营与黑客松数据并在本地按日期筛选；主源不可用时可能尝试固定的 HTTP 备用 API。备用请求只向指定 IP 发送不含凭据、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。所有相关功能均可在设置中关闭。"
+                        body: "应用会通过 UAPI 获取所选校区所在行政区的今日、明日天气和所选日期的基础黄历，并可能通过 Timeless API 补充“宜/忌”。启用对应类别时，应用会从 Contest DDL 的 GitHub Pages 主源下载公开竞赛、夏令营与黑客松数据，并从固定的校内竞赛通知 API 补充北京邮电大学教学云平台公开通知中的截止节点；主源不可用时可能尝试固定的 HTTP 备用 API。固定 IP 请求只发送不含凭据、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。所有相关功能均可在设置中关闭。"
                     )
                     privacySection(
                         title: "云课堂作业",
@@ -53,7 +53,7 @@ struct PrivacyPolicyView: View {
                     )
                     privacySection(
                         title: "不收集的数据",
-                        body: "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据 CDN、UAPI、Timeless、GitHub Pages 与可选 DDL 备用服务可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。"
+                        body: "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据 CDN、UAPI、Timeless、GitHub Pages 与固定的活动及校内竞赛通知 API 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。"
                     )
                     privacySection(
                         title: "保留与删除",

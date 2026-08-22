@@ -1,5 +1,5 @@
 // 教学日历日期详情的公开数据客户端：黄历（UAPI + Timeless）、
-// 学科竞赛/夏令营/黑客松 DDL（Contest DDL 主源 + 固定 IP 备用源），
+// 学科竞赛/夏令营/黑客松 DDL（Contest DDL 主源 + 固定 IP 备用源 + 校内竞赛通知），
 // 以及北邮云课堂真实响应契约的作业解析器。
 //
 // 公开数据请求不携带账号、密码或 Cookie；所有地址均固定校验、禁止重定向，
@@ -139,6 +139,7 @@ export class CalendarDailyInfoSources {
     'https://nemoyuzx.github.io/contest-ddl/data/competitions.json';
   static readonly deadlinePrimaryPage: string = 'https://nemoyuzx.github.io/contest-ddl/';
   static readonly deadlineBackup: string = 'http://101.201.29.29/api/contest-events';
+  static readonly schoolContestNotices: string = 'http://101.201.29.29/api/contest-notices';
   static readonly assignments: string =
     'https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3';
   static readonly smallPayloadLimit: number = 128 * 1024;
@@ -264,6 +265,94 @@ export class PublicDeadlineResponseParser {
       return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
     });
     return result;
+  }
+
+  static parseSchoolNotices(payload: string, requestedDate: string): PublicDeadlineItem[] {
+    if (StrictDates.parseDateString(requestedDate) === null) {
+      throw new CalendarDailyInfoError('DDL 日期格式不正确。');
+    }
+    let root: Object;
+    try {
+      root = JSON.parse(payload) as Object;
+    } catch (e) {
+      throw new CalendarDailyInfoError('校内竞赛通知格式不正确。');
+    }
+    const source: Record<string, Object> = JsonUtil.record(root);
+    const records: Object[] = JsonUtil.array(source['items']);
+    const result: PublicDeadlineItem[] = [];
+    for (const raw of records) {
+      const record: Record<string, Object> = JsonUtil.record(raw);
+      const id: string | null = CalendarResponseValues.firstString(record, ['id', 'source_id']);
+      const name: string | null = CalendarResponseValues.firstString(record, ['name', 'title']);
+      if (id === null || name === null) {
+        continue;
+      }
+      const sourceName: string = CalendarResponseValues.firstString(record, ['source']) ??
+        '北京邮电大学教学云平台';
+      const rawURL: string | null = CalendarResponseValues.firstString(record, ['source_url']);
+      const officialURL: string | null = rawURL !== null &&
+        PublicDeadlineResponseParser.isTrustedOfficialURL(rawURL) ? rawURL : null;
+      let deadlines: Object[] = JsonUtil.array(record['deadlines']);
+      if (deadlines.length === 0) {
+        const primary: string | null = CalendarResponseValues.firstString(record, ['primary_deadline']);
+        if (primary === null) {
+          continue;
+        }
+        const fallback: Record<string, Object> = {};
+        fallback['date'] = primary;
+        fallback['label'] = CalendarResponseValues.firstString(
+          record, ['primary_deadline_label']) ?? '截止时间';
+        deadlines = [fallback];
+      }
+      for (let index: number = 0; index < deadlines.length; index += 1) {
+        const deadlineRecord: Record<string, Object> = JsonUtil.record(deadlines[index]);
+        const deadline: string | null = CalendarResponseValues.firstString(deadlineRecord, ['date']);
+        if (deadline === null || !deadline.startsWith(requestedDate) ||
+          !PublicDeadlineResponseParser.rfc3339.test(deadline)) {
+          continue;
+        }
+        const label: string = CalendarResponseValues.firstString(deadlineRecord, ['label']) ??
+          '截止时间';
+        result.push(new PublicDeadlineItem(
+          'school:' + id + ':' + index.toString(), name, PublicDeadlineKind.competition,
+          deadline, sourceName + ' · ' + label, officialURL));
+        if (result.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
+          break;
+        }
+      }
+      if (result.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
+        break;
+      }
+    }
+    result.sort((lhs: PublicDeadlineItem, rhs: PublicDeadlineItem): number => {
+      if (lhs.deadline !== rhs.deadline) {
+        return lhs.deadline < rhs.deadline ? -1 : 1;
+      }
+      return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
+    });
+    return result;
+  }
+
+  static merge(groups: PublicDeadlineItem[][]): PublicDeadlineItem[] {
+    const seen: Set<string> = new Set<string>();
+    const result: PublicDeadlineItem[] = [];
+    for (const group of groups) {
+      for (const item of group) {
+        const key: string = item.kind + '\u001f' + item.name.trim().toLowerCase() +
+          '\u001f' + item.deadline;
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push(item);
+        }
+      }
+    }
+    result.sort((lhs: PublicDeadlineItem, rhs: PublicDeadlineItem): number => {
+      if (lhs.deadline !== rhs.deadline) {
+        return lhs.deadline < rhs.deadline ? -1 : 1;
+      }
+      return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
+    });
+    return result.slice(0, CalendarDailyInfoSources.maximumItemsPerDay);
   }
 
   private static extractRecords(root: Object): Object[] {
@@ -422,11 +511,13 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     if (StrictDates.parseDateString(date) === null) {
       throw new CalendarDailyInfoError('DDL 日期格式不正确。');
     }
+    let contest: PublicDeadlineSnapshot | null = null;
+    let contestError: string | null = null;
     try {
       const payload: string = await FixedPublicJsonTransport.fetch(
         CalendarDailyInfoSources.deadlinePrimary, 'https', 'nemoyuzx.github.io',
         CalendarDailyInfoSources.deadlinePayloadLimit);
-      return new PublicDeadlineSnapshot(
+      contest = new PublicDeadlineSnapshot(
         date, PublicDeadlineResponseParser.parse(payload, date),
         CalendarDailyInfoSources.deadlinePrimary, false);
     } catch (primaryError) {
@@ -434,17 +525,41 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
         const payload: string = await FixedPublicJsonTransport.fetch(
           CalendarDailyInfoSources.deadlineBackup, 'http', '101.201.29.29',
           CalendarDailyInfoSources.deadlinePayloadLimit);
-        return new PublicDeadlineSnapshot(
+        contest = new PublicDeadlineSnapshot(
           date, PublicDeadlineResponseParser.parse(payload, date),
           CalendarDailyInfoSources.deadlineBackup, true);
       } catch (backupError) {
         const primaryMessage: string = primaryError instanceof Error ? primaryError.message : '未知错误';
         const backupMessage: string = backupError instanceof Error ? backupError.message : '未知错误';
-        throw new CalendarDailyInfoError(
-          '主 DDL 数据源不可用（' + primaryMessage + '）；备用数据源也不可用（' +
-            backupMessage + '）。');
+        contestError = '主 DDL 数据源不可用（' + primaryMessage + '）；备用数据源也不可用（' +
+          backupMessage + '）。';
       }
     }
+    let schoolItems: PublicDeadlineItem[] | null = null;
+    let schoolError: string | null = null;
+    try {
+      const payload: string = await FixedPublicJsonTransport.fetch(
+        CalendarDailyInfoSources.schoolContestNotices, 'http', '101.201.29.29',
+        CalendarDailyInfoSources.deadlinePayloadLimit);
+      schoolItems = PublicDeadlineResponseParser.parseSchoolNotices(payload, date);
+    } catch (error) {
+      schoolError = error instanceof Error ? error.message : '未知错误';
+    }
+    if (contest === null && schoolItems === null) {
+      throw new CalendarDailyInfoError(
+        '公开活动 DDL 不可用（' + (contestError ?? '未知错误') + '）；校内竞赛通知也不可用（' +
+          (schoolError ?? '未知错误') + '）。');
+    }
+    if (contest === null) {
+      return new PublicDeadlineSnapshot(
+        date, schoolItems ?? [], CalendarDailyInfoSources.schoolContestNotices, false);
+    }
+    if (schoolItems === null) {
+      return contest;
+    }
+    return new PublicDeadlineSnapshot(
+      date, PublicDeadlineResponseParser.merge([contest.items, schoolItems]),
+      contest.source, contest.usedBackup);
   }
 }
 

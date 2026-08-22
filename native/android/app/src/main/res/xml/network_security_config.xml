@@ -7,8 +7,8 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    <!-- The user-supplied contest feed exposes a plaintext backup only. The
-         exception is pinned to that one IP; no account data is sent to it. -->
+    <!-- The user-supplied contest feeds expose a plaintext backup and school
+         notice API. The exception is pinned to that IP; no account data is sent. -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">101.201.29.29</domain>
     </domain-config>

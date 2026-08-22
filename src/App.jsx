@@ -176,7 +176,7 @@ function PrivacyPolicyDialog({ onClose }) {
           </section>
           <section>
             <h3>天气、黄历与公开 DDL</h3>
-            <p>应用会通过 UAPI 获取今日、明日校区天气和所选日期的基础黄历，并可能通过 Timeless API 补充“宜/忌”。启用对应类别时，应用会从 Contest DDL 主源下载公开竞赛、夏令营与黑客松数据并在本地按日期筛选；主源不可用时可能尝试固定的 HTTP 备用 API。备用请求只向指定 IP 发送不含凭据、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。所有相关功能均可在设置中关闭。</p>
+            <p>应用会通过 UAPI 获取今日、明日校区天气和所选日期的基础黄历，并可能通过 Timeless API 补充“宜/忌”。启用对应类别时，应用会从 Contest DDL 主源下载公开竞赛、夏令营与黑客松数据，并从固定的校内竞赛通知 API 补充北京邮电大学教学云平台公开通知中的截止节点；主源不可用时可能尝试固定的 HTTP 备用 API。固定 IP 请求只发送不含凭据、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。所有相关功能均可在设置中关闭。</p>
           </section>
           <section>
             <h3>云课堂作业</h3>
@@ -188,7 +188,7 @@ function PrivacyPolicyDialog({ onClose }) {
           </section>
           <section>
             <h3>不收集的数据</h3>
-            <p>本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据 CDN、UAPI、Timeless、GitHub Pages 与可选 DDL 备用服务可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。</p>
+            <p>本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据 CDN、UAPI、Timeless、GitHub Pages 与固定的活动及校内竞赛通知 API 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。</p>
           </section>
           <section>
             <h3>保留、删除与联系</h3>
@@ -357,6 +357,7 @@ function browserPreviewCommand(name, payload = {}) {
       used_backup: false,
       items: [
         { id: 'preview-competition', name: '大学生创新竞赛', event_type: 'competition', primary_deadline: `${payload.date}T18:00:00+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
+        { id: 'preview-school-notice', name: '校内学科竞赛通知示例', event_type: 'competition', primary_deadline: `${payload.date}T20:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
         { id: 'preview-hackathon', name: '校园黑客松', event_type: 'hackathon', primary_deadline: `${payload.date}T23:59:59+08:00`, organizer: null, official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
       ],
     }
@@ -612,6 +613,8 @@ function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onR
         <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a>
         {' · 备用：'}
         <a href="http://101.201.29.29/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
+        {' · 校内：'}
+        <a href="http://101.201.29.29/api/contest-notices" target="_blank" rel="noreferrer">竞赛通知 API</a>
         {response?.used_backup ? '（本次已使用备用源）' : ''}
       </p>
     </section>
@@ -2839,7 +2842,7 @@ function App() {
               {[
                 ['weatherEnabled', '校区天气', '在空教室联动查询上方显示默认折叠的今日、明日天气。'],
                 ['almanacEnabled', '黄历信息', '在月视图日期详情中显示农历、干支与宜忌。'],
-                ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示学科竞赛截止日期。'],
+                ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示公开赛事与北邮校内竞赛通知截止日期。'],
                 ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。'],
                 ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。'],
               ].map(([field, title, description]) => (
@@ -2858,7 +2861,7 @@ function App() {
                   ><span aria-hidden="true" /></button>
                 </div>
               ))}
-              <p className="settings-source-note">天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；关闭后不会发起对应网络请求。</p>
+              <p className="settings-source-note">天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛同时包含北邮校内通知，各开关控制对应内容是否展示。</p>
             </section>
 
           <section className="panel settings-actions settings-local-data">

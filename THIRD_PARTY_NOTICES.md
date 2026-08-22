@@ -23,6 +23,11 @@ primary endpoint is unavailable. These are external data services; no service so
 event dataset is redistributed with the application. Every corresponding card identifies the external
 source, and users can disable each event category separately.
 
+The same card also reads public BUPT competition notices and their extracted deadline nodes from the
+fixed [`contest-notices` API](http://101.201.29.29/api/contest-notices). Each item links back to the
+corresponding HTTPS notice page on `ucloud.bupt.edu.cn`. The API is an external read-only data service;
+its source code and complete dataset are not redistributed with the application.
+
 ## Beijing University of Posts and Telecommunications UCloud
 
 The teaching-calendar assignment card links to the university's official

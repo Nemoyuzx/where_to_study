@@ -1,7 +1,8 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
   AlmanacInfo, AlmanacResponseParser, AssignmentDeadlineItem,
-  AssignmentDeadlineResponseParser, PublicDeadlineItem, PublicDeadlineResponseParser
+  AssignmentDeadlineResponseParser, PublicDeadlineItem, PublicDeadlineKind,
+  PublicDeadlineResponseParser
 } from '../main/ets/net/CalendarDailyInfoClient';
 import { UCloudAssignmentClient } from '../main/ets/net/UCloudAssignmentClient';
 
@@ -49,6 +50,22 @@ export default function calendarDailyInfoClientTest() {
       expect(parsed[0].officialURL).assertEqual('https://example.com/c1');
       expect(parsed[1].id).assertEqual('h1');
       expect(parsed[1].officialURL).assertNull();
+    });
+
+    it('school_notice_parser_expands_deadlines_on_selected_day', 0, () => {
+      const parsed: PublicDeadlineItem[] = PublicDeadlineResponseParser.parseSchoolNotices('{' +
+        '"items":[{"id":"bupt-ucloud-1","name":"校内创新竞赛",' +
+        '"deadlines":[' +
+        '{"date":"2026-08-22T10:00:00+08:00","label":"材料提交"},' +
+        '{"date":"2026-08-23T23:59:59+08:00","label":"报名截止"}],' +
+        '"source":"北京邮电大学教学云平台",' +
+        '"source_url":"https://ucloud.bupt.edu.cn/#/consulting?type=1&id=1"}]}',
+      '2026-08-22');
+      expect(parsed.length).assertEqual(1);
+      expect(parsed[0].kind).assertEqual(PublicDeadlineKind.competition);
+      expect(parsed[0].organizer).assertEqual('北京邮电大学教学云平台 · 材料提交');
+      expect(parsed[0].officialURL).assertEqual(
+        'https://ucloud.bupt.edu.cn/#/consulting?type=1&id=1');
     });
 
     it('assignment_parser_supports_course_and_homepage_contracts', 0, () => {

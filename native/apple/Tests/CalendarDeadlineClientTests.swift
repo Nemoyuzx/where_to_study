@@ -37,6 +37,32 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertNil(parsed.first?.officialURL)
     }
 
+    func testSchoolNoticeParserExpandsAllDeadlinesOnSelectedDay() throws {
+        let data = Data(#"""
+        {
+          "items":[{
+            "id":"bupt-ucloud-1",
+            "name":"校内创新竞赛",
+            "deadlines":[
+              {"date":"2026-08-22T10:00:00+08:00","label":"材料提交"},
+              {"date":"2026-08-23T23:59:59+08:00","label":"报名截止"}
+            ],
+            "source":"北京邮电大学教学云平台",
+            "source_url":"https://ucloud.bupt.edu.cn/#/consulting?type=1&id=1"
+          }]
+        }
+        """#.utf8)
+
+        let parsed = try PublicDeadlineClient.parseSchoolNotices(
+            data: data,
+            requestedDate: "2026-08-22"
+        )
+        XCTAssertEqual(parsed.count, 1)
+        XCTAssertEqual(parsed.first?.kind, .competition)
+        XCTAssertEqual(parsed.first?.organizer, "北京邮电大学教学云平台 · 材料提交")
+        XCTAssertEqual(parsed.first?.officialURL?.host, "ucloud.bupt.edu.cn")
+    }
+
     func testAssignmentParserSupportsConfirmedCourseListContract() throws {
         let data = Data(#"""
         {

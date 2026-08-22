@@ -71,6 +71,7 @@ enum CalendarDeadlineSources {
     )!
     static let primaryPage = URL(string: "https://nemoyuzx.github.io/contest-ddl/")!
     static let backup = URL(string: "http://101.201.29.29/api/contest-events")!
+    static let schoolNotices = URL(string: "http://101.201.29.29/api/contest-notices")!
     static let assignments = URL(
         string: "https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3"
     )!
@@ -83,18 +84,19 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         guard StrictContractDateParser.date(from: date) != nil else {
             throw CalendarDeadlineError.service("DDL 日期格式不正确。")
         }
+        let contestResult: Result<PublicDeadlineSnapshot, Error>
         do {
             let data = try await Self.fetchData(
                 from: CalendarDeadlineSources.primary,
                 allowedScheme: "https",
                 allowedHost: "nemoyuzx.github.io"
             )
-            return PublicDeadlineSnapshot(
+            contestResult = .success(PublicDeadlineSnapshot(
                 date: date,
                 items: try Self.parse(data: data, requestedDate: date),
                 source: CalendarDeadlineSources.primary,
                 usedBackup: false
-            )
+            ))
         } catch let primaryError {
             do {
                 let data = try await Self.fetchData(
@@ -102,18 +104,57 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
                     allowedScheme: "http",
                     allowedHost: "101.201.29.29"
                 )
-                return PublicDeadlineSnapshot(
+                contestResult = .success(PublicDeadlineSnapshot(
                     date: date,
                     items: try Self.parse(data: data, requestedDate: date),
                     source: CalendarDeadlineSources.backup,
                     usedBackup: true
-                )
+                ))
             } catch let backupError {
-                throw CalendarDeadlineError.service(
+                contestResult = .failure(CalendarDeadlineError.service(
                     "主 DDL 数据源不可用（\(primaryError.localizedDescription)）；"
                         + "备用数据源也不可用（\(backupError.localizedDescription)）。"
-                )
+                ))
             }
+        }
+
+        let schoolResult: Result<[PublicDeadlineItem], Error>
+        do {
+            let data = try await Self.fetchData(
+                from: CalendarDeadlineSources.schoolNotices,
+                allowedScheme: "http",
+                allowedHost: "101.201.29.29"
+            )
+            schoolResult = .success(try Self.parseSchoolNotices(
+                data: data,
+                requestedDate: date
+            ))
+        } catch {
+            schoolResult = .failure(error)
+        }
+
+        switch (contestResult, schoolResult) {
+        case let (.success(contest), .success(schoolItems)):
+            return PublicDeadlineSnapshot(
+                date: date,
+                items: Self.merge([contest.items, schoolItems]),
+                source: contest.source,
+                usedBackup: contest.usedBackup
+            )
+        case let (.success(contest), .failure):
+            return contest
+        case let (.failure, .success(schoolItems)):
+            return PublicDeadlineSnapshot(
+                date: date,
+                items: schoolItems,
+                source: CalendarDeadlineSources.schoolNotices,
+                usedBackup: false
+            )
+        case let (.failure(contestError), .failure(schoolError)):
+            throw CalendarDeadlineError.service(
+                "公开活动 DDL 不可用（\(contestError.localizedDescription)）；"
+                    + "校内竞赛通知也不可用（\(schoolError.localizedDescription)）。"
+            )
         }
     }
 
@@ -169,6 +210,79 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         return result.sorted {
             ($0.deadline, $0.name) < ($1.deadline, $1.name)
         }
+    }
+
+    static func parseSchoolNotices(
+        data: Data,
+        requestedDate: String
+    ) throws -> [PublicDeadlineItem] {
+        guard StrictContractDateParser.date(from: requestedDate) != nil else {
+            throw CalendarDeadlineError.service("DDL 日期格式不正确。")
+        }
+        let root: Any
+        do {
+            root = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            throw CalendarDeadlineError.service("校内竞赛通知格式不正确。")
+        }
+        var result = [PublicDeadlineItem]()
+        for record in extractRecords(root) {
+            guard
+                let id = string(record, keys: ["id", "source_id"]),
+                let name = string(record, keys: ["name", "title"])
+            else { continue }
+            let source = string(record, keys: ["source"])
+                ?? "北京邮电大学教学云平台"
+            let officialURL = string(record, keys: ["source_url"])
+                .flatMap(trustedOfficialURL)
+            var deadlines = record["deadlines"] as? [[String: Any]] ?? []
+            if deadlines.isEmpty,
+               let primary = string(record, keys: ["primary_deadline"]) {
+                deadlines = [[
+                    "date": primary,
+                    "label": string(record, keys: ["primary_deadline_label"]) ?? "截止时间"
+                ]]
+            }
+            for (index, deadlineRecord) in deadlines.enumerated() {
+                guard
+                    let deadline = string(deadlineRecord, keys: ["date"]),
+                    deadline.hasPrefix(requestedDate),
+                    parseISO8601(deadline) != nil
+                else { continue }
+                let label = string(deadlineRecord, keys: ["label"]) ?? "截止时间"
+                result.append(PublicDeadlineItem(
+                    id: "school:\(id):\(index)",
+                    name: name,
+                    kind: .competition,
+                    deadline: deadline,
+                    organizer: "\(source) · \(label)",
+                    officialURL: officialURL
+                ))
+                if result.count >= CalendarDeadlineSources.maximumItemsPerDay { break }
+            }
+            if result.count >= CalendarDeadlineSources.maximumItemsPerDay { break }
+        }
+        return result.sorted {
+            ($0.deadline, $0.name) < ($1.deadline, $1.name)
+        }
+    }
+
+    static func merge(_ groups: [[PublicDeadlineItem]]) -> [PublicDeadlineItem] {
+        var seen = Set<String>()
+        var result = [PublicDeadlineItem]()
+        for item in groups.flatMap({ $0 }) {
+            let key = [
+                item.kind.rawValue,
+                item.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                item.deadline
+            ].joined(separator: "\u{001F}")
+            if seen.insert(key).inserted {
+                result.append(item)
+            }
+        }
+        return Array(result.sorted {
+            ($0.deadline, $0.name) < ($1.deadline, $1.name)
+        }.prefix(CalendarDeadlineSources.maximumItemsPerDay))
     }
 
     private static func fetchData(
@@ -244,6 +358,17 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
             }
         }
         return nil
+    }
+
+    private static func trustedOfficialURL(_ value: String) -> URL? {
+        guard
+            let url = URL(string: value),
+            url.scheme == "https",
+            url.host != nil,
+            url.user == nil,
+            url.password == nil
+        else { return nil }
+        return url
     }
 
     private static func parseISO8601(_ value: String) -> Date? {

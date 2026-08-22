@@ -75,6 +75,7 @@ internal object CalendarDailyInfoSources {
         "https://nemoyuzx.github.io/contest-ddl/data/competitions.json"
     const val deadlinePrimaryPage = "https://nemoyuzx.github.io/contest-ddl/"
     const val deadlineBackup = "http://101.201.29.29/api/contest-events"
+    const val schoolContestNotices = "http://101.201.29.29/api/contest-notices"
     const val assignments =
         "https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3"
     const val smallPayloadLimit = 128 * 1024
@@ -187,6 +188,71 @@ internal object PublicDeadlineResponseParser {
             .sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
     }
 
+    fun parseSchoolNotices(payload: String, requestedDate: String): List<PublicDeadlineItem> {
+        requireContractDate(requestedDate, "DDL")
+        val source = try {
+            JSONObject(payload)
+        } catch (error: Exception) {
+            throw DailyInfoClientException("校内竞赛通知格式不正确。", error)
+        }
+        val records = source.optJSONArray("items") ?: JSONArray()
+        val result = mutableListOf<PublicDeadlineItem>()
+        for (recordIndex in 0 until records.length()) {
+            val record = records.optJSONObject(recordIndex) ?: continue
+            val id = firstString(record, "id", "source_id") ?: continue
+            val name = firstString(record, "name", "title") ?: continue
+            val sourceName = firstString(record, "source")
+                ?: "北京邮电大学教学云平台"
+            val officialURL = firstString(record, "source_url")
+                ?.takeIf(::isTrustedOfficialURL)
+            val sourceDeadlines = record.optJSONArray("deadlines")
+            val deadlines = if (sourceDeadlines == null || sourceDeadlines.length() == 0) {
+                val primary = firstString(record, "primary_deadline") ?: continue
+                JSONArray().put(JSONObject().apply {
+                    put("date", primary)
+                    put(
+                        "label",
+                        firstString(record, "primary_deadline_label") ?: "截止时间",
+                    )
+                })
+            } else sourceDeadlines
+            for (deadlineIndex in 0 until deadlines.length()) {
+                val deadlineRecord = deadlines.optJSONObject(deadlineIndex) ?: continue
+                val deadline = firstString(deadlineRecord, "date") ?: continue
+                if (!deadline.startsWith(requestedDate) || !rfc3339.matches(deadline)) continue
+                val label = firstString(deadlineRecord, "label") ?: "截止时间"
+                result += PublicDeadlineItem(
+                    id = "school:$id:$deadlineIndex",
+                    name = name,
+                    kind = PublicDeadlineKind.COMPETITION,
+                    deadline = deadline,
+                    organizer = "$sourceName · $label",
+                    officialURL = officialURL,
+                )
+                if (result.size >= 100) break
+            }
+            if (result.size >= 100) break
+        }
+        return result.sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+    }
+
+    fun merge(vararg groups: List<PublicDeadlineItem>): List<PublicDeadlineItem> {
+        val unique = linkedMapOf<String, PublicDeadlineItem>()
+        groups.forEach { group ->
+            group.forEach { item ->
+                val key = listOf(
+                    item.kind.wireValue,
+                    item.name.trim().lowercase(),
+                    item.deadline,
+                ).joinToString("\u001f")
+                unique.putIfAbsent(key, item)
+            }
+        }
+        return unique.values
+            .sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+            .take(100)
+    }
+
     private fun extractRecords(root: Any): JSONArray {
         if (root is JSONArray) return root
         val source = root as? JSONObject ?: return JSONArray()
@@ -296,7 +362,7 @@ class CalendarDailyInfoClient {
 
     fun fetchDeadlines(date: String): PublicDeadlineSnapshot {
         requireContractDate(date, "DDL")
-        return runCatching {
+        val contestResult = runCatching {
             val payload = FixedPublicJsonTransport.fetch(
                 URI.create(CalendarDailyInfoSources.deadlinePrimary),
                 "https",
@@ -309,7 +375,7 @@ class CalendarDailyInfoClient {
                 CalendarDailyInfoSources.deadlinePrimary,
                 false,
             )
-        }.getOrElse { primaryError ->
+        }.recoverCatching { primaryError ->
             try {
                 val payload = FixedPublicJsonTransport.fetch(
                     URI.create(CalendarDailyInfoSources.deadlineBackup),
@@ -331,6 +397,39 @@ class CalendarDailyInfoClient {
                 )
             }
         }
+        val schoolResult = runCatching {
+            val payload = FixedPublicJsonTransport.fetch(
+                URI.create(CalendarDailyInfoSources.schoolContestNotices),
+                "http",
+                "101.201.29.29",
+                CalendarDailyInfoSources.deadlinePayloadLimit,
+            )
+            PublicDeadlineResponseParser.parseSchoolNotices(payload, date)
+        }
+        val contest = contestResult.getOrNull()
+        val schoolItems = schoolResult.getOrNull()
+        if (contest == null && schoolItems == null) {
+            throw DailyInfoClientException(
+                "公开活动 DDL 不可用（${contestResult.exceptionOrNull()?.message}）；" +
+                    "校内竞赛通知也不可用（${schoolResult.exceptionOrNull()?.message}）。",
+                schoolResult.exceptionOrNull(),
+            )
+        }
+        if (contest == null) {
+            return PublicDeadlineSnapshot(
+                date = date,
+                items = schoolItems.orEmpty(),
+                source = CalendarDailyInfoSources.schoolContestNotices,
+                usedBackup = false,
+            )
+        }
+        if (schoolItems == null) return contest
+        return PublicDeadlineSnapshot(
+            date = date,
+            items = PublicDeadlineResponseParser.merge(contest.items, schoolItems),
+            source = contest.source,
+            usedBackup = contest.usedBackup,
+        )
     }
 }
 

@@ -2234,6 +2234,7 @@ internal class TeachingCalendarPage(
             listOf(
                 "主数据：Contest DDL" to CalendarDailyInfoSources.deadlinePrimaryPage,
                 "备用 API" to CalendarDailyInfoSources.deadlineBackup,
+                "校内竞赛通知" to CalendarDailyInfoSources.schoolContestNotices,
             ),
         ))
     }

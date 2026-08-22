@@ -315,6 +315,12 @@ export struct CalendarDailyInfoCards {
           .onClick(() => {
             this.open(CalendarDailyInfoSources.deadlineBackup);
           })
+        Text('校内竞赛通知')
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+          .onClick(() => {
+            this.open(CalendarDailyInfoSources.schoolContestNotices);
+          })
       }
       .width('100%')
     }

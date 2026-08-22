@@ -1487,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "where-to-study-core"
-version = "0.1.9"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "chrono-tz",

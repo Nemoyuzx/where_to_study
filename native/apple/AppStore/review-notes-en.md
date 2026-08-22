@@ -1,6 +1,6 @@
 # App Review Notes (English)
 
-Submitted builds: iOS and macOS `0.1.9 (49)`. Please review the latest build for each platform.
+Submitted builds: iOS and macOS `0.2.1 (50)`. Please review the latest build for each platform.
 
 Where To Study is an independent, unofficial schedule and empty-classroom client for students of Beijing University of Posts and Telecommunications. It is not operated by or affiliated with the university. The app has no purchases, subscriptions, advertising, analytics, or tracking SDKs.
 
@@ -21,6 +21,8 @@ Sample mode uses only fictional courses, classrooms, and holiday data bundled wi
 Live mode requires the user’s own BUPT academic-system credentials. Credentials are stored only in Apple Keychain and are sent over HTTPS to `https://jwglweixin.bupt.edu.cn` when the user requests a schedule or same-day classroom availability. After valid credentials are saved, classroom availability may also refresh automatically on launch, on returning to the foreground, or at approximately 07:00 China Standard Time where the platform permits a scheduled task. The project maintainer does not operate that service and cannot access credentials, schedules, or classroom data. A failed request never falls back to another data source.
 
 Calendar import and the optional 07:30 daily course summary are initiated by the user. All other features remain available if Calendar or Notification permission is denied.
+
+Teaching-calendar date details also retrieve public weather, almanac, and event-deadline data. The event card uses fixed public endpoints to supplement BUPT school competition notices; no academic credentials are attached to those requests. The assignment card uses the university's HTTPS authentication and UCloud APIs only after the user has saved credentials. Authentication tickets, cookies, access tokens, and assignment data are not persisted to disk.
 
 ## macOS behavior
 

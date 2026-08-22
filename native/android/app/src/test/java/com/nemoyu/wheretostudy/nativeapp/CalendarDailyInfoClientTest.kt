@@ -59,6 +59,29 @@ class CalendarDailyInfoClientTest {
     }
 
     @Test
+    fun schoolNoticeParserExpandsDeadlinesOnSelectedDay() {
+        val parsed = PublicDeadlineResponseParser.parseSchoolNotices(
+            """{
+              "items":[{
+                "id":"bupt-ucloud-1",
+                "name":"校内创新竞赛",
+                "deadlines":[
+                  {"date":"2026-08-22T10:00:00+08:00","label":"材料提交"},
+                  {"date":"2026-08-23T23:59:59+08:00","label":"报名截止"}
+                ],
+                "source":"北京邮电大学教学云平台",
+                "source_url":"https://ucloud.bupt.edu.cn/#/consulting?type=1&id=1"
+              }]
+            }""",
+            "2026-08-22",
+        )
+        assertEquals(1, parsed.size)
+        assertEquals(PublicDeadlineKind.COMPETITION, parsed.first().kind)
+        assertEquals("北京邮电大学教学云平台 · 材料提交", parsed.first().organizer)
+        assertEquals("ucloud.bupt.edu.cn", java.net.URI.create(parsed.first().officialURL).host)
+    }
+
+    @Test
     fun assignmentParserSupportsCourseAndHomepageContracts() {
         val courseItems = AssignmentDeadlineResponseParser.parse(
             """{

@@ -422,7 +422,7 @@ struct SettingsView: View {
                     isOn: model.hackathonDeadlinesEnabled,
                     set: model.setHackathonDeadlinesEnabled
                 )
-                Text("天气、黄历和 DDL 来自第三方公开服务；各卡片底部会标明具体来源。")
+                Text("天气、黄历和 DDL 来自第三方公开服务；学科竞赛同时包含北邮校内通知，各卡片底部会标明具体来源。")
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
             }
