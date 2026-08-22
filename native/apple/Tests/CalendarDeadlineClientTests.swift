@@ -59,6 +59,7 @@ final class CalendarDeadlineClientTests: XCTestCase {
         )
         XCTAssertEqual(parsed.count, 1)
         XCTAssertEqual(parsed.first?.kind, .competition)
+        XCTAssertEqual(parsed.first?.source, .schoolNotice)
         XCTAssertEqual(parsed.first?.organizer, "北京邮电大学教学云平台 · 材料提交")
         XCTAssertEqual(parsed.first?.officialURL?.host, "ucloud.bupt.edu.cn")
     }

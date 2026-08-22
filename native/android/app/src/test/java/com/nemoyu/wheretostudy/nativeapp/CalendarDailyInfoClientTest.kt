@@ -55,6 +55,7 @@ class CalendarDailyInfoClientTest {
         )
         assertEquals(listOf("c1", "h1"), parsed.map(PublicDeadlineItem::id))
         assertEquals("https", java.net.URI.create(parsed.first().officialURL).scheme)
+        assertEquals(PublicDeadlineSource.CONTEST_DDL, parsed.first().source)
         assertNull(parsed.last().officialURL)
     }
 
@@ -75,6 +76,7 @@ class CalendarDailyInfoClientTest {
             }""",
             "2026-08-22",
         )
+        assertEquals(PublicDeadlineSource.SCHOOL_NOTICE, parsed.single().source)
         assertEquals(1, parsed.size)
         assertEquals(PublicDeadlineKind.COMPETITION, parsed.first().kind)
         assertEquals("北京邮电大学教学云平台 · 材料提交", parsed.first().organizer)

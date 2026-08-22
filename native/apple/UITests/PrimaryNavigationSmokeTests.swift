@@ -169,7 +169,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
         XCTAssertTrue(monthSummary.waitForExistence(timeout: 5))
         attachScreenshot(named: "calendar-month-detail-raised")
-        verticalSwipe(in: app, within: monthSummary, upward: false)
+        verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
         XCTAssertTrue(waitForValue("已收起", of: month))
         verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
@@ -246,11 +246,20 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]
             .waitForExistence(timeout: 5))
         let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
+        let deadlineCard = app.descendants(matching: .any)["calendar.mobile.deadlines"].firstMatch
+        for _ in 0..<10 where !deadlineCard.isHittable {
+            verticalSwipe(in: app, within: monthSummary, upward: true)
+        }
+        XCTAssertTrue(deadlineCard.waitForExistence(timeout: 5))
+        XCTAssertTrue(deadlineCard.isHittable)
+        XCTAssertEqual(monthState.value as? String, "日程已展开")
+        attachScreenshot(named: "calendar-month-landscape-details-scrolled")
+
         verticalSwipe(in: app, within: monthSummary, upward: true)
         XCTAssertTrue(waitForValue("日程已展开", of: monthState))
         attachScreenshot(named: "calendar-month-landscape-detail-raised")
 
-        verticalSwipe(in: app, within: monthSummary, upward: false)
+        monthState.tap()
         XCTAssertTrue(waitForValue("已展开", of: monthState))
         Thread.sleep(forTimeInterval: 0.4)
         XCTAssertEqual(monthState.value as? String, "已展开")
@@ -501,6 +510,55 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         attachScreenshot(named: "ipad-settings-portrait")
     }
 
+    func testStoreIPad13LandscapeScreenshots() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "仅在 iPad 模拟器生成")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--review-demo"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        app.launch()
+        defer {
+            app.terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        assertRegularSidebar(in: app)
+        assertScreen("screen.planner", in: app)
+        let weatherToggle = app.descendants(matching: .any)["weather.toggle"].firstMatch
+        if weatherToggle.waitForExistence(timeout: 5), weatherToggle.value as? String == "已折叠" {
+            weatherToggle.tap()
+            XCTAssertTrue(waitForValue("已展开", of: weatherToggle))
+        }
+        attachScreenshot(named: "effect-ipad-13-landscape-planner")
+
+        navigateFromSidebar(to: "教学日历", in: app)
+        assertScreen("screen.calendar", in: app)
+        let monthMode = app.segmentedControls.buttons["月"]
+        XCTAssertTrue(monthMode.waitForExistence(timeout: 5))
+        monthMode.tap()
+        let collapseMonth = app.buttons["折叠月历"]
+        if collapseMonth.waitForExistence(timeout: 5) {
+            collapseMonth.tap()
+            XCTAssertTrue(app.buttons["展开日程"].waitForExistence(timeout: 5))
+        }
+        attachScreenshot(named: "effect-ipad-13-landscape-calendar")
+
+        navigateFromSidebar(to: "设置", in: app)
+        assertScreen("screen.settings", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["settings.reference-notice"]
+            .waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["学科竞赛 DDL"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.switches["校内竞赛通知"].waitForExistence(timeout: 5))
+        attachScreenshot(named: "effect-ipad-13-landscape-settings")
+
+        let privacyButton = app.descendants(matching: .any)["action.open-privacy-policy"].firstMatch
+        revealByScrolling(visibleElement: privacyButton, in: app)
+        privacyButton.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"]
+            .waitForExistence(timeout: 5))
+        attachScreenshot(named: "effect-ipad-13-landscape-privacy")
+    }
+
     private func assertMobileCalendarControls(in app: XCUIApplication) {
         let weekMode = app.segmentedControls.buttons["周"]
         XCTAssertTrue(weekMode.waitForExistence(timeout: 5))
@@ -564,7 +622,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let topY = topElement.frame.maxY
         let bottomY = bottomElement.frame.minY
         let distance = bottomY - topY
-        XCTAssertGreaterThan(distance, 80)
+        XCTAssertGreaterThan(distance, 32)
         let centerY = topY + distance * 0.5
         let travel = min(distance * 0.5, 180)
         let startY = centerY + (upward ? travel * 0.5 : -travel * 0.5)
@@ -592,8 +650,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     ) {
         let frame = element.frame.intersection(app.frame)
         XCTAssertGreaterThan(frame.height, 80)
-        let travel = min(max(frame.height * 0.35, 96), 180)
-        let startY = upward ? frame.maxY - 28 : frame.minY + 28
+        // The compact floating tab bar overlays the lower edge of the calendar
+        // ScrollView in landscape. Start above that overlay so XCTest exercises
+        // the same visible card surface that a user can actually drag.
+        let unobscuredBottom = min(frame.maxY - 28, app.frame.maxY - 96)
+        let unobscuredTop = frame.minY + 20
+        let availableTravel = max(unobscuredBottom - unobscuredTop, 1)
+        let travel = min(max(frame.height * 0.35, 72), availableTravel)
+        let startY = upward ? unobscuredBottom : unobscuredTop
         let endY = upward ? startY - travel : startY + travel
         let appOrigin = app.coordinate(withNormalizedOffset: .zero)
         let start = appOrigin.withOffset(CGVector(

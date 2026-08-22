@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS = {
   weatherEnabled: true,
   almanacEnabled: true,
   competitionDeadlinesEnabled: true,
+  schoolContestNoticesEnabled: true,
   summerCampDeadlinesEnabled: true,
   hackathonDeadlinesEnabled: true,
 }
@@ -354,6 +355,9 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
     competitionDeadlinesEnabled: Boolean(
       data.competition_deadlines_enabled ?? fallback.competitionDeadlinesEnabled ?? true,
     ),
+    schoolContestNoticesEnabled: Boolean(
+      data.school_contest_notices_enabled ?? fallback.schoolContestNoticesEnabled ?? true,
+    ),
     summerCampDeadlinesEnabled: Boolean(
       data.summer_camp_deadlines_enabled ?? fallback.summerCampDeadlinesEnabled ?? true,
     ),
@@ -388,6 +392,7 @@ export function settingsToPayload(settings) {
     weather_enabled: Boolean(settings.weatherEnabled),
     almanac_enabled: Boolean(settings.almanacEnabled),
     competition_deadlines_enabled: Boolean(settings.competitionDeadlinesEnabled),
+    school_contest_notices_enabled: Boolean(settings.schoolContestNoticesEnabled),
     summer_camp_deadlines_enabled: Boolean(settings.summerCampDeadlinesEnabled),
     hackathon_deadlines_enabled: Boolean(settings.hackathonDeadlinesEnabled),
   }

@@ -44,10 +44,16 @@ enum class PublicDeadlineKind(val wireValue: String, val title: String) {
     }
 }
 
+enum class PublicDeadlineSource(val wireValue: String, val title: String) {
+    CONTEST_DDL("contest_ddl", "Contest DDL"),
+    SCHOOL_NOTICE("school_notice", "校内竞赛通知"),
+}
+
 data class PublicDeadlineItem(
     val id: String,
     val name: String,
     val kind: PublicDeadlineKind,
+    val source: PublicDeadlineSource,
     val deadline: String,
     val organizer: String?,
     val officialURL: String?,
@@ -179,6 +185,7 @@ internal object PublicDeadlineResponseParser {
                 id = id,
                 name = name,
                 kind = kind,
+                source = PublicDeadlineSource.CONTEST_DDL,
                 deadline = deadline,
                 organizer = firstString(record, "organizer", "host"),
                 officialURL = officialURL,
@@ -225,6 +232,7 @@ internal object PublicDeadlineResponseParser {
                     id = "school:$id:$deadlineIndex",
                     name = name,
                     kind = PublicDeadlineKind.COMPETITION,
+                    source = PublicDeadlineSource.SCHOOL_NOTICE,
                     deadline = deadline,
                     organizer = "$sourceName · $label",
                     officialURL = officialURL,
@@ -241,6 +249,7 @@ internal object PublicDeadlineResponseParser {
         groups.forEach { group ->
             group.forEach { item ->
                 val key = listOf(
+                    item.source.wireValue,
                     item.kind.wireValue,
                     item.name.trim().lowercase(),
                     item.deadline,
@@ -628,6 +637,7 @@ internal class CalendarDailyInfoRepository(
             "sample-competition",
             "全国大学生示例竞赛",
             PublicDeadlineKind.COMPETITION,
+            PublicDeadlineSource.CONTEST_DDL,
             "${date}T23:59:00+08:00",
             "示例组委会",
             null,

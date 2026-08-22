@@ -17,7 +17,7 @@ function validateReleaseLabel(label) {
 }
 
 test("release labels accept stable and unnumbered alpha versions", () => {
-  for (const label of ["v0.2.1", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
+  for (const label of ["v0.2.2", "v0.2.1", "v0.2.0-alpha", "v0.2.0-beta.1"]) {
     assert.doesNotThrow(() => validateReleaseLabel(label), label);
   }
 });
@@ -28,7 +28,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the stable 0.2.1 release version", () => {
+test("all tracked client projects use the stable 0.2.2 release version", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -49,19 +49,19 @@ test("all tracked client projects use the stable 0.2.1 release version", () => {
     "utf8",
   );
 
-  assert.equal(packageMetadata.version, "0.2.1");
-  assert.equal(tauriMetadata.version, "0.2.1");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 2001);
-  assert.match(cargoManifest, /^version = "0\.2\.1"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.2\.1"/);
-  assert.match(nativeAndroid, /versionCode = 28/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.1"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "50"/);
-  assert.match(nativeHarmony, /"versionName": "0\.2\.1"/);
-  assert.match(nativeHarmony, /"versionCode": 1002001/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.1/);
+  assert.equal(packageMetadata.version, "0.2.2");
+  assert.equal(tauriMetadata.version, "0.2.2");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 2002);
+  assert.match(cargoManifest, /^version = "0\.2\.2"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.2\.2"/);
+  assert.match(nativeAndroid, /versionCode = 29/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.2"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "51"/);
+  assert.match(nativeHarmony, /"versionName": "0\.2\.2"/);
+  assert.match(nativeHarmony, /"versionCode": 1002002/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.2/);
   assert.match(tauriApple, /CFBundleVersion: "42"/);
-  assert.match(tauriAppleInfo, /<string>0\.2\.1<\/string>/);
+  assert.match(tauriAppleInfo, /<string>0\.2\.2<\/string>/);
   assert.match(tauriAppleInfo, /<string>42<\/string>/);
 });
 

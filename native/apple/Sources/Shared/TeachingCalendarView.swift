@@ -102,6 +102,13 @@ enum TeachingCalendarLogic {
         case expanded = 2
     }
 
+    static func routesMonthDragToDetails(
+        position: MonthPosition,
+        verticalTranslation: CGFloat
+    ) -> Bool {
+        position == .detailRaised && verticalTranslation < 0
+    }
+
     static func yearCourseOpacity(courseCount: Int) -> Double {
         guard courseCount > 0 else { return 0 }
         let count = Double(courseCount)
@@ -1428,6 +1435,9 @@ struct TeachingCalendarView: View {
             }
             .font(.caption2)
             .foregroundStyle(AppTheme.secondaryText)
+            Text("校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.secondaryText)
         }
     }
 
@@ -1579,7 +1589,7 @@ struct TeachingCalendarView: View {
                 Text(item.name)
                     .font(.subheadline.weight(.semibold))
                     .multilineTextAlignment(.leading)
-                Text([item.kind.title, item.organizer].compactMap { $0 }.joined(separator: " · "))
+                Text([deadlineCategoryTitle(item), item.organizer].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
             }
@@ -1594,11 +1604,18 @@ struct TeachingCalendarView: View {
     }
 
     private func deadlineIsEnabled(_ item: PublicDeadlineItem) -> Bool {
-        switch item.kind {
-        case .competition: model.competitionDeadlinesEnabled
-        case .summerCamp: model.summerCampDeadlinesEnabled
-        case .hackathon: model.hackathonDeadlinesEnabled
+        if item.source == .schoolNotice {
+            return model.schoolContestNoticesEnabled
         }
+        switch item.kind {
+        case .competition: return model.competitionDeadlinesEnabled
+        case .summerCamp: return model.summerCampDeadlinesEnabled
+        case .hackathon: return model.hackathonDeadlinesEnabled
+        }
+    }
+
+    private func deadlineCategoryTitle(_ item: PublicDeadlineItem) -> String {
+        item.source == .schoolNotice ? item.source.title : item.kind.title
     }
 
     private func deadlineTime(_ value: String) -> String {

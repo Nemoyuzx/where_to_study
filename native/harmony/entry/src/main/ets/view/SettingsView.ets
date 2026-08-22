@@ -68,6 +68,7 @@ export struct SettingsView {
     Scroll() {
       Column({ space: 16 }) {
         this.settingsTitle()
+        this.referenceNotice()
         if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
@@ -139,6 +140,25 @@ export struct SettingsView {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding({ bottom: this.isCompact() ? 12 : 18 })
+  }
+
+  @Builder
+  referenceNotice() {
+    Column({ space: 4 }) {
+      Text('显示数据仅供参考，请以实际情况为准。')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.text())
+      Text('Displayed data is for reference only; please rely on the actual official information.')
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .lineHeight(17)
+    }
+    .padding(12)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -621,6 +641,10 @@ export struct SettingsView {
         (value: boolean): void => {
           this.model.setCompetitionDeadlinesEnabled(value);
         })
+      this.featureToggle('校内竞赛通知', this.model.schoolContestNoticesEnabled,
+        (value: boolean): void => {
+          this.model.setSchoolContestNoticesEnabled(value);
+        })
       this.featureToggle('夏令营 DDL', this.model.summerCampDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setSummerCampDeadlinesEnabled(value);
@@ -630,7 +654,7 @@ export struct SettingsView {
           this.model.setHackathonDeadlinesEnabled(value);
         })
 
-      Text('天气、黄历和 DDL 来自第三方公开服务；学科竞赛同时包含北邮校内通知，各卡片底部会标明具体来源。')
+      Text('天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。')
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(17)

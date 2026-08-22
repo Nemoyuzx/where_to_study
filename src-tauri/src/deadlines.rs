@@ -172,6 +172,7 @@ fn parse_source(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Vec<De
             id: id.to_string(),
             name: name.to_string(),
             event_type: source.event_type,
+            source_type: "contest_ddl".to_string(),
             primary_deadline: parsed_deadline.to_rfc3339(),
             organizer: source
                 .organizer
@@ -249,6 +250,7 @@ fn parse_school_notices(
                 id: format!("school:{id}:{index}"),
                 name: name.clone(),
                 event_type: "competition".to_string(),
+                source_type: "school_notice".to_string(),
                 primary_deadline: parsed_deadline.to_rfc3339(),
                 organizer: Some(format!("{source_name} · {label}")),
                 official_url: official_url.clone(),
@@ -287,7 +289,8 @@ fn merge_items(groups: impl IntoIterator<Item = Vec<DeadlineItem>>) -> Vec<Deadl
     let mut items = Vec::new();
     for item in groups.into_iter().flatten() {
         let key = format!(
-            "{}\u{1f}{}\u{1f}{}",
+            "{}\u{1f}{}\u{1f}{}\u{1f}{}",
+            item.source_type,
             item.event_type,
             item.name.trim().to_lowercase(),
             item.primary_deadline
@@ -371,6 +374,7 @@ mod tests {
         let parsed = parse_source(data.as_bytes(), date).unwrap();
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].event_type, "competition");
+        assert_eq!(parsed[0].source_type, "contest_ddl");
         assert_eq!(parsed[1].event_type, "hackathon");
     }
 
@@ -415,6 +419,7 @@ mod tests {
         let parsed = parse_school_notices(data.as_bytes(), date).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].event_type, "competition");
+        assert_eq!(parsed[0].source_type, "school_notice");
         assert_eq!(
             parsed[0].organizer.as_deref(),
             Some("北京邮电大学教学云平台 · 材料提交")

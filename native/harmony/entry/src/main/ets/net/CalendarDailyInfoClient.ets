@@ -57,6 +57,11 @@ export enum PublicDeadlineKind {
   hackathon = 'hackathon'
 }
 
+export enum PublicDeadlineSource {
+  contestDDL = 'contest_ddl',
+  schoolNotice = 'school_notice'
+}
+
 export class PublicDeadlineKindInfo {
   static fromWireValue(value: string): PublicDeadlineKind | null {
     if (value === PublicDeadlineKind.competition) {
@@ -86,15 +91,18 @@ export class PublicDeadlineItem {
   readonly id: string;
   readonly name: string;
   readonly kind: PublicDeadlineKind;
+  readonly source: PublicDeadlineSource;
   readonly deadline: string;
   readonly organizer: string | null;
   readonly officialURL: string | null;
 
-  constructor(id: string, name: string, kind: PublicDeadlineKind, deadline: string,
+  constructor(id: string, name: string, kind: PublicDeadlineKind,
+    source: PublicDeadlineSource, deadline: string,
     organizer: string | null, officialURL: string | null) {
     this.id = id;
     this.name = name;
     this.kind = kind;
+    this.source = source;
     this.deadline = deadline;
     this.organizer = organizer;
     this.officialURL = officialURL;
@@ -252,7 +260,7 @@ export class PublicDeadlineResponseParser {
       const officialURL: string | null = rawURL !== null &&
         PublicDeadlineResponseParser.isTrustedOfficialURL(rawURL) ? rawURL : null;
       result.push(new PublicDeadlineItem(
-        id, name, kind, deadline,
+        id, name, kind, PublicDeadlineSource.contestDDL, deadline,
         CalendarResponseValues.firstString(record, ['organizer', 'host']), officialURL));
       if (result.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
         break;
@@ -315,7 +323,7 @@ export class PublicDeadlineResponseParser {
           '截止时间';
         result.push(new PublicDeadlineItem(
           'school:' + id + ':' + index.toString(), name, PublicDeadlineKind.competition,
-          deadline, sourceName + ' · ' + label, officialURL));
+          PublicDeadlineSource.schoolNotice, deadline, sourceName + ' · ' + label, officialURL));
         if (result.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
           break;
         }
@@ -338,7 +346,8 @@ export class PublicDeadlineResponseParser {
     const result: PublicDeadlineItem[] = [];
     for (const group of groups) {
       for (const item of group) {
-        const key: string = item.kind + '\u001f' + item.name.trim().toLowerCase() +
+        const key: string = item.source + '\u001f' + item.kind + '\u001f' +
+          item.name.trim().toLowerCase() +
           '\u001f' + item.deadline;
         if (!seen.has(key)) {
           seen.add(key);

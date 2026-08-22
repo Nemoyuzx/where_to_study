@@ -512,7 +512,7 @@ struct MobileTeachingCalendarView: View {
             )
             let summaryHeight = max(usableHeight - 18 - 8 - visibleGridHeight - 28 - 16, 0)
 
-            VStack(spacing: 0) {
+            let calendarContent = VStack(spacing: 0) {
                 VStack(spacing: 0) {
                     monthWeekdayHeader
                         .frame(width: gridWidth)
@@ -534,9 +534,13 @@ struct MobileTeachingCalendarView: View {
                     )
                 }
                 .frame(maxWidth: .infinity)
+                .simultaneousGesture(
+                    monthNavigationGesture(travelDistance: travelDistance),
+                    including: effectiveMonthPosition == .detailRaised ? .all : .none
+                )
 
                 if expansionProgress < 0.999, summaryHeight > 0 {
-                    ScrollView(.vertical, showsIndicators: false) {
+                    ScrollView(.vertical, showsIndicators: true) {
                         VStack(spacing: 10) {
                             daySummaryCard(selectedDate)
                             mobileAssignmentCard(selectedDate)
@@ -552,11 +556,7 @@ struct MobileTeachingCalendarView: View {
                     }
                     .frame(height: summaryHeight)
                     .opacity(1 - expansionProgress)
-                    .scrollDisabled(
-                        effectiveMonthPosition != .detailRaised
-                            || monthDragAxis == .vertical
-                            || isMonthExpansionSettling
-                    )
+                    .scrollDisabled(effectiveMonthPosition != .detailRaised)
                     .accessibilityHidden(expansionProgress >= 0.25)
                     .accessibilityIdentifier("calendar.mobile.month-day-summary")
                     .background(Color.clear)
@@ -570,13 +570,31 @@ struct MobileTeachingCalendarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .clipped()
             .contentShape(Rectangle())
-            .simultaneousGesture(monthNavigationGesture(travelDistance: travelDistance))
+
+            monthGestureContainer(
+                calendarContent,
+                travelDistance: travelDistance,
+                enabled: effectiveMonthPosition != .detailRaised
+            )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("calendar.mobile.month")
             .accessibilityValue(monthAccessibilityValue)
             .accessibilityAction(named: Text(isMonthExpanded ? "收起月历" : "展开月历")) {
                 settleMonthPosition(to: isMonthExpanded ? .collapsed : .expanded)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func monthGestureContainer<Content: View>(
+        _ content: Content,
+        travelDistance: CGFloat,
+        enabled: Bool
+    ) -> some View {
+        if enabled {
+            content.simultaneousGesture(monthNavigationGesture(travelDistance: travelDistance))
+        } else {
+            content
         }
     }
 
@@ -1091,6 +1109,7 @@ struct MobileTeachingCalendarView: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("第三方来源")
+                Text("校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。")
                 ViewThatFits(in: .horizontal) {
                     HStack {
                         Link("Contest DDL", destination: CalendarDeadlineSources.primaryPage)
@@ -1134,7 +1153,7 @@ struct MobileTeachingCalendarView: View {
                 Text(item.name)
                     .font(.subheadline.weight(.semibold))
                     .multilineTextAlignment(.leading)
-                Text([item.kind.title, item.organizer].compactMap { $0 }.joined(separator: " · "))
+                Text([deadlineCategoryTitle(item), item.organizer].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
             }
@@ -1148,11 +1167,18 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func deadlineIsEnabled(_ item: PublicDeadlineItem) -> Bool {
-        switch item.kind {
-        case .competition: model.competitionDeadlinesEnabled
-        case .summerCamp: model.summerCampDeadlinesEnabled
-        case .hackathon: model.hackathonDeadlinesEnabled
+        if item.source == .schoolNotice {
+            return model.schoolContestNoticesEnabled
         }
+        switch item.kind {
+        case .competition: return model.competitionDeadlinesEnabled
+        case .summerCamp: return model.summerCampDeadlinesEnabled
+        case .hackathon: return model.hackathonDeadlinesEnabled
+        }
+    }
+
+    private func deadlineCategoryTitle(_ item: PublicDeadlineItem) -> String {
+        item.source == .schoolNotice ? item.source.title : item.kind.title
     }
 
     private func deadlineTime(_ value: String) -> String {
@@ -1467,6 +1493,13 @@ struct MobileTeachingCalendarView: View {
                     verticalTranslation: value.translation.height
                 )
                 guard let axis else { return }
+                if axis == .vertical,
+                   TeachingCalendarLogic.routesMonthDragToDetails(
+                       position: effectiveMonthPosition,
+                       verticalTranslation: value.translation.height
+                   ) {
+                    return
+                }
                 monthDragAxis = axis
                 suppressesEventSelection = true
                 switch axis {
@@ -1478,6 +1511,13 @@ struct MobileTeachingCalendarView: View {
             }
             .onEnded { value in
                 defer { finishTrackedDrag() }
+                if monthDragAxis == nil,
+                   TeachingCalendarLogic.routesMonthDragToDetails(
+                       position: effectiveMonthPosition,
+                       verticalTranslation: value.translation.height
+                   ) {
+                    return
+                }
                 if monthDragAxis == .horizontal,
                    let direction = TeachingCalendarLogic.swipeDirection(
                     horizontalTranslation: value.translation.width,

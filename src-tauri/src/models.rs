@@ -53,6 +53,8 @@ pub struct SavedSettings {
     #[serde(default = "default_true")]
     pub competition_deadlines_enabled: bool,
     #[serde(default = "default_true")]
+    pub school_contest_notices_enabled: bool,
+    #[serde(default = "default_true")]
     pub summer_camp_deadlines_enabled: bool,
     #[serde(default = "default_true")]
     pub hackathon_deadlines_enabled: bool,
@@ -72,6 +74,7 @@ impl SavedSettings {
             weather_enabled: true,
             almanac_enabled: true,
             competition_deadlines_enabled: true,
+            school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
         }
@@ -114,6 +117,8 @@ pub struct SaveSettingsRequest {
     pub almanac_enabled: bool,
     #[serde(default = "default_true")]
     pub competition_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    pub school_contest_notices_enabled: bool,
     #[serde(default = "default_true")]
     pub summer_camp_deadlines_enabled: bool,
     #[serde(default = "default_true")]
@@ -204,6 +209,7 @@ pub struct DeadlineItem {
     pub id: String,
     pub name: String,
     pub event_type: String,
+    pub source_type: String,
     pub primary_deadline: String,
     pub organizer: Option<String>,
     pub official_url: Option<String>,

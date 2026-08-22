@@ -383,6 +383,21 @@ test('native Android chrome follows the active system theme', () => {
   assert.match(nativeAndroidDarkTheme, /windowBackground">@color\/background/)
 })
 
+test('collapsed Android foldable rail centers icons inside selection frames', () => {
+  const presentation = androidMainActivitySource.match(
+    /private fun applyNavigationRailTabPresentation[\s\S]*?private fun updateNavigationRailPresentation/,
+  )?.[0] ?? ''
+  assert.match(
+    presentation,
+    /setCompoundDrawablesRelativeWithIntrinsicBounds\(destination\.iconResource, 0, 0, 0\)/,
+  )
+  assert.doesNotMatch(
+    presentation,
+    /setCompoundDrawablesRelativeWithIntrinsicBounds\(0, destination\.iconResource, 0, 0\)/,
+  )
+  assert.match(presentation, /view\.gravity = if \(navigationRailCollapsed\) Gravity\.CENTER/)
+})
+
 test('light and dark text combinations meet WCAG AA contrast', () => {
   const [lightSource, darkSource] = indexCss.split(
     '@media (prefers-color-scheme: dark)',

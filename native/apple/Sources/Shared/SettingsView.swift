@@ -60,6 +60,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     PageTitle(eyebrow: "Where To Study", title: "设置")
+                    referenceNotice
                     if columnCount == 2 {
                         let widths = DesktopColumnLayoutPolicy.widths(containerWidth: proxy.size.width)
                         HStack(alignment: .top, spacing: 16) {
@@ -101,6 +102,7 @@ struct SettingsView: View {
                         title: "设置",
                         compact: pageMetrics.usesCompactTitle
                     )
+                    referenceNotice
                     if columnCount == 2 {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
@@ -413,6 +415,11 @@ struct SettingsView: View {
                     set: model.setCompetitionDeadlinesEnabled
                 )
                 featureToggle(
+                    "校内竞赛通知",
+                    isOn: model.schoolContestNoticesEnabled,
+                    set: model.setSchoolContestNoticesEnabled
+                )
+                featureToggle(
                     "夏令营 DDL",
                     isOn: model.summerCampDeadlinesEnabled,
                     set: model.setSummerCampDeadlinesEnabled
@@ -422,12 +429,26 @@ struct SettingsView: View {
                     isOn: model.hackathonDeadlinesEnabled,
                     set: model.setHackathonDeadlinesEnabled
                 )
-                Text("天气、黄历和 DDL 来自第三方公开服务；学科竞赛同时包含北邮校内通知，各卡片底部会标明具体来源。")
+                Text("天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。")
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var referenceNotice: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.circle")
+                .foregroundStyle(AppTheme.primary)
+            Text("显示数据仅供参考，请以实际情况为准。\nDisplayed data is for reference only; please rely on the actual official information.")
+                .font(.callout)
+                .foregroundStyle(AppTheme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(AppTheme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("settings.reference-notice")
     }
 
     private func featureToggle(

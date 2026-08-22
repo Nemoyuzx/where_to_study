@@ -17,7 +17,7 @@ import { HolidayFetching, HolidayClient } from '../net/HolidayClient';
 import { CampusWeather, WeatherFetching, UAPIWeatherClient } from '../net/DailyInfoClient';
 import {
   AlmanacInfo, AssignmentDeadlineItem, CalendarDailyInfoClient, CalendarDailyInfoFetching,
-  PublicDeadlineItem, PublicDeadlineKind, PublicDeadlineSnapshot
+  PublicDeadlineItem, PublicDeadlineKind, PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../net/CalendarDailyInfoClient';
 import {
   AssignmentDeadlineFetching, UCloudAssignmentClient
@@ -178,6 +178,7 @@ export class AppModel {
   @Trace weatherEnabled: boolean = true;
   @Trace almanacEnabled: boolean = true;
   @Trace competitionDeadlinesEnabled: boolean = true;
+  @Trace schoolContestNoticesEnabled: boolean = true;
   @Trace summerCampDeadlinesEnabled: boolean = true;
   @Trace hackathonDeadlinesEnabled: boolean = true;
   @Trace campusID: string = '01';
@@ -613,6 +614,8 @@ export class AppModel {
       this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
       this.competitionDeadlinesEnabled = await this.preferences.getBool(
         'competitionDeadlinesEnabled', true);
+      this.schoolContestNoticesEnabled = await this.preferences.getBool(
+        'schoolContestNoticesEnabled', true);
       this.summerCampDeadlinesEnabled = await this.preferences.getBool(
         'summerCampDeadlinesEnabled', true);
       this.hackathonDeadlinesEnabled = await this.preferences.getBool(
@@ -782,6 +785,11 @@ export class AppModel {
     await this.preferences.setBool('competitionDeadlinesEnabled', value);
   }
 
+  async setSchoolContestNoticesEnabled(value: boolean): Promise<void> {
+    this.schoolContestNoticesEnabled = value;
+    await this.preferences.setBool('schoolContestNoticesEnabled', value);
+  }
+
   async setSummerCampDeadlinesEnabled(value: boolean): Promise<void> {
     this.summerCampDeadlinesEnabled = value;
     await this.preferences.setBool('summerCampDeadlinesEnabled', value);
@@ -793,11 +801,16 @@ export class AppModel {
   }
 
   hasEnabledPublicDeadlines(): boolean {
-    return this.competitionDeadlinesEnabled || this.summerCampDeadlinesEnabled ||
+    return this.competitionDeadlinesEnabled || this.schoolContestNoticesEnabled ||
+      this.summerCampDeadlinesEnabled ||
       this.hackathonDeadlinesEnabled;
   }
 
-  deadlineKindEnabled(kind: PublicDeadlineKind): boolean {
+  deadlineItemEnabled(item: PublicDeadlineItem): boolean {
+    if (item.source === PublicDeadlineSource.schoolNotice) {
+      return this.schoolContestNoticesEnabled;
+    }
+    const kind: PublicDeadlineKind = item.kind;
     if (kind === PublicDeadlineKind.competition) {
       return this.competitionDeadlinesEnabled;
     }
@@ -976,6 +989,7 @@ export class AppModel {
     await this.preferences.remove('weatherEnabled');
     await this.preferences.remove('almanacEnabled');
     await this.preferences.remove('competitionDeadlinesEnabled');
+    await this.preferences.remove('schoolContestNoticesEnabled');
     await this.preferences.remove('summerCampDeadlinesEnabled');
     await this.preferences.remove('hackathonDeadlinesEnabled');
     this.widgetShowsLocation = true;
@@ -984,6 +998,7 @@ export class AppModel {
     this.weatherEnabled = true;
     this.almanacEnabled = true;
     this.competitionDeadlinesEnabled = true;
+    this.schoolContestNoticesEnabled = true;
     this.summerCampDeadlinesEnabled = true;
     this.hackathonDeadlinesEnabled = true;
     this.campusID = '01';
@@ -1432,7 +1447,7 @@ export class AppModel {
         new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
       sample.set(date, new PublicDeadlineSnapshot(date, [new PublicDeadlineItem(
         'sample-competition', '全国大学生示例竞赛', PublicDeadlineKind.competition,
-        date + 'T23:59:00+08:00', '示例组委会', null)],
+        PublicDeadlineSource.contestDDL, date + 'T23:59:00+08:00', '示例组委会', null)],
       'https://nemoyuzx.github.io/contest-ddl/data/competitions.json', false));
       this.publicDeadlinesByDate = sample;
       return;

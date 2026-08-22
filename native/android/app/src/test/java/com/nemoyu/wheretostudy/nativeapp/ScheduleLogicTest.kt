@@ -602,6 +602,9 @@ class ScheduleLogicTest {
         assertFalse(TeachingCalendarLogic.canMoveMonthSheet(8f, -72f, 2f, 8))
         assertFalse(TeachingCalendarLogic.canMoveMonthSheet(64f, -72f, 1f, 8))
         assertFalse(TeachingCalendarLogic.canMoveMonthSheet(8f, -4f, 1f, 8))
+        assertTrue(TeachingCalendarLogic.routesMonthDragToDetails(2f, -72f))
+        assertFalse(TeachingCalendarLogic.routesMonthDragToDetails(2f, 72f))
+        assertFalse(TeachingCalendarLogic.routesMonthDragToDetails(1f, -72f))
     }
 
     @Test

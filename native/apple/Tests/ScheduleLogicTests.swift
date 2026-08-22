@@ -842,6 +842,27 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testRaisedMonthDetailsReceiveFurtherUpwardDrags() {
+        XCTAssertTrue(
+            TeachingCalendarLogic.routesMonthDragToDetails(
+                position: .detailRaised,
+                verticalTranslation: -24
+            )
+        )
+        XCTAssertFalse(
+            TeachingCalendarLogic.routesMonthDragToDetails(
+                position: .detailRaised,
+                verticalTranslation: 24
+            )
+        )
+        XCTAssertFalse(
+            TeachingCalendarLogic.routesMonthDragToDetails(
+                position: .collapsed,
+                verticalTranslation: -24
+            )
+        )
+    }
+
     func testLandscapeMonthPositionOnlySettlesAtTwoStops() {
         XCTAssertEqual(
             TeachingCalendarLogic.normalizedMonthPosition(

@@ -15,57 +15,57 @@ struct PrivacyPolicyView: View {
                         Text("WHERE TO STUDY")
                             .font(.caption.bold())
                             .foregroundStyle(AppTheme.secondaryText)
-                        Text("隐私声明")
+                        Text("隐私声明 / Privacy Policy")
                             .font(.largeTitle.bold())
                             .foregroundStyle(AppTheme.text)
                             .accessibilityIdentifier("screen.privacy-policy")
-                        Text("生效日期：2026 年 8 月 22 日")
+                        Text("生效日期 / Effective date: 2026-08-23")
                             .font(.callout)
                             .foregroundStyle(AppTheme.secondaryText)
                     }
 
-                    Text("Where To Study 是用于查看北邮个人课表和空教室的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。")
+                    Text("Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由学校运营，也不代表学校官方立场。\n\nWhere To Study is an independent, unofficial client for BUPT schedules, empty classrooms, and related study information. It is not operated by or affiliated with BUPT.")
                         .foregroundStyle(AppTheme.text)
 
                     privacySection(
-                        title: "账户与教务请求",
-                        body: "你输入的学号和密码保存在操作系统的受保护凭据存储中。应用在你手动获取课表或空教室时，会通过 HTTPS 将凭据发送到北邮教务服务 jwglweixin.bupt.edu.cn。保存有效凭据后，应用还可能在启动、回到前台，或平台允许的每日 07:00 左右后台任务中自动刷新当天空教室。项目维护者无法读取这些凭据。"
+                        title: "账户与教务请求 / Account and academic requests",
+                        body: "学号和密码保存在操作系统的受保护凭据存储中，仅在你请求课表、空教室或作业时按对应用途通过 HTTPS 使用。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。\n\nCredentials stay in protected OS storage and are used over HTTPS only for requested schedules, classrooms, or assignments. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password."
                     )
                     privacySection(
-                        title: "本地数据",
-                        body: "个人课表、空教室结果、校区和学期等设置会缓存在你的设备上，以减少重复请求。你可以在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室缓存、节假日缓存和提醒任务。"
+                        title: "本地数据 / Local data",
+                        body: "课表、空教室、校区、学期和功能开关缓存在设备上；受支持系统上的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Course widgets on supported systems read only a local schedule snapshot. “Clear local data” removes credentials, caches, preferences, and app-managed reminders."
                     )
                     privacySection(
-                        title: "节假日数据",
-                        body: "应用在启动、切换日历年份或缓存需要更新时，可能通过 unpkg 自动获取 holiday-calendar 数据集中的中国法定节假日和调休信息。请求只包含 CN 地区和年份，不包含你的凭据、课表或空教室数据。"
+                        title: "节假日数据 / Holiday data",
+                        body: "应用可能通过 unpkg 获取固定版本 holiday-calendar 的中国法定节假日和调休数据；Android 在已有权限时也可能读取系统节假日日历。请求仅含 CN 与年份。iOS 只依据权威休息日数据显示“休”，不会把所有节日名称都当作休息日。\n\nThe app may retrieve pinned holiday-calendar data through unpkg; Android may also read the OS holiday calendar when permitted. Requests contain only CN and year. iOS marks rest days only from authoritative rest-day data, not from every festival name."
                     )
                     privacySection(
-                        title: "天气、黄历与公开 DDL",
-                        body: "应用会通过 UAPI 获取所选校区所在行政区的今日、明日天气和所选日期的基础黄历，并可能通过 Timeless API 补充“宜/忌”。启用对应类别时，应用会从 Contest DDL 的 GitHub Pages 主源下载公开竞赛、夏令营与黑客松数据，并从固定的校内竞赛通知 API 补充北京邮电大学教学云平台公开通知中的截止节点；主源不可用时可能尝试固定的 HTTP 备用 API。固定 IP 请求只发送不含凭据、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。所有相关功能均可在设置中关闭。"
+                        title: "天气、黄历与公开活动 / Weather, almanac, and public events",
+                        body: "UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。各类别均有独立开关。固定 HTTP API 仅接收无凭据 GET，拒绝重定向且不含个人数据。所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, summer camps, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Each category has its own switch. Fixed HTTP APIs receive only credential-free GET requests with no personal data and reject redirects. Displayed data is for reference only."
                     )
                     privacySection(
-                        title: "云课堂作业",
-                        body: "查看日期详情中的课程作业时，应用会从系统安全存储临时读取已保存的教务账号和密码，仅通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存中的云课堂令牌并读取课程作业。应用不会读取浏览器 Cookie 或 token，不会把密码发送给 ucloud.bupt.edu.cn 或 apiucloud.bupt.edu.cn，也不会把认证票据、Cookie、令牌或作业写入磁盘；用于跨日期查询的全量结果最多复用 10 分钟，已显示结果只保留在当前进程内，并在切换账号或清除本地数据时失效。"
+                        title: "云课堂作业 / UCloud assignments",
+                        body: "应用仅把密码通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存令牌并从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\nThe password is submitted only to auth.bupt.edu.cn over HTTPS. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. The app reads no browser cookies, sends no password to UCloud APIs, persists no ticket, cookie, token, or assignment, and reuses results in memory for at most ten minutes."
                     )
                     privacySection(
-                        title: "系统日历与课程提醒",
-                        body: "只有在你主动操作并授予系统权限后，应用才会向系统日历写入课程或在本地安排课程摘要通知。应用只管理带有 Where To Study 标记的日历事件，相关数据不会上传给项目维护者。"
+                        title: "系统日历、通知与小组件 / Calendar, notifications, and widgets",
+                        body: "只有在你主动操作并授予权限后，应用才会写入系统日历或安排本地课程通知；只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供。相关数据不上传给维护者。\n\nCalendar writes and local course notifications require your action and permission, and only marked events are managed. Course widgets exist only on supported platforms. This data is not uploaded to the maintainer."
                     )
                     privacySection(
-                        title: "不收集的数据",
-                        body: "本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集位置、联系人、广告标识符或使用行为。北邮教务服务、节假日数据 CDN、UAPI、Timeless、GitHub Pages 与固定的活动及校内竞赛通知 API 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。"
+                        title: "不收集的数据与第三方元数据 / Data not collected and third-party metadata",
+                        body: "项目不运营应用后端，不含广告、分析或行为跟踪 SDK，也不收集 GPS、联系人、广告标识符、诊断或使用行为。所连接的第三方服务可能按各自政策处理 IP 和请求时间等普通网络元数据。\n\nThe project operates no app backend and collects no GPS, contacts, advertising identifiers, diagnostics, or usage behavior. Connected third parties may process ordinary network metadata such as IP address and request time under their own policies."
                     )
                     privacySection(
-                        title: "保留与删除",
-                        body: "凭据和缓存会保留在你的设备上，直到被替换、在设置中清除或随应用卸载移除。清除本地数据不会删除北邮教务服务持有的记录。"
+                        title: "保留与删除 / Retention and deletion",
+                        body: "凭据与缓存保留在设备上，直到被替换、清除或随卸载移除；清除本地数据不会删除学校或第三方持有的记录。\n\nCredentials and caches stay on your device until replaced, cleared, or removed with the app. Clearing local data does not delete records held by BUPT or third parties."
                     )
                     privacySection(
-                        title: "安全与联系",
-                        body: "隐私问题可以在 GitHub 提交不含敏感信息的讨论或 Issue。请勿在公开内容中提供账号、密码、令牌、个人课表或其他敏感数据。"
+                        title: "安全与联系 / Security and contact",
+                        body: "请按 SECURITY.md 报告安全问题；隐私问题可在 GitHub 提交不含敏感信息的 Issue。请勿公开账号、密码、令牌、个人课表或其他敏感数据。\n\nFollow SECURITY.md for security reports. Privacy questions may be opened as non-sensitive GitHub issues. Never publish accounts, passwords, tokens, personal schedules, or other sensitive data."
                     )
 
                     Link(destination: Self.githubURL) {
-                        Label("在 GitHub 查看项目与完整声明", systemImage: "arrow.up.right.square")
+                        Label("在 GitHub 查看完整声明 / Full policy on GitHub", systemImage: "arrow.up.right.square")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)

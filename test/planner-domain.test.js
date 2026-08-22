@@ -200,12 +200,18 @@ test('saved settings never hydrate a password into web state', () => {
     campus_id: '04',
     default_min_seats: 30,
     daily_course_notifications_enabled: true,
+    competition_deadlines_enabled: false,
+    school_contest_notices_enabled: true,
   })
 
   assert.equal(state.password, '')
   assert.equal(state.hasSavedPassword, true)
   assert.equal(state.dailyCourseNotificationsEnabled, true)
+  assert.equal(state.competitionDeadlinesEnabled, false)
+  assert.equal(state.schoolContestNoticesEnabled, true)
   assert.equal(settingsToPayload(state).daily_course_notifications_enabled, true)
+  assert.equal(settingsToPayload(state).competition_deadlines_enabled, false)
+  assert.equal(settingsToPayload(state).school_contest_notices_enabled, true)
   assert.equal(accountHasSavedPassword(' student ', { account: 'student', hasSavedPassword: true }), true)
 })
 

@@ -181,12 +181,18 @@ object TeachingCalendarLogic {
         if (verticalDistance < thresholdDp || verticalDistance <= horizontalDistance * 1.2f) {
             return false
         }
+        if (routesMonthDragToDetails(currentPosition, deltaYDp)) {
+            return false
+        }
         return when {
             deltaYDp < 0f -> currentPosition < monthSheetWeekPosition
             deltaYDp > 0f -> currentPosition > monthSheetExpandedPosition
             else -> false
         }
     }
+
+    fun routesMonthDragToDetails(currentPosition: Float, deltaYDp: Float): Boolean =
+        currentPosition >= monthSheetWeekPosition && deltaYDp < 0f
 
     fun monthCellHeightDp(expanded: Boolean): Int = if (expanded) 82 else 46
 
@@ -1502,8 +1508,12 @@ internal class TeachingCalendarPage(
             id = R.id.calendar_month_selected_details
             visibility = if (renderedMonthSheetPosition <= 0.01f) View.GONE else View.VISIBLE
             isFillViewport = false
+            isNestedScrollingEnabled = true
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             clipToPadding = false
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+            setPadding(0, 0, 0, activity.dp(24))
             addView(monthSelectedDetails(selectedDate))
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -2230,7 +2240,7 @@ internal class TeachingCalendarPage(
             else -> addView(statusText("当天没有已收录的活动截止事项"))
         }
         addView(thirdPartyFooter(
-            "第三方来源",
+            "第三方来源 · 校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考",
             listOf(
                 "主数据：Contest DDL" to CalendarDailyInfoSources.deadlinePrimaryPage,
                 "备用 API" to CalendarDailyInfoSources.deadlineBackup,
@@ -2308,7 +2318,8 @@ internal class TeachingCalendarPage(
                     ellipsize = TextUtils.TruncateAt.END
                 })
                 addView(TextView(activity).apply {
-                    text = listOfNotNull(item.kind.title, item.organizer).joinToString(" · ")
+                    text = listOfNotNull(deadlineCategoryTitle(item), item.organizer)
+                        .joinToString(" · ")
                     textSize = 11f
                     setTextColor(Palette.muted)
                     setPadding(0, activity.dp(2), 0, 0)
@@ -2354,11 +2365,19 @@ internal class TeachingCalendarPage(
         })
     }
 
-    private fun deadlineIsEnabled(item: PublicDeadlineItem): Boolean = when (item.kind) {
-        PublicDeadlineKind.COMPETITION -> preferences.competitionDeadlinesEnabled
-        PublicDeadlineKind.SUMMER_CAMP -> preferences.summerCampDeadlinesEnabled
-        PublicDeadlineKind.HACKATHON -> preferences.hackathonDeadlinesEnabled
+    private fun deadlineIsEnabled(item: PublicDeadlineItem): Boolean {
+        if (item.source == PublicDeadlineSource.SCHOOL_NOTICE) {
+            return preferences.schoolContestNoticesEnabled
+        }
+        return when (item.kind) {
+            PublicDeadlineKind.COMPETITION -> preferences.competitionDeadlinesEnabled
+            PublicDeadlineKind.SUMMER_CAMP -> preferences.summerCampDeadlinesEnabled
+            PublicDeadlineKind.HACKATHON -> preferences.hackathonDeadlinesEnabled
+        }
     }
+
+    private fun deadlineCategoryTitle(item: PublicDeadlineItem): String =
+        if (item.source == PublicDeadlineSource.SCHOOL_NOTICE) item.source.title else item.kind.title
 
     private fun deadlineTime(value: String): String =
         if (value.length >= 16) value.substring(11, 16) else value

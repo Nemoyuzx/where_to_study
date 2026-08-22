@@ -5,7 +5,7 @@ import { DateParts, StrictDates } from '../../common/StrictDates';
 import { AppModel } from '../../model/AppModel';
 import {
   AlmanacInfo, AssignmentDeadlineItem, CalendarDailyInfoSources, PublicDeadlineItem,
-  PublicDeadlineKindInfo, PublicDeadlineSnapshot
+  PublicDeadlineKindInfo, PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../../net/CalendarDailyInfoClient';
 import { AppContext } from '../../store/AppContext';
 
@@ -24,6 +24,7 @@ export struct CalendarDailyInfoCards {
   }
 
   @Monitor('model.almanacEnabled', 'model.competitionDeadlinesEnabled',
+    'model.schoolContestNoticesEnabled',
     'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled')
   onFeatureChange(monitor: IMonitor): void {
     this.ensureData();
@@ -64,7 +65,7 @@ export struct CalendarDailyInfoCards {
     }
     const result: PublicDeadlineItem[] = [];
     for (const item of snapshot.items) {
-      if (this.model.deadlineKindEnabled(item.kind)) {
+      if (this.model.deadlineItemEnabled(item)) {
         result.push(item);
       }
     }
@@ -323,6 +324,11 @@ export struct CalendarDailyInfoCards {
           })
       }
       .width('100%')
+      Text('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。')
+        .fontSize(11)
+        .fontColor(AppTheme.secondaryText())
+        .lineHeight(16)
+        .width('100%')
     }
     .padding(14)
     .width('100%')
@@ -335,7 +341,8 @@ export struct CalendarDailyInfoCards {
   @Builder
   publicDeadlineRow(item: PublicDeadlineItem) {
     Row({ space: 9 }) {
-      Text(PublicDeadlineKindInfo.title(item.kind))
+      Text(item.source === PublicDeadlineSource.schoolNotice ?
+        '校内竞赛通知' : PublicDeadlineKindInfo.title(item.kind))
         .fontSize(10)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.onPrimary())

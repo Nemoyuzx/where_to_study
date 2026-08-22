@@ -1,6 +1,23 @@
-# 历史 App Store Build 25 截图清单（已停用）
+# App Store 0.2.2 Build 51 截图清单
 
-来源版本：`0.1.3 (25)`。本清单只追踪历史截图规格和完整性校验值；PNG 文件保存在被 Git 忽略的本地目录 `release-artifacts/app-store/0.1.3-25/screenshots/final/`。这些截图不得用于当前 iOS 或 macOS `0.2.1 (50)` 提交；对应平台的新截图完成后必须替换本清单。
+来源版本：`0.2.2 (51)`。以下效果图由本地 Xcode 在 iPad Pro 13-inch 模拟器中运行审核示例模式并通过专项 UI 测试后生成，均为横屏 `2752 × 2064`、无 Alpha；仓库副本位于 `docs/screenshots/ipad-13-landscape/`。
+
+| 平台 | 文件 | 像素尺寸 | Alpha | SHA-256 |
+| --- | --- | --- | --- | --- |
+| iPad 13-inch | `planner-weather.png` | `2752 × 2064` | 无 | `0b835c686509ef4bf1c44dc9d2fc099b2c8c495f67f4f87bb322ada20d6a1c3b` |
+| iPad 13-inch | `teaching-calendar.png` | `2752 × 2064` | 无 | `60f61afa04971149243c8aa595ecd776839d3c216e47bfc40fea5d94ff2fb38f` |
+| iPad 13-inch | `settings.png` | `2752 × 2064` | 无 | `f82f7d280dcca9a43dbc9f3ecdddfc2e2325974a19b0f31a57404460727d05eb` |
+| iPad 13-inch | `privacy.png` | `2752 × 2064` | 无 | `8e5bfd09016ee8bf68ead3c13f957f85fcdfcdb578e7ec605b3d7912becfb04a` |
+
+## 0.2.2 验证记录
+
+- 专项测试：`PrimaryNavigationSmokeTests.testStoreIPad13LandscapeScreenshots`，结果为 1/1 通过。
+- 已逐张检查方向、尺寸、天气折叠卡片、月历日期详情、竞赛开关拆分、双语参考提示和双语隐私声明。
+- 截图只包含内置审核示例数据，不包含真实账号、密码、课程或其他个人信息。
+
+## 历史 App Store Build 25 截图清单（已停用）
+
+来源版本：`0.1.3 (25)`。本清单只追踪历史截图规格和完整性校验值；PNG 文件保存在被 Git 忽略的本地目录 `release-artifacts/app-store/0.1.3-25/screenshots/final/`。这些截图不得用于当前 iOS 或 macOS `0.2.2 (51)` 提交；当前可用素材以本页顶部的 0.2.2 清单为准。
 
 | 平台 | 文件 | 像素尺寸 | Alpha | SHA-256 |
 | --- | --- | --- | --- | --- |

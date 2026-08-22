@@ -171,6 +171,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var weatherEnabled: Bool
     @Published private(set) var almanacEnabled: Bool
     @Published private(set) var competitionDeadlinesEnabled: Bool
+    @Published private(set) var schoolContestNoticesEnabled: Bool
     @Published private(set) var summerCampDeadlinesEnabled: Bool
     @Published private(set) var hackathonDeadlinesEnabled: Bool
 
@@ -246,6 +247,9 @@ final class AppModel: ObservableObject {
         almanacEnabled = defaults.object(forKey: Self.almanacEnabledKey) as? Bool ?? true
         competitionDeadlinesEnabled = defaults.object(
             forKey: Self.competitionDeadlinesEnabledKey
+        ) as? Bool ?? true
+        schoolContestNoticesEnabled = defaults.object(
+            forKey: Self.schoolContestNoticesEnabledKey
         ) as? Bool ?? true
         summerCampDeadlinesEnabled = defaults.object(
             forKey: Self.summerCampDeadlinesEnabledKey
@@ -593,6 +597,12 @@ final class AppModel: ObservableObject {
         defaults.set(enabled, forKey: Self.competitionDeadlinesEnabledKey)
     }
 
+    func setSchoolContestNoticesEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        schoolContestNoticesEnabled = enabled
+        defaults.set(enabled, forKey: Self.schoolContestNoticesEnabledKey)
+    }
+
     func setSummerCampDeadlinesEnabled(_ enabled: Bool) {
         guard !isSampleMode else { return }
         summerCampDeadlinesEnabled = enabled
@@ -606,7 +616,8 @@ final class AppModel: ObservableObject {
     }
 
     var hasEnabledPublicDeadlines: Bool {
-        competitionDeadlinesEnabled || summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
+        competitionDeadlinesEnabled || schoolContestNoticesEnabled
+            || summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
     }
 
     func refreshDailyCourseNotificationAuthorization() {
@@ -672,6 +683,7 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: Self.weatherEnabledKey)
         defaults.removeObject(forKey: Self.almanacEnabledKey)
         defaults.removeObject(forKey: Self.competitionDeadlinesEnabledKey)
+        defaults.removeObject(forKey: Self.schoolContestNoticesEnabledKey)
         defaults.removeObject(forKey: Self.summerCampDeadlinesEnabledKey)
         defaults.removeObject(forKey: Self.hackathonDeadlinesEnabledKey)
         campusID = "01"
@@ -685,6 +697,7 @@ final class AppModel: ObservableObject {
         weatherEnabled = true
         almanacEnabled = true
         competitionDeadlinesEnabled = true
+        schoolContestNoticesEnabled = true
         summerCampDeadlinesEnabled = true
         hackathonDeadlinesEnabled = true
         selectedBuildings.removeAll()
@@ -1159,6 +1172,7 @@ final class AppModel: ObservableObject {
     private static let weatherEnabledKey = "weatherEnabled"
     private static let almanacEnabledKey = "almanacEnabled"
     private static let competitionDeadlinesEnabledKey = "competitionDeadlinesEnabled"
+    private static let schoolContestNoticesEnabledKey = "schoolContestNoticesEnabled"
     private static let summerCampDeadlinesEnabledKey = "summerCampDeadlinesEnabled"
     private static let hackathonDeadlinesEnabledKey = "hackathonDeadlinesEnabled"
 }

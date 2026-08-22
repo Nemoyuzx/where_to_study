@@ -275,6 +275,19 @@ h2 {
   width: 100%;
 }
 
+.settings-reference-notice {
+  display: grid;
+  gap: 4px;
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+}
+
+.settings-reference-notice span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .control-panel,
 .main-grid {
   display: flex;

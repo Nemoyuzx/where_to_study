@@ -22,10 +22,23 @@ enum PublicDeadlineKind: String, CaseIterable, Sendable {
     }
 }
 
+enum PublicDeadlineSource: String, Sendable {
+    case contestDDL = "contest_ddl"
+    case schoolNotice = "school_notice"
+
+    var title: String {
+        switch self {
+        case .contestDDL: "Contest DDL"
+        case .schoolNotice: "校内竞赛通知"
+        }
+    }
+}
+
 struct PublicDeadlineItem: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     let kind: PublicDeadlineKind
+    let source: PublicDeadlineSource
     let deadline: String
     let organizer: String?
     let officialURL: URL?
@@ -201,6 +214,7 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
                 id: id,
                 name: name,
                 kind: kind,
+                source: .contestDDL,
                 deadline: deadline,
                 organizer: string(record, keys: ["organizer", "host"]),
                 officialURL: officialURL
@@ -254,6 +268,7 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
                     id: "school:\(id):\(index)",
                     name: name,
                     kind: .competition,
+                    source: .schoolNotice,
                     deadline: deadline,
                     organizer: "\(source) · \(label)",
                     officialURL: officialURL
@@ -272,6 +287,7 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         var result = [PublicDeadlineItem]()
         for item in groups.flatMap({ $0 }) {
             let key = [
+                item.source.rawValue,
                 item.kind.rawValue,
                 item.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
                 item.deadline
@@ -988,6 +1004,7 @@ final class CalendarDeadlineStore: ObservableObject {
                         id: "sample-competition",
                         name: "全国大学生示例竞赛",
                         kind: .competition,
+                        source: .contestDDL,
                         deadline: "\(date)T23:59:00+08:00",
                         organizer: "示例组委会",
                         officialURL: nil
