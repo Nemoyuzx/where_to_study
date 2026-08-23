@@ -1,6 +1,6 @@
 # App Store 简体中文元数据
 
-适用版本：iOS 与 macOS `0.2.2 (52)`。iOS 与 macOS 使用同一个 App Store Connect App 记录，以下文案可直接填写到两个平台的简体中文本地化中；平台特有功能只写入对应平台的描述。
+适用版本：iOS `0.2.2 (55)`、macOS `0.2.2 (52)`。iOS 与 macOS 使用同一个 App Store Connect App 记录，以下文案可直接填写到两个平台的简体中文本地化中；平台特有功能只写入对应平台的描述。
 
 ## App 信息
 

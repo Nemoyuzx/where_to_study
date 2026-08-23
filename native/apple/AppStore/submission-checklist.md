@@ -31,7 +31,7 @@
 ./scripts/native-apple-app-store.sh preflight all
 
 export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
-export APPLE_BUILD_NUMBER=52
+export APPLE_BUILD_NUMBER=55
 
 # 本机需安装 Apple Distribution、Mac Installer Distribution 证书，以及以下
 # 四个默认名称的 App Store 描述文件。名称不同时可用对应环境变量覆盖：
@@ -83,8 +83,8 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Distribution、Mac Installer Distribution 证书与 macOS 发布描述文件；iOS 主应用和 Widget 使用 Xcode 自动签名完成正式归档。证书私钥和团队标识不写入仓库。
-- `0.2.2 (52)` 已完成本地 Xcode 的 macOS/iOS 编译、逻辑测试和 iPhone UI 回归；2026-08-23 两个平台的上传任务均收到 Xcode `EXPORT SUCCEEDED`，现已进入 App Store Connect / TestFlight processing。
-- `0.2.2 (51)` 是 CI 发现低速月历拖动回弹问题前上传的旧构建，已由 Build 52 取代；TestFlight 分组与后续审核只选择 Build 52。
+- macOS `0.2.2 (52)` 已完成正式签名上传；iOS `0.2.2 (55)` 已完成本地 Xcode 编译、逻辑测试、iPhone UI 回归与正式签名上传，2026-08-23 收到 Xcode `Upload succeeded` 和 `EXPORT SUCCEEDED`，现已进入 App Store Connect / TestFlight processing。
+- iOS Build 53 在上传前由 App Store Connect 拒绝，因为线上已存在 Build 54；Build 55 随后上传成功。TestFlight 分组与后续审核对 iOS 选择 Build 55，对 macOS 选择 Build 52。
 - 13 英寸 iPad 横屏四张 0.2.2 效果图已由专项 Xcode UI 测试生成并写入 `screenshot-manifest.md`；Build 25 素材只保留作历史校验。正式提交仍需按 `screenshot-plan.md` 补齐产品页所需的 iPhone 与 macOS 最新截图。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
 
@@ -95,7 +95,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 核实北邮服务对账号、密码、课程和教室请求的实际保留行为，再决定 App Privacy 是否可以回答“不收集数据”。
 - 填写真实版权主体、App Review 联系人姓名/电话/邮箱，并确认支持 URL 提供用户可用的联系方式。
 - 完成年龄分级、欧盟 DSA 身份、价格、税务类别、销售地区和中国大陆 ICP 状态；没有有效 ICP 时不要勾选中国大陆销售地区。
-- App Store Connect 处理完成后，将 iOS 与 macOS build 52 加入内部 TestFlight 群组并在真机验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
+- App Store Connect 处理完成后，将 iOS build 55 与 macOS build 52 加入内部 TestFlight 群组，并在真机验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
 - 使用对应平台的最新构建重新生成并上传商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择最新构建提交审核。
 
 ## Apple 官方核对入口
