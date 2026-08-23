@@ -231,6 +231,10 @@ export class PublicDeadlineResponseParser {
     if (StrictDates.parseDateString(requestedDate) === null) {
       throw new CalendarDailyInfoError('DDL 日期格式不正确。');
     }
+    return PublicDeadlineResponseParser.parseIndex(payload).get(requestedDate) ?? [];
+  }
+
+  static parseIndex(payload: string): Map<string, PublicDeadlineItem[]> {
     let root: Object;
     try {
       root = JSON.parse(payload) as Object;
@@ -238,7 +242,7 @@ export class PublicDeadlineResponseParser {
       throw new CalendarDailyInfoError('DDL 数据格式不正确。');
     }
     const records: Object[] = PublicDeadlineResponseParser.extractRecords(root);
-    const result: PublicDeadlineItem[] = [];
+    const indexed: Map<string, PublicDeadlineItem[]> = new Map<string, PublicDeadlineItem[]>();
     for (const raw of records) {
       const record: Record<string, Object> = JsonUtil.record(raw);
       const kindValue: string | null = CalendarResponseValues.firstString(
@@ -251,34 +255,41 @@ export class PublicDeadlineResponseParser {
       const deadline: string | null = CalendarResponseValues.firstString(
         record, ['primary_deadline', 'primaryDeadline', 'deadline', 'end_time']);
       if (kind === null || id === null || name === null || deadline === null ||
-        !deadline.startsWith(requestedDate) ||
         !PublicDeadlineResponseParser.rfc3339.test(deadline)) {
+        continue;
+      }
+      const date: string = deadline.substring(0, 10);
+      if (StrictDates.parseDateString(date) === null) {
+        continue;
+      }
+      const items: PublicDeadlineItem[] = indexed.get(date) ?? [];
+      if (items.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
         continue;
       }
       const rawURL: string | null = CalendarResponseValues.firstString(
         record, ['official_url', 'officialUrl', 'url']);
       const officialURL: string | null = rawURL !== null &&
         PublicDeadlineResponseParser.isTrustedOfficialURL(rawURL) ? rawURL : null;
-      result.push(new PublicDeadlineItem(
+      items.push(new PublicDeadlineItem(
         id, name, kind, PublicDeadlineSource.contestDDL, deadline,
         CalendarResponseValues.firstString(record, ['organizer', 'host']), officialURL));
-      if (result.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
-        break;
-      }
+      indexed.set(date, items);
     }
-    result.sort((lhs: PublicDeadlineItem, rhs: PublicDeadlineItem): number => {
-      if (lhs.deadline !== rhs.deadline) {
-        return lhs.deadline < rhs.deadline ? -1 : 1;
-      }
-      return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
+    indexed.forEach((items: PublicDeadlineItem[], date: string): void => {
+      PublicDeadlineResponseParser.sortItems(items);
+      indexed.set(date, items);
     });
-    return result;
+    return indexed;
   }
 
   static parseSchoolNotices(payload: string, requestedDate: string): PublicDeadlineItem[] {
     if (StrictDates.parseDateString(requestedDate) === null) {
       throw new CalendarDailyInfoError('DDL 日期格式不正确。');
     }
+    return PublicDeadlineResponseParser.parseSchoolNoticesIndex(payload).get(requestedDate) ?? [];
+  }
+
+  static parseSchoolNoticesIndex(payload: string): Map<string, PublicDeadlineItem[]> {
     let root: Object;
     try {
       root = JSON.parse(payload) as Object;
@@ -287,7 +298,7 @@ export class PublicDeadlineResponseParser {
     }
     const source: Record<string, Object> = JsonUtil.record(root);
     const records: Object[] = JsonUtil.array(source['items']);
-    const result: PublicDeadlineItem[] = [];
+    const indexed: Map<string, PublicDeadlineItem[]> = new Map<string, PublicDeadlineItem[]>();
     for (const raw of records) {
       const record: Record<string, Object> = JsonUtil.record(raw);
       const id: string | null = CalendarResponseValues.firstString(record, ['id', 'source_id']);
@@ -315,30 +326,39 @@ export class PublicDeadlineResponseParser {
       for (let index: number = 0; index < deadlines.length; index += 1) {
         const deadlineRecord: Record<string, Object> = JsonUtil.record(deadlines[index]);
         const deadline: string | null = CalendarResponseValues.firstString(deadlineRecord, ['date']);
-        if (deadline === null || !deadline.startsWith(requestedDate) ||
-          !PublicDeadlineResponseParser.rfc3339.test(deadline)) {
+        if (deadline === null || !PublicDeadlineResponseParser.rfc3339.test(deadline)) {
+          continue;
+        }
+        const date: string = deadline.substring(0, 10);
+        if (StrictDates.parseDateString(date) === null) {
+          continue;
+        }
+        const items: PublicDeadlineItem[] = indexed.get(date) ?? [];
+        if (items.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
           continue;
         }
         const label: string = CalendarResponseValues.firstString(deadlineRecord, ['label']) ??
           '截止时间';
-        result.push(new PublicDeadlineItem(
+        items.push(new PublicDeadlineItem(
           'school:' + id + ':' + index.toString(), name, PublicDeadlineKind.competition,
           PublicDeadlineSource.schoolNotice, deadline, sourceName + ' · ' + label, officialURL));
-        if (result.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
-          break;
-        }
-      }
-      if (result.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
-        break;
+        indexed.set(date, items);
       }
     }
-    result.sort((lhs: PublicDeadlineItem, rhs: PublicDeadlineItem): number => {
+    indexed.forEach((items: PublicDeadlineItem[], date: string): void => {
+      PublicDeadlineResponseParser.sortItems(items);
+      indexed.set(date, items);
+    });
+    return indexed;
+  }
+
+  private static sortItems(items: PublicDeadlineItem[]): void {
+    items.sort((lhs: PublicDeadlineItem, rhs: PublicDeadlineItem): number => {
       if (lhs.deadline !== rhs.deadline) {
         return lhs.deadline < rhs.deadline ? -1 : 1;
       }
       return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
     });
-    return result;
   }
 
   static merge(groups: PublicDeadlineItem[][]): PublicDeadlineItem[] {
@@ -489,6 +509,7 @@ export class AssignmentDeadlineResponseParser {
 export interface CalendarDailyInfoFetching {
   fetchAlmanac(date: string): Promise<AlmanacInfo>;
   fetchDeadlines(date: string): Promise<PublicDeadlineSnapshot>;
+  prewarmDeadlines(date: string, forceRemote?: boolean): Promise<PublicDeadlineSnapshot>;
 }
 
 export interface FixedPublicJsonFetching {
@@ -501,43 +522,54 @@ class DefaultPublicJsonTransport implements FixedPublicJsonFetching {
   }
 }
 
-class DeadlinePayloadBundle {
-  readonly contestPayload: string | null;
+class DeadlineIndexBundle {
+  readonly contestItemsByDate: Map<string, PublicDeadlineItem[]> | null;
   readonly contestSource: string;
   readonly usedBackup: boolean;
   readonly contestError: string | null;
-  readonly schoolPayload: string | null;
+  readonly schoolItemsByDate: Map<string, PublicDeadlineItem[]> | null;
   readonly schoolError: string | null;
 
-  constructor(contestPayload: string | null, contestSource: string, usedBackup: boolean,
-    contestError: string | null, schoolPayload: string | null, schoolError: string | null) {
-    this.contestPayload = contestPayload;
+  constructor(contestItemsByDate: Map<string, PublicDeadlineItem[]> | null,
+    contestSource: string, usedBackup: boolean, contestError: string | null,
+    schoolItemsByDate: Map<string, PublicDeadlineItem[]> | null, schoolError: string | null) {
+    this.contestItemsByDate = contestItemsByDate;
     this.contestSource = contestSource;
     this.usedBackup = usedBackup;
     this.contestError = contestError;
-    this.schoolPayload = schoolPayload;
+    this.schoolItemsByDate = schoolItemsByDate;
     this.schoolError = schoolError;
   }
 }
 
-class DeadlinePayloadCache {
+class DeadlineIndexCache {
   readonly fetchedAt: number;
-  readonly bundle: DeadlinePayloadBundle;
+  readonly bundle: DeadlineIndexBundle;
 
-  constructor(fetchedAt: number, bundle: DeadlinePayloadBundle) {
+  constructor(fetchedAt: number, bundle: DeadlineIndexBundle) {
     this.fetchedAt = fetchedAt;
     this.bundle = bundle;
   }
 }
 
 export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
-  private static readonly deadlineCacheLifetimeMs: number = 10 * 60 * 1000;
-  private deadlinePayloadCache: DeadlinePayloadCache | null = null;
-  private deadlinePayloadInFlight: Promise<DeadlinePayloadBundle> | null = null;
+  private static readonly deadlineCacheLifetimeMs: number = 5 * 60 * 1000;
+  private deadlineIndexCache: DeadlineIndexCache | null = null;
+  private deadlineIndexInFlight: Promise<DeadlineIndexBundle> | null = null;
   private readonly transport: FixedPublicJsonFetching;
+  private readonly parseContestIndex: (payload: string) => Map<string, PublicDeadlineItem[]>;
+  private readonly parseSchoolIndex: (payload: string) => Map<string, PublicDeadlineItem[]>;
 
-  constructor(transport: FixedPublicJsonFetching = new DefaultPublicJsonTransport()) {
+  constructor(transport: FixedPublicJsonFetching = new DefaultPublicJsonTransport(),
+    parseContestIndex: (payload: string) => Map<string, PublicDeadlineItem[]> =
+      (payload: string): Map<string, PublicDeadlineItem[]> =>
+        PublicDeadlineResponseParser.parseIndex(payload),
+    parseSchoolIndex: (payload: string) => Map<string, PublicDeadlineItem[]> =
+      (payload: string): Map<string, PublicDeadlineItem[]> =>
+        PublicDeadlineResponseParser.parseSchoolNoticesIndex(payload)) {
     this.transport = transport;
+    this.parseContestIndex = parseContestIndex;
+    this.parseSchoolIndex = parseSchoolIndex;
   }
 
   async fetchAlmanac(date: string): Promise<AlmanacInfo> {
@@ -568,11 +600,23 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     if (StrictDates.parseDateString(date) === null) {
       throw new CalendarDailyInfoError('DDL 日期格式不正确。');
     }
-    const bundle: DeadlinePayloadBundle = await this.deadlinePayloads(date);
-    const contestItems: PublicDeadlineItem[] | null = bundle.contestPayload === null ? null :
-      PublicDeadlineResponseParser.parse(bundle.contestPayload, date);
-    const schoolItems: PublicDeadlineItem[] | null = bundle.schoolPayload === null ? null :
-      PublicDeadlineResponseParser.parseSchoolNotices(bundle.schoolPayload, date);
+    const bundle: DeadlineIndexBundle = await this.deadlineIndexes(false, false);
+    return this.snapshotFromBundle(date, bundle);
+  }
+
+  async prewarmDeadlines(date: string, forceRemote: boolean = false): Promise<PublicDeadlineSnapshot> {
+    if (StrictDates.parseDateString(date) === null) {
+      throw new CalendarDailyInfoError('DDL 日期格式不正确。');
+    }
+    const bundle: DeadlineIndexBundle = await this.deadlineIndexes(forceRemote, true);
+    return this.snapshotFromBundle(date, bundle);
+  }
+
+  private snapshotFromBundle(date: string, bundle: DeadlineIndexBundle): PublicDeadlineSnapshot {
+    const contestItems: PublicDeadlineItem[] | null = bundle.contestItemsByDate === null ? null :
+      (bundle.contestItemsByDate.get(date) ?? []);
+    const schoolItems: PublicDeadlineItem[] | null = bundle.schoolItemsByDate === null ? null :
+      (bundle.schoolItemsByDate.get(date) ?? []);
     if (contestItems === null && schoolItems === null) {
       throw new CalendarDailyInfoError(
         '公开活动 DDL 不可用（' + (bundle.contestError ?? '未知错误') +
@@ -591,30 +635,32 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
       bundle.contestSource, bundle.usedBackup);
   }
 
-  private async deadlinePayloads(validationDate: string): Promise<DeadlinePayloadBundle> {
+  private async deadlineIndexes(forceRemote: boolean,
+    refreshStaleCache: boolean): Promise<DeadlineIndexBundle> {
     const now: number = Date.now();
-    if (this.deadlinePayloadCache !== null &&
-      now - this.deadlinePayloadCache.fetchedAt < CalendarDailyInfoClient.deadlineCacheLifetimeMs) {
-      return this.deadlinePayloadCache.bundle;
+    if (!forceRemote && this.deadlineIndexCache !== null &&
+      (!refreshStaleCache ||
+        now - this.deadlineIndexCache.fetchedAt < CalendarDailyInfoClient.deadlineCacheLifetimeMs)) {
+      return this.deadlineIndexCache.bundle;
     }
-    if (this.deadlinePayloadInFlight !== null) {
-      return await this.deadlinePayloadInFlight;
+    if (this.deadlineIndexInFlight !== null) {
+      return await this.deadlineIndexInFlight;
     }
-    const work: Promise<DeadlinePayloadBundle> = this.fetchDeadlinePayloads(validationDate);
-    this.deadlinePayloadInFlight = work;
+    const work: Promise<DeadlineIndexBundle> = this.fetchDeadlineIndexes();
+    this.deadlineIndexInFlight = work;
     try {
-      const result: DeadlinePayloadBundle = await work;
-      this.deadlinePayloadCache = new DeadlinePayloadCache(Date.now(), result);
+      const result: DeadlineIndexBundle = await work;
+      this.deadlineIndexCache = new DeadlineIndexCache(Date.now(), result);
       return result;
     } finally {
-      if (this.deadlinePayloadInFlight === work) {
-        this.deadlinePayloadInFlight = null;
+      if (this.deadlineIndexInFlight === work) {
+        this.deadlineIndexInFlight = null;
       }
     }
   }
 
-  private async fetchDeadlinePayloads(validationDate: string): Promise<DeadlinePayloadBundle> {
-    let contestPayload: string | null = null;
+  private async fetchDeadlineIndexes(): Promise<DeadlineIndexBundle> {
+    let contestItemsByDate: Map<string, PublicDeadlineItem[]> | null = null;
     let contestSource: string = CalendarDailyInfoSources.deadlinePrimary;
     let usedBackup: boolean = false;
     let contestError: string | null = null;
@@ -622,15 +668,13 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
       const payload: string = await this.transport.fetch(
         CalendarDailyInfoSources.deadlinePrimary, 'https', 'nemoyuzx.github.io',
         CalendarDailyInfoSources.deadlinePayloadLimit);
-      PublicDeadlineResponseParser.parse(payload, validationDate);
-      contestPayload = payload;
+      contestItemsByDate = this.parseContestIndex(payload);
     } catch (primaryError) {
       try {
         const payload: string = await this.transport.fetch(
           CalendarDailyInfoSources.deadlineBackup, 'http', '101.201.29.29',
           CalendarDailyInfoSources.deadlinePayloadLimit);
-        PublicDeadlineResponseParser.parse(payload, validationDate);
-        contestPayload = payload;
+        contestItemsByDate = this.parseContestIndex(payload);
         contestSource = CalendarDailyInfoSources.deadlineBackup;
         usedBackup = true;
       } catch (backupError) {
@@ -640,24 +684,23 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
           backupMessage + '）。';
       }
     }
-    let schoolPayload: string | null = null;
+    let schoolItemsByDate: Map<string, PublicDeadlineItem[]> | null = null;
     let schoolError: string | null = null;
     try {
       const payload: string = await this.transport.fetch(
         CalendarDailyInfoSources.schoolContestNotices, 'http', '101.201.29.29',
         CalendarDailyInfoSources.deadlinePayloadLimit);
-      PublicDeadlineResponseParser.parseSchoolNotices(payload, validationDate);
-      schoolPayload = payload;
+      schoolItemsByDate = this.parseSchoolIndex(payload);
     } catch (error) {
       schoolError = error instanceof Error ? error.message : '未知错误';
     }
-    if (contestPayload === null && schoolPayload === null) {
+    if (contestItemsByDate === null && schoolItemsByDate === null) {
       throw new CalendarDailyInfoError(
         '公开活动 DDL 不可用（' + (contestError ?? '未知错误') + '）；校内竞赛通知也不可用（' +
           (schoolError ?? '未知错误') + '）。');
     }
-    return new DeadlinePayloadBundle(
-      contestPayload, contestSource, usedBackup, contestError, schoolPayload, schoolError);
+    return new DeadlineIndexBundle(
+      contestItemsByDate, contestSource, usedBackup, contestError, schoolItemsByDate, schoolError);
   }
 }
 

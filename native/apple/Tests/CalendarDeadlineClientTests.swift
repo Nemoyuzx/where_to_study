@@ -94,6 +94,61 @@ final class CalendarDeadlineClientTests: XCTestCase {
     }
 
     @MainActor
+    func testRepeatedStartupPrewarmLoadsFullFeedOnlyOnce() async {
+        let recorder = PublicFullFeedRecorder(feed: loadedPublicDeadlineFeed())
+        let client = PublicDeadlineClient(feedLoader: { try await recorder.load() })
+        let store = CalendarDeadlineStore(client: client)
+
+        let firstStartupTask = Task { @MainActor in
+            await store.prewarmPublicIfNeeded(
+                publicDeadlinesEnabled: true,
+                sampleMode: false
+            )
+        }
+        let repeatedStartupTask = Task { @MainActor in
+            await store.prewarmPublicIfNeeded(
+                publicDeadlinesEnabled: true,
+                sampleMode: false
+            )
+        }
+        await firstStartupTask.value
+        await repeatedStartupTask.value
+
+        let invocationCount = await recorder.invocationCount
+        XCTAssertEqual(invocationCount, 1)
+        XCTAssertEqual(
+            store.publicByDate["2026-08-22"]?.items.map(\.id),
+            ["contest-august"]
+        )
+        XCTAssertEqual(
+            store.publicByDate["2026-09-12"]?.items.map(\.id),
+            ["school:september"]
+        )
+    }
+
+    @MainActor
+    func testMonthPagingReusesWarmedFullFeedWithoutAnotherLoad() async {
+        let recorder = PublicFullFeedRecorder(feed: loadedPublicDeadlineFeed())
+        let client = PublicDeadlineClient(feedLoader: { try await recorder.load() })
+        let store = CalendarDeadlineStore(client: client)
+
+        await store.prewarmPublicIfNeeded(
+            publicDeadlinesEnabled: true,
+            sampleMode: false
+        )
+        await store.loadPublic(
+            dates: ["2026-08-22", "2026-09-12", "2026-10-01"],
+            sampleMode: false
+        )
+
+        let invocationCount = await recorder.invocationCount
+        XCTAssertEqual(invocationCount, 1)
+        XCTAssertEqual(store.publicByDate["2026-08-22"]?.items.count, 1)
+        XCTAssertEqual(store.publicByDate["2026-09-12"]?.items.count, 1)
+        XCTAssertEqual(store.publicByDate["2026-10-01"]?.items, [])
+    }
+
+    @MainActor
     func testCancelledViewTaskDoesNotAbandonSharedPublicRangeLoad() async {
         let client = SuspendedPublicDeadlineClient()
         let store = CalendarDeadlineStore(client: client)
@@ -328,6 +383,50 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertTrue(store.assignmentUnavailableByDate.isEmpty)
         XCTAssertTrue(store.loadingAssignmentDates.isEmpty)
     }
+}
+
+private actor PublicFullFeedRecorder {
+    private(set) var invocationCount = 0
+    private let feed: LoadedPublicDeadlineFeed
+
+    init(feed: LoadedPublicDeadlineFeed) {
+        self.feed = feed
+    }
+
+    func load() async throws -> LoadedPublicDeadlineFeed {
+        invocationCount += 1
+        await Task.yield()
+        return feed
+    }
+}
+
+private func loadedPublicDeadlineFeed() -> LoadedPublicDeadlineFeed {
+    let august = PublicDeadlineItem(
+        id: "contest-august",
+        name: "八月竞赛",
+        kind: .competition,
+        source: .contestDDL,
+        deadline: "2026-08-22T18:00:00+08:00",
+        organizer: nil,
+        officialURL: nil
+    )
+    let september = PublicDeadlineItem(
+        id: "school:september",
+        name: "九月校内竞赛通知",
+        kind: .competition,
+        source: .schoolNotice,
+        deadline: "2026-09-12T23:59:00+08:00",
+        organizer: "北京邮电大学教学云平台 · 报名截止",
+        officialURL: nil
+    )
+    return LoadedPublicDeadlineFeed(
+        contest: LoadedPublicDeadlineFeed.ContestFeed(
+            itemsByDate: ["2026-08-22": [august]],
+            source: CalendarDeadlineSources.primary,
+            usedBackup: false
+        ),
+        schoolItemsByDate: ["2026-09-12": [september]]
+    )
 }
 
 private actor BatchDeadlineRecorder {

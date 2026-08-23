@@ -284,6 +284,16 @@ test('desktop calendar supplements are range-cached and rendered in every calend
   assert.match(appCss, /\.popover-supplement-list/)
 })
 
+test('desktop school notices preheat after settings load instead of starting on calendar paging', () => {
+  assert.match(appSource, /deadlinePreheatPlan\(settings, `\$\{todayYear\}-01-01`\)/)
+  assert.match(appSource, /void preheatDeadlineCalendar\(plan\)/)
+  assert.match(appSource, /deadlinePreheatPromiseRef/)
+  assert.match(appSource, /deadlineCoveredDatesRef/)
+  assert.match(appSource, /scheduleDeadlinePreheat\(plan, DEADLINE_PREFETCH_RETRY_MS\)/)
+  assert.match(appSource, /scheduleDeadlinePreheat\(plan, DEADLINE_SOURCE_REFRESH_MS\)/)
+  assert.match(appSource, /rangeDates\.every\(\(date\) => deadlineCoveredDatesRef\.current\.has\(date\)\)/)
+})
+
 test('desktop interface language is persistent and updates the tray without translating API data', () => {
   assert.match(appSource, /resolvedUiLanguage\(settings\.uiLanguage/)
   assert.match(appSource, /\['system', t\('跟随系统'\)\]/)
@@ -449,9 +459,22 @@ test('month expansion reserves all six rows on desktop and mobile', () => {
   assert.match(appSource, /removeProperty\('--month-expanded-height'\)/)
 })
 
-test('about this app is the final settings panel', () => {
-  assert.ok(appSource.indexOf('className="panel settings-about"') > appSource.indexOf('className="panel settings-actions"'))
+test('privacy and local data remain the final settings panels', () => {
+  assert.ok(
+    appSource.indexOf('className="panel settings-about"') <
+      appSource.indexOf('className="panel settings-actions settings-local-data"'),
+  )
   assert.match(appSource, /<h2>\{t\('关于本应用'\)\}<\/h2>/)
+})
+
+test('interface language settings stay directly above privacy and local data panels', () => {
+  const languagePanel = appSource.indexOf('className="panel settings-language"')
+  const localDataPanel = appSource.indexOf('className="panel settings-actions settings-local-data"')
+  const privacyPanel = appSource.indexOf('className="panel settings-about"')
+
+  assert.ok(languagePanel > appSource.indexOf('className="panel settings-daily-info"'))
+  assert.ok(languagePanel < privacyPanel)
+  assert.ok(privacyPanel < localDataPanel)
 })
 
 test('native Android chrome follows the active system theme', () => {

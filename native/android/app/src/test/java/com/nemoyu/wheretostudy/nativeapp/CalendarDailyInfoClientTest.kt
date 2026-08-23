@@ -91,6 +91,57 @@ class CalendarDailyInfoClientTest {
     }
 
     @Test
+    fun startupWarmupSharesFullFeedAndPageChangesOnlyFilterCachedPayload() {
+        var elapsedMillis = 1_000L
+        val primaryCalls = AtomicInteger(0)
+        val schoolCalls = AtomicInteger(0)
+        val primaryParses = AtomicInteger(0)
+        val schoolParses = AtomicInteger(0)
+        val client = CalendarDailyInfoClient(
+            fetchPublicJson = { uri, _, _, _ ->
+                when (uri.toString()) {
+                    CalendarDailyInfoSources.deadlinePrimary -> {
+                        primaryCalls.incrementAndGet()
+                        """{"items":[
+                          {"id":"first","name":"First","event_type":"competition","primary_deadline":"2026-08-22T20:00:00+08:00"},
+                          {"id":"second","name":"Second","event_type":"hackathon","primary_deadline":"2026-08-23T20:00:00+08:00"}
+                        ]}"""
+                    }
+                    CalendarDailyInfoSources.schoolContestNotices -> {
+                        schoolCalls.incrementAndGet()
+                        """{"items":[]}"""
+                    }
+                    else -> error("unexpected URL: $uri")
+                }
+            },
+            elapsedRealtimeMillis = { elapsedMillis },
+            parseContestIndex = { payload ->
+                primaryParses.incrementAndGet()
+                PublicDeadlineResponseParser.parseIndex(payload)
+            },
+            parseSchoolIndex = { payload ->
+                schoolParses.incrementAndGet()
+                PublicDeadlineResponseParser.parseSchoolNoticesIndex(payload)
+            },
+        )
+
+        assertEquals("first", client.prewarmDeadlines("2026-08-22").items.single().id)
+        elapsedMillis += 5 * 60 * 1_000L + 1L
+
+        assertEquals("second", client.fetchDeadlines("2026-08-23").items.single().id)
+        assertEquals(1, primaryCalls.get())
+        assertEquals(1, schoolCalls.get())
+        assertEquals(1, primaryParses.get())
+        assertEquals(1, schoolParses.get())
+
+        client.prewarmDeadlines("2026-08-23")
+        assertEquals(2, primaryCalls.get())
+        assertEquals(2, schoolCalls.get())
+        assertEquals(2, primaryParses.get())
+        assertEquals(2, schoolParses.get())
+    }
+
+    @Test
     fun assignmentParserSupportsCourseAndHomepageContracts() {
         val courseItems = AssignmentDeadlineResponseParser.parse(
             """{

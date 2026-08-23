@@ -587,6 +587,18 @@ mod tests {
     }
 
     #[test]
+    fn source_cache_reuses_the_complete_feed_payload() {
+        let endpoint = "test://deadline-startup-preheat";
+        let payload = br#"{"items":[{"id":"first"},{"id":"last"}]}"#;
+        cache_source(endpoint, payload);
+        assert_eq!(cached_source(endpoint).as_deref(), Some(payload.as_slice()));
+        source_cache()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(endpoint);
+    }
+
+    #[test]
     fn school_notice_parser_expands_deadlines_and_filters_the_selected_day() {
         let data = r#"{
           "items":[{

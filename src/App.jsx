@@ -54,6 +54,7 @@ import {
   contractTimestamp,
   courseTimeBounds,
   dateFromString,
+  deadlinePreheatPlan,
   DEFAULT_SETTINGS,
   displayBuildingName,
   FALLBACK_SLOTS,
@@ -267,6 +268,8 @@ function translator(language) {
 
 const BROWSER_PREVIEW_ENABLED = import.meta.env.DEV
 const PROJECT_URL = 'https://github.com/Nemoyuzx/where_to_study'
+const DEADLINE_PREFETCH_RETRY_MS = 30 * 1000
+const DEADLINE_SOURCE_REFRESH_MS = 5 * 60 * 1000 + 1000
 const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md'
 const PRIVACY_SECTIONS = [
   {
@@ -990,6 +993,11 @@ function App() {
   const deadlinesRevisionRef = useRef(0)
   const assignmentsRevisionRef = useRef(0)
   const requestedCalendarSupplementRanges = useRef(new Set())
+  const deadlineCoveredDatesRef = useRef(new Set())
+  const deadlinePreheatPromiseRef = useRef(null)
+  const deadlinePreheatTimerRef = useRef(null)
+  const deadlinePreheatEnabledRef = useRef(false)
+  const deadlineSourceReadyRef = useRef(false)
 
   const calendarSupplementRange = useMemo(() => {
     if (calendarView === 'day') return { startDate: calendarDate, endDate: calendarDate }
@@ -1065,6 +1073,7 @@ function App() {
     }
   }, [activePage, calendarView, calendarPopover])
   const todayDate = shanghaiDateString(now)
+  const todayYear = todayDate.slice(0, 4)
   const loading = loadingTasks[loadingTasks.length - 1] || ''
 
   useEffect(() => {
@@ -1130,6 +1139,8 @@ function App() {
   useEffect(() => () => {
     window.clearTimeout(monthExpansionTimerRef.current)
     window.clearTimeout(yearClickTimerRef.current)
+    deadlinePreheatEnabledRef.current = false
+    window.clearTimeout(deadlinePreheatTimerRef.current)
   }, [])
 
   useEffect(() => {
@@ -1303,7 +1314,26 @@ function App() {
   }, [activePage, calendarDate, calendarView, settings.almanacEnabled])
 
   useEffect(() => {
-    if (activePage !== 'calendar') return
+    const plan = settingsLoaded
+      ? deadlinePreheatPlan(settings, `${todayYear}-01-01`)
+      : null
+    deadlinePreheatEnabledRef.current = Boolean(plan)
+    window.clearTimeout(deadlinePreheatTimerRef.current)
+    if (!plan) return undefined
+
+    void preheatDeadlineCalendar(plan)
+    return () => window.clearTimeout(deadlinePreheatTimerRef.current)
+  }, [
+    settings.competitionDeadlinesEnabled,
+    settings.hackathonDeadlinesEnabled,
+    settings.schoolContestNoticesEnabled,
+    settings.summerCampDeadlinesEnabled,
+    settingsLoaded,
+    todayYear,
+  ])
+
+  useEffect(() => {
+    if (activePage !== 'calendar' || !settingsLoaded) return
     const anyDeadlineTypeEnabled = settings.competitionDeadlinesEnabled
       || settings.schoolContestNoticesEnabled
       || settings.summerCampDeadlinesEnabled
@@ -1317,6 +1347,7 @@ function App() {
     activePage,
     calendarSupplementRange.endDate,
     calendarSupplementRange.startDate,
+    settingsLoaded,
     settings.competitionDeadlinesEnabled,
     settings.hackathonDeadlinesEnabled,
     settings.schoolContestNoticesEnabled,
@@ -2318,6 +2349,65 @@ function App() {
     }
   }
 
+  function applyDeadlineCalendarResponse(startDate, endDate, data) {
+    const rangeDates = datesInRange(startDate, endDate)
+    const itemsByDate = new Map()
+    ;(data?.items || []).forEach((item) => {
+      const date = datePart(item.primary_deadline)
+      if (!itemsByDate.has(date)) itemsByDate.set(date, [])
+      itemsByDate.get(date).push(item)
+    })
+    rangeDates.forEach((date) => deadlineCoveredDatesRef.current.add(date))
+    setDeadlinesByDate((current) => {
+      const next = { ...current }
+      rangeDates.forEach((date) => {
+        next[date] = {
+          date,
+          fetched_at: data.fetched_at,
+          source: data.source,
+          used_backup: data.used_backup,
+          items: itemsByDate.get(date) || [],
+        }
+      })
+      return next
+    })
+    setDeadlinesErrorByDate((current) => {
+      const next = { ...current }
+      rangeDates.forEach((date) => { next[date] = '' })
+      return next
+    })
+  }
+
+  function scheduleDeadlinePreheat(plan, delay) {
+    window.clearTimeout(deadlinePreheatTimerRef.current)
+    if (!deadlinePreheatEnabledRef.current) return
+    deadlinePreheatTimerRef.current = window.setTimeout(() => {
+      void preheatDeadlineCalendar(plan)
+    }, delay)
+  }
+
+  async function preheatDeadlineCalendar(plan) {
+    if (!deadlinePreheatEnabledRef.current) return false
+    if (deadlinePreheatPromiseRef.current) return deadlinePreheatPromiseRef.current
+    const { startDate, endDate } = plan
+    const request = command('fetch_deadline_calendar', {
+      start_date: startDate,
+      end_date: endDate,
+    }).then((data) => {
+      deadlineSourceReadyRef.current = true
+      applyDeadlineCalendarResponse(startDate, endDate, data)
+      scheduleDeadlinePreheat(plan, DEADLINE_SOURCE_REFRESH_MS)
+      return true
+    }).catch(() => {
+      scheduleDeadlinePreheat(plan, DEADLINE_PREFETCH_RETRY_MS)
+      return false
+    }).finally(() => {
+      if (deadlinePreheatPromiseRef.current === request) deadlinePreheatPromiseRef.current = null
+    })
+    deadlinePreheatPromiseRef.current = request
+    return request
+  }
+
   async function loadAssignments(date = calendarDate, force = false) {
     if (!force && assignmentsByDate[date]) return
     const revision = assignmentsRevisionRef.current + 1
@@ -2390,47 +2480,41 @@ function App() {
       }))
     }
 
-    if (includeDeadlines && !requestedCalendarSupplementRanges.current.has(deadlineKey)) {
+    const deadlineRangeCovered = rangeDates.every((date) => deadlineCoveredDatesRef.current.has(date))
+    if (includeDeadlines && !deadlineRangeCovered && !requestedCalendarSupplementRanges.current.has(deadlineKey)) {
       requestedCalendarSupplementRanges.current.add(deadlineKey)
       if (selectedDateInRange) setDeadlinesLoadingDate(calendarDate)
-      tasks.push(command('fetch_deadline_calendar', {
-        start_date: startDate,
-        end_date: endDate,
-      }).then((data) => {
-        const itemsByDate = new Map()
-        ;(data?.items || []).forEach((item) => {
-          const date = datePart(item.primary_deadline)
-          if (!itemsByDate.has(date)) itemsByDate.set(date, [])
-          itemsByDate.get(date).push(item)
-        })
-        setDeadlinesByDate((current) => {
-          const next = { ...current }
-          rangeDates.forEach((date) => {
-            next[date] = {
-              date,
-              fetched_at: data.fetched_at,
-              source: data.source,
-              used_backup: data.used_backup,
-              items: itemsByDate.get(date) || [],
+      tasks.push((async () => {
+        try {
+          const preheat = deadlinePreheatPromiseRef.current
+          if (preheat) {
+            const succeeded = await preheat
+            if (!succeeded) {
+              requestedCalendarSupplementRanges.current.delete(deadlineKey)
+              return
             }
+          }
+          if (deadlinePreheatEnabledRef.current && !deadlineSourceReadyRef.current) {
+            requestedCalendarSupplementRanges.current.delete(deadlineKey)
+            return
+          }
+          if (rangeDates.every((date) => deadlineCoveredDatesRef.current.has(date))) return
+          const data = await command('fetch_deadline_calendar', {
+            start_date: startDate,
+            end_date: endDate,
           })
-          return next
-        })
-        setDeadlinesErrorByDate((current) => {
-          const next = { ...current }
-          rangeDates.forEach((date) => { next[date] = '' })
-          return next
-        })
-      }).catch((deadlineError) => {
-        requestedCalendarSupplementRanges.current.delete(deadlineKey)
-        setDeadlinesErrorByDate((current) => {
-          const next = { ...current }
-          rangeDates.forEach((date) => { next[date] = deadlineError.message })
-          return next
-        })
-      }).finally(() => {
-        if (selectedDateInRange) setDeadlinesLoadingDate('')
-      }))
+          applyDeadlineCalendarResponse(startDate, endDate, data)
+        } catch (deadlineError) {
+          requestedCalendarSupplementRanges.current.delete(deadlineKey)
+          setDeadlinesErrorByDate((current) => {
+            const next = { ...current }
+            rangeDates.forEach((date) => { next[date] = deadlineError.message })
+            return next
+          })
+        } finally {
+          if (selectedDateInRange) setDeadlinesLoadingDate('')
+        }
+      })())
     }
 
     await Promise.allSettled(tasks)
@@ -3191,23 +3275,6 @@ function App() {
             <span>{uiLanguage === 'en' ? '显示数据仅供参考，请以实际情况为准。' : 'Displayed data is for reference only; please rely on the actual official information.'}</span>
           </section>
           <div className="settings-column settings-primary-column">
-            <section className="panel settings-language">
-              <div className="panel-title"><Settings size={18} /><h2>{t('界面语言')}</h2></div>
-              <div className="language-options" role="group" aria-label={t('界面语言')}>
-                {[
-                  ['system', t('跟随系统')],
-                  ['zh-Hans', t('简体中文')],
-                  ['en', 'English'],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    className={settings.uiLanguage === value ? 'active' : ''}
-                    onClick={() => updateSetting('uiLanguage', value)}
-                  >{label}</button>
-                ))}
-              </div>
-            </section>
             <section className="panel">
               <div className="panel-title"><KeyRound size={18} /><h2>{t('个人账号')}</h2></div>
               <label>
@@ -3358,6 +3425,49 @@ function App() {
               <p className="settings-source-note">{t('天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。')}</p>
             </section>
 
+          <section className="panel settings-language">
+            <div className="panel-title"><Settings size={18} /><h2>{t('界面语言')}</h2></div>
+            <div className="language-options" role="group" aria-label={t('界面语言')}>
+              {[
+                ['system', t('跟随系统')],
+                ['zh-Hans', t('简体中文')],
+                ['en', 'English'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={settings.uiLanguage === value ? 'active' : ''}
+                  onClick={() => updateSetting('uiLanguage', value)}
+                >{label}</button>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel settings-about">
+            <div className="panel-title">
+              <Info size={18} />
+              <h2>{t('关于本应用')}</h2>
+            </div>
+            <p>{t('Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。')}</p>
+            <div className="settings-about-actions">
+              <button
+                type="button"
+                className="settings-privacy-link"
+                onClick={(event) => {
+                  privacyTriggerRef.current = event.currentTarget
+                  setPrivacyPolicyOpen(true)
+                }}
+              >
+                <ShieldCheck size={16} />
+                {t('隐私说明')}
+              </button>
+              <a href={PROJECT_URL} target="_blank" rel="noreferrer">
+                <ExternalLink size={16} />
+                {t('GitHub 项目')}
+              </a>
+            </div>
+          </section>
+
           <section className="panel settings-actions settings-local-data">
             <div className="panel-title">
               <HardDrive size={18} />
@@ -3388,31 +3498,6 @@ function App() {
                 </div>
               </div>
             ) : null}
-          </section>
-
-          <section className="panel settings-about">
-            <div className="panel-title">
-              <Info size={18} />
-              <h2>{t('关于本应用')}</h2>
-            </div>
-            <p>{t('Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。')}</p>
-            <div className="settings-about-actions">
-              <button
-                type="button"
-                className="settings-privacy-link"
-                onClick={(event) => {
-                  privacyTriggerRef.current = event.currentTarget
-                  setPrivacyPolicyOpen(true)
-                }}
-              >
-                <ShieldCheck size={16} />
-                {t('隐私说明')}
-              </button>
-              <a href={PROJECT_URL} target="_blank" rel="noreferrer">
-                <ExternalLink size={16} />
-                {t('GitHub 项目')}
-              </a>
-            </div>
           </section>
           </div>
         </section>

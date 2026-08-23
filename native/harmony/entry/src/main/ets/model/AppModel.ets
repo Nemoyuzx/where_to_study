@@ -253,6 +253,8 @@ export class AppModel {
   private weatherRevision: number = 0;
   private calendarDailyInfoRevision: number = 0;
   private calendarMarkerLoadingDates: Set<string> = new Set<string>();
+  private publicDeadlinePrewarmInFlight: Promise<void> | null = null;
+  private publicDeadlinePreferencesLoaded: boolean = false;
   // 每日课程摘要对账门控（BUG-050 修复）：当日已对账且无变化时不再全量重排提醒。
   private dailyCourseNotificationReconciledDay: string = '';
   private dailyCourseNotificationDirty: boolean = true;
@@ -330,6 +332,8 @@ export class AppModel {
       'summerCampDeadlinesEnabled', true);
     this.hackathonDeadlinesEnabled = await this.preferences.getBool(
       'hackathonDeadlinesEnabled', true);
+    this.publicDeadlinePreferencesLoaded = true;
+    this.prewarmPublicDeadlines();
     this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
     this.systemLanguageID = AppLanguageInfo.systemLanguage();
     this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
@@ -826,21 +830,69 @@ export class AppModel {
   async setCompetitionDeadlinesEnabled(value: boolean): Promise<void> {
     this.competitionDeadlinesEnabled = value;
     await this.preferences.setBool('competitionDeadlinesEnabled', value);
+    if (value) {
+      this.prewarmPublicDeadlines();
+    }
   }
 
   async setSchoolContestNoticesEnabled(value: boolean): Promise<void> {
     this.schoolContestNoticesEnabled = value;
     await this.preferences.setBool('schoolContestNoticesEnabled', value);
+    if (value) {
+      this.prewarmPublicDeadlines();
+    }
   }
 
   async setSummerCampDeadlinesEnabled(value: boolean): Promise<void> {
     this.summerCampDeadlinesEnabled = value;
     await this.preferences.setBool('summerCampDeadlinesEnabled', value);
+    if (value) {
+      this.prewarmPublicDeadlines();
+    }
   }
 
   async setHackathonDeadlinesEnabled(value: boolean): Promise<void> {
     this.hackathonDeadlinesEnabled = value;
     await this.preferences.setBool('hackathonDeadlinesEnabled', value);
+    if (value) {
+      this.prewarmPublicDeadlines();
+    }
+  }
+
+  prewarmPublicDeadlines(forceRemote: boolean = false): void {
+    if (!this.publicDeadlinePreferencesLoaded || this.isSampleMode() ||
+      !this.hasEnabledPublicDeadlines() ||
+      this.publicDeadlinePrewarmInFlight !== null) {
+      return;
+    }
+    const date: string = StrictDates.formatDateParts(StrictDates.todayParts());
+    const revision: number = this.calendarDailyInfoRevision;
+    const work: Promise<void> = (async (): Promise<void> => {
+      try {
+        const fetched: PublicDeadlineSnapshot =
+          await this.calendarDailyInfoClient.prewarmDeadlines(date, forceRemote);
+        if (revision !== this.calendarDailyInfoRevision) {
+          return;
+        }
+        const deadlines: Map<string, PublicDeadlineSnapshot> =
+          new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
+        deadlines.set(date, fetched);
+        this.publicDeadlinesByDate = deadlines;
+        const errors: Map<string, string> = new Map<string, string>(this.publicDeadlineErrors);
+        errors.delete(date);
+        this.publicDeadlineErrors = errors;
+      } catch (e) {
+        // 启动/回前台预热失败不阻塞界面；详情卡片仍可显式点击重试。
+      }
+    })();
+    this.publicDeadlinePrewarmInFlight = work;
+    work.finally((): void => {
+      if (this.publicDeadlinePrewarmInFlight === work) {
+        this.publicDeadlinePrewarmInFlight = null;
+      }
+    }).catch(() => {
+      // 失败已在预热任务内部降级。
+    });
   }
 
   hasEnabledPublicDeadlines(): boolean {
@@ -1603,7 +1655,9 @@ export class AppModel {
     const revision: number = this.calendarDailyInfoRevision;
     const work: Promise<void> = (async (): Promise<void> => {
       try {
-        const fetched: PublicDeadlineSnapshot = await this.calendarDailyInfoClient.fetchDeadlines(date);
+        const fetched: PublicDeadlineSnapshot = force ?
+          await this.calendarDailyInfoClient.prewarmDeadlines(date, true) :
+          await this.calendarDailyInfoClient.fetchDeadlines(date);
         if (revision !== this.calendarDailyInfoRevision) {
           return;
         }

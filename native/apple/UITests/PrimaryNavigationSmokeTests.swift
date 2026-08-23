@@ -236,6 +236,16 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(waitForLabel(collapsedMonthLabel, of: monthHeading))
         XCTAssertTrue(waitForValue(currentShanghaiDateString(), of: summaryCard))
 
+        horizontalSwipe(in: app, atY: 0.42, toLeft: true)
+        XCTAssertTrue(waitForLabelChange(of: monthHeading, from: collapsedMonthLabel))
+        horizontalSwipe(in: app, atY: 0.42, toLeft: false)
+        XCTAssertTrue(waitForLabel(collapsedMonthLabel, of: monthHeading))
+
+        horizontalSwipe(in: app, atY: 0.42, toLeft: false)
+        XCTAssertTrue(waitForLabelChange(of: monthHeading, from: collapsedMonthLabel))
+        horizontalSwipe(in: app, atY: 0.42, toLeft: true)
+        XCTAssertTrue(waitForLabel(collapsedMonthLabel, of: monthHeading))
+
         verticalSwipe(in: app, between: mondayHeading, and: month, upward: true)
         XCTAssertTrue(waitForValue("日程已展开", of: month))
         let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
@@ -296,6 +306,46 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["settings.language"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Interface Language"].exists)
         XCTAssertTrue(app.buttons["English"].exists || app.staticTexts["English"].exists)
+    }
+
+    func testCompactTabBarRestoresGeometryAfterLanguageRoundTrip() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only tab layout test")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "zh-Hans"
+        app.launch()
+        defer { app.terminate() }
+
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
+        let initialTabBarFrame = tabBar.frame
+        let chineseTitles = ["空教室", "教学日历", "设置"]
+        let initialButtonFrames = chineseTitles.map { title -> CGRect in
+            let button = app.tabBars.buttons[title].firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
+            return button.frame
+        }
+
+        app.tabBars.buttons["设置"].tap()
+        let chinesePicker = app.segmentedControls["settings.language"].firstMatch
+        revealByScrolling(visibleElement: chinesePicker, in: app)
+        chinesePicker.buttons["English"].tap()
+
+        XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 5))
+        let englishPicker = app.segmentedControls["settings.language"].firstMatch
+        revealByScrolling(visibleElement: englishPicker, in: app)
+        englishPicker.buttons["Simplified Chinese"].tap()
+
+        XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 5))
+        let restoredTabBar = app.tabBars.firstMatch
+        XCTAssertTrue(waitForFrame(initialTabBarFrame, of: restoredTabBar))
+        for (index, title) in chineseTitles.enumerated() {
+            XCTAssertTrue(
+                waitForFrame(initialButtonFrames[index], of: app.tabBars.buttons[title].firstMatch),
+                "The \(title) tab must return to its original centered geometry"
+            )
+        }
     }
 
     func testIPhoneLandscapeMonthUsesOnlyExpandedAndSelectedWeekStops() throws {
@@ -716,6 +766,25 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
     private func waitForLabel(_ label: String, of element: XCUIElement) -> Bool {
         let predicate = NSPredicate(format: "label == %@", label)
+        return XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
+            timeout: 3
+        ) == .completed
+    }
+
+    private func waitForFrame(
+        _ expected: CGRect,
+        of element: XCUIElement,
+        accuracy: CGFloat = 2
+    ) -> Bool {
+        let predicate = NSPredicate { object, _ in
+            guard let candidate = object as? XCUIElement else { return false }
+            let frame = candidate.frame
+            return abs(frame.minX - expected.minX) <= accuracy
+                && abs(frame.minY - expected.minY) <= accuracy
+                && abs(frame.width - expected.width) <= accuracy
+                && abs(frame.height - expected.height) <= accuracy
+        }
         return XCTWaiter.wait(
             for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
             timeout: 3

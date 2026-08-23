@@ -15,6 +15,12 @@ enum CalendarPresentationLayout: Equatable {
     case expanded
 }
 
+private struct PublicDeadlinePrewarmID: Equatable {
+    let publicDeadlinesEnabled: Bool
+    let sampleMode: Bool
+    let isSceneActive: Bool
+}
+
 enum AdaptiveLayoutPolicy {
     static let minimumSidebarWidth: CGFloat = 700
     static let minimumExpandedCalendarWidth: CGFloat = 760
@@ -37,6 +43,10 @@ enum AdaptiveLayoutPolicy {
 
     static func contentColumnCount(width: CGFloat) -> Int {
         width >= minimumTwoColumnWidth ? 2 : 1
+    }
+
+    static func compactTabIdentity(languageRawValue: String) -> String {
+        "compact-tabs-\(languageRawValue)"
     }
 }
 
@@ -87,6 +97,17 @@ struct RootView: View {
             #if os(macOS)
             model.startDailyClassroomRefresh()
             #endif
+        }
+        .task(id: PublicDeadlinePrewarmID(
+            publicDeadlinesEnabled: model.hasEnabledPublicDeadlines,
+            sampleMode: model.isSampleMode,
+            isSceneActive: scenePhase == .active
+        )) {
+            guard scenePhase == .active else { return }
+            await calendarDeadlines.prewarmPublicIfNeeded(
+                publicDeadlinesEnabled: model.hasEnabledPublicDeadlines,
+                sampleMode: model.isSampleMode
+            )
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {
@@ -280,6 +301,12 @@ struct RootView: View {
             }
         }
         .tint(AppTheme.primary)
+        // UIKit can retain the intrinsic widths of translated tab items. A
+        // language-scoped identity rebuilds the compact tab bar so switching
+        // English -> Chinese (or back again) recenters the native capsule.
+        .id(AdaptiveLayoutPolicy.compactTabIdentity(
+            languageRawValue: model.appLanguage.rawValue
+        ))
         .accessibilityIdentifier("layout.compact-tabs")
     }
 

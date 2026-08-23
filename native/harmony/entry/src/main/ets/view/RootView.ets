@@ -37,6 +37,7 @@ export struct RootView {
     this.model.refreshClassroomsIfNeeded();
     this.model.refreshDailyCourseNotificationAuthorization();
     this.model.refreshSystemLanguage();
+    this.model.prewarmPublicDeadlines();
   }
 
   build() {
@@ -175,6 +176,7 @@ export struct RootView {
       .borderRadius(30)
       .backgroundColor(AppTheme.surfaceVariant())
       .shadow({ radius: 8, color: '#33000000', offsetY: 4 })
+      .id('phone_navigation')
     }
     .width('100%')
     .height('100%')
@@ -196,6 +198,7 @@ export struct RootView {
     .justifyContent(FlexAlign.Center)
     .borderRadius(26)
     .backgroundColor(this.currentSection === section ? AppTheme.background() : Color.Transparent)
+    .id(AppSectionInfo.accessibilityId(section))
     .animation({ duration: 160, curve: Curve.EaseOut })
     .onClick(() => {
       this.selectSection(section);

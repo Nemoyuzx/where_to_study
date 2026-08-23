@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -62,7 +70,7 @@ test("all tracked client projects use the stable 0.2.3 release version", () => {
   assert.match(nativeAndroid, /versionName = "0\.2\.3"/);
   assert.match(nativeAndroid, /versionCode = 34/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.3"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "59"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "61"/);
   assert.match(nativeHarmony, /"versionName": "0\.2\.3"/);
   assert.match(nativeHarmony, /"versionCode": 1002003/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.3/);
@@ -156,6 +164,10 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
     path.join(root, "scripts", "linux-package.sh"),
     "utf8",
   );
+  const hardeningScript = readFileSync(
+    path.join(root, "scripts", "harden-linux-appimage.sh"),
+    "utf8",
+  );
 
   assert.match(packageMetadata.scripts["tauri:build:linux"], /--bundles deb,appimage/);
   assert.match(workflow, /runner: ubuntu-22\.04/);
@@ -173,7 +185,53 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
   assert.match(packagingScript, /RELEASE_ARCHITECTURE="aarch64"/);
   assert.match(packagingScript, /linux-\$RELEASE_ARCHITECTURE\.deb/);
   assert.match(packagingScript, /linux-\$RELEASE_ARCHITECTURE\.AppImage/);
+  assert.match(packagingScript, /APPIMAGETOOL_PATH/);
+  assert.match(packagingScript, /APPIMAGE_TOOL_SHA256/);
+  assert.match(packagingScript, /harden-linux-appimage\.sh/);
+  assert.match(hardeningScript, /libwayland-\*\.so\*/);
+  assert.match(hardeningScript, /GIO_MODULE_DIR/);
+  assert.match(hardeningScript, /GIO_USE_VFS=local/);
 });
+
+test(
+  "Linux AppImage hardening removes Wayland ABI libraries and is idempotent",
+  { skip: process.platform === "win32" },
+  () => {
+    const fixture = mkdtempSync(path.join(tmpdir(), "wts-appimage-hardening-"));
+    const appDir = path.join(fixture, "WhereToStudy.AppDir");
+    const libDir = path.join(appDir, "usr", "lib");
+    const hookDir = path.join(appDir, "apprun-hooks");
+    const hookPath = path.join(hookDir, "linuxdeploy-plugin-gtk.sh");
+    const hardener = path.join(root, "scripts", "harden-linux-appimage.sh");
+
+    try {
+      mkdirSync(path.join(libDir, "aarch64-linux-gnu", "gio", "modules"), {
+        recursive: true,
+      });
+      mkdirSync(hookDir, { recursive: true });
+      writeFileSync(path.join(libDir, "libwayland-client.so.0"), "fixture");
+      writeFileSync(path.join(libDir, "libwayland-egl.so.1"), "fixture");
+      writeFileSync(hookPath, "#!/usr/bin/env bash\nexport APPDIR\n");
+
+      execFileSync("bash", [hardener, appDir], { stdio: "pipe" });
+      execFileSync("bash", [hardener, appDir], { stdio: "pipe" });
+
+      assert.equal(existsSync(path.join(libDir, "libwayland-client.so.0")), false);
+      assert.equal(existsSync(path.join(libDir, "libwayland-egl.so.1")), false);
+      const hook = readFileSync(hookPath, "utf8");
+      assert.match(hook, /export GIO_MODULE_DIR=/);
+      assert.match(hook, /export GIO_EXTRA_MODULES=/);
+      assert.match(hook, /export GIO_USE_VFS=local/);
+      assert.match(hook, /unset GST_PLUGIN_SYSTEM_PATH GST_PLUGIN_SYSTEM_PATH_1_0/);
+      assert.equal(
+        hook.match(/# Where To Study AppImage host ABI isolation/g)?.length,
+        1,
+      );
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  },
+);
 
 test("Linux CLI and TUI workflows package x86_64 and native arm64 archives", () => {
   for (const [workflowName, binary] of [

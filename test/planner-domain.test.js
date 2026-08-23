@@ -4,6 +4,7 @@ import {
   accountHasSavedPassword,
   buildingsForCampus,
   dateFromString,
+  deadlinePreheatPlan,
   calendarMonthExpansion,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
@@ -227,6 +228,24 @@ test('interface language persists safely and follows non-Chinese systems in Engl
   const english = savedSettingsToState({ ui_language: 'en' })
   assert.equal(english.uiLanguage, 'en')
   assert.equal(settingsToPayload(english).ui_language, 'en')
+})
+
+test('deadline startup preheat follows every shared-feed switch and covers the whole year', () => {
+  const disabled = {
+    competitionDeadlinesEnabled: false,
+    schoolContestNoticesEnabled: false,
+    summerCampDeadlinesEnabled: false,
+    hackathonDeadlinesEnabled: false,
+  }
+  assert.equal(deadlinePreheatPlan(disabled, '2026-08-23'), null)
+
+  for (const field of Object.keys(disabled)) {
+    assert.deepEqual(deadlinePreheatPlan({ ...disabled, [field]: true }, '2026-08-23'), {
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    })
+  }
+  assert.equal(deadlinePreheatPlan(DEFAULT_SETTINGS, '2026-02-30'), null)
 })
 
 test('minimum seat settings remain finite non-negative integers', () => {

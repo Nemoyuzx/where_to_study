@@ -167,6 +167,7 @@ class MainActivity : Activity() {
         applySystemInsets(adaptiveRoot)
         setContentView(adaptiveRoot)
         configureSystemBarIcons()
+        prewarmPublicDeadlinesIfEnabled()
         updateAdaptiveLayout(force = true)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
         DailyCourseSummaryScheduler.reconcile(this)
@@ -180,6 +181,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        prewarmPublicDeadlinesIfEnabled()
         val settingChanged = DailyCourseSummaryScheduler.synchronizePermissionState(this)
         DailyCourseSummaryScheduler.reconcile(this)
         if (settingChanged && ::content.isInitialized &&
@@ -651,6 +653,11 @@ class MainActivity : Activity() {
 
     fun refreshCalendarIfVisible() {
         if (selectedDestination == Destination.CALENDAR) refreshCurrentPage()
+    }
+
+    fun prewarmPublicDeadlinesIfEnabled() {
+        if (!preferences.hasEnabledPublicDeadlines) return
+        calendarDailyInfoRepository.prewarmDeadlines()
     }
 
     fun performControlHaptic(source: View? = null) {

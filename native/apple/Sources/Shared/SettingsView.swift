@@ -1,6 +1,44 @@
 import SwiftUI
 import WidgetKit
 
+enum SettingsSurfaceID: String, Hashable {
+    case account
+    case semester
+    case notification
+    case information
+    case widget
+    case language
+    case aboutAndPrivacy
+    case localData
+}
+
+enum SettingsLayoutPolicy {
+    static let leadingColumn: [SettingsSurfaceID] = [
+        .account,
+        .semester
+    ]
+
+    static let trailingColumn: [SettingsSurfaceID] = [
+        .notification,
+        .information,
+        .widget,
+        .language,
+        .aboutAndPrivacy,
+        .localData
+    ]
+
+    static let singleColumn: [SettingsSurfaceID] = [
+        .account,
+        .semester,
+        .notification,
+        .information,
+        .widget,
+        .language,
+        .aboutAndPrivacy,
+        .localData
+    ]
+}
+
 struct SettingsView: View {
     private enum AccountField: Hashable {
         case account
@@ -65,30 +103,17 @@ struct SettingsView: View {
                         let widths = DesktopColumnLayoutPolicy.widths(containerWidth: proxy.size.width)
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
-                                languageSurface
-                                accountSurface
-                                semesterSurface
+                                settingsSurfaces(SettingsLayoutPolicy.leadingColumn)
                             }
                             .frame(width: widths.leading, alignment: .top)
                             VStack(spacing: 16) {
-                                notificationSurface
-                                informationSurface
-                                widgetSurface
-                                localDataSurface
-                                aboutSurface
+                                settingsSurfaces(SettingsLayoutPolicy.trailingColumn)
                             }
                             .frame(width: widths.trailing, alignment: .top)
                         }
                     } else {
                         VStack(spacing: 16) {
-                            languageSurface
-                            accountSurface
-                            semesterSurface
-                            notificationSurface
-                            informationSurface
-                            widgetSurface
-                            localDataSurface
-                            aboutSurface
+                            settingsSurfaces(SettingsLayoutPolicy.singleColumn)
                         }
                     }
                 }
@@ -108,30 +133,17 @@ struct SettingsView: View {
                     if columnCount == 2 {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
-                                languageSurface
-                                accountSurface
-                                semesterSurface
+                                settingsSurfaces(SettingsLayoutPolicy.leadingColumn)
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
                             VStack(spacing: 16) {
-                                notificationSurface
-                                informationSurface
-                                widgetSurface
-                                localDataSurface
+                                settingsSurfaces(SettingsLayoutPolicy.trailingColumn)
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
                         }
-                        aboutSurface
                     } else {
                         VStack(spacing: 16) {
-                            languageSurface
-                            accountSurface
-                            semesterSurface
-                            notificationSurface
-                            informationSurface
-                            widgetSurface
-                            localDataSurface
-                            aboutSurface
+                            settingsSurfaces(SettingsLayoutPolicy.singleColumn)
                         }
                     }
                 }
@@ -177,6 +189,35 @@ struct SettingsView: View {
             }
         } message: {
             Text("此操作会删除本机保存的账户密码、个人课表、空教室和节假日缓存，且无法撤销。")
+        }
+    }
+
+    @ViewBuilder
+    private func settingsSurfaces(_ surfaces: [SettingsSurfaceID]) -> some View {
+        ForEach(surfaces, id: \.self) { surface in
+            settingsSurface(surface)
+        }
+    }
+
+    @ViewBuilder
+    private func settingsSurface(_ surface: SettingsSurfaceID) -> some View {
+        switch surface {
+        case .account:
+            accountSurface
+        case .semester:
+            semesterSurface
+        case .notification:
+            notificationSurface
+        case .information:
+            informationSurface
+        case .widget:
+            widgetSurface
+        case .language:
+            languageSurface
+        case .aboutAndPrivacy:
+            aboutSurface
+        case .localData:
+            localDataSurface
         }
     }
 

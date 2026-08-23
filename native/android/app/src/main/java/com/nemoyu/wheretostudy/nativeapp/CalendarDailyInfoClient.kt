@@ -152,6 +152,10 @@ internal object PublicDeadlineResponseParser {
 
     fun parse(payload: String, requestedDate: String): List<PublicDeadlineItem> {
         requireContractDate(requestedDate, "DDL")
+        return parseIndex(payload)[requestedDate].orEmpty()
+    }
+
+    fun parseIndex(payload: String): Map<String, List<PublicDeadlineItem>> {
         val root: Any = try {
             val trimmed = payload.trimStart()
             if (trimmed.startsWith("[")) JSONArray(payload) else JSONObject(payload)
@@ -159,29 +163,32 @@ internal object PublicDeadlineResponseParser {
             throw DailyInfoClientException("DDL 数据格式不正确。", error)
         }
         val records = extractRecords(root)
-        return (0 until records.length()).mapNotNull { index ->
-            val record = records.optJSONObject(index) ?: return@mapNotNull null
+        val indexed = linkedMapOf<String, MutableList<PublicDeadlineItem>>()
+        for (index in 0 until records.length()) {
+            val record = records.optJSONObject(index) ?: continue
             val kind = PublicDeadlineKind.fromWireValue(
                 firstString(record, "event_type", "eventType", "type")
-                    ?: return@mapNotNull null,
-            ) ?: return@mapNotNull null
+                    ?: continue,
+            ) ?: continue
             val id = firstString(record, "id", "event_id", "eventId")
-                ?: return@mapNotNull null
+                ?: continue
             val name = firstString(record, "name", "title", "event_name")
-                ?: return@mapNotNull null
+                ?: continue
             val deadline = firstString(
                 record,
                 "primary_deadline",
                 "primaryDeadline",
                 "deadline",
                 "end_time",
-            ) ?: return@mapNotNull null
-            if (!deadline.startsWith(requestedDate) || !rfc3339.matches(deadline)) {
-                return@mapNotNull null
-            }
+            ) ?: continue
+            if (!rfc3339.matches(deadline)) continue
+            val date = deadline.take(10)
+            if (runCatching { requireContractDate(date, "DDL") }.isFailure) continue
+            val items = indexed.getOrPut(date) { mutableListOf() }
+            if (items.size >= 100) continue
             val officialURL = firstString(record, "official_url", "officialUrl", "url")
                 ?.takeIf(::isTrustedOfficialURL)
-            PublicDeadlineItem(
+            items += PublicDeadlineItem(
                 id = id,
                 name = name,
                 kind = kind,
@@ -191,19 +198,24 @@ internal object PublicDeadlineResponseParser {
                 officialURL = officialURL,
             )
         }
-            .take(100)
-            .sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+        return indexed.mapValues { (_, items) ->
+            items.sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+        }
     }
 
     fun parseSchoolNotices(payload: String, requestedDate: String): List<PublicDeadlineItem> {
         requireContractDate(requestedDate, "DDL")
+        return parseSchoolNoticesIndex(payload)[requestedDate].orEmpty()
+    }
+
+    fun parseSchoolNoticesIndex(payload: String): Map<String, List<PublicDeadlineItem>> {
         val source = try {
             JSONObject(payload)
         } catch (error: Exception) {
             throw DailyInfoClientException("校内竞赛通知格式不正确。", error)
         }
         val records = source.optJSONArray("items") ?: JSONArray()
-        val result = mutableListOf<PublicDeadlineItem>()
+        val indexed = linkedMapOf<String, MutableList<PublicDeadlineItem>>()
         for (recordIndex in 0 until records.length()) {
             val record = records.optJSONObject(recordIndex) ?: continue
             val id = firstString(record, "id", "source_id") ?: continue
@@ -226,9 +238,13 @@ internal object PublicDeadlineResponseParser {
             for (deadlineIndex in 0 until deadlines.length()) {
                 val deadlineRecord = deadlines.optJSONObject(deadlineIndex) ?: continue
                 val deadline = firstString(deadlineRecord, "date") ?: continue
-                if (!deadline.startsWith(requestedDate) || !rfc3339.matches(deadline)) continue
+                if (!rfc3339.matches(deadline)) continue
+                val date = deadline.take(10)
+                if (runCatching { requireContractDate(date, "DDL") }.isFailure) continue
+                val items = indexed.getOrPut(date) { mutableListOf() }
+                if (items.size >= 100) continue
                 val label = firstString(deadlineRecord, "label") ?: "截止时间"
-                result += PublicDeadlineItem(
+                items += PublicDeadlineItem(
                     id = "school:$id:$deadlineIndex",
                     name = name,
                     kind = PublicDeadlineKind.COMPETITION,
@@ -237,11 +253,11 @@ internal object PublicDeadlineResponseParser {
                     organizer = "$sourceName · $label",
                     officialURL = officialURL,
                 )
-                if (result.size >= 100) break
             }
-            if (result.size >= 100) break
         }
-        return result.sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+        return indexed.mapValues { (_, items) ->
+            items.sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+        }
     }
 
     fun merge(vararg groups: List<PublicDeadlineItem>): List<PublicDeadlineItem> {
@@ -342,13 +358,23 @@ internal object AssignmentDeadlineResponseParser {
             .matches(value)
 }
 
-class CalendarDailyInfoClient {
+class CalendarDailyInfoClient internal constructor(
+    private val fetchPublicJson: (URI, String, String, Int) -> String =
+        { uri, scheme, host, maximumBytes ->
+            FixedPublicJsonTransport.fetch(uri, scheme, host, maximumBytes)
+        },
+    private val elapsedRealtimeMillis: () -> Long = { System.nanoTime() / 1_000_000L },
+    private val parseContestIndex: (String) -> Map<String, List<PublicDeadlineItem>> =
+        PublicDeadlineResponseParser::parseIndex,
+    private val parseSchoolIndex: (String) -> Map<String, List<PublicDeadlineItem>> =
+        PublicDeadlineResponseParser::parseSchoolNoticesIndex,
+) {
     private data class DeadlineFeed(
-        val contestPayload: String?,
+        val contestItemsByDate: Map<String, List<PublicDeadlineItem>>?,
         val contestSource: String,
         val contestUsedBackup: Boolean,
         val contestError: Throwable?,
-        val schoolPayload: String?,
+        val schoolItemsByDate: Map<String, List<PublicDeadlineItem>>?,
         val schoolError: Throwable?,
         val fetchedAtMillis: Long,
     )
@@ -360,7 +386,7 @@ class CalendarDailyInfoClient {
         val target = requireContractDate(date, "黄历")
         target.set(Calendar.HOUR_OF_DAY, 12)
         val timestamp = target.timeInMillis / 1_000L
-        val basePayload = FixedPublicJsonTransport.fetch(
+        val basePayload = fetchPublicJson(
             URI.create(
                 "${CalendarDailyInfoSources.uapiOrigin}/api/v1/misc/lunartime" +
                     "?ts=$timestamp&timezone=Asia/Shanghai",
@@ -371,7 +397,7 @@ class CalendarDailyInfoClient {
         )
         val base = AlmanacResponseParser.parseBase(basePayload, date)
         return runCatching {
-            val advicePayload = FixedPublicJsonTransport.fetch(
+            val advicePayload = fetchPublicJson(
                 URI.create("${CalendarDailyInfoSources.timelessOrigin}/time?datetime=$date"),
                 "https",
                 "api.timelessq.com",
@@ -387,38 +413,55 @@ class CalendarDailyInfoClient {
         forceRemote: Boolean = false,
     ): PublicDeadlineSnapshot {
         requireContractDate(date, "DDL")
-        val feed = deadlineFeed(forceRemote)
-        val contestResult = feed.contestPayload?.let { payload ->
-            runCatching {
-                PublicDeadlineSnapshot(
-                    date,
-                    PublicDeadlineResponseParser.parse(payload, date),
-                    feed.contestSource,
-                    feed.contestUsedBackup,
-                )
-            }
-        } ?: Result.failure(feed.contestError ?: DailyInfoClientException("公开活动 DDL 不可用。"))
-        val schoolResult = feed.schoolPayload?.let { payload ->
-            runCatching { PublicDeadlineResponseParser.parseSchoolNotices(payload, date) }
-        } ?: Result.failure(feed.schoolError ?: DailyInfoClientException("校内竞赛通知不可用。"))
-        val contest = contestResult.getOrNull()
-        val schoolItems = schoolResult.getOrNull()
-        if (contest == null && schoolItems == null) {
+        val feed = deadlineFeed(forceRemote, refreshStaleCache = false)
+        return snapshotFromFeed(date, feed)
+    }
+
+    /**
+     * Refreshes the shared full-feed at most once per five minutes. Calendar
+     * page changes keep using [fetchDeadlines], which filters an existing feed
+     * locally even after that window has elapsed; only an explicit warm-up (or
+     * retry) is allowed to refresh the network payload.
+     */
+    fun prewarmDeadlines(
+        date: String,
+        forceRemote: Boolean = false,
+    ): PublicDeadlineSnapshot {
+        requireContractDate(date, "DDL")
+        val feed = deadlineFeed(forceRemote, refreshStaleCache = true)
+        return snapshotFromFeed(date, feed)
+    }
+
+    private fun snapshotFromFeed(
+        date: String,
+        feed: DeadlineFeed,
+    ): PublicDeadlineSnapshot {
+        val contest = feed.contestItemsByDate?.let { itemsByDate ->
+            PublicDeadlineSnapshot(
+                date,
+                itemsByDate[date].orEmpty(),
+                feed.contestSource,
+                feed.contestUsedBackup,
+            )
+        }
+        val schoolItemsByDate = feed.schoolItemsByDate
+        val schoolItems = schoolItemsByDate?.get(date).orEmpty()
+        if (contest == null && schoolItemsByDate == null) {
             throw DailyInfoClientException(
-                "公开活动 DDL 不可用（${contestResult.exceptionOrNull()?.message}）；" +
-                    "校内竞赛通知也不可用（${schoolResult.exceptionOrNull()?.message}）。",
-                schoolResult.exceptionOrNull(),
+                "公开活动 DDL 不可用（${feed.contestError?.message}）；" +
+                    "校内竞赛通知也不可用（${feed.schoolError?.message}）。",
+                feed.schoolError,
             )
         }
         if (contest == null) {
             return PublicDeadlineSnapshot(
                 date = date,
-                items = schoolItems.orEmpty(),
+                items = schoolItems,
                 source = CalendarDailyInfoSources.schoolContestNotices,
                 usedBackup = false,
             )
         }
-        if (schoolItems == null) return contest
+        if (schoolItemsByDate == null) return contest
         return PublicDeadlineSnapshot(
             date = date,
             items = PublicDeadlineResponseParser.merge(contest.items, schoolItems),
@@ -428,28 +471,32 @@ class CalendarDailyInfoClient {
     }
 
     @Synchronized
-    private fun deadlineFeed(forceRemote: Boolean): DeadlineFeed {
-        val nowMillis = System.nanoTime() / 1_000_000L
+    private fun deadlineFeed(
+        forceRemote: Boolean,
+        refreshStaleCache: Boolean,
+    ): DeadlineFeed {
+        val nowMillis = elapsedRealtimeMillis()
         cachedDeadlineFeed?.takeIf {
-            !forceRemote && nowMillis - it.fetchedAtMillis in 0 until DEADLINE_FEED_CACHE_MILLIS
+            !forceRemote && (!refreshStaleCache ||
+                nowMillis - it.fetchedAtMillis in 0 until DEADLINE_FEED_CACHE_MILLIS)
         }?.let { return it }
         val contestResult = runCatching {
-            val payload = FixedPublicJsonTransport.fetch(
+            val payload = fetchPublicJson(
                 URI.create(CalendarDailyInfoSources.deadlinePrimary),
                 "https",
                 "nemoyuzx.github.io",
                 CalendarDailyInfoSources.deadlinePayloadLimit,
             )
-            Triple(payload, CalendarDailyInfoSources.deadlinePrimary, false)
+            Triple(parseContestIndex(payload), CalendarDailyInfoSources.deadlinePrimary, false)
         }.recoverCatching { primaryError ->
             try {
-                val payload = FixedPublicJsonTransport.fetch(
+                val payload = fetchPublicJson(
                     URI.create(CalendarDailyInfoSources.deadlineBackup),
                     "http",
                     "101.201.29.29",
                     CalendarDailyInfoSources.deadlinePayloadLimit,
                 )
-                Triple(payload, CalendarDailyInfoSources.deadlineBackup, true)
+                Triple(parseContestIndex(payload), CalendarDailyInfoSources.deadlineBackup, true)
             } catch (backupError: Exception) {
                 throw DailyInfoClientException(
                     "主 DDL 数据源不可用（${primaryError.message}）；" +
@@ -459,13 +506,13 @@ class CalendarDailyInfoClient {
             }
         }
         val schoolResult = runCatching {
-            val payload = FixedPublicJsonTransport.fetch(
+            val payload = fetchPublicJson(
                 URI.create(CalendarDailyInfoSources.schoolContestNotices),
                 "http",
                 "101.201.29.29",
                 CalendarDailyInfoSources.deadlinePayloadLimit,
             )
-            payload
+            parseSchoolIndex(payload)
         }
         if (contestResult.isFailure && schoolResult.isFailure) {
             throw DailyInfoClientException(
@@ -476,11 +523,11 @@ class CalendarDailyInfoClient {
         }
         val contest = contestResult.getOrNull()
         return DeadlineFeed(
-            contestPayload = contest?.first,
+            contestItemsByDate = contest?.first,
             contestSource = contest?.second ?: CalendarDailyInfoSources.deadlinePrimary,
             contestUsedBackup = contest?.third ?: false,
             contestError = contestResult.exceptionOrNull(),
-            schoolPayload = schoolResult.getOrNull(),
+            schoolItemsByDate = schoolResult.getOrNull(),
             schoolError = schoolResult.exceptionOrNull(),
             fetchedAtMillis = nowMillis,
         ).also { cachedDeadlineFeed = it }
@@ -555,6 +602,7 @@ internal class CalendarDailyInfoRepository(
     private val deadlinesByDate = ConcurrentHashMap<String, PublicDeadlineSnapshot>()
     private val deadlineErrors = ConcurrentHashMap<String, String>()
     private val loadingDeadlines = ConcurrentHashMap.newKeySet<String>()
+    private val prewarmingDeadlines = AtomicBoolean(false)
     private val assignmentsByDate = ConcurrentHashMap<String, List<AssignmentDeadlineItem>>()
     private val assignmentErrors = ConcurrentHashMap<String, String>()
     private val loadingAssignments = ConcurrentHashMap.newKeySet<String>()
@@ -621,6 +669,37 @@ internal class CalendarDailyInfoRepository(
             }
         } catch (_: RejectedExecutionException) {
             loadingDeadlines.remove(date)
+        }
+    }
+
+    fun prewarmDeadlines(
+        date: String = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).run {
+            timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+            format(Calendar.getInstance(timeZone).time)
+        },
+        force: Boolean = false,
+        onComplete: () -> Unit = {},
+    ) {
+        if (closed.get() || !prewarmingDeadlines.compareAndSet(false, true)) return
+        try {
+            worker.execute {
+                runCatching {
+                    if (usesSampleData) {
+                        sampleDeadlines(date)
+                    } else {
+                        client.prewarmDeadlines(date, forceRemote = force)
+                    }
+                }.onSuccess {
+                    deadlinesByDate[date] = it
+                    deadlineErrors.remove(date)
+                }.onFailure {
+                    deadlineErrors[date] = it.message ?: "DDL 获取失败。"
+                }
+                prewarmingDeadlines.set(false)
+                postCompletion(date, onComplete)
+            }
+        } catch (_: RejectedExecutionException) {
+            prewarmingDeadlines.set(false)
         }
     }
 

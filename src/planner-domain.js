@@ -190,6 +190,23 @@ export function dateFromString(dateString) {
   return date
 }
 
+export function deadlinePreheatPlan(settings, dateString) {
+  const enabled = Boolean(
+    settings?.competitionDeadlinesEnabled
+    || settings?.schoolContestNoticesEnabled
+    || settings?.summerCampDeadlinesEnabled
+    || settings?.hackathonDeadlinesEnabled,
+  )
+  if (!enabled) return null
+  const date = dateFromString(dateString)
+  if (Number.isNaN(date.getTime())) return null
+  const year = date.getFullYear()
+  return {
+    startDate: `${year}-01-01`,
+    endDate: `${year}-12-31`,
+  }
+}
+
 function lastDayOfMonth(year, monthIndex) {
   return new Date(year, monthIndex + 1, 0).getDate()
 }

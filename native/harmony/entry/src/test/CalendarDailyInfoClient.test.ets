@@ -146,11 +146,22 @@ export default function calendarDailyInfoClientTest() {
       expect(results[1][0].id).assertEqual('second');
     });
 
-    it('deadline_dates_share_one_range_fetch_and_then_filter_in_memory', 0, async () => {
+    it('startup_warmup_shares_one_range_fetch_and_page_changes_filter_in_memory', 0, async () => {
       const transport: CountingDeadlineTransport = new CountingDeadlineTransport();
-      const client: CalendarDailyInfoClient = new CalendarDailyInfoClient(transport);
+      let contestParses: number = 0;
+      let schoolParses: number = 0;
+      const client: CalendarDailyInfoClient = new CalendarDailyInfoClient(
+        transport,
+        (payload: string): Map<string, PublicDeadlineItem[]> => {
+          contestParses++;
+          return PublicDeadlineResponseParser.parseIndex(payload);
+        },
+        (payload: string): Map<string, PublicDeadlineItem[]> => {
+          schoolParses++;
+          return PublicDeadlineResponseParser.parseSchoolNoticesIndex(payload);
+        });
       const results: PublicDeadlineSnapshot[] = await Promise.all([
-        client.fetchDeadlines('2026-08-22'), client.fetchDeadlines('2026-08-23')
+        client.prewarmDeadlines('2026-08-22'), client.fetchDeadlines('2026-08-23')
       ]);
       expect(results[0].items.length).assertEqual(1);
       expect(results[0].items[0].id).assertEqual('first');
@@ -158,10 +169,20 @@ export default function calendarDailyInfoClientTest() {
       expect(results[1].items[0].id).assertEqual('second');
       expect(transport.primaryCalls).assertEqual(1);
       expect(transport.schoolCalls).assertEqual(1);
+      expect(contestParses).assertEqual(1);
+      expect(schoolParses).assertEqual(1);
 
       await client.fetchDeadlines('2026-08-24');
       expect(transport.primaryCalls).assertEqual(1);
       expect(transport.schoolCalls).assertEqual(1);
+      expect(contestParses).assertEqual(1);
+      expect(schoolParses).assertEqual(1);
+
+      await client.prewarmDeadlines('2026-08-23', true);
+      expect(transport.primaryCalls).assertEqual(2);
+      expect(transport.schoolCalls).assertEqual(2);
+      expect(contestParses).assertEqual(2);
+      expect(schoolParses).assertEqual(2);
     });
   });
 }

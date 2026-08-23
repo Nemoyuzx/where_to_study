@@ -73,7 +73,6 @@ export struct SettingsView {
         if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
-              this.languageSurface()
               this.accountSurface()
               this.semesterSurface()
             }
@@ -84,6 +83,8 @@ export struct SettingsView {
               this.notificationSurface()
               this.dailyInfoSurface()
               this.widgetSurface()
+              this.languageSurface()
+              this.aboutSurface()
               this.localDataSurface()
             }
             .layoutWeight(1)
@@ -91,17 +92,16 @@ export struct SettingsView {
           }
           .alignItems(VerticalAlign.Top)
           .width('100%')
-          this.aboutSurface()
         } else {
           Column({ space: 16 }) {
-            this.languageSurface()
             this.accountSurface()
             this.semesterSurface()
             this.notificationSurface()
             this.dailyInfoSurface()
             this.widgetSurface()
-            this.localDataSurface()
+            this.languageSurface()
             this.aboutSurface()
+            this.localDataSurface()
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
@@ -203,6 +203,7 @@ export struct SettingsView {
     .width('100%')
     .borderRadius(8)
     .backgroundColor(AppTheme.surface())
+    .id('settings_language_surface')
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -822,6 +823,7 @@ export struct SettingsView {
     .width('100%')
     .borderRadius(8)
     .backgroundColor(AppTheme.surface())
+    .id('settings_local_data_surface')
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -849,6 +851,7 @@ export struct SettingsView {
     .width('100%')
     .borderRadius(8)
     .backgroundColor(AppTheme.surface())
+    .id('settings_about_surface')
     .alignItems(HorizontalAlign.Start)
   }
 

@@ -535,6 +535,42 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 760), 2)
     }
 
+    func testSettingsLanguageCardPrecedesPrivacyAndLocalDataInEveryLayout() {
+        let expectedBottomOrder: [SettingsSurfaceID] = [
+            .language,
+            .aboutAndPrivacy,
+            .localData
+        ]
+
+        XCTAssertEqual(
+            Array(SettingsLayoutPolicy.singleColumn.suffix(expectedBottomOrder.count)),
+            expectedBottomOrder
+        )
+        XCTAssertEqual(
+            Array(SettingsLayoutPolicy.trailingColumn.suffix(expectedBottomOrder.count)),
+            expectedBottomOrder
+        )
+        XCTAssertFalse(SettingsLayoutPolicy.leadingColumn.contains(.language))
+    }
+
+    func testCompactTabIdentityRoundTripsWithInterfaceLanguage() {
+        let chinese = AdaptiveLayoutPolicy.compactTabIdentity(
+            languageRawValue: AppLanguage.simplifiedChinese.rawValue
+        )
+        let english = AdaptiveLayoutPolicy.compactTabIdentity(
+            languageRawValue: AppLanguage.english.rawValue
+        )
+
+        XCTAssertNotEqual(chinese, english)
+        XCTAssertEqual(
+            chinese,
+            AdaptiveLayoutPolicy.compactTabIdentity(
+                languageRawValue: AppLanguage.simplifiedChinese.rawValue
+            ),
+            "Chinese -> English -> Chinese must recreate and then restore the same tab layout identity"
+        )
+    }
+
     func testMobilePageLayoutUsesCompactTopSpacingInLandscapeHeight() {
         let landscape = MobilePageLayoutPolicy.metrics(availableHeight: 393)
         let portrait = MobilePageLayoutPolicy.metrics(availableHeight: 852)
@@ -1001,6 +1037,32 @@ final class ScheduleLogicTests: XCTestCase {
                 selectedDate: nextDay
             )
         )
+    }
+
+    func testMobileMonthPagingRepreparesDirectionForLeftThenRight() {
+        var state = MobileMonthPagingState()
+
+        let leftSwipeGeneration = state.prepare(direction: 1)
+        XCTAssertEqual(state.preparedDirection, 1)
+        XCTAssertTrue(state.accepts(leftSwipeGeneration))
+
+        let rightSwipeGeneration = state.prepare(direction: -1)
+        XCTAssertEqual(state.preparedDirection, -1)
+        XCTAssertFalse(state.accepts(leftSwipeGeneration))
+        XCTAssertTrue(state.accepts(rightSwipeGeneration))
+    }
+
+    func testMobileMonthPagingRepreparesDirectionForRightThenLeft() {
+        var state = MobileMonthPagingState()
+
+        let rightSwipeGeneration = state.prepare(direction: -1)
+        XCTAssertEqual(state.preparedDirection, -1)
+        XCTAssertTrue(state.accepts(rightSwipeGeneration))
+
+        let leftSwipeGeneration = state.prepare(direction: 1)
+        XCTAssertEqual(state.preparedDirection, 1)
+        XCTAssertFalse(state.accepts(rightSwipeGeneration))
+        XCTAssertTrue(state.accepts(leftSwipeGeneration))
     }
 
     @MainActor

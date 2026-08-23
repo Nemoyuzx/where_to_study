@@ -64,8 +64,6 @@ class SettingsPage(
             addView(if (isCompact) compactSettingsTitle() else pageTitle(activity, "设置"))
             addView(referenceNotice())
             addView(spacer(activity, UiMetrics.sectionSpacingDp))
-            addView(languageSurface())
-            addView(spacer(activity, UiMetrics.sectionSpacingDp))
             if (availableWidthDp >= 760) {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -88,6 +86,10 @@ class SettingsPage(
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(widgetSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(languageSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(aboutSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(localDataSurface())
                     }, LinearLayout.LayoutParams(
                         0,
@@ -106,14 +108,17 @@ class SettingsPage(
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(widgetSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(languageSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(aboutSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(localDataSurface())
             }
-            addView(spacer(activity, UiMetrics.sectionSpacingDp))
-            addView(aboutSurface())
         })
     }
 
     private fun languageSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        id = R.id.settings_language_section
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "应用设置"))
         addView(TextView(activity).apply {
@@ -695,15 +700,19 @@ class SettingsPage(
             })
         addView(featureSwitch("学科竞赛 DDL", preferences.competitionDeadlinesEnabled) {
             preferences.competitionDeadlinesEnabled = it
+            if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
         addView(featureSwitch("校内竞赛通知", preferences.schoolContestNoticesEnabled) {
             preferences.schoolContestNoticesEnabled = it
+            if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
         addView(featureSwitch("夏令营 DDL", preferences.summerCampDeadlinesEnabled) {
             preferences.summerCampDeadlinesEnabled = it
+            if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
         addView(featureSwitch("黑客松 DDL", preferences.hackathonDeadlinesEnabled) {
             preferences.hackathonDeadlinesEnabled = it
+            if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
         addView(TextView(activity).apply {
             text = "天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。"
@@ -769,6 +778,7 @@ class SettingsPage(
     }
 
     private fun localDataSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        id = R.id.settings_local_data_section
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "本地数据"))
         addView(TextView(activity).apply {

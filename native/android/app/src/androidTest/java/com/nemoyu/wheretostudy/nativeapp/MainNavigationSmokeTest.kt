@@ -26,6 +26,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -481,6 +482,70 @@ class MainNavigationSmokeTest {
             }
         } finally {
             AppPreferences(context).languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
+        }
+    }
+
+    @Test
+    fun phoneNavigationGeometrySurvivesChineseEnglishChineseRoundTrip() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val preferences = AppPreferences(context)
+        preferences.languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
+        val launchIntent = Intent(
+            context,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                var usesPhoneNavigation = false
+                scenario.onActivity { activity ->
+                    usesPhoneNavigation = activity.findViewById<View?>(R.id.phone_navigation) != null
+                }
+                assumeTrue(
+                    "Language geometry round-trip only applies to the compact phone navigation",
+                    usesPhoneNavigation,
+                )
+                var originalGeometry: PhoneNavigationGeometry? = null
+                scenario.onActivity { activity ->
+                    originalGeometry = phoneNavigationGeometry(activity)
+                    assertEquals(
+                        listOf("空教室", "教学日历", "设置"),
+                        phoneNavigationLabels(activity),
+                    )
+                    activity.updateAppLanguage(AppLanguage.ENGLISH)
+                }
+                SystemClock.sleep(600L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "English labels must not alter the fixed navigation geometry",
+                        originalGeometry,
+                        phoneNavigationGeometry(activity),
+                    )
+                    assertEquals(
+                        listOf("Empty Classrooms", "Teaching Calendar", "Settings"),
+                        phoneNavigationLabels(activity),
+                    )
+                    activity.updateAppLanguage(AppLanguage.SIMPLIFIED_CHINESE)
+                }
+                SystemClock.sleep(600L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Chinese navigation geometry must be restored after a language round trip",
+                        originalGeometry,
+                        phoneNavigationGeometry(activity),
+                    )
+                    assertEquals(
+                        listOf("空教室", "教学日历", "设置"),
+                        phoneNavigationLabels(activity),
+                    )
+                }
+            }
+        } finally {
+            preferences.languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
         }
     }
 
@@ -1073,16 +1138,23 @@ class MainNavigationSmokeTest {
             assertVisible(device, "settings_github_link")
             scenario.onActivity { activity ->
                 val about = activity.findViewById<View>(R.id.settings_about_section)
+                val language = activity.findViewById<View>(R.id.settings_language_section)
+                val localData = activity.findViewById<View>(R.id.settings_local_data_section)
                 val settingsPage = activity.findViewById<ScrollView>(R.id.page_settings)
                 val settingsContent = settingsPage.getChildAt(0) as ViewGroup
-                assertEquals(
-                    "About section must be the final settings block",
-                    about,
-                    settingsContent.getChildAt(settingsContent.childCount - 1),
-                )
                 assertTrue(
                     "Privacy entry must remain inside the about section",
                     activity.findViewById<View>(R.id.privacy_policy_button).parent === about,
+                )
+                assertTrue(
+                    "Language section must precede the privacy entry",
+                    depthFirstIndex(settingsContent, language) <
+                        depthFirstIndex(settingsContent, activity.findViewById(R.id.privacy_policy_button)),
+                )
+                assertTrue(
+                    "Privacy entry must precede local data",
+                    depthFirstIndex(settingsContent, activity.findViewById(R.id.privacy_policy_button)) <
+                        depthFirstIndex(settingsContent, localData),
                 )
             }
             val hapticsBeforePrivacy = hapticCount(scenario)
@@ -1112,6 +1184,48 @@ class MainNavigationSmokeTest {
         view.click()
         device.waitForIdle()
     }
+
+    private fun depthFirstIndex(root: View, target: View): Int {
+        var nextIndex = 0
+        fun visit(view: View): Int? {
+            val currentIndex = nextIndex++
+            if (view === target) return currentIndex
+            if (view is ViewGroup) {
+                repeat(view.childCount) { childIndex ->
+                    visit(view.getChildAt(childIndex))?.let { return it }
+                }
+            }
+            return null
+        }
+        return requireNotNull(visit(root)) { "Target view is outside the settings hierarchy" }
+    }
+
+    private data class PhoneNavigationGeometry(
+        val width: Int,
+        val height: Int,
+        val childBounds: List<List<Int>>,
+    )
+
+    private fun phoneNavigationGeometry(activity: MainActivity): PhoneNavigationGeometry {
+        val navigation = checkNotNull(
+            activity.findViewById<ViewGroup?>(R.id.phone_navigation),
+        ) { "Language round-trip regression requires the phone navigation layout" }
+        return PhoneNavigationGeometry(
+            width = navigation.width,
+            height = navigation.height,
+            childBounds = List(navigation.childCount) { index ->
+                navigation.getChildAt(index).let { child ->
+                    listOf(child.left, child.top, child.right, child.bottom)
+                }
+            },
+        )
+    }
+
+    private fun phoneNavigationLabels(activity: MainActivity): List<String> = listOf(
+        R.id.navigation_planner,
+        R.id.navigation_calendar,
+        R.id.navigation_settings,
+    ).map { id -> activity.findViewById<TextView>(id).text.toString() }
 
     private fun hapticCount(scenario: ActivityScenario<MainActivity>): Int {
         var count = 0

@@ -75,6 +75,21 @@ enum MobileCalendarAnimationPartition {
     }
 }
 
+struct MobileMonthPagingState: Equatable {
+    private(set) var preparedDirection = 1
+    private(set) var generation = 0
+
+    mutating func prepare(direction: Int) -> Int {
+        preparedDirection = direction < 0 ? -1 : 1
+        generation += 1
+        return generation
+    }
+
+    func accepts(_ generation: Int) -> Bool {
+        self.generation == generation
+    }
+}
+
 private struct MobileCalendarDailyDetailsLoadID: Hashable {
     let dates: [String]
     let almanacDate: String?
@@ -152,6 +167,7 @@ struct MobileTeachingCalendarView: View {
     @State private var monthDetailsScrollResetID = UUID()
     @State private var monthDetailsScrollState = MobileMonthDetailsScrollState()
     @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
+    @State private var monthPagingState = MobileMonthPagingState()
     @State private var areTimelineCoursesExpanded = true
 
     private let calendar = Calendar.shanghai
@@ -1753,11 +1769,11 @@ struct MobileTeachingCalendarView: View {
             direction: direction,
             calendar: calendar
         ) {
-            pageDirection = direction
             AppHaptics.selection()
             if mode == .month {
-                selectedDate = date
+                prepareMonthPageChange(to: date, direction: direction)
             } else {
+                pageDirection = direction
                 withAnimation(Self.pageAnimation) { selectedDate = date }
             }
         }
@@ -1766,13 +1782,39 @@ struct MobileTeachingCalendarView: View {
     private func navigate(to date: Date) {
         guard !sameDay(date, selectedDate) else { return }
         AppHaptics.selection()
-        if !sameDay(date, selectedDate) {
-            pageDirection = date > selectedDate ? 1 : -1
-        }
+        let direction = date > selectedDate ? 1 : -1
         if mode == .month {
-            selectedDate = date
+            let currentIdentity = monthGridIdentity
+            let destinationIdentity = MobileCalendarAnimationPartition.monthGridIdentity(
+                selectedDate: date,
+                calendar: calendar
+            )
+            if currentIdentity == destinationIdentity {
+                pageDirection = direction
+                selectedDate = date
+            } else {
+                prepareMonthPageChange(to: date, direction: direction)
+            }
         } else {
+            pageDirection = direction
             withAnimation(Self.pageAnimation) { selectedDate = date }
+        }
+    }
+
+    private func prepareMonthPageChange(to date: Date, direction: Int) {
+        var pagingState = monthPagingState
+        let generation = pagingState.prepare(direction: direction)
+        monthPagingState = pagingState
+        pageDirection = pagingState.preparedDirection
+
+        // The outgoing grid owns the removal half of its transition. Give
+        // SwiftUI one update cycle to install the new direction on that grid
+        // before changing its identity; otherwise a direction reversal can
+        // reuse the edge from the preceding page insertion.
+        Task { @MainActor in
+            await Task.yield()
+            guard mode == .month, monthPagingState.accepts(generation) else { return }
+            selectedDate = date
         }
     }
 
