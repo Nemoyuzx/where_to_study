@@ -120,6 +120,26 @@ test("native Apple targets keep the App Store Connect bundle identifiers", () =>
   );
 });
 
+test("Xcode Cloud generates the ignored native Apple project after cloning", () => {
+  const cloudScript = readFileSync(
+    path.join(root, "native", "apple", "ci_scripts", "ci_post_clone.sh"),
+    "utf8",
+  );
+  const nativeApple = readFileSync(path.join(root, "native", "apple", "project.yml"), "utf8");
+  const gitignore = readFileSync(path.join(root, ".gitignore"), "utf8");
+
+  assert.match(gitignore, /^native\/apple\/WhereToStudyNative\.xcodeproj\/$/m);
+  assert.match(gitignore, /^native\/apple\/Generated\/$/m);
+  assert.match(nativeApple, /minimumXcodeGenVersion: 2\.45\.4/);
+  assert.match(cloudScript, /^#!\/bin\/sh\nset -eu/m);
+  assert.match(cloudScript, /CI_PRIMARY_REPOSITORY_PATH/);
+  assert.match(cloudScript, /brew install xcodegen/);
+  assert.match(cloudScript, /scripts\/native-apple-generate\.sh/);
+  assert.match(cloudScript, /PROJECT="\$APPLE_DIR\/WhereToStudyNative\.xcodeproj"/);
+  assert.match(cloudScript, /"\$PROJECT\/project\.pbxproj"/);
+  assert.match(cloudScript, /xcodebuild -project "\$PROJECT" -list/);
+});
+
 test("Linux releases build and validate both deb and AppImage artifacts", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const workflow = readFileSync(

@@ -1,6 +1,7 @@
 name: WhereToStudyNative
 options:
   bundleIdPrefix: com.nemoyu.wheretostudy
+  minimumXcodeGenVersion: 2.45.4
   deploymentTarget:
     macOS: "13.0"
     iOS: "16.0"

@@ -16,6 +16,12 @@
 ./scripts/native-apple-build.sh
 ```
 
+`WhereToStudyNative.xcodeproj` 与 `Generated/` 由 XcodeGen 确定性生成，因此不提交到仓库。
+Xcode Cloud 会在克隆后自动运行可执行的
+`native/apple/ci_scripts/ci_post_clone.sh`：缺少 XcodeGen 时通过构建环境自带的 Homebrew
+安装，然后调用同一份 `native-apple-generate.sh` 并校验共享 Scheme。Xcode Cloud 工作流必须继续
+指向 `native/apple/WhereToStudyNative.xcodeproj`；不要删除或移动该 post-clone 脚本。
+
 账号和密码由 Apple Keychain 保存，普通偏好使用 `UserDefaults`。当前原生预览版已接入移动教务的个人课表和当天两校区空教室请求，课表与空教室数据会分别原子写入应用支持目录并供后续启动离线读取。课程联动、原有教学楼限制、三位教室号、双门教室号、日/周/月/年视图和第 17、18 个实际教学周的“试”标记均复用 `contracts/v1` 的脱敏夹具测试。
 
 空教室数据仅查询当天；应用启动和重新进入前台时会在已有凭据且当天缓存缺失时自动刷新，不进行常驻轮询。macOS 常驻时使用单次睡眠到下一个 07:00 的调度任务更新当天空教室，不做分钟级检查。教学日历支持本地缓存的法定节假日、当前时间线和日/周/月/年视图，并可在用户授权后把实际上课日期幂等写入系统日历。Apple 目标包含统一应用图标与 `PrivacyInfo.xcprivacy`；隐私清单声明 `UserDefaults` 的实际用途，不声明跟踪或开发者数据收集。macOS 还提供菜单栏入口、今日与明日课程、关闭主窗口后常驻及明确退出命令。设置页明确说明这是非官方客户端，并提供完全离线的内置示例模式；示例数据不会读写真实 Keychain、缓存、系统日历、系统通知或 Widget App Group。
