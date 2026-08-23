@@ -220,6 +220,7 @@
 "示例模式已模拟同步 %d 个课程日期，未写入系统日历" = "Demo mode simulated syncing %d course dates without writing to the system calendar";
 "日历同步完成：新增 %d，更新 %d，删除 %d，已存在 %d" = "Calendar sync completed: %d inserted, %d updated, %d deleted, %d unchanged";
 "已安排未来 %d 个有课日的课程摘要" = "Course summaries scheduled for %d upcoming class days";
+"个人课表已更新，共 %d 门课程" = "Personal schedule updated: %d courses";
 "以下本地数据未能清除：" = "The following local data could not be cleared: ";
 "本地课表读取失败：" = "Unable to read the local schedule: ";
 "本地空教室读取失败：" = "Unable to read the local empty-room cache: ";

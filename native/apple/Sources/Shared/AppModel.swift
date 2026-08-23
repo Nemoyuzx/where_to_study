@@ -786,7 +786,10 @@ final class AppModel: ObservableObject {
                 synchronizeSelectedSlots()
                 reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
                 setStatusMessage(
-                    "个人课表已更新，共 \(resolvedSchedule.courses.count) 门课程",
+                    localizedFormat(
+                        "个人课表已更新，共 %d 门课程",
+                        resolvedSchedule.courses.count
+                    ),
                     autoDismiss: true
                 )
             } catch {

@@ -379,7 +379,8 @@ final class DailyCourseNotificationTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: "dailyCourseNotificationsEnabled"))
         XCTAssertEqual(
             model.dailyCourseNotificationStatusMessage,
-            "课程摘要安排失败：通知权限状态读取超时，请在系统设置中确认通知权限。"
+            model.localized("课程摘要安排失败：")
+                + "通知权限状态读取超时，请在系统设置中确认通知权限。"
         )
     }
 

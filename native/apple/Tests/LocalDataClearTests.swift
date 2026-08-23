@@ -118,13 +118,25 @@ final class LocalDataClearTests: XCTestCase {
         model.importScheduleToCalendar()
         model.setDailyCourseNotificationsEnabled(true)
 
-        XCTAssertEqual(model.statusMessage, "正在展示内置示例课表，未连接北邮服务")
-        XCTAssertEqual(model.classroomStatusMessage, "正在展示内置示例空教室，未连接北邮服务")
-        XCTAssertTrue(model.calendarImportStatusMessage.hasPrefix("示例模式已模拟同步 "))
-        XCTAssertTrue(model.calendarImportStatusMessage.hasSuffix(" 个课程日期，未写入系统日历"))
+        XCTAssertEqual(
+            model.statusMessage,
+            model.localized("正在展示内置示例课表，未连接北邮服务")
+        )
+        XCTAssertEqual(
+            model.classroomStatusMessage,
+            model.localized("正在展示内置示例空教室，未连接北邮服务")
+        )
+        let importedCount = (try? CalendarImportLogic.eventDrafts(from: Self.schedule).count) ?? 0
+        XCTAssertEqual(
+            model.calendarImportStatusMessage,
+            model.localizedFormat(
+                "示例模式已模拟同步 %d 个课程日期，未写入系统日历",
+                importedCount
+            )
+        )
         XCTAssertEqual(
             model.dailyCourseNotificationStatusMessage,
-            "示例模式已模拟开启每日课程摘要，未申请通知权限"
+            model.localized("示例模式已模拟开启每日课程摘要，未申请通知权限")
         )
         XCTAssertTrue(model.dailyCourseNotificationsEnabled)
     }
@@ -177,11 +189,12 @@ final class LocalDataClearTests: XCTestCase {
         )
 
         model.refreshSchedule()
-        for _ in 0 ..< 50 where !model.statusMessage.hasPrefix("个人课表已更新") {
+        let expectedStatus = model.localizedFormat("个人课表已更新，共 %d 门课程", 0)
+        for _ in 0 ..< 50 where model.statusMessage != expectedStatus {
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        XCTAssertEqual(model.statusMessage, "个人课表已更新，共 0 门课程")
+        XCTAssertEqual(model.statusMessage, expectedStatus)
         try await Task.sleep(for: .milliseconds(250))
         XCTAssertTrue(model.statusMessage.isEmpty)
     }
@@ -205,7 +218,7 @@ final class LocalDataClearTests: XCTestCase {
         )
 
         XCTAssertTrue(model.saveSettings())
-        XCTAssertEqual(model.statusMessage, "设置已保存")
+        XCTAssertEqual(model.statusMessage, model.localized("设置已保存"))
         try await Task.sleep(for: .milliseconds(250))
         XCTAssertTrue(model.statusMessage.isEmpty)
     }

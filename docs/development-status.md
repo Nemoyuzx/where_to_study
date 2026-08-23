@@ -104,7 +104,7 @@
 | macOS 归档检查 | SwiftUI Universal `0.2.3 (58)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
 | App Store Connect | iOS 与 macOS `0.2.3 (58)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
 | CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
-| Linux 发布 | arm64 在 Ubuntu 26.04 虚拟机、x86_64 在 Ubuntu 22.04 服务器完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；GitHub Release 不上传校验文件 |
+| Linux 发布 | GitHub-hosted Ubuntu 22.04 x86_64/arm64 工作流均完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、空教室、教学日历、设置、刷新与退出；Windows/Linux 无课程小组件入口 |
 | 敏感信息扫描 | Gitleaks 扫描完整提交历史及当前全部拟提交文件，0 泄漏 |
 | 工程静态检查 | `git diff --check`、`actionlint`、`shellcheck scripts/*.sh`、`bash -n scripts/*.sh` 全部通过 |

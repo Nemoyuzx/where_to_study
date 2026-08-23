@@ -84,7 +84,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Distribution、Mac Installer Distribution 证书与 macOS 发布描述文件；iOS 主应用和 Widget 使用 Xcode 自动签名完成正式归档。证书私钥和团队标识不写入仓库。
 - macOS 与 iOS `0.2.3 (58)` 已完成本地 Xcode 严格编译、逻辑/UI 回归和正式签名上传；两端均在 2026-08-23 收到 Xcode `Upload succeeded` 和 `EXPORT SUCCEEDED`，未再打开 App Store Connect 检查处理状态。
-- 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。对应平台完成处理后，iOS 选择 Build 57，macOS 保持 Build 52。
+- 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。`0.2.3` 的 iOS 与 macOS 均使用 Build 58。
 - 13 英寸 iPad 横屏四张 0.2.2 效果图已由专项 Xcode UI 测试生成并写入 `screenshot-manifest.md`；Build 25 素材只保留作历史校验。正式提交仍需按 `screenshot-plan.md` 补齐产品页所需的 iPhone 与 macOS 最新截图。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
 
@@ -95,7 +95,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 核实北邮服务对账号、密码、课程和教室请求的实际保留行为，再决定 App Privacy 是否可以回答“不收集数据”。
 - 填写真实版权主体、App Review 联系人姓名/电话/邮箱，并确认支持 URL 提供用户可用的联系方式。
 - 完成年龄分级、欧盟 DSA 身份、价格、税务类别、销售地区和中国大陆 ICP 状态；没有有效 ICP 时不要勾选中国大陆销售地区。
-- iOS build 57 在 TestFlight 客户端可见后，在真机验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换；macOS 继续使用 build 52。
+- iOS 与 macOS build 58 在 TestFlight 客户端可见后，分别在真机和实际 Mac 上验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
 - 使用对应平台的最新构建重新生成并上传商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择最新构建提交审核。
 
 ## Apple 官方核对入口
