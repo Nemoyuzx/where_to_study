@@ -17,6 +17,7 @@
 - iOS 月视图翻页改为先准备本次方向、再提交目标月份，连续左滑后右滑或右滑后左滑都使用正确的进入/退出动画。
 - HarmonyOS 手机端同步近期移动月视图的滚动所有权、折叠状态、遮罩层级、无横向抖动与异步局部更新逻辑，同时保留折叠屏、平板和 PC 自适应布局。
 - Windows 与 Linux 延续原生桌面布局，不提供课程小组件；课程小组件只保留在系统能力完整且已实现对应组件的平台。
+- Windows 与 Linux 的天气卡片现与空教室主工作区保持一致的左右边距，节次选择中的节次名和时间统一居中。
 - Linux AppImage 在重打阶段移除会与新宿主 Mesa/EGL 冲突的旧 Wayland ABI 库，并隔离包内 GIO 模块，避免较新桌面系统出现白屏。
 
 ### 数据来源
@@ -35,6 +36,7 @@
 - Graphical clients add a persistent System / Simplified Chinese / English interface setting. Static UI is localized while third-party API content remains unchanged.
 - Language cards now sit immediately before privacy and local-data settings. iOS also restores tab-bar geometry after an English-to-Chinese round trip and correctly animates month swipes when direction reverses.
 - HarmonyOS receives the recent mobile calendar gesture, clipping, rendering, and async-update refinements. Windows and Linux retain their desktop layouts and do not expose course widgets.
+- Windows and Linux now align the weather card with the empty-room workspace gutters and center both lines inside every period selector.
 - Linux AppImages are repacked without the stale bundled Wayland ABI libraries that conflict with newer host Mesa/EGL stacks, and their GIO module lookup is isolated to the bundle.
 
 ## Distribution

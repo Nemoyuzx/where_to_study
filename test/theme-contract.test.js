@@ -215,6 +215,16 @@ test('Windows and Linux keep native-style daily information without a faux cours
   )
 })
 
+test('desktop weather and period controls keep shared gutters and centered labels', () => {
+  assert.match(
+    appCss,
+    /@media \(min-width: 721px\)[\s\S]*\.planner-page-content > \.weather-strip,[\s\S]*\.planner-page-content \.planner-workspace,[\s\S]*margin:\s*0 16px 16px/s,
+  )
+  assert.match(appCss, /\.slot-cell\s*\{[^}]*align-content:\s*center/s)
+  assert.match(appCss, /\.slot-cell\s*\{[^}]*justify-items:\s*center/s)
+  assert.match(appCss, /\.slot-cell\s*\{[^}]*text-align:\s*center/s)
+})
+
 test('scrolling content reserves scrollbar space without shifting the layout', () => {
   assert.match(appCss, /\.page-content\s*\{[^}]*scrollbar-gutter:\s*stable/s)
 })

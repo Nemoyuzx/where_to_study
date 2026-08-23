@@ -1032,15 +1032,18 @@ button:disabled {
 }
 
 .slot-cell {
+  align-content: center;
   background: var(--app-background);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text-primary);
   cursor: pointer;
   display: grid;
+  gap: 2px;
+  justify-items: center;
   min-height: 54px;
   padding: 4px;
-  text-align: left;
+  text-align: center;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
@@ -2748,6 +2751,7 @@ button:disabled {
     max-width: none;
   }
 
+  .planner-page-content > .weather-strip,
   .planner-page-content .planner-workspace,
   .calendar-page-content .calendar-page {
     margin: 0 16px 16px;
