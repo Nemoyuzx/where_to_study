@@ -3,8 +3,15 @@ package com.nemoyu.wheretostudy.nativeapp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.json.JSONObject
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class CalendarDailyInfoClientTest {
     @Test
@@ -145,4 +152,106 @@ class CalendarDailyInfoClientTest {
             "https://evil.example/?ticket=ST-test",
         ))
     }
+
+    @Test
+    fun ucloudConcurrentDatesShareOneAccountWideFetchAll() {
+        val fetchCount = AtomicInteger(0)
+        val selectedFlights = CountDownLatch(2)
+        val fetchStarted = CountDownLatch(1)
+        val leadership = Collections.synchronizedList(mutableListOf<Boolean>())
+        val releaseFetch = CountDownLatch(1)
+        val client = UCloudAssignmentClient(
+            loadCredentials = { Credentials("2023000000", "password") },
+            fetchAllOverride = {
+                fetchCount.incrementAndGet()
+                fetchStarted.countDown()
+                assertTrue(releaseFetch.await(2, TimeUnit.SECONDS))
+                listOf(
+                    assignment("first", "2026-08-22 18:00:00"),
+                    assignment("second", "2026-08-23 19:00:00"),
+                )
+            },
+            elapsedRealtime = { 1_000L },
+            flightSelectionObserver = { isLeader ->
+                leadership += isLeader
+                selectedFlights.countDown()
+            },
+        )
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val first = executor.submit<List<AssignmentDeadlineItem>> {
+                client.fetch("2026-08-22")
+            }
+            val second = executor.submit<List<AssignmentDeadlineItem>> {
+                client.fetch("2026-08-23")
+            }
+
+            assertTrue(selectedFlights.await(2, TimeUnit.SECONDS))
+            assertTrue(fetchStarted.await(2, TimeUnit.SECONDS))
+            assertEquals(1, leadership.count { it })
+            assertEquals(1, leadership.count { !it })
+            assertEquals(1, fetchCount.get())
+            releaseFetch.countDown()
+
+            assertEquals(listOf("first"), first.get(2, TimeUnit.SECONDS).map { it.id })
+            assertEquals(listOf("second"), second.get(2, TimeUnit.SECONDS).map { it.id })
+            assertEquals(1, fetchCount.get())
+        } finally {
+            releaseFetch.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun ucloudResetInvalidatesOldFlightAndPreventsItsCacheWriteBack() {
+        val fetchCount = AtomicInteger(0)
+        val oldFetchStarted = CountDownLatch(1)
+        val releaseOldFetch = CountDownLatch(1)
+        val client = UCloudAssignmentClient(
+            loadCredentials = { Credentials("2023000000", "password") },
+            fetchAllOverride = {
+                when (fetchCount.incrementAndGet()) {
+                    1 -> {
+                        oldFetchStarted.countDown()
+                        assertTrue(releaseOldFetch.await(2, TimeUnit.SECONDS))
+                        listOf(assignment("old", "2026-08-23 08:00:00"))
+                    }
+                    else -> listOf(assignment("new", "2026-08-23 09:00:00"))
+                }
+            },
+            elapsedRealtime = { 1_000L },
+        )
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val oldRequest = executor.submit<List<AssignmentDeadlineItem>> {
+                client.fetch("2026-08-23")
+            }
+            assertTrue(oldFetchStarted.await(2, TimeUnit.SECONDS))
+
+            client.reset()
+            val refreshed = executor.submit<List<AssignmentDeadlineItem>> {
+                client.fetch("2026-08-23")
+            }
+            assertEquals(listOf("new"), refreshed.get(2, TimeUnit.SECONDS).map { it.id })
+
+            releaseOldFetch.countDown()
+            val failure = assertThrows(ExecutionException::class.java) {
+                oldRequest.get(2, TimeUnit.SECONDS)
+            }
+            assertTrue(failure.cause is DailyInfoClientException)
+            assertEquals(listOf("new"), client.fetch("2026-08-23").map { it.id })
+            assertEquals(2, fetchCount.get())
+        } finally {
+            releaseOldFetch.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    private fun assignment(id: String, deadline: String) = AssignmentDeadlineItem(
+        id = id,
+        title = id,
+        courseName = "course",
+        deadline = deadline,
+        status = "未提交",
+    )
 }

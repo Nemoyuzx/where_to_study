@@ -39,6 +39,49 @@ private final class MobileMonthDragRoutingSession {
     }
 }
 
+enum MobileCalendarAnimationPartition {
+    static func contentIdentity(
+        modeRawValue: String,
+        selectedDate: Date,
+        calendar: Calendar = .shanghai
+    ) -> String {
+        let referenceDate: Date
+        switch modeRawValue {
+        case "日":
+            referenceDate = calendar.startOfDay(for: selectedDate)
+        case "周":
+            referenceDate = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start
+                ?? selectedDate
+        case "月":
+            // Month-to-month paging is scoped to the grid. Keeping the outer
+            // identity stable prevents the details viewport from joining the
+            // horizontal page transition.
+            return "月"
+        case "年":
+            referenceDate = calendar.dateInterval(of: .year, for: selectedDate)?.start
+                ?? selectedDate
+        default:
+            referenceDate = calendar.startOfDay(for: selectedDate)
+        }
+        return "\(modeRawValue)-\(referenceDate.timeIntervalSinceReferenceDate)"
+    }
+
+    static func monthGridIdentity(
+        selectedDate: Date,
+        calendar: Calendar = .shanghai
+    ) -> String {
+        let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+        return "月格-\(month.timeIntervalSinceReferenceDate)"
+    }
+}
+
+private struct MobileCalendarDailyDetailsLoadID: Hashable {
+    let date: String?
+    let sampleMode: Bool
+    let loadsAlmanac: Bool
+    let loadsPublicDeadlines: Bool
+}
+
 @MainActor
 final class MobileMonthDetailsScrollState {
     private weak var scrollView: UIScrollView?
@@ -105,7 +148,7 @@ struct MobileTeachingCalendarView: View {
     @State private var monthSettlementID = UUID()
     @State private var eventSelectionSuppressionID = UUID()
     @State private var monthDetailsCanScrollBackward = false
-    @State private var monthDetailsScrollID = UUID()
+    @State private var monthDetailsScrollResetID = UUID()
     @State private var monthDetailsScrollState = MobileMonthDetailsScrollState()
     @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
 
@@ -160,20 +203,20 @@ struct MobileTeachingCalendarView: View {
         }
         .onAppear {
             ensureVisibleHolidays()
-            ensureVisibleDailyDetails()
             normalizeMonthPositionForLayout()
         }
         .onChange(of: selectedDate) { _ in
             resetMonthDetailsScroll()
             ensureVisibleHolidays()
-            ensureVisibleDailyDetails()
         }
         .onChange(of: mode) { _ in
             ensureVisibleHolidays()
-            ensureVisibleDailyDetails()
         }
         .onChange(of: verticalSizeClass) { _ in
             normalizeMonthPositionForLayout()
+        }
+        .task(id: dailyDetailsLoadID) {
+            await loadVisibleDailyDetails()
         }
     }
 
@@ -582,17 +625,22 @@ struct MobileTeachingCalendarView: View {
                     monthWeekdayHeader
                         .frame(width: gridWidth)
                         .padding(.bottom, 8)
-                    monthDateGrid(
-                        days: days,
-                        month: first,
-                        expansionProgress: expansionProgress,
-                        dayCellHeight: cellHeight,
-                        dayTopInset: dayTopInset
-                    )
-                    .frame(width: gridWidth, height: fullGridHeight, alignment: .top)
-                    .offset(y: gridOffset)
+                    ZStack(alignment: .top) {
+                        monthDateGrid(
+                            days: days,
+                            month: first,
+                            expansionProgress: expansionProgress,
+                            dayCellHeight: cellHeight,
+                            dayTopInset: dayTopInset
+                        )
+                        .frame(width: gridWidth, height: fullGridHeight, alignment: .top)
+                        .offset(y: gridOffset)
+                        .id(monthGridIdentity)
+                        .transition(pageTransition)
+                    }
                     .frame(width: gridWidth, height: visibleGridHeight, alignment: .top)
                     .clipped()
+                    .animation(Self.pageAnimation, value: monthGridIdentity)
                     monthExpansionHandle(
                         expansionProgress: expansionProgress,
                         detailLiftProgress: detailLiftProgress
@@ -600,8 +648,8 @@ struct MobileTeachingCalendarView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                if expansionProgress < 0.999, summaryHeight > 0 {
-                    ScrollView(.vertical, showsIndicators: false) {
+                ScrollView(.vertical, showsIndicators: false) {
+                    ZStack(alignment: .top) {
                         VStack(spacing: 10) {
                             daySummaryCard(selectedDate)
                             mobileAssignmentCard(selectedDate)
@@ -612,22 +660,27 @@ struct MobileTeachingCalendarView: View {
                                 mobileDeadlineCard(selectedDate)
                             }
                         }
-                        .padding(.horizontal, 1)
-                        .padding(.vertical, 2)
-                        .background(MobileMonthDetailsScrollConfiguration(
-                            canScrollBackward: $monthDetailsCanScrollBackward,
-                            scrollState: monthDetailsScrollState
-                        ))
+                        .id(monthDetailsContentIdentity)
+                        .transition(.opacity)
                     }
-                    .id(monthDetailsScrollID)
-                    .frame(height: summaryHeight)
-                    .opacity(1 - expansionProgress)
-                    .scrollDisabled(effectiveMonthPosition != .detailRaised)
-                    .accessibilityHidden(expansionProgress >= 0.25)
-                    .accessibilityIdentifier("calendar.mobile.month-day-summary")
-                    .accessibilityValue(monthDetailsCanScrollBackward ? "已滚动" : "顶部")
-                    .background(Color.clear)
+                    .animation(Self.detailsContentAnimation, value: monthDetailsContentIdentity)
+                    .padding(.horizontal, 1)
+                    .padding(.vertical, 2)
+                    .background(MobileMonthDetailsScrollConfiguration(
+                        canScrollBackward: $monthDetailsCanScrollBackward,
+                        resetID: monthDetailsScrollResetID,
+                        scrollState: monthDetailsScrollState
+                    ))
                 }
+                .frame(height: summaryHeight)
+                .opacity(1 - expansionProgress)
+                .clipped()
+                .allowsHitTesting(expansionProgress < 0.999 && summaryHeight > 1)
+                .scrollDisabled(effectiveMonthPosition != .detailRaised)
+                .accessibilityHidden(expansionProgress >= 0.25)
+                .accessibilityIdentifier("calendar.mobile.month-day-summary")
+                .accessibilityValue(monthDetailsCanScrollBackward ? "已滚动" : "顶部")
+                .background(Color.clear)
 
                 Spacer(minLength: 0)
             }
@@ -1492,22 +1545,59 @@ struct MobileTeachingCalendarView: View {
         visibleHolidayYears.forEach { model.ensureHolidays(for: $0) }
     }
 
-    private func ensureVisibleDailyDetails() {
-        guard mode == .month else { return }
-        let date = StrictContractDateParser.string(from: selectedDate)
-        Task {
-            await calendarDeadlines.loadAssignments(date: date, sampleMode: model.isSampleMode)
-        }
-        if model.almanacEnabled {
-            Task {
-                await dailyInfo.loadAlmanac(date: date, sampleMode: model.isSampleMode)
-            }
-        }
-        if model.hasEnabledPublicDeadlines {
-            Task {
-                await calendarDeadlines.loadPublic(date: date, sampleMode: model.isSampleMode)
-            }
-        }
+    private var dailyDetailsLoadID: MobileCalendarDailyDetailsLoadID {
+        MobileCalendarDailyDetailsLoadID(
+            date: mode == .month ? StrictContractDateParser.string(from: selectedDate) : nil,
+            sampleMode: model.isSampleMode,
+            loadsAlmanac: model.almanacEnabled,
+            loadsPublicDeadlines: model.hasEnabledPublicDeadlines
+        )
+    }
+
+    private var monthDetailsContentIdentity: String {
+        StrictContractDateParser.string(from: selectedDate)
+    }
+
+    @MainActor
+    private func loadVisibleDailyDetails() async {
+        let request = dailyDetailsLoadID
+        guard let date = request.date else { return }
+
+        async let assignments: Void = calendarDeadlines.loadAssignments(
+            date: date,
+            sampleMode: request.sampleMode
+        )
+        async let almanac: Void = loadAlmanacIfNeeded(
+            request.loadsAlmanac,
+            date: date,
+            sampleMode: request.sampleMode
+        )
+        async let publicDeadlines: Void = loadPublicDeadlinesIfNeeded(
+            request.loadsPublicDeadlines,
+            date: date,
+            sampleMode: request.sampleMode
+        )
+        _ = await (assignments, almanac, publicDeadlines)
+    }
+
+    @MainActor
+    private func loadAlmanacIfNeeded(
+        _ enabled: Bool,
+        date: String,
+        sampleMode: Bool
+    ) async {
+        guard enabled, !Task.isCancelled else { return }
+        await dailyInfo.loadAlmanac(date: date, sampleMode: sampleMode)
+    }
+
+    @MainActor
+    private func loadPublicDeadlinesIfNeeded(
+        _ enabled: Bool,
+        date: String,
+        sampleMode: Bool
+    ) async {
+        guard enabled, !Task.isCancelled else { return }
+        await calendarDeadlines.loadPublic(date: date, sampleMode: sampleMode)
     }
 
     private func moveDate(_ direction: Int) {
@@ -1519,7 +1609,11 @@ struct MobileTeachingCalendarView: View {
         ) {
             pageDirection = direction
             AppHaptics.selection()
-            withAnimation(Self.pageAnimation) { selectedDate = date }
+            if mode == .month {
+                selectedDate = date
+            } else {
+                withAnimation(Self.pageAnimation) { selectedDate = date }
+            }
         }
     }
 
@@ -1529,7 +1623,11 @@ struct MobileTeachingCalendarView: View {
         if !sameDay(date, selectedDate) {
             pageDirection = date > selectedDate ? 1 : -1
         }
-        withAnimation(Self.pageAnimation) { selectedDate = date }
+        if mode == .month {
+            selectedDate = date
+        } else {
+            withAnimation(Self.pageAnimation) { selectedDate = date }
+        }
     }
 
     private var navigationUnit: TeachingCalendarLogic.NavigationUnit {
@@ -1734,23 +1832,22 @@ struct MobileTeachingCalendarView: View {
 
     private func resetMonthDetailsScroll() {
         monthDetailsCanScrollBackward = false
-        monthDetailsScrollState.reset()
-        monthDetailsScrollID = UUID()
+        monthDetailsScrollResetID = UUID()
     }
 
     private var contentIdentity: String {
-        let referenceDate: Date
-        switch mode {
-        case .day:
-            referenceDate = calendar.startOfDay(for: selectedDate)
-        case .week:
-            referenceDate = calendar.dateInterval(of: .weekOfYear, for: selectedDate)?.start ?? selectedDate
-        case .month:
-            referenceDate = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
-        case .year:
-            referenceDate = calendar.dateInterval(of: .year, for: selectedDate)?.start ?? selectedDate
-        }
-        return "\(mode.rawValue)-\(referenceDate.timeIntervalSinceReferenceDate)"
+        MobileCalendarAnimationPartition.contentIdentity(
+            modeRawValue: mode.rawValue,
+            selectedDate: selectedDate,
+            calendar: calendar
+        )
+    }
+
+    private var monthGridIdentity: String {
+        MobileCalendarAnimationPartition.monthGridIdentity(
+            selectedDate: selectedDate,
+            calendar: calendar
+        )
     }
 
     private var pageTransition: AnyTransition {
@@ -1793,6 +1890,7 @@ struct MobileTeachingCalendarView: View {
     private static let viewAnimation = Animation.easeInOut(duration: 0.24)
     private static let pageAnimation = Animation.easeInOut(duration: 0.3)
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
+    private static let detailsContentAnimation = Animation.easeOut(duration: 0.16)
     private static let fullDateFormatter = formatter("yyyy年M月d日 EEEE")
     private static let yearMonthFormatter = formatter("yyyy年M月")
     private static let monthFormatter = formatter("M月")
@@ -1812,11 +1910,13 @@ struct MobileTeachingCalendarView: View {
 
 private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
     @Binding var canScrollBackward: Bool
+    let resetID: UUID
     let scrollState: MobileMonthDetailsScrollState
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             canScrollBackward: $canScrollBackward,
+            resetID: resetID,
             scrollState: scrollState
         )
     }
@@ -1830,6 +1930,7 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
     func updateUIView(_ uiView: UIView, context: Context) {
         context.coordinator.canScrollBackward = $canScrollBackward
         context.coordinator.scrollState = scrollState
+        context.coordinator.requestReset(resetID)
         configureNearestScrollView(from: uiView, coordinator: context.coordinator)
     }
 
@@ -1858,18 +1959,28 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
     final class Coordinator: NSObject {
         var canScrollBackward: Binding<Bool>
         var scrollState: MobileMonthDetailsScrollState
+        private var requestedResetID: UUID
+        private var appliedResetID: UUID?
         private weak var scrollView: UIScrollView?
 
         init(
             canScrollBackward: Binding<Bool>,
+            resetID: UUID,
             scrollState: MobileMonthDetailsScrollState
         ) {
             self.canScrollBackward = canScrollBackward
+            requestedResetID = resetID
             self.scrollState = scrollState
+        }
+
+        func requestReset(_ resetID: UUID) {
+            requestedResetID = resetID
+            applyPendingResetIfNeeded()
         }
 
         func observe(_ scrollView: UIScrollView) {
             guard self.scrollView !== scrollView else {
+                applyPendingResetIfNeeded()
                 updateScrollState(scrollView)
                 return
             }
@@ -1884,6 +1995,7 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
                 self,
                 action: #selector(scrollViewDidPan(_:))
             )
+            applyPendingResetIfNeeded()
             updateScrollState(scrollView)
         }
 
@@ -1907,6 +2019,17 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
             let canScrollBackward = scrollView.contentOffset.y > topOffset + 1
             guard self.canScrollBackward.wrappedValue != canScrollBackward else { return }
             self.canScrollBackward.wrappedValue = canScrollBackward
+        }
+
+        private func applyPendingResetIfNeeded() {
+            guard appliedResetID != requestedResetID, let scrollView else { return }
+            appliedResetID = requestedResetID
+            let topOffset = -scrollView.adjustedContentInset.top
+            scrollView.setContentOffset(
+                CGPoint(x: scrollView.contentOffset.x, y: topOffset),
+                animated: false
+            )
+            updateScrollState(scrollView)
         }
 
     }

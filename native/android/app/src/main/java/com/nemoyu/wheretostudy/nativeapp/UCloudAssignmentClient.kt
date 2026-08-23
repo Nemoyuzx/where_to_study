@@ -7,12 +7,17 @@ import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal class UCloudAssignmentClient(
-    private val credentialStore: SecureCredentialStore,
+internal class UCloudAssignmentClient internal constructor(
+    private val loadCredentials: () -> Credentials?,
+    private val fetchAllOverride: ((Credentials) -> List<AssignmentDeadlineItem>)? = null,
+    private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
+    private val flightSelectionObserver: ((isLeader: Boolean) -> Unit)? = null,
 ) {
     private data class CachedAssignments(
         val account: String,
@@ -31,39 +36,111 @@ internal class UCloudAssignmentClient(
         val body: String,
     )
 
-    @Volatile
+    private data class InFlightFetch(
+        val account: String,
+        val revision: Long,
+        val result: CompletableFuture<List<AssignmentDeadlineItem>>,
+    )
+
+    constructor(credentialStore: SecureCredentialStore) : this(
+        loadCredentials = credentialStore::load,
+    )
+
+    private val stateLock = Any()
     private var cachedAssignments: CachedAssignments? = null
+    private val inFlightFetches = mutableMapOf<String, InFlightFetch>()
     private val revision = AtomicLong(0)
 
     fun fetch(date: String): List<AssignmentDeadlineItem> {
         requireUCloudDate(date)
-        val credentials = credentialStore.load()
+        val credentials = loadCredentials()
             ?.takeIf { it.account.trim().isNotEmpty() && it.password.isNotEmpty() }
             ?: throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
         val account = credentials.account.trim()
-        val cached = cachedAssignments
-        val allItems = if (cached != null && cached.account == account &&
-            SystemClock.elapsedRealtime() - cached.fetchedAtElapsed < CACHE_LIFETIME_MS
-        ) {
-            cached.items
-        } else {
-            val requestRevision = revision.get()
-            fetchAll(Credentials(account, credentials.password)).also { items ->
-                if (revision.get() == requestRevision) {
-                    cachedAssignments = CachedAssignments(
-                        account,
-                        SystemClock.elapsedRealtime(),
-                        items,
-                    )
-                }
+        val normalizedCredentials = Credentials(account, credentials.password)
+        val now = elapsedRealtime()
+        val cached = synchronized(stateLock) {
+            cachedAssignments?.takeIf {
+                it.account == account && now - it.fetchedAtElapsed < CACHE_LIFETIME_MS
             }
         }
+        val allItems = cached?.items ?: fetchAllSingleFlight(normalizedCredentials)
         return allItems.filter { it.deadline.startsWith(date) }
     }
 
     fun reset() {
-        revision.incrementAndGet()
-        cachedAssignments = null
+        val invalidated = synchronized(stateLock) {
+            revision.incrementAndGet()
+            cachedAssignments = null
+            inFlightFetches.values.toList().also { inFlightFetches.clear() }
+        }
+        invalidated.forEach {
+            it.result.completeExceptionally(DailyInfoClientException("作业请求已失效。"))
+        }
+    }
+
+    private fun fetchAllSingleFlight(
+        credentials: Credentials,
+    ): List<AssignmentDeadlineItem> {
+        val selection = synchronized(stateLock) {
+            val currentRevision = revision.get()
+            val existing = inFlightFetches[credentials.account]
+            if (existing != null &&
+                existing.account == credentials.account &&
+                existing.revision == currentRevision
+            ) {
+                existing to false
+            } else {
+                InFlightFetch(
+                    account = credentials.account,
+                    revision = currentRevision,
+                    result = CompletableFuture(),
+                ).also { inFlightFetches[credentials.account] = it } to true
+            }
+        }
+        val flight = selection.first
+        flightSelectionObserver?.invoke(selection.second)
+        if (selection.second) {
+            try {
+                val items = fetchAllOverride?.invoke(credentials) ?: fetchAll(credentials)
+                val isCurrent = synchronized(stateLock) {
+                    val current = revision.get() == flight.revision &&
+                        inFlightFetches[credentials.account]?.result === flight.result
+                    if (current) {
+                        cachedAssignments = CachedAssignments(
+                            credentials.account,
+                            elapsedRealtime(),
+                            items,
+                        )
+                        inFlightFetches.remove(credentials.account)
+                    }
+                    current
+                }
+                if (isCurrent) {
+                    flight.result.complete(items)
+                } else {
+                    flight.result.completeExceptionally(
+                        DailyInfoClientException("作业请求已失效。"),
+                    )
+                }
+            } catch (error: Exception) {
+                synchronized(stateLock) {
+                    if (inFlightFetches[credentials.account]?.result === flight.result) {
+                        inFlightFetches.remove(credentials.account)
+                    }
+                }
+                flight.result.completeExceptionally(error)
+            }
+        }
+        return try {
+            flight.result.get()
+        } catch (error: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw DailyInfoClientException("作业请求已中断。", error)
+        } catch (error: ExecutionException) {
+            throw (error.cause as? Exception)
+                ?: DailyInfoClientException("作业请求失败。", error)
+        }
     }
 
     private fun fetchAll(credentials: Credentials): List<AssignmentDeadlineItem> {

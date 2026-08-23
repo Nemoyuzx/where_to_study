@@ -409,6 +409,12 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
         let userID: String
     }
 
+    private struct InFlightFetch {
+        let id: UInt64
+        let revision: UInt64
+        let task: Task<[AssignmentDeadlineItem], Error>
+    }
+
     private static let casLoginURL = URL(
         string: "https://auth.bupt.edu.cn/authserver/login?service=https%3A%2F%2Fucloud.bupt.edu.cn"
     )!
@@ -423,11 +429,29 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     private static let cacheLifetime: TimeInterval = 10 * 60
 
     private let credentialStore: any CredentialStoring
+    private let fetchAllProvider: @Sendable (Credentials) async throws -> [AssignmentDeadlineItem]
+    private let flightSelectionObserver: (@Sendable (Bool) -> Void)?
     private var cache: Cache?
+    private var inFlightFetches = [String: InFlightFetch]()
     private var revision: UInt64 = 0
+    private var nextFlightID: UInt64 = 0
 
     init(credentialStore: any CredentialStoring = KeychainCredentialStore()) {
         self.credentialStore = credentialStore
+        fetchAllProvider = { credentials in
+            try await Self.fetchAll(credentials: credentials)
+        }
+        flightSelectionObserver = nil
+    }
+
+    init(
+        credentialStore: any CredentialStoring,
+        fetchAll: @escaping @Sendable (Credentials) async throws -> [AssignmentDeadlineItem],
+        flightSelectionObserver: (@Sendable (Bool) -> Void)? = nil
+    ) {
+        self.credentialStore = credentialStore
+        fetchAllProvider = fetchAll
+        self.flightSelectionObserver = flightSelectionObserver
     }
 
     func fetch(date: String) async throws -> [AssignmentDeadlineItem] {
@@ -447,13 +471,45 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
            Date().timeIntervalSince(cache.fetchedAt) < Self.cacheLifetime {
             allItems = cache.items
         } else {
-            let requestRevision = revision
-            allItems = try await Self.fetchAll(credentials: Credentials(
-                account: account,
-                password: credentials.password
-            ))
-            if revision == requestRevision {
+            let flight: InFlightFetch
+            let isFlightLeader: Bool
+            if let existing = inFlightFetches[account], existing.revision == revision {
+                flight = existing
+                isFlightLeader = false
+            } else {
+                nextFlightID &+= 1
+                let flightID = nextFlightID
+                let requestRevision = revision
+                let normalizedCredentials = Credentials(
+                    account: account,
+                    password: credentials.password
+                )
+                let fetchAllProvider = fetchAllProvider
+                flight = InFlightFetch(
+                    id: flightID,
+                    revision: requestRevision,
+                    task: Task {
+                        try await fetchAllProvider(normalizedCredentials)
+                    }
+                )
+                inFlightFetches[account] = flight
+                isFlightLeader = true
+            }
+            flightSelectionObserver?(isFlightLeader)
+            do {
+                allItems = try await flight.task.value
+            } catch {
+                if inFlightFetches[account]?.id == flight.id {
+                    inFlightFetches.removeValue(forKey: account)
+                }
+                throw error
+            }
+            guard revision == flight.revision else {
+                throw CancellationError()
+            }
+            if inFlightFetches[account]?.id == flight.id {
                 cache = Cache(account: account, fetchedAt: Date(), items: allItems)
+                inFlightFetches.removeValue(forKey: account)
             }
         }
         return allItems.filter { $0.deadline.hasPrefix(date) }
@@ -462,6 +518,9 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     func reset() async {
         revision &+= 1
         cache = nil
+        let invalidated = inFlightFetches.values.map(\.task)
+        inFlightFetches.removeAll()
+        invalidated.forEach { $0.cancel() }
     }
 
     private static func fetchAll(credentials: Credentials) async throws -> [AssignmentDeadlineItem] {

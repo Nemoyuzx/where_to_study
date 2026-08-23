@@ -510,6 +510,7 @@ internal class CalendarDailyInfoRepository(
     private val assignmentErrors = ConcurrentHashMap<String, String>()
     private val loadingAssignments = ConcurrentHashMap.newKeySet<String>()
     private val assignmentRevision = AtomicLong(0)
+    private val observers = ConcurrentHashMap<Any, (String) -> Unit>()
     private val closed = AtomicBoolean(false)
 
     fun almanac(date: String): AlmanacInfo? = almanacByDate[date]
@@ -521,6 +522,14 @@ internal class CalendarDailyInfoRepository(
     fun assignments(date: String): List<AssignmentDeadlineItem>? = assignmentsByDate[date]
     fun assignmentError(date: String): String? = assignmentErrors[date]
     fun isLoadingAssignments(date: String): Boolean = date in loadingAssignments
+
+    fun addObserver(owner: Any, observer: (String) -> Unit) {
+        if (!closed.get()) observers[owner] = observer
+    }
+
+    fun removeObserver(owner: Any) {
+        observers.remove(owner)
+    }
 
     fun loadAlmanac(date: String, force: Boolean = false, onComplete: () -> Unit) {
         if (closed.get() || (!force && almanacByDate[date] != null) || !loadingAlmanac.add(date)) {
@@ -534,7 +543,7 @@ internal class CalendarDailyInfoRepository(
                 }.onSuccess { almanacByDate[date] = it }
                     .onFailure { almanacErrors[date] = it.message ?: "黄历获取失败。" }
                 loadingAlmanac.remove(date)
-                postCompletion(onComplete)
+                postCompletion(date, onComplete)
             }
         } catch (_: RejectedExecutionException) {
             loadingAlmanac.remove(date)
@@ -555,7 +564,7 @@ internal class CalendarDailyInfoRepository(
                 }.onSuccess { deadlinesByDate[date] = it }
                     .onFailure { deadlineErrors[date] = it.message ?: "DDL 获取失败。" }
                 loadingDeadlines.remove(date)
-                postCompletion(onComplete)
+                postCompletion(date, onComplete)
             }
         } catch (_: RejectedExecutionException) {
             loadingDeadlines.remove(date)
@@ -589,7 +598,7 @@ internal class CalendarDailyInfoRepository(
                 }
                 if (assignmentRevision.get() == requestRevision) {
                     loadingAssignments.remove(date)
-                    postCompletion(onComplete)
+                    postCompletion(date, onComplete)
                 }
             }
         } catch (_: RejectedExecutionException) {
@@ -605,13 +614,18 @@ internal class CalendarDailyInfoRepository(
         assignmentClient?.reset()
     }
 
-    private fun postCompletion(onComplete: () -> Unit) {
-        if (!closed.get()) mainHandler.post { if (!closed.get()) onComplete() }
+    private fun postCompletion(date: String, onComplete: () -> Unit) {
+        if (!closed.get()) mainHandler.post {
+            if (closed.get()) return@post
+            onComplete()
+            observers.values.toList().forEach { observer -> observer(date) }
+        }
     }
 
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         clearAssignments()
+        observers.clear()
         mainHandler.removeCallbacksAndMessages(null)
         worker.shutdownNow()
     }

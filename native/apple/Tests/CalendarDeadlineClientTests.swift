@@ -149,6 +149,82 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertEqual(items.first?.courseName, "示例课程")
     }
 
+    func testUCloudConcurrentDatesShareOneAccountWideFetchAll() async throws {
+        let provider = ControlledUCloudFetch()
+        let selection = FlightSelectionRecorder()
+        let client = UCloudAssignmentClient(
+            credentialStore: StaticDeadlineCredentialStore(),
+            fetchAll: { credentials in
+                try await provider.fetch(credentials: credentials)
+            },
+            flightSelectionObserver: { isLeader in
+                Task { await selection.record(isLeader: isLeader) }
+            }
+        )
+        let first = Task { try await client.fetch(date: "2026-08-22") }
+        await provider.waitUntilInvocationCount(1)
+        let second = Task { try await client.fetch(date: "2026-08-23") }
+
+        await selection.waitUntilCount(2)
+        let leadership = await selection.values
+        XCTAssertEqual(leadership.filter { $0 }.count, 1)
+        XCTAssertEqual(leadership.filter { !$0 }.count, 1)
+        let invocationCountBeforeCompletion = await provider.invocationCount
+        XCTAssertEqual(invocationCountBeforeCompletion, 1)
+
+        await provider.complete(
+            invocation: 1,
+            with: [
+                assignment(id: "first", deadline: "2026-08-22 18:00:00"),
+                assignment(id: "second", deadline: "2026-08-23 19:00:00")
+            ]
+        )
+        let firstItems = try await first.value
+        let secondItems = try await second.value
+        XCTAssertEqual(firstItems.map(\.id), ["first"])
+        XCTAssertEqual(secondItems.map(\.id), ["second"])
+        let invocationCountAfterCompletion = await provider.invocationCount
+        XCTAssertEqual(invocationCountAfterCompletion, 1)
+    }
+
+    func testUCloudResetInvalidatesOldFlightAndPreventsItsCacheWriteBack() async throws {
+        let provider = ControlledUCloudFetch()
+        let client = UCloudAssignmentClient(
+            credentialStore: StaticDeadlineCredentialStore(),
+            fetchAll: { credentials in
+                try await provider.fetch(credentials: credentials)
+            }
+        )
+        let oldRequest = Task { try await client.fetch(date: "2026-08-23") }
+        await provider.waitUntilInvocationCount(1)
+
+        await client.reset()
+        let refreshedRequest = Task { try await client.fetch(date: "2026-08-23") }
+        await provider.waitUntilInvocationCount(2)
+        await provider.complete(
+            invocation: 2,
+            with: [assignment(id: "new", deadline: "2026-08-23 09:00:00")]
+        )
+        let refreshed = try await refreshedRequest.value
+        XCTAssertEqual(refreshed.map(\.id), ["new"])
+
+        await provider.complete(
+            invocation: 1,
+            with: [assignment(id: "old", deadline: "2026-08-23 08:00:00")]
+        )
+        do {
+            _ = try await oldRequest.value
+            XCTFail("已清空的旧请求不应再交付结果")
+        } catch is CancellationError {
+            // Expected: reset invalidates both the shared task and its eventual write-back.
+        }
+
+        let cached = try await client.fetch(date: "2026-08-23")
+        XCTAssertEqual(cached.map(\.id), ["new"])
+        let finalInvocationCount = await provider.invocationCount
+        XCTAssertEqual(finalInvocationCount, 2)
+    }
+
     @MainActor
     func testClearingAssignmentsDiscardsAnOlderInFlightResponse() async {
         let client = SuspendedAssignmentClient()
@@ -174,6 +250,74 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertTrue(store.assignmentUnavailableByDate.isEmpty)
         XCTAssertTrue(store.loadingAssignmentDates.isEmpty)
     }
+}
+
+private struct StaticDeadlineCredentialStore: CredentialStoring {
+    func load() throws -> Credentials? {
+        Credentials(account: "2023000000", password: "password")
+    }
+
+    func save(_: Credentials) throws {}
+    func clear() throws {}
+}
+
+private actor ControlledUCloudFetch {
+    private(set) var invocationCount = 0
+    private var invocationWaiters = [(count: Int, continuation: CheckedContinuation<Void, Never>)]()
+    private var continuations = [
+        Int: CheckedContinuation<[AssignmentDeadlineItem], Error>
+    ]()
+
+    func fetch(credentials _: Credentials) async throws -> [AssignmentDeadlineItem] {
+        invocationCount += 1
+        let invocation = invocationCount
+        let ready = invocationWaiters.filter { $0.count <= invocationCount }
+        invocationWaiters.removeAll { $0.count <= invocationCount }
+        ready.forEach { $0.continuation.resume() }
+        return try await withCheckedThrowingContinuation { continuation in
+            continuations[invocation] = continuation
+        }
+    }
+
+    func waitUntilInvocationCount(_ count: Int) async {
+        guard invocationCount < count else { return }
+        await withCheckedContinuation { continuation in
+            invocationWaiters.append((count, continuation))
+        }
+    }
+
+    func complete(invocation: Int, with items: [AssignmentDeadlineItem]) {
+        continuations.removeValue(forKey: invocation)?.resume(returning: items)
+    }
+}
+
+private actor FlightSelectionRecorder {
+    private(set) var values = [Bool]()
+    private var waiters = [(count: Int, continuation: CheckedContinuation<Void, Never>)]()
+
+    func record(isLeader: Bool) {
+        values.append(isLeader)
+        let ready = waiters.filter { $0.count <= values.count }
+        waiters.removeAll { $0.count <= values.count }
+        ready.forEach { $0.continuation.resume() }
+    }
+
+    func waitUntilCount(_ count: Int) async {
+        guard values.count < count else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append((count, continuation))
+        }
+    }
+}
+
+private func assignment(id: String, deadline: String) -> AssignmentDeadlineItem {
+    AssignmentDeadlineItem(
+        id: id,
+        title: id,
+        courseName: "course",
+        deadline: deadline,
+        status: "未提交"
+    )
 }
 
 private actor SuspendedAssignmentClient: AssignmentDeadlineFetching {

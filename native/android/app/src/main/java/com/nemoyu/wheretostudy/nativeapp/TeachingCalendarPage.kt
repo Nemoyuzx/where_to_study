@@ -27,7 +27,6 @@ import android.view.Window
 import android.view.WindowManager
 import android.view.VelocityTracker
 import android.view.accessibility.AccessibilityEvent
-import android.view.animation.DecelerateInterpolator
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.FrameLayout
@@ -113,6 +112,10 @@ private data class MonthEntriesRenderState(
     val entries: List<MonthCalendarEntry>,
     val selected: Boolean,
     var slotCapacity: Int = -1,
+)
+
+private data class MonthDayCellState(
+    val dateMillis: Long,
 )
 
 private class MonthExpansionIndicatorView(context: Context) : View(context) {
@@ -647,12 +650,89 @@ internal class TeachingCalendarPage(
     private var expandedMonthCellHeightDp = TeachingCalendarLogic.monthCellHeightDp(true)
     private var monthExpansionAnimator: ValueAnimator? = null
     private var pendingPageDirection = 0
-    private var pendingMonthExpansionDirection = 0
-    private var pendingMonthSelectionDirection = 0
     private var pendingMonthSelectionStartPosition: Float? = null
     private var pendingMonthSelectionTargetPosition: Float? = null
+    private var calendarHostRoot: View? = null
     private var activePopupAnchor: YearCalendarView? = null
     private var activePopup: PopupWindow? = null
+
+    /**
+     * Starts data work from calendar state changes and lifecycle events, never
+     * from a View-construction function. Repository completions update only the
+     * currently mounted month cells/details, so they cannot replace or cut off
+     * a month-page transition.
+     */
+    private fun requestCalendarDataForSelection() {
+        visibleYears().forEach(holidayRepository::ensure)
+        if (selectedMode != Mode.MONTH) return
+        val dateKey = contractDate().format(selectedDate.time)
+        if (preferences.almanacEnabled) {
+            dailyInfoRepository.loadAlmanac(dateKey) {}
+        }
+        if (preferences.hasEnabledPublicDeadlines) {
+            dailyInfoRepository.loadDeadlines(dateKey) {}
+        }
+        dailyInfoRepository.loadAssignments(dateKey) {}
+    }
+
+    private fun activeMonthView(): ViewGroup? {
+        val root = calendarHostRoot ?: return null
+        if (!root.isAttachedToWindow || selectedMode != Mode.MONTH) return null
+        val surface = root.findViewById<FrameLayout?>(R.id.calendar_swipe_surface)
+        val activePage = surface?.takeIf { it.childCount > 0 }
+            ?.getChildAt(surface.childCount - 1)
+            ?: root
+        return activePage.findViewById(R.id.calendar_month_view)
+    }
+
+    private fun refreshSelectedMonthDetailsInPlace(expectedDateKey: String) {
+        val root = calendarHostRoot ?: return
+        root.post {
+            if (calendarHostRoot !== root || !root.isAttachedToWindow) return@post
+            val currentDateKey = contractDate().format(selectedDate.time)
+            if (currentDateKey != expectedDateKey) return@post
+            val details = activeMonthView()?.findViewById<MonthDetailsScrollView>(
+                R.id.calendar_month_selected_details,
+            ) ?: return@post
+            if (details.tag != expectedDateKey) return@post
+            val retainedScrollY = details.scrollY
+            details.removeAllViews()
+            details.addView(monthSelectedDetails(selectedDate))
+            details.post {
+                if (details.isAttachedToWindow && details.tag == expectedDateKey) {
+                    details.scrollTo(0, retainedScrollY)
+                }
+            }
+        }
+    }
+
+    private fun refreshHolidayDataInPlace() {
+        val root = calendarHostRoot ?: return
+        root.post {
+            if (calendarHostRoot !== root || !root.isAttachedToWindow) return@post
+            val monthView = activeMonthView() ?: return@post
+            val grid = monthView.findViewById<ViewGroup>(R.id.calendar_month_grid)
+            repeat(grid.childCount) { rowIndex ->
+                val row = grid.getChildAt(rowIndex) as ViewGroup
+                repeat(row.childCount) cellLoop@ { cellIndex ->
+                    val cell = row.getChildAt(cellIndex) as? LinearLayout ?: return@cellLoop
+                    val state = cell.tag as? MonthDayCellState ?: return@cellLoop
+                    val day = Calendar.getInstance(shanghai).apply {
+                        timeInMillis = state.dateMillis
+                    }
+                    val cellHeightDp = (row.height / activity.resources.displayMetrics.density)
+                        .roundToInt()
+                    bindMonthDayCell(
+                        cell,
+                        day,
+                        renderedMonthSheetPosition,
+                        cellHeightDp,
+                    )
+                }
+            }
+            refreshSelectedMonthDetailsInPlace(contractDate().format(selectedDate.time))
+        }
+    }
 
     fun build(): View = if (availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp) {
         phoneBuild()
@@ -746,22 +826,24 @@ internal class TeachingCalendarPage(
             )
             animateExpandedPageIn(content)
             animatePendingMonthDaySelection(calendarView)
-            visibleYears().forEach { year ->
-                holidayRepository.ensure(year)
-            }
         }
 
         scrollView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
+                calendarHostRoot = scrollView
                 holidayRepository.addObserver(scrollView) {
-                    if (scrollView.isAttachedToWindow) render()
+                    refreshHolidayDataInPlace()
                 }
+                dailyInfoRepository.addObserver(scrollView, ::refreshSelectedMonthDetailsInPlace)
+                requestCalendarDataForSelection()
                 render()
             }
 
             override fun onViewDetachedFromWindow(view: View) {
                 scrollView.requestDisallowInterceptTouchEvent(false)
                 holidayRepository.removeObserver(scrollView)
+                dailyInfoRepository.removeObserver(scrollView)
+                if (calendarHostRoot === scrollView) calendarHostRoot = null
                 dismissYearPopover()
             }
         })
@@ -778,6 +860,7 @@ internal class TeachingCalendarPage(
                         mode.ordinal,
                     )
                     selectedMode = mode
+                    requestCalendarDataForSelection()
                     render()
                 }.apply {
                     id = when (mode) {
@@ -871,7 +954,6 @@ internal class TeachingCalendarPage(
             }
             periodLabel.text = periodTitle()
             val pageView: View = if (selectedMode == Mode.DAY || selectedMode == Mode.WEEK) {
-                visibleYears().forEach(holidayRepository::ensure)
                 phoneDayWeekContent(::render)
             } else {
                 val fixedMonth = selectedMode == Mode.MONTH
@@ -941,7 +1023,6 @@ internal class TeachingCalendarPage(
                 ),
             )
             animatePendingMonthDaySelection(pageView)
-            visibleYears().forEach(holidayRepository::ensure)
         }
 
         pageSurface.onPageSwipe = { direction ->
@@ -967,6 +1048,7 @@ internal class TeachingCalendarPage(
             addView(phoneNavigationButton("今天", 52) {
                 performCalendarHaptic()
                 selectedDate.timeInMillis = Calendar.getInstance(shanghai).timeInMillis
+                requestCalendarDataForSelection()
                 render()
             })
             addView(phoneNavigationButton("‹", 34) {
@@ -997,6 +1079,7 @@ internal class TeachingCalendarPage(
                         mode.ordinal,
                     )
                     selectedMode = mode
+                    requestCalendarDataForSelection()
                     render()
                 }.apply {
                     id = when (mode) {
@@ -1030,15 +1113,20 @@ internal class TeachingCalendarPage(
         ))
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
+                calendarHostRoot = root
                 holidayRepository.addObserver(root) {
-                    if (root.isAttachedToWindow) render()
+                    refreshHolidayDataInPlace()
                 }
+                dailyInfoRepository.addObserver(root, ::refreshSelectedMonthDetailsInPlace)
+                requestCalendarDataForSelection()
                 render()
             }
 
             override fun onViewDetachedFromWindow(view: View) {
                 monthExpansionAnimator?.cancel()
                 holidayRepository.removeObserver(root)
+                dailyInfoRepository.removeObserver(root)
+                if (calendarHostRoot === root) calendarHostRoot = null
                 dismissYearPopover()
             }
         })
@@ -1052,20 +1140,18 @@ internal class TeachingCalendarPage(
         layoutParams: FrameLayout.LayoutParams,
     ) {
         val pageDirection = pendingPageDirection
-        val expansionDirection = pendingMonthExpansionDirection
-        val selectionDirection = pendingMonthSelectionDirection
         pendingPageDirection = 0
-        pendingMonthExpansionDirection = 0
-        pendingMonthSelectionDirection = 0
 
         // A rapid second selection may arrive before the previous transition
         // finishes. Keep only the newest mounted page as the outgoing surface.
         while (container.childCount > 1) container.removeViewAt(0)
         val oldPage = container.getChildAt(0)
 
-        if (oldPage == null ||
-            (pageDirection == 0 && expansionDirection == 0 && selectionDirection == 0)
-        ) {
+        // Date selection and the vertical month-sheet animation deliberately
+        // never share the horizontal month-pager transform. The new content is
+        // mounted at x=0 and animatePendingMonthDaySelection() owns the only
+        // animation for that interaction.
+        if (oldPage == null || pageDirection == 0) {
             container.removeAllViews()
             page.alpha = 1f
             page.translationX = 0f
@@ -1101,25 +1187,6 @@ internal class TeachingCalendarPage(
                 .start()
             return
         }
-
-        container.removeAllViews()
-        val horizontalOffset = activity.dp(12) * selectionDirection.toFloat()
-        page.alpha = 0.82f
-        page.translationX = horizontalOffset
-        page.translationY = 0f
-        container.addView(page, layoutParams)
-        page.animate()
-            .alpha(1f)
-            .translationX(0f)
-            .translationY(0f)
-            .setDuration(190L)
-            .setInterpolator(DecelerateInterpolator())
-            .withEndAction {
-                page.alpha = 1f
-                page.translationX = 0f
-                page.translationY = 0f
-            }
-            .start()
     }
 
     private fun animatePendingMonthDaySelection(root: View) {
@@ -1141,30 +1208,9 @@ internal class TeachingCalendarPage(
 
     private fun animateExpandedPageIn(content: View) {
         val direction = pendingPageDirection
-        val expansionDirection = pendingMonthExpansionDirection
-        val selectionDirection = pendingMonthSelectionDirection
         pendingPageDirection = 0
-        pendingMonthExpansionDirection = 0
-        pendingMonthSelectionDirection = 0
-        if (direction == 0 && expansionDirection == 0 && selectionDirection == 0) return
+        if (direction == 0) return
         content.animate().cancel()
-        if (direction == 0) {
-            content.alpha = 0.52f
-            content.translationX = activity.dp(16) * selectionDirection.toFloat()
-            content.translationY = when {
-                expansionDirection > 0 -> -activity.dp(14).toFloat()
-                expansionDirection < 0 -> activity.dp(14).toFloat()
-                else -> 0f
-            }
-            content.animate()
-                .alpha(1f)
-                .translationX(0f)
-                .translationY(0f)
-                .setDuration(240L)
-                .setInterpolator(DecelerateInterpolator())
-                .start()
-            return
-        }
         val distance = content.width.takeIf { it > 0 } ?: activity.dp(availableWidthDp)
         content.alpha = 1f
         content.translationX = direction * distance.toFloat()
@@ -1201,6 +1247,7 @@ internal class TeachingCalendarPage(
                 { day ->
                     if (!sameDay(selectedDate, day)) performCalendarHaptic()
                     selectedDate.timeInMillis = day.timeInMillis
+                    requestCalendarDataForSelection()
                     onDateChanged()
                 }
             } else {
@@ -1349,6 +1396,7 @@ internal class TeachingCalendarPage(
                 performCalendarHaptic()
                 selectedDate.set(year, month, day, 12, 0, 0)
                 selectedDate.set(Calendar.MILLISECOND, 0)
+                requestCalendarDataForSelection()
                 onChanged()
             },
             selectedDate.get(Calendar.YEAR),
@@ -1441,6 +1489,7 @@ internal class TeachingCalendarPage(
                     setOnClickListener {
                         if (!sameDay(selectedDate, day)) performCalendarHaptic()
                         selectedDate.timeInMillis = day.timeInMillis
+                        requestCalendarDataForSelection()
                         onDateChanged()
                     }
                 }, LinearLayout.LayoutParams(
@@ -1524,6 +1573,7 @@ internal class TeachingCalendarPage(
                     { _, year, month, day ->
                         selectedDate.set(year, month, day, 12, 0, 0)
                         selectedDate.set(Calendar.MILLISECOND, 0)
+                        requestCalendarDataForSelection()
                         onChanged()
                     },
                     selectedDate.get(Calendar.YEAR),
@@ -1538,6 +1588,7 @@ internal class TeachingCalendarPage(
         })
         addView(navigationButton("今天", width = 66) {
             selectedDate.timeInMillis = Calendar.getInstance(shanghai).timeInMillis
+            requestCalendarDataForSelection()
             onChanged()
         })
         addView(navigationButton("›") {
@@ -1607,6 +1658,7 @@ internal class TeachingCalendarPage(
         val timelineDays = days.map(::timelineDay)
         val selectDay: (Calendar) -> Unit = { day ->
             selectedDate.timeInMillis = day.timeInMillis
+            requestCalendarDataForSelection()
             onDateChanged()
         }
         if (timelineDays.any { it.holidays.isNotEmpty() }) {
@@ -1688,6 +1740,7 @@ internal class TeachingCalendarPage(
         val detailsDateKey = contractDate().format(selectedDate.time)
         addView(MonthDetailsScrollView(activity).apply {
             id = R.id.calendar_month_selected_details
+            tag = detailsDateKey
             visibility = if (renderedMonthSheetPosition <= 0.01f) View.GONE else View.VISIBLE
             isDetailsScrollingEnabled =
                 renderedMonthSheetPosition >= TeachingCalendarLogic.monthSheetWeekPosition - 0.01f
@@ -1805,27 +1858,11 @@ internal class TeachingCalendarPage(
         onDateChanged: () -> Unit,
         sheetPosition: Float,
     ): LinearLayout {
-        val courses = coursesOn(day)
-        val holidays = holidaysOn(day)
-        val inMonth = day.get(Calendar.MONTH) == selectedDate.get(Calendar.MONTH) &&
-            day.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR)
-        val selected = sameDay(day, selectedDate)
-        val today = sameDay(day, Calendar.getInstance(shanghai))
         return LinearLayout(activity).apply {
+            tag = MonthDayCellState(day.timeInMillis)
             orientation = LinearLayout.VERTICAL
-            background = calendarCellBackground(
-                selected = selected,
-                today = today,
-                courseCount = courses.size,
-                muted = !inMonth,
-            )
             isClickable = true
             isFocusable = true
-            contentDescription = buildList {
-                add("${day.get(Calendar.MONTH) + 1}月${day.get(Calendar.DAY_OF_MONTH)}日")
-                holidays.forEach { add(it.name) }
-                courses.forEach { add("${it.name} ${it.timeRange} ${it.room} ${it.teacher}") }
-            }.joinToString("，")
             setOnClickListener {
                 if (!sameDay(selectedDate, day) ||
                     renderedMonthSheetPosition.roundToInt() !=
@@ -1835,12 +1872,6 @@ internal class TeachingCalendarPage(
                 }
                 val previousPosition = renderedMonthSheetPosition
                 val targetPosition = TeachingCalendarLogic.monthDaySelectionTargetPosition()
-                pendingMonthSelectionDirection = when {
-                    sameDay(selectedDate, day) -> 0
-                    day.timeInMillis > selectedDate.timeInMillis -> 1
-                    day.timeInMillis < selectedDate.timeInMillis -> -1
-                    else -> 0
-                }
                 monthExpansionAnimator?.cancel()
                 selectedDate.timeInMillis = day.timeInMillis
                 monthSheetPosition = targetPosition
@@ -1848,11 +1879,7 @@ internal class TeachingCalendarPage(
                 pendingMonthSelectionStartPosition = previousPosition
                 pendingMonthSelectionTargetPosition = targetPosition
                 sessionState.resetMonthDetailsScroll(contractDate().format(selectedDate.time))
-                pendingMonthExpansionDirection = when {
-                    targetPosition > previousPosition -> 1
-                    targetPosition < previousPosition -> -1
-                    else -> 0
-                }
+                requestCalendarDataForSelection()
                 onDateChanged()
             }
             addView(TextView(activity).apply {
@@ -1860,40 +1887,17 @@ internal class TeachingCalendarPage(
                 text = day.get(Calendar.DAY_OF_MONTH).toString()
                 gravity = Gravity.CENTER
                 maxLines = 1
-                setTypeface(typeface, if (selected || today) Typeface.BOLD else Typeface.NORMAL)
-                setTextColor(when {
-                    selected -> Palette.onPrimary
-                    !inMonth -> Palette.outOfMonth
-                    holidays.any { it.type == "holiday" } -> Palette.holiday
-                    else -> Palette.text
-                })
             })
-            val entries = buildList {
-                holidays.forEach { item ->
-                    add(MonthCalendarEntry(
-                        title = (if (item.type == "holiday") "休 " else "班 ") + item.name,
-                    ))
-                }
-                courses.forEach { course -> add(MonthCalendarEntry(course.name)) }
-            }
             addView(LinearLayout(activity).apply {
                 id = R.id.calendar_month_expanded_entries
                 orientation = LinearLayout.VERTICAL
-                tag = MonthEntriesRenderState(entries, selected)
             })
-            val marker = buildString {
-                holidays.firstOrNull()?.let { append(if (it.type == "holiday") "休" else "班") }
-                if (holidays.isNotEmpty() && courses.isNotEmpty()) append("  ")
-                repeat(courses.size.coerceAtMost(3)) { append("•") }
-            }
             addView(TextView(activity).apply {
                 id = R.id.calendar_month_compact_marker
-                text = marker
                 textSize = 9.5f
                 gravity = Gravity.CENTER
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-                setTextColor(if (selected) Palette.onPrimary else Palette.muted)
             })
             layoutParams = LinearLayout.LayoutParams(
                 0,
@@ -1903,15 +1907,72 @@ internal class TeachingCalendarPage(
                 marginEnd = activity.dp(2)
                 bottomMargin = activity.dp(2)
             }
-            val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(sheetPosition)
-            val initialCellHeightDp = TeachingCalendarLogic.monthRowHeightDp(
+            bindMonthDayCell(this, day, sheetPosition)
+        }
+    }
+
+    private fun bindMonthDayCell(
+        cell: LinearLayout,
+        day: Calendar,
+        sheetPosition: Float,
+        measuredCellHeightDp: Int? = null,
+    ) {
+        val courses = coursesOn(day)
+        val holidays = holidaysOn(day)
+        val inMonth = day.get(Calendar.MONTH) == selectedDate.get(Calendar.MONTH) &&
+            day.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR)
+        val selected = sameDay(day, selectedDate)
+        val today = sameDay(day, Calendar.getInstance(shanghai))
+        cell.background = calendarCellBackground(
+            selected = selected,
+            today = today,
+            courseCount = courses.size,
+            muted = !inMonth,
+        )
+        cell.contentDescription = buildList {
+            add("${day.get(Calendar.MONTH) + 1}月${day.get(Calendar.DAY_OF_MONTH)}日")
+            holidays.forEach { add(it.name) }
+            courses.forEach { add("${it.name} ${it.timeRange} ${it.room} ${it.teacher}") }
+        }.joinToString("，")
+        cell.findViewById<TextView>(R.id.calendar_month_day_label).apply {
+            setTypeface(typeface, if (selected || today) Typeface.BOLD else Typeface.NORMAL)
+            setTextColor(when {
+                selected -> Palette.onPrimary
+                !inMonth -> Palette.outOfMonth
+                holidays.any { it.type == "holiday" } -> Palette.holiday
+                else -> Palette.text
+            })
+        }
+        val entries = buildList {
+            holidays.forEach { item ->
+                add(MonthCalendarEntry(
+                    title = (if (item.type == "holiday") "休 " else "班 ") + item.name,
+                ))
+            }
+            courses.forEach { course -> add(MonthCalendarEntry(course.name)) }
+        }
+        cell.findViewById<LinearLayout>(R.id.calendar_month_expanded_entries).apply {
+            tag = MonthEntriesRenderState(entries, selected)
+        }
+        cell.findViewById<TextView>(R.id.calendar_month_compact_marker).apply {
+            text = buildString {
+                holidays.firstOrNull()?.let {
+                    append(if (it.type == "holiday") "休" else "班")
+                }
+                if (holidays.isNotEmpty() && courses.isNotEmpty()) append("  ")
+                repeat(courses.size.coerceAtMost(3)) { append("•") }
+            }
+            setTextColor(if (selected) Palette.onPrimary else Palette.muted)
+        }
+        val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(sheetPosition)
+        val initialCellHeightDp = measuredCellHeightDp
+            ?: TeachingCalendarLogic.monthRowHeightDp(
                 position = sheetPosition,
                 rowIndex = 0,
                 selectedWeekIndex = 0,
                 expandedHeightDp = expandedMonthCellHeightDp,
             )
-            applyMonthDayCellProgress(this, expandedProgress, initialCellHeightDp)
-        }
+        applyMonthDayCellProgress(cell, expandedProgress, initialCellHeightDp)
     }
 
     private fun applyMonthDayCellProgress(
@@ -2141,6 +2202,7 @@ internal class TeachingCalendarPage(
                         Mode.MONTH.ordinal,
                     )
                     selectedMode = Mode.MONTH
+                    requestCalendarDataForSelection()
                     onDateChanged()
                 },
             ),
@@ -2259,6 +2321,7 @@ internal class TeachingCalendarPage(
                                 mode.ordinal,
                             )
                             selectedMode = mode
+                            requestCalendarDataForSelection()
                             dismissYearPopover()
                             onDateChanged()
                         }.apply {
@@ -2310,13 +2373,6 @@ internal class TeachingCalendarPage(
         orientation = LinearLayout.VERTICAL
         val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = shanghai }
             .format(day.time)
-        if (preferences.almanacEnabled) {
-            dailyInfoRepository.loadAlmanac(date) { activity.refreshCalendarIfVisible() }
-        }
-        if (preferences.hasEnabledPublicDeadlines) {
-            dailyInfoRepository.loadDeadlines(date) { activity.refreshCalendarIfVisible() }
-        }
-        dailyInfoRepository.loadAssignments(date) { activity.refreshCalendarIfVisible() }
         addView(selectedDayDetails(day, asCard = true))
         addView(spacer(activity, 10))
         addView(assignmentDeadlineCard(date))
@@ -2373,9 +2429,8 @@ internal class TeachingCalendarPage(
                     setPadding(0, activity.dp(6), 0, activity.dp(6))
                     setOnClickListener {
                         activity.performControlHaptic(this)
-                        dailyInfoRepository.loadAssignments(date, force = true) {
-                            activity.refreshCalendarIfVisible()
-                        }
+                        dailyInfoRepository.loadAssignments(date, force = true) {}
+                        refreshSelectedMonthDetailsInPlace(date)
                     }
                 })
                 else -> addView(statusText("当天暂无课程作业 DDL"))
@@ -2424,9 +2479,8 @@ internal class TeachingCalendarPage(
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
-                    dailyInfoRepository.loadAlmanac(date, force = true) {
-                        activity.refreshCalendarIfVisible()
-                    }
+                    dailyInfoRepository.loadAlmanac(date, force = true) {}
+                    refreshSelectedMonthDetailsInPlace(date)
                 }
             })
             else -> addView(statusText("正在查询黄历…"))
@@ -2454,9 +2508,8 @@ internal class TeachingCalendarPage(
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
-                    dailyInfoRepository.loadDeadlines(date, force = true) {
-                        activity.refreshCalendarIfVisible()
-                    }
+                    dailyInfoRepository.loadDeadlines(date, force = true) {}
+                    refreshSelectedMonthDetailsInPlace(date)
                 }
             })
             else -> addView(statusText("当天没有已收录的活动截止事项"))
@@ -2974,6 +3027,7 @@ internal class TeachingCalendarPage(
             Mode.MONTH -> selectedDate.add(Calendar.MONTH, direction)
             Mode.YEAR -> selectedDate.add(Calendar.YEAR, direction)
         }
+        requestCalendarDataForSelection()
     }
 
     private fun performCalendarHaptic() {

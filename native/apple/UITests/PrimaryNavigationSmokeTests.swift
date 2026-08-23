@@ -126,7 +126,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(mondayHeading.waitForExistence(timeout: 5))
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         XCTAssertEqual(month.value as? String, "已展开")
-        XCTAssertFalse(app.descendants(matching: .any)["calendar.mobile.month-day-summary"].exists)
+        let monthSummaryViewport = app.descendants(matching: .any)[
+            "calendar.mobile.month-day-summary"
+        ].firstMatch
+        XCTAssertTrue(monthSummaryViewport.exists)
+        XCTAssertFalse(
+            monthSummaryViewport.isHittable,
+            "The stable details viewport must remain non-interactive while the month is expanded"
+        )
         let monthEventID = "calendar.mobile.month-event.course-sample-data-mining"
         let monthEvent = app.staticTexts[monthEventID].firstMatch
         XCTAssertTrue(monthEvent.waitForExistence(timeout: 5))
@@ -189,6 +196,26 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]
             .waitForExistence(timeout: 5))
         attachScreenshot(named: "calendar-month-collapsed")
+
+        let collapsedMonthLabel = monthHeading.label
+        let nextPeriod = app.buttons["下一时间段"].firstMatch
+        let previousPeriod = app.buttons["上一时间段"].firstMatch
+        XCTAssertTrue(nextPeriod.waitForExistence(timeout: 5))
+        nextPeriod.tap()
+        XCTAssertTrue(waitForLabelChange(of: monthHeading, from: collapsedMonthLabel))
+        XCTAssertEqual(month.value as? String, "已收起")
+        XCTAssertEqual(
+            app.descendants(matching: .any)
+                .matching(identifier: "calendar.mobile.month-day-summary")
+                .count,
+            1,
+            "Month paging must keep one stable details viewport"
+        )
+        XCTAssertTrue(waitForValue(shiftedShanghaiDateString(months: 1), of: summaryCard))
+        previousPeriod.tap()
+        XCTAssertTrue(waitForLabel(collapsedMonthLabel, of: monthHeading))
+        XCTAssertTrue(waitForValue(currentShanghaiDateString(), of: summaryCard))
+
         verticalSwipe(in: app, between: mondayHeading, and: month, upward: true)
         XCTAssertTrue(waitForValue("日程已展开", of: month))
         let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
@@ -754,6 +781,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let lastDay = calendar.range(of: .day, in: .month, for: today)?.last ?? day
         let offset = day < lastDay ? 1 : -1
         return shanghaiDateString(calendar.date(byAdding: .day, value: offset, to: today)!)
+    }
+
+    private func shiftedShanghaiDateString(months: Int) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return shanghaiDateString(
+            calendar.date(byAdding: .month, value: months, to: Date())!
+        )
     }
 
     private func shanghaiDateString(_ date: Date) -> String {

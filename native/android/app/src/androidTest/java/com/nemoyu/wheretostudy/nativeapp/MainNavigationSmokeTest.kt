@@ -268,6 +268,85 @@ class MainNavigationSmokeTest {
     }
 
     @Test
+    fun compactMonthSelectionAndFirstLoadDoNotInterruptMonthPager() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val device = UiDevice.getInstance(instrumentation)
+        val launchIntent = Intent(
+            instrumentation.targetContext,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        device.executeShellCommand("settings put global animator_duration_scale 1")
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                click(device, "navigation_calendar")
+                click(device, "calendar_mode_month")
+                scenario.onActivity { activity ->
+                    val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                    assertTrue((grid.getChildAt(0) as ViewGroup).getChildAt(0).performClick())
+                    val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    val selectedPage = surface.getChildAt(0)
+                    assertEquals(
+                        "Selecting a date must leave the month page on the horizontal origin",
+                        0f,
+                        selectedPage.translationX,
+                        0.01f,
+                    )
+                    assertEquals(1f, selectedPage.alpha, 0.01f)
+                }
+                SystemClock.sleep(380L)
+                instrumentation.waitForIdleSync()
+
+                scenario.onActivity { activity ->
+                    val surface = activity.findViewById<View>(R.id.calendar_swipe_surface)
+                    assertTrue(
+                        surface.performAccessibilityAction(
+                            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,
+                            null,
+                        ),
+                    )
+                }
+                // The sample repositories complete well before the 300 ms pager.
+                // If a completion rebuilds the page, this two-page transition is
+                // cut down to one child and the incoming animation visibly jumps.
+                SystemClock.sleep(90L)
+                var incomingPageIdentity = 0
+                scenario.onActivity { activity ->
+                    val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    assertEquals(
+                        "First-load callbacks must not interrupt the month pager",
+                        2,
+                        surface.childCount,
+                    )
+                    val incomingPage = surface.getChildAt(1)
+                    incomingPageIdentity = System.identityHashCode(incomingPage)
+                    assertEquals(1f, incomingPage.alpha, 0.01f)
+                    assertEquals(0f, incomingPage.translationY, 0.01f)
+                    assertTrue(
+                        "Only a month-page change may use a horizontal transform",
+                        incomingPage.translationX > 0f,
+                    )
+                }
+
+                SystemClock.sleep(360L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    assertEquals(1, surface.childCount)
+                    val settledPage = surface.getChildAt(0)
+                    assertEquals(incomingPageIdentity, System.identityHashCode(settledPage))
+                    assertEquals(1f, settledPage.alpha, 0.01f)
+                    assertEquals(0f, settledPage.translationX, 0.01f)
+                    assertEquals(0f, settledPage.translationY, 0.01f)
+                }
+            }
+        } finally {
+            device.executeShellCommand("settings put global animator_duration_scale 0")
+        }
+    }
+
+    @Test
     fun primaryPagesCanBeNavigatedWithoutCredentials() {
         clearCredentialRecord()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -1019,6 +1098,8 @@ class MainNavigationSmokeTest {
     private fun assertMonthDaySelectionOpensDetailsAndEntriesAreDisplayOnly(
         scenario: ActivityScenario<MainActivity>,
     ) {
+        var selectedPageIdentity = 0
+        var selectedMonthViewIdentity = 0
         scenario.onActivity { activity ->
             val body = activity.findViewById<View>(R.id.calendar_page_body)
             if (activity.findViewById<View?>(R.id.tablet_navigation) != null) {
@@ -1044,10 +1125,18 @@ class MainNavigationSmokeTest {
                     pageSurface.childCount,
                 )
                 val incomingPage = pageSurface.getChildAt(0)
-                assertTrue(
-                    "The incoming month page must start from a visible transition state",
-                    incomingPage.alpha < 1f,
+                selectedPageIdentity = System.identityHashCode(incomingPage)
+                selectedMonthViewIdentity = System.identityHashCode(
+                    incomingPage.findViewById<View>(R.id.calendar_month_view),
                 )
+                assertEquals(
+                    "Date selection must never borrow the horizontal month-pager transform",
+                    0f,
+                    incomingPage.translationX,
+                    0.01f,
+                )
+                assertEquals(0f, incomingPage.translationY, 0.01f)
+                assertEquals(1f, incomingPage.alpha, 0.01f)
             }
         }
         Thread.sleep(360L)
@@ -1063,6 +1152,18 @@ class MainNavigationSmokeTest {
                     pageSurface.childCount,
                 )
                 pageSurface.getChildAt(0).let { settledPage ->
+                    assertEquals(
+                        "Async daily-info completion must not replace the selected month page",
+                        selectedPageIdentity,
+                        System.identityHashCode(settledPage),
+                    )
+                    assertEquals(
+                        "Async daily-info completion must not replace the selected month grid",
+                        selectedMonthViewIdentity,
+                        System.identityHashCode(
+                            settledPage.findViewById<View>(R.id.calendar_month_view),
+                        ),
+                    )
                     assertEquals(1f, settledPage.alpha, 0.01f)
                     assertEquals(0f, settledPage.translationX, 0.01f)
                     assertEquals(0f, settledPage.translationY, 0.01f)

@@ -881,6 +881,44 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     #if os(iOS)
+    func testMobileMonthAnimationKeepsDetailsOutsideTheHorizontalPageIdentity() throws {
+        let august = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-23"))
+        let september = try XCTUnwrap(StrictContractDateParser.date(from: "2026-09-23"))
+
+        XCTAssertEqual(
+            MobileCalendarAnimationPartition.contentIdentity(
+                modeRawValue: "月",
+                selectedDate: august
+            ),
+            MobileCalendarAnimationPartition.contentIdentity(
+                modeRawValue: "月",
+                selectedDate: september
+            ),
+            "The stable month shell keeps the details viewport out of horizontal paging"
+        )
+        XCTAssertNotEqual(
+            MobileCalendarAnimationPartition.monthGridIdentity(selectedDate: august),
+            MobileCalendarAnimationPartition.monthGridIdentity(selectedDate: september),
+            "Only the month grid receives a new page identity"
+        )
+    }
+
+    func testMobileNonMonthPageIdentityStillTracksItsNavigationPeriod() throws {
+        let firstDay = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-23"))
+        let nextDay = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-24"))
+
+        XCTAssertNotEqual(
+            MobileCalendarAnimationPartition.contentIdentity(
+                modeRawValue: "日",
+                selectedDate: firstDay
+            ),
+            MobileCalendarAnimationPartition.contentIdentity(
+                modeRawValue: "日",
+                selectedDate: nextDay
+            )
+        )
+    }
+
     @MainActor
     func testMonthDetailsRoutingReadsTheLiveUIKitOffsetInsteadOfAStaleFallback() {
         let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
