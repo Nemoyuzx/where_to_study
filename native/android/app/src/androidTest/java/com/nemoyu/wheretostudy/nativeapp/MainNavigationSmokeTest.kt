@@ -18,6 +18,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertEquals
@@ -51,6 +52,206 @@ class MainNavigationSmokeTest {
         } finally {
             DailyClassroomRefreshScheduler.cancel(context)
             SecureCredentialStore(context).clear()
+        }
+    }
+
+    @Test
+    fun compactMonthDragHandsOffToDetailsAndKeepsScrollAcrossRefresh() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val device = UiDevice.getInstance(instrumentation)
+        val launchIntent = Intent(
+            instrumentation.targetContext,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            click(device, "navigation_calendar")
+            click(device, "calendar_mode_month")
+            scenario.onActivity { activity ->
+                assertNotNull(
+                    "This regression runs against the compact phone month layout",
+                    activity.findViewById<View?>(R.id.calendar_phone_header),
+                )
+                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                assertTrue((grid.getChildAt(0) as ViewGroup).getChildAt(0).performClick())
+            }
+            Thread.sleep(500L)
+            instrumentation.waitForIdleSync()
+
+            var longDragDistancePx = 0
+            scenario.onActivity { activity ->
+                val surface = activity.findViewById<View>(R.id.calendar_swipe_surface)
+                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                assertEquals(
+                    "Selecting a day must commit the middle anchor before rendering",
+                    activity.dp(TeachingCalendarLogic.monthCellHeightDp(expanded = false)),
+                    grid.getChildAt(0).height,
+                )
+                assertEquals(
+                    "月历与当日日程",
+                    surface.createAccessibilityNodeInfo().contentDescription?.toString(),
+                )
+                longDragDistancePx = activity.dp(420)
+            }
+            val detailsBounds = checkNotNull(
+                device.wait(
+                    Until.findObject(By.res(TARGET_PACKAGE, "calendar_month_selected_details")),
+                    UI_TIMEOUT_MILLIS,
+                ),
+            ).visibleBounds
+            val surfaceBounds = checkNotNull(
+                device.wait(
+                    Until.findObject(By.res(TARGET_PACKAGE, "calendar_swipe_surface")),
+                    UI_TIMEOUT_MILLIS,
+                ),
+            ).visibleBounds
+            val longDragX = detailsBounds.centerX()
+            val longDragStartY =
+                detailsBounds.bottom - (detailsBounds.height() / 8).coerceIn(8, 32)
+            val longDragEndY = (longDragStartY - longDragDistancePx).coerceAtLeast(
+                surfaceBounds.top + 16,
+            )
+            assertTrue(longDragStartY - longDragEndY > longDragDistancePx / 2)
+            device.swipe(longDragX, longDragStartY, longDragX, longDragEndY, 60)
+            device.waitForIdle()
+            scenario.onActivity { activity ->
+                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                val details = activity.findViewById<ScrollView>(
+                    R.id.calendar_month_selected_details,
+                )
+                assertEquals(
+                    "A long upward drag must reach the selected-week anchor",
+                    1,
+                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
+                )
+                assertTrue(
+                    "Drag distance beyond the third anchor must continue into detail scrolling",
+                    details.scrollY > 0,
+                )
+            }
+            Thread.sleep(400L)
+            instrumentation.waitForIdleSync()
+
+            scenario.onActivity { activity ->
+                val scrollBeforeRefresh = activity.findViewById<ScrollView>(
+                    R.id.calendar_month_selected_details,
+                ).scrollY
+                assertTrue(scrollBeforeRefresh > 0)
+                activity.refreshCalendarIfVisible()
+            }
+            Thread.sleep(500L)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                val details = activity.findViewById<ScrollView>(
+                    R.id.calendar_month_selected_details,
+                )
+                assertTrue(
+                    "Async card refresh must preserve the user's detail scroll position",
+                    details.scrollY > 0,
+                )
+            }
+
+            scenario.recreate()
+            device.waitForIdle()
+            instrumentation.waitForIdleSync()
+            var lockedPullDownX = 0
+            var lockedPullDownStartY = 0
+            var lockedPullDownEndY = 0
+            scenario.onActivity { activity ->
+                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                val details = activity.findViewById<ScrollView>(
+                    R.id.calendar_month_selected_details,
+                )
+                assertEquals(
+                    "Activity recreation must retain the selected-week anchor",
+                    1,
+                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
+                )
+                assertTrue(
+                    "Activity recreation must retain the detail scroll position",
+                    details.scrollY > 0,
+                )
+                assertFalse(
+                    "The month detail area must not show a vertical scroll bar",
+                    details.isVerticalScrollBarEnabled,
+                )
+                assertEquals(
+                    "The detail area must not stretch when a top-edge pull changes detents",
+                    View.OVER_SCROLL_NEVER,
+                    details.overScrollMode,
+                )
+                val maximumScrollY = (details.getChildAt(0).height - details.height)
+                    .coerceAtLeast(0)
+                assertTrue(maximumScrollY > 0)
+                details.scrollTo(0, activity.dp(4).coerceAtMost(maximumScrollY))
+                assertTrue(details.canScrollVertically(-1))
+                val detailsLocation = IntArray(2).also(details::getLocationOnScreen)
+                lockedPullDownX = detailsLocation[0] + details.width / 2
+                lockedPullDownStartY = detailsLocation[1] + activity.dp(40)
+                lockedPullDownEndY = (lockedPullDownStartY + activity.dp(120)).coerceAtMost(
+                    detailsLocation[1] + details.height - activity.dp(20),
+                )
+            }
+            Thread.sleep(150L)
+            instrumentation.waitForIdleSync()
+
+            device.swipe(
+                lockedPullDownX,
+                lockedPullDownStartY,
+                lockedPullDownX,
+                lockedPullDownEndY,
+                30,
+            )
+            device.waitForIdle()
+            Thread.sleep(300L)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                val details = activity.findViewById<ScrollView>(
+                    R.id.calendar_month_selected_details,
+                )
+                assertEquals(
+                    "A pull that starts before details reach the top must keep the selected-week anchor",
+                    1,
+                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
+                )
+                assertFalse(
+                    "The delegated pull should be allowed to finish at the top",
+                    details.canScrollVertically(-1),
+                )
+            }
+
+            var pullDownX = 0
+            var pullDownStartY = 0
+            var pullDownEndY = 0
+            scenario.onActivity { activity ->
+                val details = activity.findViewById<ScrollView>(
+                    R.id.calendar_month_selected_details,
+                )
+                val detailsLocation = IntArray(2).also(details::getLocationOnScreen)
+                pullDownX = detailsLocation[0] + details.width / 2
+                pullDownStartY = detailsLocation[1] + activity.dp(40)
+                pullDownEndY = (pullDownStartY + activity.dp(180)).coerceAtMost(
+                    detailsLocation[1] + details.height - activity.dp(20),
+                )
+            }
+            device.swipe(pullDownX, pullDownStartY, pullDownX, pullDownEndY, 30)
+            device.waitForIdle()
+            Thread.sleep(400L)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                assertEquals(
+                    "Pulling down at the top of details must return to the middle anchor",
+                    grid.childCount,
+                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
+                )
+                assertEquals(
+                    View.VISIBLE,
+                    activity.findViewById<View>(R.id.calendar_month_selected_details).visibility,
+                )
+            }
         }
     }
 
@@ -951,7 +1152,13 @@ class MainNavigationSmokeTest {
     private fun assertTextChanged(device: UiDevice, resourceName: String, previous: String) {
         val deadline = System.currentTimeMillis() + UI_TIMEOUT_MILLIS
         while (System.currentTimeMillis() < deadline) {
-            val current = device.findObject(By.res(TARGET_PACKAGE, resourceName))?.text
+            val current = try {
+                device.findObject(By.res(TARGET_PACKAGE, resourceName))?.text
+            } catch (_: StaleObjectException) {
+                // Page changes replace the native view tree. Retry against the
+                // newly mounted accessibility node instead of retaining a stale one.
+                null
+            }
             if (current != null && current != previous) return
             Thread.sleep(100L)
         }

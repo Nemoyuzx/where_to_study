@@ -28,6 +28,9 @@ class ScheduleLogicTest {
         assertEquals(date.timeInMillis, state.selectedDate.timeInMillis)
         assertEquals(TeachingCalendarMode.MONTH, state.selectedMode)
         assertFalse(state.monthExpanded)
+        state.updateMonthDetailsScroll("2026-09-18", 320)
+        assertEquals(320, state.savedMonthDetailsScrollY("2026-09-18"))
+        assertEquals(0, state.savedMonthDetailsScrollY("2026-09-19"))
         assertEquals(
             TeachingCalendarMode.WEEK,
             TeachingCalendarSessionState(selectedModeName = "unknown").selectedMode,
@@ -574,6 +577,16 @@ class ScheduleLogicTest {
         assertEquals(2f, TeachingCalendarLogic.monthSheetDragPosition(-216f, 1f), 0.001f)
         assertEquals(1f, TeachingCalendarLogic.monthSheetDragPosition(216f, 2f), 0.001f)
         assertEquals(
+            84f,
+            TeachingCalendarLogic.monthDetailsDragOverflowDp(-300f, 1f),
+            0.001f,
+        )
+        assertEquals(
+            0f,
+            TeachingCalendarLogic.monthDetailsDragOverflowDp(-180f, 1f),
+            0.001f,
+        )
+        assertEquals(
             64,
             TeachingCalendarLogic.interpolateMonthMetric(46, 82, progress = 0.5f),
         )
@@ -604,6 +617,22 @@ class ScheduleLogicTest {
         assertFalse(TeachingCalendarLogic.canMoveMonthSheet(8f, -4f, 1f, 8))
         assertTrue(TeachingCalendarLogic.routesMonthDragToDetails(2f, -72f))
         assertFalse(TeachingCalendarLogic.routesMonthDragToDetails(2f, 72f))
+        assertTrue(
+            TeachingCalendarLogic.routesMonthDragToDetails(
+                currentPosition = 2f,
+                deltaYDp = 72f,
+                detailsCanScrollBackward = true,
+            ),
+        )
+        assertFalse(
+            TeachingCalendarLogic.canMoveMonthSheet(
+                deltaXDp = 8f,
+                deltaYDp = 72f,
+                currentPosition = 2f,
+                thresholdDp = 8,
+                detailsCanScrollBackward = true,
+            ),
+        )
         assertFalse(TeachingCalendarLogic.routesMonthDragToDetails(1f, -72f))
     }
 

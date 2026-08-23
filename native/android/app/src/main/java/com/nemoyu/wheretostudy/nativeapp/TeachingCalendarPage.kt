@@ -60,6 +60,8 @@ internal class TeachingCalendarSessionState(
     selectedModeName: String = TeachingCalendarMode.WEEK.name,
     monthExpanded: Boolean = true,
     initialMonthSheetPosition: Float? = null,
+    initialMonthDetailsDateKey: String? = null,
+    initialMonthDetailsScrollY: Int = 0,
 ) {
     val selectedDate: Calendar = Calendar.getInstance(SHANGHAI).apply {
         timeInMillis = selectedDateMillis
@@ -75,6 +77,25 @@ internal class TeachingCalendarSessionState(
         set(value) {
             monthSheetPosition = if (value) 0f else 1f
         }
+    var monthDetailsDateKey: String? = initialMonthDetailsDateKey
+        private set
+    var monthDetailsScrollY: Int = initialMonthDetailsScrollY.coerceAtLeast(0)
+        private set
+
+    fun savedMonthDetailsScrollY(dateKey: String): Int {
+        if (monthDetailsDateKey != dateKey) resetMonthDetailsScroll(dateKey)
+        return monthDetailsScrollY
+    }
+
+    fun updateMonthDetailsScroll(dateKey: String, scrollY: Int) {
+        if (monthDetailsDateKey != dateKey) resetMonthDetailsScroll(dateKey)
+        monthDetailsScrollY = scrollY.coerceAtLeast(0)
+    }
+
+    fun resetMonthDetailsScroll(dateKey: String) {
+        monthDetailsDateKey = dateKey
+        monthDetailsScrollY = 0
+    }
 
     private companion object {
         val SHANGHAI: TimeZone = TimeZone.getTimeZone("Asia/Shanghai")
@@ -118,6 +139,16 @@ private class MonthExpansionIndicatorView(context: Context) : View(context) {
         canvas.drawLine(centerX - horizontal, centerY + vertical, centerX, centerY, indicatorPaint)
         canvas.drawLine(centerX, centerY, centerX + horizontal, centerY + vertical, indicatorPaint)
     }
+}
+
+private class MonthDetailsScrollView(context: Context) : ScrollView(context) {
+    var isDetailsScrollingEnabled: Boolean = false
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean =
+        isDetailsScrollingEnabled && super.onInterceptTouchEvent(event)
+
+    override fun onTouchEvent(event: MotionEvent): Boolean =
+        isDetailsScrollingEnabled && super.onTouchEvent(event)
 }
 
 object TeachingCalendarLogic {
@@ -175,13 +206,19 @@ object TeachingCalendarLogic {
         deltaYDp: Float,
         currentPosition: Float,
         thresholdDp: Int,
+        detailsCanScrollBackward: Boolean = false,
     ): Boolean {
         val horizontalDistance = abs(deltaXDp)
         val verticalDistance = abs(deltaYDp)
         if (verticalDistance < thresholdDp || verticalDistance <= horizontalDistance * 1.2f) {
             return false
         }
-        if (routesMonthDragToDetails(currentPosition, deltaYDp)) {
+        if (routesMonthDragToDetails(
+                currentPosition,
+                deltaYDp,
+                detailsCanScrollBackward,
+            )
+        ) {
             return false
         }
         return when {
@@ -191,8 +228,12 @@ object TeachingCalendarLogic {
         }
     }
 
-    fun routesMonthDragToDetails(currentPosition: Float, deltaYDp: Float): Boolean =
-        currentPosition >= monthSheetWeekPosition && deltaYDp < 0f
+    fun routesMonthDragToDetails(
+        currentPosition: Float,
+        deltaYDp: Float,
+        detailsCanScrollBackward: Boolean = false,
+    ): Boolean = currentPosition >= monthSheetWeekPosition &&
+        (deltaYDp < 0f || detailsCanScrollBackward)
 
     fun monthCellHeightDp(expanded: Boolean): Int = if (expanded) 82 else 46
 
@@ -213,6 +254,17 @@ object TeachingCalendarLogic {
     ): Float {
         if (travelDp <= 0f) return startPosition.coerceIn(0f, 2f)
         return (startPosition - deltaYDp / travelDp).coerceIn(0f, 2f)
+    }
+
+    fun monthDetailsDragOverflowDp(
+        deltaYDp: Float,
+        startPosition: Float,
+        travelDp: Float = (monthCellHeightDp(true) - monthCellHeightDp(false)) * 6f,
+    ): Float {
+        if (deltaYDp >= 0f || travelDp <= 0f) return 0f
+        val distanceToDetails =
+            (monthSheetWeekPosition - startPosition.coerceIn(0f, 2f)) * travelDp
+        return (-deltaYDp - distanceToDetails).coerceAtLeast(0f)
     }
 
     fun settledMonthSheetPosition(
@@ -345,8 +397,11 @@ private class CalendarSwipeContainer(
     private var gestureEligible = false
     private var claimedGesture = 0
     private var childCancelled = false
+    private var gestureStartedInMonthDetails = false
+    private var monthDetailsCouldScrollBackwardAtGestureStart = false
     private var monthDragStartPosition = TeachingCalendarLogic.monthSheetExpandedPosition
     private var monthDragPosition = TeachingCalendarLogic.monthSheetExpandedPosition
+    private var monthDetailsDragStartScrollY = 0
     private var velocityTracker: VelocityTracker? = null
     private val density = resources.displayMetrics.density
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop / density
@@ -424,7 +479,26 @@ private class CalendarSwipeContainer(
         childCancelled = true
     }
 
+    private fun monthDetailsScrollView(): MonthDetailsScrollView? =
+        findViewById(R.id.calendar_month_selected_details)
+
+    private fun containsTouch(view: View?, x: Float, y: Float): Boolean {
+        if (view == null || view.visibility != View.VISIBLE || view.width <= 0 || view.height <= 0) {
+            return false
+        }
+        val containerLocation = IntArray(2).also(::getLocationOnScreen)
+        val viewLocation = IntArray(2).also(view::getLocationOnScreen)
+        val left = (viewLocation[0] - containerLocation[0]).toFloat()
+        val top = (viewLocation[1] - containerLocation[1]).toFloat()
+        return x >= left && x <= left + view.width && y >= top && y <= top + view.height
+    }
+
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        // When the details ScrollView is disabled at the middle detent it may decline
+        // ACTION_DOWN. Keep the container as the touch target for the full sequence so
+        // the later MOVE can still be claimed by the three-position month sheet.
+        val participatesInCalendarGesture = gestureEligible ||
+            (event.actionMasked == MotionEvent.ACTION_DOWN && swipeEnabled)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
@@ -434,6 +508,11 @@ private class CalendarSwipeContainer(
                 childCancelled = false
                 monthDragStartPosition = monthSheetPosition
                 monthDragPosition = monthSheetPosition
+                val details = monthDetailsScrollView()
+                gestureStartedInMonthDetails = containsTouch(details, event.x, event.y)
+                monthDetailsCouldScrollBackwardAtGestureStart =
+                    gestureStartedInMonthDetails && details?.canScrollVertically(-1) == true
+                monthDetailsDragStartScrollY = details?.scrollY ?: 0
                 velocityTracker?.recycle()
                 velocityTracker = VelocityTracker.obtain().also { it.addMovement(event) }
                 if (gestureEligible) {
@@ -453,13 +532,22 @@ private class CalendarSwipeContainer(
                                 deltaYDp = deltaY,
                                 currentPosition = monthDragStartPosition,
                                 thresholdDp = touchSlop.roundToInt().coerceAtLeast(6),
+                                detailsCanScrollBackward =
+                                    monthDetailsCouldScrollBackwardAtGestureStart,
                             ) -> 2
+                            gestureStartedInMonthDetails &&
+                                TeachingCalendarLogic.routesMonthDragToDetails(
+                                    currentPosition = monthDragStartPosition,
+                                    deltaYDp = deltaY,
+                                    detailsCanScrollBackward =
+                                        monthDetailsCouldScrollBackwardAtGestureStart,
+                                ) -> -2
                             else -> -1
                         }
                         if (claimedGesture > 0) {
                             parent?.requestDisallowInterceptTouchEvent(true)
                             cancelChild(event)
-                        } else if (claimedGesture < 0) {
+                        } else if (claimedGesture == -1) {
                             restoreParentInterception()
                         }
                     }
@@ -471,6 +559,16 @@ private class CalendarSwipeContainer(
                         startPosition = monthDragStartPosition,
                     )
                     onMonthSheetProgress?.invoke(monthDragPosition)
+                    val overflowDp = TeachingCalendarLogic.monthDetailsDragOverflowDp(
+                        deltaYDp = deltaY,
+                        startPosition = monthDragStartPosition,
+                    )
+                    if (overflowDp > 0f) {
+                        monthDetailsScrollView()?.scrollTo(
+                            0,
+                            monthDetailsDragStartScrollY + (overflowDp * density).roundToInt(),
+                        )
+                    }
                     return true
                 }
                 if (claimedGesture > 0) return true
@@ -508,6 +606,7 @@ private class CalendarSwipeContainer(
             }
             MotionEvent.ACTION_CANCEL -> {
                 if (claimedGesture == 2) {
+                    monthDetailsScrollView()?.scrollTo(0, monthDetailsDragStartScrollY)
                     post { onMonthSheetSettled?.invoke(monthDragStartPosition.roundToInt().toFloat()) }
                 }
                 gestureEligible = false
@@ -517,7 +616,7 @@ private class CalendarSwipeContainer(
                 velocityTracker = null
             }
         }
-        return super.dispatchTouchEvent(event)
+        return super.dispatchTouchEvent(event) || participatesInCalendarGesture
     }
 }
 
@@ -580,6 +679,16 @@ internal class TeachingCalendarPage(
             val monthView = content.findViewById<ViewGroup?>(R.id.calendar_month_view) ?: return
             val target = position.roundToInt().coerceIn(0, 2).toFloat()
             if (target != monthSheetPosition.roundToInt().toFloat()) performCalendarHaptic()
+            if (target < TeachingCalendarLogic.monthSheetWeekPosition) {
+                val dateKey = contractDate().format(selectedDate.time)
+                sessionState.resetMonthDetailsScroll(dateKey)
+                monthView.findViewById<MonthDetailsScrollView?>(
+                    R.id.calendar_month_selected_details,
+                )?.scrollTo(0, 0)
+            }
+            monthSheetPosition = target
+            content.findViewById<CalendarSwipeContainer?>(R.id.calendar_swipe_surface)
+                ?.monthSheetPosition = target
             animateMonthSheetPosition(monthView, target) {
                 monthSheetPosition = target
                 content.findViewById<CalendarSwipeContainer?>(R.id.calendar_swipe_surface)
@@ -723,6 +832,15 @@ internal class TeachingCalendarPage(
             val monthView = pageSurface.findViewById<ViewGroup?>(R.id.calendar_month_view) ?: return
             val target = position.roundToInt().coerceIn(0, 2).toFloat()
             if (target != monthSheetPosition.roundToInt().toFloat()) performCalendarHaptic()
+            if (target < TeachingCalendarLogic.monthSheetWeekPosition) {
+                val dateKey = contractDate().format(selectedDate.time)
+                sessionState.resetMonthDetailsScroll(dateKey)
+                monthView.findViewById<MonthDetailsScrollView?>(
+                    R.id.calendar_month_selected_details,
+                )?.scrollTo(0, 0)
+            }
+            monthSheetPosition = target
+            pageSurface.monthSheetPosition = target
             animateMonthSheetPosition(monthView, target) {
                 monthSheetPosition = target
                 pageSurface.monthSheetPosition = target
@@ -1484,7 +1602,6 @@ internal class TeachingCalendarPage(
                         addView(monthDayCell(
                             day = day,
                             onDateChanged = onDateChanged,
-                            onPositionChanged = onPositionChanged,
                             sheetPosition = renderedMonthSheetPosition,
                         ))
                     }
@@ -1504,17 +1621,31 @@ internal class TeachingCalendarPage(
             ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
         addView(monthExpansionHandle(onPositionChanged))
-        addView(ScrollView(activity).apply {
+        val detailsDateKey = contractDate().format(selectedDate.time)
+        addView(MonthDetailsScrollView(activity).apply {
             id = R.id.calendar_month_selected_details
             visibility = if (renderedMonthSheetPosition <= 0.01f) View.GONE else View.VISIBLE
+            isDetailsScrollingEnabled =
+                renderedMonthSheetPosition >= TeachingCalendarLogic.monthSheetWeekPosition - 0.01f
             isFillViewport = false
             isNestedScrollingEnabled = true
-            isVerticalScrollBarEnabled = true
-            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
             clipToPadding = false
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
             setPadding(0, 0, 0, activity.dp(24))
             addView(monthSelectedDetails(selectedDate))
+            val restoredScrollY = sessionState.savedMonthDetailsScrollY(detailsDateKey)
+            var restoringScroll = true
+            setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                if (!restoringScroll) {
+                    sessionState.updateMonthDetailsScroll(detailsDateKey, scrollY)
+                }
+            }
+            post {
+                scrollTo(0, restoredScrollY)
+                post { restoringScroll = false }
+            }
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0,
@@ -1600,7 +1731,6 @@ internal class TeachingCalendarPage(
     private fun monthDayCell(
         day: Calendar,
         onDateChanged: () -> Unit,
-        onPositionChanged: (Float) -> Unit,
         sheetPosition: Float,
     ): LinearLayout {
         val courses = coursesOn(day)
@@ -1631,9 +1761,19 @@ internal class TeachingCalendarPage(
                 ) {
                     performCalendarHaptic()
                 }
+                val previousPosition = renderedMonthSheetPosition
+                val targetPosition = TeachingCalendarLogic.monthDaySelectionTargetPosition()
+                monthExpansionAnimator?.cancel()
                 selectedDate.timeInMillis = day.timeInMillis
+                monthSheetPosition = targetPosition
+                renderedMonthSheetPosition = targetPosition
+                sessionState.resetMonthDetailsScroll(contractDate().format(selectedDate.time))
+                pendingMonthExpansionDirection = when {
+                    targetPosition > previousPosition -> 1
+                    targetPosition < previousPosition -> -1
+                    else -> 0
+                }
                 onDateChanged()
-                onPositionChanged(TeachingCalendarLogic.monthDaySelectionTargetPosition())
             }
             addView(TextView(activity).apply {
                 id = R.id.calendar_month_day_label
@@ -1797,9 +1937,11 @@ internal class TeachingCalendarPage(
                 )
             }
         }
-        monthView.findViewById<View>(R.id.calendar_month_selected_details).apply {
+        monthView.findViewById<MonthDetailsScrollView>(R.id.calendar_month_selected_details).apply {
             visibility = if (resolved <= 0.01f) View.GONE else View.VISIBLE
             alpha = resolved.coerceIn(0f, 1f)
+            isDetailsScrollingEnabled =
+                resolved >= TeachingCalendarLogic.monthSheetWeekPosition - 0.01f
         }
         monthView.findViewById<View>(R.id.calendar_month_drag_handle).apply {
             contentDescription = monthSheetContentDescription(resolved)

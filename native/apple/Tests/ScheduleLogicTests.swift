@@ -861,6 +861,20 @@ final class ScheduleLogicTests: XCTestCase {
                 verticalTranslation: -24
             )
         )
+        XCTAssertTrue(
+            TeachingCalendarLogic.routesMonthDragToDetails(
+                position: .detailRaised,
+                verticalTranslation: 24,
+                detailsCanScrollBackward: true
+            )
+        )
+        XCTAssertFalse(
+            TeachingCalendarLogic.routesMonthDragToDetails(
+                position: .detailRaised,
+                verticalTranslation: 24,
+                detailsCanScrollBackward: false
+            )
+        )
     }
 
     func testMonthDetentsHonorDeliberateLowVelocityDrags() {

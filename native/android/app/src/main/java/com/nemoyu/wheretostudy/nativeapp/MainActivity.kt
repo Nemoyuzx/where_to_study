@@ -141,6 +141,11 @@ class MainActivity : Activity() {
             initialMonthSheetPosition = savedInstanceState
                 ?.takeIf { it.containsKey(TEACHING_CALENDAR_MONTH_POSITION_KEY) }
                 ?.getFloat(TEACHING_CALENDAR_MONTH_POSITION_KEY),
+            initialMonthDetailsDateKey = savedInstanceState
+                ?.getString(TEACHING_CALENDAR_MONTH_DETAILS_DATE_KEY),
+            initialMonthDetailsScrollY = savedInstanceState
+                ?.getInt(TEACHING_CALENDAR_MONTH_DETAILS_SCROLL_Y_KEY, 0)
+                ?: 0,
         )
 
         adaptiveRoot = FrameLayout(this).apply {
@@ -774,6 +779,13 @@ class MainActivity : Activity() {
             TEACHING_CALENDAR_MONTH_POSITION_KEY,
             teachingCalendarSessionState.monthSheetPosition,
         )
+        teachingCalendarSessionState.monthDetailsDateKey?.let { dateKey ->
+            outState.putString(TEACHING_CALENDAR_MONTH_DETAILS_DATE_KEY, dateKey)
+        }
+        outState.putInt(
+            TEACHING_CALENDAR_MONTH_DETAILS_SCROLL_Y_KEY,
+            teachingCalendarSessionState.monthDetailsScrollY,
+        )
         super.onSaveInstanceState(outState)
     }
 
@@ -975,6 +987,10 @@ class MainActivity : Activity() {
         const val TEACHING_CALENDAR_MODE_KEY = "teaching_calendar_mode"
         const val TEACHING_CALENDAR_MONTH_EXPANDED_KEY = "teaching_calendar_month_expanded"
         const val TEACHING_CALENDAR_MONTH_POSITION_KEY = "teaching_calendar_month_position"
+        const val TEACHING_CALENDAR_MONTH_DETAILS_DATE_KEY =
+            "teaching_calendar_month_details_date"
+        const val TEACHING_CALENDAR_MONTH_DETAILS_SCROLL_Y_KEY =
+            "teaching_calendar_month_details_scroll_y"
         val CALENDAR_PERMISSIONS = arrayOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,

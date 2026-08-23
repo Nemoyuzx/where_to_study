@@ -169,9 +169,9 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
         XCTAssertTrue(monthSummary.waitForExistence(timeout: 5))
         attachScreenshot(named: "calendar-month-detail-raised")
-        verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
+        verticalSwipe(in: app, within: monthSummary, upward: false)
         XCTAssertTrue(waitForValue("已收起", of: month))
-        verticalSwipe(in: app, between: mondayHeading, and: month, upward: false)
+        verticalSwipe(in: app, within: monthSummary, upward: false)
         XCTAssertTrue(waitForValue("已展开", of: month))
 
         let initialMonth = monthHeading.label
@@ -247,6 +247,17 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             .waitForExistence(timeout: 5))
         let monthSummary = app.descendants(matching: .any)["calendar.mobile.month-day-summary"].firstMatch
         let deadlineCard = app.descendants(matching: .any)["calendar.mobile.deadlines"].firstMatch
+        verticalSwipe(in: app, within: monthSummary, upward: true, requestedTravel: 48)
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertTrue(
+            waitForValue("已滚动", of: monthSummary),
+            "The month detail scroll offset must be observable before testing gesture ownership"
+        )
+        verticalSwipe(in: app, within: monthSummary, upward: false, requestedTravel: 160)
+        XCTAssertTrue(
+            waitForValue("日程已展开", of: monthState),
+            "A pull that starts before details reach the top must not change the month detent"
+        )
         for _ in 0..<10 where !deadlineCard.isHittable {
             verticalSwipe(in: app, within: monthSummary, upward: true)
         }
@@ -646,7 +657,8 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     private func verticalSwipe(
         in app: XCUIApplication,
         within element: XCUIElement,
-        upward: Bool
+        upward: Bool,
+        requestedTravel: CGFloat? = nil
     ) {
         let frame = element.frame.intersection(app.frame)
         XCTAssertGreaterThan(frame.height, 80)
@@ -656,7 +668,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let unobscuredBottom = min(frame.maxY - 28, app.frame.maxY - 96)
         let unobscuredTop = frame.minY + 20
         let availableTravel = max(unobscuredBottom - unobscuredTop, 1)
-        let travel = min(max(frame.height * 0.35, 72), availableTravel)
+        let travel = min(
+            requestedTravel ?? max(frame.height * 0.35, 72),
+            availableTravel
+        )
         let startY = upward ? unobscuredBottom : unobscuredTop
         let endY = upward ? startY - travel : startY + travel
         let appOrigin = app.coordinate(withNormalizedOffset: .zero)

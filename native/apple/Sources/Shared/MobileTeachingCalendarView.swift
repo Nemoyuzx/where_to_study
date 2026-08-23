@@ -29,6 +29,16 @@ private struct MobileMonthEvent: Identifiable {
     let tint: Color
 }
 
+private final class MobileMonthDragRoutingSession {
+    var detailsCanScrollBackwardAtStart: Bool?
+    var isRoutedToDetails = false
+
+    func reset() {
+        detailsCanScrollBackwardAtStart = nil
+        isRoutedToDetails = false
+    }
+}
+
 struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
@@ -44,6 +54,10 @@ struct MobileTeachingCalendarView: View {
     @State private var isMonthExpansionSettling = false
     @State private var monthSettlementID = UUID()
     @State private var eventSelectionSuppressionID = UUID()
+    @State private var monthDetailsCanScrollBackward = false
+    @State private var monthDetailsCanScrollBackwardAtGestureStart = false
+    @State private var monthDetailsScrollID = UUID()
+    @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
 
     private let calendar = Calendar.shanghai
 
@@ -100,6 +114,7 @@ struct MobileTeachingCalendarView: View {
             normalizeMonthPositionForLayout()
         }
         .onChange(of: selectedDate) { _ in
+            resetMonthDetailsScroll()
             ensureVisibleHolidays()
             ensureVisibleDailyDetails()
         }
@@ -534,13 +549,9 @@ struct MobileTeachingCalendarView: View {
                     )
                 }
                 .frame(maxWidth: .infinity)
-                .simultaneousGesture(
-                    monthNavigationGesture(travelDistance: travelDistance),
-                    including: effectiveMonthPosition == .detailRaised ? .all : .none
-                )
 
                 if expansionProgress < 0.999, summaryHeight > 0 {
-                    ScrollView(.vertical, showsIndicators: true) {
+                    ScrollView(.vertical, showsIndicators: false) {
                         VStack(spacing: 10) {
                             daySummaryCard(selectedDate)
                             mobileAssignmentCard(selectedDate)
@@ -553,12 +564,19 @@ struct MobileTeachingCalendarView: View {
                         }
                         .padding(.horizontal, 1)
                         .padding(.vertical, 2)
+                        .background(MobileMonthDetailsScrollConfiguration(
+                            canScrollBackward: $monthDetailsCanScrollBackward,
+                            canScrollBackwardAtGestureStart:
+                                $monthDetailsCanScrollBackwardAtGestureStart
+                        ))
                     }
+                    .id(monthDetailsScrollID)
                     .frame(height: summaryHeight)
                     .opacity(1 - expansionProgress)
                     .scrollDisabled(effectiveMonthPosition != .detailRaised)
                     .accessibilityHidden(expansionProgress >= 0.25)
                     .accessibilityIdentifier("calendar.mobile.month-day-summary")
+                    .accessibilityValue(monthDetailsCanScrollBackward ? "已滚动" : "顶部")
                     .background(Color.clear)
                 }
 
@@ -574,7 +592,9 @@ struct MobileTeachingCalendarView: View {
             monthGestureContainer(
                 calendarContent,
                 travelDistance: travelDistance,
-                enabled: effectiveMonthPosition != .detailRaised
+                detailsCanScrollBackward: monthDetailsCanScrollBackward,
+                detailsCanScrollBackwardAtGestureStart:
+                    monthDetailsCanScrollBackwardAtGestureStart
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("calendar.mobile.month")
@@ -589,13 +609,17 @@ struct MobileTeachingCalendarView: View {
     private func monthGestureContainer<Content: View>(
         _ content: Content,
         travelDistance: CGFloat,
-        enabled: Bool
+        detailsCanScrollBackward: Bool,
+        detailsCanScrollBackwardAtGestureStart: Bool
     ) -> some View {
-        if enabled {
-            content.simultaneousGesture(monthNavigationGesture(travelDistance: travelDistance))
-        } else {
-            content
-        }
+        content.simultaneousGesture(
+            monthNavigationGesture(
+                travelDistance: travelDistance,
+                detailsCanScrollBackward: detailsCanScrollBackward,
+                detailsCanScrollBackwardAtGestureStart:
+                    detailsCanScrollBackwardAtGestureStart
+            )
+        )
     }
 
     private var monthWeekdayHeader: some View {
@@ -1484,10 +1508,22 @@ struct MobileTeachingCalendarView: View {
             }
     }
 
-    private func monthNavigationGesture(travelDistance: CGFloat) -> some Gesture {
+    private func monthNavigationGesture(
+        travelDistance: CGFloat,
+        detailsCanScrollBackward: Bool = false,
+        detailsCanScrollBackwardAtGestureStart: Bool = false
+    ) -> some Gesture {
         DragGesture(minimumDistance: 18, coordinateSpace: .local)
             .onChanged { value in
                 guard !isMonthExpansionSettling else { return }
+                let detailsCanScrollBackwardAtStart =
+                    monthDragRoutingSession.detailsCanScrollBackwardAtStart ??
+                    (detailsCanScrollBackwardAtGestureStart || detailsCanScrollBackward)
+                if monthDragRoutingSession.detailsCanScrollBackwardAtStart == nil {
+                    monthDragRoutingSession.detailsCanScrollBackwardAtStart =
+                        detailsCanScrollBackwardAtStart
+                }
+                guard !monthDragRoutingSession.isRoutedToDetails else { return }
                 let axis = monthDragAxis ?? TeachingCalendarLogic.gestureAxis(
                     horizontalTranslation: value.translation.width,
                     verticalTranslation: value.translation.height
@@ -1496,8 +1532,10 @@ struct MobileTeachingCalendarView: View {
                 if axis == .vertical,
                    TeachingCalendarLogic.routesMonthDragToDetails(
                        position: effectiveMonthPosition,
-                       verticalTranslation: value.translation.height
+                       verticalTranslation: value.translation.height,
+                       detailsCanScrollBackward: detailsCanScrollBackwardAtStart
                    ) {
+                    monthDragRoutingSession.isRoutedToDetails = true
                     return
                 }
                 monthDragAxis = axis
@@ -1511,13 +1549,7 @@ struct MobileTeachingCalendarView: View {
             }
             .onEnded { value in
                 defer { finishTrackedDrag() }
-                if monthDragAxis == nil,
-                   TeachingCalendarLogic.routesMonthDragToDetails(
-                       position: effectiveMonthPosition,
-                       verticalTranslation: value.translation.height
-                   ) {
-                    return
-                }
+                guard !monthDragRoutingSession.isRoutedToDetails else { return }
                 if monthDragAxis == .horizontal,
                    let direction = TeachingCalendarLogic.swipeDirection(
                     horizontalTranslation: value.translation.width,
@@ -1528,10 +1560,7 @@ struct MobileTeachingCalendarView: View {
                     return
                 }
 
-                guard monthDragAxis == .vertical else {
-                    settleMonthPosition(to: currentMonthPosition)
-                    return
-                }
+                guard monthDragAxis == .vertical else { return }
                 let position = TeachingCalendarLogic.monthPosition(
                     isExpanded: effectiveMonthPosition == .expanded,
                     isDetailRaised: effectiveMonthPosition == .detailRaised,
@@ -1565,6 +1594,7 @@ struct MobileTeachingCalendarView: View {
     private func finishTrackedDrag() {
         isHorizontalPaging = false
         monthDragAxis = nil
+        monthDragRoutingSession.reset()
         let suppressionID = UUID()
         eventSelectionSuppressionID = suppressionID
         Task { @MainActor in
@@ -1636,8 +1666,17 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func selectMonthDay(_ day: Date) {
+        if sameDay(day, selectedDate) {
+            resetMonthDetailsScroll()
+        }
         navigate(to: day)
         settleMonthPosition(to: usesLandscapeMonthStops ? .detailRaised : .collapsed)
+    }
+
+    private func resetMonthDetailsScroll() {
+        monthDetailsCanScrollBackward = false
+        monthDetailsCanScrollBackwardAtGestureStart = false
+        monthDetailsScrollID = UUID()
     }
 
     private var contentIdentity: String {
@@ -1709,6 +1748,109 @@ struct MobileTeachingCalendarView: View {
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = format
         return formatter
+    }
+}
+
+private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
+    @Binding var canScrollBackward: Bool
+    @Binding var canScrollBackwardAtGestureStart: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            canScrollBackward: $canScrollBackward,
+            canScrollBackwardAtGestureStart: $canScrollBackwardAtGestureStart
+        )
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        configureNearestScrollView(from: view, coordinator: context.coordinator)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.canScrollBackward = $canScrollBackward
+        context.coordinator.canScrollBackwardAtGestureStart =
+            $canScrollBackwardAtGestureStart
+        configureNearestScrollView(from: uiView, coordinator: context.coordinator)
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.stopObserving()
+    }
+
+    private func configureNearestScrollView(from view: UIView, coordinator: Coordinator) {
+        DispatchQueue.main.async {
+            var ancestor = view.superview
+            while let current = ancestor {
+                if let scrollView = current as? UIScrollView {
+                    scrollView.bounces = false
+                    scrollView.alwaysBounceVertical = false
+                    scrollView.showsVerticalScrollIndicator = false
+                    scrollView.showsHorizontalScrollIndicator = false
+                    coordinator.observe(scrollView)
+                    return
+                }
+                ancestor = current.superview
+            }
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var canScrollBackward: Binding<Bool>
+        var canScrollBackwardAtGestureStart: Binding<Bool>
+        private weak var scrollView: UIScrollView?
+
+        init(
+            canScrollBackward: Binding<Bool>,
+            canScrollBackwardAtGestureStart: Binding<Bool>
+        ) {
+            self.canScrollBackward = canScrollBackward
+            self.canScrollBackwardAtGestureStart = canScrollBackwardAtGestureStart
+        }
+
+        func observe(_ scrollView: UIScrollView) {
+            guard self.scrollView !== scrollView else {
+                updateScrollState(scrollView)
+                return
+            }
+            self.scrollView?.panGestureRecognizer.removeTarget(
+                self,
+                action: #selector(scrollViewDidPan(_:))
+            )
+            self.scrollView = scrollView
+            scrollView.panGestureRecognizer.addTarget(
+                self,
+                action: #selector(scrollViewDidPan(_:))
+            )
+            updateScrollState(scrollView)
+        }
+
+        func stopObserving() {
+            scrollView?.panGestureRecognizer.removeTarget(
+                self,
+                action: #selector(scrollViewDidPan(_:))
+            )
+            scrollView = nil
+        }
+
+        @objc private func scrollViewDidPan(_ recognizer: UIPanGestureRecognizer) {
+            guard let scrollView = recognizer.view as? UIScrollView else { return }
+            if recognizer.state == .began {
+                canScrollBackwardAtGestureStart.wrappedValue =
+                    scrollView.contentOffset.y > -scrollView.adjustedContentInset.top + 1
+            }
+            updateScrollState(scrollView)
+        }
+
+        private func updateScrollState(_ scrollView: UIScrollView) {
+            let topOffset = -scrollView.adjustedContentInset.top
+            let canScrollBackward = scrollView.contentOffset.y > topOffset + 1
+            guard self.canScrollBackward.wrappedValue != canScrollBackward else { return }
+            self.canScrollBackward.wrappedValue = canScrollBackward
+        }
+
     }
 }
 #endif

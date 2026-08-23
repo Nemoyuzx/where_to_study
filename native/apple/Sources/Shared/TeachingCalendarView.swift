@@ -104,9 +104,11 @@ enum TeachingCalendarLogic {
 
     static func routesMonthDragToDetails(
         position: MonthPosition,
-        verticalTranslation: CGFloat
+        verticalTranslation: CGFloat,
+        detailsCanScrollBackward: Bool = false
     ) -> Bool {
-        position == .detailRaised && verticalTranslation < 0
+        guard position == .detailRaised else { return false }
+        return verticalTranslation < 0 || detailsCanScrollBackward
     }
 
     static func yearCourseOpacity(courseCount: Int) -> Double {
