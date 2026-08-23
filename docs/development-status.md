@@ -101,8 +101,8 @@
 | Android UI | Medium Phone API 36.1、WhereToStudy Fold 与 Pixel Tablet 各 8/8 通过，共 24/24；覆盖日周折叠与 `+N`、英文原文边界、月动画和折叠侧栏双向居中 |
 | 浏览器视觉检查 | 桌面与手机宽度的 English 设置、日/周全天 `+N` 鼠标/键盘弹窗、月格独立配色和年视图按日详情通过；开发服务器唯一控制台消息是浏览器忽略 meta 中 `frame-ancestors` 的已知 CSP 提示 |
 | HarmonyOS | HAP 构建、88/88 ArkTS 单元测试、ohosTest HAP 编译和宽屏日/周/月/年静态契约通过；当前无连接设备，未执行 ohosTest 设备运行 |
-| macOS 归档检查 | SwiftUI Universal `0.2.3 (58)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核待正式上传步骤完成 |
-| App Store Connect | iOS 与 macOS `0.2.3 (58)` 待本地 Xcode 正式签名上传；上传成功后只记录 `Upload succeeded` / `EXPORT SUCCEEDED`，不再打开 App Store Connect 检查 |
+| macOS 归档检查 | SwiftUI Universal `0.2.3 (58)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
+| App Store Connect | iOS 与 macOS `0.2.3 (58)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
 | CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
 | Linux 发布 | arm64 在 Ubuntu 26.04 虚拟机、x86_64 在 Ubuntu 22.04 服务器完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、空教室、教学日历、设置、刷新与退出；Windows/Linux 无课程小组件入口 |

@@ -130,7 +130,7 @@ test("Xcode Cloud generates the ignored native Apple project after cloning", () 
   const cloudScript = readFileSync(
     path.join(root, "native", "apple", "ci_scripts", "ci_post_clone.sh"),
     "utf8",
-  );
+  ).replaceAll("\r\n", "\n");
   const nativeApple = readFileSync(path.join(root, "native", "apple", "project.yml"), "utf8");
   const gitignore = readFileSync(path.join(root, ".gitignore"), "utf8");
 

@@ -31,7 +31,7 @@
 ./scripts/native-apple-app-store.sh preflight all
 
 export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
-export APPLE_BUILD_NUMBER=57
+export APPLE_BUILD_NUMBER=58
 
 # 本机需安装 Apple Distribution、Mac Installer Distribution 证书，以及以下
 # 四个默认名称的 App Store 描述文件。名称不同时可用对应环境变量覆盖：
@@ -83,7 +83,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Distribution、Mac Installer Distribution 证书与 macOS 发布描述文件；iOS 主应用和 Widget 使用 Xcode 自动签名完成正式归档。证书私钥和团队标识不写入仓库。
-- macOS `0.2.2 (52)` 已完成正式签名上传；iOS `0.2.2 (57)` 已完成本地 Xcode 编译、145 项逻辑测试、iPhone UI 回归与正式签名上传，2026-08-23 收到 Xcode `Upload succeeded` 和 `EXPORT SUCCEEDED`。
+- macOS 与 iOS `0.2.3 (58)` 已完成本地 Xcode 严格编译、逻辑/UI 回归和正式签名上传；两端均在 2026-08-23 收到 Xcode `Upload succeeded` 和 `EXPORT SUCCEEDED`，未再打开 App Store Connect 检查处理状态。
 - 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。对应平台完成处理后，iOS 选择 Build 57，macOS 保持 Build 52。
 - 13 英寸 iPad 横屏四张 0.2.2 效果图已由专项 Xcode UI 测试生成并写入 `screenshot-manifest.md`；Build 25 素材只保留作历史校验。正式提交仍需按 `screenshot-plan.md` 补齐产品页所需的 iPhone 与 macOS 最新截图。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
