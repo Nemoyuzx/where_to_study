@@ -428,12 +428,27 @@ class MainActivity : Activity() {
         }
 
     private fun applyNavigationRailTabPresentation(view: TextView, destination: Destination) {
-        view.text = if (navigationRailCollapsed) "" else destination.label
+        // A null label lets TextView center a top drawable as the complete
+        // compound content. An empty string still creates a text line and
+        // shifts the icon vertically; a leading drawable also makes the icon
+        // appear horizontally off-center inside the square selection surface.
+        view.text = if (navigationRailCollapsed) null else destination.label
         view.gravity = if (navigationRailCollapsed) Gravity.CENTER else Gravity.CENTER_VERTICAL
-        // 收起状态不再把图标放在 TextView 的 top drawable 槽位。即使文本为空，
-        // top drawable 仍会连同一行空文本一起参与纵向排版，导致图标高于 48dp 选中框中心。
-        // start drawable 与空文本组合后由 Gravity.CENTER 对整个内容做双向居中。
-        view.setCompoundDrawablesRelativeWithIntrinsicBounds(destination.iconResource, 0, 0, 0)
+        if (navigationRailCollapsed) {
+            view.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                0,
+                destination.iconResource,
+                0,
+                0,
+            )
+        } else {
+            view.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                destination.iconResource,
+                0,
+                0,
+                0,
+            )
+        }
         view.compoundDrawablePadding = if (navigationRailCollapsed) 0 else dp(10)
         view.setPadding(if (navigationRailCollapsed) 0 else dp(12), 0, 0, 0)
         view.layoutParams = (view.layoutParams as? LinearLayout.LayoutParams
