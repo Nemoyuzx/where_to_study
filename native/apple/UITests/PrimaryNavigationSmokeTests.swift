@@ -5,7 +5,7 @@ import UIKit
 final class PrimaryNavigationSmokeTests: XCTestCase {
     func testPrimaryPagesAreNavigable() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing"]
         app.launch()
         defer { app.terminate() }
@@ -22,7 +22,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
     func testReviewDemoShowsLocalDataWithoutAccount() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         XCUIDevice.shared.orientation = .portrait
         app.launch()
@@ -60,7 +60,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
     func testWeatherCardStartsCollapsedAndExpandsOnDemand() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         app.launch()
         defer { app.terminate() }
@@ -81,7 +81,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testMobileCalendarPagingMonthExpansionAndYearJump() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         XCUIDevice.shared.orientation = .portrait
         app.launch()
@@ -290,7 +290,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testEnglishInterfaceCanBeSelectedWithoutTranslatingSampleAPIContent() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only localization smoke test")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "en"
         app.launch()
@@ -311,7 +311,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testCompactTabBarRestoresGeometryAfterLanguageRoundTrip() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only tab layout test")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "zh-Hans"
         app.launch()
@@ -351,7 +351,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testIPhoneLandscapeMonthUsesOnlyExpandedAndSelectedWeekStops() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         XCUIDevice.shared.orientation = .landscapeLeft
         app.launch()
@@ -440,7 +440,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
     func testSettingsCanEnterAndExitBuiltInSampleMode() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing-live"]
         app.launch()
         defer { app.terminate() }
@@ -459,7 +459,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
     func testSettingsKeyboardDismissesAfterEnteringCredentials() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing-live"]
         XCUIDevice.shared.orientation = .portrait
         app.launch()
@@ -487,7 +487,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
     func testPrivacyPolicyOpensInsideTheAppAndOffersGitHubLink() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing-live"]
         app.launch()
         defer { app.terminate() }
@@ -511,7 +511,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testSettingsShowsLiveWidgetSizePreview() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing-live"]
         app.launch()
         defer { app.terminate() }
@@ -544,7 +544,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testPlannerSummaryLabelsRemainSeparatedOnIPhone() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing"]
         app.launch()
         defer { app.terminate() }
@@ -569,7 +569,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testCompactTabBottomSafeAreaPolicyIsSectionSpecific() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing"]
         app.launch()
         defer { app.terminate() }
@@ -606,7 +606,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testIPadUsesPersistentSidebarAndExpandedLayoutsAcrossRotation() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "仅在 iPad 模拟器验证")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--ui-testing"]
         XCUIDevice.shared.orientation = .landscapeLeft
         app.launch()
@@ -682,7 +682,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     func testStoreIPad13LandscapeScreenshots() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "仅在 iPad 模拟器生成")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         XCUIDevice.shared.orientation = .landscapeLeft
         app.launch()
@@ -913,6 +913,15 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)
+    }
+
+    private func configuredApplication(language: String = "zh-Hans") -> XCUIApplication {
+        let app = XCUIApplication()
+        // UI tests share the simulator's persisted defaults and may run in a
+        // different order on CI. Pin each launch so an English-language test
+        // cannot change the labels expected by the next test.
+        app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = language
+        return app
     }
 
     private func navigate(to title: String, in app: XCUIApplication) {
