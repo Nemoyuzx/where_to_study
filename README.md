@@ -17,16 +17,6 @@ Silicon 兼容构建。
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
 
-## iPad 13 英寸横屏效果
-
-| 联动查询与校区天气 | 教学日历月视图 |
-| --- | --- |
-| ![iPad 横屏联动查询与校区天气](./docs/screenshots/ipad-13-landscape/planner-weather.png) | ![iPad 横屏教学日历月视图](./docs/screenshots/ipad-13-landscape/teaching-calendar.png) |
-| 设置与独立数据开关 | 中英双语隐私声明 |
-| ![iPad 横屏设置](./docs/screenshots/ipad-13-landscape/settings.png) | ![iPad 横屏隐私声明](./docs/screenshots/ipad-13-landscape/privacy.png) |
-
-截图由本地 Xcode 在 iPad Pro 13-inch 模拟器中使用内置审核示例数据生成，不含真实账号或个人课程信息。
-
 ## 平台状态
 
 | 平台 | 客户端技术 | 发布状态 |
