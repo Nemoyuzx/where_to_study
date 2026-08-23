@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前稳定版：[v0.2.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.3)
 - 应用版本：`0.2.3`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=58`；Android `versionCode=34`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=59`；Android `versionCode=34`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：仅保留最新 SwiftUI Universal 应用 `/Applications/Where To Study.app`；未再检测到其他 Where To Study 安装副本
-- 发布边界：`v0.2.3` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 58 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.3` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 59 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -101,8 +101,8 @@
 | Android UI | Medium Phone API 36.1、WhereToStudy Fold 与 Pixel Tablet 各 8/8 通过，共 24/24；覆盖日周折叠与 `+N`、英文原文边界、月动画和折叠侧栏双向居中 |
 | 浏览器视觉检查 | 桌面与手机宽度的 English 设置、日/周全天 `+N` 鼠标/键盘弹窗、月格独立配色和年视图按日详情通过；开发服务器唯一控制台消息是浏览器忽略 meta 中 `frame-ancestors` 的已知 CSP 提示 |
 | HarmonyOS | HAP 构建、88/88 ArkTS 单元测试、ohosTest HAP 编译和宽屏日/周/月/年静态契约通过；当前无连接设备，未执行 ohosTest 设备运行 |
-| macOS 归档检查 | SwiftUI Universal `0.2.3 (58)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
-| App Store Connect | iOS 与 macOS `0.2.3 (58)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
+| macOS 归档检查 | SwiftUI Universal `0.2.3 (59)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
+| App Store Connect | iOS 与 macOS `0.2.3 (59)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
 | CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
 | Linux 发布 | GitHub-hosted Ubuntu 22.04 x86_64/arm64 工作流均完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、空教室、教学日历、设置、刷新与退出；Windows/Linux 无课程小组件入口 |
@@ -117,7 +117,7 @@ Apple 测试结果（2026-08-23 使用 `xcresulttool` 复核）：
 
 ## 0.2.3 稳定版发布制品
 
-`v0.2.3` 的 GitHub Release 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.3 (34)` APK/AAB。iOS 与 macOS `0.2.3 (58)` 仅上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。
+`v0.2.3` 的 GitHub Release 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.3 (34)` APK/AAB。iOS 与 macOS `0.2.3 (59)` 仅上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。
 
 ## 0.2.2 稳定版发布制品
 

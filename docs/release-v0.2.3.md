@@ -33,5 +33,5 @@
 ## Distribution
 
 - GitHub Release: Windows x64 NSIS, Linux Debian/AppImage and CLI/TUI builds, plus the maintainer-signed Android `0.2.3 (34)` APK/AAB.
-- TestFlight: native iOS and macOS `0.2.3 (58)` builds. Apple artifacts are not attached to GitHub Release.
+- TestFlight: native iOS and macOS `0.2.3 (59)` builds. Apple artifacts are not attached to GitHub Release.
 - Checksum sidecars are used for verification but are not attached to the public GitHub Release.

@@ -393,6 +393,7 @@ final class DailyCourseNotificationTests: XCTestCase {
             center: NonRespondingCourseNotificationCenter(mode: .authorizationRequest),
             defaults: defaults
         )
+        defaults.set(AppLanguage.english.rawValue, forKey: AppLocalization.defaultsKey)
         let model = makeModel(
             notificationScheduler: scheduler,
             notificationAuthorizationTimeout: .milliseconds(50),
@@ -404,8 +405,11 @@ final class DailyCourseNotificationTests: XCTestCase {
         model.setDailyCourseNotificationsEnabled(true)
         try await waitUntil { !model.dailyCourseNotificationsEnabled }
 
-        XCTAssertNotEqual(model.dailyCourseNotificationStatusMessage, "正在确认通知权限…")
-        XCTAssertTrue(model.dailyCourseNotificationStatusMessage.contains("通知权限状态读取超时"))
+        XCTAssertEqual(
+            model.dailyCourseNotificationStatusMessage,
+            model.localized("课程摘要安排失败：")
+                + model.localized("通知权限状态读取超时，请在系统设置中确认通知权限。")
+        )
     }
 
     @MainActor
