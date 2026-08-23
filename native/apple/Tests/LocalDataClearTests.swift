@@ -107,6 +107,7 @@ final class LocalDataClearTests: XCTestCase {
             dailyCourseNotificationScheduler: NoopNotificationScheduler(),
             defaults: defaults
         )
+        model.setAppLanguage(.english)
 
         model.account = "must-not-save"
         model.password = "must-not-save"
@@ -120,11 +121,19 @@ final class LocalDataClearTests: XCTestCase {
 
         XCTAssertEqual(
             model.statusMessage,
-            model.localized("正在展示内置示例课表，未连接北邮服务")
+            "正在展示内置示例课表，未连接北邮服务"
+        )
+        XCTAssertEqual(
+            model.localized(model.statusMessage),
+            "Showing the built-in demo schedule; not connected to BUPT services"
         )
         XCTAssertEqual(
             model.classroomStatusMessage,
-            model.localized("正在展示内置示例空教室，未连接北邮服务")
+            "正在展示内置示例空教室，未连接北邮服务"
+        )
+        XCTAssertEqual(
+            model.localized(model.classroomStatusMessage),
+            "Showing built-in demo rooms; not connected to BUPT services"
         )
         let importedCount = (try? CalendarImportLogic.eventDrafts(from: Self.schedule).count) ?? 0
         XCTAssertEqual(
@@ -136,7 +145,11 @@ final class LocalDataClearTests: XCTestCase {
         )
         XCTAssertEqual(
             model.dailyCourseNotificationStatusMessage,
-            model.localized("示例模式已模拟开启每日课程摘要，未申请通知权限")
+            "示例模式已模拟开启每日课程摘要，未申请通知权限"
+        )
+        XCTAssertEqual(
+            model.localized(model.dailyCourseNotificationStatusMessage),
+            "Daily course summaries are simulated as enabled; notification permission was not requested"
         )
         XCTAssertTrue(model.dailyCourseNotificationsEnabled)
     }

@@ -225,6 +225,7 @@
 "本地课表读取失败：" = "Unable to read the local schedule: ";
 "本地空教室读取失败：" = "Unable to read the local empty-room cache: ";
 "课程摘要安排失败：" = "Unable to schedule course summaries: ";
+"通知权限状态读取超时，请在系统设置中确认通知权限。" = "Timed out while checking notification permission. Confirm notification access in System Settings.";
 "请先获取/刷新个人课表。" = "Fetch or refresh your personal schedule first.";
 "第一周周一日期格式不正确。" = "The first Monday has an invalid date format.";
 "课程“%@”的日期或节次信息不正确。" = "The date or period information for course “%@” is invalid.";

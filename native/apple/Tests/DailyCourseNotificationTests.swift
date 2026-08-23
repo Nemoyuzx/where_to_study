@@ -366,6 +366,7 @@ final class DailyCourseNotificationTests: XCTestCase {
             defaults: defaults
         )
         defaults.set(true, forKey: "dailyCourseNotificationsEnabled")
+        defaults.set(AppLanguage.english.rawValue, forKey: AppLocalization.defaultsKey)
         let model = makeModel(
             notificationScheduler: scheduler,
             notificationAuthorizationTimeout: .milliseconds(50),
@@ -380,7 +381,7 @@ final class DailyCourseNotificationTests: XCTestCase {
         XCTAssertEqual(
             model.dailyCourseNotificationStatusMessage,
             model.localized("课程摘要安排失败：")
-                + "通知权限状态读取超时，请在系统设置中确认通知权限。"
+                + model.localized("通知权限状态读取超时，请在系统设置中确认通知权限。")
         )
     }
 

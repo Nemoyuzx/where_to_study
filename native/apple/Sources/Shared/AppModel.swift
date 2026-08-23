@@ -1183,7 +1183,7 @@ final class AppModel: ObservableObject {
                 defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
                 dailyCourseNotificationScheduler.cancelPending(revision: revision)
                 dailyCourseNotificationStatusMessage = localized("课程摘要安排失败：")
-                    + error.localizedDescription
+                    + localized(error.localizedDescription)
             }
         }
     }
