@@ -1,4 +1,7 @@
 import XCTest
+#if os(iOS)
+import UIKit
+#endif
 #if os(macOS)
 @testable import WhereToStudyMac
 #elseif os(iOS)
@@ -876,6 +879,24 @@ final class ScheduleLogicTests: XCTestCase {
             )
         )
     }
+
+    #if os(iOS)
+    @MainActor
+    func testMonthDetailsRoutingReadsTheLiveUIKitOffsetInsteadOfAStaleFallback() {
+        let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+        scrollView.contentSize = CGSize(width: 320, height: 960)
+        let state = MobileMonthDetailsScrollState()
+        state.attach(scrollView)
+
+        scrollView.contentOffset = CGPoint(x: 0, y: 80)
+        XCTAssertTrue(state.routingSnapshot(fallback: false))
+
+        // Simulate UIKit reaching the real top before SwiftUI has published its
+        // previous Binding update. Routing must trust the live scroll view.
+        scrollView.contentOffset = .zero
+        XCTAssertFalse(state.routingSnapshot(fallback: true))
+    }
+    #endif
 
     func testMonthDetentsHonorDeliberateLowVelocityDrags() {
         XCTAssertEqual(

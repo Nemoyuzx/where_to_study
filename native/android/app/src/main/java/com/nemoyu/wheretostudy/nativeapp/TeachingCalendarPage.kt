@@ -22,6 +22,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewConfiguration
+import android.view.ViewOutlineProvider
 import android.view.Window
 import android.view.WindowManager
 import android.view.VelocityTracker
@@ -1631,9 +1632,17 @@ internal class TeachingCalendarPage(
             isNestedScrollingEnabled = true
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            clipToPadding = false
+            background = roundedBackground(
+                activity,
+                Palette.background,
+                radius = UiMetrics.surfaceRadiusDp,
+            )
+            outlineProvider = ViewOutlineProvider.BACKGROUND
+            clipToOutline = true
+            clipChildren = true
+            clipToPadding = true
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            setPadding(0, 0, 0, activity.dp(24))
+            setPadding(0, activity.dp(2), 0, activity.dp(24))
             addView(monthSelectedDetails(selectedDate))
             val restoredScrollY = sessionState.savedMonthDetailsScrollY(detailsDateKey)
             var restoringScroll = true

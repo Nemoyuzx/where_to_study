@@ -258,6 +258,16 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             waitForValue("日程已展开", of: monthState),
             "A pull that starts before details reach the top must not change the month detent"
         )
+        dayNumber.tap()
+        XCTAssertTrue(waitForValue("日程已展开", of: monthState))
+        XCTAssertTrue(waitForValue("顶部", of: monthSummary))
+        verticalSwipe(in: app, within: monthSummary, upward: false, requestedTravel: 160)
+        XCTAssertTrue(
+            waitForValue("已展开", of: monthState),
+            "The first new pull that begins at the real top must change the month detent"
+        )
+        dayNumber.tap()
+        XCTAssertTrue(waitForValue("日程已展开", of: monthState))
         for _ in 0..<10 where !deadlineCard.isHittable {
             verticalSwipe(in: app, within: monthSummary, upward: true)
         }

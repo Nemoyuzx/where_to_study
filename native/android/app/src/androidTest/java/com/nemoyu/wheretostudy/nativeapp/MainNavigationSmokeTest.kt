@@ -176,6 +176,18 @@ class MainNavigationSmokeTest {
                     "The month detail area must not show a vertical scroll bar",
                     details.isVerticalScrollBarEnabled,
                 )
+                assertTrue(
+                    "The month detail viewport must clip cards to its rounded outer edge",
+                    details.clipToOutline,
+                )
+                assertTrue(
+                    "The month detail viewport padding must mask content at its edges",
+                    details.clipToPadding,
+                )
+                assertNotNull(
+                    "The month detail viewport needs an opaque rounded mask background",
+                    details.background,
+                )
                 assertEquals(
                     "The detail area must not stretch when a top-edge pull changes detents",
                     View.OVER_SCROLL_NEVER,
@@ -620,6 +632,12 @@ class MainNavigationSmokeTest {
                         TeachingCalendarLogic.monthDetailsBorderWidthDp(),
                         0f,
                     )
+                    // This assertion block verifies anchor transitions, while the
+                    // dedicated ownership regression above covers non-top pulls.
+                    // Remove any drag overflow so the next pull starts at the edge.
+                    activity.findViewById<ScrollView>(
+                        R.id.calendar_month_selected_details,
+                    ).scrollTo(0, 0)
                 }
                 swipeResource(
                     device,

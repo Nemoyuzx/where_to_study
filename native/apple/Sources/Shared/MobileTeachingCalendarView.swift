@@ -39,6 +39,56 @@ private final class MobileMonthDragRoutingSession {
     }
 }
 
+@MainActor
+final class MobileMonthDetailsScrollState {
+    private weak var scrollView: UIScrollView?
+    private var panGestureIsActive = false
+    private var canScrollBackwardAtPanStart = false
+
+    func attach(_ scrollView: UIScrollView) {
+        self.scrollView = scrollView
+        panGestureIsActive = false
+        canScrollBackwardAtPanStart = Self.canScrollBackward(scrollView)
+    }
+
+    func detach(_ scrollView: UIScrollView?) {
+        guard self.scrollView === scrollView else { return }
+        self.scrollView = nil
+        panGestureIsActive = false
+        canScrollBackwardAtPanStart = false
+    }
+
+    func recordPan(_ recognizer: UIPanGestureRecognizer) {
+        guard let scrollView = recognizer.view as? UIScrollView else { return }
+        switch recognizer.state {
+        case .began:
+            panGestureIsActive = true
+            canScrollBackwardAtPanStart = Self.canScrollBackward(scrollView)
+        case .ended, .cancelled, .failed:
+            panGestureIsActive = false
+        default:
+            break
+        }
+    }
+
+    func routingSnapshot(fallback: Bool) -> Bool {
+        guard let scrollView else { return fallback }
+        if panGestureIsActive { return canScrollBackwardAtPanStart }
+        return Self.canScrollBackward(scrollView)
+    }
+
+    func reset() {
+        scrollView = nil
+        panGestureIsActive = false
+        canScrollBackwardAtPanStart = false
+    }
+
+    private static func canScrollBackward(_ scrollView: UIScrollView) -> Bool {
+        let topOffset = -scrollView.adjustedContentInset.top
+        return scrollView.contentOffset.y > topOffset + 1
+    }
+}
+
 struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
@@ -55,8 +105,8 @@ struct MobileTeachingCalendarView: View {
     @State private var monthSettlementID = UUID()
     @State private var eventSelectionSuppressionID = UUID()
     @State private var monthDetailsCanScrollBackward = false
-    @State private var monthDetailsCanScrollBackwardAtGestureStart = false
     @State private var monthDetailsScrollID = UUID()
+    @State private var monthDetailsScrollState = MobileMonthDetailsScrollState()
     @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
 
     private let calendar = Calendar.shanghai
@@ -566,8 +616,7 @@ struct MobileTeachingCalendarView: View {
                         .padding(.vertical, 2)
                         .background(MobileMonthDetailsScrollConfiguration(
                             canScrollBackward: $monthDetailsCanScrollBackward,
-                            canScrollBackwardAtGestureStart:
-                                $monthDetailsCanScrollBackwardAtGestureStart
+                            scrollState: monthDetailsScrollState
                         ))
                     }
                     .id(monthDetailsScrollID)
@@ -592,9 +641,7 @@ struct MobileTeachingCalendarView: View {
             monthGestureContainer(
                 calendarContent,
                 travelDistance: travelDistance,
-                detailsCanScrollBackward: monthDetailsCanScrollBackward,
-                detailsCanScrollBackwardAtGestureStart:
-                    monthDetailsCanScrollBackwardAtGestureStart
+                detailsCanScrollBackward: monthDetailsCanScrollBackward
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("calendar.mobile.month")
@@ -609,15 +656,12 @@ struct MobileTeachingCalendarView: View {
     private func monthGestureContainer<Content: View>(
         _ content: Content,
         travelDistance: CGFloat,
-        detailsCanScrollBackward: Bool,
-        detailsCanScrollBackwardAtGestureStart: Bool
+        detailsCanScrollBackward: Bool
     ) -> some View {
         content.simultaneousGesture(
             monthNavigationGesture(
                 travelDistance: travelDistance,
-                detailsCanScrollBackward: detailsCanScrollBackward,
-                detailsCanScrollBackwardAtGestureStart:
-                    detailsCanScrollBackwardAtGestureStart
+                detailsCanScrollBackward: detailsCanScrollBackward
             )
         )
     }
@@ -1510,15 +1554,16 @@ struct MobileTeachingCalendarView: View {
 
     private func monthNavigationGesture(
         travelDistance: CGFloat,
-        detailsCanScrollBackward: Bool = false,
-        detailsCanScrollBackwardAtGestureStart: Bool = false
+        detailsCanScrollBackward: Bool = false
     ) -> some Gesture {
         DragGesture(minimumDistance: 18, coordinateSpace: .local)
             .onChanged { value in
                 guard !isMonthExpansionSettling else { return }
                 let detailsCanScrollBackwardAtStart =
                     monthDragRoutingSession.detailsCanScrollBackwardAtStart ??
-                    (detailsCanScrollBackwardAtGestureStart || detailsCanScrollBackward)
+                    monthDetailsScrollState.routingSnapshot(
+                        fallback: detailsCanScrollBackward
+                    )
                 if monthDragRoutingSession.detailsCanScrollBackwardAtStart == nil {
                     monthDragRoutingSession.detailsCanScrollBackwardAtStart =
                         detailsCanScrollBackwardAtStart
@@ -1675,7 +1720,7 @@ struct MobileTeachingCalendarView: View {
 
     private func resetMonthDetailsScroll() {
         monthDetailsCanScrollBackward = false
-        monthDetailsCanScrollBackwardAtGestureStart = false
+        monthDetailsScrollState.reset()
         monthDetailsScrollID = UUID()
     }
 
@@ -1753,12 +1798,12 @@ struct MobileTeachingCalendarView: View {
 
 private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
     @Binding var canScrollBackward: Bool
-    @Binding var canScrollBackwardAtGestureStart: Bool
+    let scrollState: MobileMonthDetailsScrollState
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             canScrollBackward: $canScrollBackward,
-            canScrollBackwardAtGestureStart: $canScrollBackwardAtGestureStart
+            scrollState: scrollState
         )
     }
 
@@ -1770,8 +1815,7 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {
         context.coordinator.canScrollBackward = $canScrollBackward
-        context.coordinator.canScrollBackwardAtGestureStart =
-            $canScrollBackwardAtGestureStart
+        context.coordinator.scrollState = scrollState
         configureNearestScrollView(from: uiView, coordinator: context.coordinator)
     }
 
@@ -1799,15 +1843,15 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject {
         var canScrollBackward: Binding<Bool>
-        var canScrollBackwardAtGestureStart: Binding<Bool>
+        var scrollState: MobileMonthDetailsScrollState
         private weak var scrollView: UIScrollView?
 
         init(
             canScrollBackward: Binding<Bool>,
-            canScrollBackwardAtGestureStart: Binding<Bool>
+            scrollState: MobileMonthDetailsScrollState
         ) {
             self.canScrollBackward = canScrollBackward
-            self.canScrollBackwardAtGestureStart = canScrollBackwardAtGestureStart
+            self.scrollState = scrollState
         }
 
         func observe(_ scrollView: UIScrollView) {
@@ -1819,7 +1863,9 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
                 self,
                 action: #selector(scrollViewDidPan(_:))
             )
+            scrollState.detach(self.scrollView)
             self.scrollView = scrollView
+            scrollState.attach(scrollView)
             scrollView.panGestureRecognizer.addTarget(
                 self,
                 action: #selector(scrollViewDidPan(_:))
@@ -1832,15 +1878,13 @@ private struct MobileMonthDetailsScrollConfiguration: UIViewRepresentable {
                 self,
                 action: #selector(scrollViewDidPan(_:))
             )
+            scrollState.detach(scrollView)
             scrollView = nil
         }
 
         @objc private func scrollViewDidPan(_ recognizer: UIPanGestureRecognizer) {
             guard let scrollView = recognizer.view as? UIScrollView else { return }
-            if recognizer.state == .began {
-                canScrollBackwardAtGestureStart.wrappedValue =
-                    scrollView.contentOffset.y > -scrollView.adjustedContentInset.top + 1
-            }
+            scrollState.recordPan(recognizer)
             updateScrollState(scrollView)
         }
 
