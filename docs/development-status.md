@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前稳定版：[v0.2.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.3)
 - 应用版本：`0.2.3`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=62`；Android `versionCode=35`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=63`；Android `versionCode=35`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：仅保留最新 SwiftUI Universal 应用 `/Applications/Where To Study.app`；未再检测到其他 Where To Study 安装副本
-- 发布边界：`v0.2.3` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 62 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.3` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 63 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -101,8 +101,8 @@
 | Android UI | Medium Phone API 36.1 为 9/9；WhereToStudy Fold 与 Pixel Tablet 各 9 项通过、1 项仅手机导航几何按设计跳过；覆盖日周折叠、全部 DDL、月/周居中弹窗、月动画、月/年边框和折叠侧栏居中 |
 | 浏览器视觉检查 | 桌面与手机宽度的 English 设置、周/月独立居中日程弹窗、全部公开 DDL，以及月/年格“作业 > 校内 > 其它”三档实际计算边框通过；开发服务器唯一控制台消息是浏览器忽略 meta 中 `frame-ancestors` 的已知 CSP 提示 |
 | HarmonyOS | HAP 构建、90/90 ArkTS 单元测试、ohosTest HAP 编译和宽屏日/周/月/年静态契约通过；当前无连接设备，未执行 ohosTest 设备运行 |
-| macOS 归档检查 | SwiftUI Universal `0.2.3 (62)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
-| App Store Connect | iOS 与 macOS `0.2.3 (62)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
+| macOS 归档检查 | SwiftUI Universal `0.2.3 (63)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
+| App Store Connect | iOS 与 macOS `0.2.3 (63)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
 | CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
 | Linux 发布 | GitHub-hosted Ubuntu 22.04 x86_64/arm64 工作流均完成 `.deb`、`.AppImage`、CLI、TUI 构建；AppImage 重打时移除会与新宿主 Mesa 冲突的旧 Wayland ABI 库并隔离 GIO 模块，Ubuntu 25.04 ARM64 桌面复测通过；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、空教室、教学日历、设置、刷新与退出；Windows/Linux 无课程小组件入口 |
@@ -117,7 +117,7 @@ Apple 测试结果（2026-08-23 使用 `xcresulttool` 复核）：
 
 ## 0.2.3 稳定版发布制品
 
-`v0.2.3` 的 GitHub Release 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.3 (35)` APK/AAB。iOS 与 macOS `0.2.3 (62)` 仅上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。
+`v0.2.3` 的 GitHub Release 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.3 (35)` APK/AAB。iOS 与 macOS `0.2.3 (63)` 仅上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。
 
 ## 0.2.2 稳定版发布制品
 
