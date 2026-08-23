@@ -1036,12 +1036,38 @@ class MainNavigationSmokeTest {
             val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
             val firstCell = (grid.getChildAt(0) as ViewGroup).getChildAt(0)
             assertTrue(firstCell.performClick())
+            if (activity.findViewById<View?>(R.id.phone_navigation) != null) {
+                val pageSurface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                assertEquals(
+                    "Phone date selection must not stack two readable month grids",
+                    1,
+                    pageSurface.childCount,
+                )
+                val incomingPage = pageSurface.getChildAt(0)
+                assertTrue(
+                    "The incoming month page must start from a visible transition state",
+                    incomingPage.alpha < 1f,
+                )
+            }
         }
         Thread.sleep(360L)
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
         scenario.onActivity { activity ->
             val details = activity.findViewById<View>(R.id.calendar_month_selected_details)
             assertEquals(View.VISIBLE, details.visibility)
+            if (activity.findViewById<View?>(R.id.phone_navigation) != null) {
+                val pageSurface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                assertEquals(
+                    "Phone date selection transition must remove the outgoing page",
+                    1,
+                    pageSurface.childCount,
+                )
+                pageSurface.getChildAt(0).let { settledPage ->
+                    assertEquals(1f, settledPage.alpha, 0.01f)
+                    assertEquals(0f, settledPage.translationX, 0.01f)
+                    assertEquals(0f, settledPage.translationY, 0.01f)
+                }
+            }
             TextView(activity).apply {
                 isClickable = true
                 isFocusable = true

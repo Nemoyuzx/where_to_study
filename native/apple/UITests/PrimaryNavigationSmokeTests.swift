@@ -132,12 +132,37 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(monthEvent.waitForExistence(timeout: 5))
         XCTAssertFalse(monthEvent.label.isEmpty)
         XCTAssertFalse(app.buttons[monthEventID].exists)
-        monthEvent.tap()
-        XCTAssertEqual(month.value as? String, "已展开")
-        XCTAssertFalse(app.descendants(matching: .any)["calendar.mobile.month-day-summary"].exists)
+        monthEvent.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(
+            waitForValue("已收起", of: month),
+            "Display-only event rows must pass the tap through to their month day"
+        )
+        XCTAssertTrue(app.descendants(matching: .any)["calendar.mobile.month-day-summary"]
+            .waitForExistence(timeout: 5))
+        month.tap()
+        XCTAssertTrue(waitForValue("已展开", of: month))
         attachScreenshot(named: "calendar-month-expanded")
         let initialMonthHeadingY = monthHeading.frame.minY
         let initialMondayHeadingY = mondayHeading.frame.minY
+
+        let alternateDateKey = nearbyShanghaiDateString()
+        let alternateDay = app.buttons[
+            "calendar.mobile.month-day-number.\(alternateDateKey)"
+        ].firstMatch
+        XCTAssertTrue(alternateDay.waitForExistence(timeout: 5))
+        alternateDay.tap()
+        XCTAssertTrue(
+            waitForValue("已收起", of: month),
+            "A date tap must retarget an expansion animation without requiring a second tap"
+        )
+        let summaryCard = app.descendants(matching: .any)[
+            "calendar.mobile.month-day-summary-card"
+        ].firstMatch
+        XCTAssertTrue(summaryCard.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForValue(alternateDateKey, of: summaryCard))
+        month.tap()
+        XCTAssertTrue(waitForValue("已展开", of: month))
+
         let selectedDay = app.buttons[
             "calendar.mobile.month-day-number.\(currentShanghaiDateString())"
         ].firstMatch
@@ -718,12 +743,26 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
     }
 
     private func currentShanghaiDateString() -> String {
+        shanghaiDateString(Date())
+    }
+
+    private func nearbyShanghaiDateString() -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let today = Date()
+        let day = calendar.component(.day, from: today)
+        let lastDay = calendar.range(of: .day, in: .month, for: today)?.last ?? day
+        let offset = day < lastDay ? 1 : -1
+        return shanghaiDateString(calendar.date(byAdding: .day, value: offset, to: today)!)
+    }
+
+    private func shanghaiDateString(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        return formatter.string(from: date)
     }
 
     private func navigate(to title: String, in app: XCUIApplication) {

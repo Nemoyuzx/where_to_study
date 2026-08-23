@@ -648,6 +648,9 @@ internal class TeachingCalendarPage(
     private var monthExpansionAnimator: ValueAnimator? = null
     private var pendingPageDirection = 0
     private var pendingMonthExpansionDirection = 0
+    private var pendingMonthSelectionDirection = 0
+    private var pendingMonthSelectionStartPosition: Float? = null
+    private var pendingMonthSelectionTargetPosition: Float? = null
     private var activePopupAnchor: YearCalendarView? = null
     private var activePopup: PopupWindow? = null
 
@@ -742,6 +745,7 @@ internal class TeachingCalendarPage(
                 },
             )
             animateExpandedPageIn(content)
+            animatePendingMonthDaySelection(calendarView)
             visibleYears().forEach { year ->
                 holidayRepository.ensure(year)
             }
@@ -936,6 +940,7 @@ internal class TeachingCalendarPage(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 ),
             )
+            animatePendingMonthDaySelection(pageView)
             visibleYears().forEach(holidayRepository::ensure)
         }
 
@@ -1046,21 +1051,39 @@ internal class TeachingCalendarPage(
         page: View,
         layoutParams: FrameLayout.LayoutParams,
     ) {
-        val oldPage = container.getChildAt(0)
         val pageDirection = pendingPageDirection
         val expansionDirection = pendingMonthExpansionDirection
+        val selectionDirection = pendingMonthSelectionDirection
         pendingPageDirection = 0
         pendingMonthExpansionDirection = 0
+        pendingMonthSelectionDirection = 0
 
-        if (oldPage == null || (pageDirection == 0 && expansionDirection == 0)) {
+        // A rapid second selection may arrive before the previous transition
+        // finishes. Keep only the newest mounted page as the outgoing surface.
+        while (container.childCount > 1) container.removeViewAt(0)
+        val oldPage = container.getChildAt(0)
+
+        if (oldPage == null ||
+            (pageDirection == 0 && expansionDirection == 0 && selectionDirection == 0)
+        ) {
             container.removeAllViews()
+            page.alpha = 1f
+            page.translationX = 0f
+            page.translationY = 0f
             container.addView(page, layoutParams)
             return
         }
 
+        oldPage.animate().cancel()
+        oldPage.alpha = 1f
+        oldPage.translationX = 0f
+        oldPage.translationY = 0f
+        page.animate().cancel()
         if (pageDirection != 0) {
             val distance = container.width.takeIf { it > 0 } ?: activity.dp(availableWidthDp)
+            page.alpha = 1f
             page.translationX = pageDirection * distance.toFloat()
+            page.translationY = 0f
             container.addView(page, layoutParams)
             val interpolator = AccelerateDecelerateInterpolator()
             oldPage.animate()
@@ -1080,32 +1103,72 @@ internal class TeachingCalendarPage(
         }
 
         container.removeAllViews()
-        page.translationY = activity.dp(if (expansionDirection > 0) -18 else 18).toFloat()
+        val horizontalOffset = activity.dp(12) * selectionDirection.toFloat()
+        page.alpha = 0.82f
+        page.translationX = horizontalOffset
+        page.translationY = 0f
         container.addView(page, layoutParams)
         page.animate()
+            .alpha(1f)
+            .translationX(0f)
             .translationY(0f)
-            .setDuration(220L)
+            .setDuration(190L)
             .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                page.alpha = 1f
+                page.translationX = 0f
+                page.translationY = 0f
+            }
             .start()
+    }
+
+    private fun animatePendingMonthDaySelection(root: View) {
+        val startPosition = pendingMonthSelectionStartPosition ?: return
+        val targetPosition = pendingMonthSelectionTargetPosition ?: return
+        pendingMonthSelectionStartPosition = null
+        pendingMonthSelectionTargetPosition = null
+        val monthView = root.findViewById<ViewGroup?>(R.id.calendar_month_view) ?: return
+
+        renderedMonthSheetPosition = startPosition.coerceIn(0f, 2f)
+        applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
+        monthView.post {
+            if (!monthView.isAttachedToWindow) return@post
+            animateMonthSheetPosition(monthView, targetPosition) {
+                monthSheetPosition = targetPosition
+            }
+        }
     }
 
     private fun animateExpandedPageIn(content: View) {
         val direction = pendingPageDirection
         val expansionDirection = pendingMonthExpansionDirection
+        val selectionDirection = pendingMonthSelectionDirection
         pendingPageDirection = 0
         pendingMonthExpansionDirection = 0
-        if (direction == 0 && expansionDirection == 0) return
+        pendingMonthSelectionDirection = 0
+        if (direction == 0 && expansionDirection == 0 && selectionDirection == 0) return
+        content.animate().cancel()
         if (direction == 0) {
-            content.translationY = activity.dp(if (expansionDirection > 0) -18 else 18).toFloat()
+            content.alpha = 0.52f
+            content.translationX = activity.dp(16) * selectionDirection.toFloat()
+            content.translationY = when {
+                expansionDirection > 0 -> -activity.dp(14).toFloat()
+                expansionDirection < 0 -> activity.dp(14).toFloat()
+                else -> 0f
+            }
             content.animate()
+                .alpha(1f)
+                .translationX(0f)
                 .translationY(0f)
-                .setDuration(220L)
+                .setDuration(240L)
                 .setInterpolator(DecelerateInterpolator())
                 .start()
             return
         }
         val distance = content.width.takeIf { it > 0 } ?: activity.dp(availableWidthDp)
+        content.alpha = 1f
         content.translationX = direction * distance.toFloat()
+        content.translationY = 0f
         content.animate()
             .translationX(0f)
             .setDuration(300L)
@@ -1772,10 +1835,18 @@ internal class TeachingCalendarPage(
                 }
                 val previousPosition = renderedMonthSheetPosition
                 val targetPosition = TeachingCalendarLogic.monthDaySelectionTargetPosition()
+                pendingMonthSelectionDirection = when {
+                    sameDay(selectedDate, day) -> 0
+                    day.timeInMillis > selectedDate.timeInMillis -> 1
+                    day.timeInMillis < selectedDate.timeInMillis -> -1
+                    else -> 0
+                }
                 monthExpansionAnimator?.cancel()
                 selectedDate.timeInMillis = day.timeInMillis
                 monthSheetPosition = targetPosition
-                renderedMonthSheetPosition = targetPosition
+                renderedMonthSheetPosition = previousPosition
+                pendingMonthSelectionStartPosition = previousPosition
+                pendingMonthSelectionTargetPosition = targetPosition
                 sessionState.resetMonthDetailsScroll(contractDate().format(selectedDate.time))
                 pendingMonthExpansionDirection = when {
                     targetPosition > previousPosition -> 1
