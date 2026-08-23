@@ -94,7 +94,7 @@
 | 浏览器视觉检查 | 日/周/月真实触摸翻页、年视图日/周/月跳转、校区状态隔离通过；手机、折叠屏、平板、桌面深浅色均无横向溢出或文本裁切，控制台 0 错误 |
 | HarmonyOS | HAP 构建、80/80 ArkTS 单元测试和宽屏布局静态契约通过 |
 | macOS 归档检查 | SwiftUI Universal `0.2.2 (52)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
-| App Store Connect | iOS `0.2.2 (55)` 与 macOS `0.2.2 (52)` 均完成正式签名上传；iOS Build 55 收到 Xcode `Upload succeeded` 与 `EXPORT SUCCEEDED` 并进入 TestFlight processing |
+| App Store Connect | iOS `0.2.2 (55)` 与 macOS `0.2.2 (52)` 均完成正式签名上传；iOS Build 55 收到 Xcode `Upload succeeded` 与 `EXPORT SUCCEEDED`，线上上传状态为“完成”、构建状态为“准备提交”，并已加入内部测试组 `test_WTS` |
 | CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
 | Linux 发布 | arm64 在 Ubuntu 26.04 虚拟机、x86_64 在 Ubuntu 22.04 服务器完成 `.deb`、`.AppImage`、CLI、TUI 构建与运行验证；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、空教室、教学日历、设置、刷新与退出；Windows/Linux 无课程小组件入口 |
