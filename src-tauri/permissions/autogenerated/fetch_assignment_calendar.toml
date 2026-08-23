@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-assignment-calendar"
+description = "Enables the fetch_assignment_calendar command without any pre-configured scope."
+commands.allow = ["fetch_assignment_calendar"]
+
+[[permission]]
+identifier = "deny-fetch-assignment-calendar"
+description = "Denies the fetch_assignment_calendar command without any pre-configured scope."
+commands.deny = ["fetch_assignment_calendar"]

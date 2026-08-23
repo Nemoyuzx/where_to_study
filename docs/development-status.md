@@ -90,7 +90,7 @@
 
 | 范围 | 结果 |
 | --- | --- |
-| React | 66/66 业务规则、主题契约、跨端语言、范围缓存、公开 DDL 启动预热、设置顺序、Windows/Linux 无伪小组件、Android 折叠侧栏居中、ARM64 工作流、AppImage 宿主 ABI 隔离、Linux 发布契约与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
+| React | 67/67 业务规则、主题契约、跨端语言、范围缓存、公开 DDL 启动预热与 Tauri IPC 权限、设置顺序、Windows/Linux 无伪小组件、Android 折叠侧栏居中、ARM64 工作流、AppImage 宿主 ABI 隔离、Linux 发布契约与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
 | 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
 | Rust | 共享核心、Tauri、CLI、TUI 的全部门禁通过；Tauri `fmt`、`clippy -D warnings` 与 120/120 自动测试通过，另 1 项需本机安全存储和北邮在线服务的真实同步测试按设计忽略；共享核心 43/43、CLI 13/13、TUI 14/14 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |

@@ -18,6 +18,10 @@
     "allow-fetch-classrooms",
     "allow-fetch-holidays",
     "allow-fetch-weather",
-    "allow-fetch-almanac"
+    "allow-fetch-almanac",
+    "allow-fetch-deadlines",
+    "allow-fetch-assignments",
+    "allow-fetch-deadline-calendar",
+    "allow-fetch-assignment-calendar"
   ]
 }

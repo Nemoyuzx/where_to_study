@@ -997,7 +997,6 @@ function App() {
   const deadlinePreheatPromiseRef = useRef(null)
   const deadlinePreheatTimerRef = useRef(null)
   const deadlinePreheatEnabledRef = useRef(false)
-  const deadlineSourceReadyRef = useRef(false)
 
   const calendarSupplementRange = useMemo(() => {
     if (calendarView === 'day') return { startDate: calendarDate, endDate: calendarDate }
@@ -2394,7 +2393,6 @@ function App() {
       start_date: startDate,
       end_date: endDate,
     }).then((data) => {
-      deadlineSourceReadyRef.current = true
       applyDeadlineCalendarResponse(startDate, endDate, data)
       scheduleDeadlinePreheat(plan, DEADLINE_SOURCE_REFRESH_MS)
       return true
@@ -2488,15 +2486,10 @@ function App() {
         try {
           const preheat = deadlinePreheatPromiseRef.current
           if (preheat) {
-            const succeeded = await preheat
-            if (!succeeded) {
-              requestedCalendarSupplementRanges.current.delete(deadlineKey)
-              return
-            }
-          }
-          if (deadlinePreheatEnabledRef.current && !deadlineSourceReadyRef.current) {
-            requestedCalendarSupplementRanges.current.delete(deadlineKey)
-            return
+            // Reuse the startup request when it succeeds. If it fails, fall
+            // through to the visible range request so a silent background
+            // preheat can never suppress the user's calendar data or error.
+            await preheat
           }
           if (rangeDates.every((date) => deadlineCoveredDatesRef.current.has(date))) return
           const data = await command('fetch_deadline_calendar', {

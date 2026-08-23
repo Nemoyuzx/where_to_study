@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-assignments"
+description = "Enables the fetch_assignments command without any pre-configured scope."
+commands.allow = ["fetch_assignments"]
+
+[[permission]]
+identifier = "deny-fetch-assignments"
+description = "Denies the fetch_assignments command without any pre-configured scope."
+commands.deny = ["fetch_assignments"]
