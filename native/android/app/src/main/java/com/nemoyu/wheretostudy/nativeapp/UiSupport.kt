@@ -32,6 +32,8 @@ data class ThemeColors(
     val dangerBorder: Int,
     val nowIndicator: Int,
     val holiday: Int,
+    val assignment: Int,
+    val schoolNotice: Int,
     val outOfMonth: Int,
     val selectionSurface: Int,
     val segmentedSelection: Int,
@@ -48,6 +50,7 @@ object ThemePalettes {
         border = 0xFFC6C6C8.toInt(), danger = 0xFF8A2D1C.toInt(),
         dangerSurface = 0xFFFFF2F1.toInt(), dangerBorder = 0xFFFFB8B3.toInt(),
         nowIndicator = 0xFFFF3B30.toInt(), holiday = 0xFFC62835.toInt(),
+        assignment = 0xFF9A6500.toInt(), schoolNotice = 0xFF5B4BC4.toInt(),
         outOfMonth = 0xFF6E6E73.toInt(), selectionSurface = 0xFFDDECE8.toInt(),
         segmentedSelection = 0xFFFFFFFF.toInt(),
     )
@@ -62,6 +65,7 @@ object ThemePalettes {
         border = 0xFF38383A.toInt(), danger = 0xFFFFB4A2.toInt(),
         dangerSurface = 0xFF3B1715.toInt(), dangerBorder = 0xFF7D312C.toInt(),
         nowIndicator = 0xFFFF453A.toInt(), holiday = 0xFFFF9A9D.toInt(),
+        assignment = 0xFFFFC14D.toInt(), schoolNotice = 0xFFB7A8FF.toInt(),
         outOfMonth = 0xFF98989D.toInt(), selectionSurface = 0xFF233A35.toInt(),
         segmentedSelection = 0xFF636366.toInt(),
     )
@@ -93,6 +97,8 @@ object Palette {
     val dangerBorder get() = colors.dangerBorder
     val nowIndicator get() = colors.nowIndicator
     val holiday get() = colors.holiday
+    val assignment get() = colors.assignment
+    val schoolNotice get() = colors.schoolNotice
     val outOfMonth get() = colors.outOfMonth
     val selectionSurface get() = colors.selectionSurface
     val segmentedSelection get() = colors.segmentedSelection

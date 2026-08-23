@@ -9,6 +9,7 @@ import { PrivacyPolicyView } from './PrivacyPolicyView';
 import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
 } from '../widget/TodayCourseWidgetData';
+import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
 
 @ComponentV2
 export struct SettingsView {
@@ -72,6 +73,7 @@ export struct SettingsView {
         if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
+              this.languageSurface()
               this.accountSurface()
               this.semesterSurface()
             }
@@ -92,6 +94,7 @@ export struct SettingsView {
           this.aboutSurface()
         } else {
           Column({ space: 16 }) {
+            this.languageSurface()
             this.accountSurface()
             this.semesterSurface()
             this.notificationSurface()
@@ -130,7 +133,7 @@ export struct SettingsView {
         .fontSize(this.isCompact() ? 11 : 12)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.secondaryText())
-      Text('设置')
+      Text(this.model.text('设置'))
         .fontSize(this.isCompact() ? 28 : 34)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
@@ -145,14 +148,10 @@ export struct SettingsView {
   @Builder
   referenceNotice() {
     Column({ space: 4 }) {
-      Text('显示数据仅供参考，请以实际情况为准。')
+      Text(this.model.text('显示数据仅供参考，请以实际情况为准。'))
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.text())
-      Text('Displayed data is for reference only; please rely on the actual official information.')
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .lineHeight(17)
     }
     .padding(12)
     .width('100%')
@@ -163,12 +162,48 @@ export struct SettingsView {
 
   @Builder
   sectionTitle(title: string) {
-    Text(title)
+    Text(this.model.text(title))
       .fontSize(17)
       .fontWeight(FontWeight.Bold)
       .fontColor(AppTheme.text())
       .width('100%')
       .padding({ bottom: 12 })
+  }
+
+  @Builder
+  languageSurface() {
+    Column({ space: 8 }) {
+      this.sectionTitle('语言')
+      Select([
+        { value: AppLanguageInfo.label(AppLanguage.system, this.model.resolvedLanguage()) },
+        { value: AppLanguageInfo.label(AppLanguage.simplifiedChinese, this.model.resolvedLanguage()) },
+        { value: AppLanguageInfo.label(AppLanguage.english, this.model.resolvedLanguage()) }
+      ])
+        .selected(AppLanguageInfo.all.indexOf(this.model.languageSetting()))
+        .value(AppLanguageInfo.label(this.model.languageSetting(), this.model.resolvedLanguage()))
+        .font({ size: 15 })
+        .fontColor(AppTheme.text())
+        .selectedOptionBgColor(AppTheme.primaryFill())
+        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
+        .selectedOptionFontColor(AppTheme.onPrimary())
+        .optionBgColor(AppTheme.surface())
+        .optionFont({ size: 15 })
+        .optionFontColor(AppTheme.text())
+        .backgroundColor(AppTheme.surface())
+        .border({ width: 1, color: AppTheme.border() })
+        .borderRadius(6)
+        .height(36)
+        .width('100%')
+        .onSelect((index: number) => {
+          const target: AppLanguage = AppLanguageInfo.all[Math.min(Math.max(index, 0), 2)];
+          this.model.setLanguageSetting(target);
+        })
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -184,20 +219,20 @@ export struct SettingsView {
         this.model.password = value;
       })
       if (this.model.canPreserveSavedPassword()) {
-        Text('密码已安全保存，留空保持不变')
+        Text(this.model.text('密码已安全保存，留空保持不变'))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
           .padding({ left: 2, right: 2, top: 7 })
       }
-      Text('默认校区')
+      Text(this.model.text('默认校区'))
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: this.isCompact() ? 10 : 16, bottom: this.isCompact() ? 5 : 7 })
-      Select([{ value: '西土城' }, { value: '沙河' }])
+      Select([{ value: this.model.text('西土城') }, { value: this.model.text('沙河') }])
         .selected(this.model.campusID === '04' ? 1 : 0)
-        .value(this.model.campusID === '04' ? '沙河' : '西土城')
+        .value(this.model.text(this.model.campusID === '04' ? '沙河' : '西土城'))
         .font({ size: 15 })
         .fontColor(AppTheme.text())
         .selectedOptionBgColor(AppTheme.primaryFill())
@@ -217,7 +252,7 @@ export struct SettingsView {
         })
 
       Blank().height(this.isCompact() ? 12 : 18)
-      Button('保存设置')
+      Button(this.model.text('保存设置'))
         .type(ButtonType.Normal)
         .stateEffect(true)
         .fontSize(15)
@@ -241,7 +276,8 @@ export struct SettingsView {
         })
 
       Blank().height(7)
-      Button(this.model.isRefreshingSchedule ? '正在获取…' : '获取/刷新个人课表')
+      Button(this.model.isRefreshingSchedule ? this.model.text('正在获取…') :
+        this.model.text('获取/刷新个人课表'))
         .type(ButtonType.Normal)
         .stateEffect(true)
         .fontSize(15)
@@ -266,14 +302,14 @@ export struct SettingsView {
           });
         })
 
-      Text('账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。')
+      Text(this.model.text('账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: this.isCompact() ? 8 : 12 })
 
       if (this.model.statusMessage.length > 0) {
-        Text(this.model.statusMessage)
+        Text(this.model.text(this.model.statusMessage))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
@@ -291,7 +327,7 @@ export struct SettingsView {
   @Builder
   field(placeholder: string, value: string, inputType: InputType,
     onChangeValue: (value: string) => void, enabled: boolean = true) {
-    TextInput({ placeholder: placeholder, text: value })
+    TextInput({ placeholder: this.model.text(placeholder), text: value })
       .type(inputType)
       .fontSize(15)
       .fontColor(AppTheme.text())
@@ -317,7 +353,7 @@ export struct SettingsView {
     Column() {
       this.sectionTitle('学期设置')
       Row({ space: 8 }) {
-        Text('自动检测当前学期')
+        Text(this.model.text('自动检测当前学期'))
           .fontSize(15)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
@@ -344,9 +380,9 @@ export struct SettingsView {
           this.model.termStartDate = value;
         }, !this.model.automaticTermDetection)
 
-      Text(this.model.automaticTermDetection ?
+      Text(this.model.text(this.model.automaticTermDetection ?
         '获取/刷新课表后会自动应用教务返回的学期与开学日期。' :
-        '关闭自动检测后，将使用手动填写的学期信息。')
+        '关闭自动检测后，将使用手动填写的学期信息。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(17)
@@ -354,7 +390,7 @@ export struct SettingsView {
         .padding({ left: 2, right: 2, top: 8 })
 
       Blank().height(this.isCompact() ? 10 : 12)
-      Button('保存学期设置')
+      Button(this.model.text('保存学期设置'))
         .type(ButtonType.Normal)
         .stateEffect(true)
         .fontSize(15)
@@ -392,7 +428,7 @@ export struct SettingsView {
       this.sectionTitle('桌面小组件')
 
       Row({ space: 8 }) {
-        Text('显示课程地点')
+        Text(this.model.text('显示课程地点'))
           .fontSize(15)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
@@ -410,7 +446,7 @@ export struct SettingsView {
       .alignItems(VerticalAlign.Center)
 
       Row({ space: 8 }) {
-        Text('显示任课教师')
+        Text(this.model.text('显示任课教师'))
           .fontSize(15)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
@@ -427,15 +463,16 @@ export struct SettingsView {
       .constraintSize({ minHeight: 36 })
       .alignItems(VerticalAlign.Center)
 
-      Text('显示课程数量')
+      Text(this.model.text('显示课程数量'))
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: this.isCompact() ? 10 : 14, bottom: 5 })
-      Select([{ value: '1 门' }, { value: '2 门' }, { value: '3 门' }, { value: '4 门' },
-        { value: '5 门' }, { value: '6 门' }])
+      Select([{ value: this.model.text('1 门') }, { value: this.model.text('2 门') },
+        { value: this.model.text('3 门') }, { value: this.model.text('4 门') },
+        { value: this.model.text('5 门') }, { value: this.model.text('6 门') }])
         .selected(this.model.widgetCourseLimit - 1)
-        .value(this.model.widgetCourseLimit.toString() + ' 门')
+        .value(this.model.text(this.model.widgetCourseLimit.toString() + ' 门'))
         .font({ size: 15 })
         .fontColor(AppTheme.text())
         .selectedOptionBgColor(AppTheme.primaryFill())
@@ -459,14 +496,16 @@ export struct SettingsView {
         .color(AppTheme.border())
         .margin({ top: 14, bottom: 12 })
 
-      Text('样式预览 · 示例内容')
+      Text(this.model.text('样式预览 · 示例内容'))
         .fontSize(14)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
         .width('100%')
-      Select([{ value: '紧凑' }, { value: '标准' }, { value: '展开' }])
+      Select([{ value: this.model.text('紧凑') }, { value: this.model.text('标准') },
+        { value: this.model.text('展开') }])
         .selected(this.previewCapacity === 1 ? 0 : (this.previewCapacity === 6 ? 2 : 1))
-        .value(this.previewCapacity === 1 ? '紧凑' : (this.previewCapacity === 6 ? '展开' : '标准'))
+        .value(this.model.text(this.previewCapacity === 1 ? '紧凑' :
+          (this.previewCapacity === 6 ? '展开' : '标准')))
         .font({ size: 15 })
         .fontColor(AppTheme.text())
         .selectedOptionBgColor(AppTheme.primaryFill())
@@ -530,7 +569,7 @@ export struct SettingsView {
   private previewData(): Record<string, Object> {
     const prefs: WidgetCoursePreferences = new WidgetCoursePreferences(
       this.model.widgetShowsLocation, this.model.widgetShowsTeacher,
-      Math.min(this.model.widgetCourseLimit, this.previewCapacity));
+      Math.min(this.model.widgetCourseLimit, this.previewCapacity), this.model.resolvedLanguage());
     return TodayCourseWidgetData.binding(
       TodayCourseWidgetData.previewArchive(), prefs, undefined,
       TodayCourseWidgetData.nowMinute());
@@ -654,7 +693,7 @@ export struct SettingsView {
           this.model.setHackathonDeadlinesEnabled(value);
         })
 
-      Text('天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。')
+      Text(this.model.text('天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(17)
@@ -671,7 +710,7 @@ export struct SettingsView {
   @Builder
   featureToggle(label: string, isOn: boolean, onChangeValue: (value: boolean) => void) {
     Row({ space: 8 }) {
-      Text(label)
+      Text(this.model.text(label))
         .fontSize(15)
         .fontColor(AppTheme.text())
         .layoutWeight(1)
@@ -694,7 +733,7 @@ export struct SettingsView {
     Column() {
       this.sectionTitle('课程提醒')
       Row({ space: 8 }) {
-        Text('每天 07:30 发送当日课程摘要')
+        Text(this.model.text('每天 07:30 发送当日课程摘要'))
           .fontSize(15)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
@@ -711,13 +750,13 @@ export struct SettingsView {
       .constraintSize({ minHeight: 36 })
       .alignItems(VerticalAlign.Center)
 
-      Text('仅在当天有课时通知；课表更新或账号变更后会自动重排。')
+      Text(this.model.text('仅在当天有课时通知；课表更新或账号变更后会自动重排。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: 4 })
       if (this.model.dailyCourseNotificationStatusMessage.length > 0) {
-        Text(this.model.dailyCourseNotificationStatusMessage)
+        Text(this.model.text(this.model.dailyCourseNotificationStatusMessage))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
@@ -736,13 +775,13 @@ export struct SettingsView {
   localDataSurface() {
     Column() {
       this.sectionTitle('本地数据')
-      Text('个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。')
+      Text(this.model.text('个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(17)
         .width('100%')
         .padding({ bottom: this.isCompact() ? 8 : 12 })
-      Button('清除本地数据')
+      Button(this.model.text('清除本地数据'))
         .type(ButtonType.Normal)
         .stateEffect(true)
         .fontSize(15)
@@ -757,15 +796,15 @@ export struct SettingsView {
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
         .onClick(() => {
           this.getUIContext().showAlertDialog({
-            title: '清除全部本地数据？',
-            message: '将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。',
+            title: this.model.text('清除全部本地数据？'),
+            message: this.model.text('将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。'),
             primaryButton: {
-              value: '取消',
+              value: this.model.text('取消'),
               action: () => {
               }
             },
             secondaryButton: {
-              value: '确认清除',
+              value: this.model.text('确认清除'),
               fontColor: AppTheme.danger(),
               action: () => {
                 const work: Promise<void> = this.model.clearLocalData();
@@ -790,8 +829,8 @@ export struct SettingsView {
   aboutSurface() {
     Column() {
       this.sectionTitle('关于本应用')
-      Text('Where To Study  ' + AppMeta.version +
-        '\n北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。')
+      Text('Where To Study  ' + AppMeta.version + '\n' + this.model.text(
+        '北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。'))
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(18)
@@ -815,7 +854,7 @@ export struct SettingsView {
 
   @Builder
   linkButton(label: string, action: () => void) {
-    Button(label)
+    Button(this.model.text(label))
       .type(ButtonType.Normal)
       .stateEffect(true)
       .fontSize(15)

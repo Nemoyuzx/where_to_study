@@ -59,6 +59,13 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.monthExpansionAction(12, 30)).assertNull();
     });
 
+    it('month_sheet_only_takes_top_started_detail_pull', 0, () => {
+      expect(TeachingCalendarLogic.monthSheetOwnsGesture(80, 2, false)).assertFalse();
+      expect(TeachingCalendarLogic.monthSheetOwnsGesture(80, 2, true)).assertTrue();
+      expect(TeachingCalendarLogic.monthSheetOwnsGesture(-80, 1, true)).assertTrue();
+      expect(TeachingCalendarLogic.monthSheetOwnsGesture(-80, 2, true)).assertFalse();
+    });
+
     it('expanded_month_events_reserve_last_row_for_overflow', 0, () => {
       expect(TeachingCalendarLogic.monthEventLayout(2, 2)[0]).assertEqual(2);
       expect(TeachingCalendarLogic.monthEventLayout(2, 2)[1]).assertEqual(0);

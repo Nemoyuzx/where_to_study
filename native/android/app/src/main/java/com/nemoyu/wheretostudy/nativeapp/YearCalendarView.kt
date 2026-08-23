@@ -87,7 +87,11 @@ class YearCalendarView(
         isFocusable = true
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         val courseCount = days.sumOf(YearCalendarDay::courseCount)
-        contentDescription = "$year 年课程分布，共 $courseCount 门次；点击日期查看日程"
+        contentDescription = if (AppLocale.isEnglish(context)) {
+            "$year course distribution, $courseCount course occurrences; tap a date for details"
+        } else {
+            "$year 年课程分布，共 $courseCount 门次；点击日期查看日程"
+        }
     }
 
     fun selectDate(date: Calendar?) {
@@ -169,13 +173,19 @@ class YearCalendarView(
         boldPaint.textSize = sp(17f)
         boldPaint.color = Palette.text
         boldPaint.textAlign = Paint.Align.LEFT
-        drawCenteredText(canvas, "$month 月", left, top + monthTitleHeight / 2f, boldPaint)
+        val monthTitle = if (AppLocale.isEnglish(context)) {
+            java.text.DateFormatSymbols(Locale.US).shortMonths[month - 1]
+        } else {
+            "$month 月"
+        }
+        drawCenteredText(canvas, monthTitle, left, top + monthTitleHeight / 2f, boldPaint)
 
         textPaint.textSize = sp(8f)
         textPaint.color = Palette.muted
         textPaint.textAlign = Paint.Align.CENTER
         val cellWidth = monthWidth / 7f
-        WEEKDAYS.forEachIndexed { index, label ->
+        val weekdays = if (AppLocale.isEnglish(context)) WEEKDAYS_EN else WEEKDAYS_ZH
+        weekdays.forEachIndexed { index, label ->
             drawCenteredText(
                 canvas,
                 label,
@@ -306,6 +316,7 @@ class YearCalendarView(
     )
 
     private companion object {
-        val WEEKDAYS = listOf("一", "二", "三", "四", "五", "六", "日")
+        val WEEKDAYS_ZH = listOf("一", "二", "三", "四", "五", "六", "日")
+        val WEEKDAYS_EN = listOf("M", "T", "W", "T", "F", "S", "S")
     }
 }

@@ -76,7 +76,8 @@ enum MobileCalendarAnimationPartition {
 }
 
 private struct MobileCalendarDailyDetailsLoadID: Hashable {
-    let date: String?
+    let dates: [String]
+    let almanacDate: String?
     let sampleMode: Bool
     let loadsAlmanac: Bool
     let loadsPublicDeadlines: Bool
@@ -151,6 +152,7 @@ struct MobileTeachingCalendarView: View {
     @State private var monthDetailsScrollResetID = UUID()
     @State private var monthDetailsScrollState = MobileMonthDetailsScrollState()
     @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
+    @State private var areTimelineCoursesExpanded = true
 
     private let calendar = Calendar.shanghai
 
@@ -260,7 +262,7 @@ struct MobileTeachingCalendarView: View {
 
             Picker("日历视图", selection: modeSelection) {
                 ForEach(MobileCalendarMode.allCases) { item in
-                    Text(item.rawValue).tag(item)
+                    Text(model.localized(item.rawValue)).tag(item)
                 }
             }
             .pickerStyle(.segmented)
@@ -343,13 +345,13 @@ struct MobileTeachingCalendarView: View {
             navigate(to: day)
         } label: {
             VStack(spacing: 3) {
-                Text(Self.weekdayFormatter.string(from: day))
+                Text(weekdayFormatter.string(from: day))
                     .font(.caption2.weight(.semibold))
                 Text("\(calendar.component(.day, from: day))")
                     .font(.headline.monospacedDigit())
                 HStack(spacing: 2) {
                     if holiday != nil {
-                        Text(holiday?.type == "holiday" ? "休" : "班")
+                        Text(model.localized(holiday?.type == "holiday" ? "休" : "班"))
                             .font(.system(size: 8, weight: .bold))
                     }
                     if !dayCourses.isEmpty {
@@ -443,35 +445,53 @@ struct MobileTeachingCalendarView: View {
     private var selectedDateSummary: some View {
         let dayCourses = courses(on: selectedDate)
         return VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Self.fullDateFormatter.string(from: selectedDate))
-                    .font(.subheadline.weight(.semibold))
-                Spacer(minLength: 8)
-                Text(dayCourses.isEmpty ? "暂无课程" : "\(dayCourses.count) 门课")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
-            }
-            ForEach(dayCourses) { course in
-                Button {
-                    presentCourse(course, on: selectedDate)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(course.name)
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                        Text(
-                            [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
-                                .filter { !$0.isEmpty }
-                                .joined(separator: " · ")
-                        )
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                AppHaptics.selection()
+                withAnimation(Self.viewAnimation) {
+                    areTimelineCoursesExpanded.toggle()
                 }
-                .buttonStyle(.plain)
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(fullDateFormatter.string(from: selectedDate))
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 8)
+                    Text(dayCourses.isEmpty ? "暂无课程" : "\(dayCourses.count) 门课")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .rotationEffect(.degrees(areTimelineCoursesExpanded ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("calendar.mobile.course-summary-toggle")
+            .accessibilityValue(areTimelineCoursesExpanded ? "已展开" : "已折叠")
+
+            if areTimelineCoursesExpanded {
+                ForEach(dayCourses) { course in
+                    Button {
+                        presentCourse(course, on: selectedDate)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(course.name)
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                            Text(
+                                [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
+                                    .filter { !$0.isEmpty }
+                                    .joined(separator: " · ")
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -481,7 +501,7 @@ struct MobileTeachingCalendarView: View {
 
     @ViewBuilder
     private func allDayItems(days: [CalendarTimelineDay]) -> some View {
-        let hasAllDayItems = days.contains { !$0.holidays.isEmpty }
+        let hasAllDayItems = days.contains { !$0.allDayEvents.isEmpty }
         if hasAllDayItems, days.count > 1 {
             weekAllDayItems(days: days)
         } else if hasAllDayItems, let day = days.first {
@@ -490,18 +510,27 @@ struct MobileTeachingCalendarView: View {
                     Text("全天")
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
-                    ForEach(day.holidays) { item in
+                    ForEach(Array(day.allDayEvents.prefix(3))) { item in
                         Button {
-                            presentHoliday(item, on: day.date)
+                            present(.day, on: day.date)
                         } label: {
-                            Text("\(Self.monthDayCompactFormatter.string(from: day.date)) · \(item.name)")
+                            Text("\(monthDayCompactFormatter.string(from: day.date)) · \(item.title)")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(item.type == "holiday" ? AppTheme.danger : AppTheme.primary)
+                                .foregroundStyle(allDayEventTint(item.kind))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(AppTheme.primary.opacity(0.08), in: Capsule())
+                                .background(allDayEventTint(item.kind).opacity(0.10), in: Capsule())
                         }
                         .buttonStyle(.plain)
+                    }
+                    if day.allDayEvents.count > 3 {
+                        Button("+\(day.allDayEvents.count - 3)") {
+                            present(.day, on: day.date)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityLabel("查看其余 \(day.allDayEvents.count - 3) 项全天日程")
                     }
                 }
                 .padding(.horizontal, 16)
@@ -531,23 +560,17 @@ struct MobileTeachingCalendarView: View {
 
                 HStack(spacing: 0) {
                     ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
-                        if day.holidays.isEmpty {
+                        if day.allDayEvents.isEmpty {
                             Color.clear
                                 .frame(width: dayWidth, height: MobileCalendarAllDayLayout.height)
                                 .accessibilityHidden(true)
                         } else {
                             Button {
-                                if let holiday = day.holidays.first {
-                                    presentHoliday(holiday, on: day.date)
-                                }
+                                present(.day, on: day.date)
                             } label: {
                                 Text(labels[index])
                                     .font(.system(size: 9.5, weight: .semibold))
-                                    .foregroundStyle(
-                                        day.holidays.contains(where: { $0.type == "holiday" })
-                                            ? AppTheme.danger
-                                            : AppTheme.primary
-                                    )
+                                    .foregroundStyle(allDayEventTint(day.allDayEvents[0].kind))
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.72)
                                     .padding(.horizontal, 3)
@@ -556,7 +579,7 @@ struct MobileTeachingCalendarView: View {
                                         height: MobileCalendarAllDayLayout.height - 4
                                     )
                                     .background(
-                                        AppTheme.primary.opacity(0.08),
+                                        allDayEventTint(day.allDayEvents[0].kind).opacity(0.10),
                                         in: RoundedRectangle(cornerRadius: 4)
                                     )
                                     .padding(2)
@@ -564,10 +587,10 @@ struct MobileTeachingCalendarView: View {
                             .buttonStyle(.plain)
                             .frame(width: dayWidth, height: MobileCalendarAllDayLayout.height)
                             .accessibilityLabel(
-                                "\(Self.monthDayCompactFormatter.string(from: day.date))，全天，\(labels[index])"
+                                "\(monthDayCompactFormatter.string(from: day.date))，全天，\(labels[index])"
                             )
                             .accessibilityIdentifier(
-                                "calendar.mobile.all-day.day.\(day.holidays.first?.date ?? "")"
+                                "calendar.mobile.all-day.day.\(StrictContractDateParser.string(from: day.date))"
                             )
                         }
                     }
@@ -580,6 +603,15 @@ struct MobileTeachingCalendarView: View {
         .background(AppTheme.surface)
         .overlay(alignment: .bottom) { Divider() }
         .accessibilityIdentifier("calendar.mobile.all-day.week")
+    }
+
+    private func allDayEventTint(_ kind: CalendarAllDayEventKind) -> Color {
+        switch kind {
+        case .holiday: AppTheme.danger
+        case .workday: AppTheme.primary
+        case .assignment: AppTheme.assignment
+        case .schoolNotice: AppTheme.schoolNotice
+        }
     }
 
     private var monthView: some View {
@@ -723,7 +755,7 @@ struct MobileTeachingCalendarView: View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return LazyVGrid(columns: columns, spacing: 4) {
             ForEach(Self.weekdayLabels, id: \.self) { label in
-                Text(label)
+                Text(model.localized(label))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 18)
@@ -820,7 +852,7 @@ struct MobileTeachingCalendarView: View {
             ZStack(alignment: .top) {
                 HStack(spacing: 2) {
                     if holiday != nil {
-                        Text(holiday?.type == "holiday" ? "休" : "班")
+                        Text(model.localized(holiday?.type == "holiday" ? "休" : "班"))
                             .font(.system(size: 7, weight: .bold))
                     }
                     ForEach(0 ..< min(dayCourses.count, 3), id: \.self) { _ in
@@ -918,11 +950,26 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func monthEvents(on day: Date) -> [MobileMonthEvent] {
+        let dateKey = StrictContractDateParser.string(from: day)
         let holidays = holidayItems(on: day).map { item in
             MobileMonthEvent(
                 id: "holiday-\(item.id)",
-                title: "\(item.type == "holiday" ? "休" : "班") \(item.name)",
+                title: "\(model.localized(item.type == "holiday" ? "休" : "班")) \(item.name)",
                 tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary
+            )
+        }
+        let assignments = assignmentItems(on: day).map { item in
+            MobileMonthEvent(
+                id: "\(dateKey)-assignment-\(item.id)",
+                title: item.title,
+                tint: AppTheme.assignment
+            )
+        }
+        let schoolNotices = schoolNoticeItems(on: day).map { item in
+            MobileMonthEvent(
+                id: "\(dateKey)-school-\(item.id)",
+                title: item.name,
+                tint: AppTheme.schoolNotice
             )
         }
         let dayCourses = courses(on: day).map { course in
@@ -932,7 +979,7 @@ struct MobileTeachingCalendarView: View {
                 tint: AppTheme.primary
             )
         }
-        return holidays + dayCourses
+        return holidays + assignments + schoolNotices + dayCourses
     }
 
     private var yearView: some View {
@@ -968,20 +1015,20 @@ struct MobileTeachingCalendarView: View {
                 jumpToMonth(month)
             } label: {
                 HStack {
-                    Text(Self.monthFormatter.string(from: month))
+                    Text(monthFormatter.string(from: month))
                         .font(.headline)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("查看\(Self.monthFormatter.string(from: month))")
+            .accessibilityLabel("查看\(monthFormatter.string(from: month))")
             .accessibilityIdentifier(
                 "calendar.mobile.year-month.\(Self.yearMonthKeyFormatter.string(from: month))"
             )
             LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(Self.weekdayLabels, id: \.self) { label in
-                    Text(label)
+                    Text(model.localized(label))
                         .font(.system(size: 8, weight: .medium))
                         .foregroundStyle(AppTheme.secondaryText)
                         .frame(maxWidth: .infinity)
@@ -1031,7 +1078,7 @@ struct MobileTeachingCalendarView: View {
             Text("当日日程")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppTheme.secondaryText)
-            Text(Self.fullDateFormatter.string(from: day))
+            Text(fullDateFormatter.string(from: day))
                 .font(.headline)
             ForEach(holidays) { item in
                 Label(item.name, systemImage: item.type == "holiday" ? "calendar.badge.exclamationmark" : "briefcase")
@@ -1209,6 +1256,7 @@ struct MobileTeachingCalendarView: View {
             Label("活动 DDL", systemImage: "flag.checkered")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppTheme.secondaryText)
+                .accessibilityIdentifier("calendar.mobile.deadlines.header")
             if calendarDeadlines.loadingPublicDates.contains(date), snapshot == nil {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -1309,7 +1357,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func deadlineCategoryTitle(_ item: PublicDeadlineItem) -> String {
-        item.source == .schoolNotice ? item.source.title : item.kind.title
+        model.localized(item.source == .schoolNotice ? item.source.title : item.kind.title)
     }
 
     private func deadlineTime(_ value: String) -> String {
@@ -1348,8 +1396,10 @@ struct MobileTeachingCalendarView: View {
     private func fullDayDetail(_ day: Date) -> some View {
         let holidays = holidayItems(on: day)
         let dayCourses = courses(on: day)
+        let assignments = assignmentItems(on: day)
+        let schoolNotices = schoolNoticeItems(on: day)
         return VStack(alignment: .leading, spacing: 12) {
-            Text(Self.fullDateFormatter.string(from: day))
+            Text(fullDateFormatter.string(from: day))
                 .font(.headline)
             ForEach(holidays) { holiday in
                 holidayDetailCard(holiday, on: day)
@@ -1357,7 +1407,13 @@ struct MobileTeachingCalendarView: View {
             ForEach(dayCourses) { course in
                 courseDetailCard(course, on: day)
             }
-            if holidays.isEmpty, dayCourses.isEmpty {
+            if !assignments.isEmpty {
+                compactAssignmentDetail(assignments)
+            }
+            if !schoolNotices.isEmpty {
+                compactSchoolNoticeDetail(schoolNotices)
+            }
+            if holidays.isEmpty, dayCourses.isEmpty, assignments.isEmpty, schoolNotices.isEmpty {
                 Text("暂无日程")
                     .foregroundStyle(AppTheme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1366,12 +1422,59 @@ struct MobileTeachingCalendarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func compactAssignmentDetail(_ items: [AssignmentDeadlineItem]) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label("课程作业 DDL", systemImage: "checklist")
+                .font(.headline)
+                .foregroundStyle(AppTheme.assignment)
+            ForEach(items) { item in
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title).font(.subheadline.weight(.semibold))
+                        if let courseName = item.courseName {
+                            Text(courseName)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.secondaryText)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    Text(deadlineTime(item.deadline))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(AppTheme.surface)
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.assignment.opacity(0.5)) }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("calendar.mobile.day-detail.assignments")
+    }
+
+    private func compactSchoolNoticeDetail(_ items: [PublicDeadlineItem]) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label("校内竞赛通知", systemImage: "building.columns")
+                .font(.headline)
+                .foregroundStyle(AppTheme.schoolNotice)
+            ForEach(items) { item in
+                mobileDeadlineRow(item)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(AppTheme.surface)
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.schoolNotice.opacity(0.5)) }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("calendar.mobile.day-detail.school-notices")
+    }
+
     private func courseDetailCard(_ course: Course, on day: Date) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(course.name, systemImage: "book.closed")
                 .font(.headline)
                 .foregroundStyle(AppTheme.text)
-            detailRow("日期", Self.fullDateFormatter.string(from: day))
+            detailRow("日期", fullDateFormatter.string(from: day))
             detailRow("时间", course.timeRange)
             detailRow("节次", course.sectionText)
             detailRow("地点", course.room.isEmpty ? "未标注" : course.room)
@@ -1396,7 +1499,7 @@ struct MobileTeachingCalendarView: View {
             )
             .font(.headline)
             .foregroundStyle(holiday.type == "holiday" ? AppTheme.danger : AppTheme.primary)
-            detailRow("日期", Self.fullDateFormatter.string(from: day))
+            detailRow("日期", fullDateFormatter.string(from: day))
             detailRow("类型", holiday.type == "holiday" ? "法定节假日" : "调休工作日")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1408,7 +1511,7 @@ struct MobileTeachingCalendarView: View {
 
     private func detailRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Text(label)
+            Text(model.localized(label))
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryText)
                 .frame(width: 52, alignment: .leading)
@@ -1422,7 +1525,7 @@ struct MobileTeachingCalendarView: View {
     private func detailTitle(_ selection: MobileCalendarDetailSelection) -> String {
         switch selection.content {
         case .day:
-            Self.monthDayCompactFormatter.string(from: selection.date)
+            monthDayCompactFormatter.string(from: selection.date)
         case .course:
             "课程详情"
         case .holiday:
@@ -1444,7 +1547,7 @@ struct MobileTeachingCalendarView: View {
         mode targetMode: MobileCalendarMode,
         day: Date
     ) -> some View {
-        Button("\(title)视图") {
+        Button(model.localized("\(title)视图")) {
             AppHaptics.selection()
             withAnimation(Self.viewAnimation) {
                 selectedDate = day
@@ -1485,12 +1588,18 @@ struct MobileTeachingCalendarView: View {
         TeachingCalendarLogic.periodTitle(
             for: selectedDate,
             modeRawValue: mode.rawValue,
+            language: model.appLanguage,
             calendar: calendar
         )
     }
 
     private func timelineDay(_ date: Date) -> CalendarTimelineDay {
-        CalendarTimelineDay(date: date, courses: courses(on: date), holidays: holidayItems(on: date))
+        CalendarTimelineDay(
+            date: date,
+            courses: courses(on: date),
+            holidays: holidayItems(on: date),
+            allDayEvents: allDayEvents(on: date)
+        )
     }
 
     private func courses(on date: Date) -> [Course] {
@@ -1505,6 +1614,44 @@ struct MobileTeachingCalendarView: View {
         let year = calendar.component(.year, from: date)
         let target = StrictContractDateParser.string(from: date)
         return model.holidayItems(for: year).filter { $0.date == target }
+    }
+
+    private func assignmentItems(on date: Date) -> [AssignmentDeadlineItem] {
+        calendarDeadlines.assignmentsByDate[StrictContractDateParser.string(from: date)] ?? []
+    }
+
+    private func schoolNoticeItems(on date: Date) -> [PublicDeadlineItem] {
+        guard model.schoolContestNoticesEnabled else { return [] }
+        let dateKey = StrictContractDateParser.string(from: date)
+        return (calendarDeadlines.publicByDate[dateKey]?.items ?? []).filter {
+            $0.source == .schoolNotice
+        }
+    }
+
+    private func allDayEvents(on date: Date) -> [CalendarAllDayEvent] {
+        let dateKey = StrictContractDateParser.string(from: date)
+        let holidays = holidayItems(on: date).map { holiday in
+            CalendarAllDayEvent(
+                id: "\(dateKey)-holiday-\(holiday.id)",
+                title: "\(model.localized(holiday.type == "holiday" ? "休" : "班")) \(holiday.name)",
+                kind: holiday.type == "holiday" ? .holiday : .workday
+            )
+        }
+        let assignments = assignmentItems(on: date).map { assignment in
+            CalendarAllDayEvent(
+                id: "\(dateKey)-assignment-\(assignment.id)",
+                title: assignment.title,
+                kind: .assignment
+            )
+        }
+        let schoolNotices = schoolNoticeItems(on: date).map { notice in
+            CalendarAllDayEvent(
+                id: "\(dateKey)-school-\(notice.id)",
+                title: notice.name,
+                kind: .schoolNotice
+            )
+        }
+        return holidays + assignments + schoolNotices
     }
 
     private func weekDates() -> [Date] {
@@ -1537,6 +1684,17 @@ struct MobileTeachingCalendarView: View {
         }
     }
 
+    private var visibleDailyDetailDates: [Date] {
+        switch mode {
+        case .day, .year:
+            [selectedDate]
+        case .week:
+            weekDates()
+        case .month:
+            monthGridDates(containing: selectedDate)
+        }
+    }
+
     private var holidayStatus: String? {
         visibleHolidayYears.compactMap { model.holidayStatusByYear[$0] }.first
     }
@@ -1546,8 +1704,10 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var dailyDetailsLoadID: MobileCalendarDailyDetailsLoadID {
-        MobileCalendarDailyDetailsLoadID(
-            date: mode == .month ? StrictContractDateParser.string(from: selectedDate) : nil,
+        let dates = visibleDailyDetailDates.map { StrictContractDateParser.string(from: $0) }
+        return MobileCalendarDailyDetailsLoadID(
+            dates: dates,
+            almanacDate: mode == .month ? StrictContractDateParser.string(from: selectedDate) : nil,
             sampleMode: model.isSampleMode,
             loadsAlmanac: model.almanacEnabled,
             loadsPublicDeadlines: model.hasEnabledPublicDeadlines
@@ -1561,43 +1721,29 @@ struct MobileTeachingCalendarView: View {
     @MainActor
     private func loadVisibleDailyDetails() async {
         let request = dailyDetailsLoadID
-        guard let date = request.date else { return }
+        guard !request.dates.isEmpty else { return }
 
-        async let assignments: Void = calendarDeadlines.loadAssignments(
-            date: date,
-            sampleMode: request.sampleMode
+        async let calendarEvents: Void = calendarDeadlines.loadCalendarEvents(
+            dates: request.dates,
+            sampleMode: request.sampleMode,
+            includesPublicDeadlines: request.loadsPublicDeadlines
         )
         async let almanac: Void = loadAlmanacIfNeeded(
             request.loadsAlmanac,
-            date: date,
+            date: request.almanacDate,
             sampleMode: request.sampleMode
         )
-        async let publicDeadlines: Void = loadPublicDeadlinesIfNeeded(
-            request.loadsPublicDeadlines,
-            date: date,
-            sampleMode: request.sampleMode
-        )
-        _ = await (assignments, almanac, publicDeadlines)
+        _ = await (calendarEvents, almanac)
     }
 
     @MainActor
     private func loadAlmanacIfNeeded(
         _ enabled: Bool,
-        date: String,
+        date: String?,
         sampleMode: Bool
     ) async {
-        guard enabled, !Task.isCancelled else { return }
+        guard enabled, let date, !Task.isCancelled else { return }
         await dailyInfo.loadAlmanac(date: date, sampleMode: sampleMode)
-    }
-
-    @MainActor
-    private func loadPublicDeadlinesIfNeeded(
-        _ enabled: Bool,
-        date: String,
-        sampleMode: Bool
-    ) async {
-        guard enabled, !Task.isCancelled else { return }
-        await calendarDeadlines.loadPublic(date: date, sampleMode: sampleMode)
     }
 
     private func moveDate(_ direction: Int) {
@@ -1877,7 +2023,7 @@ struct MobileTeachingCalendarView: View {
     private func dayAccessibilityLabel(_ day: Date) -> String {
         let holidays = holidayItems(on: day).map(\.name).joined(separator: "，")
         let dayCourses = courses(on: day).map { "\($0.timeRange)\($0.name)" }.joined(separator: "，")
-        return [Self.fullDateFormatter.string(from: day), holidays, dayCourses.isEmpty ? "无课" : dayCourses]
+        return [fullDateFormatter.string(from: day), holidays, dayCourses.isEmpty ? "无课" : dayCourses]
             .filter { !$0.isEmpty }
             .joined(separator: "，")
     }
@@ -1891,12 +2037,36 @@ struct MobileTeachingCalendarView: View {
     private static let pageAnimation = Animation.easeInOut(duration: 0.3)
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
     private static let detailsContentAnimation = Animation.easeOut(duration: 0.16)
-    private static let fullDateFormatter = formatter("yyyy年M月d日 EEEE")
-    private static let yearMonthFormatter = formatter("yyyy年M月")
-    private static let monthFormatter = formatter("M月")
     private static let yearMonthKeyFormatter = formatter("yyyy-MM")
-    private static let monthDayCompactFormatter = formatter("M月d日")
-    private static let weekdayFormatter = formatter("E")
+    private var fullDateFormatter: DateFormatter {
+        localizedFormatter(chineseFormat: "yyyy年M月d日 EEEE", englishFormat: "EEEE, MMMM d, yyyy")
+    }
+
+    private var monthFormatter: DateFormatter {
+        localizedFormatter(chineseFormat: "M月", englishFormat: "MMM")
+    }
+
+    private var monthDayCompactFormatter: DateFormatter {
+        localizedFormatter(chineseFormat: "M月d日", englishFormat: "MMM d")
+    }
+
+    private var weekdayFormatter: DateFormatter {
+        localizedFormatter(chineseFormat: "E", englishFormat: "E")
+    }
+
+    private func localizedFormatter(
+        chineseFormat: String,
+        englishFormat: String
+    ) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = .shanghai
+        formatter.locale = model.appLanguage.locale
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = model.appLanguage.resolvedResourceName == "en"
+            ? englishFormat
+            : chineseFormat
+        return formatter
+    }
 
     private static func formatter(_ format: String) -> DateFormatter {
         let formatter = DateFormatter()

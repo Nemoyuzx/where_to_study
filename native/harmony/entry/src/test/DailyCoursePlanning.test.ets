@@ -57,6 +57,15 @@ export default function dailyCoursePlanningTest() {
       expect(requests[1].body.includes('晚课')).assertTrue();
     });
 
+    it('planner_localizes_static_notification_copy_only', 0, () => {
+      const schedule: ScheduleSnapshot = demoSchedule();
+      const now: number = StrictDates.epochDay(2026, 3, 2) * 86400000 - 8 * 3600 * 1000;
+      const requests: DailyCourseNotificationRequest[] =
+        DailyCourseNotificationPlanner.requests(schedule, now, undefined, true);
+      expect(requests[0].title).assertEqual('Today\'s Courses · 1');
+      expect(requests[0].body.includes('早课')).assertTrue();
+    });
+
     it('planner_caps_pending_requests_at_platform_limit', 0, () => {
       const courses: Course[] = [];
       for (let week = 1; week <= 53; week++) {

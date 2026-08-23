@@ -13,6 +13,7 @@ import credentialStoreTest from './CredentialStore.test';
 import todayCourseWidgetDataTest from './TodayCourseWidgetData.test';
 import dailyInfoClientTest from './DailyInfoClient.test';
 import calendarDailyInfoClientTest from './CalendarDailyInfoClient.test';
+import appLocalizationTest from './AppLocalization.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -29,4 +30,5 @@ export default function testsuite() {
   todayCourseWidgetDataTest();
   dailyInfoClientTest();
   calendarDailyInfoClientTest();
+  appLocalizationTest();
 }

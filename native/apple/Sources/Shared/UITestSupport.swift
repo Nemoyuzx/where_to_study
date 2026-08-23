@@ -37,6 +37,10 @@ enum AppLaunchConfiguration {
         }
         let defaults = UserDefaults(suiteName: suiteName) ?? .standard
         defaults.removePersistentDomain(forName: suiteName)
+        if let language = ProcessInfo.processInfo.environment["WHERE_TO_STUDY_UI_LANGUAGE"],
+           AppLanguage(rawValue: language) != nil {
+            defaults.set(language, forKey: AppLocalization.defaultsKey)
+        }
         if isUITestingLive {
             return AppModel(
                 credentialStore: SampleCredentialStore(),

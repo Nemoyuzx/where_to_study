@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS = {
   termStartDate: '2026-03-02',
   campusId: '01',
   defaultMinSeats: 0,
+  uiLanguage: 'system',
   dailyCourseNotificationsEnabled: false,
   automaticTermDetectionEnabled: true,
   weatherEnabled: true,
@@ -331,6 +332,16 @@ function normalizeMinSeats(value) {
   return Number.isSafeInteger(integerSeats) ? Math.max(0, integerSeats) : 0
 }
 
+export function normalizeUiLanguage(value) {
+  return ['system', 'zh-Hans', 'en'].includes(value) ? value : 'system'
+}
+
+export function resolvedUiLanguage(preference, systemLanguage = '') {
+  const normalized = normalizeUiLanguage(preference)
+  if (normalized !== 'system') return normalized
+  return String(systemLanguage).toLowerCase().startsWith('zh') ? 'zh-Hans' : 'en'
+}
+
 export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
   return {
     account: data.account ?? fallback.account ?? '',
@@ -340,6 +351,7 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
     termStartDate: data.term_start_date || fallback.termStartDate || DEFAULT_SETTINGS.termStartDate,
     campusId: data.campus_id || fallback.campusId || DEFAULT_SETTINGS.campusId,
     defaultMinSeats: normalizeMinSeats(data.default_min_seats ?? fallback.defaultMinSeats ?? 0),
+    uiLanguage: normalizeUiLanguage(data.ui_language ?? fallback.uiLanguage ?? 'system'),
     dailyCourseNotificationsEnabled: Boolean(
       data.daily_course_notifications_enabled
       ?? fallback.dailyCourseNotificationsEnabled
@@ -387,6 +399,7 @@ export function settingsToPayload(settings) {
     term_start_date: settings.termStartDate,
     campus_id: settings.campusId,
     default_min_seats: normalizeMinSeats(settings.defaultMinSeats),
+    ui_language: normalizeUiLanguage(settings.uiLanguage),
     daily_course_notifications_enabled: Boolean(settings.dailyCourseNotificationsEnabled),
     automatic_term_detection_enabled: Boolean(settings.automaticTermDetectionEnabled),
     weather_enabled: Boolean(settings.weatherEnabled),

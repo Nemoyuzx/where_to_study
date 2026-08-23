@@ -15,7 +15,10 @@ use serde_json::{json, Value};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::{ServiceError, ServiceResult};
-use crate::models::{AssignmentDeadlineItem, AssignmentsRequest, AssignmentsResponse};
+use crate::models::{
+    AssignmentCalendarResponse, AssignmentDeadlineItem, AssignmentsRequest, AssignmentsResponse,
+    CalendarRangeRequest,
+};
 
 const SOURCE_URL: &str = "https://ucloud.bupt.edu.cn/uclass/";
 const UCLOUD_ORIGIN: &str = "https://apiucloud.bupt.edu.cn";
@@ -42,6 +45,7 @@ const MAX_ASSIGNMENTS: usize = 5_000;
 const COURSE_PAGE_SIZE: usize = 9_999;
 const ASSIGNMENT_PAGE_SIZE: usize = 9_999;
 const CACHE_TTL: Duration = Duration::from_secs(10 * 60);
+const MAX_CALENDAR_RANGE_DAYS: i64 = 370;
 
 #[derive(Deserialize)]
 struct TokenPayload {
@@ -257,6 +261,24 @@ fn sort_items(items: &mut [AssignmentDeadlineItem]) {
             &right.id,
         ))
     });
+}
+
+fn assignment_items_in_range(
+    all_items: Vec<AssignmentDeadlineItem>,
+    start: NaiveDate,
+    end: NaiveDate,
+) -> Vec<AssignmentDeadlineItem> {
+    let mut items: Vec<_> = all_items
+        .into_iter()
+        .filter(|item| {
+            item.deadline
+                .get(..10)
+                .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
+                .is_some_and(|date| date >= start && date <= end)
+        })
+        .collect();
+    sort_items(&mut items);
+    items
 }
 
 fn decode_html_attribute(value: &str) -> String {
@@ -748,6 +770,41 @@ pub async fn fetch_assignments(
     })
 }
 
+pub async fn fetch_assignment_calendar(
+    payload: &CalendarRangeRequest,
+    account: &str,
+    password: &str,
+    account_scope: &str,
+) -> ServiceResult<AssignmentCalendarResponse> {
+    let start = parse_date(payload.start_date.trim())?;
+    let end = parse_date(payload.end_date.trim())?;
+    let day_count = end.signed_duration_since(start).num_days() + 1;
+    if !(1..=MAX_CALENDAR_RANGE_DAYS).contains(&day_count) {
+        return Err(ServiceError::with_status(
+            "作业日历查询范围必须在 1 至 370 天内。",
+            400,
+        ));
+    }
+
+    let all_items = match cached_items(account_scope) {
+        Some(items) => items,
+        None => {
+            let request_revision = ASSIGNMENT_REVISION.load(Ordering::SeqCst);
+            let items = fetch_all_assignments(account, password).await?;
+            save_cache(account_scope, &items, request_revision);
+            items
+        }
+    };
+    let items = assignment_items_in_range(all_items, start, end);
+
+    Ok(AssignmentCalendarResponse {
+        start_date: start.to_string(),
+        end_date: end.to_string(),
+        source: SOURCE_URL.to_string(),
+        items,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -839,6 +896,38 @@ mod tests {
         assert_eq!(courses.len(), 2);
         assert_eq!(courses[0].id, "1");
         assert_eq!(courses[1].name.as_deref(), Some("课程二"));
+    }
+
+    #[test]
+    fn calendar_range_keeps_only_assignments_inside_the_visible_dates() {
+        let items = vec![
+            AssignmentDeadlineItem {
+                id: "before".to_string(),
+                title: "范围前".to_string(),
+                course_name: None,
+                deadline: "2026-08-16T23:59:00+08:00".to_string(),
+                status: None,
+            },
+            AssignmentDeadlineItem {
+                id: "inside".to_string(),
+                title: "范围内".to_string(),
+                course_name: Some("课程".to_string()),
+                deadline: "2026-08-18T23:59:00+08:00".to_string(),
+                status: None,
+            },
+            AssignmentDeadlineItem {
+                id: "after".to_string(),
+                title: "范围后".to_string(),
+                course_name: None,
+                deadline: "2026-08-24T23:59:00+08:00".to_string(),
+                status: None,
+            },
+        ];
+        let start = NaiveDate::from_ymd_opt(2026, 8, 17).unwrap();
+        let end = NaiveDate::from_ymd_opt(2026, 8, 23).unwrap();
+        let filtered = assignment_items_in_range(items, start, end);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, "inside");
     }
 
     #[test]

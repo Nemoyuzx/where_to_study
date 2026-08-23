@@ -347,6 +347,144 @@ class MainNavigationSmokeTest {
     }
 
     @Test
+    fun dayWeekAgendaShowsSupplementaryItemsAndKeepsCollapsedState() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val device = UiDevice.getInstance(instrumentation)
+        val launchIntent = Intent(
+            instrumentation.targetContext,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            click(device, "navigation_calendar")
+            SystemClock.sleep(700L)
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                val content = activity.findViewById<ViewGroup>(R.id.calendar_day_week_agenda_content)
+                assertEquals(View.VISIBLE, content.visibility)
+                val visibleText = descendantText(content)
+                assertTrue(visibleText.contains("作业 DDL"))
+                assertTrue("Compact week overflow must expose +N", visibleText.contains("+1"))
+                assertTrue(activity.findViewById<View>(R.id.calendar_day_week_course_area).isShown)
+                val allDay = activity.findViewById<ViewGroup>(R.id.calendar_all_day_strip)
+                val dayRow = allDay.getChildAt(1) as ViewGroup
+                assertTrue(dayRow.getChildAt(0).performClick())
+            }
+            assertTrue(
+                "The +N dialog must expose the complete school-notice item",
+                device.wait(Until.hasObject(By.textContains("校内竞赛")), UI_TIMEOUT_MILLIS),
+            )
+            device.findObject(By.text("完成")).click()
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertTrue(activity.findViewById<View>(R.id.calendar_day_week_agenda_toggle).performClick())
+            }
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    View.GONE,
+                    activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
+                )
+            }
+
+            click(device, "calendar_mode_month")
+            click(device, "calendar_mode_week")
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Agenda collapse must survive calendar mode changes",
+                    View.GONE,
+                    activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
+                )
+            }
+            scenario.recreate()
+            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Agenda collapse must survive activity recreation",
+                    View.GONE,
+                    activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun englishPreferenceLocalizesStaticUiAndPreservesReturnedContent() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        AppPreferences(context).languageCode = AppLanguage.ENGLISH.code
+        val device = UiDevice.getInstance(instrumentation)
+        val launchIntent = Intent(
+            context,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Empty Classrooms",
+                        activity.findViewById<TextView>(R.id.navigation_planner).text.toString(),
+                    )
+                    val returnedContestName = "北邮校内创新竞赛通知"
+                    assertEquals(
+                        "Third-party and academic content must remain verbatim",
+                        returnedContestName,
+                        UiText.resolve(activity, returnedContestName),
+                    )
+                    listOf("高等数学", "数据挖掘", "体育", "体育 · 体育馆").forEach { value ->
+                        assertEquals(
+                            "Known course/API values must never collide with static translations",
+                            value,
+                            UiText.resolve(activity, value),
+                        )
+                    }
+                }
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val page = checkNotNull(activity.findViewById<View?>(R.id.page_settings))
+                    val text = descendantText(page)
+                    assertTrue(text.contains("App Settings"))
+                    assertTrue(text.contains("Language"))
+                    assertTrue(text.contains("Account"))
+                    assertTrue(text.contains("protected by Android Keystore"))
+                    val spinner = activity.findViewById<android.widget.Spinner>(
+                        R.id.settings_language_selector,
+                    )
+                    assertEquals("English", spinner.selectedItem.toString())
+                }
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                }
+                SystemClock.sleep(700L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val content = activity.findViewById<ViewGroup>(
+                        R.id.calendar_day_week_agenda_content,
+                    )
+                    assertTrue(descendantText(content).contains("Assignment DDL"))
+                    val allDay = activity.findViewById<ViewGroup>(R.id.calendar_all_day_strip)
+                    assertTrue((allDay.getChildAt(1) as ViewGroup).getChildAt(0).performClick())
+                }
+                assertTrue(
+                    device.wait(
+                        Until.hasObject(By.textContains("Campus Contest Notices")),
+                        UI_TIMEOUT_MILLIS,
+                    ),
+                )
+                device.pressBack()
+            }
+        } finally {
+            AppPreferences(context).languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
+        }
+    }
+
+    @Test
     fun primaryPagesCanBeNavigatedWithoutCredentials() {
         clearCredentialRecord()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -531,7 +669,7 @@ class MainNavigationSmokeTest {
 
                 click(device, "calendar_mode_day")
                 assertVisible(device, "calendar_timeline")
-                assertGone(device, "calendar_all_day_strip")
+                assertVisible(device, "calendar_all_day_strip")
                 scenario.onActivity { activity ->
                     val strip = activity.findViewById<ViewGroup>(R.id.calendar_date_strip)
                     val swipeSurface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
@@ -718,12 +856,16 @@ class MainNavigationSmokeTest {
                         R.id.calendar_month_selected_details,
                     ).scrollTo(0, 0)
                 }
-                swipeResource(
-                    device,
-                    "calendar_month_selected_details",
-                    horizontalDirection = 0,
-                    reverseVertical = true,
+                assertTrue(
+                    "Accessibility expansion must move exactly one month-sheet anchor",
+                    performAncestorAccessibilityAction(
+                        scenario,
+                        R.id.calendar_month_selected_details,
+                        AccessibilityNodeInfo.ACTION_EXPAND,
+                    ),
                 )
+                Thread.sleep(360L)
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
                 assertActivityViewMounted(
                     scenario,
                     R.id.calendar_month_selected_details,
@@ -986,6 +1128,13 @@ class MainNavigationSmokeTest {
         return null
     }
 
+    private fun descendantText(root: View): String {
+        if (root is TextView) return root.text.toString()
+        if (root !is ViewGroup) return ""
+        return (0 until root.childCount)
+            .joinToString(" ") { index -> descendantText(root.getChildAt(index)) }
+    }
+
     private fun assertCollapsibleNavigationRailWhenAvailable(
         scenario: ActivityScenario<MainActivity>,
         device: UiDevice,
@@ -1223,6 +1372,38 @@ class MainNavigationSmokeTest {
             R.id.calendar_month_selected_details,
             expected = false,
         )
+        var assignmentColor: Int? = null
+        var schoolNoticeColor: Int? = null
+        val colorDeadline = System.currentTimeMillis() + UI_TIMEOUT_MILLIS
+        while (System.currentTimeMillis() < colorDeadline &&
+            (assignmentColor == null || schoolNoticeColor == null)
+        ) {
+            scenario.onActivity { activity ->
+                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                repeat(grid.childCount) { rowIndex ->
+                    val row = grid.getChildAt(rowIndex) as ViewGroup
+                    repeat(row.childCount) { cellIndex ->
+                        val entries = row.getChildAt(cellIndex)
+                            .findViewById<ViewGroup>(R.id.calendar_month_expanded_entries)
+                        repeat(entries.childCount) entryLoop@ { entryIndex ->
+                            val entry = entries.getChildAt(entryIndex) as? TextView
+                                ?: return@entryLoop
+                            when {
+                                entry.text.startsWith("作 ") -> assignmentColor = entry.currentTextColor
+                                entry.text.startsWith("校 ") -> schoolNoticeColor = entry.currentTextColor
+                            }
+                        }
+                    }
+                }
+            }
+            if (assignmentColor == null || schoolNoticeColor == null) SystemClock.sleep(100L)
+        }
+        assertNotNull("Month grid must render assignment DDL entries", assignmentColor)
+        assertNotNull("Month grid must render school notice entries", schoolNoticeColor)
+        assertTrue(
+            "Assignment and school-notice entries need distinguishable colors",
+            assignmentColor != schoolNoticeColor,
+        )
     }
 
     private fun assertVisible(device: UiDevice, resourceName: String) {
@@ -1451,6 +1632,7 @@ class MainNavigationSmokeTest {
 
     private fun clearCredentialRecord() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        AppPreferences(context).languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
         val cleared = context
             .getSharedPreferences(CREDENTIAL_PREFERENCES, Context.MODE_PRIVATE)
             .edit()

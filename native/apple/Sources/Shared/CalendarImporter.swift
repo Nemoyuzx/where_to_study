@@ -68,19 +68,24 @@ enum CalendarImportError: LocalizedError, Equatable {
     case eventStoreChanged
 
     var errorDescription: String? {
-        switch self {
+        let language = AppLocalization.persistedLanguage()
+        return switch self {
         case .noSchedule:
-            "请先获取/刷新个人课表。"
+            AppLocalization.string("请先获取/刷新个人课表。", language: language)
         case .invalidTermStartDate:
-            "第一周周一日期格式不正确。"
+            AppLocalization.string("第一周周一日期格式不正确。", language: language)
         case let .invalidCourse(name):
-            "课程“\(name)”的日期或节次信息不正确。"
+            String(
+                format: AppLocalization.string("课程“%@”的日期或节次信息不正确。", language: language),
+                locale: language.locale,
+                name
+            )
         case .permissionDenied:
-            "没有日历完整访问权限，请在系统设置中允许后重试。"
+            AppLocalization.string("没有日历完整访问权限，请在系统设置中允许后重试。", language: language)
         case .noWritableCalendar:
-            "系统中没有可写入的默认日历。"
+            AppLocalization.string("系统中没有可写入的默认日历。", language: language)
         case .eventStoreChanged:
-            "系统日历在同步期间发生变化，请重试。"
+            AppLocalization.string("系统日历在同步期间发生变化，请重试。", language: language)
         }
     }
 }

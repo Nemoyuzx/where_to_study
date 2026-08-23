@@ -14,6 +14,14 @@ import org.junit.Test
 
 class ScheduleLogicTest {
     @Test
+    fun appLanguagePreferenceOffersSystemChineseAndEnglish() {
+        assertEquals(
+            listOf("system", "zh-Hans", "en"),
+            AppLanguage.entries.map(AppLanguage::code),
+        )
+    }
+
+    @Test
     fun teachingCalendarSessionStateKeepsDateModeAndExpansionAcrossPageRebuilds() {
         val date = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
             set(2026, Calendar.SEPTEMBER, 18, 12, 0, 0)
@@ -23,11 +31,15 @@ class ScheduleLogicTest {
             selectedDateMillis = date.timeInMillis,
             selectedModeName = TeachingCalendarMode.MONTH.name,
             monthExpanded = false,
+            initialDayWeekAgendaExpanded = false,
         )
 
         assertEquals(date.timeInMillis, state.selectedDate.timeInMillis)
         assertEquals(TeachingCalendarMode.MONTH, state.selectedMode)
         assertFalse(state.monthExpanded)
+        assertFalse(state.dayWeekAgendaExpanded)
+        state.dayWeekAgendaExpanded = true
+        assertTrue(state.dayWeekAgendaExpanded)
         state.updateMonthDetailsScroll("2026-09-18", 320)
         assertEquals(320, state.savedMonthDetailsScrollY("2026-09-18"))
         assertEquals(0, state.savedMonthDetailsScrollY("2026-09-19"))
@@ -666,6 +678,26 @@ class ScheduleLogicTest {
             TeachingCalendarLogic.monthDaySelectionTargetPosition(),
             0f,
         )
+    }
+
+    @Test
+    fun compactAgendaUsesBoundedItemsAndReportsOverflow() {
+        assertEquals(1, TeachingCalendarLogic.agendaVisibleItemCount(5, compactWeek = true))
+        assertEquals(4, TeachingCalendarLogic.agendaHiddenItemCount(5, compactWeek = true))
+        assertEquals(3, TeachingCalendarLogic.agendaVisibleItemCount(5, compactWeek = false))
+        assertEquals(2, TeachingCalendarLogic.agendaHiddenItemCount(5, compactWeek = false))
+        assertEquals(3, TeachingCalendarLogic.compactCourseVisibleCount(8))
+        assertEquals(5, TeachingCalendarLogic.compactCourseHiddenCount(8))
+    }
+
+    @Test
+    fun supplementaryCalendarKindsHaveDistinctAccessibleAccents() {
+        assertTrue(ThemePalettes.light.primary != ThemePalettes.light.assignment)
+        assertTrue(ThemePalettes.light.primary != ThemePalettes.light.schoolNotice)
+        assertTrue(ThemePalettes.light.holiday != ThemePalettes.light.assignment)
+        assertTrue(ThemePalettes.light.holiday != ThemePalettes.light.schoolNotice)
+        assertTrue(ThemePalettes.light.assignment != ThemePalettes.light.schoolNotice)
+        assertTrue(ThemePalettes.dark.assignment != ThemePalettes.dark.schoolNotice)
     }
 
     @Test

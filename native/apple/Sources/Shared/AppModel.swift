@@ -11,17 +11,18 @@ enum CredentialSettingsError: LocalizedError, Equatable {
     case invalidTermStartDate
 
     var errorDescription: String? {
-        switch self {
+        let language = AppLocalization.persistedLanguage()
+        return switch self {
         case .accountRequired:
-            "请输入教务账号。"
+            AppLocalization.string("请输入教务账号。", language: language)
         case .passwordRequiredForChangedAccount:
-            "更换教务账号时必须输入新密码。"
+            AppLocalization.string("更换教务账号时必须输入新密码。", language: language)
         case .accountDataResetFailed:
-            "无法清除原账号的课表与空教室缓存，账号未更改。"
+            AppLocalization.string("无法清除原账号的课表与空教室缓存，账号未更改。", language: language)
         case .calendarImportInProgress:
-            "系统日历正在同步，请完成后再更换账号。"
+            AppLocalization.string("系统日历正在同步，请完成后再更换账号。", language: language)
         case .invalidTermStartDate:
-            "第一周周一日期格式不正确，请使用 yyyy-MM-dd。"
+            AppLocalization.string("第一周周一日期格式不正确，请使用 yyyy-MM-dd。", language: language)
         }
     }
 }
@@ -92,7 +93,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    var titleKey: String {
         switch self {
         case .planner: "空教室"
         case .calendar: "教学日历"
@@ -174,6 +175,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var schoolContestNoticesEnabled: Bool
     @Published private(set) var summerCampDeadlinesEnabled: Bool
     @Published private(set) var hackathonDeadlinesEnabled: Bool
+    @Published private(set) var appLanguage: AppLanguage
 
     let slots = SlotMetadata.defaults
     @Published private(set) var runtimeMode: AppRuntimeMode
@@ -230,6 +232,7 @@ final class AppModel: ObservableObject {
         self.dailyCourseNotificationAuthorizationTimeout = dailyCourseNotificationAuthorizationTimeout
         self.statusMessageAutoDismissDelay = statusMessageAutoDismissDelay
         self.defaults = defaults
+        appLanguage = AppLocalization.persistedLanguage(defaults: defaults)
         termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
         termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
         automaticTermDetectionEnabled = defaults.object(forKey: Self.automaticTermDetectionKey) as? Bool ?? true
@@ -615,6 +618,20 @@ final class AppModel: ObservableObject {
         defaults.set(enabled, forKey: Self.hackathonDeadlinesEnabledKey)
     }
 
+    func setAppLanguage(_ language: AppLanguage) {
+        appLanguage = language
+        defaults.set(language.rawValue, forKey: AppLocalization.defaultsKey)
+        synchronizeWidgetSchedule()
+    }
+
+    func localized(_ key: String) -> String {
+        AppLocalization.string(key, language: appLanguage)
+    }
+
+    func localizedFormat(_ key: String, _ arguments: CVarArg...) -> String {
+        String(format: localized(key), locale: appLanguage.locale, arguments: arguments)
+    }
+
     var hasEnabledPublicDeadlines: Bool {
         competitionDeadlinesEnabled || schoolContestNoticesEnabled
             || summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
@@ -686,6 +703,7 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: Self.schoolContestNoticesEnabledKey)
         defaults.removeObject(forKey: Self.summerCampDeadlinesEnabledKey)
         defaults.removeObject(forKey: Self.hackathonDeadlinesEnabledKey)
+        defaults.removeObject(forKey: AppLocalization.defaultsKey)
         campusID = "01"
         queryCampusID = "01"
         termID = ScheduleDefaults.termID
@@ -700,6 +718,7 @@ final class AppModel: ObservableObject {
         schoolContestNoticesEnabled = true
         summerCampDeadlinesEnabled = true
         hackathonDeadlinesEnabled = true
+        appLanguage = .system
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         synchronizeSelectedSlots()
@@ -707,7 +726,7 @@ final class AppModel: ObservableObject {
 
         statusMessage = failures.isEmpty
             ? "本地数据已清除"
-            : "以下本地数据未能清除：\(failures.joined(separator: "、"))"
+            : localized("以下本地数据未能清除：") + failures.joined(separator: "、")
     }
 
     func refreshSchedule() {
@@ -782,7 +801,8 @@ final class AppModel: ObservableObject {
         let revision = statusMessageRevision
         statusMessageDismissTask?.cancel()
         statusMessageDismissTask = nil
-        statusMessage = message
+        let displayedMessage = localized(message)
+        statusMessage = displayedMessage
 
         guard autoDismiss, !message.isEmpty else { return }
         statusMessageDismissTask = Task { [weak self] in
@@ -794,7 +814,7 @@ final class AppModel: ObservableObject {
             guard
                 let self,
                 self.statusMessageRevision == revision,
-                self.statusMessage == message
+                self.statusMessage == displayedMessage
             else { return }
             self.statusMessage = ""
             self.statusMessageDismissTask = nil
@@ -805,7 +825,10 @@ final class AppModel: ObservableObject {
         guard !isSampleMode else {
             if isReviewDemo, let schedule {
                 let count = (try? CalendarImportLogic.eventDrafts(from: schedule).count) ?? 0
-                calendarImportStatusMessage = "示例模式已模拟同步 \(count) 个课程日期，未写入系统日历"
+                calendarImportStatusMessage = localizedFormat(
+                    "示例模式已模拟同步 %d 个课程日期，未写入系统日历",
+                    count
+                )
             } else {
                 calendarImportStatusMessage = "示例模式不会访问系统日历"
             }
@@ -832,7 +855,13 @@ final class AppModel: ObservableObject {
                 if result.total == 0 {
                     calendarImportStatusMessage = "课表中没有可导入的课程日期"
                 } else {
-                    calendarImportStatusMessage = "日历同步完成：新增 \(result.inserted)，更新 \(result.updated)，删除 \(result.deleted)，已存在 \(result.unchanged)"
+                    calendarImportStatusMessage = localizedFormat(
+                        "日历同步完成：新增 %d，更新 %d，删除 %d，已存在 %d",
+                        result.inserted,
+                        result.updated,
+                        result.deleted,
+                        result.unchanged
+                    )
                 }
             } catch {
                 guard generation == localDataGeneration, importToken == calendarImportToken else { return }
@@ -1046,7 +1075,7 @@ final class AppModel: ObservableObject {
             }
             synchronizeWidgetSchedule()
         } catch {
-            statusMessage = "本地课表读取失败：\(error.localizedDescription)"
+            statusMessage = localized("本地课表读取失败：") + error.localizedDescription
         }
     }
 
@@ -1058,8 +1087,13 @@ final class AppModel: ObservableObject {
             showsTeacher: widgetShowsTeacher,
             courseLimit: widgetCourseLimit
         )
+        let languageRawValue = appLanguage.rawValue
         Task.detached(priority: .utility) {
-            Self.writeWidgetSchedule(snapshot, preferences: preferences)
+            Self.writeWidgetSchedule(
+                snapshot,
+                preferences: preferences,
+                languageRawValue: languageRawValue
+            )
         }
         #endif
     }
@@ -1067,9 +1101,11 @@ final class AppModel: ObservableObject {
     #if canImport(WidgetKit)
     nonisolated private static func writeWidgetSchedule(
         _ schedule: ScheduleSnapshot?,
-        preferences: TodayCourseWidgetData.Preferences
+        preferences: TodayCourseWidgetData.Preferences,
+        languageRawValue: String
     ) {
         guard !AppLaunchConfiguration.isXCTestRunning else { return }
+        TodayCourseWidgetData.saveLanguage(rawValue: languageRawValue)
         try? TodayCourseWidgetData.save(preferences: preferences)
         if let schedule {
             try? TodayCourseWidgetData.save(schedule: schedule)
@@ -1087,7 +1123,7 @@ final class AppModel: ObservableObject {
             }
             classroomsCache = cached
         } catch {
-            classroomStatusMessage = "本地空教室读取失败：\(error.localizedDescription)"
+            classroomStatusMessage = localized("本地空教室读取失败：") + error.localizedDescription
         }
     }
 
@@ -1136,14 +1172,15 @@ final class AppModel: ObservableObject {
                     defaults.set(true, forKey: Self.dailyCourseNotificationsKey)
                     dailyCourseNotificationStatusMessage = count == 0
                         ? "每日课程摘要已开启，当前课表没有待通知课程"
-                        : "已安排未来 \(count) 个有课日的课程摘要"
+                        : localizedFormat("已安排未来 %d 个有课日的课程摘要", count)
                 }
             } catch {
                 guard revision == dailyCourseNotificationRevision else { return }
                 dailyCourseNotificationsEnabled = false
                 defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
                 dailyCourseNotificationScheduler.cancelPending(revision: revision)
-                dailyCourseNotificationStatusMessage = "课程摘要安排失败：\(error.localizedDescription)"
+                dailyCourseNotificationStatusMessage = localized("课程摘要安排失败：")
+                    + error.localizedDescription
             }
         }
     }

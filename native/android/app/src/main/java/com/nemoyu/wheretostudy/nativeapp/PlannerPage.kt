@@ -257,6 +257,7 @@ class PlannerPage(
                         setPadding(0, activity.dp(8), 0, 0)
                         addView(TextView(activity).apply {
                             text = weather.reportTime
+                            UiText.preserveRawText(this)
                             textSize = 11f
                             setTextColor(Palette.muted)
                         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -292,7 +293,7 @@ class PlannerPage(
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(TextView(activity).apply {
-                    text = "$label · ${shortWeatherDate(day.date)}"
+                    text = "${activity.uiText(label)} · ${shortWeatherDate(day.date)}"
                     textSize = 13f
                     setTextColor(Palette.text)
                     setTypeface(typeface, Typeface.BOLD)
@@ -301,8 +302,9 @@ class PlannerPage(
                     text = if (day.weatherDay == day.weatherNight) {
                         day.weatherDay
                     } else {
-                        "${day.weatherDay}转${day.weatherNight}"
+                        "${day.weatherDay}${activity.uiText("转")}${day.weatherNight}"
                     }
+                    UiText.preserveRawText(this)
                     textSize = 12f
                     setTextColor(Palette.muted)
                 })
@@ -439,20 +441,24 @@ class PlannerPage(
         addView(label)
         setOnClickListener {
             activity.performControlHaptic(it)
-            label.text = "正在获取当天空教室…"
-            contentDescription = "正在获取当天空教室"
+            label.text = activity.uiText("正在获取当天空教室…")
+            contentDescription = activity.uiText("正在获取当天空教室")
             isEnabled = false
             classroomRepository.refresh(force = true) { result ->
                 result.onSuccess {
-                    Toast.makeText(activity, "当天空教室已更新", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        activity,
+                        activity.uiText("当天空教室已更新"),
+                        Toast.LENGTH_SHORT,
+                    ).show()
                     activity.refreshCurrentPage()
                 }.onFailure { error ->
-                    label.text = "获取空教室信息"
-                    contentDescription = "获取空教室信息"
+                    label.text = activity.uiText("获取空教室信息")
+                    contentDescription = activity.uiText("获取空教室信息")
                     isEnabled = true
                     Toast.makeText(
                         activity,
-                        error.message ?: "当天空教室获取失败",
+                        activity.uiText(error.message ?: "当天空教室获取失败"),
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -719,6 +725,7 @@ class PlannerPage(
                         )
                         buttonLabel = TextView(activity).apply {
                             text = building
+                            UiText.preserveRawText(this)
                             textSize = if (isCompact) 13f else 15f
                             includeFontPadding = false
                             gravity = Gravity.CENTER_VERTICAL
@@ -970,13 +977,19 @@ class PlannerPage(
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(activity).apply {
-                text = if (course.examWeekNumbers.isEmpty()) course.name else "试  ${course.name}"
+                text = if (course.examWeekNumbers.isEmpty()) {
+                    course.name
+                } else {
+                    "${activity.uiText("试")}  ${course.name}"
+                }
+                UiText.preserveRawText(this)
                 textSize = if (isCompact) 14f else 15f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
-                text = course.room.ifEmpty { "地点未标注" }
+                text = course.room.ifEmpty { activity.uiText("地点未标注") }
+                UiText.preserveRawText(this)
                 textSize = 12f
                 setTextColor(Palette.muted)
             })
@@ -997,6 +1010,7 @@ class PlannerPage(
             gravity = Gravity.CENTER_VERTICAL
             addView(TextView(activity).apply {
                 text = room.name
+                UiText.preserveRawText(this)
                 textSize = if (isCompact) 13.5f else 15f
                 setTextColor(Palette.text)
                 setTypeface(typeface, Typeface.BOLD)

@@ -1,12 +1,16 @@
-use std::collections::HashSet;
-use std::time::Duration;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, NaiveDate};
 use reqwest::Url;
 use serde::Deserialize;
 
 use crate::error::{ServiceError, ServiceResult};
-use crate::models::{DeadlineItem, DeadlinesRequest, DeadlinesResponse};
+use crate::models::{
+    CalendarRangeRequest, DeadlineCalendarResponse, DeadlineItem, DeadlinesRequest,
+    DeadlinesResponse,
+};
 
 const PRIMARY_URL: &str = "https://nemoyuzx.github.io/contest-ddl/data/competitions.json";
 const PRIMARY_HOST: &str = "nemoyuzx.github.io";
@@ -15,7 +19,43 @@ const SCHOOL_NOTICES_URL: &str = "http://101.201.29.29/api/contest-notices";
 const BACKUP_HOST: &str = "101.201.29.29";
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_ITEMS_PER_DAY: usize = 100;
+const MAX_CALENDAR_RANGE_DAYS: i64 = 370;
+const SOURCE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const USER_AGENT: &str = concat!("WhereToStudy/", env!("CARGO_PKG_VERSION"));
+
+struct SourceCacheEntry {
+    fetched_at: Instant,
+    bytes: Vec<u8>,
+}
+
+static SOURCE_CACHE: OnceLock<Mutex<HashMap<String, SourceCacheEntry>>> = OnceLock::new();
+
+fn source_cache() -> &'static Mutex<HashMap<String, SourceCacheEntry>> {
+    SOURCE_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cached_source(endpoint: &str) -> Option<Vec<u8>> {
+    let cache = source_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    cache
+        .get(endpoint)
+        .filter(|entry| entry.fetched_at.elapsed() < SOURCE_CACHE_TTL)
+        .map(|entry| entry.bytes.clone())
+}
+
+fn cache_source(endpoint: &str, bytes: &[u8]) {
+    let mut cache = source_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    cache.insert(
+        endpoint.to_string(),
+        SourceCacheEntry {
+            fetched_at: Instant::now(),
+            bytes: bytes.to_vec(),
+        },
+    );
+}
 
 #[derive(Debug, Deserialize)]
 struct SourceEnvelope {
@@ -114,6 +154,9 @@ async fn fetch_source(
     host: &'static str,
     allow_plain_http: bool,
 ) -> ServiceResult<Vec<u8>> {
+    if let Some(bytes) = cached_source(endpoint) {
+        return Ok(bytes);
+    }
     let url = Url::parse(endpoint)
         .map_err(|error| ServiceError::new(format!("DDL 数据源地址无效：{error}")))?;
     validate_endpoint(&url, host, allow_plain_http)?;
@@ -138,13 +181,21 @@ async fn fetch_source(
     let response = response
         .error_for_status()
         .map_err(|error| ServiceError::new(format!("DDL 数据源返回错误：{error}")))?;
-    read_limited(response).await
+    let bytes = read_limited(response).await?;
+    cache_source(endpoint, &bytes);
+    Ok(bytes)
 }
 
-fn parse_source(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Vec<DeadlineItem>> {
+fn parse_source_range(
+    bytes: &[u8],
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+) -> ServiceResult<Vec<DeadlineItem>> {
     let envelope: SourceEnvelope = serde_json::from_slice(bytes)
         .map_err(|error| ServiceError::new(format!("DDL 数据解析失败：{error}")))?;
-    let requested = requested_date.to_string();
+    let max_items = MAX_ITEMS_PER_DAY.saturating_mul(
+        (end_date.signed_duration_since(start_date).num_days() + 1).max(1) as usize,
+    );
     let mut items = Vec::new();
     for source in envelope.items {
         if !matches!(
@@ -159,7 +210,13 @@ fn parse_source(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Vec<De
         let Ok(parsed_deadline) = DateTime::parse_from_rfc3339(&deadline) else {
             continue;
         };
-        if deadline.get(..10) != Some(requested.as_str()) {
+        let Some(deadline_date) = deadline
+            .get(..10)
+            .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
+        else {
+            continue;
+        };
+        if deadline_date < start_date || deadline_date > end_date {
             continue;
         }
         let id = source.id.trim();
@@ -180,7 +237,7 @@ fn parse_source(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Vec<De
                 .filter(|value| !value.is_empty()),
             official_url,
         });
-        if items.len() >= MAX_ITEMS_PER_DAY {
+        if items.len() >= max_items {
             break;
         }
     }
@@ -190,13 +247,21 @@ fn parse_source(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Vec<De
     Ok(items)
 }
 
-fn parse_school_notices(
+#[cfg(test)]
+fn parse_source(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Vec<DeadlineItem>> {
+    parse_source_range(bytes, requested_date, requested_date)
+}
+
+fn parse_school_notices_range(
     bytes: &[u8],
-    requested_date: NaiveDate,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
 ) -> ServiceResult<Vec<DeadlineItem>> {
     let envelope: SchoolNoticeEnvelope = serde_json::from_slice(bytes)
         .map_err(|error| ServiceError::new(format!("校内竞赛通知解析失败：{error}")))?;
-    let requested = requested_date.to_string();
+    let max_items = MAX_ITEMS_PER_DAY.saturating_mul(
+        (end_date.signed_duration_since(start_date).num_days() + 1).max(1) as usize,
+    );
     let mut items = Vec::new();
     for notice in envelope.items {
         let id = notice.id.trim().to_string();
@@ -237,7 +302,13 @@ fn parse_school_notices(
             let Ok(parsed_deadline) = DateTime::parse_from_rfc3339(deadline) else {
                 continue;
             };
-            if deadline.get(..10) != Some(requested.as_str()) {
+            let Some(deadline_date) = deadline
+                .get(..10)
+                .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
+            else {
+                continue;
+            };
+            if deadline_date < start_date || deadline_date > end_date {
                 continue;
             }
             let label = entry
@@ -255,11 +326,11 @@ fn parse_school_notices(
                 organizer: Some(format!("{source_name} · {label}")),
                 official_url: official_url.clone(),
             });
-            if items.len() >= MAX_ITEMS_PER_DAY {
+            if items.len() >= max_items {
                 break;
             }
         }
-        if items.len() >= MAX_ITEMS_PER_DAY {
+        if items.len() >= max_items {
             break;
         }
     }
@@ -267,6 +338,13 @@ fn parse_school_notices(
         (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
     });
     Ok(items)
+}
+
+fn parse_school_notices(
+    bytes: &[u8],
+    requested_date: NaiveDate,
+) -> ServiceResult<Vec<DeadlineItem>> {
+    parse_school_notices_range(bytes, requested_date, requested_date)
 }
 
 fn trusted_https_url(value: Option<String>) -> Option<String> {
@@ -285,6 +363,13 @@ fn trusted_https_url(value: Option<String>) -> Option<String> {
 }
 
 fn merge_items(groups: impl IntoIterator<Item = Vec<DeadlineItem>>) -> Vec<DeadlineItem> {
+    merge_items_with_limit(groups, MAX_ITEMS_PER_DAY)
+}
+
+fn merge_items_with_limit(
+    groups: impl IntoIterator<Item = Vec<DeadlineItem>>,
+    max_items: usize,
+) -> Vec<DeadlineItem> {
     let mut seen = HashSet::new();
     let mut items = Vec::new();
     for item in groups.into_iter().flatten() {
@@ -302,15 +387,26 @@ fn merge_items(groups: impl IntoIterator<Item = Vec<DeadlineItem>>) -> Vec<Deadl
     items.sort_by(|left, right| {
         (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
     });
-    items.truncate(MAX_ITEMS_PER_DAY);
+    items.truncate(max_items);
     items
 }
 
 async fn fetch_contest_deadlines(
     date: NaiveDate,
 ) -> ServiceResult<(Vec<DeadlineItem>, String, bool)> {
+    fetch_contest_deadlines_range(date, date).await
+}
+
+async fn fetch_contest_deadlines_range(
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+) -> ServiceResult<(Vec<DeadlineItem>, String, bool)> {
     match fetch_source(PRIMARY_URL, PRIMARY_HOST, false).await {
-        Ok(bytes) => Ok((parse_source(&bytes, date)?, PRIMARY_URL.to_string(), false)),
+        Ok(bytes) => Ok((
+            parse_source_range(&bytes, start_date, end_date)?,
+            PRIMARY_URL.to_string(),
+            false,
+        )),
         Err(primary_error) => {
             let bytes =
                 fetch_source(BACKUP_URL, BACKUP_HOST, true)
@@ -321,7 +417,11 @@ async fn fetch_contest_deadlines(
                             primary_error.message, backup_error.message
                         ))
                     })?;
-            Ok((parse_source(&bytes, date)?, BACKUP_URL.to_string(), true))
+            Ok((
+                parse_source_range(&bytes, start_date, end_date)?,
+                BACKUP_URL.to_string(),
+                true,
+            ))
         }
     }
 }
@@ -349,6 +449,52 @@ pub async fn fetch_deadlines(payload: &DeadlinesRequest) -> ServiceResult<Deadli
     };
     Ok(DeadlinesResponse {
         date: date.to_string(),
+        fetched_at: crate::config::now_in_app_tz(),
+        source,
+        used_backup,
+        items: contest_items,
+    })
+}
+
+pub async fn fetch_deadline_calendar(
+    payload: &CalendarRangeRequest,
+) -> ServiceResult<DeadlineCalendarResponse> {
+    let start = parse_date(payload.start_date.trim())?;
+    let end = parse_date(payload.end_date.trim())?;
+    let day_count = end.signed_duration_since(start).num_days() + 1;
+    if !(1..=MAX_CALENDAR_RANGE_DAYS).contains(&day_count) {
+        return Err(ServiceError::with_status(
+            "DDL 日历查询范围必须在 1 至 370 天内。",
+            400,
+        ));
+    }
+
+    let contest = fetch_contest_deadlines_range(start, end).await;
+    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, true)
+        .await
+        .and_then(|bytes| parse_school_notices_range(&bytes, start, end));
+    let (contest_items, source, used_backup) = match (contest, school) {
+        (Ok((contest_items, source, used_backup)), Ok(school_items)) => (
+            merge_items_with_limit(
+                [contest_items, school_items],
+                MAX_ITEMS_PER_DAY.saturating_mul(day_count as usize),
+            ),
+            source,
+            used_backup,
+        ),
+        (Ok((contest_items, source, used_backup)), Err(_)) => (contest_items, source, used_backup),
+        (Err(_), Ok(school_items)) => (school_items, SCHOOL_NOTICES_URL.to_string(), false),
+        (Err(contest_error), Err(school_error)) => {
+            return Err(ServiceError::new(format!(
+                "公开活动 DDL 不可用（{}）；校内竞赛通知也不可用（{}）。",
+                contest_error.message, school_error.message
+            )));
+        }
+    };
+
+    Ok(DeadlineCalendarResponse {
+        start_date: start.to_string(),
+        end_date: end.to_string(),
         fetched_at: crate::config::now_in_app_tz(),
         source,
         used_backup,
@@ -384,6 +530,45 @@ mod tests {
         let date = NaiveDate::from_ymd_opt(2026, 8, 22).unwrap();
         let parsed = parse_source(data.as_bytes(), date).unwrap();
         assert_eq!(parsed[0].official_url, None);
+    }
+
+    #[test]
+    fn calendar_parser_returns_each_supported_deadline_in_the_requested_range() {
+        let data = r#"{"items":[
+          {"id":"d1","name":"第一项","event_type":"competition","primary_deadline":"2026-08-17T18:00:00+08:00"},
+          {"id":"d2","name":"第二项","event_type":"hackathon","primary_deadline":"2026-08-23T23:59:59+08:00"},
+          {"id":"d3","name":"范围外","event_type":"summer_camp","primary_deadline":"2026-08-24T23:59:59+08:00"}
+        ]}"#;
+        let start = NaiveDate::from_ymd_opt(2026, 8, 17).unwrap();
+        let end = NaiveDate::from_ymd_opt(2026, 8, 23).unwrap();
+        let parsed = parse_source_range(data.as_bytes(), start, end).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].id, "d1");
+        assert_eq!(parsed[1].id, "d2");
+    }
+
+    #[test]
+    fn calendar_merge_does_not_apply_the_single_day_item_cap_to_a_year() {
+        let items: Vec<_> = (0..150)
+            .map(|index| DeadlineItem {
+                id: format!("id-{index}"),
+                name: format!("event-{index}"),
+                event_type: "competition".to_string(),
+                source_type: "contest_ddl".to_string(),
+                primary_deadline: format!(
+                    "2026-{:02}-{:02}T18:00:00+08:00",
+                    (index / 28) + 1,
+                    (index % 28) + 1
+                ),
+                organizer: None,
+                official_url: None,
+            })
+            .collect();
+        assert_eq!(merge_items([items.clone()]).len(), MAX_ITEMS_PER_DAY);
+        assert_eq!(
+            merge_items_with_limit([items], 365 * MAX_ITEMS_PER_DAY).len(),
+            150
+        );
     }
 
     #[test]

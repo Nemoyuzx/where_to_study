@@ -538,8 +538,9 @@ object DailyCourseSummaryNotificationRuntime {
     fun show(context: Context, draft: DailyCourseSummaryDraft) {
         if (DailyCourseNotificationRuntimeMode.isUiTesting) return
         if (!hasPermission(context)) return
+        val localizedContext = AppLocale.wrap(context, AppPreferences(context).languageCode)
         val manager = context.getSystemService(NotificationManager::class.java)
-        ensureChannel(manager)
+        ensureChannel(manager, localizedContext)
         val pendingIntent = PendingIntent.getActivity(
             context,
             0,
@@ -556,9 +557,9 @@ object DailyCourseSummaryNotificationRuntime {
             NOTIFICATION_ID,
             builder
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(draft.title)
-                .setContentText(draft.body)
-                .setStyle(Notification.BigTextStyle().bigText(draft.body))
+                .setContentTitle(localizedContext.uiText(draft.title))
+                .setContentText(localizedContext.uiText(draft.body))
+                .setStyle(Notification.BigTextStyle().bigText(localizedContext.uiText(draft.body)))
                 .setContentIntent(pendingIntent)
                 .setCategory(Notification.CATEGORY_EVENT)
                 .setAutoCancel(true)
@@ -573,14 +574,14 @@ object DailyCourseSummaryNotificationRuntime {
 
     fun isManagedNotification(notificationID: Int): Boolean = notificationID == NOTIFICATION_ID
 
-    private fun ensureChannel(manager: NotificationManager) {
+    private fun ensureChannel(manager: NotificationManager, context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         manager.createNotificationChannel(NotificationChannel(
             CHANNEL_ID,
-            "每日课程摘要",
+            context.uiText("每日课程摘要"),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "每天约 07:30 显示当天个人课程摘要"
+            description = context.uiText("每天约 07:30 显示当天个人课程摘要")
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         })
     }

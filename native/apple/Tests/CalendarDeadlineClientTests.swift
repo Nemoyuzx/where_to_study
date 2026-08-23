@@ -64,6 +64,56 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertEqual(parsed.first?.officialURL?.host, "ucloud.bupt.edu.cn")
     }
 
+    func testBatchParsersReuseOnePayloadAcrossVisibleDates() throws {
+        let contestData = Data(#"""
+        {"items":[
+          {"id":"c1","name":"竞赛一","event_type":"competition","primary_deadline":"2026-08-22T18:00:00+08:00"},
+          {"id":"c2","name":"竞赛二","event_type":"competition","primary_deadline":"2026-08-23T18:00:00+08:00"}
+        ]}
+        """#.utf8)
+        let parsed = try PublicDeadlineClient.parse(
+            data: contestData,
+            requestedDates: ["2026-08-22", "2026-08-23"]
+        )
+
+        XCTAssertEqual(parsed["2026-08-22"]?.map(\.id), ["c1"])
+        XCTAssertEqual(parsed["2026-08-23"]?.map(\.id), ["c2"])
+    }
+
+    @MainActor
+    func testStoreLoadsVisiblePublicDatesThroughOneBatchRequest() async {
+        let recorder = BatchDeadlineRecorder()
+        let store = CalendarDeadlineStore(client: BatchDeadlineClient(recorder: recorder))
+        let dates = ["2026-08-22", "2026-08-23", "2026-08-24"]
+
+        await store.loadPublic(dates: dates, sampleMode: false)
+
+        let batches = await recorder.batches
+        XCTAssertEqual(batches, [dates])
+        XCTAssertEqual(Set(store.publicByDate.keys), Set(dates))
+    }
+
+    @MainActor
+    func testCancelledViewTaskDoesNotAbandonSharedPublicRangeLoad() async {
+        let client = SuspendedPublicDeadlineClient()
+        let store = CalendarDeadlineStore(client: client)
+        let dates = ["2026-08-22", "2026-08-23"]
+        let originalViewTask = Task {
+            await store.loadPublic(dates: dates, sampleMode: false)
+        }
+        await client.waitUntilStarted()
+
+        originalViewTask.cancel()
+        await store.loadPublic(dates: dates, sampleMode: false)
+        await client.complete(dates: dates)
+        await originalViewTask.value
+
+        XCTAssertEqual(Set(store.publicByDate.keys), Set(dates))
+        XCTAssertTrue(store.loadingPublicDates.isEmpty)
+        let invocationCount = await client.invocationCount
+        XCTAssertEqual(invocationCount, 1)
+    }
+
     func testAssignmentParserSupportsConfirmedCourseListContract() throws {
         let data = Data(#"""
         {
@@ -187,6 +237,34 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertEqual(invocationCountAfterCompletion, 1)
     }
 
+    func testUCloudBatchFiltersSeveralVisibleDatesAfterOneAccountWideFetch() async throws {
+        let provider = ControlledUCloudFetch()
+        let client = UCloudAssignmentClient(
+            credentialStore: StaticDeadlineCredentialStore(),
+            fetchAll: { credentials in
+                try await provider.fetch(credentials: credentials)
+            }
+        )
+        let request = Task {
+            try await client.fetch(dates: ["2026-08-22", "2026-08-23", "2026-08-24"])
+        }
+        await provider.waitUntilInvocationCount(1)
+        await provider.complete(
+            invocation: 1,
+            with: [
+                assignment(id: "first", deadline: "2026-08-22 18:00:00"),
+                assignment(id: "second", deadline: "2026-08-23 19:00:00")
+            ]
+        )
+
+        let itemsByDate = try await request.value
+        XCTAssertEqual(itemsByDate["2026-08-22"]?.map(\.id), ["first"])
+        XCTAssertEqual(itemsByDate["2026-08-23"]?.map(\.id), ["second"])
+        XCTAssertEqual(itemsByDate["2026-08-24"], [])
+        let invocationCount = await provider.invocationCount
+        XCTAssertEqual(invocationCount, 1)
+    }
+
     func testUCloudResetInvalidatesOldFlightAndPreventsItsCacheWriteBack() async throws {
         let provider = ControlledUCloudFetch()
         let client = UCloudAssignmentClient(
@@ -249,6 +327,83 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertTrue(store.assignmentsByDate.isEmpty)
         XCTAssertTrue(store.assignmentUnavailableByDate.isEmpty)
         XCTAssertTrue(store.loadingAssignmentDates.isEmpty)
+    }
+}
+
+private actor BatchDeadlineRecorder {
+    private(set) var batches = [[String]]()
+
+    func record(_ dates: [String]) {
+        batches.append(dates)
+    }
+}
+
+private actor SuspendedPublicDeadlineClient: PublicDeadlineFetching {
+    private(set) var invocationCount = 0
+    private var startedWaiters = [CheckedContinuation<Void, Never>]()
+    private var continuation: CheckedContinuation<[String: PublicDeadlineSnapshot], Error>?
+
+    func fetch(date: String) async throws -> PublicDeadlineSnapshot {
+        let snapshots = try await fetch(dates: [date])
+        guard let snapshot = snapshots[date] else {
+            throw CalendarDeadlineError.service("missing test snapshot")
+        }
+        return snapshot
+    }
+
+    func fetch(dates _: [String]) async throws -> [String: PublicDeadlineSnapshot] {
+        invocationCount += 1
+        startedWaiters.forEach { $0.resume() }
+        startedWaiters.removeAll()
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard invocationCount == 0 else { return }
+        await withCheckedContinuation { continuation in
+            startedWaiters.append(continuation)
+        }
+    }
+
+    func complete(dates: [String]) {
+        continuation?.resume(returning: Dictionary(uniqueKeysWithValues: dates.map { date in
+            (
+                date,
+                PublicDeadlineSnapshot(
+                    date: date,
+                    items: [],
+                    source: CalendarDeadlineSources.primary,
+                    usedBackup: false
+                )
+            )
+        }))
+        continuation = nil
+    }
+}
+
+private struct BatchDeadlineClient: PublicDeadlineFetching {
+    let recorder: BatchDeadlineRecorder
+
+    func fetch(date: String) async throws -> PublicDeadlineSnapshot {
+        let snapshots = try await fetch(dates: [date])
+        return try XCTUnwrap(snapshots[date])
+    }
+
+    func fetch(dates: [String]) async throws -> [String: PublicDeadlineSnapshot] {
+        await recorder.record(dates)
+        return Dictionary(uniqueKeysWithValues: dates.map { date in
+            (
+                date,
+                PublicDeadlineSnapshot(
+                    date: date,
+                    items: [],
+                    source: CalendarDeadlineSources.primary,
+                    usedBackup: false
+                )
+            )
+        })
     }
 }
 

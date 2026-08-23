@@ -13,6 +13,24 @@ APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 RELEASE_LABEL="${1:-v$APP_VERSION}"
 validate_release_label "$RELEASE_LABEL"
 
+MACHINE_ARCHITECTURE="${LINUX_ARCHITECTURE:-$(uname -m)}"
+case "$MACHINE_ARCHITECTURE" in
+  x86_64)
+    DEB_EXPECTED_ARCHITECTURE="amd64"
+    RELEASE_ARCHITECTURE="x86_64"
+    APPIMAGE_FILE_PATTERN='ELF 64-bit.*x86-64'
+    ;;
+  aarch64|arm64)
+    DEB_EXPECTED_ARCHITECTURE="arm64"
+    RELEASE_ARCHITECTURE="aarch64"
+    APPIMAGE_FILE_PATTERN='ELF 64-bit.*(ARM aarch64|ARM64)'
+    ;;
+  *)
+    echo "Unsupported Linux release architecture: $MACHINE_ARCHITECTURE" >&2
+    exit 1
+    ;;
+esac
+
 if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]] &&
   [[ "${BASH_REMATCH[1]}" != "$APP_VERSION" ]]; then
   echo "Release label $RELEASE_LABEL does not match app version $APP_VERSION." >&2
@@ -88,8 +106,8 @@ if [[ "$DEB_VERSION" != "$APP_VERSION" ]]; then
   echo "Debian package version $DEB_VERSION does not match package version $APP_VERSION." >&2
   exit 1
 fi
-if [[ "$DEB_ARCHITECTURE" != "amd64" ]]; then
-  echo "Debian package architecture must be amd64, got $DEB_ARCHITECTURE." >&2
+if [[ "$DEB_ARCHITECTURE" != "$DEB_EXPECTED_ARCHITECTURE" ]]; then
+  echo "Debian package architecture must be $DEB_EXPECTED_ARCHITECTURE, got $DEB_ARCHITECTURE." >&2
   exit 1
 fi
 if ! grep -q 'libwebkit2gtk-4.1-0' <<<"$DEB_DEPENDENCIES"; then
@@ -104,8 +122,8 @@ if ! grep -Eq 'lib(ayatana-)?appindicator3-1' <<<"$DEB_DEPENDENCIES"; then
   echo "Debian package is missing the detected app-indicator runtime dependency." >&2
   exit 1
 fi
-if ! file "$APPIMAGE_PATH" | grep -Eq 'ELF 64-bit.*x86-64'; then
-  echo "AppImage is not an x86-64 ELF executable: $APPIMAGE_PATH" >&2
+if ! file "$APPIMAGE_PATH" | grep -Eq "$APPIMAGE_FILE_PATTERN"; then
+  echo "AppImage does not match $RELEASE_ARCHITECTURE: $APPIMAGE_PATH" >&2
   exit 1
 fi
 
@@ -127,8 +145,8 @@ chmod +x "$APPIMAGE_PATH"
 validate_extracted_bundle "$TEMP_DIR/appimage/squashfs-root"
 
 mkdir -p "$OUTPUT_DIR"
-DEB_OUTPUT="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-linux-x86_64.deb"
-APPIMAGE_OUTPUT="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-linux-x86_64.AppImage"
+DEB_OUTPUT="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-linux-$RELEASE_ARCHITECTURE.deb"
+APPIMAGE_OUTPUT="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-linux-$RELEASE_ARCHITECTURE.AppImage"
 install -m 0644 "$DEB_PATH" "$DEB_OUTPUT"
 install -m 0755 "$APPIMAGE_PATH" "$APPIMAGE_OUTPUT"
 

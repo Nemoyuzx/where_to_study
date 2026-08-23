@@ -1,19 +1,20 @@
 # App Review Notes (English)
 
-Submitted builds: iOS `0.2.2 (57)` and macOS `0.2.2 (52)`. Please review the latest build for each platform.
+Submitted builds: iOS `0.2.3 (58)` and macOS `0.2.3 (58)`. Please review the latest build for each platform.
 
 Where To Study is an independent, unofficial schedule and empty-classroom client for students of Beijing University of Posts and Telecommunications. It is not operated by or affiliated with the university. The app has no purchases, subscriptions, advertising, analytics, or tracking SDKs.
 
 ## Review without a school account
 
 1. Open the app and select Settings.
-2. Select “浏览内置示例数据” (Browse built-in sample data).
-3. Review sample courses, classrooms, and the day/week/month/year calendar views.
-4. On iPhone, select a date in Month view and keep swiping upward. After the sheet reaches “日程已展开” (Details Raised), it continues scrolling through assignments, almanac, and event deadlines.
-5. Select “导入系统日历” (Import to System Calendar). The app displays a simulated result without requesting Calendar access or writing events.
-6. In Settings, review the bilingual reference notice and the separate Competition and School Notice switches, then toggle the 07:30 course summary. Sample mode requests no Notification access.
-7. On iOS or macOS, add the “今日课程” (Today’s Courses) widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path.
-8. Return to Settings and select “返回真实数据” (Return to live data) to leave sample mode.
+2. Select Browse Built-in Sample Data.
+3. Switch the interface among System, Simplified Chinese, and English. Static UI updates immediately; sample API content intentionally remains in its original language.
+4. Review sample courses, classrooms, and the day/week/month/year calendar views. Collapse the day/week course summary, and use an all-day `+N` button to open the full assignment and school-notice list. The same items are marked in month cells and year-date details.
+5. On iPhone, select a date in Month view and keep swiping upward. After the sheet reaches Details Raised, it continues scrolling through assignments, almanac, and event deadlines.
+6. Select Import to System Calendar. The app displays a simulated result without requesting Calendar access or writing events.
+7. In Settings, review the bilingual reference notice and the separate Competition and School Notice switches, then toggle the 07:30 course summary. Sample mode requests no Notification access.
+8. On iOS or macOS, add the Today’s Courses widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path.
+9. Return to Settings and select Return to Live Data to leave sample mode.
 
 Sample mode uses only fictional courses, classrooms, and holiday data bundled with the app. It does not connect to the school service or access/modify Keychain credentials, live user caches, Calendar, or Notifications. On iOS and macOS it writes only the fictional schedule to the Widget App Group; leaving sample mode immediately restores the locally cached live schedule snapshot.
 

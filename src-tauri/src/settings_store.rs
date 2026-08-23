@@ -16,7 +16,7 @@ use crate::models::{SaveSettingsRequest, SavedSettings};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 6;
+const SETTINGS_SCHEMA_VERSION: u32 = 7;
 
 fn default_true() -> bool {
     true
@@ -36,6 +36,8 @@ struct SettingsFile {
     campus_id: String,
     #[serde(default)]
     default_min_seats: usize,
+    #[serde(default)]
+    ui_language: String,
     #[serde(default)]
     daily_course_notifications_enabled: bool,
     #[serde(default = "default_true")]
@@ -61,6 +63,7 @@ struct PersistedSettings<'a> {
     term_start_date: &'a str,
     campus_id: &'a str,
     default_min_seats: usize,
+    ui_language: &'a str,
     daily_course_notifications_enabled: bool,
     automatic_term_detection_enabled: bool,
     weather_enabled: bool,
@@ -200,6 +203,7 @@ where
         term_start_date: file.term_start_date.clone(),
         campus_id: file.campus_id.clone(),
         default_min_seats: file.default_min_seats,
+        ui_language: file.ui_language.clone(),
         daily_course_notifications_enabled: file.daily_course_notifications_enabled,
         automatic_term_detection_enabled: file.automatic_term_detection_enabled,
         weather_enabled: file.weather_enabled,
@@ -291,6 +295,7 @@ where
         term_start_date: request.term_start_date.clone(),
         campus_id: request.campus_id.clone(),
         default_min_seats: request.default_min_seats,
+        ui_language: request.ui_language.clone(),
         daily_course_notifications_enabled: request.daily_course_notifications_enabled,
         automatic_term_detection_enabled: request.automatic_term_detection_enabled,
         weather_enabled: request.weather_enabled,
@@ -423,6 +428,7 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         term_start_date: &settings.term_start_date,
         campus_id: &settings.campus_id,
         default_min_seats: settings.default_min_seats,
+        ui_language: &settings.ui_language,
         daily_course_notifications_enabled: settings.daily_course_notifications_enabled,
         automatic_term_detection_enabled: settings.automatic_term_detection_enabled,
         weather_enabled: settings.weather_enabled,
@@ -580,6 +586,7 @@ mod tests {
             term_start_date: "2026-03-02".to_string(),
             campus_id: "01".to_string(),
             default_min_seats: 20,
+            ui_language: "en".to_string(),
             daily_course_notifications_enabled: true,
             automatic_term_detection_enabled: true,
             weather_enabled: true,
@@ -599,6 +606,7 @@ mod tests {
             term_start_date: "2026-03-02".to_string(),
             campus_id: "01".to_string(),
             default_min_seats: 20,
+            ui_language: "en".to_string(),
             daily_course_notifications_enabled: true,
             automatic_term_detection_enabled: true,
             weather_enabled: true,
@@ -620,6 +628,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&content).expect("valid JSON");
 
         assert_eq!(value["schema_version"], SETTINGS_SCHEMA_VERSION);
+        assert_eq!(value["ui_language"], "en");
         assert_eq!(value["daily_course_notifications_enabled"], true);
         assert_eq!(value["automatic_term_detection_enabled"], true);
         assert_eq!(value["weather_enabled"], true);

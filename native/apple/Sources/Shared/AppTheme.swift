@@ -58,6 +58,8 @@ enum AppTheme {
     static let secondaryText = Color(nsColor: .secondaryLabelColor)
     static let border = Color(nsColor: .separatorColor)
     static let danger = Color(nsColor: .systemRed)
+    static let assignment = Color(nsColor: .systemPurple)
+    static let schoolNotice = Color(nsColor: .systemOrange)
     #else
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
@@ -65,6 +67,8 @@ enum AppTheme {
     static let secondaryText = Color(uiColor: .secondaryLabel)
     static let border = Color(uiColor: .separator)
     static let danger = Color(uiColor: .systemRed)
+    static let assignment = Color(uiColor: .systemPurple)
+    static let schoolNotice = Color(uiColor: .systemOrange)
     #endif
 
     private static func adaptiveColor(

@@ -77,6 +77,7 @@ import {
   normalizeError,
   parseTimeMinutes,
   requestBody,
+  resolvedUiLanguage,
   savedCredentialSnapshot,
   savedSettingsToState,
   settingsToPayload,
@@ -94,6 +95,175 @@ const NAV_ITEMS = [
   { id: 'calendar', label: '教学日历', Icon: CalendarRange },
   { id: 'settings', label: '设置', Icon: Settings },
 ]
+
+const EN_TEXT = Object.freeze({
+  '空教室': 'Empty Classrooms',
+  '教学日历': 'Teaching Calendar',
+  '设置': 'Settings',
+  '联动查询': 'Linked Search',
+  '应用导航': 'App navigation',
+  '日历视图': 'Calendar view',
+  '日': 'Day',
+  '周': 'Week',
+  '月': 'Month',
+  '年': 'Year',
+  '今天': 'Today',
+  '上一段': 'Previous period',
+  '下一段': 'Next period',
+  '全天': 'All day',
+  '全天日程': 'All-day events',
+  '关闭全天日程': 'Close all-day events',
+  '打开所选日期': 'Open selected date',
+  '查看日': 'Day',
+  '查看周': 'Week',
+  '查看月': 'Month',
+  '查询条件': 'Search options',
+  '查询校区': 'Search campus',
+  '正在获取当天空教室…': 'Loading today’s empty classrooms…',
+  '获取空教室信息': 'Load empty classrooms',
+  '数据源': 'Source',
+  '当天课程': 'Today’s courses',
+  '个人空闲节次': 'Free periods',
+  '匹配教室': 'Matching rooms',
+  '节次筛选': 'Period filters',
+  '使用个人课表排除已有课程': 'Exclude occupied periods using my schedule',
+  '选中空闲': 'Select free periods',
+  '清空': 'Clear',
+  '个人课表占用': 'Occupied by your schedule',
+  '个人课程时间，已纳入筛选': 'Course period, included in filtering',
+  '个人空闲，可筛选教室': 'Free period, available for classroom search',
+  '未选择': 'None selected',
+  '暂无课程': 'No courses',
+  '教师未标注': 'Teacher unavailable',
+  '地点未标注': 'Location unavailable',
+  '教学楼': 'Teaching buildings',
+  '暂无教学楼': 'No teaching buildings',
+  '空教室结果': 'Empty classroom results',
+  '未选择教学楼': 'Select a teaching building',
+  '未选择节次': 'Select at least one period',
+  '座位未知': 'Capacity unknown',
+  '暂无匹配空教室': 'No matching empty classrooms',
+  '获取/刷新个人课表': 'Load / refresh my schedule',
+  '导入苹果日历': 'Import into Apple Calendar',
+  '收起月历': 'Collapse month',
+  '展开月历': 'Expand month',
+  '月历': 'Month calendar',
+  '无课程': 'No courses',
+  '当天没有课程': 'No courses today',
+  '信息未标注': 'Details unavailable',
+  '时间待定': 'Time TBD',
+  '课程名称未标注': 'Course name unavailable',
+  '课程作业 DDL': 'Assignment deadlines',
+  '正在同步云课堂作业…': 'Syncing UCloud assignments…',
+  '点击重试': 'Tap to retry',
+  '当天没有课程作业截止': 'No assignment deadlines today',
+  '第三方来源': 'Third-party source',
+  '北京邮电大学云邮教学空间': 'BUPT UCloud',
+  '竞赛与活动 DDL': 'Competition and event deadlines',
+  '正在更新实时 DDL…': 'Updating live deadlines…',
+  '当天没有已启用类型的报名或提交截止': 'No enabled registration or submission deadlines today',
+  '学科竞赛': 'Academic competitions',
+  '校内竞赛通知': 'School competition notices',
+  '夏令营': 'Summer camps',
+  '黑客松': 'Hackathons',
+  '校区天气': 'Campus weather',
+  '今日与明日': 'Today and tomorrow',
+  '正在更新天气…': 'Updating weather…',
+  '今日': 'Today',
+  '明日': 'Tomorrow',
+  '降水': 'Precipitation',
+  '数据：UAPI': 'Data: UAPI',
+  '黄历信息': 'Chinese almanac',
+  '正在查询…': 'Loading…',
+  '农历': 'Lunar',
+  '岁次': 'Year pillar',
+  '月柱': 'Month pillar',
+  '日柱': 'Day pillar',
+  '宜：': 'Suitable: ',
+  '忌：': 'Avoid: ',
+  '暂无数据': 'No data',
+  '民俗信息仅供参考 · 数据：': 'Folk information is for reference only · Data: ',
+  '个人账号': 'Account',
+  '学号': 'Student ID',
+  '请输入教务学号': 'Enter your academic-system student ID',
+  '教务密码': 'Academic-system password',
+  '已安全保存，留空保持不变': 'Saved securely; leave blank to keep it',
+  '输入后保存到系统凭据存储': 'Saved in the operating system credential store',
+  '默认校区': 'Default campus',
+  '保存设置': 'Save settings',
+  '已保存': 'Saved',
+  '学期设置': 'Term settings',
+  '自动检测当前学期': 'Detect the current term automatically',
+  '学期编号': 'Term ID',
+  '第一周周一': 'Monday of week 1',
+  '获取/刷新课表后会自动应用教务返回的学期与开学日期。': 'Loading your schedule automatically applies the term and start date returned by the academic system.',
+  '已关闭自动检测，将使用上方手动填写的学期信息。': 'Automatic detection is off; the term values above will be used.',
+  '按当前日期填写': 'Suggest from today',
+  '✓ 与当前学期一致': '✓ Matches the current term',
+  '当前设置与检测结果不同': 'Current values differ from the detected term',
+  '保存学期设置': 'Save term settings',
+  '课程提醒': 'Course reminders',
+  '每天 07:30 发送当日课程摘要': 'Send today’s course summary at 07:30',
+  '仅在当天有课时发送；课表更新或账号变更后会自动重排。': 'Sent only on days with courses; rescheduled after account or schedule changes.',
+  '生活信息与 DDL': 'Daily information and deadlines',
+  '在空教室联动查询上方显示默认折叠的今日、明日天气。': 'Show a collapsed today/tomorrow weather card above linked classroom search.',
+  '在月视图日期详情中显示农历、干支与宜忌。': 'Show lunar date, pillars, and suitable/avoid advice in month details.',
+  '在统一 DDL 卡片中显示 Contest DDL 收录的公开学科竞赛截止日期。': 'Show public academic competition deadlines from Contest DDL.',
+  '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。': 'Show notices extracted by script from public pages on the university’s internal website.',
+  '在统一 DDL 卡片中显示夏令营截止日期。': 'Show summer-camp deadlines in the combined deadline card.',
+  '在统一 DDL 卡片中显示黑客松截止日期。': 'Show hackathon deadlines in the combined deadline card.',
+  '天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。': 'Weather, almanac, and deadline cards identify their third-party sources. Academic competitions and script-extracted school notices have separate switches.',
+  '显示数据仅供参考，请以实际情况为准。': 'Displayed data is for reference only; rely on official information.',
+  '本地数据': 'Local data',
+  '清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。': 'Remove saved academic credentials, schedules, classroom and holiday caches, and reset local preferences.',
+  '清除本地数据': 'Clear local data',
+  '清除全部本地数据？': 'Clear all local data?',
+  '将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。': 'This removes saved credentials, schedules, classroom caches, and settings. This cannot be undone.',
+  '取消': 'Cancel',
+  '确认清除': 'Clear now',
+  '关于本应用': 'About',
+  'Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。': 'Where To Study is an independently developed, unofficial client. It is not operated by BUPT and does not represent the university.',
+  '隐私说明': 'Privacy policy',
+  'GitHub 项目': 'GitHub project',
+  '界面语言': 'Interface language',
+  '跟随系统': 'System default',
+  '简体中文': 'Simplified Chinese',
+  'English': 'English',
+  '休': 'Off',
+  '班': 'Work',
+  '作': 'A',
+  '赛': 'C',
+  '试': 'Exam',
+  '已生成日历文件并打开苹果日历：': 'Calendar file created and opened in Apple Calendar: ',
+  '移动教务实时接口': 'Mobile academic system live API',
+  'Jraaay 公共实时数据': 'Jraaay public live data',
+  '微信教务实时接口': 'WeChat academic system live API',
+  '数据参考提示': 'Data disclaimer',
+  '校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。': 'School competition notices are extracted by script from public pages on the university’s internal website and are for reference only.',
+  '备用：': 'Backup: ',
+  '校内：': 'School: ',
+  '竞赛通知 API': 'School notice API',
+  '（本次已使用备用源）': ' (backup source used)',
+  'UAPI 农历': 'UAPI Lunar Calendar',
+  'Timeless 万年历': 'Timeless Calendar',
+  '黄历宜忌': 'Almanac advice',
+  '云课堂作业截止': 'UCloud assignment deadlines',
+  '竞赛与活动截止': 'Competition and event deadlines',
+  '请先在设置中保存教务账号和密码。': 'Save your academic-system account and password in Settings first.',
+  '自动获取当天空教室失败。': 'Automatic loading of today’s empty classrooms failed.',
+  '空教室更新的账号作用域无效，已拒绝显示。': 'The empty-classroom result used an invalid account scope and was rejected.',
+  '窗口已隐藏，应用仍在系统托盘运行。': 'The window is hidden; the app is still running in the system tray.',
+})
+
+function translator(language) {
+  return (text, values = {}) => {
+    const template = language === 'en' ? (EN_TEXT[text] || text) : text
+    return Object.entries(values).reduce(
+      (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+      template,
+    )
+  }
+}
 
 const BROWSER_PREVIEW_ENABLED = import.meta.env.DEV
 const PROJECT_URL = 'https://github.com/Nemoyuzx/where_to_study'
@@ -241,6 +411,7 @@ function browserPreviewCommand(name, payload = {}) {
       term_start_date: DEFAULT_SETTINGS.termStartDate,
       campus_id: DEFAULT_SETTINGS.campusId,
       default_min_seats: DEFAULT_SETTINGS.defaultMinSeats,
+      ui_language: DEFAULT_SETTINGS.uiLanguage,
       daily_course_notifications_enabled: DEFAULT_SETTINGS.dailyCourseNotificationsEnabled,
       automatic_term_detection_enabled: DEFAULT_SETTINGS.automaticTermDetectionEnabled,
       weather_enabled: DEFAULT_SETTINGS.weatherEnabled,
@@ -259,6 +430,7 @@ function browserPreviewCommand(name, payload = {}) {
       term_start_date: payload.term_start_date || DEFAULT_SETTINGS.termStartDate,
       campus_id: payload.campus_id || DEFAULT_SETTINGS.campusId,
       default_min_seats: Number(payload.default_min_seats) || 0,
+      ui_language: payload.ui_language || 'system',
       daily_course_notifications_enabled: Boolean(payload.daily_course_notifications_enabled),
       automatic_term_detection_enabled: Boolean(payload.automatic_term_detection_enabled),
       weather_enabled: Boolean(payload.weather_enabled),
@@ -375,6 +547,22 @@ function browserPreviewCommand(name, payload = {}) {
       ],
     }
   }
+  if (name === 'fetch_deadline_calendar') {
+    const startDate = payload.start_date
+    const secondDate = addDays(startDate, 1)
+    return {
+      start_date: startDate,
+      end_date: payload.end_date,
+      fetched_at: contractTimestamp(),
+      source: 'https://nemoyuzx.github.io/contest-ddl/data/competitions.json',
+      used_backup: false,
+      items: [
+        { id: 'preview-school-notice-range', name: '校内学科竞赛通知示例', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${startDate}T20:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
+        { id: 'preview-school-notice-range-2', name: '校内创新项目通知示例', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${startDate}T21:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
+        { id: 'preview-competition-range', name: '大学生创新竞赛', event_type: 'competition', source_type: 'contest_ddl', primary_deadline: `${secondDate}T18:00:00+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
+      ],
+    }
+  }
   if (name === 'fetch_assignments') {
     return {
       date: payload.date,
@@ -383,25 +571,38 @@ function browserPreviewCommand(name, payload = {}) {
       unavailable_reason: '浏览器预览不连接个人云课堂作业。',
     }
   }
+  if (name === 'fetch_assignment_calendar') {
+    return {
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      source: 'https://ucloud.bupt.edu.cn/uclass/',
+      items: [
+        { id: 'preview-assignment-range', title: '课程作业示例', course_name: '示例课程', deadline: `${payload.start_date}T23:59:00+08:00`, status: '未提交' },
+      ],
+    }
+  }
   if (name === 'clear_local_data') {
+    return true
+  }
+  if (name === 'set_interface_language') {
     return true
   }
   return null
 }
 
-function PlannerSummary({ dayCoursesCount, freeSlotsCount, matchingRoomsCount, className = '' }) {
+function PlannerSummary({ dayCoursesCount, freeSlotsCount, matchingRoomsCount, className = '', t }) {
   return (
     <section className={`summary-band ${className}`.trim()}>
       <div>
-        <span>当天课程</span>
+        <span>{t('当天课程')}</span>
         <strong>{dayCoursesCount}</strong>
       </div>
       <div>
-        <span>个人空闲节次</span>
+        <span>{t('个人空闲节次')}</span>
         <strong>{freeSlotsCount}</strong>
       </div>
       <div>
-        <span>匹配教室</span>
+        <span>{t('匹配教室')}</span>
         <strong>{matchingRoomsCount}</strong>
       </div>
     </section>
@@ -418,11 +619,11 @@ function WeatherGlyph({ weather, size = 22 }) {
   return <Sun size={size} />
 }
 
-function WeatherStrip({ weather, loading, error, onRetry }) {
+function WeatherStrip({ weather, loading, error, onRetry, language, t }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <section className="weather-strip" aria-label="校区今日与明日天气">
+    <section className="weather-strip" aria-label={t('校区天气')}>
       <button
         type="button"
         className="weather-strip-toggle"
@@ -432,8 +633,8 @@ function WeatherStrip({ weather, loading, error, onRetry }) {
       >
         <WeatherGlyph weather={weather?.current_weather} size={20} />
         <div className="weather-strip-heading">
-          <span>校区天气</span>
-          <strong>{weather ? `${weather.campus_name} · ${weather.district}` : '今日与明日'}</strong>
+          <span>{t('校区天气')}</span>
+          <strong>{weather ? `${weather.campus_name} · ${weather.district}` : t('今日与明日')}</strong>
         </div>
         {weather ? <small>{weather.current_weather} {weather.current_temperature}° · {weather.report_time}</small> : null}
         <ChevronDown className="weather-strip-chevron" size={18} aria-hidden="true" />
@@ -441,10 +642,10 @@ function WeatherStrip({ weather, loading, error, onRetry }) {
       {expanded ? (
         <div className="weather-strip-details" id="weather-strip-details">
           {loading ? (
-            <div className="weather-strip-state"><Loader2 className="spin" size={18} /> 正在更新天气…</div>
+            <div className="weather-strip-state"><Loader2 className="spin" size={18} /> {t('正在更新天气…')}</div>
           ) : error ? (
             <button type="button" className="weather-strip-state weather-retry" onClick={onRetry}>
-              <AlertTriangle size={17} /> {error}，点击重试
+              <AlertTriangle size={17} /> {t(error)} · {t('点击重试')}
             </button>
           ) : (
             <div className="weather-days">
@@ -452,30 +653,30 @@ function WeatherStrip({ weather, loading, error, onRetry }) {
                 <article key={day.date}>
                   <WeatherGlyph weather={day.weather_day} />
                   <div>
-                    <strong>{index === 0 ? '今日' : '明日'} · {formatShortDate(day.date)}</strong>
-                    <span>{day.weather_day}{day.weather_night !== day.weather_day ? `转${day.weather_night}` : ''}</span>
+                    <strong>{index === 0 ? t('今日') : t('明日')} · {formatShortDate(day.date)}</strong>
+                    <span>{day.weather_day}{day.weather_night !== day.weather_day ? `${language === 'en' ? ' to ' : '转'}${day.weather_night}` : ''}</span>
                   </div>
                   <b>{day.temp_min}° / {day.temp_max}°</b>
-                  {day.precipitation_probability != null ? <small>降水 {day.precipitation_probability}%</small> : null}
+                  {day.precipitation_probability != null ? <small>{t('降水')} {day.precipitation_probability}%</small> : null}
                 </article>
               ))}
             </div>
           )}
-          <a href="https://uapis.cn/docs/api-reference/get-misc-weather" target="_blank" rel="noreferrer">数据：UAPI</a>
+          <a href="https://uapis.cn/docs/api-reference/get-misc-weather" target="_blank" rel="noreferrer">{t('数据：UAPI')}</a>
         </div>
       ) : null}
     </section>
   )
 }
 
-function SelectedDaySchedule({ date, weekState, slotMeta }) {
+function SelectedDaySchedule({ date, weekState, slotMeta, language, t }) {
   return (
     <section className="panel selected-day-schedule">
       <div className="panel-title selected-day-title">
         <CalendarDays size={18} />
         <div>
-          <h2>{formatCourseDate(date)}</h2>
-          <span>{formatTeachingWeek(weekState.weekNumber)} · {weekState.dayCourses.length} 门课</span>
+          <h2>{formatUiCourseDate(date, language)}</h2>
+          <span>{formatUiTeachingWeek(weekState.weekNumber, language)} · {language === 'en' ? `${weekState.dayCourses.length} courses` : `${weekState.dayCourses.length} 门课`}</span>
         </div>
       </div>
       <div className="selected-day-course-list">
@@ -485,56 +686,56 @@ function SelectedDaySchedule({ date, weekState, slotMeta }) {
             <article key={`${date}-${course.id}`}>
               <time>{bounds.start}</time>
               <div>
-                <strong><CourseName course={course} /></strong>
-                <span>{bounds.start}-{bounds.end} · {course.room || '地点未标注'}</span>
+                <strong><CourseName course={course} t={t} /></strong>
+                <span>{bounds.start}-{bounds.end} · {course.room || t('地点未标注')}</span>
               </div>
             </article>
           )
-        }) : <div className="empty-state">当天没有课程</div>}
+        }) : <div className="empty-state">{t('当天没有课程')}</div>}
       </div>
     </section>
   )
 }
 
-function AlmanacCard({ date, almanac, loading, error, onRetry }) {
+function AlmanacCard({ date, almanac, loading, error, onRetry, t }) {
   const festival = [almanac?.solar_term, almanac?.lunar_festival, almanac?.solar_festival]
     .filter(Boolean)
     .join(' · ')
   return (
-    <section className="panel almanac-card" aria-label={`${date} 黄历信息`}>
+    <section className="panel almanac-card" aria-label={`${date} ${t('黄历信息')}`}>
       <div className="panel-title">
         <CalendarRange size={18} />
-        <h2>黄历信息</h2>
+        <h2>{t('黄历信息')}</h2>
       </div>
       {loading ? (
-        <div className="almanac-state"><Loader2 className="spin" size={18} /> 正在查询…</div>
+        <div className="almanac-state"><Loader2 className="spin" size={18} /> {t('正在查询…')}</div>
       ) : error ? (
         <button type="button" className="almanac-state almanac-retry" onClick={onRetry}>
-          <AlertTriangle size={17} /> {error}，点击重试
+          <AlertTriangle size={17} /> {t(error)} · {t('点击重试')}
         </button>
       ) : almanac ? (
         <div className="almanac-content">
           <div className="almanac-date">
             <span>{almanac.weekday}</span>
-            <strong>农历 {almanac.lunar_date}</strong>
+            <strong>{t('农历')} {almanac.lunar_date}</strong>
             {festival ? <small>{festival}</small> : null}
           </div>
           <div className="almanac-grid">
-            <div><span>岁次</span><strong>{almanac.ganzhi_year}年 · 肖{almanac.zodiac}</strong></div>
-            <div><span>月柱</span><strong>{almanac.ganzhi_month}月</strong></div>
-            <div><span>日柱</span><strong>{almanac.ganzhi_day}日</strong></div>
+            <div><span>{t('岁次')}</span><strong>{almanac.ganzhi_year}年 · 肖{almanac.zodiac}</strong></div>
+            <div><span>{t('月柱')}</span><strong>{almanac.ganzhi_month}月</strong></div>
+            <div><span>{t('日柱')}</span><strong>{almanac.ganzhi_day}日</strong></div>
           </div>
-          <div className="almanac-advice" aria-label="黄历宜忌">
-            <div className="almanac-yi"><strong>宜：</strong><span>{almanac.yi || '暂无数据'}</span></div>
-            <div className="almanac-ji"><strong>忌：</strong><span>{almanac.ji || '暂无数据'}</span></div>
+          <div className="almanac-advice" aria-label={t('黄历宜忌')}>
+            <div className="almanac-yi"><strong>{t('宜：')}</strong><span>{almanac.yi || t('暂无数据')}</span></div>
+            <div className="almanac-ji"><strong>{t('忌：')}</strong><span>{almanac.ji || t('暂无数据')}</span></div>
           </div>
         </div>
       ) : null}
       <p>
-        民俗信息仅供参考 · 数据：
-        <a href="https://uapis.cn/docs/api-reference/get-misc-lunartime" target="_blank" rel="noreferrer">UAPI 农历</a>
+        {t('民俗信息仅供参考 · 数据：')}
+        <a href="https://uapis.cn/docs/api-reference/get-misc-lunartime" target="_blank" rel="noreferrer">{t('UAPI 农历')}</a>
         {' · '}
-        <a href="https://api.timelessq.com/docs/api-15277838" target="_blank" rel="noreferrer">Timeless 万年历</a>
+        <a href="https://api.timelessq.com/docs/api-15277838" target="_blank" rel="noreferrer">{t('Timeless 万年历')}</a>
       </p>
     </section>
   )
@@ -546,23 +747,63 @@ const DEADLINE_TYPE_META = {
   hackathon: { label: '黑客松', Icon: Code2 },
 }
 
-function deadlineClock(value) {
+function deadlineClock(value, fallback = '时间待定') {
   const match = String(value || '').match(/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/)
-  return match?.[1] || '时间待定'
+  return match?.[1] || fallback
 }
 
-function AssignmentDeadlineCard({ date, response, loading, error, onRetry }) {
+function datesInRange(startDate, endDate) {
+  const dates = []
+  let current = startDate
+  while (current <= endDate && dates.length < 370) {
+    dates.push(current)
+    current = addDays(current, 1)
+  }
+  return dates
+}
+
+function datePart(value) {
+  return String(value || '').slice(0, 10)
+}
+
+function formatUiCalendarTitle(dateString, view, language) {
+  if (language !== 'en') return formatCalendarTitle(dateString, view)
+  const date = dateFromString(dateString)
+  if (view === 'year') return String(date.getFullYear())
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: view === 'day' ? 'short' : 'long',
+    ...(view === 'day' ? { day: 'numeric' } : {}),
+  }).format(date)
+}
+
+function formatUiCourseDate(dateString, language) {
+  if (language !== 'en') return formatCourseDate(dateString)
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  }).format(dateFromString(dateString))
+}
+
+function formatUiTeachingWeek(weekNumber, language) {
+  if (language !== 'en') return formatTeachingWeek(weekNumber)
+  return weekNumber > 0 ? `Teaching week ${weekNumber}` : 'Outside teaching weeks'
+}
+
+function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) {
   return (
-    <section className="panel assignment-deadline-card" aria-label={`${date} 云课堂作业截止`}>
+    <section className="panel assignment-deadline-card" aria-label={`${date} ${t('云课堂作业截止')}`}>
       <div className="panel-title">
         <ClipboardList size={18} />
-        <h2>课程作业 DDL</h2>
+        <h2>{t('课程作业 DDL')}</h2>
       </div>
       {loading ? (
-        <div className="deadline-state"><Loader2 className="spin" size={18} /> 正在同步云课堂作业…</div>
+        <div className="deadline-state"><Loader2 className="spin" size={18} /> {t('正在同步云课堂作业…')}</div>
       ) : error ? (
         <button type="button" className="deadline-state deadline-retry" onClick={onRetry}>
-          <AlertTriangle size={17} /> {error}，点击重试
+          <AlertTriangle size={17} /> {t(error)} · {t('点击重试')}
         </button>
       ) : response?.items?.length ? (
         <div className="deadline-list">
@@ -570,43 +811,43 @@ function AssignmentDeadlineCard({ date, response, loading, error, onRetry }) {
             <article key={item.id}>
               <div>
                 <strong>{item.title}</strong>
-                <span>{item.course_name || '课程名称未标注'}{item.status ? ` · ${item.status}` : ''}</span>
+                <span>{item.course_name || t('课程名称未标注')}{item.status ? ` · ${item.status}` : ''}</span>
               </div>
-              <time>{deadlineClock(item.deadline)}</time>
+              <time>{deadlineClock(item.deadline, t('时间待定'))}</time>
             </article>
           ))}
         </div>
       ) : (
-        <div className="deadline-empty">{response?.unavailable_reason || '当天没有课程作业截止'}</div>
+        <div className="deadline-empty">{response?.unavailable_reason || t('当天没有课程作业截止')}</div>
       )}
-      <p>第三方来源：<a href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer">北京邮电大学云邮教学空间</a></p>
+      <p>{t('第三方来源')}：<a href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer">{t('北京邮电大学云邮教学空间')}</a></p>
     </section>
   )
 }
 
-function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onRetry }) {
+function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onRetry, t }) {
   const items = (response?.items || []).filter((item) => (
     item.source_type === 'school_notice'
       ? enabledTypes.school_notice
       : enabledTypes[item.event_type]
   ))
   return (
-    <section className="panel contest-deadline-card" aria-label={`${date} 竞赛与活动截止`}>
+    <section className="panel contest-deadline-card" aria-label={`${date} ${t('竞赛与活动截止')}`}>
       <div className="panel-title">
         <Trophy size={18} />
-        <h2>竞赛与活动 DDL</h2>
+        <h2>{t('竞赛与活动 DDL')}</h2>
       </div>
       {loading ? (
-        <div className="deadline-state"><Loader2 className="spin" size={18} /> 正在更新实时 DDL…</div>
+        <div className="deadline-state"><Loader2 className="spin" size={18} /> {t('正在更新实时 DDL…')}</div>
       ) : error ? (
         <button type="button" className="deadline-state deadline-retry" onClick={onRetry}>
-          <AlertTriangle size={17} /> {error}，点击重试
+          <AlertTriangle size={17} /> {t(error)} · {t('点击重试')}
         </button>
       ) : items.length ? (
         <div className="deadline-list">
           {items.map((item) => {
             const meta = item.source_type === 'school_notice'
-              ? { label: '校内竞赛通知', Icon: Trophy }
+              ? { label: t('校内竞赛通知'), Icon: Trophy }
               : DEADLINE_TYPE_META[item.event_type] || DEADLINE_TYPE_META.competition
             const ItemIcon = meta.Icon
             const body = (
@@ -614,9 +855,9 @@ function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onR
                 <ItemIcon size={17} />
                 <div>
                   <strong>{item.name}</strong>
-                  <span>{meta.label}{item.organizer ? ` · ${item.organizer}` : ''}</span>
+                  <span>{t(meta.label)}{item.organizer ? ` · ${item.organizer}` : ''}</span>
                 </div>
-                <time>{deadlineClock(item.primary_deadline)}</time>
+                <time>{deadlineClock(item.primary_deadline, t('时间待定'))}</time>
               </>
             )
             return item.official_url ? (
@@ -625,26 +866,26 @@ function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onR
           })}
         </div>
       ) : (
-        <div className="deadline-empty">当天没有已启用类型的报名或提交截止</div>
+        <div className="deadline-empty">{t('当天没有已启用类型的报名或提交截止')}</div>
       )}
       <p>
-        校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。{' '}
-        第三方来源：
+        {t('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。')}{' '}
+        {t('第三方来源')}：
         <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a>
-        {' · 备用：'}
+        {' · '}{t('备用：')}
         <a href="http://101.201.29.29/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
-        {' · 校内：'}
-        <a href="http://101.201.29.29/api/contest-notices" target="_blank" rel="noreferrer">竞赛通知 API</a>
-        {response?.used_backup ? '（本次已使用备用源）' : ''}
+        {' · '}{t('校内：')}
+        <a href="http://101.201.29.29/api/contest-notices" target="_blank" rel="noreferrer">{t('竞赛通知 API')}</a>
+        {response?.used_backup ? t('（本次已使用备用源）') : ''}
       </p>
     </section>
   )
 }
 
-function CourseName({ course }) {
+function CourseName({ course, t }) {
   return (
     <span className="course-name-with-badge">
-      {course.is_exam ? <em className="course-exam-badge">试</em> : null}
+      {course.is_exam ? <em className="course-exam-badge">{t('试')}</em> : null}
       <span>{course.name}</span>
     </span>
   )
@@ -676,11 +917,17 @@ function App() {
     supports_calendar_import: false,
   })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
+  const uiLanguage = resolvedUiLanguage(settings.uiLanguage, navigator.languages?.[0] || navigator.language)
+  const t = useMemo(() => translator(uiLanguage), [uiLanguage])
+  const uiWeekdayLabels = uiLanguage === 'en'
+    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    : CALENDAR_WEEKDAYS
   const [queryCampusId, setQueryCampusId] = useState(DEFAULT_SETTINGS.campusId)
   const [calendarDate, setCalendarDate] = useState(localDateString())
   const [calendarView, setCalendarView] = useState('week')
   const [calendarMotion, setCalendarMotion] = useState('')
   const [monthExpanded, setMonthExpanded] = useState(true)
+  const [calendarAgendaDialog, setCalendarAgendaDialog] = useState(null)
   const [compactCalendarLayout, setCompactCalendarLayout] = useState(
     () => window.matchMedia('(max-width: 720px)').matches,
   )
@@ -742,6 +989,26 @@ function App() {
   const almanacRevisionRef = useRef(0)
   const deadlinesRevisionRef = useRef(0)
   const assignmentsRevisionRef = useRef(0)
+  const requestedCalendarSupplementRanges = useRef(new Set())
+
+  const calendarSupplementRange = useMemo(() => {
+    if (calendarView === 'day') return { startDate: calendarDate, endDate: calendarDate }
+    if (calendarView === 'week') {
+      const startDate = startOfWeekMonday(calendarDate)
+      return { startDate, endDate: addDays(startDate, 6) }
+    }
+    if (calendarView === 'month') {
+      const days = buildMonthDays(calendarDate)
+      return { startDate: days[0], endDate: days[days.length - 1] }
+    }
+    const year = dateFromString(calendarDate).getFullYear()
+    return { startDate: `${year}-01-01`, endDate: `${year}-12-31` }
+  }, [calendarDate, calendarView])
+
+  useEffect(() => {
+    document.documentElement.lang = uiLanguage === 'en' ? 'en' : 'zh-Hans'
+    void command('set_interface_language', uiLanguage).catch(() => {})
+  }, [uiLanguage])
 
   useEffect(() => {
     const page = pageContentRef.current
@@ -1036,32 +1303,25 @@ function App() {
   }, [activePage, calendarDate, calendarView, settings.almanacEnabled])
 
   useEffect(() => {
+    if (activePage !== 'calendar') return
     const anyDeadlineTypeEnabled = settings.competitionDeadlinesEnabled
       || settings.schoolContestNoticesEnabled
       || settings.summerCampDeadlinesEnabled
       || settings.hackathonDeadlinesEnabled
-    if (activePage !== 'calendar' || calendarView !== 'month' || !anyDeadlineTypeEnabled) return undefined
-    void loadDeadlines(calendarDate)
-    return () => {
-      deadlinesRevisionRef.current += 1
-    }
+    void loadCalendarSupplements(
+      calendarSupplementRange.startDate,
+      calendarSupplementRange.endDate,
+      anyDeadlineTypeEnabled,
+    )
   }, [
     activePage,
-    calendarDate,
-    calendarView,
+    calendarSupplementRange.endDate,
+    calendarSupplementRange.startDate,
     settings.competitionDeadlinesEnabled,
+    settings.hackathonDeadlinesEnabled,
     settings.schoolContestNoticesEnabled,
     settings.summerCampDeadlinesEnabled,
-    settings.hackathonDeadlinesEnabled,
   ])
-
-  useEffect(() => {
-    if (activePage !== 'calendar' || calendarView !== 'month') return undefined
-    void loadAssignments(calendarDate)
-    return () => {
-      assignmentsRevisionRef.current += 1
-    }
-  }, [activePage, calendarDate, calendarView])
 
   useEffect(() => {
     const todayVisible = calendarView === 'day'
@@ -1106,6 +1366,36 @@ function App() {
     [calendarHolidayItems],
   )
   const calendarItemsFor = (dateString) => calendarDayMap.get(dateString) || []
+  const schoolNoticeItemsFor = (dateString) => settings.schoolContestNoticesEnabled
+    ? (deadlinesByDate[dateString]?.items || []).filter((item) => item.source_type === 'school_notice')
+    : []
+  const supplementalEntriesFor = (dateString) => [
+    ...(assignmentsByDate[dateString]?.items || []).map((item) => ({
+      key: `assignment-${item.id}-${item.deadline}`,
+      type: 'assignment',
+      label: item.title,
+      subtitle: item.course_name || '',
+      time: deadlineClock(item.deadline, t('时间待定')),
+    })),
+    ...schoolNoticeItemsFor(dateString).map((item) => ({
+      key: `school-notice-${item.id}-${item.primary_deadline}`,
+      type: 'school-notice',
+      label: item.name,
+      subtitle: item.organizer || '',
+      time: deadlineClock(item.primary_deadline, t('时间待定')),
+      url: item.official_url || '',
+    })),
+  ]
+  const allDayEntriesFor = (dateString) => [
+    ...calendarItemsFor(dateString).map((item) => ({
+      key: `calendar-${item.type}-${item.name}`,
+      type: item.type,
+      label: `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`,
+      subtitle: '',
+      time: '',
+    })),
+    ...supplementalEntriesFor(dateString),
+  ]
   const plannerWeekState = useMemo(
     () => getWeekState(courses, activeTermStartDate, todayDate),
     [courses, activeTermStartDate, todayDate],
@@ -1163,20 +1453,27 @@ function App() {
     const year = dateFromString(calendarDate).getFullYear()
     return Array.from({ length: 12 }, (_, monthIndex) => ({
       monthIndex,
-      label: `${monthIndex + 1}月`,
+      label: uiLanguage === 'en'
+        ? new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(year, monthIndex, 1))
+        : `${monthIndex + 1}月`,
       days: buildMiniMonthDays(year, monthIndex),
     }))
-  }, [calendarDate])
+  }, [calendarDate, uiLanguage])
   const calendarDetailCourse = calendarWeekState.dayCourses[0] || null
   const calendarHeaderTitle = calendarView === 'week'
-    ? `${formatCalendarTitle(calendarDate, calendarView)} · ${formatTeachingWeek(calendarWeekState.weekNumber)}`
-    : formatCalendarTitle(calendarDate, calendarView)
+    ? `${formatUiCalendarTitle(calendarDate, calendarView, uiLanguage)} · ${formatUiTeachingWeek(calendarWeekState.weekNumber, uiLanguage)}`
+    : formatUiCalendarTitle(calendarDate, calendarView, uiLanguage)
   const visibleAllDayItems = useMemo(
     () => visibleCalendarDays.reduce(
-      (count, dateString) => count + (calendarDayMap.get(dateString) || []).length,
+      (count, dateString) => count
+        + (calendarDayMap.get(dateString) || []).length
+        + (assignmentsByDate[dateString]?.items || []).length
+        + (settings.schoolContestNoticesEnabled
+          ? (deadlinesByDate[dateString]?.items || []).filter((item) => item.source_type === 'school_notice').length
+          : 0),
       0,
     ),
-    [calendarDayMap, visibleCalendarDays],
+    [assignmentsByDate, calendarDayMap, deadlinesByDate, settings.schoolContestNoticesEnabled, visibleCalendarDays],
   )
   const calendarPopoverState = useMemo(() => (
     calendarPopover
@@ -1456,7 +1753,7 @@ function App() {
       monthExpanded,
       scrollTop: pageContentRef.current?.scrollTop || 0,
       scrollLocked: false,
-      blocked: Boolean(event.target.closest('input, select, textarea, a')),
+      blocked: Boolean(event.target.closest('input, select, textarea, a, .time-all-day-overflow')),
     }
   }
 
@@ -1466,6 +1763,7 @@ function App() {
     if (calendarView === 'year' || event.isPrimary === false) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
     if (event.target.closest('input, select, textarea, a')) return
+    if (event.target.closest('.time-all-day-overflow')) return
     if (event.target.closest('.time-course-block')) return
 
     calendarGestureRef.current = {
@@ -1869,10 +2167,10 @@ function App() {
     // A double-click fires two click events first; defer the single-click
     // action so the desktop double-click (open month view) wins cleanly.
     if (!compactCalendarLayout) {
+      const point = { clientX: event.clientX, clientY: event.clientY }
       window.clearTimeout(yearClickTimerRef.current)
       yearClickTimerRef.current = window.setTimeout(() => {
-        setCalendarDate(dateString)
-        setCalendarPopover(null)
+        openYearDayPopover(point, dateString)
       }, 250)
       return
     }
@@ -1882,6 +2180,7 @@ function App() {
   function openDesktopYearMonth(event, dateString) {
     if (compactCalendarLayout) return
     event.preventDefault()
+    window.clearTimeout(yearClickTimerRef.current)
     startCalendarMotion('previous')
     setCalendarDate(dateString)
     setCalendarView('month')
@@ -2037,6 +2336,106 @@ function App() {
     }
   }
 
+  async function loadCalendarSupplements(startDate, endDate, includeDeadlines) {
+    const rangeDates = datesInRange(startDate, endDate)
+    if (!rangeDates.length) return
+    const accountDataRevision = localDataClearRevision.current
+    const accountScopeKey = savedCredentialState.current.account || settings.account.trim() || 'anonymous'
+    const assignmentKey = `assignments:${accountScopeKey}:${startDate}:${endDate}`
+    const deadlineKey = `deadlines:${startDate}:${endDate}`
+    const selectedDateInRange = calendarDate >= startDate && calendarDate <= endDate
+    const tasks = []
+
+    if (!requestedCalendarSupplementRanges.current.has(assignmentKey)) {
+      requestedCalendarSupplementRanges.current.add(assignmentKey)
+      if (selectedDateInRange) setAssignmentsLoadingDate(calendarDate)
+      tasks.push(command('fetch_assignment_calendar', {
+        start_date: startDate,
+        end_date: endDate,
+      }).then((data) => {
+        if (accountDataRevision !== localDataClearRevision.current) return
+        const itemsByDate = new Map()
+        ;(data?.items || []).forEach((item) => {
+          const date = datePart(item.deadline)
+          if (!itemsByDate.has(date)) itemsByDate.set(date, [])
+          itemsByDate.get(date).push(item)
+        })
+        setAssignmentsByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => {
+            next[date] = {
+              date,
+              source: data.source,
+              items: itemsByDate.get(date) || [],
+              unavailable_reason: null,
+            }
+          })
+          return next
+        })
+        setAssignmentsErrorByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => { next[date] = '' })
+          return next
+        })
+      }).catch((assignmentError) => {
+        requestedCalendarSupplementRanges.current.delete(assignmentKey)
+        if (accountDataRevision !== localDataClearRevision.current) return
+        setAssignmentsErrorByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => { next[date] = assignmentError.message })
+          return next
+        })
+      }).finally(() => {
+        if (selectedDateInRange) setAssignmentsLoadingDate('')
+      }))
+    }
+
+    if (includeDeadlines && !requestedCalendarSupplementRanges.current.has(deadlineKey)) {
+      requestedCalendarSupplementRanges.current.add(deadlineKey)
+      if (selectedDateInRange) setDeadlinesLoadingDate(calendarDate)
+      tasks.push(command('fetch_deadline_calendar', {
+        start_date: startDate,
+        end_date: endDate,
+      }).then((data) => {
+        const itemsByDate = new Map()
+        ;(data?.items || []).forEach((item) => {
+          const date = datePart(item.primary_deadline)
+          if (!itemsByDate.has(date)) itemsByDate.set(date, [])
+          itemsByDate.get(date).push(item)
+        })
+        setDeadlinesByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => {
+            next[date] = {
+              date,
+              fetched_at: data.fetched_at,
+              source: data.source,
+              used_backup: data.used_backup,
+              items: itemsByDate.get(date) || [],
+            }
+          })
+          return next
+        })
+        setDeadlinesErrorByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => { next[date] = '' })
+          return next
+        })
+      }).catch((deadlineError) => {
+        requestedCalendarSupplementRanges.current.delete(deadlineKey)
+        setDeadlinesErrorByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => { next[date] = deadlineError.message })
+          return next
+        })
+      }).finally(() => {
+        if (selectedDateInRange) setDeadlinesLoadingDate('')
+      }))
+    }
+
+    await Promise.allSettled(tasks)
+  }
+
   async function importSystemCalendar() {
     if (settingsSaving) return
     await runTask('calendar-import', async () => {
@@ -2073,6 +2472,7 @@ function App() {
 
   function clearAccountScopedViewState() {
     assignmentsRevisionRef.current += 1
+    requestedCalendarSupplementRanges.current.clear()
     setSchedule(null)
     setClassroomsCache(null)
     setAssignmentsByDate({})
@@ -2086,25 +2486,25 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" lang={uiLanguage === 'en' ? 'en' : 'zh-Hans'}>
       <div className="app-frame">
         <aside className="side-nav">
           <div className="side-brand">
             <p className="eyebrow">BUPT</p>
             <strong>Where To Study</strong>
           </div>
-          <nav className="app-nav" aria-label="应用导航">
+          <nav className="app-nav" aria-label={t('应用导航')}>
             {NAV_ITEMS.map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
                 className={activePage === id ? 'active' : ''}
                 onClick={() => setActivePage(id)}
-                aria-label={label}
-                title={label}
+                aria-label={t(label)}
+                title={t(label)}
               >
                 <Icon size={17} />
-                <span className="nav-label">{label}</span>
+                <span className="nav-label">{t(label)}</span>
               </button>
             ))}
           </nav>
@@ -2118,11 +2518,11 @@ function App() {
           <header className={`topbar ${activePage}-topbar`}>
             <div>
               <p className="eyebrow">{activePage === 'calendar' ? 'BUPT Classroom Planner' : 'Where To Study'}</p>
-              <h1>{activePage === 'calendar' ? calendarHeaderTitle : activePage === 'settings' ? '设置' : '联动查询'}</h1>
+              <h1>{activePage === 'calendar' ? calendarHeaderTitle : activePage === 'settings' ? t('设置') : t('联动查询')}</h1>
             </div>
             {activePage === 'calendar' ? (
               <div className="calendar-toolbar-actions">
-                <div className="calendar-view-switch" aria-label="日历视图">
+                <div className="calendar-view-switch" aria-label={t('日历视图')}>
                   {CALENDAR_VIEWS.map((view) => (
                     <button
                       key={view.id}
@@ -2130,7 +2530,7 @@ function App() {
                       className={calendarView === view.id ? 'active' : ''}
                       onClick={() => chooseCalendarView(view.id)}
                     >
-                      {view.label}
+                      {t(view.label)}
                     </button>
                   ))}
                 </div>
@@ -2146,7 +2546,7 @@ function App() {
           {error ? (
             <div className="notice error">
               <AlertTriangle size={18} />
-              <span>{error}</span>
+              <span>{t(error)}</span>
             </div>
           ) : null}
 
@@ -2158,6 +2558,8 @@ function App() {
             loading={weatherLoading}
             error={weatherError}
             onRetry={() => loadWeather(queryCampusId)}
+            language={uiLanguage}
+            t={t}
           />
         ) : null}
         <div className="workspace planner-workspace">
@@ -2165,9 +2567,9 @@ function App() {
             <section className="panel planner-query-panel">
               <div className="panel-title">
                 <CalendarDays size={18} />
-                <h2>查询条件</h2>
+                <h2>{t('查询条件')}</h2>
               </div>
-              <div className="campus-options" aria-label="查询校区">
+              <div className="campus-options" aria-label={t('查询校区')}>
                 {(metadata.campuses || []).map((campus) => (
                   <button
                     key={campus.id}
@@ -2189,11 +2591,11 @@ function App() {
                 disabled={settingsSaving || !!loading}
               >
                 {loading === 'classrooms' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-                {loading === 'classrooms' ? '正在获取当天空教室…' : '获取空教室信息'}
+                {loading === 'classrooms' ? t('正在获取当天空教室…') : t('获取空教室信息')}
               </button>
               {classrooms?.provider ? (
                 <p className="planner-source-note">
-                  数据源：{classrooms.provider === 'sjd' ? '移动教务实时接口' : classrooms.provider === 'jray_public' ? 'Jraaay 公共实时数据' : '微信教务实时接口'} · {classroomsCache?.target_date || todayDate}
+                  {t('数据源')}：{t(classrooms.provider === 'sjd' ? '移动教务实时接口' : classrooms.provider === 'jray_public' ? 'Jraaay 公共实时数据' : '微信教务实时接口')} · {classroomsCache?.target_date || todayDate}
                 </p>
               ) : null}
             </section>
@@ -2203,6 +2605,7 @@ function App() {
               dayCoursesCount={plannerWeekState.dayCourses.length}
               freeSlotsCount={freeSlots.length}
               matchingRoomsCount={needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}
+              t={t}
             />
 
           </aside>
@@ -2211,10 +2614,10 @@ function App() {
             <section className="panel wide planner-slot-panel">
               <div className="panel-title">
                 <Clock3 size={18} />
-                <h2>节次筛选</h2>
+                <h2>{t('节次筛选')}</h2>
               </div>
               <label className="planner-switch-row">
-                <span>使用个人课表排除已有课程</span>
+                <span>{t('使用个人课表排除已有课程')}</span>
                 <input
                   type="checkbox"
                   checked={usePersonalSchedule}
@@ -2229,7 +2632,7 @@ function App() {
                     setSelectedSlots(freeSlots)
                   }}
                 >
-                  选中空闲
+                  {t('选中空闲')}
                 </button>
                 <button
                   type="button"
@@ -2237,7 +2640,7 @@ function App() {
                     setSelectedSlots([])
                   }}
                 >
-                  清空
+                  {t('清空')}
                 </button>
               </div>
               <div className="slot-grid">
@@ -2252,39 +2655,39 @@ function App() {
                       className={`slot-cell ${busy ? 'busy' : 'free'} ${selected ? 'selected' : ''}`}
                       onClick={() => !busy && toggleSlot(slot.index)}
                       disabled={busy}
-                      title={busy ? '个人课表占用' : personalCourseSlot ? '个人课程时间，已纳入筛选' : '个人空闲，可筛选教室'}
+                      title={busy ? t('个人课表占用') : personalCourseSlot ? t('个人课程时间，已纳入筛选') : t('个人空闲，可筛选教室')}
                     >
-                      <span>第 {slot.label} 节</span>
+                      <span>{uiLanguage === 'en' ? `Period ${slot.label}` : `第 ${slot.label} 节`}</span>
                       <small>{slot.start}-{slot.end}</small>
                     </button>
                   )
                 })}
               </div>
               <p className="muted">
-                {formatTeachingWeek(plannerWeekState.weekNumber)}，选中范围：
-                {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : '未选择'}
+                {formatUiTeachingWeek(plannerWeekState.weekNumber, uiLanguage)} · {uiLanguage === 'en' ? 'Selected: ' : '选中范围：'}
+                {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : t('未选择')}
               </p>
             </section>
 
             <section className="panel planner-courses-panel">
               <div className="panel-title">
                 <CalendarDays size={18} />
-                <h2>当天课程</h2>
+                <h2>{t('当天课程')}</h2>
               </div>
               <div className="course-list">
                 {plannerWeekState.dayCourses.length ? plannerWeekState.dayCourses.map((course) => (
                   <article key={course.id} className="course-row">
                     <div>
-                      <strong><CourseName course={course} /></strong>
-                      <span>{course.teacher || '教师未标注'}</span>
+                      <strong><CourseName course={course} t={t} /></strong>
+                      <span>{course.teacher || t('教师未标注')}</span>
                     </div>
                     <div>
                       <span>{course.time_range}</span>
-                      <span>{course.room || '地点未标注'}</span>
+                      <span>{course.room || t('地点未标注')}</span>
                     </div>
                   </article>
                 )) : (
-                  <div className="empty-state">暂无课程</div>
+                  <div className="empty-state">{t('暂无课程')}</div>
                 )}
               </div>
             </section>
@@ -2292,7 +2695,7 @@ function App() {
             <section className="panel planner-buildings-panel">
               <div className="panel-title">
                 <Building2 size={18} />
-                <h2>教学楼</h2>
+                <h2>{t('教学楼')}</h2>
               </div>
               <div className="building-list">
                 {buildings.length ? buildings.map((building) => (
@@ -2305,31 +2708,31 @@ function App() {
                     <MapPin size={15} />
                     {displayBuildingName(building)}
                   </button>
-                )) : <div className="empty-state">暂无教学楼</div>}
+                )) : <div className="empty-state">{t('暂无教学楼')}</div>}
               </div>
             </section>
 
             <section className="panel wide planner-results-panel">
               <div className="panel-title">
                 <CheckCircle2 size={18} />
-                <h2>空教室结果</h2>
+                <h2>{t('空教室结果')}</h2>
               </div>
               <div className="room-list">
                 {needsBuildingSelection ? (
-                  <div className="empty-state">未选择教学楼</div>
+                  <div className="empty-state">{t('未选择教学楼')}</div>
                 ) : needsSlotSelection ? (
-                  <div className="empty-state">未选择节次</div>
+                  <div className="empty-state">{t('未选择节次')}</div>
                 ) : (
                   filteredRooms.length ? filteredRooms.slice(0, 80).map((room) => (
                     <article key={room.id} className="room-card">
                       <div>
                         <strong>{displayBuildingName(room.name)}</strong>
-                        <span>{room.size ? `${room.size} 座` : '座位未知'}</span>
+                        <span>{room.size ? (uiLanguage === 'en' ? `${room.size} seats` : `${room.size} 座`) : t('座位未知')}</span>
                       </div>
                       <p>{slotsToRanges(room.available_slots.filter((slot) => selectedSlots.includes(slot)), slotMeta).map((range) => range.label).join(' / ')}</p>
                     </article>
                   )) : (
-                    <div className="empty-state">暂无匹配空教室</div>
+                    <div className="empty-state">{t('暂无匹配空教室')}</div>
                   )
                 )}
               </div>
@@ -2341,6 +2744,7 @@ function App() {
             dayCoursesCount={plannerWeekState.dayCourses.length}
             freeSlotsCount={freeSlots.length}
             matchingRoomsCount={needsBuildingSelection || needsSlotSelection ? 0 : filteredRooms.length}
+            t={t}
           />
         </div>
         </>
@@ -2352,7 +2756,7 @@ function App() {
             className={`teaching-calendar-layout ${calendarView === 'month' && compactCalendarLayout ? 'month-gesture-surface' : ''}`}
             role={calendarView === 'month' && compactCalendarLayout ? 'region' : undefined}
             tabIndex={calendarView === 'month' && compactCalendarLayout ? 0 : undefined}
-            aria-label={calendarView === 'month' && compactCalendarLayout ? '月历，下拉或按下方向键展开，上拉或按上方向键收起' : undefined}
+            aria-label={calendarView === 'month' && compactCalendarLayout ? t('月历') : undefined}
             aria-expanded={calendarView === 'month' && compactCalendarLayout ? monthExpanded : undefined}
             onKeyDown={calendarView === 'month' && compactCalendarLayout ? handleMonthCalendarKeyDown : undefined}
           >
@@ -2368,13 +2772,13 @@ function App() {
                   setMonthExpanded((current) => !current)
                 }}
               >
-                {monthExpanded ? '收起月历' : '展开月历'}
+                {monthExpanded ? t('收起月历') : t('展开月历')}
               </button>
             ) : null}
             <section className="teaching-calendar-main">
               <div className="calendar-action-strip">
                 <div className="calendar-navigation-actions">
-                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label="上一段">‹</button>
+                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label={t('上一段')}>‹</button>
                   <input
                     type="date"
                     value={calendarDate}
@@ -2382,24 +2786,24 @@ function App() {
                     max="2030-12-31"
                     onChange={chooseCalendarDateFromInput}
                   />
-                  <button type="button" className="calendar-today-button" onClick={() => chooseCalendarDate(todayDate)}>今天</button>
-                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label="下一段">›</button>
+                  <button type="button" className="calendar-today-button" onClick={() => chooseCalendarDate(todayDate)}>{t('今天')}</button>
+                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label={t('下一段')}>›</button>
                 </div>
                 <div className="calendar-data-actions">
                   <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
                     {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-                    获取/刷新个人课表
+                    {t('获取/刷新个人课表')}
                   </button>
                   {metadata.supports_calendar_import ? (
                     <button type="button" onClick={importSystemCalendar} disabled={settingsSaving || !!loading || !courses.length}>
                       {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
-                      导入苹果日历
+                      {t('导入苹果日历')}
                     </button>
                   ) : null}
                 </div>
               </div>
               {calendarImportedPath ? (
-                <p className="calendar-export-note">已生成日历文件并打开苹果日历：{calendarImportedPath}</p>
+                <p className="calendar-export-note">{t('已生成日历文件并打开苹果日历：')}{calendarImportedPath}</p>
               ) : null}
 
               <div ref={calendarTransitionHostRef} className="calendar-transition-host">
@@ -2426,12 +2830,12 @@ function App() {
                           key={`head-${dateString}`}
                           type="button"
                           className={`time-day-head ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
-                          aria-label={`${date.getMonth() + 1}月${date.getDate()}日，${dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}`}
+                          aria-label={`${formatUiCourseDate(dateString, uiLanguage)} · ${dayState.dayCourses.length ? (uiLanguage === 'en' ? `${dayState.dayCourses.length} courses` : `${dayState.dayCourses.length} 门课`) : t('无课程')}`}
                           onClick={() => chooseCalendarDate(dateString)}
                         >
-                          <span>{CALENDAR_WEEKDAYS[(date.getDay() + 6) % 7]}</span>
+                          <span>{uiWeekdayLabels[(date.getDay() + 6) % 7]}</span>
                           <strong data-mobile-day={date.getDate()}>{date.getMonth() + 1}/{date.getDate()}</strong>
-                          <small>{dayState.dayCourses.length ? `${dayState.dayCourses.length} 门课` : '无课程'}</small>
+                          <small>{dayState.dayCourses.length ? (uiLanguage === 'en' ? `${dayState.dayCourses.length} courses` : `${dayState.dayCourses.length} 门课`) : t('无课程')}</small>
                           {dayState.dayCourses.length ? (
                             <div className="calendar-day-tags">
                               <i aria-hidden="true" />
@@ -2442,16 +2846,27 @@ function App() {
                     })}
                     {visibleAllDayItems ? (
                       <>
-                        <div className="time-all-day-label">全天</div>
-                        {visibleCalendarDays.map((dateString) => (
-                          <div key={`all-day-${dateString}`} className="time-all-day-cell">
-                            {calendarItemsFor(dateString).map((item) => (
-                              <span key={`${dateString}-${item.type}-${item.name}`} className={item.type}>
-                                {item.type === 'holiday' ? '休' : '班'} {item.name}
-                              </span>
-                            ))}
-                          </div>
-                        ))}
+                        <div className="time-all-day-label">{t('全天')}</div>
+                        {visibleCalendarDays.map((dateString) => {
+                          const summary = summarizeMonthEntries(allDayEntriesFor(dateString), 2)
+                          return (
+                            <div key={`all-day-${dateString}`} className="time-all-day-cell">
+                              {summary.visible.map((item) => (
+                                <span key={`${dateString}-${item.key}`} className={item.type} title={item.label}>
+                                  {item.type === 'assignment' ? `${t('作')} ` : item.type === 'school-notice' ? `${t('赛')} ` : ''}{item.label}
+                                </span>
+                              ))}
+                              {summary.hiddenCount ? (
+                                <button
+                                  type="button"
+                                  className="time-all-day-overflow"
+                                  aria-label={uiLanguage === 'en' ? `${summary.hiddenCount} more all-day events on ${dateString}` : `${dateString} 还有 ${summary.hiddenCount} 项全天日程`}
+                                  onClick={() => setCalendarAgendaDialog({ date: dateString })}
+                                >+{summary.hiddenCount}</button>
+                              ) : null}
+                            </div>
+                          )
+                        })}
                       </>
                     ) : null}
                     <div className="time-labels">
@@ -2468,7 +2883,7 @@ function App() {
                         const height = Math.max(((end - start) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100, 4)
                         return (
                           <span key={slot.index} style={{ top: `${top}%`, height: `${height}%` }}>
-                            <strong>第 {slot.label} 节</strong>
+                            <strong>{uiLanguage === 'en' ? `Period ${slot.label}` : `第 ${slot.label} 节`}</strong>
                             <small>{slot.start}-{slot.end}</small>
                           </span>
                         )
@@ -2505,14 +2920,14 @@ function App() {
                                   type="button"
                                   className="time-course-block"
                                   style={{ top: `${top}%`, height: `${height}%` }}
-                                  title={`${course.name} · ${bounds.start}-${bounds.end} · ${course.room || '地点未标注'}`}
+                                  title={`${course.name} · ${bounds.start}-${bounds.end} · ${course.room || t('地点未标注')}`}
                                   onClick={() => chooseCalendarDate(dateString)}
                                 >
-                                  <strong><CourseName course={course} /></strong>
+                                  <strong><CourseName course={course} t={t} /></strong>
                                   <span className="course-block-time">{bounds.start}-{bounds.end}</span>
                                   <small className="course-block-place">
-                                    <span>{course.room || '地点未标注'}</span>
-                                    <span>{course.teacher || '教师未标注'}</span>
+                                    <span>{course.room || t('地点未标注')}</span>
+                                    <span>{course.teacher || t('教师未标注')}</span>
                                   </small>
                                 </button>
                               )
@@ -2537,26 +2952,32 @@ function App() {
                     <div
                       id="teaching-month-calendar"
                       className="calendar-swipe-surface month-calendar"
-                      aria-label={compactCalendarLayout ? `${monthExpanded ? '展开' : '收起'}的月历，下拉展开，上拉收起` : '月历'}
+                      aria-label={t('月历')}
                       aria-expanded={compactCalendarLayout ? monthExpanded : undefined}
                     >
-                      {CALENDAR_WEEKDAYS.map((label) => <span key={label} className="month-weekday">{label}</span>)}
+                      {uiWeekdayLabels.map((label) => <span key={label} className="month-weekday">{label}</span>)}
                       {visibleCalendarDays.map((dateString) => {
                         const date = dateFromString(dateString)
                         const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()
                         const dayState = getWeekState(courses, activeTermStartDate, dateString)
                         const calendarItems = calendarItemsFor(dateString)
-                        const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length, 3)
+                        const supplementalEntries = supplementalEntriesFor(dateString)
+                        const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length + supplementalEntries.length, 3)
                         const monthEntries = [
                           ...calendarItems.map((item) => ({
                             key: `${dateString}-${item.type}-${item.name}`,
-                            label: `${item.type === 'holiday' ? '休' : '班'} ${item.name}`,
+                            label: `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`,
                             type: item.type,
                           })),
                           ...dayState.dayCourses.map((course) => ({
                             key: `${dateString}-${course.id}`,
-                            label: `${course.is_exam ? '试 ' : ''}${course.name}`,
+                            label: `${course.is_exam ? `${t('试')} ` : ''}${course.name}`,
                             type: 'course',
+                          })),
+                          ...supplementalEntries.map((item) => ({
+                            ...item,
+                            key: `${dateString}-${item.key}`,
+                            label: `${t(item.type === 'assignment' ? '作' : '赛')} ${item.label}`,
                           })),
                         ]
                         const monthEntrySummary = summarizeMonthEntries(monthEntries)
@@ -2564,7 +2985,7 @@ function App() {
                           <button
                             key={dateString}
                             type="button"
-                            className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length ? 'has-calendar-item' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                            className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length || supplementalEntries.length ? 'has-calendar-item' : ''} ${supplementalEntries.length ? 'has-supplement' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
                             onClick={() => chooseCalendarDate(dateString)}
                           >
                             <span>{date.getDate()}</span>
@@ -2593,7 +3014,7 @@ function App() {
                       <button
                         type="button"
                         className="month-expansion-handle"
-                        aria-label={monthExpanded ? '收起月历' : '展开月历'}
+                        aria-label={monthExpanded ? t('收起月历') : t('展开月历')}
                         aria-controls="teaching-month-calendar"
                         aria-expanded={monthExpanded}
                         onClick={() => {
@@ -2605,13 +3026,14 @@ function App() {
                       </button>
                     ) : null}
                     <div className="month-detail-stack">
-                      <SelectedDaySchedule date={calendarDate} weekState={calendarWeekState} slotMeta={slotMeta} />
+                      <SelectedDaySchedule date={calendarDate} weekState={calendarWeekState} slotMeta={slotMeta} language={uiLanguage} t={t} />
                       <AssignmentDeadlineCard
                         date={calendarDate}
                         response={assignmentsByDate[calendarDate]}
                         loading={assignmentsLoadingDate === calendarDate}
                         error={assignmentsErrorByDate[calendarDate] || ''}
                         onRetry={() => loadAssignments(calendarDate, true)}
+                        t={t}
                       />
                       {settings.almanacEnabled ? (
                         <AlmanacCard
@@ -2620,6 +3042,7 @@ function App() {
                           loading={almanacLoadingDate === calendarDate}
                           error={almanacErrorByDate[calendarDate] || ''}
                           onRetry={() => loadAlmanac(calendarDate, true)}
+                          t={t}
                         />
                       ) : null}
                       {settings.competitionDeadlinesEnabled
@@ -2638,6 +3061,7 @@ function App() {
                               hackathon: settings.hackathonDeadlinesEnabled,
                             }}
                             onRetry={() => loadDeadlines(calendarDate, true)}
+                            t={t}
                           />
                         ) : null}
                     </div>
@@ -2654,7 +3078,7 @@ function App() {
                       <section key={month.monthIndex} className="year-month">
                         <h3>{month.label}</h3>
                         <div className="mini-month-head">
-                          {CALENDAR_WEEKDAYS.map((label) => <span key={label}>{label}</span>)}
+                          {uiWeekdayLabels.map((label) => <span key={label}>{label}</span>)}
                         </div>
                         <div className="mini-month-grid">
                           {month.days.map((dateString) => {
@@ -2664,21 +3088,29 @@ function App() {
                             const courseCount = currentMonth ? state.dayCourses.length : 0
                             const courseOpacity = yearCourseOpacity(courseCount)
                             const calendarItems = currentMonth ? calendarItemsFor(dateString) : []
+                            const supplementalEntries = currentMonth ? supplementalEntriesFor(dateString) : []
                             const hasHoliday = hasCalendarItemType(calendarItems, 'holiday')
                             const hasWorkday = hasCalendarItemType(calendarItems, 'workday')
+                            const hasAssignment = supplementalEntries.some((item) => item.type === 'assignment')
+                            const hasSchoolNotice = supplementalEntries.some((item) => item.type === 'school-notice')
                             return (
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${currentMonth && (compactCalendarLayout ? calendarPopover?.date === dateString : calendarDate === dateString) ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
                                 style={courseCount ? { '--course-load-opacity': courseOpacity } : null}
-                                title={calendarItems.map((item) => `${item.type === 'holiday' ? '休' : '班'} ${item.name}`).join(' / ')}
+                                title={[
+                                  ...calendarItems.map((item) => `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`),
+                                  ...supplementalEntries.map((item) => `${item.type === 'assignment' ? (uiLanguage === 'en' ? 'Assignment' : '作业') : t('校内竞赛通知')} ${item.label}`),
+                                ].join(' / ')}
                                 onClick={(event) => currentMonth && selectYearDate(event, dateString)}
                                 onDoubleClick={(event) => currentMonth && openDesktopYearMonth(event, dateString)}
                               >
                                 <span>{date.getDate()}</span>
-                                {hasHoliday ? <em>休</em> : null}
-                                {hasWorkday ? <em className="workday">班</em> : null}
+                                {hasHoliday ? <em>{uiLanguage === 'en' ? 'O' : t('休')}</em> : null}
+                                {hasWorkday ? <em className="workday">{uiLanguage === 'en' ? 'W' : t('班')}</em> : null}
+                                {hasAssignment ? <em className="assignment">{t('作')}</em> : null}
+                                {hasSchoolNotice ? <em className="school-notice">{t('赛')}</em> : null}
                               </button>
                             )
                           })}
@@ -2688,24 +3120,40 @@ function App() {
                   </div>
                 ) : null}
               </div>
-                {compactCalendarLayout && calendarView === 'year' && calendarPopover && calendarPopoverState ? (
+                {calendarView === 'year' && calendarPopover && calendarPopoverState ? (
                   <div
                     ref={calendarPopoverRef}
                     className="year-day-popover"
                     style={{ left: calendarPopover.x, top: calendarPopover.y }}
                     role="dialog"
-                    aria-label={`${formatCourseDate(calendarPopover.date)} 日程`}
+                    aria-label={`${formatUiCourseDate(calendarPopover.date, uiLanguage)} ${t('全天日程')}`}
                   >
-                    <span>{formatCourseDate(calendarPopover.date)}</span>
-                    <strong>{calendarPopoverState.dayCourses.length} 门课</strong>
-                    <small>{formatTeachingWeek(calendarPopoverState.weekNumber)}</small>
+                    <span>{formatUiCourseDate(calendarPopover.date, uiLanguage)}</span>
+                    <strong>{uiLanguage === 'en' ? `${calendarPopoverState.dayCourses.length} courses` : `${calendarPopoverState.dayCourses.length} 门课`}</strong>
+                    <small>{formatUiTeachingWeek(calendarPopoverState.weekNumber, uiLanguage)}</small>
                     {calendarItemsFor(calendarPopover.date).length ? (
                       <div className="popover-holiday-list">
                         {calendarItemsFor(calendarPopover.date).map((item) => (
                           <span key={`${calendarPopover.date}-${item.type}-${item.name}`} className={item.type}>
-                            {item.type === 'holiday' ? '休' : '班'} {item.name}
+                            {t(item.type === 'holiday' ? '休' : '班')} {item.name}
                           </span>
                         ))}
+                      </div>
+                    ) : null}
+                    {supplementalEntriesFor(calendarPopover.date).length ? (
+                      <div className="popover-supplement-list">
+                        {supplementalEntriesFor(calendarPopover.date).map((item) => {
+                          const content = (
+                            <>
+                              <strong>{item.type === 'assignment' ? (uiLanguage === 'en' ? 'Assignment' : '作业') : t('校内竞赛通知')} · {item.label}</strong>
+                              <span>{item.subtitle || t('信息未标注')}</span>
+                              <small>{item.time || t('时间待定')}</small>
+                            </>
+                          )
+                          return item.url ? (
+                            <a key={item.key} href={item.url} target="_blank" rel="noreferrer" className={item.type}>{content}</a>
+                          ) : <article key={item.key} className={item.type}>{content}</article>
+                        })}
                       </div>
                     ) : null}
                     <div className="popover-course-list">
@@ -2713,19 +3161,19 @@ function App() {
                         const bounds = courseTimeBounds(course, slotMeta)
                         return (
                           <article key={`${calendarPopover.date}-${course.id}`}>
-                            <strong><CourseName course={course} /></strong>
+                            <strong><CourseName course={course} t={t} /></strong>
                             <span>{bounds.start}-{bounds.end}</span>
-                            <small>{course.room || '地点未标注'}</small>
+                            <small>{course.room || t('地点未标注')}</small>
                           </article>
                         )
                       }) : (
-                        <p>当天没有课程</p>
+                        <p>{t('当天没有课程')}</p>
                       )}
                     </div>
-                    <div className="popover-view-actions" aria-label="打开所选日期">
-                      <button type="button" onClick={() => jumpFromYearPopover('day')}>查看日</button>
-                      <button type="button" onClick={() => jumpFromYearPopover('week')}>查看周</button>
-                      <button type="button" onClick={() => jumpFromYearPopover('month')}>查看月</button>
+                    <div className="popover-view-actions" aria-label={t('打开所选日期')}>
+                      <button type="button" onClick={() => jumpFromYearPopover('day')}>{t('查看日')}</button>
+                      <button type="button" onClick={() => jumpFromYearPopover('week')}>{t('查看周')}</button>
+                      <button type="button" onClick={() => jumpFromYearPopover('month')}>{t('查看月')}</button>
                     </div>
                   </div>
                 ) : null}
@@ -2738,36 +3186,53 @@ function App() {
 
           {activePage === 'settings' ? (
         <section className="settings-layout">
-          <section className="panel settings-reference-notice" aria-label="数据参考提示">
-            <strong>显示数据仅供参考，请以实际情况为准。</strong>
-            <span>Displayed data is for reference only; please rely on the actual official information.</span>
+          <section className="panel settings-reference-notice" aria-label={t('数据参考提示')}>
+            <strong>{t('显示数据仅供参考，请以实际情况为准。')}</strong>
+            <span>{uiLanguage === 'en' ? '显示数据仅供参考，请以实际情况为准。' : 'Displayed data is for reference only; please rely on the actual official information.'}</span>
           </section>
           <div className="settings-column settings-primary-column">
+            <section className="panel settings-language">
+              <div className="panel-title"><Settings size={18} /><h2>{t('界面语言')}</h2></div>
+              <div className="language-options" role="group" aria-label={t('界面语言')}>
+                {[
+                  ['system', t('跟随系统')],
+                  ['zh-Hans', t('简体中文')],
+                  ['en', 'English'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={settings.uiLanguage === value ? 'active' : ''}
+                    onClick={() => updateSetting('uiLanguage', value)}
+                  >{label}</button>
+                ))}
+              </div>
+            </section>
             <section className="panel">
-              <div className="panel-title"><KeyRound size={18} /><h2>个人账号</h2></div>
+              <div className="panel-title"><KeyRound size={18} /><h2>{t('个人账号')}</h2></div>
               <label>
-                学号
+                {t('学号')}
                 <input
                   value={settings.account}
                   onChange={(event) => updateSetting('account', event.target.value)}
                   onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentSettings() }}
                   inputMode="numeric"
-                  placeholder="请输入教务学号"
+                  placeholder={t('请输入教务学号')}
                 />
               </label>
               <label>
-                教务密码
+                {t('教务密码')}
                 <input
                   value={settings.password}
                   onChange={(event) => updateSetting('password', event.target.value)}
                   onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentSettings() }}
                   type="password"
-                  placeholder={settings.hasSavedPassword ? '已安全保存，留空保持不变' : '输入后保存到系统凭据存储'}
+                  placeholder={settings.hasSavedPassword ? t('已安全保存，留空保持不变') : t('输入后保存到系统凭据存储')}
                   autoComplete="new-password"
                 />
               </label>
               <div className="field-group">
-                默认校区
+                {t('默认校区')}
                 <div className="campus-options">
                   {(metadata.campuses || []).map((campus) => (
                     <button
@@ -2782,18 +3247,18 @@ function App() {
                 </div>
               </div>
               <button type="button" className="primary settings-full-button" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
-                {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />} 保存设置
+                {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />} {t('保存设置')}
               </button>
               <button type="button" className="secondary settings-full-button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
-                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />} 获取/刷新个人课表
+                {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />} {t('获取/刷新个人课表')}
               </button>
-              {settingsSaved ? <span className="settings-saved-note">已保存</span> : null}
+              {settingsSaved ? <span className="settings-saved-note">{t('已保存')}</span> : null}
             </section>
 
             <section className="panel">
-              <div className="panel-title"><CalendarDays size={18} /><h2>学期设置</h2></div>
+              <div className="panel-title"><CalendarDays size={18} /><h2>{t('学期设置')}</h2></div>
               <div className="settings-switch-row compact-switch-row">
-                <strong>自动检测当前学期</strong>
+                <strong>{t('自动检测当前学期')}</strong>
                 <button
                   type="button"
                   className="settings-switch"
@@ -2803,7 +3268,7 @@ function App() {
                 ><span aria-hidden="true" /></button>
               </div>
               <label>
-                学期编号
+                {t('学期编号')}
                 <input
                   value={settings.termId}
                   disabled={settings.automaticTermDetectionEnabled}
@@ -2811,7 +3276,7 @@ function App() {
                 />
               </label>
               <label>
-                第一周周一
+                {t('第一周周一')}
                 <input
                   type="date"
                   value={settings.termStartDate}
@@ -2823,8 +3288,8 @@ function App() {
               </label>
               <p className="term-detect-note">
                 {settings.automaticTermDetectionEnabled
-                  ? '获取/刷新课表后会自动应用教务返回的学期与开学日期。'
-                  : '已关闭自动检测，将使用上方手动填写的学期信息。'}
+                  ? t('获取/刷新课表后会自动应用教务返回的学期与开学日期。')
+                  : t('已关闭自动检测，将使用上方手动填写的学期信息。')}
               </p>
               {!settings.automaticTermDetectionEnabled ? (
                 <div className="mini-actions term-detect-actions">
@@ -2832,41 +3297,41 @@ function App() {
                     const suggested = suggestTermForDate()
                     updateSetting('termId', suggested.termId)
                     updateSetting('termStartDate', suggested.termStartDate)
-                  }}><CalendarDays size={15} />按当前日期填写</button>
+                  }}><CalendarDays size={15} />{t('按当前日期填写')}</button>
                   {termMatchesCurrentPeriod(settings.termId, settings.termStartDate) ? (
-                    <span className="term-detect-ok">✓ 与当前学期一致</span>
+                    <span className="term-detect-ok">{t('✓ 与当前学期一致')}</span>
                   ) : isValidTermId(settings.termId) && isValidTermStartDate(settings.termStartDate) ? (
-                    <span className="term-detect-hint">当前设置与检测结果不同</span>
+                    <span className="term-detect-hint">{t('当前设置与检测结果不同')}</span>
                   ) : null}
                 </div>
               ) : null}
               <button type="button" className="secondary settings-full-button" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
-                <CheckCircle2 size={17} /> 保存学期设置
+                <CheckCircle2 size={17} /> {t('保存学期设置')}
               </button>
             </section>
           </div>
 
           <div className="settings-column settings-secondary-column">
             <section className="panel settings-reminder">
-              <div className="panel-title"><BellRing size={18} /><h2>课程提醒</h2></div>
+              <div className="panel-title"><BellRing size={18} /><h2>{t('课程提醒')}</h2></div>
               <div className="settings-switch-row">
                 <div>
-                  <strong>每天 07:30 发送当日课程摘要</strong>
-                  <span>仅在当天有课时发送；课表更新或账号变更后会自动重排。</span>
+                  <strong>{t('每天 07:30 发送当日课程摘要')}</strong>
+                  <span>{t('仅在当天有课时发送；课表更新或账号变更后会自动重排。')}</span>
                 </div>
                 <button
                   type="button"
                   className="settings-switch"
                   role="switch"
                   aria-checked={settings.dailyCourseNotificationsEnabled}
-                  aria-label="每天 07:30 发送当日课程摘要"
+                  aria-label={t('每天 07:30 发送当日课程摘要')}
                   onClick={() => updateSetting('dailyCourseNotificationsEnabled', !settings.dailyCourseNotificationsEnabled)}
                 ><span aria-hidden="true" /></button>
               </div>
             </section>
 
             <section className="panel settings-daily-info">
-              <div className="panel-title"><CalendarRange size={18} /><h2>生活信息与 DDL</h2></div>
+              <div className="panel-title"><CalendarRange size={18} /><h2>{t('生活信息与 DDL')}</h2></div>
               {[
                 ['weatherEnabled', '校区天气', '在空教室联动查询上方显示默认折叠的今日、明日天气。'],
                 ['almanacEnabled', '黄历信息', '在月视图日期详情中显示农历、干支与宜忌。'],
@@ -2877,28 +3342,28 @@ function App() {
               ].map(([field, title, description]) => (
                 <div className="settings-switch-row" key={field}>
                   <div>
-                    <strong>{title}</strong>
-                    <span>{description}</span>
+                    <strong>{t(title)}</strong>
+                    <span>{t(description)}</span>
                   </div>
                   <button
                     type="button"
                     className="settings-switch"
                     role="switch"
                     aria-checked={settings[field]}
-                    aria-label={title}
+                    aria-label={t(title)}
                     onClick={() => updateSetting(field, !settings[field])}
                   ><span aria-hidden="true" /></button>
                 </div>
               ))}
-              <p className="settings-source-note">天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。</p>
+              <p className="settings-source-note">{t('天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。')}</p>
             </section>
 
           <section className="panel settings-actions settings-local-data">
             <div className="panel-title">
               <HardDrive size={18} />
-              <h2>本地数据</h2>
+              <h2>{t('本地数据')}</h2>
             </div>
-            <p className="settings-local-data-note">清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。</p>
+            <p className="settings-local-data-note">{t('清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。')}</p>
             <button
               type="button"
               className="danger"
@@ -2906,19 +3371,19 @@ function App() {
               disabled={settingsSaving || !!loading}
             >
               <Trash2 size={17} />
-              清除本地数据
+              {t('清除本地数据')}
             </button>
             {clearConfirmationOpen ? (
               <div className="clear-data-confirmation" role="alertdialog" aria-labelledby="clear-data-title">
-                <strong id="clear-data-title">清除全部本地数据？</strong>
-                <p>将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。</p>
+                <strong id="clear-data-title">{t('清除全部本地数据？')}</strong>
+                <p>{t('将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。')}</p>
                 <div>
                   <button ref={clearCancelButtonRef} type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={settingsSaving || !!loading}>
-                    取消
+                    {t('取消')}
                   </button>
                   <button type="button" className="danger" onClick={clearAllLocalData} disabled={settingsSaving || !!loading}>
                     {loading === 'clear-local-data' ? <Loader2 className="spin" size={17} /> : <Trash2 size={17} />}
-                    确认清除
+                    {t('确认清除')}
                   </button>
                 </div>
               </div>
@@ -2928,9 +3393,9 @@ function App() {
           <section className="panel settings-about">
             <div className="panel-title">
               <Info size={18} />
-              <h2>关于本应用</h2>
+              <h2>{t('关于本应用')}</h2>
             </div>
-            <p>Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。</p>
+            <p>{t('Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。')}</p>
             <div className="settings-about-actions">
               <button
                 type="button"
@@ -2941,11 +3406,11 @@ function App() {
                 }}
               >
                 <ShieldCheck size={16} />
-                隐私说明
+                {t('隐私说明')}
               </button>
               <a href={PROJECT_URL} target="_blank" rel="noreferrer">
                 <ExternalLink size={16} />
-                GitHub 项目
+                {t('GitHub 项目')}
               </a>
             </div>
           </section>
@@ -2954,6 +3419,38 @@ function App() {
           ) : null}
         </section>
       </div>
+      {calendarAgendaDialog ? (
+        <div
+          className="calendar-agenda-backdrop"
+          onMouseDown={(event) => {
+            if (event.button === 0 && event.target === event.currentTarget) setCalendarAgendaDialog(null)
+          }}
+        >
+          <section className="calendar-agenda-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-agenda-title">
+            <header>
+              <div>
+                <span>{t('全天日程')}</span>
+                <h2 id="calendar-agenda-title">{formatUiCourseDate(calendarAgendaDialog.date, uiLanguage)}</h2>
+              </div>
+              <button type="button" onClick={() => setCalendarAgendaDialog(null)} aria-label={t('关闭全天日程')}><X size={19} /></button>
+            </header>
+            <div className="calendar-agenda-list">
+              {allDayEntriesFor(calendarAgendaDialog.date).map((item) => {
+                const content = (
+                  <>
+                    <strong>{item.label}</strong>
+                    {item.subtitle ? <span>{item.subtitle}</span> : null}
+                    {item.time ? <time>{item.time}</time> : null}
+                  </>
+                )
+                return item.url ? (
+                  <a key={item.key} href={item.url} target="_blank" rel="noreferrer" className={item.type}>{content}</a>
+                ) : <article key={item.key} className={item.type}>{content}</article>
+              })}
+            </div>
+          </section>
+        </div>
+      ) : null}
       {privacyPolicyOpen ? (
         <PrivacyPolicyDialog onClose={() => {
           setPrivacyPolicyOpen(false)

@@ -4,6 +4,7 @@
 import { Course, SlotMetadata } from '../../common/Models';
 import { DateParts, StrictDates } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
+import { AppModel } from '../../model/AppModel';
 import { CalendarFormatters, CalendarTimelineDay, CalendarTimelineLogic } from './CalendarLogic';
 
 export class MobileCalendarTimelineLayout {
@@ -48,6 +49,7 @@ export class CoursePlacement {
 
 @ComponentV2
 export struct MobileCalendarTimelineView {
+  @Consumer('appModel') model: AppModel = new AppModel();
   @Param days: CalendarTimelineDay[] = [];
   @Param selectedDate: DateParts = StrictDates.todayParts();
   @Param showsWeekColumns: boolean = false;
@@ -375,13 +377,13 @@ export struct MobileCalendarTimelineView {
   dayHeaderRow() {
     Row({ space: 0 }) {
       Row() {
-        Text('整点')
+        Text(this.model.text('整点'))
           .fontSize(10)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.secondaryText())
           .textAlign(TextAlign.Center)
           .width(this.hourAxisWidth())
-        Text('课程节次')
+        Text(this.model.text('课程节次'))
           .fontSize(10)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.secondaryText())
@@ -405,8 +407,8 @@ export struct MobileCalendarTimelineView {
               .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.text())
           }
-          Text(day.courses.length === 0 ? '无课程' :
-            day.courses.length.toString() + ' 门课')
+          Text(this.model.text(day.courses.length === 0 ? '无课程' :
+            day.courses.length.toString() + ' 门课'))
             .fontSize(10)
             .fontColor(day.courses.length > 0 ? AppTheme.primary() : AppTheme.secondaryText())
             .maxLines(1)
@@ -437,7 +439,7 @@ export struct MobileCalendarTimelineView {
   @Builder
   slotAxisLabel(slot: SlotMetadata) {
     Column({ space: 1 }) {
-      Text('第' + slot.label + '节')
+      Text(this.model.text('第' + slot.label + '节'))
         .fontSize(11)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.secondaryText())
@@ -460,7 +462,7 @@ export struct MobileCalendarTimelineView {
 
   @Builder
   slotGuide(slot: SlotMetadata) {
-    Text('第' + slot.label + '节 ' + slot.start + '-' + slot.end)
+    Text(this.model.text('第' + slot.label + '节') + ' ' + slot.start + '-' + slot.end)
       .fontSize(9)
       .fontColor(AppTheme.secondaryText())
       .padding({ left: 6, right: 6, top: 3, bottom: 3 })
@@ -540,11 +542,13 @@ export struct MobileCalendarTimelineView {
           .maxLines(2)
       }
       if (this.blockHeight(placement.course) >= 48) {
-        Text(placement.course.room.length === 0 ? '地点未标注' : placement.course.room)
+        Text(placement.course.room.length === 0 ? this.model.text('地点未标注') :
+          placement.course.room)
           .fontSize(10)
           .fontColor(AppTheme.onPrimary())
           .maxLines(3)
-        Text(placement.course.teacher.length === 0 ? '教师未标注' : '教师：' + placement.course.teacher)
+        Text(placement.course.teacher.length === 0 ? this.model.text('教师未标注') :
+          this.model.text('教师：') + placement.course.teacher)
           .fontSize(10)
           .fontColor(AppTheme.onPrimary())
           .maxLines(3)

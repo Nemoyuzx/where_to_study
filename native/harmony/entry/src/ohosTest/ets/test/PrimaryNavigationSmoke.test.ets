@@ -154,10 +154,31 @@ export default function primaryNavigationSmokeTest() {
       expect(yearMode !== null).assertTrue();
       await yearMode?.click();
       await driver.delayMs(1200);
-      const yearHint: Component | null = await findText(driver, '颜色越深表示当天课程越多');
+      const yearHint: Component | null = await findText(driver, '颜色越深表示当天日程越多');
       expect(yearHint !== null).assertTrue();
       const januaryLabel: Component | null = await findText(driver, '1月');
       expect(januaryLabel !== null).assertTrue();
+    });
+
+    it('language_setting_updates_static_ui_without_relaunch', 0, async () => {
+      await launchApp(false);
+      const driver: Driver = Driver.create();
+      const settingsTab: Component | null = await findText(driver, '设置');
+      expect(settingsTab !== null).assertTrue();
+      await settingsTab?.click();
+      await driver.delayMs(800);
+      const systemLanguage: Component | null = await findText(driver, '跟随系统');
+      expect(systemLanguage !== null).assertTrue();
+      await systemLanguage?.click();
+      await driver.delayMs(500);
+      const english: Component | null = await findText(driver, 'English');
+      expect(english !== null).assertTrue();
+      await english?.click();
+      await driver.delayMs(800);
+      const account: Component | null = await findText(driver, 'Account');
+      expect(account !== null).assertTrue();
+      const language: Component | null = await findText(driver, 'Language');
+      expect(language !== null).assertTrue();
     });
   });
 }

@@ -10,6 +10,7 @@ struct TodayCourseWidgetCard: View {
     let weekNumber: Int?
     let family: WidgetFamily
     let usesWidgetContainer: Bool
+    var language: TodayCourseWidgetData.Language = .simplifiedChinese
 
     var body: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 7) {
@@ -24,7 +25,10 @@ struct TodayCourseWidgetCard: View {
                         courseRow(course)
                     }
                     if courses.count > courseLimit {
-                        Text("另有 \(courses.count - courseLimit) 门课程")
+                        Text(language.text(
+                            chinese: "另有 \(courses.count - courseLimit) 门课程",
+                            english: "\(courses.count - courseLimit) more courses"
+                        ))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -45,11 +49,14 @@ struct TodayCourseWidgetCard: View {
         HStack(spacing: 6) {
             Image(systemName: "calendar.badge.clock")
                 .foregroundStyle(primary)
-            Text("今日课程")
+            Text(language.text(chinese: "今日课程", english: "Today's Courses"))
                 .font(family == .systemSmall ? .subheadline.weight(.bold) : .headline)
                 .foregroundStyle(.primary)
             Spacer(minLength: 4)
-            Text(courses.isEmpty ? "" : "\(courses.count) 门")
+            Text(courses.isEmpty ? "" : language.text(
+                chinese: "\(courses.count) 门",
+                english: "\(courses.count) courses"
+            ))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
         }
@@ -57,11 +64,19 @@ struct TodayCourseWidgetCard: View {
 
     private var contextLine: some View {
         HStack(spacing: 5) {
-            Text(TodayCourseWidgetData.dayContext(on: date, weekNumber: weekNumber))
+            Text(TodayCourseWidgetData.dayContext(
+                on: date,
+                weekNumber: weekNumber,
+                language: language
+            ))
                 .lineLimit(1)
             if family != .systemSmall {
                 Text("·")
-                Text(TodayCourseWidgetData.statusSummary(for: courses, at: date))
+                Text(TodayCourseWidgetData.statusSummary(
+                    for: courses,
+                    at: date,
+                    language: language
+                ))
                     .lineLimit(1)
             }
         }
@@ -75,11 +90,14 @@ struct TodayCourseWidgetCard: View {
                 .font(.title3)
                 .foregroundStyle(primary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(TodayCourseWidgetData.emptyMessage)
+                Text(TodayCourseWidgetData.emptyMessage(language: language))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                 if family != .systemSmall {
-                    Text("今天可以自由安排")
+                    Text(language.text(
+                        chinese: "今天可以自由安排",
+                        english: "Your day is free"
+                    ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -117,7 +135,7 @@ struct TodayCourseWidgetCard: View {
     }
 
     private func phaseBadge(_ phase: TodayCourseWidgetData.CoursePhase) -> some View {
-        Text(phase.badgeText)
+        Text(phase.badgeText(language: language))
             .font(.caption2.weight(.bold))
             .foregroundStyle(phase == .inProgress ? primary : Color.primary)
             .padding(.horizontal, 5)
@@ -166,10 +184,16 @@ struct TodayCourseWidgetCard: View {
             values.append(sectionText)
         }
         if preferences.showsLocation, !course.room.isEmpty {
-            values.append(course.room)
+            values.append(language.text(
+                chinese: "地点：\(course.room)",
+                english: "Room: \(course.room)"
+            ))
         }
         if preferences.showsTeacher, let teacher = nonempty(course.teacher) {
-            values.append(teacher)
+            values.append(language.text(
+                chinese: "教师：\(teacher)",
+                english: "Teacher: \(teacher)"
+            ))
         }
         return values.filter { !$0.isEmpty }.joined(separator: " · ")
     }

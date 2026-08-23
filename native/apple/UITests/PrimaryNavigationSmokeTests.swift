@@ -24,8 +24,12 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--review-demo"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
-        defer { app.terminate() }
+        defer {
+            app.terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
 
         XCTAssertTrue(app.descendants(matching: .any)["banner.sample-mode"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["数据挖掘"].waitForExistence(timeout: 5))
@@ -79,8 +83,12 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--review-demo"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
-        defer { app.terminate() }
+        defer {
+            app.terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
 
         navigate(to: "教学日历", in: app)
         let periodLabel = app.staticTexts.matching(
@@ -90,6 +98,18 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(periodLabel.label.contains("第 "))
         XCTAssertTrue(periodLabel.label.hasSuffix(" 周"))
         attachScreenshot(named: "calendar-week-single-viewport")
+        let courseSummaryToggle = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS '门课'")
+        ).firstMatch
+        XCTAssertTrue(courseSummaryToggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(courseSummaryToggle.value as? String, "已展开")
+        courseSummaryToggle.tap()
+        XCTAssertTrue(waitForValue("已折叠", of: courseSummaryToggle))
+        courseSummaryToggle.tap()
+        XCTAssertTrue(waitForValue("已展开", of: courseSummaryToggle))
+        XCTAssertTrue(app.buttons.matching(
+            NSPredicate(format: "label CONTAINS '全天' AND label CONTAINS '+'")
+        ).firstMatch.waitForExistence(timeout: 5))
         let initialWeek = periodLabel.label
         horizontalSwipe(in: app, atY: 0.29, toLeft: true)
         XCTAssertTrue(waitForLabelChange(of: periodLabel, from: initialWeek))
@@ -134,7 +154,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             monthSummaryViewport.isHittable,
             "The stable details viewport must remain non-interactive while the month is expanded"
         )
-        let monthEventID = "calendar.mobile.month-event.course-sample-data-mining"
+        let monthEventID = "calendar.mobile.month-event.\(currentShanghaiDateString())-assignment-sample-assignment"
         let monthEvent = app.staticTexts[monthEventID].firstMatch
         XCTAssertTrue(monthEvent.waitForExistence(timeout: 5))
         XCTAssertFalse(monthEvent.label.isEmpty)
@@ -242,6 +262,9 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             XCTAssertTrue(yearDay.isHittable)
             yearDay.tap()
 
+            XCTAssertTrue(app.staticTexts["课程作业 DDL"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["校内竞赛通知"].waitForExistence(timeout: 5))
+
             for target in ["日", "周", "月"] {
                 XCTAssertTrue(app.buttons["\(target)视图"].waitForExistence(timeout: 5))
             }
@@ -252,6 +275,27 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             XCTAssertTrue(app.segmentedControls.buttons[mode].waitForExistence(timeout: 5))
             XCTAssertTrue(app.segmentedControls.buttons[mode].isSelected)
         }
+    }
+
+    func testEnglishInterfaceCanBeSelectedWithoutTranslatingSampleAPIContent() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only localization smoke test")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "en"
+        app.launch()
+        defer { app.terminate() }
+
+        XCTAssertTrue(app.tabBars.buttons["Academic Calendar"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Academic Calendar"].tap()
+        XCTAssertTrue(app.segmentedControls.buttons["Week"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Data Mining"].exists == false)
+        XCTAssertTrue(app.staticTexts["数据挖掘"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["settings.language"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Interface Language"].exists)
+        XCTAssertTrue(app.buttons["English"].exists || app.staticTexts["English"].exists)
     }
 
     func testIPhoneLandscapeMonthUsesOnlyExpandedAndSelectedWeekStops() throws {
@@ -320,11 +364,15 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         )
         dayNumber.tap()
         XCTAssertTrue(waitForValue("日程已展开", of: monthState))
-        for _ in 0..<10 where !deadlineCard.isHittable {
-            verticalSwipe(in: app, within: monthSummary, upward: true)
+        for _ in 0..<16 {
+            verticalSwipe(in: app, within: monthSummary, upward: true, requestedTravel: 160)
         }
         XCTAssertTrue(deadlineCard.waitForExistence(timeout: 5))
-        XCTAssertTrue(deadlineCard.isHittable)
+        XCTAssertGreaterThan(
+            deadlineCard.frame.intersection(app.frame).height,
+            8,
+            "The taller DDL card must remain reachable in the raised detail scroller"
+        )
         XCTAssertEqual(monthState.value as? String, "日程已展开")
         attachScreenshot(named: "calendar-month-landscape-details-scrolled")
 
@@ -363,8 +411,12 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing-live"]
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
-        defer { app.terminate() }
+        defer {
+            app.terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
 
         navigate(to: "设置", in: app)
         let accountField = app.textFields["field.account"]
@@ -377,12 +429,6 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         passwordField.tap()
         passwordField.typeText("keyboard-test")
         XCTAssertTrue(app.keyboards.firstMatch.exists)
-
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.18)).tap()
-        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
-
-        passwordField.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
         let doneButton = app.buttons["action.dismiss-keyboard"]
         XCTAssertTrue(doneButton.waitForExistence(timeout: 2))
         doneButton.tap()

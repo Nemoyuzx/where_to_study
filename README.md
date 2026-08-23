@@ -13,6 +13,8 @@ Silicon 兼容构建。
 - SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
 - 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 - 联动查询顶部提供默认折叠的今日/明日校区天气卡片；月视图日期详情按“课程日程 → 云课堂作业 DDL → 黄历宜忌 → 统一活动 DDL”排列，学科竞赛、校内竞赛通知、夏令营与黑客松均可独立关闭。
+- 作业 DDL 与校内竞赛通知同时进入日/周全天区、月格和年视图日期详情；超出紧凑区域时使用可点击的 `+N` 展开完整列表。
+- 图形客户端支持跟随系统、简体中文与 English；静态界面切换语言，第三方 API 返回的课程、天气、黄历、作业和竞赛内容保持原文。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
@@ -21,18 +23,18 @@ Silicon 兼容构建。
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.2 (52)` 正式签名 Universal 构建通过 TestFlight 分发；不作为 GitHub Release 附件 |
-| Android | Kotlin + Android Views | `0.2.2 (33)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.3 (58)` 正式签名 Universal 构建通过 TestFlight 分发；不作为 GitHub Release 附件 |
+| Android | Kotlin + Android Views | `0.2.3 (34)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.2 (57)` 正式签名构建通过 TestFlight 分发；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 80 项单元测试；发布签名与 AGC 上架尚待配置 |
+| iOS | SwiftUI 原生 | `0.2.3 (58)` 正式签名构建通过 TestFlight 分发；不作为 GitHub Release 附件 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 88 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-稳定版 [v0.2.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.2) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版让 iOS 与 Android 手机月视图在保留三档位置的同时，可在“日程已展开”后继续连续滚动直至完整查看作业、黄历和活动卡片；设置中拆分学科竞赛与校内竞赛通知，加入双语数据参考提示，并统一各平台的中英双语隐私声明。最新移动端构建将动画与数据加载彻底分离：Android 日期选择不再横向抖动，未缓存数据返回只局部更新而不会截断月份分页；iOS 仅让月格参与横向换月，详情容器常驻并连续折叠、淡化更新。两端云课堂作业还使用账户级 single-flight，共享一次登录和全量抓取；Android 折叠侧栏图标在 48dp 选中框内保持水平、纵向双向居中。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS `0.2.2 (57)` 与 macOS `0.2.2 (52)` 仅通过 TestFlight 分发。
+稳定版 [v0.2.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.3) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版把作业 DDL 与校内竞赛通知扩展到日/周全天区、月格和年视图日期详情，加入 `+N` 完整列表；可见日期范围使用独立快照与短时缓存，移动原生端再以 single-flight 合并并发请求，不再让网络结果截断分页动画。iOS、Android 与 HarmonyOS 手机端的日/周课程摘要可折叠，HarmonyOS 同步移动月视图的滚动、遮罩、无横抖与局部渲染优化；图形客户端新增跟随系统、简体中文与 English 界面设置。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.3 (58)` 仅通过 TestFlight 分发。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
@@ -117,8 +119,8 @@ Linux 终端客户端可以直接从 Release 安装。以 x86_64 为例：
 
 ```bash
 mkdir -p ~/.local/bin
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.2/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.2/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.3/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.3/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
 install -m 0755 where-to-study-cli where-to-study-tui ~/.local/bin/
 ```
 
@@ -145,7 +147,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 ./scripts/native-harmony-build.sh
 ```
 
-`native/apple`、`native/android` 与 `native/harmony` 是当前 macOS、iOS、Android 和鸿蒙客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。鸿蒙客户端当前在 `feature/harmonyos` 分支开发，尚未合入发布流程。
+`native/apple`、`native/android` 与 `native/harmony` 是当前 macOS、iOS、Android 和鸿蒙客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。HarmonyOS 源码已合入 `main` 并纳入本地构建与单元测试；AGC 正式签名和商店发布仍需维护者的华为开发者账号配置。
 
 Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri 或 WebView。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 

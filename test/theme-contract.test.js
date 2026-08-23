@@ -6,6 +6,8 @@ const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf
 const appCss = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
 const appSource = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
 const tauriSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8')
+const tauriDeadlineSource = readFileSync(new URL('../src-tauri/src/deadlines.rs', import.meta.url), 'utf8')
+const tauriAssignmentSource = readFileSync(new URL('../src-tauri/src/assignments.rs', import.meta.url), 'utf8')
 const tauriConfig = readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8')
 const tauriCapabilities = readFileSync(
   new URL('../src-tauri/capabilities/default.json', import.meta.url),
@@ -21,6 +23,14 @@ const appleCalendarSource = readFileSync(
 )
 const appleMobileCalendarSource = readFileSync(
   new URL('../native/apple/Sources/Shared/MobileTeachingCalendarView.swift', import.meta.url),
+  'utf8',
+)
+const appleLocalizationSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/AppLocalization.swift', import.meta.url),
+  'utf8',
+)
+const appleWidgetDataSource = readFileSync(
+  new URL('../native/apple/Sources/WidgetShared/TodayCourseWidgetData.swift', import.meta.url),
   'utf8',
 )
 const androidPlannerSource = readFileSync(
@@ -77,6 +87,28 @@ const androidUiSupportSource = readFileSync(
     '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/UiSupport.kt',
     import.meta.url,
   ),
+  'utf8',
+)
+const androidLocaleSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/AppLocale.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const androidWidgetSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/TodayCourseWidget.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const harmonyLocalizationSource = readFileSync(
+  new URL('../native/harmony/entry/src/main/ets/common/AppLocalization.ets', import.meta.url),
+  'utf8',
+)
+const harmonyWidgetSource = readFileSync(
+  new URL('../native/harmony/entry/src/main/ets/widget/TodayCourseWidgetData.ets', import.meta.url),
   'utf8',
 )
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
@@ -198,7 +230,7 @@ test('mobile navigation keeps the same icon and label hierarchy as iOS tabs', ()
 })
 
 test('every client uses the concise linked-query page title', () => {
-  assert.match(appSource, /activePage === 'settings' \? '设置' : '联动查询'/)
+  assert.match(appSource, /activePage === 'settings' \? t\('设置'\) : t\('联动查询'\)/)
   assert.match(applePlannerSource, /title: "联动查询"/)
   assert.match(androidPlannerSource, /"联动查询"/)
   for (const source of [appSource, applePlannerSource, androidPlannerSource]) {
@@ -222,9 +254,9 @@ test('mobile week calendar stays in one viewport and pages from the full timelin
 
 test('calendar chrome is compact and all-day events stay above the timeline', () => {
   assert.match(appSource, /calendarHeaderTitle = calendarView === 'week'/)
-  assert.match(appSource, /formatTeachingWeek\(calendarWeekState\.weekNumber\)/)
+  assert.match(appSource, /formatUiTeachingWeek\(calendarWeekState\.weekNumber, uiLanguage\)/)
   assert.doesNotMatch(appSource, /className="topbar-subtitle"/)
-  assert.match(appSource, /className="time-all-day-label">全天</)
+  assert.match(appSource, /className="time-all-day-label">\{t\('全天'\)\}</)
   assert.match(appSource, /className="time-all-day-cell"/)
   assert.match(appCss, /\.calendar-view-switch\s*\{[^}]*border:\s*0/s)
   assert.match(appCss, /\.teaching-calendar-main\s*\{[^}]*border:\s*0/s)
@@ -232,6 +264,59 @@ test('calendar chrome is compact and all-day events stay above the timeline', ()
     appCss,
     /@media \(max-width: 720px\)[\s\S]*\.year-calendar\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
   )
+})
+
+test('desktop calendar supplements are range-cached and rendered in every calendar view', () => {
+  assert.match(appSource, /command\('fetch_assignment_calendar'/)
+  assert.match(appSource, /command\('fetch_deadline_calendar'/)
+  assert.match(appSource, /calendarSupplementRange/)
+  assert.match(appSource, /requestedCalendarSupplementRanges/)
+  assert.match(tauriAssignmentSource, /fetch_assignment_calendar/)
+  assert.match(tauriAssignmentSource, /cached_items\(account_scope\)/)
+  assert.match(tauriDeadlineSource, /SOURCE_CACHE_TTL/)
+  assert.match(tauriDeadlineSource, /fetch_deadline_calendar/)
+  assert.match(appSource, /className="time-all-day-overflow"/)
+  assert.match(appSource, /className="calendar-agenda-dialog"/)
+  assert.ok(appSource.includes('className={`month-entry ${entry.type}`}'))
+  assert.match(appSource, /className="school-notice"/)
+  assert.match(appCss, /\.month-cell small\.month-entry\.assignment/)
+  assert.match(appCss, /\.month-cell small\.month-entry\.school-notice/)
+  assert.match(appCss, /\.popover-supplement-list/)
+})
+
+test('desktop interface language is persistent and updates the tray without translating API data', () => {
+  assert.match(appSource, /resolvedUiLanguage\(settings\.uiLanguage/)
+  assert.match(appSource, /\['system', t\('跟随系统'\)\]/)
+  assert.match(appSource, /\['zh-Hans', t\('简体中文'\)\]/)
+  assert.match(appSource, /\['en', 'English'\]/)
+  assert.match(appSource, /command\('set_interface_language', uiLanguage\)/)
+  assert.match(tauriSource, /fn set_interface_language/)
+  assert.match(tauriSource, /DESKTOP_INTERFACE_ENGLISH/)
+  assert.match(appSource, /item\.title/)
+  assert.match(appSource, /item\.name/)
+  assert.match(appSource, /day\.weather_day/)
+})
+
+test('native graphical clients and supported widgets share the system Chinese English boundary', () => {
+  assert.match(appleLocalizationSource, /case system/)
+  assert.match(appleLocalizationSource, /case simplifiedChinese = "zh-Hans"/)
+  assert.match(appleLocalizationSource, /case english = "en"/)
+  assert.match(appleLocalizationSource, /hasPrefix\("zh"\)/)
+  assert.match(appleWidgetDataSource, /languageDefaultsKey = "appLanguage"/)
+  assert.match(appleWidgetDataSource, /UserDefaults\(suiteName: appGroupIdentifier\)/)
+
+  assert.match(androidLocaleSource, /SYSTEM\("system"\)/)
+  assert.match(androidLocaleSource, /SIMPLIFIED_CHINESE\("zh-Hans"\)/)
+  assert.match(androidLocaleSource, /ENGLISH\("en"\)/)
+  assert.match(androidWidgetSource, /AppLocale\.wrap\(context, preferences\.languageCode\)/)
+
+  assert.match(harmonyLocalizationSource, /system = 'system'/)
+  assert.match(harmonyLocalizationSource, /simplifiedChinese = 'zh-Hans'/)
+  assert.match(harmonyLocalizationSource, /english = 'en'/)
+  assert.match(harmonyWidgetSource, /prefs\.language === AppLanguage\.english/)
+  assert.match(appleCalendarSource, /Text\(item\.name\)/)
+  assert.match(androidLocaleSource, /third-party content/)
+  assert.match(harmonyLocalizationSource, /API 返回/)
 })
 
 test('native Android year calendar follows the compact iOS mini-month layout', () => {
@@ -315,7 +400,7 @@ test('month expansion stays mobile-only and morphs its drag handle with progress
   assert.match(appSource, /month-expansion-accessibility-action/)
   assert.match(appSource, /month-expansion-accessibility-action[\s\S]*tabIndex=\{-1\}/)
   assert.match(appCss, /\.assistive-only\s*\{[^}]*clip-path:\s*inset\(50%\)/s)
-  assert.match(appSource, /下拉展开，上拉收起/)
+  assert.match(appSource, /aria-label=\{t\('月历'\)\}/)
   assert.match(appCss, /\.page-content\.calendar-gesture-locked\s*\{[^}]*overflow-y:\s*hidden/s)
   assert.match(appSource, /month-entry-overflow/)
   assert.match(appSource, /className="month-expansion-handle"/)
@@ -366,7 +451,7 @@ test('month expansion reserves all six rows on desktop and mobile', () => {
 
 test('about this app is the final settings panel', () => {
   assert.ok(appSource.indexOf('className="panel settings-about"') > appSource.indexOf('className="panel settings-actions"'))
-  assert.match(appSource, /<h2>关于本应用<\/h2>/)
+  assert.match(appSource, /<h2>\{t\('关于本应用'\)\}<\/h2>/)
 })
 
 test('native Android chrome follows the active system theme', () => {
@@ -387,13 +472,16 @@ test('collapsed Android foldable rail centers icons inside selection frames', ()
   const presentation = androidMainActivitySource.match(
     /private fun applyNavigationRailTabPresentation[\s\S]*?private fun updateNavigationRailPresentation/,
   )?.[0] ?? ''
+  const collapsedBranch = presentation.match(
+    /if \(navigationRailCollapsed\) \{([\s\S]*?)\} else/,
+  )?.[1] ?? ''
   assert.match(
-    presentation,
-    /setCompoundDrawablesRelativeWithIntrinsicBounds\(destination\.iconResource, 0, 0, 0\)/,
+    collapsedBranch,
+    /setCompoundDrawablesRelativeWithIntrinsicBounds\(\s*0,\s*destination\.iconResource,\s*0,\s*0,?\s*\)/,
   )
   assert.doesNotMatch(
-    presentation,
-    /setCompoundDrawablesRelativeWithIntrinsicBounds\(0, destination\.iconResource, 0, 0\)/,
+    collapsedBranch,
+    /setCompoundDrawablesRelativeWithIntrinsicBounds\(\s*destination\.iconResource,\s*0,\s*0,\s*0/,
   )
   assert.match(presentation, /view\.gravity = if \(navigationRailCollapsed\) Gravity\.CENTER/)
 })

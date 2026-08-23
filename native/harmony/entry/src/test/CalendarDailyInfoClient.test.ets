@@ -2,9 +2,11 @@ import { describe, it, expect } from '@ohos/hypium';
 import {
   AlmanacInfo, AlmanacResponseParser, AssignmentDeadlineItem,
   AssignmentDeadlineResponseParser, PublicDeadlineItem, PublicDeadlineKind,
-  PublicDeadlineResponseParser
+  PublicDeadlineResponseParser, CalendarDailyInfoClient, CalendarDailyInfoSources,
+  FixedPublicJsonFetching, PublicDeadlineSnapshot
 } from '../main/ets/net/CalendarDailyInfoClient';
 import { UCloudAssignmentClient } from '../main/ets/net/UCloudAssignmentClient';
+import { Credentials } from '../main/ets/store/CredentialStore';
 
 export default function calendarDailyInfoClientTest() {
   describe('CalendarDailyInfoClientTest', () => {
@@ -122,5 +124,66 @@ export default function calendarDailyInfoClientTest() {
       expect(UCloudAssignmentClient.cookieHeaderFrom(headers))
         .assertEqual('_route=first; SESSION=second');
     });
+
+    it('ucloud_concurrent_dates_share_one_account_range_fetch', 0, async () => {
+      let fetchCount: number = 0;
+      const client: UCloudAssignmentClient = new UCloudAssignmentClient(
+        async (credentials: Credentials): Promise<AssignmentDeadlineItem[]> => {
+          fetchCount++;
+          return [
+            new AssignmentDeadlineItem('first', 'First', null,
+              '2026-08-22 20:00:00', '未提交'),
+            new AssignmentDeadlineItem('second', 'Second', null,
+              '2026-08-23 20:00:00', '未提交')
+          ];
+        });
+      const credentials: Credentials = new Credentials('2023000000', 'password');
+      const results: AssignmentDeadlineItem[][] = await Promise.all([
+        client.fetch(credentials, '2026-08-22'), client.fetch(credentials, '2026-08-23')
+      ]);
+      expect(fetchCount).assertEqual(1);
+      expect(results[0][0].id).assertEqual('first');
+      expect(results[1][0].id).assertEqual('second');
+    });
+
+    it('deadline_dates_share_one_range_fetch_and_then_filter_in_memory', 0, async () => {
+      const transport: CountingDeadlineTransport = new CountingDeadlineTransport();
+      const client: CalendarDailyInfoClient = new CalendarDailyInfoClient(transport);
+      const results: PublicDeadlineSnapshot[] = await Promise.all([
+        client.fetchDeadlines('2026-08-22'), client.fetchDeadlines('2026-08-23')
+      ]);
+      expect(results[0].items.length).assertEqual(1);
+      expect(results[0].items[0].id).assertEqual('first');
+      expect(results[1].items.length).assertEqual(1);
+      expect(results[1].items[0].id).assertEqual('second');
+      expect(transport.primaryCalls).assertEqual(1);
+      expect(transport.schoolCalls).assertEqual(1);
+
+      await client.fetchDeadlines('2026-08-24');
+      expect(transport.primaryCalls).assertEqual(1);
+      expect(transport.schoolCalls).assertEqual(1);
+    });
   });
+}
+
+class CountingDeadlineTransport implements FixedPublicJsonFetching {
+  primaryCalls: number = 0;
+  schoolCalls: number = 0;
+
+  async fetch(url: string, scheme: string, host: string, maximumBytes: number): Promise<string> {
+    if (url === CalendarDailyInfoSources.deadlinePrimary) {
+      this.primaryCalls++;
+      return '{"items":[' +
+        '{"id":"first","name":"First","event_type":"competition",' +
+        '"primary_deadline":"2026-08-22T20:00:00+08:00"},' +
+        '{"id":"second","name":"Second","event_type":"hackathon",' +
+        '"primary_deadline":"2026-08-23T20:00:00+08:00"}' +
+        ']}';
+    }
+    if (url === CalendarDailyInfoSources.schoolContestNotices) {
+      this.schoolCalls++;
+      return '{"items":[]}';
+    }
+    throw new Error('unexpected URL');
+  }
 }

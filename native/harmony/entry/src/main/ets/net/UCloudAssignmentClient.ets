@@ -80,6 +80,13 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
   private inFlight: Promise<AssignmentDeadlineItem[]> | null = null;
   private inFlightAccount: string = '';
   private revision: number = 0;
+  private readonly fetchAllProvider: ((credentials: Credentials) =>
+    Promise<AssignmentDeadlineItem[]>) | null;
+
+  constructor(fetchAllProvider: ((credentials: Credentials) =>
+    Promise<AssignmentDeadlineItem[]>) | null = null) {
+    this.fetchAllProvider = fetchAllProvider;
+  }
 
   async fetch(credentials: Credentials, date: string): Promise<AssignmentDeadlineItem[]> {
     if (StrictDates.parseDateString(date) === null) {
@@ -98,8 +105,9 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       allItems = await this.inFlight;
     } else {
       const requestRevision: number = this.revision;
-      const work: Promise<AssignmentDeadlineItem[]> = this.fetchAll(
-        new Credentials(account, credentials.password));
+      const normalized: Credentials = new Credentials(account, credentials.password);
+      const work: Promise<AssignmentDeadlineItem[]> = this.fetchAllProvider === null ?
+        this.fetchAll(normalized) : this.fetchAllProvider(normalized);
       this.inFlight = work;
       this.inFlightAccount = account;
       try {

@@ -24,6 +24,8 @@ import {
   requestBody,
   savedSettingsToState,
   settingsToPayload,
+  normalizeUiLanguage,
+  resolvedUiLanguage,
   shanghaiDateString,
   shiftDate,
   slotsToRanges,
@@ -213,6 +215,18 @@ test('saved settings never hydrate a password into web state', () => {
   assert.equal(settingsToPayload(state).competition_deadlines_enabled, false)
   assert.equal(settingsToPayload(state).school_contest_notices_enabled, true)
   assert.equal(accountHasSavedPassword(' student ', { account: 'student', hasSavedPassword: true }), true)
+})
+
+test('interface language persists safely and follows non-Chinese systems in English', () => {
+  assert.equal(normalizeUiLanguage('en'), 'en')
+  assert.equal(normalizeUiLanguage('zh-Hans'), 'zh-Hans')
+  assert.equal(normalizeUiLanguage('unexpected'), 'system')
+  assert.equal(resolvedUiLanguage('system', 'zh-CN'), 'zh-Hans')
+  assert.equal(resolvedUiLanguage('system', 'en-US'), 'en')
+
+  const english = savedSettingsToState({ ui_language: 'en' })
+  assert.equal(english.uiLanguage, 'en')
+  assert.equal(settingsToPayload(english).ui_language, 'en')
 })
 
 test('minimum seat settings remain finite non-negative integers', () => {

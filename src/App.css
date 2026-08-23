@@ -675,6 +675,7 @@ button:disabled {
   background: var(--primary-surface);
 }
 
+.calendar-agenda-backdrop,
 .privacy-dialog-backdrop {
   animation: privacy-backdrop-in 0.2s ease;
   background: var(--modal-backdrop);
@@ -684,6 +685,93 @@ button:disabled {
   place-items: center;
   position: fixed;
   z-index: 100;
+}
+
+.calendar-agenda-dialog {
+  animation: privacy-dialog-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-popover);
+  max-height: min(640px, calc(100dvh - 36px));
+  overflow: hidden;
+  width: min(520px, 100%);
+}
+
+.calendar-agenda-dialog > header {
+  align-items: center;
+  border-bottom: 1px solid var(--divider);
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.calendar-agenda-dialog > header span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.calendar-agenda-dialog > header h2 {
+  color: var(--text-primary);
+  font-size: 19px;
+  margin-top: 3px;
+}
+
+.calendar-agenda-dialog > header button {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.calendar-agenda-list {
+  display: grid;
+  gap: 9px;
+  max-height: min(520px, calc(100dvh - 150px));
+  overflow-y: auto;
+  padding: 16px 18px 20px;
+}
+
+.calendar-agenda-list article,
+.calendar-agenda-list a {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-left-width: 4px;
+  border-radius: 8px;
+  color: inherit;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+
+.calendar-agenda-list .holiday {
+  border-left-color: var(--primary);
+}
+
+.calendar-agenda-list .workday,
+.calendar-agenda-list .school-notice {
+  border-left-color: var(--gold);
+}
+
+.calendar-agenda-list .assignment {
+  border-left-color: var(--busy-border);
+}
+
+.calendar-agenda-list strong {
+  color: var(--text-primary);
+}
+
+.calendar-agenda-list span,
+.calendar-agenda-list time {
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 @keyframes privacy-backdrop-in {
@@ -1225,6 +1313,28 @@ button:disabled {
   padding: 3px;
 }
 
+.language-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.language-options button {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-control);
+  min-height: 36px;
+  padding: 0 8px;
+}
+
+.language-options button.active {
+  background: var(--primary-surface);
+  border-color: var(--primary-focus);
+  color: var(--primary-text-strong);
+  font-weight: 700;
+}
+
 .building-list button,
 .campus-options button {
   gap: 6px;
@@ -1412,7 +1522,7 @@ button:disabled {
   border: 0;
   border-radius: 7px;
   display: grid;
-  grid-template-columns: repeat(4, 44px);
+  grid-template-columns: repeat(4, minmax(58px, 1fr));
   padding: 3px;
 }
 
@@ -1709,6 +1819,32 @@ button:disabled {
 .time-all-day-cell span.workday {
   background: var(--gold-surface);
   color: var(--gold-text-muted);
+}
+
+.time-all-day-cell span.assignment {
+  background: var(--busy-surface);
+  color: var(--busy-text);
+}
+
+.time-all-day-cell span.school-notice {
+  background: var(--gold-surface-soft);
+  color: var(--gold-text-muted);
+}
+
+.time-all-day-overflow {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 750;
+  min-height: 22px;
+  padding: 2px 5px;
+}
+
+.time-all-day-overflow:hover {
+  background: var(--surface);
+  border-color: var(--primary-border-soft);
 }
 
 .time-labels,
@@ -2205,6 +2341,18 @@ button:disabled {
   border-color: var(--primary-border);
 }
 
+.month-cell small.month-entry.assignment {
+  background: var(--busy-surface);
+  border-color: var(--busy-border);
+  color: var(--busy-text);
+}
+
+.month-cell small.month-entry.school-notice {
+  background: var(--gold-surface-soft);
+  border-color: var(--gold);
+  color: var(--gold-text-muted);
+}
+
 .month-cell em {
   white-space: nowrap;
 }
@@ -2320,6 +2468,23 @@ button:disabled {
   color: var(--gold-text-muted);
 }
 
+.mini-month-grid button em.assignment {
+  background: var(--busy-surface);
+  bottom: 1px;
+  color: var(--busy-text);
+  left: 1px;
+  right: auto;
+  top: auto;
+}
+
+.mini-month-grid button em.school-notice {
+  background: var(--gold-surface-soft);
+  bottom: 1px;
+  color: var(--gold-text-muted);
+  right: 1px;
+  top: auto;
+}
+
 .year-day-popover {
   animation: popover-in 0.18s cubic-bezier(0.22, 0.61, 0.36, 1);
   background: var(--surface);
@@ -2365,6 +2530,37 @@ button:disabled {
 .popover-course-list {
   display: grid;
   gap: 8px;
+}
+
+.popover-supplement-list {
+  display: grid;
+  gap: 7px;
+}
+
+.popover-supplement-list article,
+.popover-supplement-list a {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  color: inherit;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  text-decoration: none;
+}
+
+.popover-supplement-list .assignment {
+  border-left: 3px solid var(--busy-border);
+}
+
+.popover-supplement-list .school-notice {
+  border-left: 3px solid var(--gold);
+}
+
+.popover-supplement-list span,
+.popover-supplement-list small {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .popover-course-list article {

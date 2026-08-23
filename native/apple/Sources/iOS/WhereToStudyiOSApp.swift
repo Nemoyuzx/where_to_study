@@ -20,6 +20,7 @@ struct WhereToStudyiOSApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
+                .environment(\.locale, model.appLanguage.locale)
         }
     }
 }

@@ -617,6 +617,24 @@ final class ScheduleLogicTests: XCTestCase {
             ) / 7
         )
     }
+
+    func testMobileWeekAllDayLabelUsesPlusCountForDeadlinesThatDoNotFit() {
+        let date = Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 23)
+        )!
+        let day = CalendarTimelineDay(
+            date: date,
+            courses: [],
+            holidays: [],
+            allDayEvents: [
+                CalendarAllDayEvent(id: "assignment", title: "作业一", kind: .assignment),
+                CalendarAllDayEvent(id: "school", title: "校内竞赛", kind: .schoolNotice),
+                CalendarAllDayEvent(id: "holiday", title: "休 节日", kind: .holiday)
+            ]
+        )
+
+        XCTAssertEqual(MobileCalendarAllDayLayout.labels(for: [day]), ["作业一 +2"])
+    }
     #endif
 
     func testYearCourseDensityContinuesIncreasingPastFourCourses() {
@@ -698,6 +716,72 @@ final class ScheduleLogicTests: XCTestCase {
             TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "年", calendar: calendar),
             "2026年"
         )
+    }
+
+    func testCalendarPeriodTitlesSupportEnglishWithoutChangingModeIdentity() throws {
+        let calendar = Calendar.shanghai
+        let date = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 23))
+        )
+
+        XCTAssertEqual(
+            TeachingCalendarLogic.periodTitle(
+                for: date,
+                modeRawValue: "日",
+                language: .english,
+                calendar: calendar
+            ),
+            "August 23, 2026"
+        )
+        XCTAssertTrue(
+            TeachingCalendarLogic.periodTitle(
+                for: date,
+                modeRawValue: "周",
+                language: .english,
+                calendar: calendar
+            ).contains("Week")
+        )
+    }
+
+    func testAppLanguagePreferenceRoundTripsThroughUserDefaults() {
+        let suiteName = "AppLanguagePreferenceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(AppLocalization.persistedLanguage(defaults: defaults), .system)
+        defaults.set(AppLanguage.english.rawValue, forKey: AppLocalization.defaultsKey)
+        XCTAssertEqual(AppLocalization.persistedLanguage(defaults: defaults), .english)
+        XCTAssertEqual(AppLanguage.english.resolvedResourceName, "en")
+        XCTAssertEqual(AppLanguage.simplifiedChinese.resolvedResourceName, "zh-Hans")
+        XCTAssertEqual(
+            AppLanguage.system.resourceName(preferredLanguages: ["zh-Hans-CN"]),
+            "zh-Hans"
+        )
+        XCTAssertEqual(
+            AppLanguage.system.resourceName(preferredLanguages: ["ja-JP"]),
+            "en"
+        )
+        XCTAssertEqual(
+            AppLanguage.system.resourceName(preferredLanguages: ["ko-KR"]),
+            "en"
+        )
+    }
+
+    func testEnglishRuntimeStatusCopyUsesTheAppLocalizationBoundary() {
+        XCTAssertEqual(
+            AppLocalization.string("当天空教室已更新", language: .english),
+            "Today's empty rooms are up to date"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("正在导入系统日历…", language: .english),
+            "Importing into the system calendar…"
+        )
+        let format = AppLocalization.string(
+            "已安排未来 %d 个有课日的课程摘要",
+            language: .english
+        )
+        XCTAssertEqual(String(format: format, locale: Locale(identifier: "en"), 3),
+                       "Course summaries scheduled for 3 upcoming class days")
     }
 
     func testCalendarSwipeRequiresDeliberateHorizontalGesture() {

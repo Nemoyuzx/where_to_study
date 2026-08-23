@@ -44,10 +44,11 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::models::{
-    AlmanacRequest, AlmanacResponse, AssignmentsRequest, AssignmentsResponse,
-    ClassroomsCacheResponse, ClassroomsRequest, DeadlinesRequest, DeadlinesResponse,
-    HolidaysRequest, HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings,
-    ScheduleRequest, ScheduleResponse, WeatherRequest, WeatherResponse,
+    AlmanacRequest, AlmanacResponse, AssignmentCalendarResponse, AssignmentsRequest,
+    AssignmentsResponse, CalendarRangeRequest, ClassroomsCacheResponse, ClassroomsRequest,
+    DeadlineCalendarResponse, DeadlinesRequest, DeadlinesResponse, HolidaysRequest,
+    HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest,
+    ScheduleResponse, WeatherRequest, WeatherResponse,
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
@@ -1134,6 +1135,54 @@ async fn fetch_assignments(payload: AssignmentsRequest) -> Result<AssignmentsRes
         .map_err(LocalDataAccessError::message)
 }
 
+#[tauri::command]
+async fn fetch_deadline_calendar(
+    payload: CalendarRangeRequest,
+) -> Result<DeadlineCalendarResponse, String> {
+    deadlines::fetch_deadline_calendar(&payload)
+        .await
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_assignment_calendar(
+    payload: CalendarRangeRequest,
+) -> Result<AssignmentCalendarResponse, String> {
+    let generation = LOCAL_DATA.begin();
+    let credentials = LOCAL_DATA
+        .with_current_account(generation, || {
+            load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())
+        })
+        .map_err(LocalDataAccessError::message)?;
+    let response = assignments::fetch_assignment_calendar(
+        &payload,
+        &credentials.account,
+        &credentials.password,
+        &credentials.account_scope,
+    )
+    .await
+    .map_err(|error| error.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || Ok(response))
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+fn set_interface_language(app: tauri::AppHandle, payload: String) -> Result<(), String> {
+    if !matches!(payload.as_str(), "zh-Hans" | "en") {
+        return Err("界面语言参数无效。".to_string());
+    }
+    #[cfg(not(mobile))]
+    {
+        DESKTOP_INTERFACE_ENGLISH.store(payload == "en", Ordering::SeqCst);
+        refresh_tray_courses(app, true);
+    }
+    #[cfg(mobile)]
+    let _ = app;
+    Ok(())
+}
+
 #[cfg(not(mobile))]
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -1326,6 +1375,18 @@ fn truncate_menu_label(value: String, limit: usize) -> String {
 }
 
 #[cfg(not(mobile))]
+static DESKTOP_INTERFACE_ENGLISH: AtomicBool = AtomicBool::new(false);
+
+#[cfg(not(mobile))]
+fn desktop_text<'a>(chinese: &'a str, english: &'a str) -> &'a str {
+    if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
+        english
+    } else {
+        chinese
+    }
+}
+
+#[cfg(not(mobile))]
 fn course_time_label(course: &crate::models::Course) -> String {
     if !course.time_range.trim().is_empty() {
         return course.time_range.clone();
@@ -1344,12 +1405,12 @@ fn course_time_label(course: &crate::models::Course) -> String {
 #[cfg(not(mobile))]
 fn format_course_menu_line(course: &crate::models::Course, week_number: i64) -> String {
     let room = if course.room.trim().is_empty() {
-        "地点未标注".to_string()
+        desktop_text("地点未标注", "Location unavailable").to_string()
     } else {
         course.room.clone()
     };
     let course_name = if course.exam_week_numbers.contains(&week_number) {
-        format!("试 {}", course.name)
+        format!("{} {}", desktop_text("试", "Exam"), course.name)
     } else {
         course.name.clone()
     };
@@ -1388,10 +1449,17 @@ fn append_course_section<M: Manager<tauri::Wry>>(
         menu,
         app,
         format!("{id_prefix}_title"),
-        format!(
-            "{}课程 · {} · 第 {} 周",
-            day.label, day.date, day.week_number
-        ),
+        if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
+            format!(
+                "{} courses · {} · Week {}",
+                day.label, day.date, day.week_number
+            )
+        } else {
+            format!(
+                "{}课程 · {} · 第 {} 周",
+                day.label, day.date, day.week_number
+            )
+        },
         true,
     )?;
     if day.courses.is_empty() {
@@ -1399,7 +1467,11 @@ fn append_course_section<M: Manager<tauri::Wry>>(
             menu,
             app,
             format!("{id_prefix}_empty"),
-            format!("{}暂无课程", day.label),
+            if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
+                format!("No courses {}", day.label.to_lowercase())
+            } else {
+                format!("{}暂无课程", day.label)
+            },
             true,
         )?;
     } else {
@@ -1427,24 +1499,42 @@ fn build_tray_menu<M: Manager<tauri::Wry>>(
         &menu,
         app,
         "tray_status",
-        "空教室、教学日历与本地账号设置",
+        desktop_text(
+            "空教室、教学日历与本地账号设置",
+            "Empty classrooms, calendar, and local settings",
+        ),
         true,
     )?;
     append_separator(&menu, app)?;
 
     match &content {
         TrayCourseContent::Loading => {
-            append_menu_item(&menu, app, "loading_title", "课程 · 正在更新", false)?;
+            append_menu_item(
+                &menu,
+                app,
+                "loading_title",
+                desktop_text("课程 · 正在更新", "Courses · Updating"),
+                false,
+            )?;
             append_menu_item(
                 &menu,
                 app,
                 "loading_message",
-                "正在读取本地账号并获取课表…",
+                desktop_text(
+                    "正在读取本地账号并获取课表…",
+                    "Reading the local account and loading the schedule…",
+                ),
                 false,
             )?;
         }
         TrayCourseContent::Message(message) => {
-            append_menu_item(&menu, app, "course_message_title", "课程", true)?;
+            append_menu_item(
+                &menu,
+                app,
+                "course_message_title",
+                desktop_text("课程", "Courses"),
+                true,
+            )?;
             append_menu_item(
                 &menu,
                 app,
@@ -1461,12 +1551,48 @@ fn build_tray_menu<M: Manager<tauri::Wry>>(
     }
 
     append_separator(&menu, app)?;
-    let open = MenuItem::with_id(app, "open", "打开主窗口", true, None::<&str>)?;
-    let planner = MenuItem::with_id(app, "planner", "查看空教室", true, None::<&str>)?;
-    let calendar = MenuItem::with_id(app, "calendar", "教学日历", true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", "设置", true, Some("CmdOrCtrl+,"))?;
-    let refresh = MenuItem::with_id(app, "refresh_today", "刷新课程", true, Some("CmdOrCtrl+R"))?;
-    let quit = MenuItem::with_id(app, "quit", "退出", true, Some("CmdOrCtrl+Q"))?;
+    let open = MenuItem::with_id(
+        app,
+        "open",
+        desktop_text("打开主窗口", "Open main window"),
+        true,
+        None::<&str>,
+    )?;
+    let planner = MenuItem::with_id(
+        app,
+        "planner",
+        desktop_text("查看空教室", "View empty classrooms"),
+        true,
+        None::<&str>,
+    )?;
+    let calendar = MenuItem::with_id(
+        app,
+        "calendar",
+        desktop_text("教学日历", "Teaching calendar"),
+        true,
+        None::<&str>,
+    )?;
+    let settings = MenuItem::with_id(
+        app,
+        "settings",
+        desktop_text("设置", "Settings"),
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+    let refresh = MenuItem::with_id(
+        app,
+        "refresh_today",
+        desktop_text("刷新课程", "Refresh courses"),
+        true,
+        Some("CmdOrCtrl+R"),
+    )?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        desktop_text("退出", "Quit"),
+        true,
+        Some("CmdOrCtrl+Q"),
+    )?;
     menu.append_items(&[&open, &planner, &calendar, &settings])?;
     append_separator(&menu, app)?;
     menu.append_items(&[&refresh, &quit])?;
@@ -1549,8 +1675,18 @@ fn schedule_to_tray_content(schedule: ScheduleResponse) -> TrayCourseContent {
     let today_date = config::today_in_app_tz();
     let tomorrow_date = today_date + ChronoDuration::days(1);
     TrayCourseContent::Courses {
-        today: build_tray_day_courses("今日", &schedule.courses, today_date, term_start_date),
-        tomorrow: build_tray_day_courses("明日", &schedule.courses, tomorrow_date, term_start_date),
+        today: build_tray_day_courses(
+            desktop_text("今日", "Today"),
+            &schedule.courses,
+            today_date,
+            term_start_date,
+        ),
+        tomorrow: build_tray_day_courses(
+            desktop_text("明日", "Tomorrow"),
+            &schedule.courses,
+            tomorrow_date,
+            term_start_date,
+        ),
     }
 }
 
@@ -2405,7 +2541,10 @@ pub fn run() {
             fetch_weather,
             fetch_almanac,
             fetch_deadlines,
-            fetch_assignments
+            fetch_assignments,
+            fetch_deadline_calendar,
+            fetch_assignment_calendar,
+            set_interface_language
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

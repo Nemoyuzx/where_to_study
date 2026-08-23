@@ -1,14 +1,26 @@
 // 与 iOS 端 PrivacyPolicyView.swift 对应的应用内隐私声明页。
 import { AppTheme } from '../common/AppTheme';
 import { AppContext } from '../store/AppContext';
+import { AppModel } from '../model/AppModel';
+import { AppLanguage } from '../common/AppLocalization';
 
 @ComponentV2
 export struct PrivacyPolicyView {
+  @Consumer('appModel') model: AppModel = new AppModel();
   @Event onClose: () => void = () => {
   };
 
   private static readonly githubURL: string =
     'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md';
+
+  private policyText(value: string): string {
+    const separator: string = value.includes('\n\n') ? '\n\n' : ' / ';
+    const parts: string[] = value.split(separator);
+    if (parts.length < 2) {
+      return this.model.text(value);
+    }
+    return this.model.resolvedLanguage() === AppLanguage.english ? parts[parts.length - 1] : parts[0];
+  }
 
   build() {
     Column() {
@@ -16,7 +28,7 @@ export struct PrivacyPolicyView {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([AppTheme.text()])
-        Text('返回')
+        Text(this.model.resolvedLanguage() === AppLanguage.english ? 'Back' : '返回')
           .fontSize(16)
           .fontColor(AppTheme.text())
       }
@@ -33,18 +45,19 @@ export struct PrivacyPolicyView {
               .fontSize(12)
               .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.secondaryText())
-            Text('隐私声明 / Privacy Policy')
+            Text(this.policyText('隐私声明 / Privacy Policy'))
               .fontSize(30)
               .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.text())
-            Text('生效日期 / Effective date: 2026-08-23')
+            Text(this.model.resolvedLanguage() === AppLanguage.english ?
+              'Effective date: 2026-08-23' : '生效日期：2026-08-23')
               .fontSize(14)
               .fontColor(AppTheme.secondaryText())
           }
           .alignItems(HorizontalAlign.Start)
           .width('100%')
 
-          Text('Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由学校运营，也不代表学校官方立场。\n\nWhere To Study is an independent, unofficial client for BUPT schedules, empty classrooms, and related study information. It is not operated by or affiliated with BUPT.')
+          Text(this.policyText('Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由学校运营，也不代表学校官方立场。\n\nWhere To Study is an independent, unofficial client for BUPT schedules, empty classrooms, and related study information. It is not operated by or affiliated with BUPT.'))
             .fontSize(15)
             .fontColor(AppTheme.text())
             .width('100%')
@@ -73,7 +86,7 @@ export struct PrivacyPolicyView {
               SymbolGlyph($r('sys.symbol.arrow_up_right'))
                 .fontSize(16)
                 .fontColor([AppTheme.text()])
-              Text('在 GitHub 查看完整声明 / Full policy on GitHub')
+              Text(this.policyText('在 GitHub 查看完整声明 / Full policy on GitHub'))
                 .fontSize(14)
                 .fontColor(AppTheme.text())
             }
@@ -112,11 +125,11 @@ export struct PrivacyPolicyView {
     Column({ space: 8 }) {
       Divider()
         .color(AppTheme.border())
-      Text(title)
+      Text(this.policyText(title))
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
-      Text(body)
+      Text(this.policyText(body))
         .fontSize(14)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(20)

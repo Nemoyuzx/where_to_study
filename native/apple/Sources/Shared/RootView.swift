@@ -144,7 +144,7 @@ struct RootView: View {
                 Button {
                     model.selectedSection = section
                 } label: {
-                    Label(section.title, systemImage: section.systemImage)
+                    Label(model.localized(section.titleKey), systemImage: section.systemImage)
                         .font(.body.weight(model.selectedSection == section ? .semibold : .regular))
                         .foregroundStyle(AppTheme.text)
                         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
@@ -225,7 +225,7 @@ struct RootView: View {
                             .font(.system(size: 18, weight: .medium))
                             .frame(width: 24, height: 24, alignment: .center)
                         if isRegularSidebarExpanded {
-                            Text(section.title)
+                            Text(model.localized(section.titleKey))
                                 .font(.body.weight(model.selectedSection == section ? .semibold : .regular))
                                 .lineLimit(1)
                                 .transition(.opacity)
@@ -254,7 +254,7 @@ struct RootView: View {
                 .buttonStyle(.plain)
                 .frame(maxWidth: isRegularSidebarExpanded ? .infinity : nil, alignment: .center)
                 .accessibilityIdentifier(section.accessibilityIdentifier)
-                .accessibilityLabel(section.title)
+                .accessibilityLabel(model.localized(section.titleKey))
                 .accessibilityAddTraits(model.selectedSection == section ? .isSelected : [])
             }
 
@@ -273,7 +273,7 @@ struct RootView: View {
             ForEach(AppSection.allCases) { section in
                 compactTabSectionView(section)
                     .tabItem {
-                        Label(section.title, systemImage: section.systemImage)
+                        Label(model.localized(section.titleKey), systemImage: section.systemImage)
                             .accessibilityIdentifier(section.accessibilityIdentifier)
                     }
                     .tag(section)

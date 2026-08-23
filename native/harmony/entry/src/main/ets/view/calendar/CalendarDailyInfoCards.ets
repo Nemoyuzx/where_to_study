@@ -8,34 +8,15 @@ import {
   PublicDeadlineKindInfo, PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../../net/CalendarDailyInfoClient';
 import { AppContext } from '../../store/AppContext';
+import { AppLanguage } from '../../common/AppLocalization';
 
 @ComponentV2
 export struct CalendarDailyInfoCards {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param day: DateParts = StrictDates.todayParts();
 
-  aboutToAppear(): void {
-    this.ensureData();
-  }
-
-  @Monitor('day')
-  onDayChange(monitor: IMonitor): void {
-    this.ensureData();
-  }
-
-  @Monitor('model.almanacEnabled', 'model.competitionDeadlinesEnabled',
-    'model.schoolContestNoticesEnabled',
-    'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled')
-  onFeatureChange(monitor: IMonitor): void {
-    this.ensureData();
-  }
-
   private date(): string {
     return StrictDates.formatDateParts(this.day);
-  }
-
-  private ensureData(): void {
-    this.model.loadCalendarDailyInfo(this.date());
   }
 
   private open(url: string): void {
@@ -95,7 +76,8 @@ export struct CalendarDailyInfoCards {
           this.assignmentRow(item)
         }, (item: AssignmentDeadlineItem) => 'assignment.' + item.id)
       } else {
-        Text(this.model.assignmentUnavailableByDate.get(this.date()) ?? '当天暂无课程作业 DDL')
+        Text(this.model.text(this.model.assignmentUnavailableByDate.get(this.date()) ??
+          '当天暂无课程作业 DDL'))
           .fontSize(13)
           .fontColor(this.model.loadingAssignmentDates.has(this.date()) ?
             AppTheme.secondaryText() :
@@ -153,6 +135,8 @@ export struct CalendarDailyInfoCards {
     }
     parts.push(this.deadlineTime(item.deadline));
     if (item.status !== null) {
+      // The assignment status comes from UCloud and remains verbatim, just
+      // like course, assignment, contest, weather, and almanac content.
       parts.push(item.status as string);
     }
     return parts.join(' · ');
@@ -165,11 +149,12 @@ export struct CalendarDailyInfoCards {
       if (this.almanac() !== null) {
         this.almanacContent(this.almanac() as AlmanacInfo)
       } else if (this.model.loadingAlmanacDates.has(this.date())) {
-        Text('正在获取黄历与宜忌…')
+        Text(this.model.text('正在获取黄历与宜忌…'))
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       } else if (this.model.almanacErrors.has(this.date())) {
-        Text((this.model.almanacErrors.get(this.date()) ?? '黄历获取失败。') + ' 点击重试')
+        Text(this.model.text(this.model.almanacErrors.get(this.date()) ??
+          '黄历获取失败。') + ' ' + this.model.text('点击重试'))
           .fontSize(13)
           .fontColor(AppTheme.danger())
           .lineHeight(18)
@@ -177,18 +162,18 @@ export struct CalendarDailyInfoCards {
             this.model.loadCalendarDailyInfo(this.date(), true, false);
           })
       } else {
-        Text('暂无黄历信息')
+        Text(this.model.text('暂无黄历信息'))
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       }
       Row({ space: 8 }) {
-        Text('民俗信息仅供参考 · 第三方来源：UAPI')
+        Text(this.model.text('民俗信息仅供参考 · 第三方来源：UAPI'))
           .fontSize(11)
           .fontColor(AppTheme.secondaryText())
           .onClick(() => {
             this.open(CalendarDailyInfoSources.uapiOrigin);
           })
-        Text('宜忌：Timeless API')
+        Text(this.model.text('宜忌：Timeless API'))
           .fontSize(11)
           .fontColor(AppTheme.primary())
           .onClick(() => {
@@ -208,12 +193,16 @@ export struct CalendarDailyInfoCards {
 
   @Builder
   almanacContent(info: AlmanacInfo) {
-    Text(info.weekday + ' · 农历' + info.lunarDate + ' · ' + info.zodiac + '年')
+    Text(this.model.resolvedLanguage() === AppLanguage.english ?
+      info.weekday + ' · Lunar ' + info.lunarDate + ' · Zodiac ' + info.zodiac :
+      info.weekday + ' · 农历' + info.lunarDate + ' · ' + info.zodiac + '年')
       .fontSize(13)
       .fontWeight(FontWeight.Medium)
       .fontColor(AppTheme.text())
       .width('100%')
-    Text('干支：' + info.ganzhiYear + '年 ' + info.ganzhiMonth + '月 ' + info.ganzhiDay + '日')
+    Text(this.model.resolvedLanguage() === AppLanguage.english ?
+      'Ganzhi: ' + info.ganzhiYear + ' / ' + info.ganzhiMonth + ' / ' + info.ganzhiDay :
+      '干支：' + info.ganzhiYear + '年 ' + info.ganzhiMonth + '月 ' + info.ganzhiDay + '日')
       .fontSize(12)
       .fontColor(AppTheme.secondaryText())
       .width('100%')
@@ -248,7 +237,7 @@ export struct CalendarDailyInfoCards {
   @Builder
   almanacAdviceRow(label: string, value: string, color: ResourceColor) {
     Row({ space: 8 }) {
-      Text(label)
+      Text(this.model.text(label))
         .fontSize(12)
         .fontWeight(FontWeight.Bold)
         .fontColor(Color.White)
@@ -273,7 +262,7 @@ export struct CalendarDailyInfoCards {
       this.cardTitle('DDL · 竞赛 / 夏令营 / 黑客松')
       if (this.deadlineSnapshot() !== null) {
         if (this.enabledDeadlineItems().length === 0) {
-          Text('当天暂无已启用类别的 DDL')
+          Text(this.model.text('当天暂无已启用类别的 DDL'))
             .fontSize(13)
             .fontColor(AppTheme.secondaryText())
         } else {
@@ -282,16 +271,17 @@ export struct CalendarDailyInfoCards {
           }, (item: PublicDeadlineItem) => 'public-deadline.' + item.id)
         }
         if ((this.deadlineSnapshot() as PublicDeadlineSnapshot).usedBackup) {
-          Text('本次使用备用 API')
+          Text(this.model.text('本次使用备用 API'))
             .fontSize(11)
             .fontColor(AppTheme.secondaryText())
         }
       } else if (this.model.loadingPublicDeadlineDates.has(this.date())) {
-        Text('正在获取当天 DDL…')
+        Text(this.model.text('正在获取当天 DDL…'))
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       } else if (this.model.publicDeadlineErrors.has(this.date())) {
-        Text((this.model.publicDeadlineErrors.get(this.date()) ?? 'DDL 获取失败。') + ' 点击重试')
+        Text(this.model.text(this.model.publicDeadlineErrors.get(this.date()) ??
+          'DDL 获取失败。') + ' ' + this.model.text('点击重试'))
           .fontSize(13)
           .fontColor(AppTheme.danger())
           .lineHeight(18)
@@ -299,24 +289,24 @@ export struct CalendarDailyInfoCards {
             this.model.loadCalendarDailyInfo(this.date(), false, true);
           })
       } else {
-        Text('暂无 DDL 信息')
+        Text(this.model.text('暂无 DDL 信息'))
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       }
       Row({ space: 10 }) {
-        Text('第三方来源：Contest DDL')
+        Text(this.model.text('第三方来源：Contest DDL'))
           .fontSize(11)
           .fontColor(AppTheme.primary())
           .onClick(() => {
             this.open(CalendarDailyInfoSources.deadlinePrimaryPage);
           })
-        Text('备用 API')
+        Text(this.model.text('备用 API'))
           .fontSize(11)
           .fontColor(AppTheme.secondaryText())
           .onClick(() => {
             this.open(CalendarDailyInfoSources.deadlineBackup);
           })
-        Text('校内竞赛通知')
+        Text(this.model.text('校内竞赛通知'))
           .fontSize(11)
           .fontColor(AppTheme.secondaryText())
           .onClick(() => {
@@ -324,7 +314,7 @@ export struct CalendarDailyInfoCards {
           })
       }
       .width('100%')
-      Text('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。')
+      Text(this.model.text('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。'))
         .fontSize(11)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(16)
@@ -341,8 +331,8 @@ export struct CalendarDailyInfoCards {
   @Builder
   publicDeadlineRow(item: PublicDeadlineItem) {
     Row({ space: 9 }) {
-      Text(item.source === PublicDeadlineSource.schoolNotice ?
-        '校内竞赛通知' : PublicDeadlineKindInfo.title(item.kind))
+      Text(this.model.text(item.source === PublicDeadlineSource.schoolNotice ?
+        '校内竞赛通知' : PublicDeadlineKindInfo.title(item.kind)))
         .fontSize(10)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.onPrimary())
@@ -389,7 +379,7 @@ export struct CalendarDailyInfoCards {
 
   @Builder
   cardTitle(title: string) {
-    Text(title)
+    Text(this.model.text(title))
       .fontSize(15)
       .fontWeight(FontWeight.Bold)
       .fontColor(AppTheme.text())
@@ -398,7 +388,7 @@ export struct CalendarDailyInfoCards {
 
   @Builder
   sourceLink(label: string, url: string) {
-    Text(label)
+    Text(this.model.text(label))
       .fontSize(11)
       .fontColor(AppTheme.primary())
       .width('100%')

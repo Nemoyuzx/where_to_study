@@ -34,6 +34,9 @@ import { AppRuntimeMode } from './AppRuntimeMode';
 import { SampleData } from './SampleData';
 import { WidgetSync } from '../widget/WidgetSync';
 import { WidgetCoursePreferences } from '../widget/TodayCourseWidgetData';
+import {
+  AppLanguage, AppLanguageInfo, AppLocalization
+} from '../common/AppLocalization';
 
 export class CredentialSettingsError extends Error {
   constructor(message: string) {
@@ -212,6 +215,8 @@ export class AppModel {
   @Trace holidayStatusByYear: Map<number, string> = new Map<number, string>();
   @Trace dailyCourseNotificationsEnabled: boolean = false;
   @Trace dailyCourseNotificationStatusMessage: string = '';
+  @Trace languageSettingRawValue: string = AppLanguage.system;
+  @Trace systemLanguageID: string = AppLanguageInfo.systemLanguage();
   @Trace runtimeMode: AppRuntimeMode;
 
   readonly slots: SlotMetadata[] = SlotMetadata.defaults;
@@ -247,6 +252,7 @@ export class AppModel {
   private classroomRefreshInFlight: boolean = false;
   private weatherRevision: number = 0;
   private calendarDailyInfoRevision: number = 0;
+  private calendarMarkerLoadingDates: Set<string> = new Set<string>();
   // 每日课程摘要对账门控（BUG-050 修复）：当日已对账且无变化时不再全量重排提醒。
   private dailyCourseNotificationReconciledDay: string = '';
   private dailyCourseNotificationDirty: boolean = true;
@@ -305,6 +311,7 @@ export class AppModel {
     const savedTermID: string | null = await this.preferences.getString('termID');
     const savedTermStart: string | null = await this.preferences.getString('termStartDate');
     const savedCampusID: string | null = await this.preferences.getString('campusID');
+    const savedLanguage: string | null = await this.preferences.getString('appLanguage');
     const notificationsEnabled: boolean = await this.preferences.getBool(
       DailyCourseNotificationSettings.enabledKey, false);
     this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
@@ -317,10 +324,14 @@ export class AppModel {
     this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
     this.competitionDeadlinesEnabled = await this.preferences.getBool(
       'competitionDeadlinesEnabled', true);
+    this.schoolContestNoticesEnabled = await this.preferences.getBool(
+      'schoolContestNoticesEnabled', true);
     this.summerCampDeadlinesEnabled = await this.preferences.getBool(
       'summerCampDeadlinesEnabled', true);
     this.hackathonDeadlinesEnabled = await this.preferences.getBool(
       'hackathonDeadlinesEnabled', true);
+    this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
+    this.systemLanguageID = AppLanguageInfo.systemLanguage();
     this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
     this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
       savedTermStart : ScheduleDefaults.termStartDate;
@@ -372,6 +383,26 @@ export class AppModel {
 
   selectedCampusName(): string {
     return this.queryCampusID === '04' ? '沙河' : '西土城';
+  }
+
+  languageSetting(): AppLanguage {
+    return AppLanguageInfo.normalize(this.languageSettingRawValue);
+  }
+
+  resolvedLanguage(): AppLanguage {
+    return AppLanguageInfo.resolved(this.languageSetting(), this.systemLanguageID);
+  }
+
+  text(source: string): string {
+    return AppLocalization.text(source, this.languageSetting(), this.systemLanguageID);
+  }
+
+  refreshSystemLanguage(): void {
+    const current: string = AppLanguageInfo.systemLanguage();
+    if (current !== this.systemLanguageID) {
+      this.systemLanguageID = current;
+      this.synchronizeWidgetSchedule();
+    }
   }
 
   todayCourses(): Course[] {
@@ -602,6 +633,7 @@ export class AppModel {
       const savedTermID: string | null = await this.preferences.getString('termID');
       const savedTermStart: string | null = await this.preferences.getString('termStartDate');
       const savedCampusID: string | null = await this.preferences.getString('campusID');
+      const savedLanguage: string | null = await this.preferences.getString('appLanguage');
       const notificationsEnabled: boolean = await this.preferences.getBool(
         DailyCourseNotificationSettings.enabledKey, false);
       this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
@@ -620,6 +652,8 @@ export class AppModel {
         'summerCampDeadlinesEnabled', true);
       this.hackathonDeadlinesEnabled = await this.preferences.getBool(
         'hackathonDeadlinesEnabled', true);
+      this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
+      this.systemLanguageID = AppLanguageInfo.systemLanguage();
       this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
       this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
         savedTermStart : ScheduleDefaults.termStartDate;
@@ -751,6 +785,15 @@ export class AppModel {
     this.synchronizeWidgetSchedule();
   }
 
+  async setLanguageSetting(value: AppLanguage): Promise<void> {
+    this.languageSettingRawValue = value;
+    this.systemLanguageID = AppLanguageInfo.systemLanguage();
+    await this.preferences.setString('appLanguage', value);
+    this.synchronizeWidgetSchedule();
+    this.dailyCourseNotificationDirty = true;
+    this.reconcileDailyCourseNotifications(false);
+  }
+
   async setWidgetShowsTeacher(value: boolean): Promise<void> {
     this.widgetShowsTeacher = value;
     await this.preferences.setBool('widgetShowsTeacher', value);
@@ -877,7 +920,8 @@ export class AppModel {
       return;
     }
     const coordinator: DailyCourseNotificationCoordinator = new DailyCourseNotificationCoordinator(
-      this.dailyCourseNotificationScheduler, this.dailyCourseNotificationAuthorizationTimeoutMs);
+      this.dailyCourseNotificationScheduler, this.dailyCourseNotificationAuthorizationTimeoutMs,
+      this.resolvedLanguage() === AppLanguage.english);
     const work: Promise<void> = (async (): Promise<void> => {
       try {
         const result = await coordinator.reconcile(
@@ -992,6 +1036,7 @@ export class AppModel {
     await this.preferences.remove('schoolContestNoticesEnabled');
     await this.preferences.remove('summerCampDeadlinesEnabled');
     await this.preferences.remove('hackathonDeadlinesEnabled');
+    await this.preferences.remove('appLanguage');
     this.widgetShowsLocation = true;
     this.widgetShowsTeacher = true;
     this.widgetCourseLimit = WidgetCoursePreferences.defaultLimit;
@@ -1001,6 +1046,8 @@ export class AppModel {
     this.schoolContestNoticesEnabled = true;
     this.summerCampDeadlinesEnabled = true;
     this.hackathonDeadlinesEnabled = true;
+    this.languageSettingRawValue = AppLanguage.system;
+    this.systemLanguageID = AppLanguageInfo.systemLanguage();
     this.campusID = '01';
     this.queryCampusID = '01';
     this.termID = ScheduleDefaults.termID;
@@ -1303,7 +1350,102 @@ export class AppModel {
     this.assignmentDeadlinesByDate = new Map<string, AssignmentDeadlineItem[]>();
     this.assignmentUnavailableByDate = new Map<string, string>();
     this.loadingAssignmentDates = new Set<string>();
+    this.calendarMarkerLoadingDates.clear();
     this.assignmentClient.reset();
+  }
+
+  // 月格/年格标记的批量预取与视图动画分离：UCloud 和公开 DDL 客户端
+  // 各自共享一次全量请求，这里只在内存中按日期分组，最后一次性交付 Map。
+  prefetchCalendarMarkers(days: DateParts[]): void {
+    const dates: string[] = [];
+    for (const day of days) {
+      const date: string = StrictDates.formatDateParts(day);
+      if (!this.calendarMarkerLoadingDates.has(date) && !dates.includes(date)) {
+        const needsAssignments: boolean = !this.assignmentDeadlinesByDate.has(date) &&
+          !this.assignmentUnavailableByDate.has(date);
+        const needsDeadlines: boolean = this.hasEnabledPublicDeadlines() &&
+          !this.publicDeadlinesByDate.has(date);
+        if (needsAssignments || needsDeadlines) {
+          dates.push(date);
+          this.calendarMarkerLoadingDates.add(date);
+        }
+      }
+    }
+    if (dates.length === 0) {
+      return;
+    }
+    const revision: number = this.calendarDailyInfoRevision;
+    const work: Promise<void> = (async (): Promise<void> => {
+      const assignmentResults: Map<string, AssignmentDeadlineItem[]> =
+        new Map<string, AssignmentDeadlineItem[]>();
+      const deadlineResults: Map<string, PublicDeadlineSnapshot> =
+        new Map<string, PublicDeadlineSnapshot>();
+      if (this.isSampleMode()) {
+        for (const date of dates) {
+          const parts: DateParts | null = StrictDates.parseDateString(date);
+          assignmentResults.set(date, parts !== null && parts.day % 5 === 3 ?
+            [new AssignmentDeadlineItem(
+              'sample-assignment', '示例课程作业', '示例课程', date + ' 23:59:00', '未提交')] : []);
+          if (this.hasEnabledPublicDeadlines()) {
+            const items: PublicDeadlineItem[] = parts !== null && parts.day % 7 === 2 ?
+              [new PublicDeadlineItem(
+                'sample-competition', '全国大学生示例竞赛', PublicDeadlineKind.competition,
+                PublicDeadlineSource.contestDDL, date + 'T23:59:00+08:00', '示例组委会', null)] : [];
+            deadlineResults.set(date, new PublicDeadlineSnapshot(date, items,
+            'https://nemoyuzx.github.io/contest-ddl/data/competitions.json', false));
+          }
+        }
+      } else {
+        try {
+          const credentials: Credentials = await this.credentialsForRequest();
+          for (const date of dates) {
+            if (!this.assignmentDeadlinesByDate.has(date) &&
+              !this.assignmentUnavailableByDate.has(date)) {
+              assignmentResults.set(date, await this.assignmentClient.fetch(credentials, date));
+            }
+          }
+        } catch (e) {
+          // 未登录或作业源不可用时，不影响公开 DDL 的批量预取。
+        }
+        if (this.hasEnabledPublicDeadlines()) {
+          for (const date of dates) {
+            if (!this.publicDeadlinesByDate.has(date)) {
+              try {
+                deadlineResults.set(date, await this.calendarDailyInfoClient.fetchDeadlines(date));
+              } catch (e) {
+                // 标记预取不显示错误；选中日期的详情请求会给出可重试状态。
+              }
+            }
+          }
+        }
+      }
+      if (revision !== this.calendarDailyInfoRevision) {
+        return;
+      }
+      if (assignmentResults.size > 0) {
+        const assignments: Map<string, AssignmentDeadlineItem[]> =
+          new Map<string, AssignmentDeadlineItem[]>(this.assignmentDeadlinesByDate);
+        assignmentResults.forEach((items: AssignmentDeadlineItem[], date: string) => {
+          assignments.set(date, items);
+        });
+        this.assignmentDeadlinesByDate = assignments;
+      }
+      if (deadlineResults.size > 0) {
+        const deadlines: Map<string, PublicDeadlineSnapshot> =
+          new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
+        deadlineResults.forEach((snapshot: PublicDeadlineSnapshot, date: string) => {
+          deadlines.set(date, snapshot);
+        });
+        this.publicDeadlinesByDate = deadlines;
+      }
+    })();
+    work.finally((): void => {
+      for (const date of dates) {
+        this.calendarMarkerLoadingDates.delete(date);
+      }
+    }).catch(() => {
+      // 上述数据源均在内部降级，不让预取失败泄漏为未处理 Promise。
+    });
   }
 
   loadCalendarDailyInfo(date: string, forceAlmanac: boolean = false,
@@ -1706,7 +1848,8 @@ export class AppModel {
   // 对应 iOS 端 synchronizeWidgetSchedule：课表变化后同步“今日课程”卡片。
   private synchronizeWidgetSchedule(): void {
     WidgetSync.refresh(this.schedule, new WidgetCoursePreferences(
-    this.widgetShowsLocation, this.widgetShowsTeacher, this.widgetCourseLimit));
+    this.widgetShowsLocation, this.widgetShowsTeacher, this.widgetCourseLimit,
+    this.resolvedLanguage()));
   }
 
   private static todayString(): string {

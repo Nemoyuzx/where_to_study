@@ -9,6 +9,35 @@ import XCTest
 final class TodayCourseWidgetDataTests: XCTestCase {
     func testWidgetEmptyStateAlwaysUsesNoCoursesCopy() {
         XCTAssertEqual(TodayCourseWidgetData.emptyMessage, "今日无课")
+        XCTAssertEqual(
+            TodayCourseWidgetData.emptyMessage(language: .english),
+            "No classes today"
+        )
+    }
+
+    func testWidgetLanguageUsesChineseOnlyForChineseSystemLanguages() {
+        XCTAssertEqual(
+            TodayCourseWidgetData.Language.resolve(
+                rawValue: "system",
+                preferredLanguages: ["zh-Hans-CN"]
+            ),
+            .simplifiedChinese
+        )
+        XCTAssertEqual(
+            TodayCourseWidgetData.Language.resolve(
+                rawValue: "system",
+                preferredLanguages: ["ja-JP"]
+            ),
+            .english
+        )
+        XCTAssertEqual(
+            TodayCourseWidgetData.Language.resolve(
+                rawValue: "en",
+                preferredLanguages: ["zh-Hans"]
+            ),
+            .english
+        )
+        XCTAssertEqual(AppLocalization.defaultsKey, TodayCourseWidgetData.languageDefaultsKey)
     }
 
     func testWidgetArchiveSelectsAndOrdersCoursesForRequestedDate() throws {
@@ -79,6 +108,31 @@ final class TodayCourseWidgetDataTests: XCTestCase {
             TodayCourseWidgetData.statusSummary(for: courses, at: betweenCourses),
             "下一节 · 13:00"
         )
+        XCTAssertEqual(
+            TodayCourseWidgetData.statusSummary(
+                for: courses,
+                at: duringFirstCourse,
+                language: .english
+            ),
+            "Now · ends 12:15"
+        )
+        XCTAssertEqual(
+            TodayCourseWidgetData.CoursePhase.upcoming.badgeText(language: .english),
+            "Next"
+        )
+    }
+
+    func testWidgetEnglishDayContextLocalizesOnlyStaticDateLabels() throws {
+        let monday = try XCTUnwrap(StrictContractDateParser.date(from: "2026-03-02"))
+        XCTAssertEqual(
+            TodayCourseWidgetData.dayContext(
+                on: monday,
+                weekNumber: 1,
+                language: .english
+            ),
+            "Mar 2 · Mon · Week 1"
+        )
+        XCTAssertEqual(TodayCourseWidgetData.previewCourses().first?.name, "高等数学")
     }
 
     private func course(

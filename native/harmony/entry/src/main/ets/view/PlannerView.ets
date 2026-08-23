@@ -188,7 +188,7 @@ export struct PlannerView {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.secondaryText())
       Row({ space: 12 }) {
-        Text('联动查询')
+        Text(this.model.text('联动查询'))
           .fontSize(this.isCompact() ? 28 : 34)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
@@ -223,7 +223,7 @@ export struct PlannerView {
           .width(24)
           .textAlign(TextAlign.Center)
         Column({ space: 2 }) {
-          Text('校区天气')
+          Text(this.model.text('校区天气'))
             .fontSize(this.sectionTitleSize())
             .fontWeight(FontWeight.Bold)
             .fontColor(AppTheme.text())
@@ -257,7 +257,8 @@ export struct PlannerView {
           this.emptyMessage('正在更新今日与明日天气…')
         } else if (this.model.weatherErrors.has(this.model.queryCampusID) &&
           !this.model.weatherByCampus.has(this.model.queryCampusID)) {
-          Button((this.model.weatherErrors.get(this.model.queryCampusID) ?? '天气获取失败') + '，点击重试')
+          Button(this.model.text(this.model.weatherErrors.get(this.model.queryCampusID) ??
+            '天气获取失败') + '，' + this.model.text('点击重试'))
             .fontSize(this.isCompact() ? 12.5 : 14)
             .fontColor(AppTheme.danger())
             .height(this.isCompact() ? 48 : 56)
@@ -305,7 +306,7 @@ export struct PlannerView {
         .fontSize(11)
         .fontColor(AppTheme.secondaryText())
         .layoutWeight(1)
-      Text('数据：UAPI')
+      Text(this.model.text('数据：UAPI'))
         .fontSize(11)
         .fontColor(AppTheme.secondaryText())
     }
@@ -322,7 +323,7 @@ export struct PlannerView {
         .width(24)
         .textAlign(TextAlign.Center)
       Column({ space: 2 }) {
-        Text(label + ' · ' + this.shortWeatherDate(day.date))
+        Text(this.model.text(label) + ' · ' + this.shortWeatherDate(day.date))
           .fontSize(13)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
@@ -339,7 +340,8 @@ export struct PlannerView {
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
         if (day.precipitationProbability !== null) {
-          Text('降水 ' + (day.precipitationProbability as number).toString() + '%')
+          Text(this.model.text('降水') + ' ' +
+            (day.precipitationProbability as number).toString() + '%')
             .fontSize(11)
             .fontColor(AppTheme.secondaryText())
         }
@@ -360,7 +362,7 @@ export struct PlannerView {
       SymbolGlyph(icon)
         .fontSize(18)
         .fontColor([AppTheme.text()])
-      Text(title)
+      Text(this.model.text(title))
         .fontSize(this.sectionTitleSize())
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
@@ -371,7 +373,7 @@ export struct PlannerView {
 
   @Builder
   emptyMessage(message: string) {
-    Text(message)
+    Text(this.model.text(message))
       .fontSize(this.isCompact() ? 12.5 : 14)
       .fontColor(AppTheme.secondaryText())
       .width('100%')
@@ -387,7 +389,9 @@ export struct PlannerView {
       this.campusSegment()
       Blank().height(6)
       Button() {
-        Text(this.model.isRefreshingClassrooms ? '正在获取当天空教室…' : '获取空教室信息')
+        Text(this.model.isRefreshingClassrooms ?
+          this.model.text('正在获取当天空教室…') :
+          this.model.text('获取空教室信息'))
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.onPrimary())
@@ -403,7 +407,8 @@ export struct PlannerView {
       })
 
       if (this.model.classroomsCache !== null) {
-        Text((this.model.isSampleMode() ? '数据源：内置示例数据 · ' : '数据源：移动教务实时接口 · ') +
+        Text(this.model.text(this.model.isSampleMode() ? '数据源：内置示例数据 · ' :
+          '数据源：移动教务实时接口 · ') +
           this.model.classroomsCache.targetDate)
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
@@ -421,7 +426,7 @@ export struct PlannerView {
   campusSegment() {
     Row() {
       ForEach(['01', '04'], (id: string) => {
-        Text(id === '01' ? '西土城' : '沙河')
+        Text(this.model.text(id === '01' ? '西土城' : '沙河'))
           .fontSize(14)
           .fontWeight(this.model.queryCampusID === id ? FontWeight.Bold : FontWeight.Regular)
           .fontColor(AppTheme.text())
@@ -449,7 +454,7 @@ export struct PlannerView {
     Column() {
       this.sectionHeader($r('sys.symbol.clock'), '节次筛选')
       Row({ space: 8 }) {
-        Text('使用个人课表排除已有课程')
+        Text(this.model.text('使用个人课表排除已有课程'))
           .fontSize(14)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
@@ -467,7 +472,7 @@ export struct PlannerView {
       .margin({ top: 4, bottom: 4 })
 
       Row({ space: 6 }) {
-        Button('选中空闲')
+        Button(this.model.text('选中空闲'))
           .fontSize(13)
           .fontWeight(FontWeight.Regular)
           .fontColor(AppTheme.text())
@@ -479,7 +484,7 @@ export struct PlannerView {
           .onClick(() => {
             this.model.selectFreeSlots();
           })
-        Button('清空')
+        Button(this.model.text('清空'))
           .fontSize(13)
           .fontWeight(FontWeight.Regular)
           .fontColor(AppTheme.text())
@@ -516,7 +521,7 @@ export struct PlannerView {
   @Builder
   slotChip(slot: SlotMetadata) {
     Column({ space: 2 }) {
-      Text('第 ' + slot.label + ' 节')
+      Text(this.model.text('第 ' + slot.label + ' 节'))
         .fontSize(13)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.model.selectedSlots.has(slot.index) ? AppTheme.onPrimary() : AppTheme.text())
@@ -572,11 +577,11 @@ export struct PlannerView {
   courseRow(course: Course) {
     Row({ space: 12 }) {
       Column({ space: 1 }) {
-        Text(course.examWeekNumbers.length > 0 ? '试  ' + course.name : course.name)
+        Text(course.examWeekNumbers.length > 0 ? this.model.text('试') + '  ' + course.name : course.name)
           .fontSize(this.isCompact() ? 14 : 15)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
-        Text(course.room.length === 0 ? '地点未标注' : course.room)
+        Text(course.room.length === 0 ? this.model.text('地点未标注') : course.room)
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
       }
@@ -688,13 +693,13 @@ export struct PlannerView {
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
-        Text(room.size !== null ? room.size.toString() + ' 座' : '座位未知')
+        Text(this.model.text(room.size !== null ? room.size.toString() + ' 座' : '座位未知'))
           .fontSize(this.isCompact() ? 11 : 12)
           .fontColor(AppTheme.secondaryText())
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
-      Text(this.selectedRanges())
+      Text(this.model.text(this.selectedRanges()))
         .fontSize(this.isCompact() ? 11 : 12)
         .fontColor(AppTheme.primary())
     }
@@ -710,7 +715,7 @@ export struct PlannerView {
         SymbolGlyph($r('sys.symbol.square_grid_2x2'))
           .fontSize(18)
           .fontColor([AppTheme.text()])
-        Text('查询概览')
+        Text(this.model.text('查询概览'))
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
@@ -743,7 +748,7 @@ export struct PlannerView {
   @Builder
   summaryItem(label: string, value: number) {
     Column({ space: 1 }) {
-      Text(label)
+      Text(this.model.text(label))
         .fontSize(11.5)
         .fontColor(AppTheme.secondaryText())
         .textAlign(TextAlign.Center)
@@ -835,6 +840,6 @@ export struct PlannerView {
     const label: string = start === end ?
       '第 ' + first.label + ' 节' :
       '第 ' + first.label + '-' + last.label + ' 节';
-    return label + ' ' + first.start + '-' + last.end;
+    return this.model.text(label + ' ') + first.start + '-' + last.end;
   }
 }

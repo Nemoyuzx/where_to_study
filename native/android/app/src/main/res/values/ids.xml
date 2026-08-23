@@ -23,6 +23,8 @@
     <item name="planner_weather_details" type="id" />
     <item name="privacy_policy_button" type="id" />
     <item name="settings_about_section" type="id" />
+    <item name="settings_language_selector" type="id" />
+    <item name="preserve_raw_text" type="id" />
     <item name="settings_github_link" type="id" />
     <item name="privacy_policy_content" type="id" />
     <item name="privacy_github_link" type="id" />
@@ -41,6 +43,10 @@
     <item name="calendar_date_summary" type="id" />
     <item name="calendar_timeline" type="id" />
     <item name="calendar_all_day_strip" type="id" />
+    <item name="calendar_day_week_agenda" type="id" />
+    <item name="calendar_day_week_agenda_toggle" type="id" />
+    <item name="calendar_day_week_agenda_content" type="id" />
+    <item name="calendar_day_week_course_area" type="id" />
     <item name="calendar_timeline_scroll" type="id" />
     <item name="calendar_timeline_day_scroll" type="id" />
     <item name="calendar_month_view" type="id" />

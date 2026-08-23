@@ -47,9 +47,9 @@ find_text() {
 
 assert_text() {
   # assert_text <描述> <text> [ymin] [ymax]
-  local bounds attempt
+  local bounds
   bounds=""
-  for attempt in 1 2 3 4; do
+  for _ in 1 2 3 4; do
     bounds="$(find_text "$2" "${3:--1}" "${4:-1000000000}")"
     if [[ -n "$bounds" ]]; then
       break

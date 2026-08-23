@@ -319,11 +319,17 @@ private class CalendarTimelineCanvas(
             boldPaint.color = Palette.text
             boldPaint.textAlign = Paint.Align.CENTER
             boldPaint.textSize = sp(12f)
-            drawCenteredText(canvas, "整点", hourAxisWidth / 2f, headerHeight / 2f, boldPaint)
+            drawCenteredText(
+                canvas,
+                context.uiText("整点"),
+                hourAxisWidth / 2f,
+                headerHeight / 2f,
+                boldPaint,
+            )
             if (showCourseSlots) {
                 drawCenteredText(
                     canvas,
-                    "课程节次",
+                    context.uiText("课程节次"),
                     hourAxisWidth + slotAxisWidth / 2f,
                     headerHeight / 2f,
                     boldPaint,
@@ -372,7 +378,7 @@ private class CalendarTimelineCanvas(
                 textPaint.textSize = sp(if (compact) 7f else 9f)
                 drawCenteredText(
                     canvas,
-                    "第 ${slot.label} 节",
+                    context.uiText("第 ${slot.label} 节"),
                     hourAxisWidth + slotAxisWidth / 2f,
                     centerY - dp(7),
                     boldPaint,
@@ -408,7 +414,7 @@ private class CalendarTimelineCanvas(
             val start = CalendarTimelineLogic.minuteOfDay(slot.start) ?: return@forEach
             val end = CalendarTimelineLogic.minuteOfDay(slot.end) ?: return@forEach
             val centerY = (yForMinute(start) + yForMinute(end)) / 2f
-            val label = "第${slot.label}节  ${slot.start}-${slot.end}"
+            val label = context.uiText("第${slot.label}节") + "  ${slot.start}-${slot.end}"
             val labelWidth = (boldPaint.measureText(label) + dp(12))
                 .coerceAtMost(width - dp(16).toFloat())
             val left = dp(5).toFloat()
@@ -479,7 +485,9 @@ private class CalendarTimelineCanvas(
                 textPaint.color = if (day.courses.isEmpty()) Palette.muted else Palette.primaryText
                 textPaint.textAlign = Paint.Align.CENTER
                 textPaint.textSize = sp(10f)
-                val detail = if (day.courses.isEmpty()) "无课" else "${day.courses.size} 门课"
+                val detail = context.uiText(
+                    if (day.courses.isEmpty()) "无课" else "${day.courses.size} 门课",
+                )
                 drawCenteredText(
                     canvas,
                     ellipsize(detail, dayWidth - dp(8), textPaint),
@@ -592,11 +600,15 @@ private class CalendarTimelineCanvas(
                     drawLines(placement.course.name, boldPaint, 3)
                     drawLines(placement.course.timeRange, textPaint, 2)
                     textPaint.textSize = sp(10f)
-                    drawLines(placement.course.room.ifEmpty { "地点未标注" }, textPaint, 3)
+                    drawLines(
+                        placement.course.room.ifEmpty { context.uiText("地点未标注") },
+                        textPaint,
+                        3,
+                    )
                     drawLines(
                         placement.course.teacher.takeIf(String::isNotEmpty)
                             ?.let { "教师：$it" }
-                            ?: "教师未标注",
+                            ?: context.uiText("教师未标注"),
                         textPaint,
                         3,
                     )
@@ -687,7 +699,7 @@ private class CalendarTimelineCanvas(
         headerHeight + timelineHeight * CalendarTimelineLogic.position(minute)
 
     private fun holidayBadge(items: List<HolidayItem>): String = items.joinToString(" · ") {
-        "${if (it.type == "holiday") "休" else "班"} ${it.name}"
+        "${context.uiText(if (it.type == "holiday") "休" else "班")} ${it.name}"
     }
 
     private fun wrapText(text: String, maxWidth: Float, paint: Paint, maximumLines: Int): List<String> {
@@ -712,10 +724,12 @@ private class CalendarTimelineCanvas(
     }
 
     private fun buildAxisContentDescription(): String = buildString {
-        append("整点")
+        append(context.uiText("整点"))
         if (showCourseSlots) {
-            append("；课程节次；")
-            append(AppMetadata.slots.joinToString("；") { "第 ${it.label} 节 ${it.start}-${it.end}" })
+            append("; ${context.uiText("课程节次")}; ")
+            append(AppMetadata.slots.joinToString("; ") {
+                context.uiText("第 ${it.label} 节") + " ${it.start}-${it.end}"
+            })
         }
     }
 
@@ -723,7 +737,11 @@ private class CalendarTimelineCanvas(
         val date = SimpleDateFormat("yyyy年M月d日", Locale.CHINA).apply { timeZone = shanghai }.format(day.date.time)
         val holidays = holidayBadge(day.holidays)
         val courses = day.courses.joinToString("，") { "${it.timeRange} ${it.name} ${it.room}" }
-        listOf(date, holidays, courses.ifEmpty { "无课" }).filter(String::isNotEmpty).joinToString("，")
+        listOf(
+            context.uiText(date),
+            holidays,
+            courses.ifEmpty { context.uiText("无课") },
+        ).filter(String::isNotEmpty).joinToString(if (AppLocale.isEnglish(context)) ", " else "，")
     }
 
     private fun placeCourses(courses: List<Course>): List<CoursePlacement> {

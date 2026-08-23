@@ -4,8 +4,13 @@ import { formBindingData, FormExtensionAbility, formProvider } from '@kit.FormKi
 import { Want } from '@kit.AbilityKit';
 import { WidgetSync } from './WidgetSync';
 import { TodayCourseWidgetData, WidgetArchive, WidgetCoursePreferences } from './TodayCourseWidgetData';
+import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
 
 export default class TodayCourseWidgetAbility extends FormExtensionAbility {
+  private static defaultPreferences(): WidgetCoursePreferences {
+    return new WidgetCoursePreferences(true, true, WidgetCoursePreferences.defaultLimit,
+      AppLanguageInfo.resolved(AppLanguage.system, AppLanguageInfo.systemLanguage()));
+  }
   // 卡片尺寸 → 行数上限（2*2 两行，其余按偏好上限；未知按偏好上限），BUG-040 修复。
   private static rowLimitForDimension(dimension: Object | undefined,
     preferences: WidgetCoursePreferences): number {
@@ -22,7 +27,7 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
       TodayCourseWidgetData.archiveFilePath(this.context.filesDir));
     const dimension: Object | undefined = want.parameters?.['ohos.extra.param.key.form_dimension'];
     const preferences: WidgetCoursePreferences =
-      archive?.preferences ?? new WidgetCoursePreferences();
+      archive?.preferences ?? TodayCourseWidgetAbility.defaultPreferences();
     return formBindingData.createFormBindingData(
       TodayCourseWidgetData.binding(archive, preferences,
         undefined, TodayCourseWidgetData.nowMinute()));
@@ -40,7 +45,7 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
       const archive: WidgetArchive | null = await WidgetSync.loadArchive(
         TodayCourseWidgetData.archiveFilePath(filesDir));
       const preferences: WidgetCoursePreferences =
-        archive?.preferences ?? new WidgetCoursePreferences();
+        archive?.preferences ?? TodayCourseWidgetAbility.defaultPreferences();
       const data: formBindingData.FormBindingData =
         formBindingData.createFormBindingData(
           TodayCourseWidgetData.binding(archive, preferences,

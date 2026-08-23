@@ -135,6 +135,18 @@ class AppPreferences(context: Context) {
             save(CAMPUS_KEY, value)
         }
 
+    var languageCode: String
+        get() = preferences.getString(LANGUAGE_KEY, AppLanguage.SYSTEM.code)
+            ?.takeIf { value -> AppLanguage.entries.any { it.code == value } }
+            ?: AppLanguage.SYSTEM.code
+        set(value) {
+            save(
+                LANGUAGE_KEY,
+                AppLanguage.entries.firstOrNull { it.code == value }?.code
+                    ?: AppLanguage.SYSTEM.code,
+            )
+        }
+
     var termID: String
         get() = preferences.getString(TERM_ID_KEY, AppMetadata.defaultTermID)
             ?: AppMetadata.defaultTermID
@@ -249,6 +261,7 @@ class AppPreferences(context: Context) {
     private companion object {
         const val PREFERENCES_NAME = "app_preferences_v1"
         const val CAMPUS_KEY = "campus_id"
+        const val LANGUAGE_KEY = "language_code"
         const val TERM_ID_KEY = "term_id"
         const val TERM_START_DATE_KEY = "term_start_date"
         const val DAILY_COURSE_NOTIFICATIONS_KEY = "daily_course_notifications_enabled"

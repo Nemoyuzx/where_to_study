@@ -70,3 +70,59 @@ jobs:
           name: where-to-study-tui-macos-arm64
           path: wts-tui/target/release/where-to-study-tui
           if-no-files-found: error
+
+  linux:
+    name: Linux TUI (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
+        with:
+          workspaces: |
+            ./where-to-study-core
+            ./wts-tui
+
+      - name: Test and build TUI
+        run: |
+          set -euo pipefail
+          cargo test --manifest-path wts-tui/Cargo.toml --locked
+          cargo build --manifest-path wts-tui/Cargo.toml --release --locked
+          file wts-tui/target/release/where-to-study-tui
+          wts-tui/target/release/where-to-study-tui --version | grep -F '0.2.3'
+          [[ "$(uname -m)" == "${{ matrix.arch }}" ]]
+
+      - name: Package Linux TUI
+        run: |
+          set -euo pipefail
+          mkdir -p release-artifacts
+          archive="where-to-study-tui-linux-${{ matrix.arch }}.tar.gz"
+          tar -C wts-tui/target/release -czf "release-artifacts/$archive" where-to-study-tui
+          tar -tzf "release-artifacts/$archive" | grep -qx 'where-to-study-tui'
+          (cd release-artifacts && sha256sum "$archive" > "$archive.sha256")
+
+      - name: Upload Linux TUI archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: where-to-study-tui-linux-${{ matrix.arch }}
+          path: |
+            release-artifacts/where-to-study-tui-linux-${{ matrix.arch }}.tar.gz
+            release-artifacts/where-to-study-tui-linux-${{ matrix.arch }}.tar.gz.sha256
+          if-no-files-found: error

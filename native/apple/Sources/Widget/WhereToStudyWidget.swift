@@ -6,6 +6,7 @@ private struct TodayCourseEntry: TimelineEntry {
     let courses: [TodayCourseWidgetData.Course]
     let preferences: TodayCourseWidgetData.Preferences
     let weekNumber: Int?
+    let language: TodayCourseWidgetData.Language
 }
 
 private struct TodayCourseProvider: TimelineProvider {
@@ -14,7 +15,8 @@ private struct TodayCourseProvider: TimelineProvider {
             date: .now,
             courses: TodayCourseWidgetData.previewCourses(),
             preferences: .default,
-            weekNumber: 8
+            weekNumber: 8,
+            language: TodayCourseWidgetData.loadLanguage()
         )
     }
 
@@ -41,7 +43,8 @@ private struct TodayCourseProvider: TimelineProvider {
             date: date,
             courses: TodayCourseWidgetData.courses(on: date, archive: archive),
             preferences: TodayCourseWidgetData.loadPreferences(),
-            weekNumber: TodayCourseWidgetData.weekNumber(on: date, archive: archive)
+            weekNumber: TodayCourseWidgetData.weekNumber(on: date, archive: archive),
+            language: TodayCourseWidgetData.loadLanguage()
         )
     }
 }
@@ -57,7 +60,8 @@ private struct TodayCourseWidgetView: View {
             preferences: entry.preferences,
             weekNumber: entry.weekNumber,
             family: family,
-            usesWidgetContainer: true
+            usesWidgetContainer: true,
+            language: entry.language
         )
     }
 }
@@ -67,11 +71,18 @@ struct WhereToStudyWidget: Widget {
     let kind = "TodayCourseWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TodayCourseProvider()) { entry in
+        let language = TodayCourseWidgetData.loadLanguage()
+        return StaticConfiguration(kind: kind, provider: TodayCourseProvider()) { entry in
             TodayCourseWidgetView(entry: entry)
         }
-        .configurationDisplayName("今日课程")
-        .description("查看今天的课程、节次、教室、教师与上课状态。")
+        .configurationDisplayName(language.text(
+            chinese: "今日课程",
+            english: "Today's Courses"
+        ))
+        .description(language.text(
+            chinese: "查看今天的课程、节次、教室、教师与上课状态。",
+            english: "See today's classes, periods, rooms, teachers, and live status."
+        ))
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

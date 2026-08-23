@@ -5,6 +5,7 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.ColorStateList
@@ -107,6 +108,11 @@ class MainActivity : Activity() {
     }
     private val applyAdaptiveLayout = Runnable { updateAdaptiveLayout() }
 
+    override fun attachBaseContext(newBase: Context) {
+        val languageCode = AppPreferences(newBase).languageCode
+        super.attachBaseContext(AppLocale.wrap(newBase, languageCode))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         DailyCourseNotificationRuntimeMode.activateFrom(intent)
         super.onCreate(savedInstanceState)
@@ -146,6 +152,9 @@ class MainActivity : Activity() {
             initialMonthDetailsScrollY = savedInstanceState
                 ?.getInt(TEACHING_CALENDAR_MONTH_DETAILS_SCROLL_Y_KEY, 0)
                 ?: 0,
+            initialDayWeekAgendaExpanded = savedInstanceState
+                ?.getBoolean(TEACHING_CALENDAR_DAY_WEEK_AGENDA_EXPANDED_KEY, true)
+                ?: true,
         )
 
         adaptiveRoot = FrameLayout(this).apply {
@@ -432,7 +441,7 @@ class MainActivity : Activity() {
         // compound content. An empty string still creates a text line and
         // shifts the icon vertically; a leading drawable also makes the icon
         // appear horizontally off-center inside the square selection surface.
-        view.text = if (navigationRailCollapsed) null else destination.label
+        view.text = if (navigationRailCollapsed) null else uiText(destination.label)
         view.gravity = if (navigationRailCollapsed) Gravity.CENTER else Gravity.CENTER_VERTICAL
         if (navigationRailCollapsed) {
             view.setCompoundDrawablesRelativeWithIntrinsicBounds(
@@ -463,7 +472,7 @@ class MainActivity : Activity() {
             bottomMargin = dp(4)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            view.tooltipText = destination.label
+            view.tooltipText = uiText(destination.label)
         }
     }
 
@@ -483,7 +492,9 @@ class MainActivity : Activity() {
         }
         navigationRailToggle?.apply {
             text = if (navigationRailCollapsed) "›" else "‹"
-            contentDescription = if (navigationRailCollapsed) "展开导航栏" else "收起导航栏"
+            contentDescription = uiText(
+                if (navigationRailCollapsed) "展开导航栏" else "收起导航栏",
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 tooltipText = contentDescription
             }
@@ -545,7 +556,7 @@ class MainActivity : Activity() {
                         navigate(selectedDestination)
                     }
                     navigationRailToggle?.announceForAccessibility(
-                        if (targetCollapsed) "导航栏已收起" else "导航栏已展开",
+                        uiText(if (targetCollapsed) "导航栏已收起" else "导航栏已展开"),
                     )
                 }
             })
@@ -579,6 +590,7 @@ class MainActivity : Activity() {
                 },
                 radius = if (currentLayoutSpec?.usesBottomNavigation == true) 26 else UiMetrics.controlRadiusDp,
             )
+            UiText.localizeTree(view)
         }
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(
@@ -612,6 +624,7 @@ class MainActivity : Activity() {
             ).build()
         }
         page.id = destination.pageViewID
+        UiText.localizeTree(page)
         content.removeAllViews()
         content.addView(
             page,
@@ -624,6 +637,12 @@ class MainActivity : Activity() {
 
     fun refreshCurrentPage() {
         navigate(selectedDestination)
+    }
+
+    fun updateAppLanguage(language: AppLanguage) {
+        if (preferences.languageCode == language.code) return
+        preferences.languageCode = language.code
+        recreate()
     }
 
     fun refreshPlannerIfVisible() {
@@ -801,6 +820,10 @@ class MainActivity : Activity() {
             TEACHING_CALENDAR_MONTH_DETAILS_SCROLL_Y_KEY,
             teachingCalendarSessionState.monthDetailsScrollY,
         )
+        outState.putBoolean(
+            TEACHING_CALENDAR_DAY_WEEK_AGENDA_EXPANDED_KEY,
+            teachingCalendarSessionState.dayWeekAgendaExpanded,
+        )
         super.onSaveInstanceState(outState)
     }
 
@@ -936,13 +959,13 @@ class MainActivity : Activity() {
         result.onSuccess { summary ->
             android.widget.Toast.makeText(
                 this,
-                "已同步 ${summary.totalEvents} 条课程到系统日历。",
+                uiText("已同步 ${summary.totalEvents} 条课程到系统日历。"),
                 android.widget.Toast.LENGTH_LONG,
             ).show()
         }.onFailure { error ->
             android.widget.Toast.makeText(
                 this,
-                error.message ?: "系统日历导入失败。",
+                uiText(error.message ?: "系统日历导入失败。"),
                 android.widget.Toast.LENGTH_LONG,
             ).show()
         }
@@ -1006,6 +1029,8 @@ class MainActivity : Activity() {
             "teaching_calendar_month_details_date"
         const val TEACHING_CALENDAR_MONTH_DETAILS_SCROLL_Y_KEY =
             "teaching_calendar_month_details_scroll_y"
+        const val TEACHING_CALENDAR_DAY_WEEK_AGENDA_EXPANDED_KEY =
+            "teaching_calendar_day_week_agenda_expanded"
         val CALENDAR_PERMISSIONS = arrayOf(
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,

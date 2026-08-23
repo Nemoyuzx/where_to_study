@@ -51,10 +51,9 @@ enum MobileCalendarAllDayLayout {
 
     static func labels(for days: [CalendarTimelineDay]) -> [String] {
         days.map { day in
-            day.holidays.map { holiday in
-                "\(holiday.type == "holiday" ? "休" : "班") \(holiday.name)"
-            }
-            .joined(separator: " · ")
+            guard let first = day.allDayEvents.first else { return "" }
+            let hiddenCount = day.allDayEvents.count - 1
+            return hiddenCount > 0 ? "\(first.title) +\(hiddenCount)" : first.title
         }
     }
 }

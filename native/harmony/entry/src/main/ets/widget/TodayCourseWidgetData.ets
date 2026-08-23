@@ -5,6 +5,7 @@
 import { ScheduleSnapshot } from '../common/Models';
 import { ScheduleLogic } from '../common/ScheduleLogic';
 import { StrictDates, DateParts } from '../common/StrictDates';
+import { AppLanguage } from '../common/AppLocalization';
 
 export class WidgetArchiveCourse {
   readonly id: string;
@@ -57,12 +58,16 @@ export class WidgetCoursePreferences {
   readonly showsLocation: boolean;
   readonly showsTeacher: boolean;
   readonly courseLimit: number;
+  readonly language: string;
 
   constructor(showsLocation: boolean = true, showsTeacher: boolean = true,
-    courseLimit: number = WidgetCoursePreferences.defaultLimit) {
+    courseLimit: number = WidgetCoursePreferences.defaultLimit,
+    language: string = AppLanguage.simplifiedChinese) {
     this.showsLocation = showsLocation;
     this.showsTeacher = showsTeacher;
     this.courseLimit = Math.min(Math.max(courseLimit, 1), WidgetCoursePreferences.maximumLimit);
+    this.language = language === AppLanguage.english ? AppLanguage.english :
+      AppLanguage.simplifiedChinese;
   }
 
   static fromJson(raw: Record<string, Object>): WidgetCoursePreferences {
@@ -70,7 +75,9 @@ export class WidgetCoursePreferences {
       typeof raw['shows_location'] === 'boolean' ? raw['shows_location'] as boolean : true,
       typeof raw['shows_teacher'] === 'boolean' ? raw['shows_teacher'] as boolean : true,
       typeof raw['course_limit'] === 'number' ? raw['course_limit'] as number :
-      WidgetCoursePreferences.defaultLimit);
+      WidgetCoursePreferences.defaultLimit,
+      typeof raw['language'] === 'string' ? raw['language'] as string :
+      AppLanguage.simplifiedChinese);
   }
 
   toJson(): Record<string, Object> {
@@ -78,6 +85,7 @@ export class WidgetCoursePreferences {
     out['shows_location'] = this.showsLocation;
     out['shows_teacher'] = this.showsTeacher;
     out['course_limit'] = this.courseLimit;
+    out['language'] = this.language;
     return out;
   }
 }
@@ -185,7 +193,19 @@ export class TodayCourseWidgetData {
   }
 
   // 日期上下文："8月21日 · 周五 · 第34周"。
-  static dayContext(date: DateParts, weekNumber: number | null): string {
+  static dayContext(date: DateParts, weekNumber: number | null,
+    english: boolean = false): string {
+    if (english) {
+      const weekdays: string[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const parts: string[] = [
+        date.month.toString() + '/' + date.day.toString(),
+        weekdays[StrictDates.weekdayMonday1(date) - 1]
+      ];
+      if (weekNumber !== null) {
+        parts.push('Week ' + weekNumber.toString());
+      }
+      return parts.join(' · ');
+    }
     const weekdays: string[] = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     const parts: string[] = [
       date.month.toString() + '月' + date.day.toString() + '日',
@@ -198,25 +218,28 @@ export class TodayCourseWidgetData {
   }
 
   // 状态摘要：进行中·几点下课 / 下一节·几点 / 今日课程已结束 / 今天可以自由安排。
-  static statusSummary(courses: WidgetArchiveCourse[], minute: number): string {
+  static statusSummary(courses: WidgetArchiveCourse[], minute: number,
+    english: boolean = false): string {
     if (courses.length === 0) {
-      return '今天可以自由安排';
+      return english ? 'No classes today' : '今天可以自由安排';
     }
     for (const course of courses) {
       if (TodayCourseWidgetData.coursePhase(course, StrictDates.todayParts(), minute) ===
         CoursePhase.inProgress) {
         const end: string = TodayCourseWidgetData.endTimeOf(course.timeRange);
-        return end.length === 0 ? '课程进行中' : '进行中 · ' + end + ' 下课';
+        return english ? (end.length === 0 ? 'In progress' : 'In progress · Ends ' + end) :
+          (end.length === 0 ? '课程进行中' : '进行中 · ' + end + ' 下课');
       }
     }
     for (const course of courses) {
       if (TodayCourseWidgetData.coursePhase(course, StrictDates.todayParts(), minute) ===
         CoursePhase.upcoming) {
         const start: string = TodayCourseWidgetData.startTimeOf(course.timeRange);
-        return start.length === 0 ? '还有待上课程' : '下一节 · ' + start;
+        return english ? (start.length === 0 ? 'Upcoming class' : 'Next · ' + start) :
+          (start.length === 0 ? '还有待上课程' : '下一节 · ' + start);
       }
     }
-    return '今日课程已结束';
+    return english ? 'Classes finished for today' : '今日课程已结束';
   }
 
   static startTimeOf(value: string): string {
@@ -230,14 +253,15 @@ export class TodayCourseWidgetData {
   }
 
   // 课程标题：高亮时加前缀（进行中 · X / 下一节 · X）。
-  static courseTitle(course: WidgetArchiveCourse, minute: number): string {
+  static courseTitle(course: WidgetArchiveCourse, minute: number,
+    english: boolean = false): string {
     const phase: CoursePhase = TodayCourseWidgetData.coursePhase(
       course, StrictDates.todayParts(), minute);
     if (phase === CoursePhase.inProgress) {
-      return '进行中 · ' + course.name;
+      return (english ? 'In progress' : '进行中') + ' · ' + course.name;
     }
     if (phase === CoursePhase.upcoming) {
-      return '下一节 · ' + course.name;
+      return (english ? 'Next' : '下一节') + ' · ' + course.name;
     }
     return course.name;
   }
@@ -271,11 +295,13 @@ export class TodayCourseWidgetData {
     const limit: number = Math.max(1, prefs.courseLimit);
     const highlighted: WidgetArchiveCourse | null = TodayCourseWidgetData.highlightedCourse(
       todayCourses, minute);
+    const english: boolean = prefs.language === AppLanguage.english;
     const out: Record<string, Object> = {};
-    out['todayTitle'] = '今日课程';
-    out['todayCountText'] = todayCourses.length === 0 ? '' : todayCourses.length.toString() + ' 门';
-    out['dateContext'] = TodayCourseWidgetData.dayContext(today, week);
-    out['statusText'] = TodayCourseWidgetData.statusSummary(todayCourses, minute);
+    out['todayTitle'] = english ? 'Today\'s Courses' : '今日课程';
+    out['todayCountText'] = todayCourses.length === 0 ? '' : todayCourses.length.toString() +
+      (english ? ' courses' : ' 门');
+    out['dateContext'] = TodayCourseWidgetData.dayContext(today, week, english);
+    out['statusText'] = TodayCourseWidgetData.statusSummary(todayCourses, minute, english);
     for (let i = 0; i < 6; i++) {
       const course: WidgetArchiveCourse | undefined = todayCourses[i];
       const key: string = (i + 1).toString();
@@ -284,19 +310,21 @@ export class TodayCourseWidgetData {
         out['course' + key + 'Details'] = '';
         out['course' + key + 'Highlighted'] = false;
       } else {
-        out['course' + key + 'Name'] = TodayCourseWidgetData.courseTitle(course, minute);
+        out['course' + key + 'Name'] = TodayCourseWidgetData.courseTitle(course, minute, english);
         out['course' + key + 'Details'] = TodayCourseWidgetData.courseDetails(course, prefs);
         out['course' + key + 'Highlighted'] = course.id === (highlighted?.id ?? '');
       }
     }
     out['moreHint'] = todayCourses.length > limit ?
-      '另有 ' + (todayCourses.length - limit).toString() + ' 门课程' : '';
+      (english ? (todayCourses.length - limit).toString() + ' more courses' :
+        '另有 ' + (todayCourses.length - limit).toString() + ' 门课程') : '';
     if (archive === null) {
       out['emptyGlyph'] = '↻';
-      out['emptyText'] = '打开应用获取个人课表';
+      out['emptyText'] = english ? 'Open the app to fetch your schedule' :
+        '打开应用获取个人课表';
     } else if (todayCourses.length === 0) {
       out['emptyGlyph'] = '✓';
-      out['emptyText'] = '今日无课';
+      out['emptyText'] = english ? 'No classes today' : '今日无课';
     } else {
       out['emptyGlyph'] = '';
       out['emptyText'] = '';

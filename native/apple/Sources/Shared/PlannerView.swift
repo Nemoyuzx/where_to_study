@@ -226,7 +226,7 @@ struct PlannerView: View {
                 .foregroundStyle(AppTheme.primary)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(label) · \(shortDate(day.date))")
+                Text("\(model.localized(label)) · \(shortDate(day.date))")
                     .font(.subheadline.weight(.semibold))
                 Text(day.weatherDay == day.weatherNight ? day.weatherDay : "\(day.weatherDay)转\(day.weatherNight)")
                     .font(.caption)
@@ -306,7 +306,7 @@ struct PlannerView: View {
                 .disabled(model.isRefreshingClassrooms)
 
                 if !model.classroomStatusMessage.isEmpty {
-                    Text(model.classroomStatusMessage)
+                    Text(model.localized(model.classroomStatusMessage))
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
                 } else if let cache = model.classroomsCache {
@@ -420,7 +420,7 @@ struct PlannerView: View {
                     }
                     Text(course.name).font(.headline)
                 }
-                Text(course.room.isEmpty ? "地点未标注" : course.room)
+                Text(course.room.isEmpty ? model.localized("地点未标注") : course.room)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
             }
@@ -504,7 +504,7 @@ struct PlannerView: View {
                     .foregroundStyle(AppTheme.primary)
             }
             Spacer(minLength: 8)
-            Text(room.size.map { "\($0) 座" } ?? "座位未知")
+            Text(room.size.map { "\($0) \(model.localized("座"))" } ?? model.localized("座位未知"))
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryText)
                 .fixedSize()
@@ -535,7 +535,7 @@ struct PlannerView: View {
             VStack(spacing: 0) {
                 ForEach(Array(values.enumerated()), id: \.offset) { index, item in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(item.0)
+                        Text(model.localized(item.0))
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.secondaryText)
                             .accessibilityIdentifier("planner.summary.label.\(index)")
@@ -552,7 +552,7 @@ struct PlannerView: View {
             HStack(alignment: .center, spacing: 0) {
                 ForEach(Array(values.enumerated()), id: \.offset) { index, item in
                     VStack(spacing: 4) {
-                        Text(item.0)
+                        Text(model.localized(item.0))
                             .font(.caption)
                             .foregroundStyle(AppTheme.secondaryText)
                             .multilineTextAlignment(.center)
@@ -577,7 +577,7 @@ struct PlannerView: View {
     }
 
     private func emptyMessage(_ message: String) -> some View {
-        Text(message)
+        Text(model.localized(message))
             .font(.subheadline)
             .foregroundStyle(AppTheme.secondaryText)
             .frame(maxWidth: .infinity, minHeight: 72)

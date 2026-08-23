@@ -28,7 +28,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the stable 0.2.2 release version", () => {
+test("all tracked client projects use the stable 0.2.3 release version", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -48,21 +48,27 @@ test("all tracked client projects use the stable 0.2.2 release version", () => {
     path.join(root, "src-tauri", "gen", "apple", "where_to_study_iOS", "Info.plist"),
     "utf8",
   );
+  const coreManifest = readFileSync(path.join(root, "where-to-study-core", "Cargo.toml"), "utf8");
+  const cliManifest = readFileSync(path.join(root, "wts-cli", "Cargo.toml"), "utf8");
+  const tuiManifest = readFileSync(path.join(root, "wts-tui", "Cargo.toml"), "utf8");
 
-  assert.equal(packageMetadata.version, "0.2.2");
-  assert.equal(tauriMetadata.version, "0.2.2");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 2002);
-  assert.match(cargoManifest, /^version = "0\.2\.2"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.2\.2"/);
-  assert.match(nativeAndroid, /versionCode = 29/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.2"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "52"/);
-  assert.match(nativeHarmony, /"versionName": "0\.2\.2"/);
-  assert.match(nativeHarmony, /"versionCode": 1002002/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.2/);
-  assert.match(tauriApple, /CFBundleVersion: "42"/);
-  assert.match(tauriAppleInfo, /<string>0\.2\.2<\/string>/);
-  assert.match(tauriAppleInfo, /<string>42<\/string>/);
+  assert.equal(packageMetadata.version, "0.2.3");
+  assert.equal(tauriMetadata.version, "0.2.3");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 2003);
+  assert.match(cargoManifest, /^version = "0\.2\.3"$/m);
+  assert.match(coreManifest, /^version = "0\.2\.3"$/m);
+  assert.match(cliManifest, /^version = "0\.2\.3"$/m);
+  assert.match(tuiManifest, /^version = "0\.2\.3"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.2\.3"/);
+  assert.match(nativeAndroid, /versionCode = 34/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.3"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "58"/);
+  assert.match(nativeHarmony, /"versionName": "0\.2\.3"/);
+  assert.match(nativeHarmony, /"versionCode": 1002003/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.3/);
+  assert.match(tauriApple, /CFBundleVersion: "43"/);
+  assert.match(tauriAppleInfo, /<string>0\.2\.3<\/string>/);
+  assert.match(tauriAppleInfo, /<string>43<\/string>/);
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {
@@ -152,7 +158,9 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
   );
 
   assert.match(packageMetadata.scripts["tauri:build:linux"], /--bundles deb,appimage/);
-  assert.match(workflow, /runs-on: ubuntu-22\.04/);
+  assert.match(workflow, /runner: ubuntu-22\.04/);
+  assert.match(workflow, /runner: ubuntu-22\.04-arm/);
+  assert.match(workflow, /artifact: where-to-study-linux-aarch64/);
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
   assert.match(workflow, /Acquire::Retries=5/);
   assert.match(workflow, /libwebkit2gtk-4\.1-dev/);
@@ -161,6 +169,25 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
   assert.match(packagingScript, /dpkg-deb -f "\$DEB_PATH" Version/);
   assert.match(packagingScript, /lib\(ayatana-\)\?appindicator3-1/);
   assert.match(packagingScript, /--appimage-extract/);
-  assert.match(packagingScript, /linux-x86_64\.deb/);
-  assert.match(packagingScript, /linux-x86_64\.AppImage/);
+  assert.match(packagingScript, /DEB_EXPECTED_ARCHITECTURE="arm64"/);
+  assert.match(packagingScript, /RELEASE_ARCHITECTURE="aarch64"/);
+  assert.match(packagingScript, /linux-\$RELEASE_ARCHITECTURE\.deb/);
+  assert.match(packagingScript, /linux-\$RELEASE_ARCHITECTURE\.AppImage/);
+});
+
+test("Linux CLI and TUI workflows package x86_64 and native arm64 archives", () => {
+  for (const [workflowName, binary] of [
+    ["build-cli.yml", "where-to-study-cli"],
+    ["build-tui.yml", "where-to-study-tui"],
+  ]) {
+    const workflow = readFileSync(
+      path.join(root, ".github", "workflows", workflowName),
+      "utf8",
+    );
+    assert.match(workflow, /runner: ubuntu-22\.04/);
+    assert.match(workflow, /runner: ubuntu-22\.04-arm/);
+    assert.match(workflow, /arch: x86_64/);
+    assert.match(workflow, /arch: aarch64/);
+    assert.match(workflow, new RegExp(`${binary}-linux-\\$\\{\\{ matrix\\.arch \\}\\}\\.tar\\.gz`));
+  }
 });

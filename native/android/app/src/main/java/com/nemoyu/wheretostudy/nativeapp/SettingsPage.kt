@@ -38,7 +38,7 @@ class SettingsPage(
 
     private fun showSavedToast() {
         transientToast?.cancel()
-        val toast = Toast.makeText(activity, "设置已保存", Toast.LENGTH_SHORT)
+        val toast = Toast.makeText(activity, activity.uiText("设置已保存"), Toast.LENGTH_SHORT)
         transientToast = toast
         toast.show()
         toastHandler.postDelayed({
@@ -63,6 +63,8 @@ class SettingsPage(
             }
             addView(if (isCompact) compactSettingsTitle() else pageTitle(activity, "设置"))
             addView(referenceNotice())
+            addView(spacer(activity, UiMetrics.sectionSpacingDp))
+            addView(languageSurface())
             addView(spacer(activity, UiMetrics.sectionSpacingDp))
             if (availableWidthDp >= 760) {
                 addView(LinearLayout(activity).apply {
@@ -111,6 +113,57 @@ class SettingsPage(
         })
     }
 
+    private fun languageSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        applyCompactSurfacePadding()
+        addView(sectionTitle(activity, "应用设置"))
+        addView(TextView(activity).apply {
+            text = "语言"
+            textSize = 13f
+            setTextColor(Palette.muted)
+            setPadding(0, 0, 0, activity.dp(6))
+        })
+        val languages = AppLanguage.entries
+        val current = languages.indexOfFirst { it.code == preferences.languageCode }
+            .coerceAtLeast(0)
+        addView(Spinner(activity).apply {
+            id = R.id.settings_language_selector
+            adapter = ArrayAdapter(
+                activity,
+                android.R.layout.simple_spinner_item,
+                languages.map { AppLocale.displayName(activity, it) },
+            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            setSelection(current, false)
+            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            setPadding(activity.dp(12), 0, activity.dp(12), 0)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(UiMetrics.controlHeightDp),
+            )
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long,
+                ) {
+                    val selectedLanguage = languages[position]
+                    if (selectedLanguage.code != preferences.languageCode) {
+                        activity.performControlHaptic(view)
+                        activity.updateAppLanguage(selectedLanguage)
+                    }
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+        })
+        addView(TextView(activity).apply {
+            text = "更改语言后将立即重新加载界面。"
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setPadding(0, activity.dp(7), 0, 0)
+        })
+    }
+
     private fun accountSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         val savedIdentity = credentialStore.load()?.let { it.account to it.password.isNotEmpty() }
@@ -128,9 +181,9 @@ class SettingsPage(
             val preservesSavedPassword = hasPersistedPassword &&
                 persistedAccount == account.text.toString().trim()
             passwordStatus.text = if (preservesSavedPassword) {
-                "密码已安全保存，留空保持不变"
+                activity.uiText("密码已安全保存，留空保持不变")
             } else if (hasPersistedPassword && account.text.toString().trim().isNotEmpty()) {
-                "更换账号时请输入新密码"
+                activity.uiText("更换账号时请输入新密码")
             } else {
                 ""
             }
@@ -157,7 +210,7 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, 0, 0, activity.dp(if (isCompact) 5 else 7))
         })
-        val campusLabels = AppMetadata.campuses.map(CampusMetadata::name)
+        val campusLabels = AppMetadata.campuses.map { activity.uiText(it.name) }
         val campusAdapter = object : ArrayAdapter<String>(
             activity,
             android.R.layout.simple_spinner_item,
@@ -292,7 +345,7 @@ class SettingsPage(
                 }.onFailure { error ->
                     Toast.makeText(
                         activity,
-                        error.message ?: "无法安全保存账户信息",
+                        activity.uiText(error.message ?: "无法安全保存账户信息"),
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -324,29 +377,31 @@ class SettingsPage(
                 if (saveResult.isFailure) {
                     Toast.makeText(
                         activity,
-                        saveResult.exceptionOrNull()?.message ?: "无法安全保存账户信息",
+                        activity.uiText(
+                            saveResult.exceptionOrNull()?.message ?: "无法安全保存账户信息",
+                        ),
                         Toast.LENGTH_LONG,
                     ).show()
                     return@setOnClickListener
                 }
                 applySavedCredentials(saveResult.getOrThrow())
-                button.text = "正在获取…"
+                button.text = activity.uiText("正在获取…")
                 button.isEnabled = false
                 scheduleRepository.refresh { result ->
-                    button.text = "获取/刷新个人课表"
+                    button.text = activity.uiText("获取/刷新个人课表")
                     button.isEnabled = true
                     result.onSuccess { schedule ->
                         activity.reconcileDailyCourseNotifications()
                         Toast.makeText(
                             activity,
-                            "个人课表已更新，共 ${schedule.courses.size} 门课程",
+                            activity.uiText("个人课表已更新，共 ${schedule.courses.size} 门课程"),
                             Toast.LENGTH_LONG,
                         ).show()
                         activity.refreshCurrentPage()
                     }.onFailure { error ->
                         Toast.makeText(
                             activity,
-                            error.message ?: "个人课表获取失败",
+                            activity.uiText(error.message ?: "个人课表获取失败"),
                             Toast.LENGTH_LONG,
                         ).show()
                     }
@@ -398,11 +453,11 @@ class SettingsPage(
             autoDetect.setOnCheckedChangeListener { button, checked ->
                 activity.performControlHaptic(button)
                 updateManualFields()
-                text = if (checked) {
+                text = activity.uiText(if (checked) {
                     "获取/刷新课表后会自动应用教务返回的学期与开学日期。"
                 } else {
                     "关闭自动检测后，将使用手动填写的学期信息。"
-                }
+                })
             }
         })
         updateManualFields()
@@ -418,7 +473,11 @@ class SettingsPage(
             }.onSuccess {
                 showSavedToast()
             }.onFailure { error ->
-                Toast.makeText(activity, error.message ?: "无法保存学期设置", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    activity,
+                    activity.uiText(error.message ?: "无法保存学期设置"),
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         })
     }
@@ -445,7 +504,7 @@ class SettingsPage(
                         requested -> "通知权限未开启，无法启用课程摘要"
                         else -> "每日课程摘要已关闭"
                     }
-                    Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, activity.uiText(message), Toast.LENGTH_SHORT).show()
                 }
             }
         })
@@ -484,6 +543,7 @@ class SettingsPage(
                 showsTeacher = preferences.widgetShowsTeacher,
                 rowLimit = minOf(previewCapacity, preferences.widgetCourseLimit),
             )
+            UiText.localizeTree(preview)
             val height = when (previewCapacity) {
                 1 -> 122
                 3 -> 205
@@ -530,7 +590,7 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(8), 0, activity.dp(5))
         })
-        val labels = (1..6).map { "$it 门" }
+        val labels = (1..6).map { activity.uiText("$it 门") }
         addView(Spinner(activity).apply {
             adapter = ArrayAdapter(
                 activity,
@@ -576,7 +636,7 @@ class SettingsPage(
             setTextColor(Palette.text)
             setTypeface(typeface, Typeface.BOLD)
         })
-        val previewLabels = listOf("紧凑", "标准", "展开")
+        val previewLabels = listOf("紧凑", "标准", "展开").map(activity::uiText)
         val previewCapacities = listOf(1, 3, 6)
         addView(Spinner(activity).apply {
             adapter = ArrayAdapter(
@@ -752,11 +812,11 @@ class SettingsPage(
                         }
                         Toast.makeText(
                             activity,
-                            message,
+                            activity.uiText(message),
                             if (result.isComplete) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
                         ).show()
                     }
-                    .show()
+                    .showLocalized()
             }
         })
     }
@@ -948,7 +1008,7 @@ class SettingsPage(
         AlertDialog.Builder(activity)
             .setView(scroll)
             .setNegativeButton("关闭") { _, _ -> activity.performControlHaptic() }
-            .show()
+            .showLocalized()
     }
 
     private fun privacySection(title: String, body: String): LinearLayout =

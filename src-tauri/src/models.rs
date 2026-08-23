@@ -43,6 +43,8 @@ pub struct SavedSettings {
     #[serde(default)]
     pub default_min_seats: usize,
     #[serde(default)]
+    pub ui_language: String,
+    #[serde(default)]
     pub daily_course_notifications_enabled: bool,
     #[serde(default = "default_true")]
     pub automatic_term_detection_enabled: bool,
@@ -69,6 +71,7 @@ impl SavedSettings {
             term_start_date: crate::config::default_term_start_date(),
             campus_id: crate::config::CAMPUSES[0].id.to_string(),
             default_min_seats: 0,
+            ui_language: "system".to_string(),
             daily_course_notifications_enabled: false,
             automatic_term_detection_enabled: true,
             weather_enabled: true,
@@ -90,6 +93,9 @@ impl SavedSettings {
         if self.campus_id.trim().is_empty() {
             self.campus_id = crate::config::CAMPUSES[0].id.to_string();
         }
+        if !matches!(self.ui_language.as_str(), "system" | "zh-Hans" | "en") {
+            self.ui_language = "system".to_string();
+        }
     }
 }
 
@@ -107,6 +113,8 @@ pub struct SaveSettingsRequest {
     pub campus_id: String,
     #[serde(default)]
     pub default_min_seats: usize,
+    #[serde(default)]
+    pub ui_language: String,
     #[serde(default)]
     pub daily_course_notifications_enabled: bool,
     #[serde(default = "default_true")]
@@ -135,6 +143,9 @@ impl SaveSettingsRequest {
         }
         if self.campus_id.trim().is_empty() {
             self.campus_id = crate::config::CAMPUSES[0].id.to_string();
+        }
+        if !matches!(self.ui_language.as_str(), "system" | "zh-Hans" | "en") {
+            self.ui_language = "system".to_string();
         }
     }
 }
@@ -204,6 +215,12 @@ pub struct DeadlinesRequest {
     pub date: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalendarRangeRequest {
+    pub start_date: String,
+    pub end_date: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeadlineItem {
     pub id: String,
@@ -218,6 +235,16 @@ pub struct DeadlineItem {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeadlinesResponse {
     pub date: String,
+    pub fetched_at: String,
+    pub source: String,
+    pub used_backup: bool,
+    pub items: Vec<DeadlineItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeadlineCalendarResponse {
+    pub start_date: String,
+    pub end_date: String,
     pub fetched_at: String,
     pub source: String,
     pub used_backup: bool,
@@ -244,6 +271,14 @@ pub struct AssignmentsResponse {
     pub source: String,
     pub items: Vec<AssignmentDeadlineItem>,
     pub unavailable_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssignmentCalendarResponse {
+    pub start_date: String,
+    pub end_date: String,
+    pub source: String,
+    pub items: Vec<AssignmentDeadlineItem>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]

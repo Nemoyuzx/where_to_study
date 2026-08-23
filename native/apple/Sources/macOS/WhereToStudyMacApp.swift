@@ -20,6 +20,7 @@ struct WhereToStudyMacApp: App {
         Window("Where To Study", id: "main") {
             RootView()
                 .environmentObject(model)
+                .environment(\.locale, model.appLanguage.locale)
                 .frame(minWidth: 960, minHeight: 680)
         }
         .defaultSize(width: 1280, height: 840)
@@ -27,6 +28,7 @@ struct WhereToStudyMacApp: App {
         MenuBarExtra {
             MacMenuBarView()
                 .environmentObject(model)
+                .environment(\.locale, model.appLanguage.locale)
         } label: {
             MacMenuBarLabel()
         }

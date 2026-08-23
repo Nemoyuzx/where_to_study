@@ -39,7 +39,8 @@ export class DailyCourseNotificationPlanner {
   static readonly maximumScanDayCount: number = 400;
 
   static requests(
-    schedule: ScheduleSnapshot, nowEpochMs: number, scanDayLimit?: number
+    schedule: ScheduleSnapshot, nowEpochMs: number, scanDayLimit?: number,
+    english: boolean = false
   ): DailyCourseNotificationRequest[] {
     const termStart: DateParts | null = StrictDates.parseDateString(schedule.termStartDate);
     if (termStart === null) {
@@ -93,7 +94,7 @@ export class DailyCourseNotificationPlanner {
       const entries: string[] = [];
       for (const course of courses) {
         const name: string = course.examWeekNumbers.includes(week) ?
-          course.name + '（试）' : course.name;
+          course.name + (english ? ' (Exam)' : '（试）') : course.name;
         const location: string = course.room.length === 0 ? '' : ' @ ' + course.room;
         entries.push(course.timeRange + ' ' + name + location);
       }
@@ -101,8 +102,9 @@ export class DailyCourseNotificationPlanner {
       requests.push(new DailyCourseNotificationRequest(
         DailyCourseNotificationPlanner.identifierPrefix + date,
         fireEpochMs,
-        '今日课程 · ' + courses.length.toString() + ' 门',
-        entries.join('；')
+        english ? 'Today\'s Courses · ' + courses.length.toString() :
+          '今日课程 · ' + courses.length.toString() + ' 门',
+        entries.join(english ? '; ' : '；')
       ));
     }
     return requests;
@@ -139,10 +141,13 @@ export class DailyCourseNotificationReconcileResult {
 export class DailyCourseNotificationCoordinator {
   private readonly scheduler: DailyCourseNotificationScheduling;
   private readonly authorizationTimeoutMs: number;
+  private readonly english: boolean;
 
-  constructor(scheduler: DailyCourseNotificationScheduling, authorizationTimeoutMs: number = 8000) {
+  constructor(scheduler: DailyCourseNotificationScheduling, authorizationTimeoutMs: number = 8000,
+    english: boolean = false) {
     this.scheduler = scheduler;
     this.authorizationTimeoutMs = authorizationTimeoutMs;
+    this.english = english;
   }
 
   async reconcile(
@@ -175,10 +180,9 @@ export class DailyCourseNotificationCoordinator {
         DailyCourseNotificationReconcileOutcome.waitingForSchedule, 0);
     }
     const requests: DailyCourseNotificationRequest[] =
-      DailyCourseNotificationPlanner.requests(schedule, Date.now());
+      DailyCourseNotificationPlanner.requests(schedule, Date.now(), undefined, this.english);
     await this.scheduler.replacePending(requests, revision);
     return new DailyCourseNotificationReconcileResult(
       DailyCourseNotificationReconcileOutcome.scheduled, requests.length);
   }
 }
-

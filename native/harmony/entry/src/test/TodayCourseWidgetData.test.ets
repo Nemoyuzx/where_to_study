@@ -6,6 +6,7 @@ import {
   TodayCourseWidgetData, WidgetArchive, WidgetArchiveCourse,
   WidgetCoursePreferences, CoursePhase
 } from '../main/ets/widget/TodayCourseWidgetData';
+import { AppLanguage } from '../main/ets/common/AppLocalization';
 
 function course(id: string, name: string, room: string, timeRange: string,
   weekday: number, weeks: number[], startSlot: number,
@@ -91,6 +92,15 @@ export default function todayCourseWidgetDataTest() {
       expect(String(data['emptyGlyph'])).assertEqual('✓');
       expect(String(data['emptyText'])).assertEqual('今日无课');
       expect(String(data['statusText'])).assertEqual('今天可以自由安排');
+    });
+
+    it('binding_localizes_static_widget_copy_without_touching_course_names', 0, () => {
+      const data: Record<string, Object> = TodayCourseWidgetData.binding(
+        archive(), new WidgetCoursePreferences(true, true, 4, AppLanguage.english),
+        new DateParts(2026, 3, 2), 8 * 60 + 30);
+      expect(String(data['todayTitle'])).assertEqual('Today\'s Courses');
+      expect(String(data['dateContext'])).assertEqual('3/2 · Mon · Week 1');
+      expect(String(data['course1Name'])).assertEqual('In progress · 高等数学');
     });
 
     it('preview_archive_contains_sample_courses', 0, () => {

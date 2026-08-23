@@ -160,7 +160,21 @@ export class TeachingCalendarLogic {
     return 0.12 + 0.72 * count / (count + 3);
   }
 
-  static periodTitle(date: DateParts, mode: CalendarMode): string {
+  static periodTitle(date: DateParts, mode: CalendarMode, english: boolean = false): string {
+    if (english) {
+      if (mode === CalendarMode.day) {
+        return CalendarFormatters.englishMonth(date.month) + ' ' + date.day.toString() + ', ' +
+          date.year.toString();
+      }
+      if (mode === CalendarMode.week) {
+        return CalendarFormatters.englishMonth(date.month) + ' ' + date.year.toString() +
+          ' · Week ' + TeachingCalendarLogic.weekOfYear(date).toString();
+      }
+      if (mode === CalendarMode.year) {
+        return date.year.toString();
+      }
+      return CalendarFormatters.englishMonth(date.month) + ' ' + date.year.toString();
+    }
     if (mode === CalendarMode.day) {
       return date.year.toString() + '年' + date.month.toString() + '月' + date.day.toString() + '日';
     }
@@ -242,6 +256,20 @@ export class TeachingCalendarLogic {
     }
     if (vertical > 0) {
       return currentPosition > TeachingCalendarLogic.monthSheetExpandedPosition;
+    }
+    return false;
+  }
+
+  static monthSheetOwnsGesture(vertical: number, currentPosition: number,
+    detailsAtTopAtGestureStart: boolean): boolean {
+    if (vertical < 0) {
+      // 中间档先收窄到选中周；已到第三档后交给详情列表滚动。
+      return currentPosition < TeachingCalendarLogic.monthSheetWeekPosition;
+    }
+    if (vertical > 0) {
+      // 手势开始时详情未到顶，整次手势均归列表；不在中途抢占。
+      return currentPosition > TeachingCalendarLogic.monthSheetExpandedPosition &&
+        detailsAtTopAtGestureStart;
     }
     return false;
   }
@@ -344,23 +372,46 @@ export class TeachingCalendarLogic {
 export class CalendarFormatters {
   static readonly weekdayLabels: string[] = ['一', '二', '三', '四', '五', '六', '日'];
 
-  static weekdayLabel(day: DateParts): string {
+  static weekdayLabel(day: DateParts, english: boolean = false): string {
+    if (english) {
+      const labels: string[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return labels[StrictDates.weekdayMonday1(day) - 1];
+    }
     return '周' + CalendarFormatters.weekdayLabels[StrictDates.weekdayMonday1(day) - 1];
   }
 
   // 2026年8月18日 星期二
-  static fullDate(day: DateParts): string {
+  static fullDate(day: DateParts, english: boolean = false): string {
+    if (english) {
+      const weekdays: string[] = [
+        'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+      ];
+      return weekdays[StrictDates.weekdayMonday1(day) - 1] + ', ' +
+        CalendarFormatters.englishMonth(day.month) + ' ' + day.day.toString() + ', ' +
+        day.year.toString();
+    }
     const weekdays: string[] = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
     return day.year.toString() + '年' + day.month.toString() + '月' + day.day.toString() + '日 ' +
       weekdays[StrictDates.weekdayMonday1(day) - 1];
   }
 
-  static monthDayCompact(day: DateParts): string {
+  static monthDayCompact(day: DateParts, english: boolean = false): string {
+    if (english) {
+      return CalendarFormatters.englishMonth(day.month) + ' ' + day.day.toString();
+    }
     return day.month.toString() + '月' + day.day.toString() + '日';
   }
 
-  static monthLabel(month: number): string {
-    return month.toString() + '月';
+  static monthLabel(month: number, english: boolean = false): string {
+    return english ? CalendarFormatters.englishMonth(month) : month.toString() + '月';
+  }
+
+  static englishMonth(month: number): string {
+    const months: string[] = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return month >= 1 && month <= 12 ? months[month - 1] : month.toString();
   }
 
   static hourLabel(hour: number): string {

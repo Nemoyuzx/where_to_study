@@ -343,6 +343,19 @@ internal object AssignmentDeadlineResponseParser {
 }
 
 class CalendarDailyInfoClient {
+    private data class DeadlineFeed(
+        val contestPayload: String?,
+        val contestSource: String,
+        val contestUsedBackup: Boolean,
+        val contestError: Throwable?,
+        val schoolPayload: String?,
+        val schoolError: Throwable?,
+        val fetchedAtMillis: Long,
+    )
+
+    @Volatile
+    private var cachedDeadlineFeed: DeadlineFeed? = null
+
     fun fetchAlmanac(date: String): AlmanacInfo {
         val target = requireContractDate(date, "黄历")
         target.set(Calendar.HOUR_OF_DAY, 12)
@@ -369,52 +382,25 @@ class CalendarDailyInfoClient {
         }.getOrDefault(base)
     }
 
-    fun fetchDeadlines(date: String): PublicDeadlineSnapshot {
+    fun fetchDeadlines(
+        date: String,
+        forceRemote: Boolean = false,
+    ): PublicDeadlineSnapshot {
         requireContractDate(date, "DDL")
-        val contestResult = runCatching {
-            val payload = FixedPublicJsonTransport.fetch(
-                URI.create(CalendarDailyInfoSources.deadlinePrimary),
-                "https",
-                "nemoyuzx.github.io",
-                CalendarDailyInfoSources.deadlinePayloadLimit,
-            )
-            PublicDeadlineSnapshot(
-                date,
-                PublicDeadlineResponseParser.parse(payload, date),
-                CalendarDailyInfoSources.deadlinePrimary,
-                false,
-            )
-        }.recoverCatching { primaryError ->
-            try {
-                val payload = FixedPublicJsonTransport.fetch(
-                    URI.create(CalendarDailyInfoSources.deadlineBackup),
-                    "http",
-                    "101.201.29.29",
-                    CalendarDailyInfoSources.deadlinePayloadLimit,
-                )
+        val feed = deadlineFeed(forceRemote)
+        val contestResult = feed.contestPayload?.let { payload ->
+            runCatching {
                 PublicDeadlineSnapshot(
                     date,
                     PublicDeadlineResponseParser.parse(payload, date),
-                    CalendarDailyInfoSources.deadlineBackup,
-                    true,
-                )
-            } catch (backupError: Exception) {
-                throw DailyInfoClientException(
-                    "主 DDL 数据源不可用（${primaryError.message}）；" +
-                        "备用数据源也不可用（${backupError.message}）。",
-                    backupError,
+                    feed.contestSource,
+                    feed.contestUsedBackup,
                 )
             }
-        }
-        val schoolResult = runCatching {
-            val payload = FixedPublicJsonTransport.fetch(
-                URI.create(CalendarDailyInfoSources.schoolContestNotices),
-                "http",
-                "101.201.29.29",
-                CalendarDailyInfoSources.deadlinePayloadLimit,
-            )
-            PublicDeadlineResponseParser.parseSchoolNotices(payload, date)
-        }
+        } ?: Result.failure(feed.contestError ?: DailyInfoClientException("公开活动 DDL 不可用。"))
+        val schoolResult = feed.schoolPayload?.let { payload ->
+            runCatching { PublicDeadlineResponseParser.parseSchoolNotices(payload, date) }
+        } ?: Result.failure(feed.schoolError ?: DailyInfoClientException("校内竞赛通知不可用。"))
         val contest = contestResult.getOrNull()
         val schoolItems = schoolResult.getOrNull()
         if (contest == null && schoolItems == null) {
@@ -439,6 +425,69 @@ class CalendarDailyInfoClient {
             source = contest.source,
             usedBackup = contest.usedBackup,
         )
+    }
+
+    @Synchronized
+    private fun deadlineFeed(forceRemote: Boolean): DeadlineFeed {
+        val nowMillis = System.nanoTime() / 1_000_000L
+        cachedDeadlineFeed?.takeIf {
+            !forceRemote && nowMillis - it.fetchedAtMillis in 0 until DEADLINE_FEED_CACHE_MILLIS
+        }?.let { return it }
+        val contestResult = runCatching {
+            val payload = FixedPublicJsonTransport.fetch(
+                URI.create(CalendarDailyInfoSources.deadlinePrimary),
+                "https",
+                "nemoyuzx.github.io",
+                CalendarDailyInfoSources.deadlinePayloadLimit,
+            )
+            Triple(payload, CalendarDailyInfoSources.deadlinePrimary, false)
+        }.recoverCatching { primaryError ->
+            try {
+                val payload = FixedPublicJsonTransport.fetch(
+                    URI.create(CalendarDailyInfoSources.deadlineBackup),
+                    "http",
+                    "101.201.29.29",
+                    CalendarDailyInfoSources.deadlinePayloadLimit,
+                )
+                Triple(payload, CalendarDailyInfoSources.deadlineBackup, true)
+            } catch (backupError: Exception) {
+                throw DailyInfoClientException(
+                    "主 DDL 数据源不可用（${primaryError.message}）；" +
+                        "备用数据源也不可用（${backupError.message}）。",
+                    backupError,
+                )
+            }
+        }
+        val schoolResult = runCatching {
+            val payload = FixedPublicJsonTransport.fetch(
+                URI.create(CalendarDailyInfoSources.schoolContestNotices),
+                "http",
+                "101.201.29.29",
+                CalendarDailyInfoSources.deadlinePayloadLimit,
+            )
+            payload
+        }
+        if (contestResult.isFailure && schoolResult.isFailure) {
+            throw DailyInfoClientException(
+                "公开活动 DDL 不可用（${contestResult.exceptionOrNull()?.message}）；" +
+                    "校内竞赛通知也不可用（${schoolResult.exceptionOrNull()?.message}）。",
+                schoolResult.exceptionOrNull(),
+            )
+        }
+        val contest = contestResult.getOrNull()
+        return DeadlineFeed(
+            contestPayload = contest?.first,
+            contestSource = contest?.second ?: CalendarDailyInfoSources.deadlinePrimary,
+            contestUsedBackup = contest?.third ?: false,
+            contestError = contestResult.exceptionOrNull(),
+            schoolPayload = schoolResult.getOrNull(),
+            schoolError = schoolResult.exceptionOrNull(),
+            fetchedAtMillis = nowMillis,
+        ).also { cachedDeadlineFeed = it }
+    }
+
+    private companion object {
+        const val DEADLINE_FEED_CACHE_MILLIS = 5 * 60 * 1_000L
     }
 }
 
@@ -560,7 +609,11 @@ internal class CalendarDailyInfoRepository(
         try {
             worker.execute {
                 runCatching {
-                    if (usesSampleData) sampleDeadlines(date) else client.fetchDeadlines(date)
+                    if (usesSampleData) {
+                        sampleDeadlines(date)
+                    } else {
+                        client.fetchDeadlines(date, forceRemote = force)
+                    }
                 }.onSuccess { deadlinesByDate[date] = it }
                     .onFailure { deadlineErrors[date] = it.message ?: "DDL 获取失败。" }
                 loadingDeadlines.remove(date)
@@ -647,15 +700,26 @@ internal class CalendarDailyInfoRepository(
 
     private fun sampleDeadlines(date: String) = PublicDeadlineSnapshot(
         date,
-        listOf(PublicDeadlineItem(
-            "sample-competition",
-            "全国大学生示例竞赛",
-            PublicDeadlineKind.COMPETITION,
-            PublicDeadlineSource.CONTEST_DDL,
-            "${date}T23:59:00+08:00",
-            "示例组委会",
-            null,
-        )),
+        listOf(
+            PublicDeadlineItem(
+                "sample-competition",
+                "全国大学生示例竞赛",
+                PublicDeadlineKind.COMPETITION,
+                PublicDeadlineSource.CONTEST_DDL,
+                "${date}T23:59:00+08:00",
+                "示例组委会",
+                null,
+            ),
+            PublicDeadlineItem(
+                "sample-school-notice",
+                "北邮校内创新竞赛通知",
+                PublicDeadlineKind.COMPETITION,
+                PublicDeadlineSource.SCHOOL_NOTICE,
+                "${date}T18:00:00+08:00",
+                "北京邮电大学 · 报名截止",
+                null,
+            ),
+        ),
         CalendarDailyInfoSources.deadlinePrimary,
         false,
     )

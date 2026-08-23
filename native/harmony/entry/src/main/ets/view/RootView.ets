@@ -36,6 +36,7 @@ export struct RootView {
     // 对应 iOS scenePhase == .active 时的刷新。
     this.model.refreshClassroomsIfNeeded();
     this.model.refreshDailyCourseNotificationAuthorization();
+    this.model.refreshSystemLanguage();
   }
 
   build() {
@@ -63,7 +64,7 @@ export struct RootView {
       SymbolGlyph($r('sys.symbol.eye'))
         .fontSize(14)
         .fontColor([AppTheme.text()])
-      Text('示例数据 · 不连接北邮教务服务')
+      Text(this.model.text('示例数据 · 不连接北邮教务服务'))
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.text())
@@ -125,7 +126,7 @@ export struct RootView {
           SymbolGlyph(AppSectionInfo.symbol(section))
             .fontSize(18)
             .fontColor([AppTheme.text()])
-          Text(AppSectionInfo.title(section))
+          Text(this.model.text(AppSectionInfo.title(section)))
             .fontSize(16)
             .fontWeight(this.currentSection === section ? FontWeight.Medium : FontWeight.Regular)
             .fontColor(AppTheme.text())
@@ -185,7 +186,7 @@ export struct RootView {
       SymbolGlyph(AppSectionInfo.symbol(section))
         .fontSize(22)
         .fontColor([this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText()])
-      Text(AppSectionInfo.title(section))
+      Text(this.model.text(AppSectionInfo.title(section)))
         .fontSize(11)
         .fontWeight(this.currentSection === section ? FontWeight.Bold : FontWeight.Regular)
         .fontColor(this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText())

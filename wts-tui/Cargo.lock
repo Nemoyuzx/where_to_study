@@ -2689,7 +2689,7 @@ dependencies = [
 
 [[package]]
 name = "where-to-study-core"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2705,7 +2705,7 @@ dependencies = [
 
 [[package]]
 name = "where-to-study-tui"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "chrono",
  "crossterm",

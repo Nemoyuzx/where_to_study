@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Where To Study</string>
+    <string name="brand_eyebrow">BUPT</string>
+    <string name="brand_name">Where To Study</string>
+    <string name="planner_eyebrow">Where To Study</string>
+    <string name="slot_format">Period %1$s\n%2$s–%3$s</string>
+    <string name="classroom_source_format">Source: live Academic Affairs API · %1$s</string>
+    <string name="personal_schedule_state_format">Personal schedule: %1$s</string>
+    <string name="state_on">On</string>
+    <string name="state_off">Off</string>
+    <string name="holiday_item_format">%1$s %2$s</string>
+    <string name="holiday_marker">Off</string>
+    <string name="workday_marker">Work</string>
+    <string name="credential_security_note">Your account and password stay on this device and are protected by Android Keystore.</string>
+    <string name="daily_course_notification_toggle">Send today’s course summary at 07:30</string>
+    <string name="daily_course_notification_description">Only notifies on days with courses; automatically reschedules after schedule or account changes.</string>
+    <string name="widget_today_course_name">Today’s Courses</string>
+    <string name="widget_today_course_title">Today’s Courses</string>
+    <string name="widget_today_course_description">View today’s courses, periods, rooms, instructors, and status on your home screen.</string>
+    <string name="widget_empty_course_message">No courses today</string>
+    <string name="widget_course_count_format">%1$d courses</string>
+    <string name="widget_more_courses_format">%1$d more courses</string>
+    <string name="widget_preview_accessibility_format">Today’s Courses widget preview, %1$s, with %2$d sample courses</string>
+</resources>

@@ -1,9 +1,41 @@
 import SwiftUI
 
+enum CalendarAllDayEventKind: String, Equatable, Sendable {
+    case holiday
+    case workday
+    case assignment
+    case schoolNotice
+}
+
+struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let kind: CalendarAllDayEventKind
+}
+
 struct CalendarTimelineDay: Identifiable {
     let date: Date
     let courses: [Course]
     let holidays: [HolidayItem]
+    let allDayEvents: [CalendarAllDayEvent]
+
+    init(
+        date: Date,
+        courses: [Course],
+        holidays: [HolidayItem],
+        allDayEvents: [CalendarAllDayEvent]? = nil
+    ) {
+        self.date = date
+        self.courses = courses
+        self.holidays = holidays
+        self.allDayEvents = allDayEvents ?? holidays.map { holiday in
+            CalendarAllDayEvent(
+                id: "holiday-\(holiday.id)",
+                title: "\(holiday.type == "holiday" ? "休" : "班") \(holiday.name)",
+                kind: holiday.type == "holiday" ? .holiday : .workday
+            )
+        }
+    }
 
     var id: Date { date }
 }
@@ -75,6 +107,7 @@ enum CalendarTimelineLogic {
 }
 
 struct CalendarTimelineView: View {
+    @EnvironmentObject private var model: AppModel
     let days: [CalendarTimelineDay]
     let selectedDate: Date
     var onSelectDay: ((Date) -> Void)?
@@ -308,7 +341,7 @@ struct CalendarTimelineView: View {
                 onSelectDay?(day.date)
             } label: {
                 VStack(spacing: 5) {
-                    Text(Self.dayHeaderFormatter.string(from: day.date))
+                    Text(dayHeaderFormatter.string(from: day.date))
                         .font(.caption.bold())
                         .foregroundStyle(AppTheme.text)
                     Text(headerDetail(for: day))
@@ -432,7 +465,7 @@ struct CalendarTimelineView: View {
     @ViewBuilder
     private func currentTimeAxisLabel(now: Date) -> some View {
         if let minute = currentMinuteIfVisible(now) {
-            Text(Self.timeFormatter.string(from: now))
+            Text(timeFormatter.string(from: now))
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(AppTheme.onPrimary)
                 .padding(.horizontal, 4)
@@ -476,7 +509,10 @@ struct CalendarTimelineView: View {
     }
 
     private func headerDetail(for day: CalendarTimelineDay) -> String {
-        return day.courses.isEmpty ? "无课" : "\(day.courses.count) 门课"
+        guard !day.courses.isEmpty else { return model.localized("无课") }
+        return model.appLanguage.resolvedResourceName == "en"
+            ? "\(day.courses.count) courses"
+            : "\(day.courses.count) 门课"
     }
 
     private func headerDetailColor(for day: CalendarTimelineDay) -> Color {
@@ -487,7 +523,7 @@ struct CalendarTimelineView: View {
     private func dayAccessibilityLabel(_ day: CalendarTimelineDay) -> String {
         let holidays = day.holidays.map(\.name).joined(separator: "，")
         let courses = day.courses.map { "\($0.timeRange)\($0.name)" }.joined(separator: "，")
-        return [Self.accessibleDateFormatter.string(from: day.date), holidays, courses.isEmpty ? "无课" : courses]
+        return [accessibleDateFormatter.string(from: day.date), holidays, courses.isEmpty ? model.localized("无课") : courses]
             .filter { !$0.isEmpty }
             .joined(separator: "，")
     }
@@ -500,14 +536,22 @@ struct CalendarTimelineView: View {
     }
 
     private static let nowRed = AppTheme.danger
-    private static let dayHeaderFormatter = formatter("M/d E")
-    private static let accessibleDateFormatter = formatter("yyyy年M月d日 EEEE")
-    private static let timeFormatter = formatter("HH:mm")
+    private var dayHeaderFormatter: DateFormatter {
+        formatter("M/d E")
+    }
 
-    private static func formatter(_ format: String) -> DateFormatter {
+    private var accessibleDateFormatter: DateFormatter {
+        formatter(model.appLanguage.resolvedResourceName == "en" ? "EEEE, MMMM d, yyyy" : "yyyy年M月d日 EEEE")
+    }
+
+    private var timeFormatter: DateFormatter {
+        formatter("HH:mm")
+    }
+
+    private func formatter(_ format: String) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.calendar = .shanghai
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = model.appLanguage.locale
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         formatter.dateFormat = format
         return formatter

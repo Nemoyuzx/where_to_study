@@ -2,10 +2,50 @@ import Foundation
 
 enum TodayCourseWidgetData {
     static let appGroupIdentifier = "group.com.nemoyu.wheretostudy.native"
+    static let languageDefaultsKey = "appLanguage"
     static let archiveFileName = "widget-schedule.json"
     static let preferencesFileName = "widget-preferences.json"
     static let emptyMessage = "今日无课"
     static let maximumCourseLimit = 6
+
+    enum Language: String, Equatable, Sendable {
+        case simplifiedChinese = "zh-Hans"
+        case english = "en"
+
+        static func resolve(
+            rawValue: String?,
+            preferredLanguages: [String] = Locale.preferredLanguages
+        ) -> Language {
+            if rawValue == simplifiedChinese.rawValue { return .simplifiedChinese }
+            if rawValue == english.rawValue { return .english }
+            return preferredLanguages.first?.lowercased().hasPrefix("zh") == true
+                ? .simplifiedChinese
+                : .english
+        }
+
+        func text(chinese: String, english: String) -> String {
+            self == .english ? english : chinese
+        }
+    }
+
+    static func saveLanguage(rawValue: String) {
+        UserDefaults(suiteName: appGroupIdentifier)?.set(rawValue, forKey: languageDefaultsKey)
+    }
+
+    static func loadLanguage(
+        preferredLanguages: [String] = Locale.preferredLanguages
+    ) -> Language {
+        Language.resolve(
+            rawValue: UserDefaults(suiteName: appGroupIdentifier)?.string(
+                forKey: languageDefaultsKey
+            ),
+            preferredLanguages: preferredLanguages
+        )
+    }
+
+    static func emptyMessage(language: Language) -> String {
+        language.text(chinese: emptyMessage, english: "No classes today")
+    }
 
     struct Preferences: Codable, Equatable, Sendable {
         let showsLocation: Bool
@@ -99,10 +139,14 @@ enum TodayCourseWidgetData {
         case finished
 
         var badgeText: String {
+            badgeText(language: .simplifiedChinese)
+        }
+
+        func badgeText(language: Language) -> String {
             switch self {
-            case .upcoming: "下一节"
-            case .inProgress: "进行中"
-            case .finished: "已结束"
+            case .upcoming: language.text(chinese: "下一节", english: "Next")
+            case .inProgress: language.text(chinese: "进行中", english: "Now")
+            case .finished: language.text(chinese: "已结束", english: "Finished")
             }
         }
     }
@@ -225,8 +269,21 @@ enum TodayCourseWidgetData {
     static func dayContext(
         on date: Date,
         weekNumber: Int?,
+        language: Language = .simplifiedChinese,
         calendar: Calendar = .shanghai
     ) -> String {
+        if language == .english {
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.locale = Locale(identifier: "en")
+            formatter.timeZone = calendar.timeZone
+            formatter.dateFormat = "MMM d · EEE"
+            var values = [formatter.string(from: date)]
+            if let weekNumber, weekNumber > 0 {
+                values.append("Week \(weekNumber)")
+            }
+            return values.joined(separator: " · ")
+        }
         let month = calendar.component(.month, from: date)
         let day = calendar.component(.day, from: date)
         let weekdayIndex = ((calendar.component(.weekday, from: date) + 5) % 7)
@@ -263,22 +320,27 @@ enum TodayCourseWidgetData {
     static func statusSummary(
         for courses: [Course],
         at date: Date,
+        language: Language = .simplifiedChinese,
         calendar: Calendar = .shanghai
     ) -> String {
-        guard !courses.isEmpty else { return emptyMessage }
+        guard !courses.isEmpty else { return emptyMessage(language: language) }
         if let course = courses.first(where: {
             coursePhase($0, at: date, calendar: calendar) == .inProgress
         }) {
             let end = timeParts(course.timeRange)?.end ?? ""
-            return end.isEmpty ? "课程进行中" : "进行中 · \(end) 下课"
+            return end.isEmpty
+                ? language.text(chinese: "课程进行中", english: "Class in progress")
+                : language.text(chinese: "进行中 · \(end) 下课", english: "Now · ends \(end)")
         }
         if let course = courses.first(where: {
             coursePhase($0, at: date, calendar: calendar) == .upcoming
         }) {
             let start = timeParts(course.timeRange)?.start ?? ""
-            return start.isEmpty ? "还有待上课程" : "下一节 · \(start)"
+            return start.isEmpty
+                ? language.text(chinese: "还有待上课程", english: "Classes remaining")
+                : language.text(chinese: "下一节 · \(start)", english: "Next · \(start)")
         }
-        return "今日课程已结束"
+        return language.text(chinese: "今日课程已结束", english: "Today's classes are finished")
     }
 
     static func timelineDates(

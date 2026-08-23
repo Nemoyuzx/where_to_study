@@ -289,8 +289,9 @@ object TodayCourseWidgetPreviewBinder {
         } else {
             context.getString(R.string.widget_course_count_format, content.courses.size)
         }
-        root.findViewById<TextView>(R.id.widget_day_context).text = content.contextText
-        root.findViewById<TextView>(R.id.widget_empty_text).text = content.emptyMessage
+        root.findViewById<TextView>(R.id.widget_day_context).text =
+            UiText.widgetContext(context, content.contextText)
+        root.findViewById<TextView>(R.id.widget_empty_text).text = context.uiText(content.emptyMessage)
         root.findViewById<View>(R.id.widget_empty_state).visibility =
             if (content.courses.isEmpty()) View.VISIBLE else View.GONE
         root.findViewById<View>(R.id.widget_courses).visibility =
@@ -302,7 +303,8 @@ object TodayCourseWidgetPreviewBinder {
             root.findViewById<View>(ids.container).visibility =
                 if (course == null) View.GONE else View.VISIBLE
             if (course != null) {
-                root.findViewById<TextView>(ids.name).text = TodayCourseWidgetLogic.title(course, content)
+                root.findViewById<TextView>(ids.name).text =
+                    UiText.widgetCourseTitle(context, TodayCourseWidgetLogic.title(course, content))
                 root.findViewById<TextView>(ids.details).text = TodayCourseWidgetLogic.details(
                     course,
                     showsLocation,
@@ -376,6 +378,7 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             val schedule = runCatching { ScheduleStore(context).load() }.getOrNull()
             val content = TodayCourseWidgetLogic.content(schedule, System.currentTimeMillis())
             val preferences = AppPreferences(context)
+            val localizedContext = AppLocale.wrap(context, preferences.languageCode)
             val views = RemoteViews(context.packageName, R.layout.widget_today_course)
             val rowLimit = minOf(
                 TodayCourseWidgetLogic.rowLimit(
@@ -388,12 +391,15 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_root, launchPendingIntent(context))
             views.setTextViewText(
                 R.id.widget_course_count,
-                if (content.courses.isEmpty()) "" else context.getString(
+                if (content.courses.isEmpty()) "" else localizedContext.getString(
                     R.string.widget_course_count_format,
                     content.courses.size,
                 ),
             )
-            views.setTextViewText(R.id.widget_day_context, content.contextText)
+            views.setTextViewText(
+                R.id.widget_day_context,
+                UiText.widgetContext(localizedContext, content.contextText),
+            )
             views.setViewVisibility(
                 R.id.widget_empty_state,
                 if (content.courses.isEmpty()) View.VISIBLE else View.GONE,
@@ -402,13 +408,22 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
                 R.id.widget_courses,
                 if (content.courses.isEmpty()) View.GONE else View.VISIBLE,
             )
-            views.setTextViewText(R.id.widget_empty_text, content.emptyMessage)
+            views.setTextViewText(
+                R.id.widget_empty_text,
+                localizedContext.uiText(content.emptyMessage),
+            )
 
             widgetRowIDs.forEachIndexed { index, ids ->
                 val course = content.courses.getOrNull(index).takeIf { index < rowLimit }
                 views.setViewVisibility(ids.container, if (course == null) View.GONE else View.VISIBLE)
                 if (course != null) {
-                    views.setTextViewText(ids.name, TodayCourseWidgetLogic.title(course, content))
+                    views.setTextViewText(
+                        ids.name,
+                        UiText.widgetCourseTitle(
+                            localizedContext,
+                            TodayCourseWidgetLogic.title(course, content),
+                        ),
+                    )
                     views.setTextViewText(
                         ids.details,
                         TodayCourseWidgetLogic.details(
@@ -428,7 +443,7 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             if (hiddenCount > 0) {
                 views.setTextViewText(
                     R.id.widget_more_courses,
-                    context.getString(R.string.widget_more_courses_format, hiddenCount),
+                    localizedContext.getString(R.string.widget_more_courses_format, hiddenCount),
                 )
             }
             manager.updateAppWidget(widgetID, views)

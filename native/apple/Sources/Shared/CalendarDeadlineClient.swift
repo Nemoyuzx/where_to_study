@@ -61,11 +61,33 @@ struct AssignmentDeadlineItem: Identifiable, Equatable, Sendable {
 
 protocol PublicDeadlineFetching: Sendable {
     func fetch(date: String) async throws -> PublicDeadlineSnapshot
+    func fetch(dates: [String]) async throws -> [String: PublicDeadlineSnapshot]
+}
+
+extension PublicDeadlineFetching {
+    func fetch(dates: [String]) async throws -> [String: PublicDeadlineSnapshot] {
+        var snapshots = [String: PublicDeadlineSnapshot]()
+        for date in dates {
+            snapshots[date] = try await fetch(date: date)
+        }
+        return snapshots
+    }
 }
 
 protocol AssignmentDeadlineFetching: Sendable {
     func fetch(date: String) async throws -> [AssignmentDeadlineItem]
+    func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]]
     func reset() async
+}
+
+extension AssignmentDeadlineFetching {
+    func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]] {
+        var itemsByDate = [String: [AssignmentDeadlineItem]]()
+        for date in dates {
+            itemsByDate[date] = try await fetch(date: date)
+        }
+        return itemsByDate
+    }
 }
 
 enum CalendarDeadlineError: LocalizedError, Equatable {
@@ -94,21 +116,35 @@ enum CalendarDeadlineSources {
 
 struct PublicDeadlineClient: PublicDeadlineFetching {
     func fetch(date: String) async throws -> PublicDeadlineSnapshot {
-        guard StrictContractDateParser.date(from: date) != nil else {
+        let snapshots = try await fetch(dates: [date])
+        guard let snapshot = snapshots[date] else {
+            throw CalendarDeadlineError.service("DDL 日期数据缺失。")
+        }
+        return snapshot
+    }
+
+    func fetch(dates: [String]) async throws -> [String: PublicDeadlineSnapshot] {
+        let requestedDates = Array(Set(dates)).sorted()
+        guard !requestedDates.isEmpty else { return [:] }
+        guard requestedDates.allSatisfy({ StrictContractDateParser.date(from: $0) != nil }) else {
             throw CalendarDeadlineError.service("DDL 日期格式不正确。")
         }
-        let contestResult: Result<PublicDeadlineSnapshot, Error>
+
+        let contestResult: Result<(
+            itemsByDate: [String: [PublicDeadlineItem]],
+            source: URL,
+            usedBackup: Bool
+        ), Error>
         do {
             let data = try await Self.fetchData(
                 from: CalendarDeadlineSources.primary,
                 allowedScheme: "https",
                 allowedHost: "nemoyuzx.github.io"
             )
-            contestResult = .success(PublicDeadlineSnapshot(
-                date: date,
-                items: try Self.parse(data: data, requestedDate: date),
-                source: CalendarDeadlineSources.primary,
-                usedBackup: false
+            contestResult = .success((
+                try Self.parse(data: data, requestedDates: requestedDates),
+                CalendarDeadlineSources.primary,
+                false
             ))
         } catch let primaryError {
             do {
@@ -117,11 +153,10 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
                     allowedScheme: "http",
                     allowedHost: "101.201.29.29"
                 )
-                contestResult = .success(PublicDeadlineSnapshot(
-                    date: date,
-                    items: try Self.parse(data: data, requestedDate: date),
-                    source: CalendarDeadlineSources.backup,
-                    usedBackup: true
+                contestResult = .success((
+                    try Self.parse(data: data, requestedDates: requestedDates),
+                    CalendarDeadlineSources.backup,
+                    true
                 ))
             } catch let backupError {
                 contestResult = .failure(CalendarDeadlineError.service(
@@ -131,7 +166,7 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
             }
         }
 
-        let schoolResult: Result<[PublicDeadlineItem], Error>
+        let schoolResult: Result<[String: [PublicDeadlineItem]], Error>
         do {
             let data = try await Self.fetchData(
                 from: CalendarDeadlineSources.schoolNotices,
@@ -140,35 +175,50 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
             )
             schoolResult = .success(try Self.parseSchoolNotices(
                 data: data,
-                requestedDate: date
+                requestedDates: requestedDates
             ))
         } catch {
             schoolResult = .failure(error)
         }
 
-        switch (contestResult, schoolResult) {
-        case let (.success(contest), .success(schoolItems)):
-            return PublicDeadlineSnapshot(
-                date: date,
-                items: Self.merge([contest.items, schoolItems]),
-                source: contest.source,
-                usedBackup: contest.usedBackup
-            )
-        case let (.success(contest), .failure):
-            return contest
-        case let (.failure, .success(schoolItems)):
-            return PublicDeadlineSnapshot(
-                date: date,
-                items: schoolItems,
-                source: CalendarDeadlineSources.schoolNotices,
-                usedBackup: false
-            )
-        case let (.failure(contestError), .failure(schoolError)):
+        if case let (.failure(contestError), .failure(schoolError)) = (contestResult, schoolResult) {
             throw CalendarDeadlineError.service(
                 "公开活动 DDL 不可用（\(contestError.localizedDescription)）；"
                     + "校内竞赛通知也不可用（\(schoolError.localizedDescription)）。"
             )
         }
+
+        var snapshots = [String: PublicDeadlineSnapshot]()
+        for date in requestedDates {
+            let contestItems: [PublicDeadlineItem]
+            let source: URL
+            let usedBackup: Bool
+            switch contestResult {
+            case let .success(payload):
+                contestItems = payload.itemsByDate[date] ?? []
+                source = payload.source
+                usedBackup = payload.usedBackup
+            case .failure:
+                contestItems = []
+                source = CalendarDeadlineSources.schoolNotices
+                usedBackup = false
+            }
+
+            let schoolItems: [PublicDeadlineItem]
+            switch schoolResult {
+            case let .success(itemsByDate):
+                schoolItems = itemsByDate[date] ?? []
+            case .failure:
+                schoolItems = []
+            }
+            snapshots[date] = PublicDeadlineSnapshot(
+                date: date,
+                items: Self.merge([contestItems, schoolItems]),
+                source: source,
+                usedBackup: usedBackup
+            )
+        }
+        return snapshots
     }
 
     static func parse(data: Data, requestedDate: String) throws -> [PublicDeadlineItem] {
@@ -226,6 +276,17 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         }
     }
 
+    static func parse(
+        data: Data,
+        requestedDates: [String]
+    ) throws -> [String: [PublicDeadlineItem]] {
+        var itemsByDate = [String: [PublicDeadlineItem]]()
+        for date in requestedDates {
+            itemsByDate[date] = try parse(data: data, requestedDate: date)
+        }
+        return itemsByDate
+    }
+
     static func parseSchoolNotices(
         data: Data,
         requestedDate: String
@@ -280,6 +341,17 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         return result.sorted {
             ($0.deadline, $0.name) < ($1.deadline, $1.name)
         }
+    }
+
+    static func parseSchoolNotices(
+        data: Data,
+        requestedDates: [String]
+    ) throws -> [String: [PublicDeadlineItem]] {
+        var itemsByDate = [String: [PublicDeadlineItem]]()
+        for date in requestedDates {
+            itemsByDate[date] = try parseSchoolNotices(data: data, requestedDate: date)
+        }
+        return itemsByDate
     }
 
     static func merge(_ groups: [[PublicDeadlineItem]]) -> [PublicDeadlineItem] {
@@ -455,9 +527,31 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     }
 
     func fetch(date: String) async throws -> [AssignmentDeadlineItem] {
-        guard StrictContractDateParser.date(from: date) != nil else {
+        let itemsByDate = try await fetch(dates: [date])
+        return itemsByDate[date] ?? []
+    }
+
+    func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]] {
+        let requestedDates = Array(Set(dates)).sorted()
+        guard requestedDates.allSatisfy({ StrictContractDateParser.date(from: $0) != nil }) else {
             throw CalendarDeadlineError.service("作业日期格式不正确。")
         }
+        guard !requestedDates.isEmpty else { return [:] }
+        let allItems = try await accountWideItems()
+        let requestedDateSet = Set(requestedDates)
+        var itemsByDate = Dictionary(
+            uniqueKeysWithValues: requestedDates.map { ($0, [AssignmentDeadlineItem]()) }
+        )
+        for item in allItems {
+            let date = String(item.deadline.prefix(10))
+            if requestedDateSet.contains(date) {
+                itemsByDate[date, default: []].append(item)
+            }
+        }
+        return itemsByDate
+    }
+
+    private func accountWideItems() async throws -> [AssignmentDeadlineItem] {
         guard let credentials = try credentialStore.load(),
               !credentials.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !credentials.password.isEmpty
@@ -512,7 +606,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
                 inFlightFetches.removeValue(forKey: account)
             }
         }
-        return allItems.filter { $0.deadline.hasPrefix(date) }
+        return allItems
     }
 
     func reset() async {
@@ -1050,70 +1144,151 @@ final class CalendarDeadlineStore: ObservableObject {
     }
 
     func loadPublic(date: String, sampleMode: Bool, force: Bool = false) async {
-        guard force || publicByDate[date] == nil else { return }
-        guard !loadingPublicDates.contains(date) else { return }
-        loadingPublicDates.insert(date)
-        publicErrors.removeValue(forKey: date)
-        defer { loadingPublicDates.remove(date) }
+        await loadPublic(dates: [date], sampleMode: sampleMode, force: force)
+    }
+
+    func loadPublic(dates: [String], sampleMode: Bool, force: Bool = false) async {
+        let requestedDates = Array(Set(dates)).sorted().filter { date in
+            (force || publicByDate[date] == nil) && !loadingPublicDates.contains(date)
+        }
+        guard !requestedDates.isEmpty else { return }
+        loadingPublicDates.formUnion(requestedDates)
+        var clearedErrors = publicErrors
+        requestedDates.forEach { clearedErrors.removeValue(forKey: $0) }
+        publicErrors = clearedErrors
+        defer { loadingPublicDates.subtract(requestedDates) }
         if sampleMode {
-            publicByDate[date] = PublicDeadlineSnapshot(
-                date: date,
-                items: [
-                    PublicDeadlineItem(
-                        id: "sample-competition",
-                        name: "全国大学生示例竞赛",
-                        kind: .competition,
-                        source: .contestDDL,
-                        deadline: "\(date)T23:59:00+08:00",
-                        organizer: "示例组委会",
-                        officialURL: nil
-                    )
-                ],
-                source: CalendarDeadlineSources.primary,
-                usedBackup: false
-            )
+            var updated = publicByDate
+            for date in requestedDates {
+                updated[date] = PublicDeadlineSnapshot(
+                    date: date,
+                    items: [
+                        PublicDeadlineItem(
+                            id: "sample-competition",
+                            name: "全国大学生示例竞赛",
+                            kind: .competition,
+                            source: .contestDDL,
+                            deadline: "\(date)T23:59:00+08:00",
+                            organizer: "示例组委会",
+                            officialURL: nil
+                        ),
+                        PublicDeadlineItem(
+                            id: "sample-school-notice",
+                            name: "校内示例竞赛通知",
+                            kind: .competition,
+                            source: .schoolNotice,
+                            deadline: "\(date)T18:00:00+08:00",
+                            organizer: "学校公开通知页",
+                            officialURL: nil
+                        )
+                    ],
+                    source: CalendarDeadlineSources.primary,
+                    usedBackup: false
+                )
+            }
+            publicByDate = updated
             return
         }
         do {
-            publicByDate[date] = try await client.fetch(date: date)
+            // The visible SwiftUI task is intentionally allowed to be cancelled
+            // when users page or select quickly. Keep the shared range owner
+            // unstructured so its cache write still completes; a replacement
+            // view task can safely observe the same loading set instead of
+            // leaving the month permanently empty.
+            let rangeOwner = Task {
+                try await client.fetch(dates: requestedDates)
+            }
+            let snapshots = try await rangeOwner.value
+            var updated = publicByDate
+            for date in requestedDates {
+                updated[date] = snapshots[date] ?? PublicDeadlineSnapshot(
+                    date: date,
+                    items: [],
+                    source: CalendarDeadlineSources.primary,
+                    usedBackup: false
+                )
+            }
+            publicByDate = updated
         } catch {
-            publicErrors[date] = error.localizedDescription
+            var updated = publicErrors
+            requestedDates.forEach { updated[$0] = error.localizedDescription }
+            publicErrors = updated
         }
     }
 
+    func loadCalendarEvents(
+        dates: [String],
+        sampleMode: Bool,
+        includesPublicDeadlines: Bool
+    ) async {
+        let requestedDates = Array(Set(dates)).sorted()
+        guard !requestedDates.isEmpty else { return }
+        if includesPublicDeadlines {
+            await loadPublic(dates: requestedDates, sampleMode: sampleMode)
+        }
+        guard !Task.isCancelled else { return }
+        await loadAssignments(dates: requestedDates, sampleMode: sampleMode)
+    }
+
     func loadAssignments(date: String, sampleMode: Bool, force: Bool = false) async {
-        guard force || assignmentsByDate[date] == nil else { return }
-        guard !loadingAssignmentDates.contains(date) else { return }
+        await loadAssignments(dates: [date], sampleMode: sampleMode, force: force)
+    }
+
+    func loadAssignments(dates: [String], sampleMode: Bool, force: Bool = false) async {
+        let requestedDates = Array(Set(dates)).sorted().filter { date in
+            (force || assignmentsByDate[date] == nil) && !loadingAssignmentDates.contains(date)
+        }
+        guard !requestedDates.isEmpty else { return }
         if sampleMode {
-            assignmentsByDate[date] = [
-                AssignmentDeadlineItem(
-                    id: "sample-assignment",
-                    title: "示例课程作业",
-                    courseName: "示例课程",
-                    deadline: "\(date) 23:59:00",
-                    status: "未提交"
-                )
-            ]
-            assignmentUnavailableByDate.removeValue(forKey: date)
+            var updatedAssignments = assignmentsByDate
+            var updatedUnavailable = assignmentUnavailableByDate
+            for date in requestedDates {
+                updatedAssignments[date] = [
+                    AssignmentDeadlineItem(
+                        id: "sample-assignment",
+                        title: "示例课程作业",
+                        courseName: "示例课程",
+                        deadline: "\(date) 23:59:00",
+                        status: "未提交"
+                    )
+                ]
+                updatedUnavailable.removeValue(forKey: date)
+            }
+            assignmentsByDate = updatedAssignments
+            assignmentUnavailableByDate = updatedUnavailable
             return
         }
         let requestRevision = assignmentRevision
-        loadingAssignmentDates.insert(date)
-        assignmentUnavailableByDate[date] = "正在同步云课堂作业…"
+        loadingAssignmentDates.formUnion(requestedDates)
+        var loadingMessages = assignmentUnavailableByDate
+        requestedDates.forEach { loadingMessages[$0] = "正在同步云课堂作业…" }
+        assignmentUnavailableByDate = loadingMessages
         defer {
             if assignmentRevision == requestRevision {
-                loadingAssignmentDates.remove(date)
+                loadingAssignmentDates.subtract(requestedDates)
             }
         }
         do {
-            let items = try await assignmentClient.fetch(date: date)
+            let itemsByDate = try await assignmentClient.fetch(dates: requestedDates)
             guard assignmentRevision == requestRevision else { return }
-            assignmentsByDate[date] = items
-            assignmentUnavailableByDate.removeValue(forKey: date)
+            var updatedAssignments = assignmentsByDate
+            var updatedUnavailable = assignmentUnavailableByDate
+            for date in requestedDates {
+                updatedAssignments[date] = itemsByDate[date] ?? []
+                updatedUnavailable.removeValue(forKey: date)
+            }
+            assignmentsByDate = updatedAssignments
+            assignmentUnavailableByDate = updatedUnavailable
         } catch {
             guard assignmentRevision == requestRevision else { return }
-            assignmentsByDate[date] = []
-            assignmentUnavailableByDate[date] = error.localizedDescription
+            var updatedAssignments = assignmentsByDate
+            var updatedUnavailable = assignmentUnavailableByDate
+            for date in requestedDates {
+                updatedAssignments[date] = []
+                updatedUnavailable[date] = error.localizedDescription
+            }
+            assignmentsByDate = updatedAssignments
+            assignmentUnavailableByDate = updatedUnavailable
         }
     }
 

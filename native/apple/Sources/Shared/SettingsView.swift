@@ -65,6 +65,7 @@ struct SettingsView: View {
                         let widths = DesktopColumnLayoutPolicy.widths(containerWidth: proxy.size.width)
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
+                                languageSurface
                                 accountSurface
                                 semesterSurface
                             }
@@ -80,6 +81,7 @@ struct SettingsView: View {
                         }
                     } else {
                         VStack(spacing: 16) {
+                            languageSurface
                             accountSurface
                             semesterSurface
                             notificationSurface
@@ -106,6 +108,7 @@ struct SettingsView: View {
                     if columnCount == 2 {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(spacing: 16) {
+                                languageSurface
                                 accountSurface
                                 semesterSurface
                             }
@@ -121,6 +124,7 @@ struct SettingsView: View {
                         aboutSurface
                     } else {
                         VStack(spacing: 16) {
+                            languageSurface
                             accountSurface
                             semesterSurface
                             notificationSurface
@@ -139,10 +143,6 @@ struct SettingsView: View {
             }
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                dismissKeyboard()
-            }
             #endif
             #endif
         }
@@ -248,7 +248,11 @@ struct SettingsView: View {
                     }
                     .accessibilityIdentifier("field.account")
                 SecureField(
-                    model.canPreserveSavedPassword ? "已安全保存，留空保持不变" : "教务密码",
+                    model.localized(
+                        model.canPreserveSavedPassword
+                            ? "已安全保存，留空保持不变"
+                            : "教务密码"
+                    ),
                     text: $model.password
                 )
                     .textFieldStyle(.roundedBorder)
@@ -300,13 +304,42 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
                 .disabled(model.isRefreshingSchedule || model.isSampleMode)
                 if !model.statusMessage.isEmpty {
-                    Text(model.statusMessage)
+                    Text(model.localized(model.statusMessage))
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var languageSurface: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("界面语言", systemImage: "globe")
+                    .font(.headline)
+                Picker(
+                    "界面语言",
+                    selection: Binding(
+                        get: { model.appLanguage },
+                        set: { language in
+                            AppHaptics.selection()
+                            model.setAppLanguage(language)
+                        }
+                    )
+                ) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(model.localized(language.titleKey)).tag(language)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("API 、课程与竞赛返回的原始内容不会自动翻译。")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("settings.language")
     }
 
     private var semesterSurface: some View {
@@ -384,7 +417,7 @@ struct SettingsView: View {
                     .font(.callout)
                     .foregroundStyle(AppTheme.secondaryText)
                 if !model.dailyCourseNotificationStatusMessage.isEmpty {
-                    Text(model.dailyCourseNotificationStatusMessage)
+                    Text(model.localized(model.dailyCourseNotificationStatusMessage))
                         .font(.caption)
                         .foregroundStyle(AppTheme.secondaryText)
                 }
@@ -457,7 +490,7 @@ struct SettingsView: View {
         set: @escaping (Bool) -> Void
     ) -> some View {
         Toggle(
-            title,
+            model.localized(title),
             isOn: Binding(
                 get: { isOn },
                 set: { enabled in
@@ -535,7 +568,7 @@ struct SettingsView: View {
                 }
                 Picker("预览尺寸", selection: $widgetPreviewSize) {
                     ForEach(WidgetPreviewSize.allCases) { size in
-                        Text(size.title).tag(size)
+                        Text(model.localized(size.title)).tag(size)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -550,7 +583,10 @@ struct SettingsView: View {
                     ),
                     weekNumber: 8,
                     family: widgetPreviewSize.family,
-                    usesWidgetContainer: false
+                    usesWidgetContainer: false,
+                    language: TodayCourseWidgetData.Language.resolve(
+                        rawValue: model.appLanguage.rawValue
+                    )
                 )
                 .aspectRatio(widgetPreviewSize.aspectRatio, contentMode: .fit)
                 .frame(maxWidth: widgetPreviewSize.maximumWidth)
