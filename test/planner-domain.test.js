@@ -6,6 +6,7 @@ import {
   dateFromString,
   deadlinePreheatPlan,
   calendarMonthExpansion,
+  calendarDeadlineBorderPriority,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
   calendarSwipeDirection,
@@ -99,6 +100,23 @@ test('expanded month cells reserve the last row for a hidden-entry count', () =>
     visible: ['a'],
     hiddenCount: 3,
   })
+})
+
+test('year deadline borders use assignment then school then public priority', () => {
+  const publicDeadline = { type: 'public-deadline' }
+  const schoolNotice = { type: 'school-notice' }
+  const assignment = { type: 'assignment' }
+
+  assert.equal(calendarDeadlineBorderPriority([]), '')
+  assert.equal(calendarDeadlineBorderPriority([publicDeadline]), 'public-deadline')
+  assert.equal(
+    calendarDeadlineBorderPriority([publicDeadline, schoolNotice]),
+    'school-notice',
+  )
+  assert.equal(
+    calendarDeadlineBorderPriority([schoolNotice, publicDeadline, assignment]),
+    'assignment',
+  )
 })
 
 test('expanded month grid caps web rows at the native mobile height', () => {

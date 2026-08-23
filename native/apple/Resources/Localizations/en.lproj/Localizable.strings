@@ -79,6 +79,10 @@
 "%lld 门课" = "%lld courses";
 "无课" = "No classes";
 "全天" = "All day";
+"全天日程" = "All-day Events";
+"月视图全天日程" = "Month All-day Events";
+"周视图全天日程" = "Week All-day Events";
+"关闭全天日程" = "Close all-day events";
 "当日日程" = "Today's Schedule";
 "暂无日程" = "No events";
 "颜色越深表示当天课程越多" = "Darker cells indicate more courses";
@@ -108,6 +112,7 @@
 "当天没有课程作业截止事项" = "No assignment deadlines for this day";
 "校内竞赛通知" = "On-campus Competition Notices";
 "活动 DDL" = "Event Deadlines";
+"公开活动 DDL" = "Public Event Deadlines";
 "正在同步活动截止信息…" = "Syncing event deadlines…";
 "正在同步竞赛、夏令营与黑客松…" = "Syncing competitions, summer camps, and hackathons…";
 "当天没有已收录的活动截止事项" = "No recorded event deadlines for this day";

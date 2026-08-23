@@ -69,6 +69,13 @@ const androidCalendarSource = readFileSync(
   ),
   'utf8',
 )
+const androidCalendarDailyInfoSource = readFileSync(
+  new URL(
+    '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/CalendarDailyInfoClient.kt',
+    import.meta.url,
+  ),
+  'utf8',
+)
 const androidYearCalendarSource = readFileSync(
   new URL(
     '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/YearCalendarView.kt',
@@ -110,6 +117,31 @@ const harmonyLocalizationSource = readFileSync(
 )
 const harmonyWidgetSource = readFileSync(
   new URL('../native/harmony/entry/src/main/ets/widget/TodayCourseWidgetData.ets', import.meta.url),
+  'utf8',
+)
+const harmonyMobileCalendarSource = readFileSync(
+  new URL(
+    '../native/harmony/entry/src/main/ets/view/calendar/MobileTeachingCalendarView.ets',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const harmonyExpandedCalendarSource = readFileSync(
+  new URL(
+    '../native/harmony/entry/src/main/ets/view/calendar/ExpandedTeachingCalendarView.ets',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const harmonyCalendarLogicSource = readFileSync(
+  new URL(
+    '../native/harmony/entry/src/main/ets/view/calendar/CalendarLogic.ets',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const harmonyAppModelSource = readFileSync(
+  new URL('../native/harmony/entry/src/main/ets/model/AppModel.ets', import.meta.url),
   'utf8',
 )
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
@@ -287,12 +319,33 @@ test('desktop calendar supplements are range-cached and rendered in every calend
   assert.match(tauriDeadlineSource, /SOURCE_CACHE_TTL/)
   assert.match(tauriDeadlineSource, /fetch_deadline_calendar/)
   assert.match(appSource, /className="time-all-day-overflow"/)
-  assert.match(appSource, /className="calendar-agenda-dialog"/)
+  assert.match(appSource, /calendar-agenda-dialog/)
   assert.ok(appSource.includes('className={`month-entry ${entry.type}`}'))
   assert.match(appSource, /className="school-notice"/)
+  assert.match(appSource, /type: 'public-deadline'/)
+  assert.match(appSource, /deadlineItemEnabled\(item, enabledDeadlineTypes\)/)
+  assert.match(appSource, /sourceView: 'month'/)
+  assert.match(appSource, /entries: monthAgendaEntries/)
+  assert.match(appSource, /sourceView: calendarView/)
+  assert.match(appSource, /agendaViewLabel\(calendarAgendaDialog\.sourceView, t\)/)
   assert.match(appCss, /\.month-cell small\.month-entry\.assignment/)
   assert.match(appCss, /\.month-cell small\.month-entry\.school-notice/)
+  assert.match(appCss, /\.month-cell small\.month-entry\.public-deadline/)
+  assert.match(appCss, /\.time-all-day-cell span\.public-deadline/)
+  assert.match(appCss, /\.calendar-agenda-list \.public-deadline/)
   assert.match(appCss, /\.popover-supplement-list/)
+  assert.match(appCss, /\.popover-supplement-list \.public-deadline/)
+  assert.match(appSource, /calendarDeadlineBorderPriority\(supplementalEntries\)/)
+  assert.match(appCss, /\.month-cell\.deadline-border-assignment/)
+  assert.match(appCss, /\.month-cell\.deadline-border-school-notice/)
+  assert.match(appCss, /\.month-cell\.deadline-border-public-deadline/)
+  assert.match(appCss, /\.mini-month-grid button\.deadline-border-assignment/)
+  assert.match(appCss, /\.mini-month-grid button\.deadline-border-school-notice/)
+  assert.match(appCss, /\.mini-month-grid button\.deadline-border-public-deadline/)
+  assert.match(
+    appCss,
+    /\.mini-month-grid button\.today\.deadline-border-assignment > span/,
+  )
 })
 
 test('desktop school notices preheat after settings load instead of starting on calendar paging', () => {
@@ -303,6 +356,44 @@ test('desktop school notices preheat after settings load instead of starting on 
   assert.match(appSource, /scheduleDeadlinePreheat\(plan, DEADLINE_PREFETCH_RETRY_MS\)/)
   assert.match(appSource, /scheduleDeadlinePreheat\(plan, DEADLINE_SOURCE_REFRESH_MS\)/)
   assert.match(appSource, /rangeDates\.every\(\(date\) => deadlineCoveredDatesRef\.current\.has\(date\)\)/)
+})
+
+test('native calendars render public deadlines, centered agendas, and shared month-year priority', () => {
+  assert.match(appleCalendarSource, /case publicDeadline/)
+  assert.match(appleCalendarSource, /CalendarDeadlinePresentation\.preferredDeadlineKind/)
+  assert.match(appleCalendarSource, /showsSecondaryTodayIndicator/)
+  assert.match(appleCalendarSource, /calendar\.regular\.month-agenda-dialog/)
+  assert.match(appleMobileCalendarSource, /calendar\.mobile\.week-agenda-dialog/)
+  assert.match(appleMobileCalendarSource, /if deadlineKind != nil, today \{/)
+
+  assert.match(androidCalendarSource, /PUBLIC_DEADLINE/)
+  assert.match(androidCalendarSource, /showCenteredAgendaDialog/)
+  assert.match(androidCalendarSource, /monthCellBorderColor/)
+  assert.match(androidCalendarSource, /val showsTodayBadge = today && supplementaryKind != null/)
+  assert.match(androidCalendarSource, /activeYearCalendar\?\.updateDays/)
+  assert.match(androidCalendarDailyInfoSource, /fun loadCalendarMarkers\(/)
+  assert.match(
+    androidCalendarDailyInfoSource,
+    /if \(assignmentDates\.isNotEmpty\(\)\) \{[\s\S]*?worker\.execute/,
+  )
+  assert.match(
+    androidCalendarDailyInfoSource,
+    /if \(deadlineDates\.isNotEmpty\(\)\) \{[\s\S]*?worker\.execute/,
+  )
+  assert.match(androidYearCalendarSource, /today && day\.supplementaryKind != null/)
+
+  assert.match(harmonyCalendarLogicSource, /CalendarYearDeadlinePriority/)
+  assert.match(harmonyCalendarLogicSource, /showsTodayDeadlineDot/)
+  assert.match(harmonyMobileCalendarSource, /presentAllDayDialog/)
+  assert.match(harmonyMobileCalendarSource, /yearDeadlinePriority\(day\)/)
+  assert.match(harmonyExpandedCalendarSource, /monthAllDayDialogOverlay/)
+  assert.match(harmonyExpandedCalendarSource, /yearDeadlineBorderColor/)
+  assert.match(harmonyAppModelSource, /assignmentMarkerLoadingDates/)
+  assert.match(harmonyAppModelSource, /deadlineMarkerLoadingDates/)
+  assert.match(harmonyAppModelSource, /assignmentWork\.finally/)
+  assert.match(harmonyAppModelSource, /deadlineWork\.finally/)
+  assert.match(harmonyAppModelSource, /this\.assignmentDeadlinesByDate = assignments/)
+  assert.match(harmonyAppModelSource, /this\.publicDeadlinesByDate = deadlines/)
 })
 
 test('desktop calendar supplement commands are exposed by the Tauri capability manifest', () => {
@@ -364,7 +455,7 @@ test('native Android year calendar follows the compact iOS mini-month layout', (
     androidCalendarSource,
     /private fun yearView\(onDateChanged: \(\) -> Unit\): LinearLayout = LinearLayout\(activity\)\.apply/,
   )
-  assert.match(androidCalendarSource, /text = "颜色越深表示当天课程越多"/)
+  assert.match(androidCalendarSource, /text = "颜色越深表示当天课程越多，彩色边框表示作业与 DDL"/)
   assert.doesNotMatch(androidCalendarSource, /\$year 年课程分布/)
   assert.doesNotMatch(androidCalendarSource, /颜色越深表示当天课程越多；点击日期查看日程/)
   assert.match(androidYearCalendarSource, /weekdayHeight = dp\(14\)/)
@@ -552,5 +643,6 @@ test('light and dark text combinations meet WCAG AA contrast', () => {
     assertContrast(tokens, '--on-primary', '--primary')
     assertContrast(tokens, '--gold-text', '--gold-surface')
     assertContrast(tokens, '--error-text', '--error-surface')
+    assertContrast(tokens, '--other-deadline-text', '--other-deadline-surface')
   }
 })

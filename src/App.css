@@ -764,6 +764,14 @@ button:disabled {
   border-left-color: var(--busy-border);
 }
 
+.calendar-agenda-list .course {
+  border-left-color: var(--primary);
+}
+
+.calendar-agenda-list .public-deadline {
+  border-left-color: var(--other-deadline-outline);
+}
+
 .calendar-agenda-list strong {
   color: var(--text-primary);
 }
@@ -1834,6 +1842,11 @@ button:disabled {
   color: var(--gold-text-muted);
 }
 
+.time-all-day-cell span.public-deadline {
+  background: var(--other-deadline-surface);
+  color: var(--other-deadline-text);
+}
+
 .time-all-day-overflow {
   background: var(--surface-muted);
   border: 1px solid var(--border);
@@ -2235,7 +2248,7 @@ button:disabled {
   opacity: calc(1 - var(--month-drag-progress));
 }
 
-.month-view.compact .month-cell > span {
+.month-view.compact .month-cell-date-button {
   justify-self: center;
 }
 
@@ -2248,7 +2261,14 @@ button:disabled {
 }
 
 .month-cell {
+  border: 0;
   cursor: pointer;
+  font: inherit;
+}
+
+.month-cell-date-button:focus-visible {
+  outline: 2px solid var(--primary-focus);
+  outline-offset: -2px;
 }
 
 .month-cell:hover:not(.selected) {
@@ -2282,22 +2302,26 @@ button:disabled {
   box-shadow: inset 0 0 0 2px var(--current-time);
 }
 
-.month-cell > span {
+.month-cell-date-button {
+  background: transparent;
   color: var(--text-primary);
   font-size: 17px;
   font-weight: 700;
   justify-self: center;
+  min-height: 27px;
+  min-width: 27px;
+  padding: 0;
 }
 
-.month-cell.selected > span {
+.month-cell.selected .month-cell-date-button {
   color: var(--on-primary);
 }
 
-.month-cell.today > span {
+.month-cell.today .month-cell-date-button {
   color: var(--text-primary);
 }
 
-.month-cell.today.selected > span {
+.month-cell.today.selected .month-cell-date-button {
   color: var(--on-primary);
 }
 
@@ -2310,7 +2334,8 @@ button:disabled {
 }
 
 .month-cell small,
-.month-cell em {
+.month-cell em,
+.month-cell .month-entry-overflow {
   background: var(--primary-surface);
   border: 1px solid var(--primary-border);
   border-radius: 4px;
@@ -2356,8 +2381,21 @@ button:disabled {
   color: var(--gold-text-muted);
 }
 
-.month-cell em {
+.month-cell small.month-entry.public-deadline {
+  background: var(--other-deadline-surface);
+  border-color: var(--other-deadline-border);
+  color: var(--other-deadline-text);
+}
+
+.month-cell em,
+.month-cell .month-entry-overflow {
   white-space: nowrap;
+}
+
+.month-cell .month-entry-overflow {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
 
 .muted-day {
@@ -2451,6 +2489,31 @@ button:disabled {
   box-shadow: inset 0 0 0 2px currentColor;
 }
 
+.mini-month-grid button.deadline-border-assignment {
+  box-shadow: inset 0 0 0 2px var(--busy-border);
+}
+
+.mini-month-grid button.deadline-border-school-notice {
+  box-shadow: inset 0 0 0 2px var(--gold-outline);
+}
+
+.mini-month-grid button.deadline-border-public-deadline {
+  box-shadow: inset 0 0 0 2px var(--other-deadline-outline);
+}
+
+.mini-month-grid button.today.deadline-border-assignment > span,
+.mini-month-grid button.today.deadline-border-school-notice > span,
+.mini-month-grid button.today.deadline-border-public-deadline > span {
+  align-items: center;
+  background: var(--current-time);
+  border-radius: 50%;
+  color: var(--on-primary);
+  display: inline-flex;
+  height: 16px;
+  justify-content: center;
+  width: 16px;
+}
+
 .mini-month-grid button em {
   background: var(--primary-surface-holiday-badge);
   border-radius: 999px;
@@ -2486,6 +2549,16 @@ button:disabled {
   color: var(--gold-text-muted);
   right: 1px;
   top: auto;
+}
+
+.mini-month-grid button em.public-deadline {
+  background: var(--other-deadline-surface);
+  bottom: 1px;
+  color: var(--other-deadline-text);
+  left: 50%;
+  right: auto;
+  top: auto;
+  transform: translateX(-50%);
 }
 
 .year-day-popover {
@@ -2558,6 +2631,10 @@ button:disabled {
 
 .popover-supplement-list .school-notice {
   border-left: 3px solid var(--gold);
+}
+
+.popover-supplement-list .public-deadline {
+  border-left: 3px solid var(--other-deadline-outline);
 }
 
 .popover-supplement-list span,
@@ -3319,12 +3396,13 @@ button:disabled {
     padding: 6px 4px;
   }
 
-  .month-cell > span {
+  .month-cell-date-button {
     font-size: 15px;
   }
 
   .month-cell small,
-  .month-cell em {
+  .month-cell em,
+  .month-cell .month-entry-overflow {
     align-items: center;
     display: flex;
     font-size: 10px;
@@ -3817,12 +3895,37 @@ button:disabled {
   background: var(--primary-surface-selected);
 }
 
-.month-cell.selected > span {
+.month-cell.selected .month-cell-date-button {
   color: var(--text-primary);
 }
 
-.month-cell.today > span,
-.month-cell.today.selected > span {
+.month-cell.today .month-cell-date-button,
+.month-cell.today.selected .month-cell-date-button {
+  align-items: center;
+  background: var(--current-time);
+  border-radius: 50%;
+  color: var(--on-primary);
+  display: inline-flex;
+  height: 27px;
+  justify-content: center;
+  width: 27px;
+}
+
+.month-cell.deadline-border-assignment {
+  box-shadow: inset 0 0 0 2px var(--busy-border);
+}
+
+.month-cell.deadline-border-school-notice {
+  box-shadow: inset 0 0 0 2px var(--gold-outline);
+}
+
+.month-cell.deadline-border-public-deadline {
+  box-shadow: inset 0 0 0 2px var(--other-deadline-outline);
+}
+
+.month-cell.today.deadline-border-assignment .month-cell-date-button,
+.month-cell.today.deadline-border-school-notice .month-cell-date-button,
+.month-cell.today.deadline-border-public-deadline .month-cell-date-button {
   align-items: center;
   background: var(--current-time);
   border-radius: 50%;

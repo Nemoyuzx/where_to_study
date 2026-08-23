@@ -738,6 +738,116 @@ internal class CalendarDailyInfoRepository(
         }
     }
 
+    /**
+     * Materializes a calendar range from the account-wide assignment cache and
+     * the shared public-deadline feed in two independent source jobs. This is
+     * used by the year view so entering it never queues hundreds of per-date
+     * jobs, and a slow UCloud login cannot delay already-cached public DDL.
+     * Each source asks the UI to repaint as soon as its own date index lands.
+     */
+    fun loadCalendarMarkers(
+        dates: List<String>,
+        includeDeadlines: Boolean,
+        onComplete: () -> Unit,
+    ) {
+        if (closed.get()) return
+        val normalizedDates = dates.distinct()
+        val assignmentDates = normalizedDates.filter { date ->
+            assignmentMarkerNeedsLoad(date) && loadingAssignments.add(date)
+        }
+        val deadlineDates = if (includeDeadlines) {
+            normalizedDates.filter { date ->
+                deadlinesByDate[date] == null && loadingDeadlines.add(date)
+            }
+        } else {
+            emptyList()
+        }
+        if (assignmentDates.isEmpty() && deadlineDates.isEmpty()) {
+            mainHandler.post { if (!closed.get()) onComplete() }
+            return
+        }
+        assignmentDates.forEach(assignmentErrors::remove)
+        deadlineDates.forEach(deadlineErrors::remove)
+        val requestRevision = assignmentRevision.get()
+        fun postSourceCompletion() {
+            if (!closed.get()) mainHandler.post {
+                if (!closed.get()) onComplete()
+            }
+        }
+        if (assignmentDates.isNotEmpty()) {
+            try {
+                worker.execute {
+                    loadAssignmentMarkerBatch(assignmentDates, requestRevision)
+                    assignmentDates.forEach(loadingAssignments::remove)
+                    postSourceCompletion()
+                }
+            } catch (_: RejectedExecutionException) {
+                assignmentDates.forEach(loadingAssignments::remove)
+            }
+        }
+        if (deadlineDates.isNotEmpty()) {
+            try {
+                worker.execute {
+                    loadDeadlineMarkerBatch(deadlineDates)
+                    deadlineDates.forEach(loadingDeadlines::remove)
+                    postSourceCompletion()
+                }
+            } catch (_: RejectedExecutionException) {
+                deadlineDates.forEach(loadingDeadlines::remove)
+            }
+        }
+    }
+
+    private fun assignmentMarkerNeedsLoad(date: String): Boolean =
+        assignmentsByDate[date] == null && assignmentErrors[date] == null
+
+    private fun loadAssignmentMarkerBatch(dates: List<String>, requestRevision: Long) {
+        val firstDate = dates.firstOrNull() ?: return
+        val firstResult = runCatching { assignmentItemsForMarkerDate(firstDate) }
+        if (firstResult.isFailure) {
+            if (assignmentRevision.get() == requestRevision) {
+                val message = firstResult.exceptionOrNull()?.message ?: "课程作业获取失败。"
+                dates.forEach { date -> assignmentErrors[date] = message }
+            }
+            return
+        }
+        if (assignmentRevision.get() != requestRevision) return
+        assignmentsByDate[firstDate] = firstResult.getOrThrow()
+        dates.drop(1).forEach { date ->
+            if (assignmentRevision.get() != requestRevision) return
+            runCatching { assignmentItemsForMarkerDate(date) }
+                .onSuccess { items -> assignmentsByDate[date] = items }
+                .onFailure { error ->
+                    assignmentErrors[date] = error.message ?: "课程作业获取失败。"
+                }
+        }
+    }
+
+    private fun assignmentItemsForMarkerDate(date: String): List<AssignmentDeadlineItem> = when {
+        usesSampleData -> sampleAssignments(date)
+        assignmentClient != null -> assignmentClient.fetch(date)
+        else -> throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
+    }
+
+    private fun loadDeadlineMarkerBatch(dates: List<String>) {
+        val firstDate = dates.firstOrNull() ?: return
+        val firstResult = runCatching { deadlineSnapshotForMarkerDate(firstDate) }
+        if (firstResult.isFailure) {
+            val message = firstResult.exceptionOrNull()?.message ?: "DDL 获取失败。"
+            dates.forEach { date -> deadlineErrors[date] = message }
+            return
+        }
+        deadlinesByDate[firstDate] = firstResult.getOrThrow()
+        dates.drop(1).forEach { date ->
+            runCatching { deadlineSnapshotForMarkerDate(date) }
+                .onSuccess { snapshot -> deadlinesByDate[date] = snapshot }
+                .onFailure { error -> deadlineErrors[date] = error.message ?: "DDL 获取失败。" }
+        }
+    }
+
+    private fun deadlineSnapshotForMarkerDate(date: String): PublicDeadlineSnapshot =
+        if (usesSampleData) sampleDeadlines(date) else client.fetchDeadlines(date)
+
     fun clearAssignments() {
         assignmentRevision.incrementAndGet()
         assignmentsByDate.clear()
@@ -787,6 +897,24 @@ internal class CalendarDailyInfoRepository(
                 PublicDeadlineSource.CONTEST_DDL,
                 "${date}T23:59:00+08:00",
                 "示例组委会",
+                null,
+            ),
+            PublicDeadlineItem(
+                "sample-summer-camp",
+                "示例高校夏令营",
+                PublicDeadlineKind.SUMMER_CAMP,
+                PublicDeadlineSource.CONTEST_DDL,
+                "${date}T20:00:00+08:00",
+                "示例高校",
+                null,
+            ),
+            PublicDeadlineItem(
+                "sample-hackathon",
+                "示例大学生黑客松",
+                PublicDeadlineKind.HACKATHON,
+                PublicDeadlineSource.CONTEST_DDL,
+                "${date}T21:00:00+08:00",
+                "示例社区",
                 null,
             ),
             PublicDeadlineItem(

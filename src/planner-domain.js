@@ -278,6 +278,13 @@ export function summarizeMonthEntries(entries, maxRows = 2) {
   }
 }
 
+export function calendarDeadlineBorderPriority(entries) {
+  if (entries.some((entry) => entry.type === 'assignment')) return 'assignment'
+  if (entries.some((entry) => entry.type === 'school-notice')) return 'school-notice'
+  if (entries.some((entry) => entry.type === 'public-deadline')) return 'public-deadline'
+  return ''
+}
+
 export function expandedMonthGridMetrics(
   availableHeight,
   maximumRowHeight = 68,

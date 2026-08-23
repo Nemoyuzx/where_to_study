@@ -252,7 +252,8 @@ export class AppModel {
   private classroomRefreshInFlight: boolean = false;
   private weatherRevision: number = 0;
   private calendarDailyInfoRevision: number = 0;
-  private calendarMarkerLoadingDates: Set<string> = new Set<string>();
+  private assignmentMarkerLoadingDates: Set<string> = new Set<string>();
+  private deadlineMarkerLoadingDates: Set<string> = new Set<string>();
   private publicDeadlinePrewarmInFlight: Promise<void> | null = null;
   private publicDeadlinePreferencesLoaded: boolean = false;
   // 每日课程摘要对账门控（BUG-050 修复）：当日已对账且无变化时不再全量重排提醒。
@@ -1402,102 +1403,145 @@ export class AppModel {
     this.assignmentDeadlinesByDate = new Map<string, AssignmentDeadlineItem[]>();
     this.assignmentUnavailableByDate = new Map<string, string>();
     this.loadingAssignmentDates = new Set<string>();
-    this.calendarMarkerLoadingDates.clear();
+    this.assignmentMarkerLoadingDates.clear();
+    this.deadlineMarkerLoadingDates.clear();
     this.assignmentClient.reset();
   }
 
-  // 月格/年格标记的批量预取与视图动画分离：UCloud 和公开 DDL 客户端
-  // 各自共享一次全量请求，这里只在内存中按日期分组，最后一次性交付 Map。
+  // 月格/年格标记的批量预取与视图动画分离。作业和公开 DDL 是两个完全
+  // 独立的任务：两者同时启动，各自复用客户端的全量 single-flight，并在
+  // 自己完成时立即提交 Map，公开 DDL 不等待 UCloud 登录或课程遍历。
   prefetchCalendarMarkers(days: DateParts[]): void {
-    const dates: string[] = [];
+    const assignmentDates: string[] = [];
+    const deadlineDates: string[] = [];
+    const seen: Set<string> = new Set<string>();
     for (const day of days) {
       const date: string = StrictDates.formatDateParts(day);
-      if (!this.calendarMarkerLoadingDates.has(date) && !dates.includes(date)) {
-        const needsAssignments: boolean = !this.assignmentDeadlinesByDate.has(date) &&
-          !this.assignmentUnavailableByDate.has(date);
-        const needsDeadlines: boolean = this.hasEnabledPublicDeadlines() &&
-          !this.publicDeadlinesByDate.has(date);
-        if (needsAssignments || needsDeadlines) {
-          dates.push(date);
-          this.calendarMarkerLoadingDates.add(date);
-        }
+      if (seen.has(date)) {
+        continue;
+      }
+      seen.add(date);
+      const needsAssignments: boolean = !this.assignmentDeadlinesByDate.has(date) &&
+        !this.assignmentUnavailableByDate.has(date) &&
+        !this.assignmentMarkerLoadingDates.has(date);
+      const needsDeadlines: boolean = this.hasEnabledPublicDeadlines() &&
+        !this.publicDeadlinesByDate.has(date) &&
+        !this.deadlineMarkerLoadingDates.has(date);
+      if (needsAssignments) {
+        assignmentDates.push(date);
+        this.assignmentMarkerLoadingDates.add(date);
+      }
+      if (needsDeadlines) {
+        deadlineDates.push(date);
+        this.deadlineMarkerLoadingDates.add(date);
       }
     }
-    if (dates.length === 0) {
+    if (assignmentDates.length === 0 && deadlineDates.length === 0) {
       return;
     }
     const revision: number = this.calendarDailyInfoRevision;
-    const work: Promise<void> = (async (): Promise<void> => {
-      const assignmentResults: Map<string, AssignmentDeadlineItem[]> =
-        new Map<string, AssignmentDeadlineItem[]>();
-      const deadlineResults: Map<string, PublicDeadlineSnapshot> =
-        new Map<string, PublicDeadlineSnapshot>();
-      if (this.isSampleMode()) {
-        for (const date of dates) {
-          const parts: DateParts | null = StrictDates.parseDateString(date);
-          assignmentResults.set(date, parts !== null && parts.day % 5 === 3 ?
-            [new AssignmentDeadlineItem(
-              'sample-assignment', '示例课程作业', '示例课程', date + ' 23:59:00', '未提交')] : []);
-          if (this.hasEnabledPublicDeadlines()) {
-            const items: PublicDeadlineItem[] = parts !== null && parts.day % 7 === 2 ?
-              [new PublicDeadlineItem(
-                'sample-competition', '全国大学生示例竞赛', PublicDeadlineKind.competition,
-                PublicDeadlineSource.contestDDL, date + 'T23:59:00+08:00', '示例组委会', null)] : [];
-            deadlineResults.set(date, new PublicDeadlineSnapshot(date, items,
-            'https://nemoyuzx.github.io/contest-ddl/data/competitions.json', false));
-          }
-        }
-      } else {
-        try {
-          const credentials: Credentials = await this.credentialsForRequest();
-          for (const date of dates) {
-            if (!this.assignmentDeadlinesByDate.has(date) &&
-              !this.assignmentUnavailableByDate.has(date)) {
-              assignmentResults.set(date, await this.assignmentClient.fetch(credentials, date));
-            }
-          }
-        } catch (e) {
-          // 未登录或作业源不可用时，不影响公开 DDL 的批量预取。
-        }
-        if (this.hasEnabledPublicDeadlines()) {
-          for (const date of dates) {
-            if (!this.publicDeadlinesByDate.has(date)) {
-              try {
-                deadlineResults.set(date, await this.calendarDailyInfoClient.fetchDeadlines(date));
-              } catch (e) {
-                // 标记预取不显示错误；选中日期的详情请求会给出可重试状态。
-              }
-            }
-          }
-        }
-      }
-      if (revision !== this.calendarDailyInfoRevision) {
-        return;
-      }
-      if (assignmentResults.size > 0) {
-        const assignments: Map<string, AssignmentDeadlineItem[]> =
-          new Map<string, AssignmentDeadlineItem[]>(this.assignmentDeadlinesByDate);
-        assignmentResults.forEach((items: AssignmentDeadlineItem[], date: string) => {
-          assignments.set(date, items);
-        });
-        this.assignmentDeadlinesByDate = assignments;
-      }
-      if (deadlineResults.size > 0) {
-        const deadlines: Map<string, PublicDeadlineSnapshot> =
-          new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
-        deadlineResults.forEach((snapshot: PublicDeadlineSnapshot, date: string) => {
-          deadlines.set(date, snapshot);
-        });
-        this.publicDeadlinesByDate = deadlines;
-      }
-    })();
-    work.finally((): void => {
-      for (const date of dates) {
-        this.calendarMarkerLoadingDates.delete(date);
+    const assignmentWork: Promise<void> = this.prefetchAssignmentMarkers(
+      assignmentDates, revision);
+    const deadlineWork: Promise<void> = this.prefetchPublicDeadlineMarkers(
+      deadlineDates, revision);
+    assignmentWork.finally((): void => {
+      for (const date of assignmentDates) {
+        this.assignmentMarkerLoadingDates.delete(date);
       }
     }).catch(() => {
-      // 上述数据源均在内部降级，不让预取失败泄漏为未处理 Promise。
+      // 作业源在内部降级，不让预取失败泄漏为未处理 Promise。
     });
+    deadlineWork.finally((): void => {
+      for (const date of deadlineDates) {
+        this.deadlineMarkerLoadingDates.delete(date);
+      }
+    }).catch(() => {
+      // 公开 DDL 源在内部降级，不让预取失败泄漏为未处理 Promise。
+    });
+  }
+
+  private async prefetchAssignmentMarkers(dates: string[], revision: number): Promise<void> {
+    if (dates.length === 0) {
+      return;
+    }
+    const results: Map<string, AssignmentDeadlineItem[]> =
+      new Map<string, AssignmentDeadlineItem[]>();
+    if (this.isSampleMode()) {
+      for (const date of dates) {
+        const parts: DateParts | null = StrictDates.parseDateString(date);
+        results.set(date, parts !== null && parts.day % 5 === 3 ?
+          [new AssignmentDeadlineItem(
+            'sample-assignment', '示例课程作业', '示例课程', date + ' 23:59:00', '未提交')] : []);
+      }
+    } else {
+      try {
+        const credentials: Credentials = await this.credentialsForRequest();
+        const requests: Promise<void>[] = [];
+        for (const date of dates) {
+          const request: Promise<void> = this.assignmentClient.fetch(credentials, date)
+            .then((items: AssignmentDeadlineItem[]): void => {
+              results.set(date, items);
+            })
+            .catch((): void => {
+              // 单日筛选失败不阻塞同批其他日期，也不影响公开 DDL 任务。
+            });
+          requests.push(request);
+        }
+        await Promise.all(requests);
+      } catch (e) {
+        // 未登录或凭据不可用时公开 DDL 任务仍独立运行并提交。
+      }
+    }
+    if (revision !== this.calendarDailyInfoRevision || results.size === 0) {
+      return;
+    }
+    const assignments: Map<string, AssignmentDeadlineItem[]> =
+      new Map<string, AssignmentDeadlineItem[]>(this.assignmentDeadlinesByDate);
+    results.forEach((items: AssignmentDeadlineItem[], date: string) => {
+      assignments.set(date, items);
+    });
+    this.assignmentDeadlinesByDate = assignments;
+  }
+
+  private async prefetchPublicDeadlineMarkers(dates: string[], revision: number): Promise<void> {
+    if (dates.length === 0 || !this.hasEnabledPublicDeadlines()) {
+      return;
+    }
+    const results: Map<string, PublicDeadlineSnapshot> =
+      new Map<string, PublicDeadlineSnapshot>();
+    if (this.isSampleMode()) {
+      for (const date of dates) {
+        const parts: DateParts | null = StrictDates.parseDateString(date);
+        const items: PublicDeadlineItem[] = parts !== null && parts.day % 7 === 2 ?
+          [new PublicDeadlineItem(
+            'sample-competition', '全国大学生示例竞赛', PublicDeadlineKind.competition,
+            PublicDeadlineSource.contestDDL, date + 'T23:59:00+08:00', '示例组委会', null)] : [];
+        results.set(date, new PublicDeadlineSnapshot(date, items,
+          'https://nemoyuzx.github.io/contest-ddl/data/competitions.json', false));
+      }
+    } else {
+      const requests: Promise<void>[] = [];
+      for (const date of dates) {
+        const request: Promise<void> = this.calendarDailyInfoClient.fetchDeadlines(date)
+          .then((snapshot: PublicDeadlineSnapshot): void => {
+            results.set(date, snapshot);
+          })
+          .catch((): void => {
+            // 标记预取静默降级；选中日期详情仍会提供可重试错误。
+          });
+        requests.push(request);
+      }
+      await Promise.all(requests);
+    }
+    if (revision !== this.calendarDailyInfoRevision || results.size === 0) {
+      return;
+    }
+    const deadlines: Map<string, PublicDeadlineSnapshot> =
+      new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
+    results.forEach((snapshot: PublicDeadlineSnapshot, date: string) => {
+      deadlines.set(date, snapshot);
+    });
+    this.publicDeadlinesByDate = deadlines;
   }
 
   loadCalendarDailyInfo(date: string, forceAlmanac: boolean = false,

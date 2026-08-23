@@ -59,6 +59,10 @@
   --busy-surface: #f8ece6;
   --busy-border: #edc8b7;
   --busy-text: #7b2e1a;
+  --other-deadline-surface: #f1edff;
+  --other-deadline-border: #c3b6eb;
+  --other-deadline-text: #513b8f;
+  --other-deadline-outline: #7058b1;
   --empty-surface: #f8f9f6;
   --empty-border: #d7ded8;
   --empty-text: #6c7770;
@@ -152,6 +156,10 @@
     --busy-surface: #38251f;
     --busy-border: #75483b;
     --busy-text: #f4b6a3;
+    --other-deadline-surface: #2d2743;
+    --other-deadline-border: #62548b;
+    --other-deadline-text: #d3c7ff;
+    --other-deadline-outline: #af9ae9;
     --empty-surface: #161c19;
     --empty-border: #3a453f;
     --empty-text: #9ba7a1;

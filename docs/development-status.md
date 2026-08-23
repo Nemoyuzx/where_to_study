@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前稳定版：[v0.2.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.3)
 - 应用版本：`0.2.3`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=61`；Android `versionCode=34`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=62`；Android `versionCode=35`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：仅保留最新 SwiftUI Universal 应用 `/Applications/Where To Study.app`；未再检测到其他 Where To Study 安装副本
-- 发布边界：`v0.2.3` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 61 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.3` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 62 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -77,32 +77,32 @@
 - Android 已接入与其他图形端一致的两校区天气查询，并使用默认折叠、按需展开的卡片布局。
 - Android 月视图日期详情已接入云课堂原生 CAS 登录与实时作业同步、黄历宜忌和统一活动 DDL 卡片；天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松六个开关与来源声明和 Apple 端一致。手机日期详情到达最高档后可继续滚动到底，滚动视口使用圆角边缘遮罩约束卡片层级；日期选择只进行纵向月格/详情动画，横向位移仅属于真正的月份分页。黄历、DDL、作业和节假日返回后只局部更新当前节点，不再重建页面；折叠屏收起侧栏时图标在选中框内保持纵向居中。
 - iOS 与 Android 云课堂作业客户端按账户共享一次全量请求，不同日期只在内存中过滤；清除账号会取消或失效旧请求，阻止延迟结果回写。
-- Android 日/周增加可持久折叠的课程与全天区，月格以独立颜色显示作业与校内通知，年视图弹窗在数据返回后局部补全；三种设备形态均支持 System / 简体中文 / English，通知和桌面小组件同步跟随。
+- Android 日/周增加可持久折叠的课程与全天区；作业、校内竞赛和学科竞赛/夏令营/黑客松均进入月格、年视图与独立居中日程弹窗，月/年日期边框按“作业 > 校内竞赛 > 其它 DDL”着色；全年数据由单个后台批次从账号级作业缓存与共享公开 feed 本地物化。三种设备形态均支持 System / 简体中文 / English，通知和桌面小组件同步跟随。
 
 ### HarmonyOS 原生端
 
 - “今日课程”服务卡片补齐课程数量、地点和教师展示偏好，并统一无课状态。
 - 联动查询页补齐两校区天气与默认折叠卡片，折叠时保留摘要，展开后显示今日和明日详情。
 - 月视图日期详情补齐云课堂原生 CAS 登录与实时作业同步、黄历宜忌与竞赛/夏令营/黑客松统一 DDL 卡片，设置页提供天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松六个独立开关与来源声明。
-- 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/竞赛全天区、`+N`、折叠课程区、范围缓存和中英文界面；构建及 88 项 ArkTS 单元测试通过。
+- 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年优先级边框、折叠课程区、范围缓存和中英文界面；构建及 90 项 ArkTS 单元测试通过。
 
 ## 最终本地验证
 
 | 范围 | 结果 |
 | --- | --- |
-| React | 68/68 业务规则、主题契约、跨端语言、范围缓存、公开 DDL 启动预热与 Tauri IPC 权限、桌面天气边距和节次居中、设置顺序、Windows/Linux 无伪小组件、Android 折叠侧栏居中、ARM64 工作流、AppImage 宿主 ABI 隔离、Linux 发布契约与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
+| React | 70/70 业务规则、主题契约、全端 DDL 显示与月/年边框优先级、独立居中弹窗、跨端语言、范围缓存、公开 DDL 启动预热与 Tauri IPC 权限、桌面天气边距和节次居中、设置顺序、Windows/Linux 无伪小组件、Android 折叠侧栏居中、ARM64 工作流、AppImage 宿主 ABI 隔离、Linux 发布契约与全端版本一致性测试、`npm run build`、许可证新鲜度检查通过 |
 | 许可证交付 | 根许可证为 `GPL-3.0-only`；锁定依赖生成的第三方许可证清单通过新鲜度检查；Tauri、Apple 与 Android 制品中的三份法律文件均与仓库逐字节一致 |
 | Rust | 共享核心、Tauri、CLI、TUI 的全部门禁通过；Tauri `fmt`、`clippy -D warnings` 与 120/120 自动测试通过，另 1 项需本机安全存储和北邮在线服务的真实同步测试按设计忽略；共享核心 43/43、CLI 13/13、TUI 14/14 测试通过 |
 | Rust 依赖审计 | `cargo audit 0.22.2`：0 个漏洞；17 个允许警告来自 Tauri 的 Linux GTK3/旧 proc-macro/unic 传递依赖 |
-| macOS SwiftUI | 本机 Xcode 严格 Swift 6 并发和警告即错误构建通过；154/154 XCTest 通过，App 与 Widget 均完成英文、设置顺序、公共 DDL 预热、运行状态和范围日程回归 |
-| iOS SwiftUI | 本机 Xcode 严格 Swift 6 并发；161/161 逻辑测试通过；iPhone UI 套件共 15 项，其中 2 项 iPad 专项按设计跳过、其余 13 项通过；反向月份翻页、语言往返底栏几何、公共 DDL 预热和 Widget 本地化回归通过 |
-| Android Debug | 159/159 JVM 测试、Lint、Debug APK 与 AndroidTest APK 构建通过 |
-| Android Release | `0.2.3 (34)` 的 Release JVM 测试、`lintRelease`、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、许可证与包内版本校验通过 |
-| Android UI | Medium Phone API 36.1、WhereToStudy Fold 与 Pixel Tablet 各 8/8 通过，共 24/24；覆盖日周折叠与 `+N`、英文原文边界、月动画和折叠侧栏双向居中 |
-| 浏览器视觉检查 | 桌面与手机宽度的 English 设置、日/周全天 `+N` 鼠标/键盘弹窗、月格独立配色和年视图按日详情通过；开发服务器唯一控制台消息是浏览器忽略 meta 中 `frame-ancestors` 的已知 CSP 提示 |
-| HarmonyOS | HAP 构建、88/88 ArkTS 单元测试、ohosTest HAP 编译和宽屏日/周/月/年静态契约通过；当前无连接设备，未执行 ohosTest 设备运行 |
-| macOS 归档检查 | SwiftUI Universal `0.2.3 (61)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
-| App Store Connect | iOS 与 macOS `0.2.3 (61)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
+| macOS SwiftUI | 本机 Xcode 严格 Swift 6 并发和警告即错误构建通过；全部 DDL/居中弹窗实现后的 158/158 全量 XCTest、月边框补丁后的 ScheduleLogic 59/59 专项测试及 Universal Release 归档通过 |
+| iOS SwiftUI | 本机 Xcode 严格 Swift 6 并发；最终源码 165/165 逻辑测试通过；iPhone 月/周居中弹窗、月/年边框优先级与公开 DDL 详情及 iPad 13 英寸布局专项 UI 通过 |
+| Android Debug | 160/160 JVM 测试、Lint、Debug APK 与 AndroidTest APK 构建通过 |
+| Android Release | `0.2.3 (35)` 的 Release JVM 测试、`lintRelease`、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、许可证与包内版本校验通过 |
+| Android UI | Medium Phone API 36.1 为 9/9；WhereToStudy Fold 与 Pixel Tablet 各 9 项通过、1 项仅手机导航几何按设计跳过；覆盖日周折叠、全部 DDL、月/周居中弹窗、月动画、月/年边框和折叠侧栏居中 |
+| 浏览器视觉检查 | 桌面与手机宽度的 English 设置、周/月独立居中日程弹窗、全部公开 DDL，以及月/年格“作业 > 校内 > 其它”三档实际计算边框通过；开发服务器唯一控制台消息是浏览器忽略 meta 中 `frame-ancestors` 的已知 CSP 提示 |
+| HarmonyOS | HAP 构建、90/90 ArkTS 单元测试、ohosTest HAP 编译和宽屏日/周/月/年静态契约通过；当前无连接设备，未执行 ohosTest 设备运行 |
+| macOS 归档检查 | SwiftUI Universal `0.2.3 (62)` 的 x86_64/arm64、WidgetKit 扩展、版本、签名、沙盒权限、隐私清单与统一应用图标复核通过 |
+| App Store Connect | iOS 与 macOS `0.2.3 (62)` 均由本地 Xcode 完成上传并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按当前发布约定未再打开 App Store Connect 检查后续状态 |
 | CLI/TUI 真实数据 | 本机与 Ubuntu 22.04 x86_64 服务器均使用隔离 HOME、隐藏输入和真实教务路径验证登录、学期自动检测、课表刷新与凭据清除；测试凭据文件已删除 |
 | Linux 发布 | GitHub-hosted Ubuntu 22.04 x86_64/arm64 工作流均完成 `.deb`、`.AppImage`、CLI、TUI 构建；AppImage 重打时移除会与新宿主 Mesa 冲突的旧 Wayland ABI 库并隔离 GIO 模块，Ubuntu 25.04 ARM64 桌面复测通过；GitHub Release 不上传校验文件 |
 | Tauri 托盘实机 | 点击不闪退；显示今日/明日课程、打开主窗口、空教室、教学日历、设置、刷新与退出；Windows/Linux 无课程小组件入口 |
@@ -111,13 +111,13 @@
 
 Apple 测试结果（2026-08-23 使用 `xcresulttool` 复核）：
 
-- macOS：154/154 通过
-- iOS：161/161 项逻辑测试通过；iPhone UI 测试套件共 15 项、iPad 专项跳过 2 项、其余 13 项通过；13 英寸 iPad 横屏截图专项 1/1 通过
+- macOS：全部 DDL/居中弹窗实现后的 158/158 全量通过；月视图优先级边框补丁后的 ScheduleLogic 59/59 专项通过
+- iOS：最终源码 165/165 项逻辑测试通过；iPhone 月/周居中弹窗与月/年边框专项、13 英寸 iPad expanded 布局专项均通过
 - 通知权限超时精确测试：20 轮、40/40 通过
 
 ## 0.2.3 稳定版发布制品
 
-`v0.2.3` 的 GitHub Release 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.3 (34)` APK/AAB。iOS 与 macOS `0.2.3 (61)` 仅上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。
+`v0.2.3` 的 GitHub Release 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.3 (35)` APK/AAB。iOS 与 macOS `0.2.3 (62)` 仅上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。
 
 ## 0.2.2 稳定版发布制品
 

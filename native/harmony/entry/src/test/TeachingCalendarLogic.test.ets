@@ -3,7 +3,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import { DateParts, StrictDates } from '../main/ets/common/StrictDates';
 import { Course } from '../main/ets/common/Models';
 import {
-  CalendarMode, CalendarTimelineLogic, TeachingCalendarLogic
+  CalendarMode, CalendarTimelineLogic, CalendarYearDeadlinePriority, TeachingCalendarLogic
 } from '../main/ets/view/calendar/CalendarLogic';
 
 export default function teachingCalendarLogicTest() {
@@ -84,6 +84,37 @@ export default function teachingCalendarLogicTest() {
         previous = value;
       }
       expect(previous < 1).assertTrue();
+    });
+
+    it('month_and_year_deadline_border_priority_is_assignment_then_school_then_other', 0, () => {
+      expect(TeachingCalendarLogic.yearDeadlinePriority(1, 3, 5))
+        .assertEqual(CalendarYearDeadlinePriority.assignment);
+      // 月格与年格共用同一优先级；选中态/today 只改变底色或无 DDL 时的回退边框。
+      expect(TeachingCalendarLogic.yearDeadlinePriority(4, 0, 0))
+        .assertEqual(CalendarYearDeadlinePriority.assignment);
+      expect(TeachingCalendarLogic.yearDeadlinePriority(0, 2, 5))
+        .assertEqual(CalendarYearDeadlinePriority.schoolNotice);
+      expect(TeachingCalendarLogic.yearDeadlinePriority(0, 0, 4))
+        .assertEqual(CalendarYearDeadlinePriority.other);
+      expect(TeachingCalendarLogic.yearDeadlinePriority(0, 0, 0))
+        .assertEqual(CalendarYearDeadlinePriority.none);
+      expect(TeachingCalendarLogic.showsTodayDeadlineDot(
+        true, CalendarYearDeadlinePriority.assignment)).assertTrue();
+      expect(TeachingCalendarLogic.showsTodayDeadlineDot(
+        true, CalendarYearDeadlinePriority.none)).assertFalse();
+      expect(TeachingCalendarLogic.showsTodayDeadlineDot(
+        false, CalendarYearDeadlinePriority.schoolNotice)).assertFalse();
+    });
+
+    it('month_and_week_all_day_dialogs_keep_distinct_bilingual_titles', 0, () => {
+      expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.week, false))
+        .assertEqual('周视图 · 全天');
+      expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.month, false))
+        .assertEqual('月视图 · 全天');
+      expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.week, true))
+        .assertEqual('Week View · All-day');
+      expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.month, true))
+        .assertEqual('Month View · All-day');
     });
 
     it('timeline_minute_and_metadata_helpers', 0, () => {

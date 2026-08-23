@@ -5,12 +5,46 @@ enum CalendarAllDayEventKind: String, Equatable, Sendable {
     case workday
     case assignment
     case schoolNotice
+    case publicDeadline
 }
 
 struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let kind: CalendarAllDayEventKind
+}
+
+enum CalendarDeadlinePresentation {
+    static func isVisible(
+        _ item: PublicDeadlineItem,
+        competitionEnabled: Bool,
+        schoolNoticeEnabled: Bool,
+        summerCampEnabled: Bool,
+        hackathonEnabled: Bool
+    ) -> Bool {
+        if item.source == .schoolNotice { return schoolNoticeEnabled }
+        switch item.kind {
+        case .competition: return competitionEnabled
+        case .summerCamp: return summerCampEnabled
+        case .hackathon: return hackathonEnabled
+        }
+    }
+
+    static func preferredDeadlineKind(
+        in events: [CalendarAllDayEvent]
+    ) -> CalendarAllDayEventKind? {
+        if events.contains(where: { $0.kind == .assignment }) { return .assignment }
+        if events.contains(where: { $0.kind == .schoolNotice }) { return .schoolNotice }
+        if events.contains(where: { $0.kind == .publicDeadline }) { return .publicDeadline }
+        return nil
+    }
+
+    static func showsSecondaryTodayIndicator(
+        isToday: Bool,
+        deadlineKind: CalendarAllDayEventKind?
+    ) -> Bool {
+        isToday && deadlineKind != nil
+    }
 }
 
 struct CalendarTimelineDay: Identifiable {

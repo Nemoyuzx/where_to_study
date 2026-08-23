@@ -26,7 +26,20 @@ private struct MobileCalendarDetailSelection: Identifiable {
 private struct MobileMonthEvent: Identifiable {
     let id: String
     let title: String
+    let categoryKey: String
     let tint: Color
+}
+
+private struct MobileMonthAgendaSelection: Identifiable {
+    let id = UUID()
+    let date: Date
+    let events: [MobileMonthEvent]
+}
+
+private struct MobileWeekAgendaSelection: Identifiable {
+    let id = UUID()
+    let date: Date
+    let events: [CalendarAllDayEvent]
 }
 
 private final class MobileMonthDragRoutingSession {
@@ -155,6 +168,8 @@ struct MobileTeachingCalendarView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var session: TeachingCalendarSessionState
     @State private var presentedDetail: MobileCalendarDetailSelection?
+    @State private var presentedMonthAgenda: MobileMonthAgendaSelection?
+    @State private var presentedWeekAgenda: MobileWeekAgendaSelection?
     @State private var pageDirection = 1
     @State private var isHorizontalPaging = false
     @State private var suppressesEventSelection = false
@@ -218,6 +233,13 @@ struct MobileTeachingCalendarView: View {
         .sheet(item: $presentedDetail) { selection in
             detailSheet(selection)
                 .presentationDetents([.medium, .large])
+        }
+        .overlay {
+            if let selection = presentedMonthAgenda {
+                monthAgendaDialog(selection)
+            } else if let selection = presentedWeekAgenda {
+                weekAgendaDialog(selection)
+            }
         }
         .onAppear {
             ensureVisibleHolidays()
@@ -582,7 +604,11 @@ struct MobileTeachingCalendarView: View {
                                 .accessibilityHidden(true)
                         } else {
                             Button {
-                                present(.day, on: day.date)
+                                AppHaptics.selection()
+                                presentedWeekAgenda = MobileWeekAgendaSelection(
+                                    date: day.date,
+                                    events: day.allDayEvents
+                                )
                             } label: {
                                 Text(labels[index])
                                     .font(.system(size: 9.5, weight: .semibold))
@@ -627,6 +653,7 @@ struct MobileTeachingCalendarView: View {
         case .workday: AppTheme.primary
         case .assignment: AppTheme.assignment
         case .schoolNotice: AppTheme.schoolNotice
+        case .publicDeadline: AppTheme.publicDeadline
         }
     }
 
@@ -843,6 +870,9 @@ struct MobileTeachingCalendarView: View {
         let dayCourses = courses(on: day)
         let holiday = holidayItems(on: day).first
         let events = monthEvents(on: day)
+        let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+            in: allDayEvents(on: day)
+        )
         let eventLayout = TeachingCalendarLogic.monthEventLayout(
             totalCount: events.count,
             maximumRows: TeachingCalendarLogic.monthEventRowCapacity(
@@ -886,24 +916,40 @@ struct MobileTeachingCalendarView: View {
                             tint: selected ? AppTheme.onPrimary : event.tint,
                             selected: selected
                         )
+                        .allowsHitTesting(false)
                     }
                     if eventLayout.hiddenEventCount > 0 {
-                        Text("+\(eventLayout.hiddenEventCount)")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.secondaryText)
-                            .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14)
-                            .background(
-                                selected
-                                    ? Color.black.opacity(0.18)
-                                    : AppTheme.surface.opacity(0.78)
+                        Button {
+                            AppHaptics.selection()
+                            presentedMonthAgenda = MobileMonthAgendaSelection(
+                                date: day,
+                                events: events
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        } label: {
+                            Text("+\(eventLayout.hiddenEventCount)")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.secondaryText)
+                                .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14)
+                                .background(
+                                    selected
+                                        ? Color.black.opacity(0.18)
+                                        : AppTheme.surface.opacity(0.78)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            model.localizedFormat("查看其余 %lld 项全天日程", eventLayout.hiddenEventCount)
+                        )
+                        .accessibilityIdentifier(
+                            "calendar.mobile.month-overflow.\(StrictContractDateParser.string(from: day))"
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
                 .opacity(expansionProgress)
                 .offset(y: (1 - expansionProgress) * -5)
-                .allowsHitTesting(false)
+                .allowsHitTesting(expansionProgress > 0.95)
             }
         }
         .foregroundStyle(monthForeground(selected: selected, inMonth: inMonth, holiday: holiday))
@@ -928,12 +974,24 @@ struct MobileTeachingCalendarView: View {
             }
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 9)
-                .stroke(today && !selected ? AppTheme.primary : Color.clear, lineWidth: 2)
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .stroke(
+                        deadlineKind.map { allDayEventTint($0) }
+                            ?? (today && !selected ? AppTheme.primary : Color.clear),
+                        lineWidth: deadlineKind != nil || (today && !selected) ? 2 : 0
+                    )
+                if deadlineKind != nil, today {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(AppTheme.primary, lineWidth: 1)
+                        .padding(2)
+                }
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
+        .accessibilityValue(deadlineKind?.rawValue ?? "")
         .accessibilityIdentifier(
             "calendar.mobile.month-day-cell.\(StrictContractDateParser.string(from: day))"
         )
@@ -971,6 +1029,7 @@ struct MobileTeachingCalendarView: View {
             MobileMonthEvent(
                 id: "holiday-\(item.id)",
                 title: "\(model.localized(item.type == "holiday" ? "休" : "班")) \(item.name)",
+                categoryKey: item.type == "holiday" ? "法定节假日" : "调休工作日",
                 tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary
             )
         }
@@ -978,6 +1037,7 @@ struct MobileTeachingCalendarView: View {
             MobileMonthEvent(
                 id: "\(dateKey)-assignment-\(item.id)",
                 title: item.title,
+                categoryKey: "课程作业 DDL",
                 tint: AppTheme.assignment
             )
         }
@@ -985,17 +1045,27 @@ struct MobileTeachingCalendarView: View {
             MobileMonthEvent(
                 id: "\(dateKey)-school-\(item.id)",
                 title: item.name,
+                categoryKey: "校内竞赛通知",
                 tint: AppTheme.schoolNotice
+            )
+        }
+        let publicDeadlines = otherPublicDeadlineItems(on: day).map { item in
+            MobileMonthEvent(
+                id: "\(dateKey)-public-\(item.id)",
+                title: item.name,
+                categoryKey: item.kind.title,
+                tint: AppTheme.publicDeadline
             )
         }
         let dayCourses = courses(on: day).map { course in
             MobileMonthEvent(
                 id: "course-\(course.id)",
                 title: course.name,
+                categoryKey: "课程详情",
                 tint: AppTheme.primary
             )
         }
-        return holidays + assignments + schoolNotices + dayCourses
+        return holidays + assignments + schoolNotices + publicDeadlines + dayCourses
     }
 
     private var yearView: some View {
@@ -1061,6 +1131,9 @@ struct MobileTeachingCalendarView: View {
         if calendar.isDate(day, equalTo: month, toGranularity: .month) {
             let count = courses(on: day).count
             let today = sameDay(day, .now)
+            let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+                in: allDayEvents(on: day)
+            )
             Button {
                 AppHaptics.selection()
                 selectedDate = day
@@ -1072,8 +1145,22 @@ struct MobileTeachingCalendarView: View {
                     .frame(maxWidth: .infinity, minHeight: 24)
                     .background(AppTheme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: count)))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(today ? AppTheme.primary : AppTheme.border, lineWidth: today ? 2 : 0.5)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(
+                                    deadlineKind.map { allDayEventTint($0) }
+                                        ?? (today ? AppTheme.primary : AppTheme.border),
+                                    lineWidth: deadlineKind != nil || today ? 2 : 0.5
+                                )
+                            if CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
+                                isToday: today,
+                                deadlineKind: deadlineKind
+                            ) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .stroke(AppTheme.primary, lineWidth: 1)
+                                    .padding(2)
+                            }
+                        }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
@@ -1082,6 +1169,7 @@ struct MobileTeachingCalendarView: View {
             .accessibilityIdentifier(
                 "calendar.mobile.year-day.\(StrictContractDateParser.string(from: day))"
             )
+            .accessibilityValue(deadlineKind?.rawValue ?? "")
         } else {
             Color.clear.frame(height: 24)
         }
@@ -1342,7 +1430,9 @@ struct MobileTeachingCalendarView: View {
     private func mobileDeadlineRowContent(_ item: PublicDeadlineItem) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: item.kind.systemImage)
-                .foregroundStyle(AppTheme.primary)
+                .foregroundStyle(
+                    item.source == .schoolNotice ? AppTheme.schoolNotice : AppTheme.publicDeadline
+                )
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
@@ -1362,14 +1452,13 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func deadlineIsEnabled(_ item: PublicDeadlineItem) -> Bool {
-        if item.source == .schoolNotice {
-            return model.schoolContestNoticesEnabled
-        }
-        switch item.kind {
-        case .competition: return model.competitionDeadlinesEnabled
-        case .summerCamp: return model.summerCampDeadlinesEnabled
-        case .hackathon: return model.hackathonDeadlinesEnabled
-        }
+        CalendarDeadlinePresentation.isVisible(
+            item,
+            competitionEnabled: model.competitionDeadlinesEnabled,
+            schoolNoticeEnabled: model.schoolContestNoticesEnabled,
+            summerCampEnabled: model.summerCampDeadlinesEnabled,
+            hackathonEnabled: model.hackathonDeadlinesEnabled
+        )
     }
 
     private func deadlineCategoryTitle(_ item: PublicDeadlineItem) -> String {
@@ -1380,6 +1469,129 @@ struct MobileTeachingCalendarView: View {
         guard value.count >= 16 else { return value }
         let start = value.index(value.startIndex, offsetBy: 11)
         return String(value[start...].prefix(5))
+    }
+
+    private func monthAgendaDialog(_ selection: MobileMonthAgendaSelection) -> some View {
+        centeredAgendaDialog(
+            titleKey: "月视图全天日程",
+            date: selection.date,
+            accessibilityIdentifier: "calendar.mobile.month-agenda-dialog",
+            dismiss: { presentedMonthAgenda = nil }
+        ) {
+            ForEach(selection.events) { event in
+                agendaRow(
+                    title: event.title,
+                    categoryKey: event.categoryKey,
+                    tint: event.tint
+                )
+            }
+        }
+    }
+
+    private func weekAgendaDialog(_ selection: MobileWeekAgendaSelection) -> some View {
+        centeredAgendaDialog(
+            titleKey: "周视图全天日程",
+            date: selection.date,
+            accessibilityIdentifier: "calendar.mobile.week-agenda-dialog",
+            dismiss: { presentedWeekAgenda = nil }
+        ) {
+            ForEach(selection.events) { event in
+                agendaRow(
+                    title: event.title,
+                    categoryKey: allDayEventCategoryKey(event.kind),
+                    tint: allDayEventTint(event.kind)
+                )
+            }
+        }
+    }
+
+    private func centeredAgendaDialog<Rows: View>(
+        titleKey: String,
+        date: Date,
+        accessibilityIdentifier: String,
+        dismiss: @escaping () -> Void,
+        @ViewBuilder rows: () -> Rows
+    ) -> some View {
+        ZStack {
+            Color.black.opacity(0.34)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: dismiss)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(model.localized(titleKey))
+                            .font(.headline)
+                        Text(fullDateFormatter.string(from: date))
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                    }
+                    Spacer(minLength: 8)
+                    Button(action: dismiss) {
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.bold))
+                            .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(model.localized("关闭全天日程"))
+                }
+
+                Divider()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        rows()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 360)
+            }
+            .padding(16)
+            .frame(maxWidth: 380)
+            .background(AppTheme.surface)
+            .overlay {
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(AppTheme.border, lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .shadow(color: Color.black.opacity(0.24), radius: 20, y: 8)
+            .padding(20)
+            .contentShape(Rectangle())
+            .onTapGesture { }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(accessibilityIdentifier)
+        }
+        .zIndex(40)
+    }
+
+    private func agendaRow(title: String, categoryKey: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Circle()
+                .fill(tint)
+                .frame(width: 8, height: 8)
+                .padding(.top, 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(model.localized(categoryKey))
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func allDayEventCategoryKey(_ kind: CalendarAllDayEventKind) -> String {
+        switch kind {
+        case .holiday: "法定节假日"
+        case .workday: "调休工作日"
+        case .assignment: "课程作业 DDL"
+        case .schoolNotice: "校内竞赛通知"
+        case .publicDeadline: "公开活动 DDL"
+        }
     }
 
     private func detailSheet(_ selection: MobileCalendarDetailSelection) -> some View {
@@ -1414,6 +1626,7 @@ struct MobileTeachingCalendarView: View {
         let dayCourses = courses(on: day)
         let assignments = assignmentItems(on: day)
         let schoolNotices = schoolNoticeItems(on: day)
+        let publicDeadlines = otherPublicDeadlineItems(on: day)
         return VStack(alignment: .leading, spacing: 12) {
             Text(fullDateFormatter.string(from: day))
                 .font(.headline)
@@ -1429,7 +1642,14 @@ struct MobileTeachingCalendarView: View {
             if !schoolNotices.isEmpty {
                 compactSchoolNoticeDetail(schoolNotices)
             }
-            if holidays.isEmpty, dayCourses.isEmpty, assignments.isEmpty, schoolNotices.isEmpty {
+            if !publicDeadlines.isEmpty {
+                compactPublicDeadlineDetail(publicDeadlines)
+            }
+            if holidays.isEmpty,
+               dayCourses.isEmpty,
+               assignments.isEmpty,
+               schoolNotices.isEmpty,
+               publicDeadlines.isEmpty {
                 Text("暂无日程")
                     .foregroundStyle(AppTheme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1483,6 +1703,23 @@ struct MobileTeachingCalendarView: View {
         .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.schoolNotice.opacity(0.5)) }
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.day-detail.school-notices")
+    }
+
+    private func compactPublicDeadlineDetail(_ items: [PublicDeadlineItem]) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Label("公开活动 DDL", systemImage: "flag.checkered")
+                .font(.headline)
+                .foregroundStyle(AppTheme.publicDeadline)
+            ForEach(items) { item in
+                mobileDeadlineRow(item)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(AppTheme.surface)
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.publicDeadline.opacity(0.5)) }
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("calendar.mobile.day-detail.public-deadlines")
     }
 
     private func courseDetailCard(_ course: Course, on day: Date) -> some View {
@@ -1644,6 +1881,13 @@ struct MobileTeachingCalendarView: View {
         }
     }
 
+    private func otherPublicDeadlineItems(on date: Date) -> [PublicDeadlineItem] {
+        let dateKey = StrictContractDateParser.string(from: date)
+        return (calendarDeadlines.publicByDate[dateKey]?.items ?? []).filter {
+            $0.source != .schoolNotice && deadlineIsEnabled($0)
+        }
+    }
+
     private func allDayEvents(on date: Date) -> [CalendarAllDayEvent] {
         let dateKey = StrictContractDateParser.string(from: date)
         let holidays = holidayItems(on: date).map { holiday in
@@ -1667,7 +1911,14 @@ struct MobileTeachingCalendarView: View {
                 kind: .schoolNotice
             )
         }
-        return holidays + assignments + schoolNotices
+        let publicDeadlines = otherPublicDeadlineItems(on: date).map { item in
+            CalendarAllDayEvent(
+                id: "\(dateKey)-public-\(item.id)",
+                title: item.name,
+                kind: .publicDeadline
+            )
+        }
+        return holidays + assignments + schoolNotices + publicDeadlines
     }
 
     private func weekDates() -> [Date] {
@@ -1702,12 +1953,14 @@ struct MobileTeachingCalendarView: View {
 
     private var visibleDailyDetailDates: [Date] {
         switch mode {
-        case .day, .year:
+        case .day:
             [selectedDate]
         case .week:
             weekDates()
         case .month:
             monthGridDates(containing: selectedDate)
+        case .year:
+            TeachingCalendarLogic.datesInYear(containing: selectedDate, calendar: calendar)
         }
     }
 
@@ -2063,9 +2316,10 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func dayAccessibilityLabel(_ day: Date) -> String {
+        let today = sameDay(day, .now) ? model.localized("今天") : ""
         let holidays = holidayItems(on: day).map(\.name).joined(separator: "，")
         let dayCourses = courses(on: day).map { "\($0.timeRange)\($0.name)" }.joined(separator: "，")
-        return [fullDateFormatter.string(from: day), holidays, dayCourses.isEmpty ? "无课" : dayCourses]
+        return [today, fullDateFormatter.string(from: day), holidays, dayCourses.isEmpty ? "无课" : dayCourses]
             .filter { !$0.isEmpty }
             .joined(separator: "，")
     }

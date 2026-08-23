@@ -1331,6 +1331,24 @@ final class CalendarDeadlineStore: ObservableObject {
                             deadline: "\(date)T18:00:00+08:00",
                             organizer: "学校公开通知页",
                             officialURL: nil
+                        ),
+                        PublicDeadlineItem(
+                            id: "sample-summer-camp",
+                            name: "示例高校夏令营",
+                            kind: .summerCamp,
+                            source: .contestDDL,
+                            deadline: "\(date)T20:00:00+08:00",
+                            organizer: "示例高校",
+                            officialURL: nil
+                        ),
+                        PublicDeadlineItem(
+                            id: "sample-hackathon",
+                            name: "示例校园黑客松",
+                            kind: .hackathon,
+                            source: .contestDDL,
+                            deadline: "\(date)T21:00:00+08:00",
+                            organizer: "示例社区",
+                            officialURL: nil
                         )
                     ],
                     source: CalendarDeadlineSources.primary,

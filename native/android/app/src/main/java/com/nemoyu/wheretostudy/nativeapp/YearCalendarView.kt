@@ -20,7 +20,14 @@ data class YearCalendarDay(
     val date: Calendar,
     val courseCount: Int,
     val holidays: List<HolidayItem>,
+    val supplementaryKind: YearCalendarSupplementaryKind? = null,
 )
+
+enum class YearCalendarSupplementaryKind {
+    ASSIGNMENT,
+    SCHOOL_NOTICE,
+    PUBLIC_DEADLINE,
+}
 
 object YearCalendarLogic {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
@@ -41,6 +48,17 @@ object YearCalendarLogic {
         val candidate = row * 7 + column - leadingDays + 1
         return candidate.takeIf { it in 1..first.getActualMaximum(Calendar.DAY_OF_MONTH) }
     }
+
+    fun supplementaryKind(
+        assignmentCount: Int,
+        schoolNoticeCount: Int,
+        publicDeadlineCount: Int,
+    ): YearCalendarSupplementaryKind? = when {
+        assignmentCount > 0 -> YearCalendarSupplementaryKind.ASSIGNMENT
+        schoolNoticeCount > 0 -> YearCalendarSupplementaryKind.SCHOOL_NOTICE
+        publicDeadlineCount > 0 -> YearCalendarSupplementaryKind.PUBLIC_DEADLINE
+        else -> null
+    }
 }
 
 @SuppressLint("ViewConstructor")
@@ -53,7 +71,7 @@ class YearCalendarView(
     private val onMonthSelected: (Calendar) -> Unit,
 ) : View(context) {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
-    private val dayByKey = days.associateBy { key(it.date) }
+    private val dayByKey = days.associateByTo(mutableMapOf()) { key(it.date) }
     private val columns = YearCalendarLogic.columns(availableWidthDp)
     private val monthTitleHeight = dp(28).toFloat()
     private val weekdayHeight = dp(14).toFloat()
@@ -102,6 +120,21 @@ class YearCalendarView(
     fun clearSelection() {
         if (selectedDate == null) return
         selectedDate = null
+        invalidate()
+    }
+
+    fun updateDay(day: YearCalendarDay) {
+        if (day.date.get(Calendar.YEAR) != year) return
+        dayByKey[key(day.date)] = day
+        invalidate()
+    }
+
+    fun updateDays(updatedDays: List<YearCalendarDay>) {
+        updatedDays.forEach { day ->
+            if (day.date.get(Calendar.YEAR) == year) {
+                dayByKey[key(day.date)] = day
+            }
+        }
         invalidate()
     }
 
@@ -226,9 +259,25 @@ class YearCalendarView(
         }
         canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), fillPaint)
 
-        borderPaint.color = if (today) Palette.primary else Palette.border
-        borderPaint.strokeWidth = resources.displayMetrics.density * if (today) 1.5f else 0.32f
+        borderPaint.color = when (day.supplementaryKind) {
+            YearCalendarSupplementaryKind.ASSIGNMENT -> Palette.assignment
+            YearCalendarSupplementaryKind.SCHOOL_NOTICE -> Palette.schoolNotice
+            YearCalendarSupplementaryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
+            null -> if (today) Palette.primary else Palette.border
+        }
+        borderPaint.strokeWidth = resources.displayMetrics.density * when {
+            day.supplementaryKind != null -> 1.8f
+            today -> 1.5f
+            else -> 0.32f
+        }
         canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), borderPaint)
+        if (today && day.supplementaryKind != null) {
+            val inset = resources.displayMetrics.density * 2.5f
+            val todayRect = RectF(rect).apply { inset(inset, inset) }
+            borderPaint.color = Palette.nowIndicator
+            borderPaint.strokeWidth = resources.displayMetrics.density
+            canvas.drawRoundRect(todayRect, dp(3).toFloat(), dp(3).toFloat(), borderPaint)
+        }
 
         textPaint.textAlign = Paint.Align.CENTER
         textPaint.color = if (selected) Palette.onPrimary else Palette.text

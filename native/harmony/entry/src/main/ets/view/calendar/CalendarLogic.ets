@@ -34,6 +34,15 @@ export enum CalendarMode {
   year = '年'
 }
 
+// 年视图只用边框表达 DDL 类型，课程数量仍由格子底色表达。多个来源落在
+// 同一天时必须保持 assignment > school notice > other 的稳定优先级。
+export enum CalendarYearDeadlinePriority {
+  none = 'none',
+  other = 'other',
+  schoolNotice = 'school_notice',
+  assignment = 'assignment'
+}
+
 export class CalendarModeInfo {
   static readonly all: CalendarMode[] = [
     CalendarMode.day, CalendarMode.week, CalendarMode.month, CalendarMode.year
@@ -158,6 +167,38 @@ export class TeachingCalendarLogic {
     }
     const count: number = courseCount;
     return 0.12 + 0.72 * count / (count + 3);
+  }
+
+  static yearDeadlinePriority(assignmentCount: number, schoolNoticeCount: number,
+    otherDeadlineCount: number): CalendarYearDeadlinePriority {
+    if (assignmentCount > 0) {
+      return CalendarYearDeadlinePriority.assignment;
+    }
+    if (schoolNoticeCount > 0) {
+      return CalendarYearDeadlinePriority.schoolNotice;
+    }
+    if (otherDeadlineCount > 0) {
+      return CalendarYearDeadlinePriority.other;
+    }
+    return CalendarYearDeadlinePriority.none;
+  }
+
+  static allDayDialogTitle(mode: CalendarMode, english: boolean): string {
+    if (english) {
+      if (mode === CalendarMode.day) {
+        return 'Day View · All-day';
+      }
+      if (mode === CalendarMode.month) {
+        return 'Month View · All-day';
+      }
+      return 'Week View · All-day';
+    }
+    return mode + '视图 · 全天';
+  }
+
+  static showsTodayDeadlineDot(isToday: boolean,
+    priority: CalendarYearDeadlinePriority): boolean {
+    return isToday && priority !== CalendarYearDeadlinePriority.none;
   }
 
   static periodTitle(date: DateParts, mode: CalendarMode, english: boolean = false): string {

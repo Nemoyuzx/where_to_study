@@ -60,6 +60,7 @@ enum AppTheme {
     static let danger = Color(nsColor: .systemRed)
     static let assignment = Color(nsColor: .systemPurple)
     static let schoolNotice = Color(nsColor: .systemOrange)
+    static let publicDeadline = Color(nsColor: .systemBlue)
     #else
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
@@ -69,6 +70,7 @@ enum AppTheme {
     static let danger = Color(uiColor: .systemRed)
     static let assignment = Color(uiColor: .systemPurple)
     static let schoolNotice = Color(uiColor: .systemOrange)
+    static let publicDeadline = Color(uiColor: .systemBlue)
     #endif
 
     private static func adaptiveColor(

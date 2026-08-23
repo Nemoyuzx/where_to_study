@@ -9,7 +9,7 @@ import { AppTheme } from '../../common/AppTheme';
 import { PageTitle, SurfaceCard } from '../SharedComponents';
 import {
   CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarTimelineDay,
-  CalendarTimelineLogic, DarkModeProbe, TeachingCalendarLogic
+  CalendarTimelineLogic, CalendarYearDeadlinePriority, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
 import { MobileCalendarTimelineLayout, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
@@ -44,6 +44,8 @@ export struct MobileTeachingCalendarView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
   @Local presentedDay: DateParts | null = null;
+  @Local allDayDialogDay: DateParts | null = null;
+  @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local showingActions: boolean = false;
   @Local contentWidth: number = 350;
   @Local contentHeight: number = 500;
@@ -177,6 +179,17 @@ export struct MobileTeachingCalendarView {
     return result;
   }
 
+  private yearDates(containing: DateParts): DateParts[] {
+    const result: DateParts[] = [];
+    for (let month = 1; month <= 12; month++) {
+      const count: number = StrictDates.daysInMonth(containing.year, month);
+      for (let day = 1; day <= count; day++) {
+        result.push(new DateParts(containing.year, month, day));
+      }
+    }
+    return result;
+  }
+
   private visibleHolidayYears(renderMode: CalendarMode = this.mode(),
     renderDate: DateParts = this.selectedDate()): number[] {
     const result: Set<number> = new Set<number>();
@@ -229,6 +242,7 @@ export struct MobileTeachingCalendarView {
       this.model.prefetchCalendarMarkers([selected]);
     } else {
       this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(selected));
+      this.model.prefetchCalendarMarkers(this.yearDates(selected));
     }
   }
 
@@ -441,6 +455,13 @@ export struct MobileTeachingCalendarView {
 
       if (this.presentedDay !== null) {
         this.dayDetailOverlay()
+      }
+      if (this.allDayDialogDay !== null) {
+        if (this.allDayDialogModeRawValue === CalendarMode.month) {
+          this.monthAllDayDialogOverlay()
+        } else {
+          this.weekAllDayDialogOverlay()
+        }
       }
       if (this.showingActions) {
         this.actionsOverlay()
@@ -911,7 +932,7 @@ export struct MobileTeachingCalendarView {
                   .textAlign(TextAlign.Start)
                   .onClick(() => {
                     if (interactive) {
-                      this.presentDayDetails(day.date);
+                      this.presentAllDayDialog(day.date, renderMode);
                     }
                   })
               }
@@ -1114,15 +1135,25 @@ export struct MobileTeachingCalendarView {
   @Builder
   monthDayButton(day: DateParts, rowIndex: number, renderDate: DateParts, interactive: boolean) {
     Column({ space: 0 }) {
-      Text(day.day.toString())
-        .fontSize(15)
-        .fontWeight(day.equals(renderDate) ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.monthForeground(day, renderDate))
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .height(24)
+      Row({ space: 3 }) {
+        Text(day.day.toString())
+          .fontSize(15)
+          .fontWeight(day.equals(renderDate) ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.monthForeground(day, renderDate))
+        if (this.showsTodayDeadlineDot(day)) {
+          Column()
+            .width(5)
+            .height(5)
+            .borderRadius(2.5)
+            .backgroundColor(AppTheme.nowIndicator())
+        }
+      }
+      .width('100%')
+      .height(24)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
       if (this.monthExpansionProgress() > 0.01) {
-        this.expandedMonthEvents(day, renderDate)
+        this.expandedMonthEvents(day, renderDate, interactive)
       }
       if (this.monthExpansionProgress() < 0.99) {
         Text(this.compactMonthMarker(day))
@@ -1149,9 +1180,12 @@ export struct MobileTeachingCalendarView {
     .backgroundColor(this.monthBackground(day, renderDate))
     .borderRadius(10)
     .border({
-      width: day.equals(StrictDates.todayParts()) && !day.equals(renderDate) ? 2 : 0,
-      color: day.equals(StrictDates.todayParts()) && !day.equals(renderDate) ?
-        AppTheme.nowIndicator() : Color.Transparent
+      width: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ||
+        (day.equals(StrictDates.todayParts()) && !day.equals(renderDate)) ? 2 : 0,
+      color: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ?
+        this.yearDeadlineBorderColor(this.yearDeadlinePriority(day)) :
+        (day.equals(StrictDates.todayParts()) && !day.equals(renderDate) ?
+          AppTheme.nowIndicator() : Color.Transparent)
     })
     .clip(true)
     .onClick(() => {
@@ -1201,7 +1235,7 @@ export struct MobileTeachingCalendarView {
   }
 
   @Builder
-  expandedMonthEvents(day: DateParts, renderDate: DateParts) {
+  expandedMonthEvents(day: DateParts, renderDate: DateParts, interactive: boolean) {
     Column({ space: 1 }) {
       ForEach(this.monthEvents(day).slice(0, this.visibleMonthEventCount(day, renderDate)),
         (event: MonthEvent) => {
@@ -1218,6 +1252,11 @@ export struct MobileTeachingCalendarView {
           .textAlign(TextAlign.Start)
           .borderRadius(4)
           .backgroundColor(day.equals(renderDate) ? AppTheme.primary() : AppTheme.selection())
+          .onClick(() => {
+            if (interactive) {
+              this.presentAllDayDialog(day, CalendarMode.month);
+            }
+          })
         }
       }
     .width('100%')
@@ -1268,7 +1307,9 @@ export struct MobileTeachingCalendarView {
         if (this.model.deadlineItemEnabled(item)) {
           const school: boolean = item.source === PublicDeadlineSource.schoolNotice;
           result.push(new MonthEvent('deadline-' + item.id,
-            (school ? this.model.text('校内') + ' ' : 'DDL ') + item.name, false, false,
+            (school ? this.model.text('校内') :
+              this.model.text(PublicDeadlineKindInfo.title(item.kind))) + ' ' + item.name,
+            false, false,
           school ? AppTheme.holiday() : '#C06A00', school ? '#15FF3B30' : '#15C06A00'));
         }
       }
@@ -1434,21 +1475,34 @@ export struct MobileTeachingCalendarView {
   @Builder
   yearDayButton(day: DateParts, month: number, interactive: boolean) {
     if (day.month === month) {
-      Text(day.day.toString())
-        .fontSize(8)
-        .fontColor(this.presentedDay !== null && day.equals(this.presentedDay as DateParts) ?
-          AppTheme.onPrimary() : AppTheme.text())
-        .textAlign(TextAlign.Center)
+      Row({ space: 2 }) {
+        Text(day.day.toString())
+          .fontSize(8)
+          .fontColor(this.presentedDay !== null && day.equals(this.presentedDay as DateParts) ?
+            AppTheme.onPrimary() : AppTheme.text())
+        if (this.showsTodayDeadlineDot(day)) {
+          Column()
+            .width(4)
+            .height(4)
+            .borderRadius(2)
+            .backgroundColor(AppTheme.nowIndicator())
+        }
+      }
         .width('100%')
         .height(26)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
         .borderRadius(4)
         .backgroundColor(this.presentedDay !== null && day.equals(this.presentedDay as DateParts) ?
           AppTheme.primaryFill() : CalendarColors.primaryWithAlpha(
             TeachingCalendarLogic.yearCourseOpacity(this.markerCount(day)), this.isDarkMode))
         .border({
-          width: day.equals(StrictDates.todayParts()) && !day.equals(this.presentedDay) ? 2 : 0,
-          color: day.equals(StrictDates.todayParts()) && !day.equals(this.presentedDay) ?
-            AppTheme.nowIndicator() : Color.Transparent
+          width: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ||
+            (day.equals(StrictDates.todayParts()) && !day.equals(this.presentedDay)) ? 2 : 0,
+          color: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ?
+            this.yearDeadlineBorderColor(this.yearDeadlinePriority(day)) :
+            (day.equals(StrictDates.todayParts()) && !day.equals(this.presentedDay) ?
+              AppTheme.nowIndicator() : Color.Transparent)
         })
         .onClick((event: ClickEvent) => {
           if (!interactive) {
@@ -1470,15 +1524,133 @@ export struct MobileTeachingCalendarView {
     }
   }
 
-  // ---------- 详情卡片 ----------
+  private yearDeadlinePriority(day: DateParts): CalendarYearDeadlinePriority {
+    const date: string = StrictDates.formatDateParts(day);
+    const assignmentCount: number = (this.model.assignmentDeadlinesByDate.get(date) ?? []).length;
+    let schoolCount: number = 0;
+    let otherCount: number = 0;
+    const snapshot: PublicDeadlineSnapshot | undefined = this.model.publicDeadlinesByDate.get(date);
+    if (snapshot !== undefined) {
+      for (const item of snapshot.items) {
+        if (!this.model.deadlineItemEnabled(item)) {
+          continue;
+        }
+        if (item.source === PublicDeadlineSource.schoolNotice) {
+          schoolCount++;
+        } else {
+          otherCount++;
+        }
+      }
+    }
+    return TeachingCalendarLogic.yearDeadlinePriority(
+      assignmentCount, schoolCount, otherCount);
+  }
 
-  private presentDayDetails(day: DateParts): void {
+  private showsTodayDeadlineDot(day: DateParts): boolean {
+    return TeachingCalendarLogic.showsTodayDeadlineDot(
+      day.equals(StrictDates.todayParts()), this.yearDeadlinePriority(day));
+  }
+
+  private yearDeadlineBorderColor(priority: CalendarYearDeadlinePriority): ResourceColor {
+    if (priority === CalendarYearDeadlinePriority.assignment) {
+      return '#3478F6';
+    }
+    if (priority === CalendarYearDeadlinePriority.schoolNotice) {
+      return AppTheme.holiday();
+    }
+    return '#C06A00';
+  }
+
+  // ---------- 月/周全天日程弹窗 ----------
+
+  private presentAllDayDialog(day: DateParts, mode: CalendarMode): void {
     this.setSelectedDate(day);
     this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(day));
-    this.presentedDayAnchorX = this.rootWidth / 2;
-    this.presentedDayAnchorY = Math.min(this.rootHeight * 0.32, 260);
-    this.presentedDay = day;
+    this.allDayDialogModeRawValue = mode;
+    this.allDayDialogDay = day;
   }
+
+  @Builder
+  weekAllDayDialogOverlay() {
+    this.centeredAllDayDialog(CalendarModeInfo.fromRawValue(this.allDayDialogModeRawValue))
+  }
+
+  @Builder
+  monthAllDayDialogOverlay() {
+    this.centeredAllDayDialog(CalendarMode.month)
+  }
+
+  @Builder
+  centeredAllDayDialog(mode: CalendarMode) {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#33000000')
+        .onClick(() => {
+          this.allDayDialogDay = null;
+        })
+      Column({ space: 12 }) {
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text(TeachingCalendarLogic.allDayDialogTitle(mode, this.isEnglish()))
+              .fontSize(16)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.text())
+            Text(CalendarFormatters.fullDate(this.allDayDialogDay as DateParts, this.isEnglish()))
+              .fontSize(12)
+              .fontColor(AppTheme.secondaryText())
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+          Text(this.model.text('完成'))
+            .fontSize(14)
+            .fontColor(AppTheme.primary())
+            .onClick(() => {
+              this.allDayDialogDay = null;
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Top)
+
+        Scroll() {
+          Column({ space: 8 }) {
+            ForEach(this.allDayItemsOn(this.allDayDialogDay as DateParts),
+              (item: CalendarAllDayItem) => {
+                Text(item.title)
+                  .fontSize(13)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(item.tint)
+                  .width('100%')
+                  .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+                  .borderRadius(6)
+                  .backgroundColor(item.fill)
+              }, (item: CalendarAllDayItem) => 'all-day-dialog.' + mode + '.' + item.id)
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+        }
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.None)
+        .constraintSize({ maxHeight: Math.max(this.rootHeight - 180, 160) })
+        .width('100%')
+      }
+      .padding(16)
+      .width(Math.min(360, Math.max(this.rootWidth - 32, 240)))
+      .constraintSize({ maxHeight: Math.max(this.rootHeight - 48, 220) })
+      .borderRadius(12)
+      .border({ width: 1, color: AppTheme.border() })
+      .backgroundColor(AppTheme.surface())
+      .shadow({ radius: 18, color: '#33000000', offsetX: 0, offsetY: 8 })
+      .position({ x: '50%', y: '50%' })
+      .translate({ x: '-50%', y: '-50%' })
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  // ---------- 年视图详情卡片 ----------
 
   @Builder
   dayDetailOverlay() {

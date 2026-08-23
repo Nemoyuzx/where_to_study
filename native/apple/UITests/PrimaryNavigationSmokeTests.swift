@@ -270,10 +270,12 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             }
             XCTAssertTrue(yearDay.waitForExistence(timeout: 3))
             XCTAssertTrue(yearDay.isHittable)
+            XCTAssertEqual(yearDay.value as? String, "assignment")
             yearDay.tap()
 
             XCTAssertTrue(app.staticTexts["课程作业 DDL"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.staticTexts["校内竞赛通知"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["公开活动 DDL"].waitForExistence(timeout: 5))
 
             for target in ["日", "周", "月"] {
                 XCTAssertTrue(app.buttons["\(target)视图"].waitForExistence(timeout: 5))
@@ -285,6 +287,85 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             XCTAssertTrue(app.segmentedControls.buttons[mode].waitForExistence(timeout: 5))
             XCTAssertTrue(app.segmentedControls.buttons[mode].isSelected)
         }
+    }
+
+    func testMobileMonthAndWeekUseDedicatedCenteredDeadlineDialogs() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "教学日历", in: app)
+        let weekAllDayButton = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS '全天' AND label CONTAINS '+'")
+        ).firstMatch
+        XCTAssertTrue(weekAllDayButton.waitForExistence(timeout: 5))
+        weekAllDayButton.tap()
+
+        let weekDialog = app.descendants(matching: .any)[
+            "calendar.mobile.week-agenda-dialog"
+        ].firstMatch
+        XCTAssertTrue(weekDialog.waitForExistence(timeout: 5))
+        XCTAssertEqual(weekDialog.frame.midX, app.frame.midX, accuracy: 2)
+        XCTAssertLessThan(abs(weekDialog.frame.midY - app.frame.midY), 48)
+        XCTAssertTrue(app.staticTexts["全国大学生示例竞赛"].exists)
+        XCTAssertTrue(app.staticTexts["示例高校夏令营"].exists)
+        app.buttons["关闭全天日程"].tap()
+
+        app.segmentedControls.buttons["月"].tap()
+        let monthState = app.descendants(matching: .any)["calendar.mobile.month-state"].firstMatch
+        XCTAssertTrue(monthState.waitForExistence(timeout: 5))
+        XCTAssertEqual(monthState.value as? String, "已展开")
+        let markedMonthDay = app.descendants(matching: .any)[
+            "calendar.mobile.month-day-cell.\(currentShanghaiDateString())"
+        ].firstMatch
+        XCTAssertTrue(markedMonthDay.waitForExistence(timeout: 5))
+        XCTAssertEqual(markedMonthDay.value as? String, "assignment")
+        let monthOverflow = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS '查看其余'")
+        ).firstMatch
+        XCTAssertTrue(monthOverflow.waitForExistence(timeout: 5))
+        monthOverflow.tap()
+
+        let monthDialog = app.descendants(matching: .any)[
+            "calendar.mobile.month-agenda-dialog"
+        ].firstMatch
+        XCTAssertTrue(monthDialog.waitForExistence(timeout: 5))
+        XCTAssertEqual(monthDialog.frame.midX, app.frame.midX, accuracy: 2)
+        XCTAssertLessThan(abs(monthDialog.frame.midY - app.frame.midY), 48)
+        XCTAssertTrue(app.staticTexts["示例校园黑客松"].exists)
+        app.buttons["关闭全天日程"].tap()
+    }
+
+    func testMobileYearDeadlineBorderPriorityAndDetailContent() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "教学日历", in: app)
+        app.segmentedControls.buttons["年"].tap()
+        let yearDay = app.buttons[
+            "calendar.mobile.year-day.\(currentShanghaiDateString())"
+        ].firstMatch
+        for _ in 0..<8 where !yearDay.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(yearDay.waitForExistence(timeout: 5))
+        XCTAssertEqual(yearDay.value as? String, "assignment")
+        XCTAssertTrue(yearDay.label.contains("今天"))
+        yearDay.tap()
+
+        XCTAssertTrue(app.staticTexts["课程作业 DDL"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["校内竞赛通知"].exists)
+        XCTAssertTrue(app.staticTexts["公开活动 DDL"].exists)
+        XCTAssertTrue(app.staticTexts["全国大学生示例竞赛"].exists)
+        XCTAssertTrue(app.staticTexts["示例高校夏令营"].exists)
+        XCTAssertTrue(app.staticTexts["示例校园黑客松"].exists)
     }
 
     func testEnglishInterfaceCanBeSelectedWithoutTranslatingSampleAPIContent() throws {
@@ -301,7 +382,6 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.segmentedControls.buttons["Week"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Data Mining"].exists == false)
         XCTAssertTrue(app.staticTexts["数据挖掘"].waitForExistence(timeout: 5))
-
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["settings.language"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Interface Language"].exists)

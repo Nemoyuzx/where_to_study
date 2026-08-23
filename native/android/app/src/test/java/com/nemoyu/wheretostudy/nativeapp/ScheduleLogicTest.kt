@@ -530,6 +530,23 @@ class ScheduleLogicTest {
     }
 
     @Test
+    fun yearDeadlineBorderPriorityIsAssignmentThenSchoolThenPublic() {
+        assertEquals(
+            YearCalendarSupplementaryKind.ASSIGNMENT,
+            YearCalendarLogic.supplementaryKind(1, 4, 8),
+        )
+        assertEquals(
+            YearCalendarSupplementaryKind.SCHOOL_NOTICE,
+            YearCalendarLogic.supplementaryKind(0, 2, 8),
+        )
+        assertEquals(
+            YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
+            YearCalendarLogic.supplementaryKind(0, 0, 3),
+        )
+        assertEquals(null, YearCalendarLogic.supplementaryKind(0, 0, 0))
+    }
+
+    @Test
     fun phoneCalendarDateCellsStayReadableAcrossSupportedWidths() {
         assertEquals(40, TeachingCalendarLogic.phoneDateCellWidth(320))
         assertEquals(50, TeachingCalendarLogic.phoneDateCellWidth(390))

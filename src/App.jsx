@@ -41,11 +41,12 @@ import {
   buildCalendarDayMap,
   buildMiniMonthDays,
   buildMonthDays,
-    buildingsForCampus,
-    calendarMonthExpansion,
-    calendarMonthDragProgress,
-    calendarMonthExpansionTarget,
-    calendarSwipeDirection,
+  calendarDeadlineBorderPriority,
+  buildingsForCampus,
+  calendarMonthExpansion,
+  calendarMonthDragProgress,
+  calendarMonthExpansionTarget,
+  calendarSwipeDirection,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
   CALENDAR_VIEWS,
@@ -113,6 +114,9 @@ const EN_TEXT = Object.freeze({
   '下一段': 'Next period',
   '全天': 'All day',
   '全天日程': 'All-day events',
+  '日视图全天日程': 'Day-view all-day events',
+  '周视图全天日程': 'Week-view all-day events',
+  '月视图全天日程': 'Month-view all-day events',
   '关闭全天日程': 'Close all-day events',
   '打开所选日期': 'Open selected date',
   '查看日': 'Day',
@@ -165,6 +169,7 @@ const EN_TEXT = Object.freeze({
   '当天没有已启用类型的报名或提交截止': 'No enabled registration or submission deadlines today',
   '学科竞赛': 'Academic competitions',
   '校内竞赛通知': 'School competition notices',
+  '其它 DDL': 'Other deadlines',
   '夏令营': 'Summer camps',
   '黑客松': 'Hackathons',
   '校区天气': 'Campus weather',
@@ -553,6 +558,8 @@ function browserPreviewCommand(name, payload = {}) {
   if (name === 'fetch_deadline_calendar') {
     const startDate = payload.start_date
     const secondDate = addDays(startDate, 1)
+    const thirdDate = addDays(startDate, 2)
+    const fourthDate = addDays(startDate, 3)
     return {
       start_date: startDate,
       end_date: payload.end_date,
@@ -562,7 +569,10 @@ function browserPreviewCommand(name, payload = {}) {
       items: [
         { id: 'preview-school-notice-range', name: '校内学科竞赛通知示例', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${startDate}T20:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
         { id: 'preview-school-notice-range-2', name: '校内创新项目通知示例', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${startDate}T21:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
+        { id: 'preview-school-over-public-range', name: '校内竞赛报名提醒', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${secondDate}T12:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
         { id: 'preview-competition-range', name: '大学生创新竞赛', event_type: 'competition', source_type: 'contest_ddl', primary_deadline: `${secondDate}T18:00:00+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
+        { id: 'preview-summer-camp-range', name: '高校夏令营', event_type: 'summer_camp', source_type: 'contest_ddl', primary_deadline: `${thirdDate}T18:00:00+08:00`, organizer: '示例高校', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
+        { id: 'preview-hackathon-range', name: '校园黑客松', event_type: 'hackathon', source_type: 'contest_ddl', primary_deadline: `${fourthDate}T23:59:59+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
       ],
     }
   }
@@ -755,6 +765,30 @@ function deadlineClock(value, fallback = '时间待定') {
   return match?.[1] || fallback
 }
 
+function deadlineItemEnabled(item, enabledTypes) {
+  return item.source_type === 'school_notice'
+    ? Boolean(enabledTypes.school_notice)
+    : Boolean(enabledTypes[item.event_type])
+}
+
+function supplementalEntryPrefix(entry, t) {
+  if (entry.type === 'assignment') return t('作')
+  if (entry.type === 'school-notice') return t('赛')
+  return 'DDL'
+}
+
+function supplementalEntryKind(entry, language, t) {
+  if (entry.type === 'assignment') return language === 'en' ? 'Assignment' : '作业'
+  if (entry.type === 'school-notice') return t('校内竞赛通知')
+  return t('其它 DDL')
+}
+
+function agendaViewLabel(view, t) {
+  if (view === 'month') return t('月视图全天日程')
+  if (view === 'week') return t('周视图全天日程')
+  return t('日视图全天日程')
+}
+
 function datesInRange(startDate, endDate) {
   const dates = []
   let current = startDate
@@ -829,11 +863,7 @@ function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) 
 }
 
 function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onRetry, t }) {
-  const items = (response?.items || []).filter((item) => (
-    item.source_type === 'school_notice'
-      ? enabledTypes.school_notice
-      : enabledTypes[item.event_type]
-  ))
+  const items = (response?.items || []).filter((item) => deadlineItemEnabled(item, enabledTypes))
   return (
     <section className="panel contest-deadline-card" aria-label={`${date} ${t('竞赛与活动截止')}`}>
       <div className="panel-title">
@@ -1396,9 +1426,15 @@ function App() {
     [calendarHolidayItems],
   )
   const calendarItemsFor = (dateString) => calendarDayMap.get(dateString) || []
-  const schoolNoticeItemsFor = (dateString) => settings.schoolContestNoticesEnabled
-    ? (deadlinesByDate[dateString]?.items || []).filter((item) => item.source_type === 'school_notice')
-    : []
+  const enabledDeadlineTypes = {
+    competition: settings.competitionDeadlinesEnabled,
+    school_notice: settings.schoolContestNoticesEnabled,
+    summer_camp: settings.summerCampDeadlinesEnabled,
+    hackathon: settings.hackathonDeadlinesEnabled,
+  }
+  const enabledDeadlineItemsFor = (dateString) => (
+    deadlinesByDate[dateString]?.items || []
+  ).filter((item) => deadlineItemEnabled(item, enabledDeadlineTypes))
   const supplementalEntriesFor = (dateString) => [
     ...(assignmentsByDate[dateString]?.items || []).map((item) => ({
       key: `assignment-${item.id}-${item.deadline}`,
@@ -1407,14 +1443,27 @@ function App() {
       subtitle: item.course_name || '',
       time: deadlineClock(item.deadline, t('时间待定')),
     })),
-    ...schoolNoticeItemsFor(dateString).map((item) => ({
-      key: `school-notice-${item.id}-${item.primary_deadline}`,
-      type: 'school-notice',
-      label: item.name,
-      subtitle: item.organizer || '',
-      time: deadlineClock(item.primary_deadline, t('时间待定')),
-      url: item.official_url || '',
-    })),
+    ...enabledDeadlineItemsFor(dateString)
+      .filter((item) => item.source_type === 'school_notice')
+      .map((item) => ({
+        key: `school-notice-${item.id}-${item.primary_deadline}`,
+        type: 'school-notice',
+        label: item.name,
+        subtitle: item.organizer || '',
+        time: deadlineClock(item.primary_deadline, t('时间待定')),
+        url: item.official_url || '',
+      })),
+    ...enabledDeadlineItemsFor(dateString)
+      .filter((item) => item.source_type !== 'school_notice')
+      .map((item) => ({
+        key: `public-deadline-${item.id}-${item.primary_deadline}`,
+        type: 'public-deadline',
+        deadlineType: item.event_type,
+        label: item.name,
+        subtitle: item.organizer || '',
+        time: deadlineClock(item.primary_deadline, t('时间待定')),
+        url: item.official_url || '',
+      })),
   ]
   const allDayEntriesFor = (dateString) => [
     ...calendarItemsFor(dateString).map((item) => ({
@@ -1498,12 +1547,24 @@ function App() {
       (count, dateString) => count
         + (calendarDayMap.get(dateString) || []).length
         + (assignmentsByDate[dateString]?.items || []).length
-        + (settings.schoolContestNoticesEnabled
-          ? (deadlinesByDate[dateString]?.items || []).filter((item) => item.source_type === 'school_notice').length
-          : 0),
+        + (deadlinesByDate[dateString]?.items || []).filter((item) => deadlineItemEnabled(item, {
+          competition: settings.competitionDeadlinesEnabled,
+          school_notice: settings.schoolContestNoticesEnabled,
+          summer_camp: settings.summerCampDeadlinesEnabled,
+          hackathon: settings.hackathonDeadlinesEnabled,
+        })).length,
       0,
     ),
-    [assignmentsByDate, calendarDayMap, deadlinesByDate, settings.schoolContestNoticesEnabled, visibleCalendarDays],
+    [
+      assignmentsByDate,
+      calendarDayMap,
+      deadlinesByDate,
+      settings.competitionDeadlinesEnabled,
+      settings.schoolContestNoticesEnabled,
+      settings.summerCampDeadlinesEnabled,
+      settings.hackathonDeadlinesEnabled,
+      visibleCalendarDays,
+    ],
   )
   const calendarPopoverState = useMemo(() => (
     calendarPopover
@@ -1979,7 +2040,7 @@ function App() {
     if (!compactCalendarLayout || calendarView !== 'month' || event.isPrimary === false) return
     if (event.pointerType === 'mouse' && event.button !== 0) return
     const target = event.target instanceof Element ? event.target : null
-    if (target?.closest('input, select, textarea, a')) return
+    if (target?.closest('input, select, textarea, a, .month-entry-overflow')) return
     if (target?.closest('.month-expansion-handle, .month-expansion-accessibility-action')) return
 
     const surface = event.currentTarget
@@ -2930,7 +2991,9 @@ function App() {
                             <div key={`all-day-${dateString}`} className="time-all-day-cell">
                               {summary.visible.map((item) => (
                                 <span key={`${dateString}-${item.key}`} className={item.type} title={item.label}>
-                                  {item.type === 'assignment' ? `${t('作')} ` : item.type === 'school-notice' ? `${t('赛')} ` : ''}{item.label}
+                                  {item.type === 'holiday' || item.type === 'workday'
+                                    ? item.label
+                                    : `${supplementalEntryPrefix(item, t)} ${item.label}`}
                                 </span>
                               ))}
                               {summary.hiddenCount ? (
@@ -2938,7 +3001,7 @@ function App() {
                                   type="button"
                                   className="time-all-day-overflow"
                                   aria-label={uiLanguage === 'en' ? `${summary.hiddenCount} more all-day events on ${dateString}` : `${dateString} 还有 ${summary.hiddenCount} 项全天日程`}
-                                  onClick={() => setCalendarAgendaDialog({ date: dateString })}
+                                  onClick={() => setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })}
                                 >+{summary.hiddenCount}</button>
                               ) : null}
                             </div>
@@ -3039,33 +3102,51 @@ function App() {
                         const dayState = getWeekState(courses, activeTermStartDate, dateString)
                         const calendarItems = calendarItemsFor(dateString)
                         const supplementalEntries = supplementalEntriesFor(dateString)
+                        const deadlineBorderPriority = calendarDeadlineBorderPriority(supplementalEntries)
                         const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length + supplementalEntries.length, 3)
-                        const monthEntries = [
+                        const monthAgendaEntries = [
                           ...calendarItems.map((item) => ({
                             key: `${dateString}-${item.type}-${item.name}`,
                             label: `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`,
                             type: item.type,
                           })),
-                          ...dayState.dayCourses.map((course) => ({
-                            key: `${dateString}-${course.id}`,
-                            label: `${course.is_exam ? `${t('试')} ` : ''}${course.name}`,
-                            type: 'course',
-                          })),
+                          ...dayState.dayCourses.map((course) => {
+                            const bounds = courseTimeBounds(course, slotMeta)
+                            return {
+                              key: `${dateString}-${course.id}`,
+                              label: course.name,
+                              compactLabel: `${course.is_exam ? `${t('试')} ` : ''}${course.name}`,
+                              type: 'course',
+                              subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
+                              time: `${bounds.start}-${bounds.end}`,
+                            }
+                          }),
                           ...supplementalEntries.map((item) => ({
                             ...item,
                             key: `${dateString}-${item.key}`,
-                            label: `${t(item.type === 'assignment' ? '作' : '赛')} ${item.label}`,
+                            compactLabel: `${supplementalEntryPrefix(item, t)} ${item.label}`,
                           })),
                         ]
+                        const monthEntries = monthAgendaEntries.map((item) => ({
+                          ...item,
+                          label: item.compactLabel || item.label,
+                        }))
                         const monthEntrySummary = summarizeMonthEntries(monthEntries)
                         return (
-                          <button
+                          <div
                             key={dateString}
-                            type="button"
-                            className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length || supplementalEntries.length ? 'has-calendar-item' : ''} ${supplementalEntries.length ? 'has-supplement' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                            className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length || supplementalEntries.length ? 'has-calendar-item' : ''} ${supplementalEntries.length ? 'has-supplement' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
                             onClick={() => chooseCalendarDate(dateString)}
                           >
-                            <span>{date.getDate()}</span>
+                            <button
+                              type="button"
+                              className="month-cell-date-button"
+                              aria-label={formatUiCourseDate(dateString, uiLanguage)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                chooseCalendarDate(dateString)
+                              }}
+                            >{date.getDate()}</button>
                             <div className="month-compact-markers" aria-hidden="true">
                               {Array.from({ length: compactMarkers }, (_, index) => <i key={index} />)}
                             </div>
@@ -3080,10 +3161,24 @@ function App() {
                                 </small>
                               ))}
                               {monthEntrySummary.hiddenCount ? (
-                                <em className="month-entry-overflow">+{monthEntrySummary.hiddenCount}</em>
+                                <button
+                                  type="button"
+                                  className="month-entry-overflow"
+                                  aria-label={uiLanguage === 'en'
+                                    ? `${monthEntrySummary.hiddenCount} more all-day events on ${dateString}`
+                                    : `${dateString} 还有 ${monthEntrySummary.hiddenCount} 项全天日程`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setCalendarAgendaDialog({
+                                      date: dateString,
+                                      sourceView: 'month',
+                                      entries: monthAgendaEntries,
+                                    })
+                                  }}
+                                >+{monthEntrySummary.hiddenCount}</button>
                               ) : null}
                             </div>
-                          </button>
+                          </div>
                         )
                       })}
                     </div>
@@ -3170,15 +3265,17 @@ function App() {
                             const hasWorkday = hasCalendarItemType(calendarItems, 'workday')
                             const hasAssignment = supplementalEntries.some((item) => item.type === 'assignment')
                             const hasSchoolNotice = supplementalEntries.some((item) => item.type === 'school-notice')
+                            const hasPublicDeadline = supplementalEntries.some((item) => item.type === 'public-deadline')
+                            const deadlineBorderPriority = calendarDeadlineBorderPriority(supplementalEntries)
                             return (
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${hasPublicDeadline ? 'has-public-deadline' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
                                 style={courseCount ? { '--course-load-opacity': courseOpacity } : null}
                                 title={[
                                   ...calendarItems.map((item) => `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`),
-                                  ...supplementalEntries.map((item) => `${item.type === 'assignment' ? (uiLanguage === 'en' ? 'Assignment' : '作业') : t('校内竞赛通知')} ${item.label}`),
+                                  ...supplementalEntries.map((item) => `${supplementalEntryKind(item, uiLanguage, t)} ${item.label}`),
                                 ].join(' / ')}
                                 onClick={(event) => currentMonth && selectYearDate(event, dateString)}
                                 onDoubleClick={(event) => currentMonth && openDesktopYearMonth(event, dateString)}
@@ -3188,6 +3285,7 @@ function App() {
                                 {hasWorkday ? <em className="workday">{uiLanguage === 'en' ? 'W' : t('班')}</em> : null}
                                 {hasAssignment ? <em className="assignment">{t('作')}</em> : null}
                                 {hasSchoolNotice ? <em className="school-notice">{t('赛')}</em> : null}
+                                {hasPublicDeadline ? <em className="public-deadline">D</em> : null}
                               </button>
                             )
                           })}
@@ -3222,7 +3320,7 @@ function App() {
                         {supplementalEntriesFor(calendarPopover.date).map((item) => {
                           const content = (
                             <>
-                              <strong>{item.type === 'assignment' ? (uiLanguage === 'en' ? 'Assignment' : '作业') : t('校内竞赛通知')} · {item.label}</strong>
+                              <strong>{supplementalEntryKind(item, uiLanguage, t)} · {item.label}</strong>
                               <span>{item.subtitle || t('信息未标注')}</span>
                               <small>{item.time || t('时间待定')}</small>
                             </>
@@ -3504,16 +3602,21 @@ function App() {
             if (event.button === 0 && event.target === event.currentTarget) setCalendarAgendaDialog(null)
           }}
         >
-          <section className="calendar-agenda-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-agenda-title">
+          <section
+            className={`calendar-agenda-dialog ${calendarAgendaDialog.sourceView || 'day'}-agenda-dialog`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-agenda-title"
+          >
             <header>
               <div>
-                <span>{t('全天日程')}</span>
+                <span>{agendaViewLabel(calendarAgendaDialog.sourceView, t)}</span>
                 <h2 id="calendar-agenda-title">{formatUiCourseDate(calendarAgendaDialog.date, uiLanguage)}</h2>
               </div>
               <button type="button" onClick={() => setCalendarAgendaDialog(null)} aria-label={t('关闭全天日程')}><X size={19} /></button>
             </header>
             <div className="calendar-agenda-list">
-              {allDayEntriesFor(calendarAgendaDialog.date).map((item) => {
+              {(calendarAgendaDialog.entries || allDayEntriesFor(calendarAgendaDialog.date)).map((item) => {
                 const content = (
                   <>
                     <strong>{item.label}</strong>

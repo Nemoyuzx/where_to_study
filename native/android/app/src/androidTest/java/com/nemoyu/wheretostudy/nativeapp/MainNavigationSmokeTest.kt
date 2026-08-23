@@ -29,6 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class MainNavigationSmokeTest {
@@ -366,7 +367,10 @@ class MainNavigationSmokeTest {
                 assertEquals(View.VISIBLE, content.visibility)
                 val visibleText = descendantText(content)
                 assertTrue(visibleText.contains("作业 DDL"))
-                assertTrue("Compact week overflow must expose +N", visibleText.contains("+1"))
+                assertTrue(
+                    "Compact week overflow must expose +N",
+                    Regex("\\+\\d+").containsMatchIn(visibleText),
+                )
                 assertTrue(activity.findViewById<View>(R.id.calendar_day_week_course_area).isShown)
                 val allDay = activity.findViewById<ViewGroup>(R.id.calendar_all_day_strip)
                 val dayRow = allDay.getChildAt(1) as ViewGroup
@@ -376,7 +380,50 @@ class MainNavigationSmokeTest {
                 "The +N dialog must expose the complete school-notice item",
                 device.wait(Until.hasObject(By.textContains("校内竞赛")), UI_TIMEOUT_MILLIS),
             )
+            assertTrue(
+                "The +N dialog must expose enabled public deadlines",
+                device.wait(Until.hasObject(By.textContains("示例高校夏令营")), UI_TIMEOUT_MILLIS),
+            )
+            val weekDialogBounds = checkNotNull(
+                device.wait(
+                    Until.findObject(By.desc("周视图全天日程弹窗")),
+                    UI_TIMEOUT_MILLIS,
+                ),
+            ).visibleBounds
+            assertTrue(
+                "Week all-day dialog must be horizontally centered",
+                abs(weekDialogBounds.centerX() - device.displayWidth / 2) <= 24,
+            )
+            assertTrue(
+                "Week all-day dialog must be vertically centered",
+                abs(weekDialogBounds.centerY() - device.displayHeight / 2) <= 80,
+            )
             device.findObject(By.text("完成")).click()
+            instrumentation.waitForIdleSync()
+
+            click(device, "calendar_mode_month")
+            SystemClock.sleep(700L)
+            instrumentation.waitForIdleSync()
+            val monthOverflow = checkNotNull(
+                device.wait(Until.findObject(By.textStartsWith("+")), UI_TIMEOUT_MILLIS),
+            )
+            monthOverflow.click()
+            val monthDialogBounds = checkNotNull(
+                device.wait(
+                    Until.findObject(By.desc("月视图溢出日程弹窗")),
+                    UI_TIMEOUT_MILLIS,
+                ),
+            ).visibleBounds
+            assertTrue(
+                "Month schedule dialog must be horizontally centered",
+                abs(monthDialogBounds.centerX() - device.displayWidth / 2) <= 24,
+            )
+            assertTrue(
+                "Month schedule dialog must be vertically centered",
+                abs(monthDialogBounds.centerY() - device.displayHeight / 2) <= 80,
+            )
+            device.findObject(By.text("完成")).click()
+            click(device, "calendar_mode_week")
             instrumentation.waitForIdleSync()
             scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.calendar_day_week_agenda_toggle).performClick())
@@ -388,7 +435,6 @@ class MainNavigationSmokeTest {
                     activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
                 )
             }
-
             click(device, "calendar_mode_month")
             click(device, "calendar_mode_week")
             scenario.onActivity { activity ->

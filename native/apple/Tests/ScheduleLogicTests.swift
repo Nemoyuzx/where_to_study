@@ -673,6 +673,164 @@ final class ScheduleLogicTests: XCTestCase {
     }
     #endif
 
+    func testDeadlineVisibilityRespectsEveryIndependentSetting() {
+        let contest = PublicDeadlineItem(
+            id: "contest",
+            name: "竞赛原文",
+            kind: .competition,
+            source: .contestDDL,
+            deadline: "2026-08-23T18:00:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
+        let school = PublicDeadlineItem(
+            id: "school",
+            name: "校内原文",
+            kind: .competition,
+            source: .schoolNotice,
+            deadline: "2026-08-23T19:00:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
+        let summerCamp = PublicDeadlineItem(
+            id: "summer",
+            name: "夏令营原文",
+            kind: .summerCamp,
+            source: .contestDDL,
+            deadline: "2026-08-23T20:00:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
+        let hackathon = PublicDeadlineItem(
+            id: "hackathon",
+            name: "黑客松原文",
+            kind: .hackathon,
+            source: .contestDDL,
+            deadline: "2026-08-23T21:00:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
+
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            contest,
+            competitionEnabled: true,
+            schoolNoticeEnabled: false,
+            summerCampEnabled: false,
+            hackathonEnabled: false
+        ))
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            school,
+            competitionEnabled: false,
+            schoolNoticeEnabled: true,
+            summerCampEnabled: false,
+            hackathonEnabled: false
+        ))
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            summerCamp,
+            competitionEnabled: false,
+            schoolNoticeEnabled: false,
+            summerCampEnabled: true,
+            hackathonEnabled: false
+        ))
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            hackathon,
+            competitionEnabled: false,
+            schoolNoticeEnabled: false,
+            summerCampEnabled: false,
+            hackathonEnabled: true
+        ))
+        XCTAssertFalse(CalendarDeadlinePresentation.isVisible(
+            contest,
+            competitionEnabled: false,
+            schoolNoticeEnabled: true,
+            summerCampEnabled: true,
+            hackathonEnabled: true
+        ))
+    }
+
+    func testCalendarDeadlineBorderPriorityIsAssignmentThenSchoolThenPublic() {
+        let holiday = CalendarAllDayEvent(id: "holiday", title: "休", kind: .holiday)
+        let publicDDL = CalendarAllDayEvent(
+            id: "public",
+            title: "公开竞赛原文",
+            kind: .publicDeadline
+        )
+        let school = CalendarAllDayEvent(
+            id: "school",
+            title: "校内通知原文",
+            kind: .schoolNotice
+        )
+        let assignment = CalendarAllDayEvent(
+            id: "assignment",
+            title: "作业原文",
+            kind: .assignment
+        )
+
+        XCTAssertNil(CalendarDeadlinePresentation.preferredDeadlineKind(in: [holiday]))
+        XCTAssertEqual(
+            CalendarDeadlinePresentation.preferredDeadlineKind(in: [holiday, publicDDL]),
+            .publicDeadline
+        )
+        XCTAssertEqual(
+            CalendarDeadlinePresentation.preferredDeadlineKind(in: [publicDDL, school]),
+            .schoolNotice
+        )
+        XCTAssertEqual(
+            CalendarDeadlinePresentation.preferredDeadlineKind(in: [school, assignment, publicDDL]),
+            .assignment
+        )
+        XCTAssertTrue(CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
+            isToday: true,
+            deadlineKind: .assignment
+        ))
+        XCTAssertTrue(CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
+            isToday: true,
+            deadlineKind: .publicDeadline
+        ))
+        XCTAssertFalse(CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
+            isToday: true,
+            deadlineKind: nil
+        ))
+        XCTAssertFalse(CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
+            isToday: false,
+            deadlineKind: .schoolNotice
+        ))
+    }
+
+    func testYearDeadlineLoadingCoversLeapAndCommonYears() throws {
+        let calendar = Calendar.shanghai
+        let leap = try XCTUnwrap(calendar.date(from: DateComponents(year: 2024, month: 8, day: 23)))
+        let common = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 23)))
+
+        XCTAssertEqual(TeachingCalendarLogic.datesInYear(containing: leap).count, 366)
+        XCTAssertEqual(TeachingCalendarLogic.datesInYear(containing: common).count, 365)
+        XCTAssertEqual(
+            StrictContractDateParser.string(
+                from: try XCTUnwrap(TeachingCalendarLogic.datesInYear(containing: common).last)
+            ),
+            "2026-12-31"
+        )
+    }
+
+    func testDeadlineAgendaChromeHasCompleteEnglishLocalization() {
+        XCTAssertEqual(
+            AppLocalization.string("月视图全天日程", language: .english),
+            "Month All-day Events"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("周视图全天日程", language: .english),
+            "Week All-day Events"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("公开活动 DDL", language: .english),
+            "Public Event Deadlines"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("关闭全天日程", language: .english),
+            "Close all-day events"
+        )
+    }
+
     func testYearCourseDensityContinuesIncreasingPastFourCourses() {
         let opacities = [1, 4, 5, 8, 12].map {
             TeachingCalendarLogic.yearCourseOpacity(courseCount: $0)

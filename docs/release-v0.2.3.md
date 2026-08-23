@@ -4,10 +4,11 @@
 
 ### 教学日历
 
-- 作业 DDL 与校内竞赛通知不再只出现在月视图详情卡片：日/周视图加入紧凑全天日程区，内容过多时显示可点击的 `+N`；月格直接显示独立配色的作业与校内竞赛标记；年视图点击日期后也会显示对应详情。
+- 作业 DDL、校内竞赛通知以及学科竞赛、夏令营、黑客松 DDL 不再只出现在月视图详情卡片：日/周视图加入紧凑全天日程区，月格直接显示独立配色标记，年视图点击日期后也会显示对应详情。
+- 月视图和周视图分别使用独立的居中日程弹窗，`+N` 计数与弹窗内容保持一致；月格、年格按“作业 > 校内竞赛 > 其它 DDL”的优先级显示分类外框，同时用独立内环或日期圆点保留“今天”状态。
 - 日、周、月、年使用按可见范围预取的本地快照。日期选择和翻页动画先完成，网络结果只局部更新当前数据，不再因未缓存请求造成横向抖动、动画截断或整页重建。
 - 公开竞赛数据使用短时缓存，移动原生端会把并发范围请求合并为 single-flight；云课堂作业按账户复用一次全量同步，再在本地按日期过滤。
-- 公开竞赛与校内通知在应用启动、回前台或相关开关开启时后台预热；完整 feed 每次只解析一次并建立日期索引，日/周/月/年翻页仅查本地缓存。
+- 公开竞赛与校内通知在应用启动、回前台或相关开关开启时后台预热；完整 feed 每次只解析一次并建立日期索引，日/周/月/年翻页仅查本地缓存。全年作业与公开 DDL 作为独立任务并发物化，各自完成即刷新，公开信息不再等待 UCloud 登录。
 - iOS、Android 与 HarmonyOS 手机端的日/周课程摘要区均可折叠；Android 补齐与 iOS 一致的日期下方课程信息。
 
 ### 多语言与跨平台一致性
@@ -29,9 +30,10 @@
 
 ## English
 
-- Assignment deadlines and school competition notices now appear in day/week all-day rows, month cells with distinct colors, and year-date details. Overflow uses a tappable `+N` dialog.
+- Assignment deadlines, school competition notices, academic competitions, summer camps, and hackathons now appear in day/week all-day rows, month cells with distinct colors, and year-date details.
+- Month and week views use separate centered schedule dialogs whose content matches each `+N` count. Month and year cells use assignment > school notice > other deadline outer-border priority while preserving today with an independent inner ring or date dot.
 - Calendar paging is decoupled from networking. Visible-range snapshots, account-scoped assignment reuse, short-lived contest caches, and single-flight range loading on native mobile clients prevent incomplete animations and unnecessary repeated requests.
-- Public contest and school-notice feeds now prewarm at startup, foreground entry, or when a related switch is enabled. Each full feed is parsed once into a date index, so calendar paging performs local lookups only.
+- Public contest and school-notice feeds now prewarm at startup, foreground entry, or when a related switch is enabled. Each full feed is parsed once into a date index, so calendar paging performs local lookups only. Year assignment and public-feed materialization run independently and repaint as soon as each source completes.
 - Day/week course summaries are collapsible on iOS, Android, and HarmonyOS; Android now shows the same date-level course summary as iOS.
 - Graphical clients add a persistent System / Simplified Chinese / English interface setting. Static UI is localized while third-party API content remains unchanged.
 - Language cards now sit immediately before privacy and local-data settings. iOS also restores tab-bar geometry after an English-to-Chinese round trip and correctly animates month swipes when direction reverses.
@@ -41,6 +43,6 @@
 
 ## Distribution
 
-- GitHub Release: Windows x64 NSIS, Linux Debian/AppImage and CLI/TUI builds, plus the maintainer-signed Android `0.2.3 (34)` APK/AAB.
-- TestFlight: native iOS and macOS `0.2.3 (61)` builds. Apple artifacts are not attached to GitHub Release.
+- GitHub Release: Windows x64 NSIS, Linux Debian/AppImage and CLI/TUI builds, plus the maintainer-signed Android `0.2.3 (35)` APK/AAB.
+- TestFlight: native iOS and macOS `0.2.3 (62)` builds. Apple artifacts are not attached to GitHub Release.
 - Checksum sidecars are used for verification but are not attached to the public GitHub Release.
