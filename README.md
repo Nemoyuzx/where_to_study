@@ -24,18 +24,18 @@ Silicon 兼容构建。
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.5 (66)` 正式签名 Universal 构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| Android | Kotlin + Android Views | `0.2.5 (38)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.5 (67)` 正式签名 Universal 构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| Android | Kotlin + Android Views | `0.2.5 (39)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.5 (66)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.5 (1002005)` 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 94 项单元测试；发布签名与 AGC 上架尚待配置 |
+| iOS | SwiftUI 原生 | `0.2.5 (67)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.5 (1002006)` 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 103 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-[v0.2.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.5) 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版加入最多 500 条完整本地日程收藏、自定义 HTTPS JSON 日程源与独立收藏管理页；内置 DDL、作业和自定义源按自然年独立预热，日期选择、同年翻页和视图切换不再触发网络请求。Android 的课程摘要、月视图底部间距、设置控件和动画进一步对齐 iOS；iOS 优化月视图动画性能；桌面端补齐全天日程列、教学周和键盘操作；HarmonyOS 同步手机与 PC 语义。完整中英文改动见 [0.2.5 发布说明](./docs/release-v0.2.5.md)。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.5 (66)` 已由本地 Xcode 上传 TestFlight。
+[v0.2.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.5) 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版加入最多 500 条完整本地日程收藏、自定义 HTTPS JSON 日程源与独立收藏管理页；内置 DDL、作业和自定义源按自然年独立预热，日期选择、同年翻页和视图切换不再触发网络请求。Android 的课程摘要、月视图底部间距、设置控件和动画进一步对齐 iOS；iOS 优化月视图动画性能；桌面端补齐全天日程列、教学周和键盘操作；HarmonyOS 同步手机与 PC 语义。完整中英文改动见 [0.2.5 发布说明](./docs/release-v0.2.5.md)。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.5 (67)` 已由本地 Xcode 上传 TestFlight。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 

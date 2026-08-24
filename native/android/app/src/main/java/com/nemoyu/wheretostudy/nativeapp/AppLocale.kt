@@ -153,11 +153,17 @@ object UiText {
         "地点" to "Location",
         "教师" to "Instructor",
         "教学周" to "Teaching Weeks",
+        "教学\n—" to "Teaching\n—",
+        "暂无教学周信息" to "Teaching week unavailable",
         "考试周" to "Exam Weeks",
         "未标注" to "Not specified",
         "关闭" to "Close",
         "完成" to "Done",
         "导入手机日历" to "Import to Device Calendar",
+        "导入已收藏日程" to "Import Favorite Events",
+        "将把当前收藏的完整日程快照同步到系统日历；重复导入会更新已有项。是否继续？" to
+            "Sync the complete snapshots of current favorites to the system calendar. Re-importing updates existing events. Continue?",
+        "收藏日程导入失败。" to "Favorite-event import failed.",
         "更多日历操作" to "More calendar actions",
         "正在导入…" to "Importing…",
         "确认导入" to "Confirm Import",
@@ -171,7 +177,6 @@ object UiText {
         "打开月视图全天日程" to "Open month all-day schedule",
         "周视图全天日程弹窗" to "Week all-day schedule dialog",
         "日视图全天日程弹窗" to "Day all-day schedule dialog",
-        "月视图溢出日程弹窗" to "Month overflow schedule dialog",
         "收起月历并显示当日日程" to "Collapse month and show day details",
         "展开月历" to "Expand month",
         "显示完整月份" to "Show full month",
@@ -348,6 +353,9 @@ object UiText {
         }
         Regex("^已同步 (\\d+) 条课程到系统日历。$").matchEntire(source)?.let {
             return "Synced ${it.groupValues[1]} courses to the system calendar."
+        }
+        Regex("^已同步 (\\d+) 条收藏日程到「(.+)」$").matchEntire(source)?.let {
+            return "Synced ${it.groupValues[1]} favorite events to \"${it.groupValues[2]}\"."
         }
         Regex("^个人课表已更新，共 (\\d+) 门课程$").matchEntire(source)?.let {
             return "Personal schedule updated: ${it.groupValues[1]} courses"

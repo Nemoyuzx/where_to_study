@@ -164,6 +164,10 @@ private struct SampleCalendarImporter: CalendarImporting {
     func importSchedule(_: ScheduleSnapshot) async throws -> CalendarImportResult {
         throw SampleDependencyError.unavailable
     }
+
+    func importFavorites(_: [PublicDeadlineItem]) async throws -> CalendarImportResult {
+        throw SampleDependencyError.unavailable
+    }
 }
 
 private struct SampleDailyCourseNotificationScheduler: DailyCourseNotificationScheduling {

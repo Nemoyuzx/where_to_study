@@ -3,6 +3,7 @@
 import { Course, ScheduleSnapshot, SlotMetadata } from '../common/Models';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { Utf8 } from '../common/Utf8';
+import { FavoriteDeadlineCodec, PublicDeadlineItem } from '../net/CalendarDailyInfoClient';
 
 
 export class CalendarEventDraft {
@@ -151,6 +152,7 @@ export class CalendarImportError extends Error {
 
 export class CalendarImportLogic {
   static readonly markerPrefix: string = 'where-to-study:event:';
+  static readonly favoriteMarkerPrefix: string = 'where-to-study:favorite:';
   static readonly minimumTermWeeks: number = 18;
   static readonly reminderOffsetMinutes: number = -5;
   static readonly shanghaiTimeZoneId: string = 'Asia/Shanghai';
@@ -201,6 +203,56 @@ export class CalendarImportLogic {
       throw CalendarImportError.invalidTermStartDate();
     }
     return CalendarImportLogic.eventDraftsFrom(schedule, termStart, slots);
+  }
+
+  static favoritePlan(items: PublicDeadlineItem[]): CalendarScheduleImportPlan {
+    const drafts: CalendarEventDraft[] = CalendarImportLogic.favoriteDrafts(items);
+    if (drafts.length === 0) {
+      throw new CalendarImportError('暂无已收藏日程。');
+    }
+    return new CalendarScheduleImportPlan(
+      new CalendarImportScope(
+        drafts[0].startEpochMs - 366 * 24 * 60 * 60 * 1000,
+        drafts[drafts.length - 1].startEpochMs + 366 * 24 * 60 * 60 * 1000),
+      drafts);
+  }
+
+  static favoriteDrafts(items: PublicDeadlineItem[]): CalendarEventDraft[] {
+    const drafts: CalendarEventDraft[] = [];
+    const seen: Set<string> = new Set<string>();
+    for (const item of items) {
+      const identity: string = FavoriteDeadlineCodec.key(item);
+      if (seen.has(identity)) {
+        continue;
+      }
+      seen.add(identity);
+      const startEpochMs: number | null = CalendarImportLogic.favoriteDeadlineEpochMs(item.deadline);
+      if (startEpochMs === null) {
+        throw new CalendarImportError('收藏日程“' + item.name + '”的截止时间无效。');
+      }
+      const marker: string = CalendarImportLogic.favoriteMarkerPrefix +
+        Utf8.base64(Utf8.bytes(identity));
+      const details: string[] = [];
+      if (item.organizer !== null && item.organizer.length > 0) {
+        details.push('主办方：' + item.organizer);
+      }
+      details.push('来源：' + (item.sourceName ?? item.source));
+      if (item.officialURL !== null && item.officialURL.length > 0) {
+        details.push(item.officialURL);
+      }
+      details.push('由 Where To Study 导入');
+      details.push(marker);
+      drafts.push(new CalendarEventDraft(
+        marker, item.name, '', details.join('\n'), startEpochMs,
+        startEpochMs + 30 * 60 * 1000));
+    }
+    drafts.sort((lhs: CalendarEventDraft, rhs: CalendarEventDraft) => {
+      if (lhs.startEpochMs !== rhs.startEpochMs) {
+        return lhs.startEpochMs - rhs.startEpochMs;
+      }
+      return lhs.marker < rhs.marker ? -1 : (lhs.marker > rhs.marker ? 1 : 0);
+    });
+    return drafts;
   }
 
   private static eventDraftsFrom(
@@ -264,11 +316,12 @@ export class CalendarImportLogic {
 
   static syncPlan(
     drafts: CalendarEventDraft[], scope: CalendarImportScope,
-    existingEvents: CalendarExistingEvent[], destinationCalendarIdentifier: string
+    existingEvents: CalendarExistingEvent[], destinationCalendarIdentifier: string,
+    managedMarkerPrefix: string = CalendarImportLogic.markerPrefix
   ): CalendarSyncPlan {
     const ownedEvents: CalendarExistingEvent[] = [];
     for (const event of existingEvents) {
-      if (event.marker !== null && event.marker.startsWith(CalendarImportLogic.markerPrefix)) {
+      if (event.marker !== null && event.marker.startsWith(managedMarkerPrefix)) {
         ownedEvents.push(event);
       }
     }
@@ -351,7 +404,8 @@ export class CalendarImportLogic {
   static markerInNotes(notes: string): string | null {
     const lines: string[] = notes.split('\n');
     for (const line of lines) {
-      if (line.startsWith(CalendarImportLogic.markerPrefix)) {
+      if (line.startsWith(CalendarImportLogic.markerPrefix) ||
+        line.startsWith(CalendarImportLogic.favoriteMarkerPrefix)) {
         return line;
       }
     }
@@ -396,6 +450,21 @@ export class CalendarImportLogic {
     }
     const dayEpoch: number = StrictDates.epochDay(day.year, day.month, day.day);
     return dayEpoch * 86400000 + hour * 3600000 + minute * 60000 - 8 * 3600000;
+  }
+
+  private static favoriteDeadlineEpochMs(value: string): number | null {
+    const fractionalStart: number = value.indexOf('.');
+    let normalized: string = value;
+    if (fractionalStart >= 0) {
+      const zoneStart: number = value.indexOf('Z', fractionalStart) >= 0 ?
+        value.indexOf('Z', fractionalStart) :
+        Math.max(value.indexOf('+', fractionalStart), value.indexOf('-', fractionalStart));
+      if (zoneStart <= fractionalStart) {
+        return null;
+      }
+      normalized = value.substring(0, fractionalStart) + value.substring(zoneStart);
+    }
+    return StrictDates.parseFetchedAt(normalized);
   }
 
   private static dayStartEpochMs(day: DateParts): number {

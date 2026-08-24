@@ -10,13 +10,15 @@ import {
   calendarDeadlineBorderPriority,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
-  calendarWeekOfYear,
+  calendarSurfaceKey,
+  calendarTransition,
   calendarSwipeDirection,
   DEFAULT_SETTINGS,
   desktopMonthGridMetrics,
   expandedMonthGridMetrics,
   favoriteDeadlineKey,
   favoriteDeadlinesForDate,
+  formatTeachingWeek,
   FALLBACK_SLOTS,
   fallbackHolidayItems,
   getCampusClassrooms,
@@ -109,6 +111,22 @@ test('expanded month cells reserve the last row for a hidden-entry count', () =>
   })
 })
 
+test('teaching week labels never fall back to Gregorian week wording', () => {
+  assert.equal(formatTeachingWeek(8), '第 8 教学周')
+  assert.equal(formatTeachingWeek(0), '非教学周')
+})
+
+test('calendar period keys and transition direction share one navigation contract', () => {
+  assert.equal(calendarSurfaceKey('week', '2026-08-24'), 'week:2026-08-24')
+  assert.equal(calendarSurfaceKey('week', '2026-08-30'), 'week:2026-08-24')
+  assert.equal(calendarSurfaceKey('month', '2026-08-24'), 'month:2026-08')
+  assert.equal(calendarTransition('2026-08-24', 'week', '2026-08-26').motion, '')
+  assert.equal(calendarTransition('2026-08-24', 'week', '2026-08-31').motion, 'next')
+  assert.equal(calendarTransition('2026-08-31', 'week', '2026-08-24').motion, 'previous')
+  assert.equal(calendarTransition('2026-08-24', 'year', '2026-08-24', 'month').motion, 'previous')
+  assert.equal(calendarTransition('2026-08-24', 'day', '2026-08-24', 'year').motion, 'next')
+})
+
 test('desktop month layout follows native macOS remaining-height metrics', () => {
   assert.deepEqual(desktopMonthGridMetrics(900), {
     weekdayHeight: 30,
@@ -128,14 +146,6 @@ test('desktop month layout follows native macOS remaining-height metrics', () =>
     height: 520,
     maximumEventRows: 2,
   })
-})
-
-test('desktop Monday week labels match the native Gregorian calendar', () => {
-  assert.equal(calendarWeekOfYear('2026-01-01'), 1)
-  assert.equal(calendarWeekOfYear('2026-08-24'), 35)
-  assert.equal(calendarWeekOfYear('2026-12-27'), 52)
-  assert.equal(calendarWeekOfYear('2026-12-28'), 1)
-  assert.equal(calendarWeekOfYear('invalid'), 0)
 })
 
 test('year deadline borders use assignment then school then public priority', () => {

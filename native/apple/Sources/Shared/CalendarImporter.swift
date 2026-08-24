@@ -66,6 +66,7 @@ enum CalendarImportError: LocalizedError, Equatable {
     case permissionDenied
     case noWritableCalendar
     case eventStoreChanged
+    case invalidFavoriteDeadline(String)
 
     var errorDescription: String? {
         let language = AppLocalization.persistedLanguage()
@@ -86,12 +87,19 @@ enum CalendarImportError: LocalizedError, Equatable {
             AppLocalization.string("系统中没有可写入的默认日历。", language: language)
         case .eventStoreChanged:
             AppLocalization.string("系统日历在同步期间发生变化，请重试。", language: language)
+        case let .invalidFavoriteDeadline(name):
+            String(
+                format: AppLocalization.string("收藏日程“%@”的截止时间不正确。", language: language),
+                locale: language.locale,
+                name
+            )
         }
     }
 }
 
 enum CalendarImportLogic {
     static let markerPrefix = "where-to-study:event:"
+    static let favoriteMarkerPrefix = "where-to-study:favorite:"
     static let minimumTermWeeks = 18
     static let reminderOffset: TimeInterval = -5 * 60
 
@@ -144,14 +152,15 @@ enum CalendarImportLogic {
         drafts: [CalendarEventDraft],
         scope: CalendarImportScope,
         existingEvents: [CalendarExistingEvent],
-        destinationCalendarIdentifier: String
+        destinationCalendarIdentifier: String,
+        ownedMarkerPrefix: String = markerPrefix
     ) -> CalendarSyncPlan {
         // Only in-scope owned events take part in matching or duplicate
         // cleanup: copies the user moved or duplicated outside the import
         // window are their deliberate edits and must never be reverted or
         // deleted by a sync.
         let scopedOwnedEvents = existingEvents.filter { event in
-            (event.marker?.hasPrefix(markerPrefix) ?? false) && scope.contains(event.startDate)
+            (event.marker?.hasPrefix(ownedMarkerPrefix) ?? false) && scope.contains(event.startDate)
         }
         let desiredMarkers = Set(drafts.map(\.marker))
         var eventsByMarker = [String: [CalendarExistingEvent]]()
@@ -211,11 +220,88 @@ enum CalendarImportLogic {
         return markerPrefix + Data(identity.utf8).base64EncodedString()
     }
 
+    static func favoriteEventMarker(favoriteID: String) -> String {
+        favoriteMarkerPrefix + Data(favoriteID.utf8).base64EncodedString()
+    }
+
+    static func favoritePlan(
+        from items: [PublicDeadlineItem],
+        calendar: Calendar = .shanghai
+    ) throws -> CalendarScheduleImportPlan? {
+        guard !items.isEmpty else { return nil }
+        var drafts = [CalendarEventDraft]()
+        var markers = Set<String>()
+        for item in items {
+            guard let startDate = favoriteDeadlineDate(item.deadline),
+                  let endDate = calendar.date(byAdding: .minute, value: 30, to: startDate)
+            else {
+                throw CalendarImportError.invalidFavoriteDeadline(item.name)
+            }
+            let marker = favoriteEventMarker(favoriteID: item.favoriteID)
+            guard markers.insert(marker).inserted else { continue }
+            let notes = [
+                "类型：\(item.kind.title)",
+                item.sourceName.map { "来源：\($0)" } ?? "来源：\(item.source.title)",
+                "来源类型：\(item.source.title)",
+                "截止时间：\(item.deadline)",
+                item.organizer.map { "主办方：\($0)" },
+                item.officialURL.map { "链接：\($0.absoluteString)" },
+                item.sourceHomepage.map { "来源主页：\($0.absoluteString)" },
+                "由 Where To Study 收藏导入",
+                marker,
+            ].compactMap { $0 }
+            drafts.append(CalendarEventDraft(
+                marker: marker,
+                title: item.name,
+                location: item.organizer ?? "",
+                notes: notes.joined(separator: "\n"),
+                startDate: startDate,
+                endDate: endDate
+            ))
+        }
+        let sorted = drafts.sorted {
+            if $0.startDate == $1.startDate { return $0.marker < $1.marker }
+            return $0.startDate < $1.startDate
+        }
+        guard let first = sorted.first, let last = sorted.last,
+              let scopeEnd = calendar.date(
+                  byAdding: .day,
+                  value: 1,
+                  to: calendar.startOfDay(for: last.startDate)
+              )
+        else { return nil }
+        return CalendarScheduleImportPlan(
+            scope: CalendarImportScope(
+                startDate: calendar.startOfDay(for: first.startDate),
+                endDate: scopeEnd
+            ),
+            drafts: sorted
+        )
+    }
+
     static func marker(in notes: String?) -> String? {
         notes?
             .split(whereSeparator: \Character.isNewline)
             .map(String.init)
-            .first { $0.hasPrefix(markerPrefix) }
+            .first {
+                $0.hasPrefix(markerPrefix) || $0.hasPrefix(favoriteMarkerPrefix)
+            }
+    }
+
+    private static func favoriteDeadlineDate(_ value: String) -> Date? {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = isoFormatter.date(from: value) { return date }
+        isoFormatter.formatOptions = [.withInternetDateTime]
+        if let date = isoFormatter.date(from: value) { return date }
+
+        let formatter = DateFormatter()
+        formatter.calendar = .shanghai
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = Calendar.shanghai.timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.isLenient = false
+        return formatter.date(from: value)
     }
 
     private static func eventDrafts(
@@ -311,16 +397,32 @@ enum CalendarImportLogic {
 @MainActor
 protocol CalendarImporting {
     func importSchedule(_ schedule: ScheduleSnapshot) async throws -> CalendarImportResult
+    func importFavorites(_ items: [PublicDeadlineItem]) async throws -> CalendarImportResult
 }
 
 @MainActor
 final class EventKitCalendarImporter: CalendarImporting {
+    nonisolated init() {}
+
     func importSchedule(_ schedule: ScheduleSnapshot) async throws -> CalendarImportResult {
         let importPlan = try CalendarImportLogic.schedulePlan(from: schedule)
         guard try await requestAccess() else { throw CalendarImportError.permissionDenied }
 
         return try await Task.detached(priority: .userInitiated) {
-            try Self.write(importPlan)
+            try Self.write(importPlan, ownedMarkerPrefix: CalendarImportLogic.markerPrefix)
+        }.value
+    }
+
+    func importFavorites(_ items: [PublicDeadlineItem]) async throws -> CalendarImportResult {
+        guard let importPlan = try CalendarImportLogic.favoritePlan(from: items) else {
+            return CalendarImportResult(inserted: 0, updated: 0, deleted: 0, unchanged: 0)
+        }
+        guard try await requestAccess() else { throw CalendarImportError.permissionDenied }
+        return try await Task.detached(priority: .userInitiated) {
+            try Self.write(
+                importPlan,
+                ownedMarkerPrefix: CalendarImportLogic.favoriteMarkerPrefix
+            )
         }.value
     }
 
@@ -347,7 +449,8 @@ final class EventKitCalendarImporter: CalendarImporting {
     }
 
     nonisolated private static func write(
-        _ importPlan: CalendarScheduleImportPlan
+        _ importPlan: CalendarScheduleImportPlan,
+        ownedMarkerPrefix: String
     ) throws -> CalendarImportResult {
         let store = EKEventStore()
         guard let destination = store.defaultCalendarForNewEvents else {
@@ -386,7 +489,8 @@ final class EventKitCalendarImporter: CalendarImporting {
             drafts: importPlan.drafts,
             scope: importPlan.scope,
             existingEvents: indexedEvents.map(\.snapshot),
-            destinationCalendarIdentifier: destination.calendarIdentifier
+            destinationCalendarIdentifier: destination.calendarIdentifier,
+            ownedMarkerPrefix: ownedMarkerPrefix
         )
 
         for identifier in syncPlan.deleteIdentifiers {

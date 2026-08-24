@@ -46,9 +46,9 @@ use tauri_plugin_notification::NotificationExt;
 use crate::models::{
     AlmanacRequest, AlmanacResponse, AssignmentCalendarResponse, AssignmentsRequest,
     AssignmentsResponse, CalendarRangeRequest, ClassroomsCacheResponse, ClassroomsRequest,
-    CustomDeadlineCalendarRequest, DeadlineCalendarResponse, DeadlinesRequest, DeadlinesResponse,
-    HolidaysRequest, HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings,
-    ScheduleRequest, ScheduleResponse, WeatherRequest, WeatherResponse,
+    CustomDeadlineCalendarRequest, DeadlineCalendarResponse, DeadlineItem, DeadlinesRequest,
+    DeadlinesResponse, HolidaysRequest, HolidaysResponse, MetadataResponse, SaveSettingsRequest,
+    SavedSettings, ScheduleRequest, ScheduleResponse, WeatherRequest, WeatherResponse,
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
@@ -1018,6 +1018,16 @@ fn import_schedule_to_calendar(app: tauri::AppHandle) -> Result<String, String> 
                 .map_err(|error| error.message)
         })
         .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+fn import_favorite_deadlines_to_calendar(
+    app: tauri::AppHandle,
+    items: Vec<DeadlineItem>,
+) -> Result<String, String> {
+    calendar_export::export_favorites_and_open(&app, &items)
+        .map(|path| path.to_string_lossy().to_string())
+        .map_err(|error| error.message)
 }
 
 #[tauri::command]
@@ -2545,6 +2555,7 @@ pub fn run() {
             load_saved_classrooms_for_scope,
             fetch_schedule,
             import_schedule_to_calendar,
+            import_favorite_deadlines_to_calendar,
             fetch_classrooms,
             fetch_holidays,
             fetch_weather,

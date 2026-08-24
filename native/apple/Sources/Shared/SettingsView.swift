@@ -46,6 +46,9 @@ private struct FavoriteDeadlineManagementView: View {
         }
         .background(AppTheme.background)
         .navigationTitle("收藏管理")
+        #if os(iOS)
+        .toolbar(.hidden, for: .tabBar)
+        #endif
         .accessibilityIdentifier("favorites.page")
     }
 

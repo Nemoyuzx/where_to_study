@@ -21,6 +21,7 @@ export struct RootView {
   @Local currentSection: AppSection = AppSection.planner;
   // 初始值按屏幕宽度预估，避免宽屏启动首帧闪 Tabs（BUG-022 修复）。
   @Local containerWidth: number = DeviceState.screenWidthVp();
+  @Local settingsFavoriteManagerVisible: boolean = false;
   private deadlineRefreshTimer: number = -1;
 
   private sidebarWidth(): number {
@@ -189,25 +190,32 @@ export struct RootView {
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth })
         } else {
-          SettingsView()
+          SettingsView({
+            onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
+              this.settingsFavoriteManagerVisible = visible;
+            }
+          })
         }
       }
       .width('100%')
       .height('100%')
 
-      Row({ space: 4 }) {
-        ForEach(AppSectionInfo.all, (section: AppSection) => {
-          this.phoneNavigationItem(section)
-        }, (section: AppSection) => AppSectionInfo.accessibilityId(section))
+      if (AppSectionInfo.showsPhoneNavigation(
+        this.currentSection, this.settingsFavoriteManagerVisible)) {
+        Row({ space: 4 }) {
+          ForEach(AppSectionInfo.all, (section: AppSection) => {
+            this.phoneNavigationItem(section)
+          }, (section: AppSection) => AppSectionInfo.accessibilityId(section))
+        }
+        .width('calc(100% - 88vp)')
+        .height(60)
+        .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+        .margin({ bottom: 10 })
+        .borderRadius(30)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .shadow({ radius: 8, color: '#33000000', offsetY: 4 })
+        .id('phone_navigation')
       }
-      .width('calc(100% - 88vp)')
-      .height(60)
-      .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-      .margin({ bottom: 10 })
-      .borderRadius(30)
-      .backgroundColor(AppTheme.surfaceVariant())
-      .shadow({ radius: 8, color: '#33000000', offsetY: 4 })
-      .id('phone_navigation')
     }
     .width('100%')
     .height('100%')
@@ -250,6 +258,9 @@ export struct RootView {
   selectSection(section: AppSection): void {
     hilog.info(0x0000, 'RootView', 'selectSection -> %{public}s', section);
     this.currentSection = section;
+    if (section !== AppSection.settings) {
+      this.settingsFavoriteManagerVisible = false;
+    }
     this.model.selectedSection = section;
   }
 

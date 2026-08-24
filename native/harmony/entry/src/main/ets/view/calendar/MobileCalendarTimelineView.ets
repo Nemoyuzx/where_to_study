@@ -13,6 +13,8 @@ export class MobileCalendarTimelineLayout {
   static readonly hourHeight: number = 72;
   static readonly axisWidth: number = 48;
   static readonly bottomContentInset: number = 84;
+  static readonly columnSelectionLayerZ: number = 1;
+  static readonly courseBlockLayerZ: number = 3;
   static readonly timelineHeight: number =
     (MobileCalendarTimelineLayout.endMinute - MobileCalendarTimelineLayout.startMinute) / 60 *
     MobileCalendarTimelineLayout.hourHeight;
@@ -34,6 +36,10 @@ export class MobileCalendarTimelineLayout {
 
   static initialVisibleHour(currentHour: number, includesToday: boolean): number {
     return 8;
+  }
+
+  static columnTapSelectsDay(insideCourseBlock: boolean): boolean {
+    return !insideCourseBlock;
   }
 }
 
@@ -302,12 +308,29 @@ export struct MobileCalendarTimelineView {
             }, (day: CalendarTimelineDay) => 'selected-column.' + this.dayKey(day))
           }
 
+          // 整列日期命中层是背景层：空白区域可选日，后绘制且 zIndex 更高的
+          // 课程块保留自己的指针命中，不会被整列透明层吞掉。
+          if (this.showsWeekColumns) {
+            ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
+              Column()
+                .width(this.dayWidthValue())
+                .height(this.bodyHeight())
+                .backgroundColor(Color.Transparent)
+                .zIndex(MobileCalendarTimelineLayout.columnSelectionLayerZ)
+                .position({ x: index * this.dayWidthValue(), y: 0 })
+                .onClick(() => {
+                  this.onSelectDay(day.date);
+                })
+            }, (day: CalendarTimelineDay) => 'column-click.' + this.dayKey(day))
+          }
+
           // 小时线
           ForEach(this.hours, (hour: number) => {
             Divider()
               .strokeWidth(0.5)
               .color(AppTheme.border())
               .width(this.viewportWidth)
+              .hitTestBehavior(HitTestMode.None)
               .position({ x: 0, y: this.yPos(hour * 60) })
           }, (hour: number) => 'grid-hour.' + hour.toString())
 
@@ -322,6 +345,7 @@ export struct MobileCalendarTimelineView {
                 style: BorderStyle.Dashed
               })
               .opacity(0.56)
+              .hitTestBehavior(HitTestMode.None)
               .position({ x: 0, y: this.yPos(minute) })
           }, (minute: number) => 'grid-slot.' + minute.toString())
 
@@ -334,6 +358,7 @@ export struct MobileCalendarTimelineView {
                 .color(AppTheme.border())
                 .opacity(0.7)
                 .height(this.bodyHeight())
+                .hitTestBehavior(HitTestMode.None)
                 .position({ x: index * this.dayWidthValue(), y: 0 })
             }, (day: CalendarTimelineDay) => 'grid-column.' + this.dayKey(day))
           }
@@ -358,19 +383,6 @@ export struct MobileCalendarTimelineView {
             this.currentTimeIndicator()
           }
 
-          // 周视图列点击
-          if (this.showsWeekColumns) {
-            ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
-              Column()
-                .width(this.dayWidthValue())
-                .height(this.bodyHeight())
-                .backgroundColor(Color.Transparent)
-                .position({ x: index * this.dayWidthValue(), y: 0 })
-                .onClick(() => {
-                  this.onSelectDay(day.date);
-                })
-            }, (day: CalendarTimelineDay) => 'column-click.' + this.dayKey(day))
-          }
         }
         .width(this.viewportWidth)
         .height(this.bodyHeight())
@@ -549,6 +561,8 @@ export struct MobileCalendarTimelineView {
     .borderRadius(6)
     .border({ width: { left: 3 }, color: AppTheme.accent() })
     .backgroundColor(AppTheme.primaryFill())
+    .zIndex(MobileCalendarTimelineLayout.courseBlockLayerZ)
+    .hitTestBehavior(HitTestMode.Block)
     .position({ x: this.blockDayX(dayIndex, placement), y: this.blockTop(placement.course) })
   }
 
@@ -592,6 +606,8 @@ export struct MobileCalendarTimelineView {
     .borderRadius(6)
     .border({ width: { left: 3 }, color: AppTheme.accent() })
     .backgroundColor(AppTheme.primaryFill())
+    .zIndex(MobileCalendarTimelineLayout.courseBlockLayerZ)
+    .hitTestBehavior(HitTestMode.Block)
     .position({
       x: this.blockWeekX(dayIndex, placement),
       y: this.blockTop(placement.course)

@@ -28,6 +28,28 @@ private struct CustomDeadlinePrewarmID: Equatable {
     let calendarYear: Int
 }
 
+private struct AssignmentDeadlinePrewarmID: Equatable {
+    let account: String
+    let scheduleFetchedAt: String?
+    let sampleMode: Bool
+    let isSceneActive: Bool
+    let calendarYear: Int
+}
+
+private struct AlmanacPrewarmID: Equatable {
+    let date: String
+    let enabled: Bool
+    let isMonthMode: Bool
+    let sampleMode: Bool
+    let isSceneActive: Bool
+}
+
+private struct SampleCalendarPrewarmID: Equatable {
+    let date: String
+    let modeRawValue: String
+    let sampleMode: Bool
+}
+
 enum AdaptiveLayoutPolicy {
     static let minimumSidebarWidth: CGFloat = 700
     static let minimumExpandedCalendarWidth: CGFloat = 760
@@ -120,7 +142,10 @@ struct RootView: View {
             sourceURL: model.customDeadlineSourceURL?.absoluteString,
             sampleMode: model.isSampleMode,
             isSceneActive: scenePhase == .active,
-            calendarYear: Calendar.shanghai.component(.year, from: .now)
+            calendarYear: Calendar.shanghai.component(
+                .year,
+                from: teachingCalendarSession.selectedDate
+            )
         )) {
             guard scenePhase == .active,
                   let sourceURL = model.customDeadlineSourceURL
@@ -131,13 +156,82 @@ struct RootView: View {
                 return
             }
             let dates = TeachingCalendarLogic.datesInYear(
-                containing: .now,
+                containing: teachingCalendarSession.selectedDate,
                 calendar: .shanghai
             ).map { StrictContractDateParser.string(from: $0) }
             await calendarDeadlines.prewarmCustomIfNeeded(
                 sourceURL: sourceURL,
                 dates: dates,
                 sampleMode: model.isSampleMode
+            )
+        }
+        .task(id: AssignmentDeadlinePrewarmID(
+            account: model.account,
+            scheduleFetchedAt: model.schedule?.fetchedAt,
+            sampleMode: model.isSampleMode,
+            isSceneActive: scenePhase == .active,
+            calendarYear: Calendar.shanghai.component(
+                .year,
+                from: teachingCalendarSession.selectedDate
+            )
+        )) {
+            guard scenePhase == .active,
+                  !model.isSampleMode,
+                  !model.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  model.schedule != nil
+            else { return }
+            let dates = TeachingCalendarLogic.datesInYear(
+                containing: teachingCalendarSession.selectedDate,
+                calendar: .shanghai
+            ).map { StrictContractDateParser.string(from: $0) }
+            await calendarDeadlines.loadAssignments(dates: dates, sampleMode: false)
+        }
+        .task(id: Calendar.shanghai.component(
+            .year,
+            from: teachingCalendarSession.selectedDate
+        )) {
+            let selectedYear = Calendar.shanghai.component(
+                .year,
+                from: teachingCalendarSession.selectedDate
+            )
+            for year in (selectedYear - 1) ... (selectedYear + 1) {
+                model.ensureHolidays(for: year)
+            }
+        }
+        .task(id: AlmanacPrewarmID(
+            date: StrictContractDateParser.string(from: teachingCalendarSession.selectedDate),
+            enabled: model.almanacEnabled,
+            isMonthMode: teachingCalendarSession.modeRawValue == "月",
+            sampleMode: model.isSampleMode,
+            isSceneActive: scenePhase == .active
+        )) {
+            guard scenePhase == .active,
+                  model.almanacEnabled,
+                  teachingCalendarSession.modeRawValue == "月"
+            else { return }
+            await dailyInfo.loadAlmanac(
+                date: StrictContractDateParser.string(
+                    from: teachingCalendarSession.selectedDate
+                ),
+                sampleMode: model.isSampleMode
+            )
+        }
+        .task(id: SampleCalendarPrewarmID(
+            date: StrictContractDateParser.string(from: teachingCalendarSession.selectedDate),
+            modeRawValue: teachingCalendarSession.modeRawValue,
+            sampleMode: model.isSampleMode
+        )) {
+            guard model.isSampleMode else { return }
+            let dates = TeachingCalendarLogic.visibleDates(
+                containing: teachingCalendarSession.selectedDate,
+                modeRawValue: teachingCalendarSession.modeRawValue,
+                calendar: .shanghai
+            ).map { StrictContractDateParser.string(from: $0) }
+            await calendarDeadlines.loadCalendarEvents(
+                dates: dates,
+                sampleMode: true,
+                includesPublicDeadlines: model.hasEnabledBuiltInPublicDeadlines,
+                customSourceURL: nil
             )
         }
         .onChange(of: scenePhase) { phase in
@@ -153,7 +247,9 @@ struct RootView: View {
             notification in
             guard let action = AppKeyboardCommandNotification.action(from: notification) else { return }
             if action == .dismissOverlay || model.selectedSection == .calendar {
-                teachingCalendarSession.applyKeyboardAction(action)
+                withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
+                    teachingCalendarSession.applyKeyboardAction(action)
+                }
             }
         }
         .environmentObject(dailyInfo)

@@ -180,7 +180,12 @@ object ScheduleLogic {
     ): Int? {
         schedule ?: return null
         val start = parseContractDate(schedule.termStartDate) ?: return null
-        return weekNumber(start, target).takeIf { it > 0 }
+        val maximumWeek = schedule.courses
+            .flatMap(Course::weekNumbers)
+            .filter { it > 0 }
+            .maxOrNull()
+            ?: return null
+        return weekNumber(start, target).takeIf { it in 1..maximumWeek }
     }
 
     fun busySlots(

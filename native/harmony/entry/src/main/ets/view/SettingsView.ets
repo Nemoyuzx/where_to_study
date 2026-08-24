@@ -16,6 +16,8 @@ import { PublicDeadlineItem, PublicDeadlineKindInfo,
 @ComponentV2
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
+  @Event onFavoriteManagerVisibilityChanged: (visible: boolean) => void = () => {
+  };
   @Local contentWidth: number = 350;
   @Local showingPrivacyPolicy: boolean = false;
   @Local showingFavoriteManager: boolean = false;
@@ -59,6 +61,7 @@ export struct SettingsView {
   private setFavoriteManagerVisible(visible: boolean): void {
     this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
       this.showingFavoriteManager = visible;
+      this.onFavoriteManagerVisibilityChanged(visible);
     });
   }
 
@@ -928,7 +931,7 @@ export struct SettingsView {
         .scrollBar(BarState.Off)
       }
     }
-    .padding({ left: 20, right: 20, top: 18, bottom: this.isCompact() ? 88 : 28 })
+    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
     .width('100%')
     .height('100%')
     .backgroundColor(AppTheme.background())

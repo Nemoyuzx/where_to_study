@@ -1,6 +1,7 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -169,6 +170,74 @@ class ScheduleCalendarLogicTest {
     }
 
     @Test
+    fun favoriteDraftsUseStableMarkersAndPreserveDeadlineInstant() {
+        val item = PublicDeadlineItem(
+            id = "contest-42",
+            name = "国际大学生编程竞赛",
+            kind = PublicDeadlineKind.COMPETITION,
+            source = PublicDeadlineSource.CONTEST_DDL,
+            deadline = "2026-05-01T23:59:00.123+08:00",
+            organizer = "ICPC",
+            officialURL = "https://example.com/contest",
+        )
+
+        val first = FavoriteCalendarLogic.expand(listOf(item, item))
+        val second = FavoriteCalendarLogic.expand(listOf(item))
+
+        assertEquals(1, first.size)
+        assertEquals(second.single().marker, first.single().marker)
+        assertTrue(first.single().marker.startsWith(FavoriteCalendarLogic.markerPrefix))
+        assertEquals("2026-05-01 23:59", format(first.single().startsAtMillis))
+        assertEquals(30L * 60L * 1_000L, first.single().endsAtMillis - first.single().startsAtMillis)
+        assertTrue(first.single().description.contains("由 Where To Study 导入"))
+    }
+
+    @Test
+    fun favoriteSyncUpdatesOneCopyAndRemovesDuplicateAndUnfavoritedSnapshots() {
+        val keep = FavoriteCalendarLogic.expand(listOf(favorite("keep"))).single()
+        val stale = FavoriteCalendarLogic.expand(listOf(favorite("stale"))).single()
+        val plan = CalendarSyncPlanner.planFavorites(
+            drafts = listOf(keep),
+            existingEvents = listOf(
+                ManagedCalendarEvent(51, keep.marker, keep.startsAtMillis),
+                ManagedCalendarEvent(52, keep.marker, keep.startsAtMillis),
+                ManagedCalendarEvent(53, stale.marker, stale.startsAtMillis),
+            ),
+        )
+
+        assertEquals(listOf(51L), plan.updates.map(CalendarEventUpdate::eventID))
+        assertEquals(listOf(52L), plan.duplicateEventIDs)
+        assertEquals(listOf(53L), plan.staleEventIDs)
+        assertTrue(plan.inserts.isEmpty())
+    }
+
+    @Test
+    fun teachingWeekLabelsNeverFallbackToGregorianWeekNumbers() {
+        assertEquals("2026年5月", TeachingCalendarLogic.weekPeriodTitle("2026年5月", null))
+        assertEquals("2026年5月 第9教学周", TeachingCalendarLogic.weekPeriodTitle("2026年5月", 9))
+        assertEquals("教学\n—", TeachingCalendarLogic.teachingWeekAxisLabel(null))
+        assertEquals("教学\n第9周", TeachingCalendarLogic.teachingWeekAxisLabel(9))
+        val snapshot = schedule(course(weekNumbers = listOf(1, 18)))
+        val duringTerm = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
+            set(2026, Calendar.MARCH, 2, 12, 0, 0)
+        }
+        val outsideTerm = (duringTerm.clone() as Calendar).apply {
+            add(Calendar.DAY_OF_MONTH, 18 * 7)
+        }
+        assertEquals(1, ScheduleLogic.weekNumber(snapshot, duringTerm))
+        assertEquals(null, ScheduleLogic.weekNumber(snapshot, outsideTerm))
+    }
+
+    @Test
+    fun mobileModeAndMonthOverflowLayoutContractsStaySynchronizedAndInline() {
+        assertEquals(300L, TeachingCalendarLogic.pageAnimationDurationMillis)
+        assertEquals(1, TeachingCalendarLogic.modeTransitionDirection(1, 3))
+        assertTrue(TeachingCalendarLogic.monthOverflowDescription(2).contains("下方查看"))
+        assertTrue(TeachingCalendarLogic.almanacAdviceMinimumTextHeightDp >= 36)
+        assertTrue(TeachingCalendarLogic.almanacAdviceLineExtraDp >= 2)
+    }
+
+    @Test
     fun rejectsInvalidTermDates() {
         listOf("2026-02-30", "2026-3-02", "not-a-date").forEach { invalidDate ->
             assertThrows(ScheduleCalendarExpansionException::class.java) {
@@ -219,6 +288,18 @@ class ScheduleCalendarLogicTest {
         endSlot = endSlot,
         sectionText = "1-2节",
         timeRange = "08:00-09:35",
+    )
+
+    private fun favorite(id: String): PublicDeadlineItem = PublicDeadlineItem(
+        id = id,
+        name = id,
+        kind = PublicDeadlineKind.CUSTOM,
+        source = PublicDeadlineSource.CUSTOM,
+        deadline = "2026-05-01T23:59:00+08:00",
+        organizer = null,
+        officialURL = "https://example.com/$id",
+        sourceName = "test",
+        sourceHomepage = "https://example.com",
     )
 
     private fun format(value: Long): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply {

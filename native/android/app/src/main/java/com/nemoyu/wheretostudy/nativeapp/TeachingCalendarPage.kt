@@ -16,6 +16,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.TransitionDrawable
 import android.os.Bundle
 import android.net.Uri
 import android.text.TextUtils
@@ -221,12 +222,24 @@ object TeachingCalendarLogic {
     const val compactAgendaHeaderHeightDp = 34
     const val expandedAgendaHeaderHeightDp = 36
     const val agendaAnimationDurationMillis = 220L
+    const val pageAnimationDurationMillis = 300L
+    const val almanacAdviceMinimumTextHeightDp = 36
+    const val almanacAdviceLineExtraDp = 2
 
     fun modeTransitionDirection(fromIndex: Int, toIndex: Int): Int = when {
         toIndex > fromIndex -> 1
         toIndex < fromIndex -> -1
         else -> 0
     }
+
+    fun weekPeriodTitle(base: String, teachingWeek: Int?): String =
+        teachingWeek?.takeIf { it > 0 }?.let { "$base 第${it}教学周" } ?: base
+
+    fun teachingWeekAxisLabel(teachingWeek: Int?): String =
+        teachingWeek?.takeIf { it > 0 }?.let { "教学\n第${it}周" } ?: "教学\n—"
+
+    fun monthOverflowDescription(hiddenCount: Int): String =
+        "月视图还有 ${hiddenCount.coerceAtLeast(0)} 项日程，请选择日期后在下方查看"
 
     fun yearCourseOpacity(courseCount: Int): Float {
         if (courseCount <= 0) return 0f
@@ -719,6 +732,52 @@ private class CalendarSwipeContainer(
     }
 }
 
+internal fun buildAlmanacAdviceRow(
+    context: Context,
+    label: String,
+    value: String,
+    color: Int,
+): LinearLayout = LinearLayout(context).apply {
+    id = R.id.calendar_almanac_advice_row
+    orientation = LinearLayout.HORIZONTAL
+    gravity = Gravity.TOP
+    isBaselineAligned = false
+    background = roundedBackground(context, Palette.background, Palette.border, radius = 7)
+    setPadding(context.dp(9), context.dp(8), context.dp(9), context.dp(8))
+    layoutParams = LinearLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+    ).apply { topMargin = context.dp(7) }
+    addView(TextView(context).apply {
+        id = R.id.calendar_almanac_advice_label
+        text = label
+        textSize = 12f
+        gravity = Gravity.CENTER
+        setTextColor(color)
+        setTypeface(typeface, Typeface.BOLD)
+    }, LinearLayout.LayoutParams(context.dp(24), context.dp(24)).apply {
+        marginEnd = context.dp(7)
+    })
+    addView(TextView(context).apply {
+        id = R.id.calendar_almanac_advice_text
+        text = value
+        textSize = 12f
+        setTextColor(Palette.muted)
+        includeFontPadding = true
+        setLineSpacing(
+            context.dp(TeachingCalendarLogic.almanacAdviceLineExtraDp).toFloat(),
+            1f,
+        )
+        setPadding(
+            0,
+            0,
+            0,
+            context.dp(TeachingCalendarLogic.almanacAdviceLineExtraDp),
+        )
+        minHeight = context.dp(TeachingCalendarLogic.almanacAdviceMinimumTextHeightDp)
+    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+}
+
 internal class TeachingCalendarPage(
     private val activity: MainActivity,
     private val scheduleRepository: ScheduleRepository,
@@ -745,6 +804,7 @@ internal class TeachingCalendarPage(
     private var expandedMonthCellHeightDp = TeachingCalendarLogic.monthCellHeightDp(true)
     private var monthExpansionAnimator: ValueAnimator? = null
     private var pendingPageDirection = 0
+    private var pendingModeSelectionFrom: Mode? = null
     private var pendingMonthSelectionStartPosition: Float? = null
     private var pendingMonthSelectionTargetPosition: Float? = null
     private var calendarHostRoot: View? = null
@@ -1061,6 +1121,8 @@ internal class TeachingCalendarPage(
 
         root.addView(pageTitle(activity, "教学日历", "课程、节次与法定节假日"))
         root.addView(calendarImportButton())
+        root.addView(spacer(activity, 8))
+        root.addView(favoriteCalendarImportButton())
         root.addView(spacer(activity, 12))
         root.addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1149,9 +1211,7 @@ internal class TeachingCalendarPage(
         fun render() {
             calendarRenderAction = ::render
             dismissYearPopover()
-            tabs.forEach { (mode, view) ->
-                view.setCompactSelectedStyle(activity, mode == selectedMode)
-            }
+            updatePhoneModeTabs(tabs)
             pageSurface.swipeEnabled = selectedMode != Mode.YEAR
             pageSurface.monthSheetPosition = monthSheetPosition
             pageSurface.onMonthSheetSettled = if (selectedMode == Mode.MONTH) {
@@ -1287,6 +1347,9 @@ internal class TeachingCalendarPage(
                 val tab = fixedTab(activity, mode.label) {
                     if (selectedMode == mode) return@fixedTab
                     performCalendarHaptic()
+                    pendingModeSelectionFrom = selectedMode.takeIf {
+                        availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp
+                    }
                     pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
                         selectedMode.ordinal,
                         mode.ordinal,
@@ -1348,6 +1411,38 @@ internal class TeachingCalendarPage(
         return root
     }
 
+    private fun updatePhoneModeTabs(tabs: Map<Mode, TextView>) {
+        val previous = pendingModeSelectionFrom
+        pendingModeSelectionFrom = null
+        tabs.forEach { (mode, view) ->
+            val selected = mode == selectedMode
+            if (previous != null && (mode == previous || selected)) {
+                val fromSelected = mode == previous
+                val transition = TransitionDrawable(arrayOf(
+                    roundedBackground(
+                        activity,
+                        if (fromSelected) Palette.segmentedSelection else Color.TRANSPARENT,
+                        radius = UiMetrics.controlRadiusDp,
+                    ),
+                    roundedBackground(
+                        activity,
+                        if (selected) Palette.segmentedSelection else Color.TRANSPARENT,
+                        radius = UiMetrics.controlRadiusDp,
+                    ),
+                )).apply { isCrossFadeEnabled = true }
+                view.background = transition
+                view.setTypeface(
+                    view.typeface,
+                    if (selected) Typeface.BOLD else Typeface.NORMAL,
+                )
+                view.setTextColor(Palette.text)
+                transition.startTransition(TeachingCalendarLogic.pageAnimationDurationMillis.toInt())
+            } else {
+                view.setCompactSelectedStyle(activity, selected)
+            }
+        }
+    }
+
     private fun replacePhonePage(
         container: FrameLayout,
         page: View,
@@ -1388,7 +1483,7 @@ internal class TeachingCalendarPage(
             val interpolator = AccelerateDecelerateInterpolator()
             oldPage.animate()
                 .translationX(-pageDirection * distance.toFloat())
-                .setDuration(300L)
+                .setDuration(TeachingCalendarLogic.pageAnimationDurationMillis)
                 .setInterpolator(interpolator)
                 .withEndAction {
                     if (oldPage.parent === container) container.removeView(oldPage)
@@ -1396,7 +1491,7 @@ internal class TeachingCalendarPage(
                 .start()
             page.animate()
                 .translationX(0f)
-                .setDuration(300L)
+                .setDuration(TeachingCalendarLogic.pageAnimationDurationMillis)
                 .setInterpolator(interpolator)
                 .start()
             return
@@ -1431,7 +1526,7 @@ internal class TeachingCalendarPage(
         content.translationY = 0f
         content.animate()
             .translationX(0f)
-            .setDuration(300L)
+            .setDuration(TeachingCalendarLogic.pageAnimationDurationMillis)
             .setInterpolator(AccelerateDecelerateInterpolator())
             .start()
     }
@@ -1743,12 +1838,23 @@ internal class TeachingCalendarPage(
                         0,
                         activity.uiText("导入手机日历"),
                     )
+                    menu.add(
+                        0,
+                        R.id.calendar_import_favorites_menu_item,
+                        1,
+                        activity.uiText("导入已收藏日程"),
+                    )
                     setOnMenuItemClickListener { item ->
-                        if (item.itemId == R.id.calendar_import_menu_item) {
-                            confirmImport()
-                            true
-                        } else {
-                            false
+                        when (item.itemId) {
+                            R.id.calendar_import_menu_item -> {
+                                confirmImport()
+                                true
+                            }
+                            R.id.calendar_import_favorites_menu_item -> {
+                                confirmFavoriteCalendarImport()
+                                true
+                            }
+                            else -> false
                         }
                     }
                 }.show()
@@ -1756,6 +1862,54 @@ internal class TeachingCalendarPage(
                 confirmImport()
             }
         }
+    }
+
+    private fun favoriteCalendarImportButton(): TextView = TextView(activity).apply {
+        text = activity.uiText("导入已收藏日程")
+        textSize = 15f
+        gravity = Gravity.CENTER
+        setTextColor(Palette.text)
+        setTypeface(typeface, Typeface.BOLD)
+        includeFontPadding = false
+        background = roundedBackground(
+            activity,
+            Palette.surface,
+            Palette.border,
+            radius = UiMetrics.controlRadiusDp,
+        )
+        isClickable = true
+        isFocusable = true
+        contentDescription = text
+        layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            activity.dp(48),
+        )
+        setOnClickListener { confirmFavoriteCalendarImport() }
+    }
+
+    private fun confirmFavoriteCalendarImport() {
+        AlertDialog.Builder(activity)
+            .setTitle(activity.uiText("导入已收藏日程"))
+            .setMessage(activity.uiText("将把当前收藏的完整日程快照同步到系统日历；重复导入会更新已有项。是否继续？"))
+            .setNegativeButton(activity.uiText("取消"), null)
+            .setPositiveButton(activity.uiText("确认导入")) { _, _ ->
+                activity.importFavoriteDeadlinesToSystemCalendar { result ->
+                    result.onSuccess { summary ->
+                        Toast.makeText(
+                            activity,
+                            activity.uiText("已同步 ${summary.totalEvents} 条收藏日程到「${summary.calendarName}」"),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }.onFailure { error ->
+                        Toast.makeText(
+                            activity,
+                            activity.uiText(error.message ?: "收藏日程导入失败。"),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .showLocalized()
     }
 
     private fun phoneNavigationButton(
@@ -1808,11 +1962,7 @@ internal class TeachingCalendarPage(
         }
         return if (selectedMode == Mode.WEEK) {
             val teachingWeek = ScheduleLogic.weekNumber(scheduleRepository.schedule, selectedDate)
-            if (teachingWeek != null) {
-                "$date 第${teachingWeek}教学周"
-            } else {
-                "$date 第${selectedDate.get(Calendar.WEEK_OF_YEAR)}周"
-            }
+            TeachingCalendarLogic.weekPeriodTitle(date, teachingWeek)
         } else {
             date
         }
@@ -1835,11 +1985,7 @@ internal class TeachingCalendarPage(
                         scheduleRepository.schedule,
                         selectedDate,
                     )
-                    text = if (teachingWeek != null) {
-                        "教学\n第${teachingWeek}周"
-                    } else {
-                        "${selectedDate.get(Calendar.WEEK_OF_YEAR)}\n周"
-                    }
+                    text = TeachingCalendarLogic.teachingWeekAxisLabel(teachingWeek)
                     textSize = 9.5f
                     gravity = Gravity.CENTER
                     setTextColor(Palette.muted)
@@ -1848,7 +1994,7 @@ internal class TeachingCalendarPage(
                     contentDescription = if (teachingWeek != null) {
                         "第${teachingWeek}教学周"
                     } else {
-                        "第${selectedDate.get(Calendar.WEEK_OF_YEAR)}周"
+                        "暂无教学周信息"
                     }
                 }, LinearLayout.LayoutParams(
                     activity.dp(leadingWidth),
@@ -2527,17 +2673,9 @@ internal class TeachingCalendarPage(
                     MonthCalendarEntry("+$hiddenCount", MonthCalendarEntryKind.OVERFLOW),
                     state.selected,
                 ).apply {
-                    isClickable = true
-                    isFocusable = true
-                    contentDescription = activity.uiText("打开月视图全天日程") + "，+$hiddenCount"
-                    setOnClickListener {
-                        showMonthOverflowDialog(
-                            Calendar.getInstance(shanghai).apply {
-                                timeInMillis = state.dateMillis
-                            },
-                            state.entries,
-                        )
-                    }
+                    contentDescription = activity.uiText(
+                        TeachingCalendarLogic.monthOverflowDescription(hiddenCount),
+                    )
                 }
                 container.addView(overflow, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -2693,6 +2831,7 @@ internal class TeachingCalendarPage(
                 onMonthSelected = { month ->
                     performCalendarHaptic()
                     selectedDate.timeInMillis = month.timeInMillis
+                    pendingModeSelectionFrom = selectedMode
                     pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
                         selectedMode.ordinal,
                         Mode.MONTH.ordinal,
@@ -2893,24 +3032,6 @@ internal class TeachingCalendarPage(
         )
     }
 
-    private fun showMonthOverflowDialog(
-        day: Calendar,
-        entries: List<MonthCalendarEntry>,
-    ) {
-        showCenteredAgendaDialog(
-            title = "${activity.uiText("月视图日程")} · ${displayMonthDayWithWeekday(day)}",
-            rows = entries.map { entry ->
-                CenteredAgendaRow(
-                    title = entry.title,
-                    subtitle = null,
-                    accent = monthEntryAccent(entry.kind),
-                    deadlineItem = entry.deadlineItem,
-                )
-            },
-            contentDescription = activity.uiText("月视图溢出日程弹窗"),
-        )
-    }
-
     private fun showCenteredAgendaDialog(
         title: String,
         rows: List<CenteredAgendaRow>,
@@ -3045,6 +3166,9 @@ internal class TeachingCalendarPage(
                         addView(fixedTab(activity, mode.label) {
                             performCalendarHaptic()
                             selectedDate.timeInMillis = day.timeInMillis
+                            pendingModeSelectionFrom = selectedMode.takeIf {
+                                availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp
+                            }
                             pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
                                 selectedMode.ordinal,
                                 mode.ordinal,
@@ -3288,31 +3412,7 @@ internal class TeachingCalendarPage(
     }
 
     private fun almanacAdviceRow(label: String, value: String, color: Int): LinearLayout =
-        LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.TOP
-            background = roundedBackground(activity, Palette.background, Palette.border, radius = 7)
-            setPadding(activity.dp(9), activity.dp(8), activity.dp(9), activity.dp(8))
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = activity.dp(7) }
-            addView(TextView(activity).apply {
-                text = label
-                textSize = 12f
-                gravity = Gravity.CENTER
-                setTextColor(color)
-                setTypeface(typeface, Typeface.BOLD)
-            }, LinearLayout.LayoutParams(activity.dp(24), activity.dp(24)).apply {
-                marginEnd = activity.dp(7)
-            })
-            addView(TextView(activity).apply {
-                text = value
-                textSize = 12f
-                setTextColor(Palette.muted)
-                setLineSpacing(0f, 1.12f)
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        }
+        buildAlmanacAdviceRow(activity, label, value, color)
 
     private fun publicDeadlineRow(item: PublicDeadlineItem): LinearLayout =
         LinearLayout(activity).apply {

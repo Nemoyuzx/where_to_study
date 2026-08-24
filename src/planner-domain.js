@@ -235,6 +235,34 @@ export function shiftDate(dateString, view, direction) {
   return localDateString(date)
 }
 
+export function calendarSurfaceKey(view, dateString) {
+  if (view === 'day') return `day:${dateString}`
+  if (view === 'week') return `week:${startOfWeekMonday(dateString)}`
+  if (view === 'month') return `month:${String(dateString || '').slice(0, 7)}`
+  if (view === 'year') return `year:${String(dateString || '').slice(0, 4)}`
+  return `${view}:${dateString}`
+}
+
+export function calendarTransition(currentDate, currentView, targetDate, targetView = currentView) {
+  const currentViewIndex = CALENDAR_VIEWS.findIndex((item) => item.id === currentView)
+  const targetViewIndex = CALENDAR_VIEWS.findIndex((item) => item.id === targetView)
+  let motion = ''
+  if (currentView !== targetView && currentViewIndex >= 0 && targetViewIndex >= 0) {
+    motion = targetViewIndex > currentViewIndex ? 'next' : 'previous'
+  } else if (
+    currentDate !== targetDate
+    && calendarSurfaceKey(currentView, currentDate) !== calendarSurfaceKey(targetView, targetDate)
+  ) {
+    motion = targetDate > currentDate ? 'next' : 'previous'
+  }
+  return {
+    date: targetDate,
+    view: targetView,
+    motion,
+    surfaceKey: calendarSurfaceKey(targetView, targetDate),
+  }
+}
+
 export function calendarSwipeDirection(deltaX, deltaY, threshold = 56) {
   if (Math.abs(deltaX) < threshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) {
     return 0
@@ -278,22 +306,6 @@ export function summarizeMonthEntries(entries, maxRows = 2) {
     visible: entries.slice(0, visibleCount),
     hiddenCount: entries.length - visibleCount,
   }
-}
-
-export function calendarWeekOfYear(dateString) {
-  const date = dateFromString(dateString)
-  if (Number.isNaN(date.getTime())) return 0
-  const year = date.getFullYear()
-  const weekOneStart = (weekYear) => {
-    const januaryFirst = new Date(weekYear, 0, 1)
-    return dateOrdinal(`${weekYear}-01-01`) - ((januaryFirst.getDay() + 6) % 7)
-  }
-  const ordinal = dateOrdinal(dateString)
-  const nextWeekOneStart = weekOneStart(year + 1)
-  const activeWeekOneStart = ordinal >= nextWeekOneStart
-    ? nextWeekOneStart
-    : weekOneStart(year)
-  return Math.floor((ordinal - activeWeekOneStart) / 7) + 1
 }
 
 export function desktopMonthGridMetrics(availableHeight) {
@@ -668,7 +680,7 @@ export function getWeekState(courses, termStartDate, targetDate) {
 }
 
 export function formatTeachingWeek(weekNumber) {
-  return weekNumber > 0 ? `第 ${weekNumber} 周` : '非教学周'
+  return weekNumber > 0 ? `第 ${weekNumber} 教学周` : '非教学周'
 }
 
 export function slotsToRanges(slots, slotMeta) {

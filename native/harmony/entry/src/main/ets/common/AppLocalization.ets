@@ -130,6 +130,9 @@ export class AppLocalization {
     '获取/刷新个人课表': 'Fetch / Refresh Schedule',
     '正在获取…': 'Fetching…',
     '导入系统日历': 'Add to System Calendar',
+    '导入已收藏日程': 'Import Favorite Events',
+    '正在导入已收藏日程…': 'Importing favorite events…',
+    '暂无已收藏日程。': 'There are no favorite events to import.',
     '正在导入…': 'Importing…',
     '课程作业 DDL': 'Course Assignment Deadlines',
     '作业': 'Assignment',
@@ -336,6 +339,19 @@ export class AppLocalization {
     if (source.startsWith('已安排未来 ') && source.endsWith(' 个有课日的课程摘要')) {
       return 'Course summaries scheduled for ' + source.substring('已安排未来 '.length,
         source.length - ' 个有课日的课程摘要'.length) + ' upcoming class days';
+    }
+    if (source.startsWith('收藏日程同步完成：')) {
+      return 'Favorite-event sync complete: ' +
+        source.substring('收藏日程同步完成：'.length)
+          .replace('新增 ', 'added ')
+          .replace('，更新 ', ', updated ')
+          .replace('，删除 ', ', deleted ')
+          .replace('，已存在 ', ', unchanged ');
+    }
+    if (source.startsWith('示例模式已模拟导入 ') && source.endsWith(' 条收藏日程，未写入系统日历')) {
+      return 'Sample mode simulated ' + source.substring('示例模式已模拟导入 '.length,
+        source.length - ' 条收藏日程，未写入系统日历'.length) +
+        ' favorite events without writing to the system calendar';
     }
     if (source.startsWith('本地课表读取失败：')) {
       return 'Unable to read the local schedule: ' +

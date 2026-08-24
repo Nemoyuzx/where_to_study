@@ -3,6 +3,7 @@ package com.nemoyu.wheretostudy.nativeapp
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
+import java.text.ParsePosition
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -219,5 +220,100 @@ object CalendarSyncPlanner {
             duplicateEventIDs = duplicates.distinct().sorted(),
             staleEventIDs = stale,
         )
+    }
+
+    fun planFavorites(
+        drafts: List<CalendarEventDraft>,
+        existingEvents: List<ManagedCalendarEvent>,
+    ): CalendarSyncPlan = planManaged(
+        drafts = drafts,
+        existingEvents = existingEvents,
+        staleCandidates = existingEvents,
+    )
+
+    private fun planManaged(
+        drafts: List<CalendarEventDraft>,
+        existingEvents: List<ManagedCalendarEvent>,
+        staleCandidates: List<ManagedCalendarEvent>,
+    ): CalendarSyncPlan {
+        val existingByMarker = existingEvents.groupBy(ManagedCalendarEvent::marker)
+        val expectedMarkers = drafts.mapTo(mutableSetOf(), CalendarEventDraft::marker)
+        val inserts = mutableListOf<CalendarEventDraft>()
+        val updates = mutableListOf<CalendarEventUpdate>()
+        val duplicates = mutableListOf<Long>()
+
+        drafts.forEach { draft ->
+            val matches = existingByMarker[draft.marker].orEmpty().sortedBy(ManagedCalendarEvent::id)
+            val primary = matches.firstOrNull()
+            if (primary == null) {
+                inserts += draft
+            } else {
+                updates += CalendarEventUpdate(primary.id, draft)
+                duplicates += matches.drop(1).map(ManagedCalendarEvent::id)
+            }
+        }
+        val stale = staleCandidates
+            .filterNot { it.marker in expectedMarkers }
+            .map(ManagedCalendarEvent::id)
+            .distinct()
+            .sorted()
+        return CalendarSyncPlan(
+            inserts = inserts,
+            updates = updates,
+            duplicateEventIDs = duplicates.distinct().sorted(),
+            staleEventIDs = stale,
+        )
+    }
+}
+
+object FavoriteCalendarLogic {
+    const val markerPrefix = "wheretostudy://favorite/v1/"
+    private const val eventDurationMillis = 30L * 60L * 1_000L
+    private val timestampPattern = Regex(
+        "^(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+    )
+
+    fun expand(items: List<PublicDeadlineItem>): List<CalendarEventDraft> = items
+        .distinctBy(PublicDeadlineItem::favoriteID)
+        .map { item ->
+            val deadline = parseDeadline(item.deadline)
+                ?: throw ScheduleCalendarExpansionException("收藏日程“${item.name}”的截止时间无效。")
+            CalendarEventDraft(
+                marker = stableMarker(item.favoriteID),
+                title = "${item.kind.title} DDL · ${item.name}",
+                location = "",
+                description = buildList {
+                    item.organizer?.takeIf(String::isNotBlank)?.let { add("主办方：$it") }
+                    add("来源：${item.sourceName ?: item.source.title}")
+                    item.officialURL?.takeIf(String::isNotBlank)?.let { add(it) }
+                    add("由 Where To Study 导入")
+                }.joinToString("\n"),
+                startsAtMillis = deadline,
+                endsAtMillis = deadline + eventDurationMillis,
+                timeZoneID = ScheduleCalendarLogic.timeZoneID,
+            )
+        }
+        .sortedWith(compareBy(CalendarEventDraft::startsAtMillis, CalendarEventDraft::marker))
+
+    fun stableMarker(favoriteID: String): String {
+        require(favoriteID.isNotBlank()) { "无法为收藏日程生成稳定标识。" }
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(favoriteID.toByteArray(StandardCharsets.UTF_8))
+        return markerPrefix + digest.joinToString("") { byte ->
+            "0123456789abcdef"[(byte.toInt() ushr 4) and 0x0f].toString() +
+                "0123456789abcdef"[byte.toInt() and 0x0f]
+        }
+    }
+
+    private fun parseDeadline(value: String): Long? {
+        val match = timestampPattern.matchEntire(value) ?: return null
+        val normalized = match.groupValues[1] +
+            if (match.groupValues[2] == "Z") "+00:00" else match.groupValues[2]
+        val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
+            isLenient = false
+        }
+        val position = ParsePosition(0)
+        val parsed = formatter.parse(normalized, position) ?: return null
+        return parsed.time.takeIf { position.index == normalized.length }
     }
 }

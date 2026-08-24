@@ -100,6 +100,11 @@ class FavoriteDeadlineUiTest {
                 instrumentation.waitForIdleSync()
                 scenario.onActivity { activity ->
                     assertNotNull(activity.findViewById<View?>(R.id.favorite_deadlines_page))
+                    assertEquals(
+                        "Favorite management is an independent phone page and must hide navigation",
+                        View.GONE,
+                        activity.findViewById<View>(R.id.phone_navigation).visibility,
+                    )
                     val star = activity.window.decorView.findViewWithTag<View>(
                         customFavorite.favoriteID,
                     ) as ImageView
@@ -116,6 +121,7 @@ class FavoriteDeadlineUiTest {
                     assertNotNull(
                         activity.findViewById<View?>(R.id.settings_favorite_deadlines_button),
                     )
+                    assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.phone_navigation).visibility)
                 }
             }
         } finally {

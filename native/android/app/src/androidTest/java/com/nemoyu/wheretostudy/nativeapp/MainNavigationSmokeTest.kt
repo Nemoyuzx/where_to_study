@@ -563,27 +563,13 @@ class MainNavigationSmokeTest {
                 val monthOverflow = checkNotNull(
                     device.wait(Until.findObject(By.textStartsWith("+")), UI_TIMEOUT_MILLIS),
                 )
+                assertFalse("Month +N must remain display-only", monthOverflow.isClickable)
                 monthOverflow.click()
-                val monthDialogBounds = checkNotNull(
-                    device.wait(
-                        Until.findObject(By.desc("月视图溢出日程弹窗")),
-                        UI_TIMEOUT_MILLIS,
-                    ),
-                ).visibleBounds
                 assertTrue(
-                    "Month schedule dialog must be horizontally centered",
-                    abs(monthDialogBounds.centerX() - device.displayWidth / 2) <= 24,
-                )
-                assertTrue(
-                    "Month schedule dialog must be vertically centered",
-                    abs(monthDialogBounds.centerY() - device.displayHeight / 2) <= 80,
-                )
-                device.findObject(By.text("完成")).click()
-                assertTrue(
-                    "Month agenda dialog must be gone before switching modes",
+                    "Month content must stay inline and never open an agenda dialog",
                     device.wait(
                         Until.gone(By.desc("月视图溢出日程弹窗")),
-                        UI_TIMEOUT_MILLIS,
+                        500L,
                     ),
                 )
                 val weekMode = checkNotNull(

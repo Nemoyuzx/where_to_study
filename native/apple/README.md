@@ -24,7 +24,7 @@ Xcode Cloud 会在克隆后自动运行可执行的
 
 账号和密码由 Apple Keychain 保存，普通偏好使用 `UserDefaults`。当前原生预览版已接入移动教务的个人课表和当天两校区空教室请求，课表与空教室数据会分别原子写入应用支持目录并供后续启动离线读取。课程联动、原有教学楼限制、三位教室号、双门教室号、日/周/月/年视图和第 17、18 个实际教学周的“试”标记均复用 `contracts/v1` 的脱敏夹具测试。
 
-空教室数据仅查询当天；应用启动和重新进入前台时会在已有凭据且当天缓存缺失时自动刷新，不进行常驻轮询。macOS 常驻时使用单次睡眠到下一个 07:00 的调度任务更新当天空教室，不做分钟级检查。教学日历支持本地缓存的法定节假日、当前时间线和日/周/月/年视图，并可在用户授权后把实际上课日期幂等写入系统日历。Apple 目标包含统一应用图标与 `PrivacyInfo.xcprivacy`；隐私清单声明 `UserDefaults` 的实际用途，不声明跟踪或开发者数据收集。macOS 还提供菜单栏入口、今日与明日课程、关闭主窗口后常驻及明确退出命令。设置页明确说明这是非官方客户端，并提供完全离线的内置示例模式；示例数据不会读写真实 Keychain、缓存、系统日历、系统通知或 Widget App Group。
+空教室数据仅查询当天；应用启动和重新进入前台时会在已有凭据且当天缓存缺失时自动刷新，不进行常驻轮询。macOS 常驻时使用单次睡眠到下一个 07:00 的调度任务更新当天空教室，不做分钟级检查。教学日历支持本地缓存的法定节假日、当前时间线和日/周/月/年视图，并可在用户授权后把实际上课日期或本机已收藏日程幂等写入系统日历；收藏使用完整本地快照和独立稳定标记，重复导入会更新同一事件且不会误删课程事件。Apple 目标包含统一应用图标与 `PrivacyInfo.xcprivacy`；隐私清单声明 `UserDefaults` 的实际用途，不声明跟踪或开发者数据收集。macOS 还提供菜单栏入口、今日与明日课程、关闭主窗口后常驻及明确退出命令。设置页明确说明这是非官方客户端，并提供完全离线的内置示例模式；示例数据不会读写真实 Keychain、缓存、系统日历、系统通知或 Widget App Group。
 
 iOS 与 macOS 安装包都内嵌真正的 WidgetKit extension，可在系统小组件图库中添加“今日课程”。小组件支持小号、中号和大号样式，展示日期、星期、教学周、当前或下一节状态、时间、节次、教室与教师，大号最多显示 6 门课程。设置页直接复用小组件视图提供三种尺寸的虚构示例预览，并可实时查看课程数量、地点与教师开关效果。主应用在读取、刷新或清除个人课表时写入原子化的小组件快照并刷新 timeline，课程开始与结束时也会切换状态；主应用与扩展使用一致的 App Group entitlement。当天没有课程或尚未获取课表时，小组件统一显示“今日无课”。正式 App Store 构建只使用已签名的 App Group 容器，本地 ad-hoc 预览包另保留应用支持目录兼容副本。
 
@@ -60,4 +60,4 @@ APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX \
   ./scripts/native-apple-app-store.sh upload all
 ```
 
-本地正式构建默认使用手动分发签名和已安装的 App Store 描述文件，校验非 ad-hoc 签名、版本/构建号、`get-task-allow`、macOS App Sandbox、网络/日历 entitlement、双平台主应用与 Widget App Group、隐私清单及三份许可证文件。使用 Xcode 管理的描述文件时，可将 `APPLE_IOS_SIGNING_STYLE` 或 `APPLE_MACOS_SIGNING_STYLE` 设为 `Automatic`；手动签名仍是默认值。macOS 手动导出会自动按团队查找 Installer Distribution 身份，也可通过 `APPLE_INSTALLER_SIGNING_CERTIFICATE` 覆盖；CI 可另外传入 `APPLE_AUTH_KEY_PATH`、`APPLE_AUTH_KEY_ID`、`APPLE_AUTH_KEY_ISSUER_ID`。当前待分发构建为 iOS `0.2.5 (66)` 与 macOS `0.2.5 (66)`；正式提交选择对应平台的最新构建，Apple 制品不作为 GitHub Release 附件。账户侧配置、商店元数据、隐私问卷草案、截图方案、App Review 说明和 GPL 发布确认见 [`AppStore/`](./AppStore/)。
+本地正式构建默认使用手动分发签名和已安装的 App Store 描述文件，校验非 ad-hoc 签名、版本/构建号、`get-task-allow`、macOS App Sandbox、网络/日历 entitlement、双平台主应用与 Widget App Group、隐私清单及三份许可证文件。使用 Xcode 管理的描述文件时，可将 `APPLE_IOS_SIGNING_STYLE` 或 `APPLE_MACOS_SIGNING_STYLE` 设为 `Automatic`；手动签名仍是默认值。macOS 手动导出会自动按团队查找 Installer Distribution 身份，也可通过 `APPLE_INSTALLER_SIGNING_CERTIFICATE` 覆盖；CI 可另外传入 `APPLE_AUTH_KEY_PATH`、`APPLE_AUTH_KEY_ID`、`APPLE_AUTH_KEY_ISSUER_ID`。当前待分发构建为 iOS `0.2.5 (67)` 与 macOS `0.2.5 (67)`；正式提交选择对应平台的最新构建，Apple 制品不作为 GitHub Release 附件。账户侧配置、商店元数据、隐私问卷草案、截图方案、App Review 说明和 GPL 发布确认见 [`AppStore/`](./AppStore/)。

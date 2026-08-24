@@ -15,7 +15,6 @@ internal class FavoriteDeadlinesPage(
     private val activity: MainActivity,
     private val preferences: AppPreferences,
     private val availableWidthDp: Int,
-    private val usesBottomNavigation: Boolean,
 ) {
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
@@ -29,7 +28,7 @@ internal class FavoriteDeadlinesPage(
                     activity.dp(20),
                     activity.dp(16),
                     activity.dp(20),
-                    activity.dp(if (usesBottomNavigation) 88 else 28),
+                    activity.dp(28),
                 )
             }
             addView(LinearLayout(activity).apply {

@@ -5,6 +5,9 @@ import test from 'node:test'
 const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
 const appCss = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
 const appSource = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
+const calendarExportSource = readFileSync(new URL('../src-tauri/src/calendar_export.rs', import.meta.url), 'utf8')
+const tauriSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8')
+const tauriCapabilities = readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8')
 
 test('desktop teaching calendar uses the shared high-contrast selected-date blue', () => {
   assert.match(indexCss, /--selected-date-fill:\s*#2563EB;/)
@@ -75,9 +78,10 @@ test('desktop month geometry and typography mirror the native macOS grid', () =>
   assert.match(appSource, /setDesktopMonthEventRows/)
   assert.match(appSource, /compactCalendarLayout \? 2 : desktopMonthEventRows/)
   assert.match(appSource, /className="month-cell-head"/)
-  assert.match(appSource, /calendarWeekOfYear\(dateString\)/)
+  assert.match(appSource, /date\.getDay\(\) === 1 && dayState\.weekNumber > 0/)
+  assert.match(appSource, /formatUiTeachingWeek\(dayState\.weekNumber, uiLanguage\)/)
+  assert.doesNotMatch(appSource, /calendarWeekOfYear\(dateString\)/)
   assert.match(appSource, /className="month-weekday-desktop"/)
-  assert.match(appSource, /className=\{`month-entry-icon \$\{entry\.type\}`\}/)
   assert.match(appSource, /className="month-entry-title"/)
   assert.match(appSource, /<time>\{String\(entry\.time\)\.split\('-'\)\[0\]\}<\/time>/)
   assert.match(
@@ -98,7 +102,7 @@ test('desktop month geometry and typography mirror the native macOS grid', () =>
   )
   assert.match(
     appCss,
-    /\.desktop-month-view \.month-cell small\.month-entry\s*\{[^}]*border-radius:\s*3px;[^}]*font-size:\s*9px;[^}]*font-weight:\s*600;[^}]*height:\s*15px;[^}]*padding:\s*0 5px;/s,
+    /\.desktop-month-view \.month-cell \.month-entry\s*\{[^}]*border-radius:\s*3px;[^}]*font-size:\s*9px;[^}]*font-weight:\s*600;[^}]*height:\s*15px;[^}]*padding:\s*0 5px;/s,
   )
   assert.match(
     appCss,
@@ -106,17 +110,59 @@ test('desktop month geometry and typography mirror the native macOS grid', () =>
   )
   assert.match(
     appCss,
-    /\.desktop-month-view \.month-entry-icon\s*\{[^}]*flex:\s*0 0 7px;[^}]*font-size:\s*7px;[^}]*height:\s*7px;[^}]*width:\s*7px;/s,
-  )
-  assert.match(
-    appCss,
     /\.desktop-month-view \.month-cell \.month-entry-overflow\s*\{[^}]*font-size:\s*9px;[^}]*height:\s*15px;[^}]*padding:\s*0 6px;/s,
   )
-  const monthAgendaStart = appSource.indexOf('const monthAgendaEntries = [')
-  const monthAgendaEnd = appSource.indexOf('const monthEntries =', monthAgendaStart)
-  const monthAgendaSource = appSource.slice(monthAgendaStart, monthAgendaEnd)
-  assert.ok(monthAgendaSource.indexOf('calendarItems.map') < monthAgendaSource.indexOf('dayState.dayCourses.map'))
-  assert.ok(monthAgendaSource.indexOf('dayState.dayCourses.map') < monthAgendaSource.indexOf('supplementalEntries.map'))
+  assert.match(appSource, /const monthCourseEntries = dayState\.dayCourses\.map/)
+  assert.match(appSource, /className="month-course-entries"/)
+  assert.match(appSource, /const monthEntrySummary = summarizeMonthEntries\(/)
+  assert.doesNotMatch(appSource, /monthAllDayEntries|month-all-day-entries|month-all-day-entry/)
+  assert.match(
+    appSource,
+    /const compactMarkers = Math\.min\(calendarItems\.length \+ dayState\.dayCourses\.length \+ supplementalEntries\.length, 3\)/,
+  )
+  assert.doesNotMatch(appSource, /sourceView: 'month'/)
+})
+
+test('desktop week all-day row stays in each date column and opens the whole event card', () => {
+  assert.match(
+    appCss,
+    /@media \(max-width: 1100px\)[\s\S]*\.time-calendar\.has-all-day:not\(\.single-day\)\s*\{[^}]*grid-template-rows:\s*auto auto 900px;/s,
+  )
+  assert.match(appSource, /style=\{\{ gridColumn: dayIndex \+ 3, gridRow: 2 \}\}/)
+  assert.match(appSource, /style=\{\{ gridColumn: dayIndex \+ 3, gridRow: visibleAllDayItems \? 3 : 2 \}\}/)
+  assert.match(appSource, /className=\{`time-all-day-item \$\{item\.type\}`\}[\s\S]*href=\{item\.url\}/)
+  assert.match(appSource, /\{item\.time \? <time>\{item\.time\}<\/time> : null\}/)
+  assert.match(appSource, /setCalendarAgendaDialog\(\{ date: dateString, sourceView: calendarView \}\)/)
+  assert.match(appSource, /className=\{`time-day-head[^`]*`\}[\s\S]*onClick=\{\(\) => chooseCalendarDate\(dateString\)\}/)
+  const pointerStart = appSource.indexOf('function beginCalendarPointerSwipe(')
+  const pointerUpdate = appSource.indexOf('function updateCalendarPointerSwipe(', pointerStart)
+  const pointerFinish = appSource.indexOf('function finishCalendarPointerSwipe(', pointerUpdate)
+  assert.doesNotMatch(appSource.slice(pointerStart, pointerUpdate), /setPointerCapture/)
+  assert.match(
+    appSource.slice(pointerUpdate, pointerFinish),
+    /start\.axis === 'horizontal'[\s\S]*setPointerCapture/,
+  )
+})
+
+test('desktop calendar navigation, background data, and year scrolling stay independent', () => {
+  const transitionStart = appSource.indexOf('function transitionCalendar(')
+  const transitionEnd = appSource.indexOf('function beginCalendarSwipe(', transitionStart)
+  const transitionSource = appSource.slice(transitionStart, transitionEnd)
+  assert.match(transitionSource, /calendarTransition\(/)
+  assert.doesNotMatch(transitionSource, /command\(|fetch_/)
+
+  const controllerStart = appSource.indexOf('// Calendar network work is owned by this background controller.')
+  const controllerEnd = appSource.indexOf('useEffect(() => {\n    const todayVisible', controllerStart)
+  const controllerSource = appSource.slice(controllerStart, controllerEnd)
+  assert.match(controllerSource, /window\.setTimeout\(\(\) => void refreshTarget\(false\), 320\)/)
+  assert.match(controllerSource, /calendarDateRef\.current/)
+  assert.doesNotMatch(controllerSource, /activePage|calendarView/)
+
+  assert.match(appSource, /className="year-day-popover-scroll"/)
+  assert.match(appCss, /\.year-day-popover-scroll\s*\{[^}]*overflow-y:\s*auto;/s)
+  assert.match(appCss, /\.year-day-popover\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s)
+  assert.match(appCss, /\.calendar-motion-exit-next\s*\{[^}]*desktop-calendar-exit-next 180ms/s)
+  assert.match(appCss, /\.calendar-motion-exit-previous\s*\{[^}]*desktop-calendar-exit-previous 180ms/s)
 })
 
 test('desktop month selection matches the macOS light-blue cell and solid date badge', () => {
@@ -152,6 +198,24 @@ test('desktop settings expose matching deadline color dots and switch controls',
   )
 })
 
+test('favorite management removes the underlying navigation from the modal accessibility tree', () => {
+  assert.match(appSource, /aria-hidden=\{favoriteManagerOpen \? true : undefined\}/)
+  assert.match(appSource, /inert=\{favoriteManagerOpen \? true : undefined\}/)
+  assert.match(appSource, /\{!favoriteManagerOpen \? <aside className="side-nav">/)
+  assert.match(appCss, /\.app-frame\.favorite-manager-open\s*\{[^}]*display:\s*none;/s)
+})
+
+test('desktop calendar imports locally persisted favorite event snapshots', () => {
+  assert.match(appSource, /function importFavoriteDeadlines\(\)/)
+  assert.match(appSource, /command\('import_favorite_deadlines_to_calendar'/)
+  assert.match(appSource, /\{t\('导入已收藏日程'\)\}/)
+  assert.match(tauriSource, /fn import_favorite_deadlines_to_calendar\(/)
+  assert.match(tauriCapabilities, /allow-import-favorite-deadlines-to-calendar/)
+  assert.match(calendarExportSource, /fn build_favorite_ics\(/)
+  assert.match(calendarExportSource, /DTSTART;TZID=Asia\/Shanghai/)
+  assert.match(calendarExportSource, /URL:\{url\}/)
+})
+
 test('desktop day and week timelines separate hour and course-slot grid lines', () => {
   assert.match(appSource, /nonHourlyCourseBoundaryMinutes\(slotMeta\)/)
   assert.match(appSource, /className="slot-axis-grid-lines"/)
@@ -184,7 +248,7 @@ test('desktop year selection persists and today survives holiday and deadline pr
   )
   assert.match(
     appSource,
-    /function openYearDayPopover[\s\S]*setCalendarDate\(dateString\)/,
+    /function openYearDayPopover[\s\S]*transitionCalendar\(dateString, 'year'\)/,
   )
 
   const holidayTodayRule = appCss.indexOf(

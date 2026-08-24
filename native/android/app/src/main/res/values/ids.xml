@@ -63,6 +63,10 @@
     <item name="calendar_period_label" type="id" />
     <item name="calendar_overflow_button" type="id" />
     <item name="calendar_import_menu_item" type="id" />
+    <item name="calendar_import_favorites_menu_item" type="id" />
+    <item name="calendar_almanac_advice_row" type="id" />
+    <item name="calendar_almanac_advice_label" type="id" />
+    <item name="calendar_almanac_advice_text" type="id" />
     <item name="calendar_week_number" type="id" />
     <item name="calendar_date_strip" type="id" />
     <item name="calendar_date_summary" type="id" />

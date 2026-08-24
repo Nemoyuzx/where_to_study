@@ -92,11 +92,11 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         navigate(to: "教学日历", in: app)
         let periodLabel = app.staticTexts.matching(
-            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月 第 [0-9]+ 周$")
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月 第 [0-9]+ 教学周$")
         ).firstMatch
         XCTAssertTrue(periodLabel.waitForExistence(timeout: 5))
         XCTAssertTrue(periodLabel.label.contains("第 "))
-        XCTAssertTrue(periodLabel.label.hasSuffix(" 周"))
+        XCTAssertTrue(periodLabel.label.hasSuffix(" 教学周"))
         attachScreenshot(named: "calendar-week-single-viewport")
         let courseSummaryToggle = app.buttons.matching(
             NSPredicate(format: "label CONTAINS '门课'")
@@ -289,7 +289,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         }
     }
 
-    func testMobileMonthAndWeekUseDedicatedCenteredDeadlineDialogs() throws {
+    func testMobileWeekUsesCenteredDialogAndMonthKeepsDetailsInline() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
         let app = configuredApplication()
@@ -329,14 +329,12 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(monthOverflow.waitForExistence(timeout: 5))
         monthOverflow.tap()
 
-        let monthDialog = app.descendants(matching: .any)[
+        XCTAssertFalse(app.descendants(matching: .any)[
             "calendar.mobile.month-agenda-dialog"
-        ].firstMatch
-        XCTAssertTrue(monthDialog.waitForExistence(timeout: 5))
-        XCTAssertEqual(monthDialog.frame.midX, app.frame.midX, accuracy: 2)
-        XCTAssertLessThan(abs(monthDialog.frame.midY - app.frame.midY), 48)
-        XCTAssertTrue(app.staticTexts["示例校园黑客松"].exists)
-        app.buttons["关闭全天日程"].tap()
+        ].firstMatch.exists)
+        XCTAssertTrue(app.descendants(matching: .any)[
+            "calendar.mobile.month-day-summary-card"
+        ].firstMatch.waitForExistence(timeout: 5))
     }
 
     func testMobileYearDeadlineBorderPriorityAndDetailContent() throws {
@@ -384,10 +382,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.segmentedControls.buttons["Month"].exists)
         XCTAssertTrue(app.segmentedControls.buttons["Year"].exists)
         let weekContext = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Calendar week")
+            NSPredicate(format: "label BEGINSWITH %@", "Teaching week")
         ).firstMatch
         XCTAssertTrue(weekContext.waitForExistence(timeout: 5))
-        XCTAssertTrue(weekContext.label.hasPrefix("Calendar week"))
+        XCTAssertTrue(weekContext.label.hasPrefix("Teaching week"))
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(weekContext.frame))
         XCTAssertTrue(app.staticTexts["Data Mining"].exists == false)
         XCTAssertTrue(app.staticTexts["数据挖掘"].waitForExistence(timeout: 5))
@@ -439,6 +437,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         revealByScrolling(visibleElement: management, in: app)
         management.tap()
         XCTAssertTrue(app.descendants(matching: .any)["favorites.page"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.tabBars.firstMatch.waitForNonExistence(timeout: 3),
+            "收藏管理是独立页面，底部主导航必须隐藏"
+        )
         XCTAssertTrue(app.staticTexts["全国大学生示例竞赛"].waitForExistence(timeout: 5))
         let remove = app.buttons["favorites.remove.contest_ddl.sample-competition"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
@@ -517,7 +519,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(button.frame))
         }
         let weekContext = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Calendar week")
+            NSPredicate(format: "label BEGINSWITH %@", "Teaching week")
         ).firstMatch
         XCTAssertTrue(weekContext.waitForExistence(timeout: 5))
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(weekContext.frame))
@@ -529,6 +531,35 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(monthHeading.frame))
         XCTAssertTrue(app.buttons["Collapse month"].waitForExistence(timeout: 5))
+    }
+
+    func testExpandedIPadWeekKeepsAllDayEventsInTheirDateColumnAndSelectsWholeHeader() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad-only expanded week test")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        navigateFromSidebar(to: "教学日历", in: app)
+        let dateKey = nearbyShanghaiWeekDateString()
+        let header = app.buttons["calendar.timeline.day-header.\(dateKey)"]
+        XCTAssertTrue(header.waitForExistence(timeout: 5))
+        XCTAssertTrue(header.isHittable)
+
+        let assignmentLink = app.descendants(matching: .any)[
+            "calendar.timeline.all-day.\(dateKey).\(dateKey)-assignment-sample-assignment"
+        ].firstMatch
+        XCTAssertTrue(assignmentLink.waitForExistence(timeout: 5))
+        XCTAssertTrue(assignmentLink.isHittable)
+        XCTAssertTrue(assignmentLink.label.contains("23:59"))
+        XCTAssertTrue(assignmentLink.label.contains("示例课程作业"))
+        XCTAssertGreaterThanOrEqual(assignmentLink.frame.midX, header.frame.minX)
+        XCTAssertLessThanOrEqual(assignmentLink.frame.midX, header.frame.maxX)
+
+        header.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.78)).tap()
+        XCTAssertTrue(waitForSelected(header))
     }
 
     func testCompactTabBarRestoresGeometryAfterLanguageRoundTrip() throws {
@@ -1107,6 +1138,16 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         ) == .completed
     }
 
+    private func waitForSelected(_ element: XCUIElement) -> Bool {
+        let predicate = NSPredicate { object, _ in
+            (object as? XCUIElement)?.isSelected == true
+        }
+        return XCTWaiter.wait(
+            for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
+            timeout: 5
+        ) == .completed
+    }
+
     private func currentShanghaiDateString() -> String {
         shanghaiDateString(Date())
     }
@@ -1119,6 +1160,13 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let lastDay = calendar.range(of: .day, in: .month, for: today)?.last ?? day
         let offset = day < lastDay ? 1 : -1
         return shanghaiDateString(calendar.date(byAdding: .day, value: offset, to: today)!)
+    }
+
+    private func nearbyShanghaiWeekDateString() -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let offset = calendar.component(.weekday, from: Date()) == 1 ? -1 : 1
+        return shanghaiDateString(calendar.date(byAdding: .day, value: offset, to: Date())!)
     }
 
     private func shiftedShanghaiDateString(months: Int) -> String {

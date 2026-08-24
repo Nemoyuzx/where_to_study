@@ -753,4 +753,9 @@ private struct NotificationTestCalendarImporter: CalendarImporting {
     func importSchedule(_: ScheduleSnapshot) async throws -> CalendarImportResult {
         throw NotificationTestError.unavailable
     }
+
+
+    func importFavorites(_: [PublicDeadlineItem]) async throws -> CalendarImportResult {
+        throw NotificationTestError.unavailable
+    }
 }

@@ -34,6 +34,7 @@ import {
 import { AppRuntimeMode } from './AppRuntimeMode';
 import { SampleData } from './SampleData';
 import { WidgetSync } from '../widget/WidgetSync';
+import { CalendarViewportPreloadTarget } from '../common/CalendarViewportPreload';
 import { WidgetCoursePreferences } from '../widget/TodayCourseWidgetData';
 import {
   AppLanguage, AppLanguageInfo, AppLocalization
@@ -164,7 +165,7 @@ class HolidayLoadState {
 }
 
 @ObservedV2
-export class AppModel {
+export class AppModel implements CalendarViewportPreloadTarget {
   @Trace selectedSection: AppSection = AppSection.planner;
   @Trace account: string = '';
   @Trace password: string = '';
@@ -1393,6 +1394,50 @@ export class AppModel {
     });
   }
 
+  async importFavoritesToCalendar(): Promise<void> {
+    if (this.favoriteDeadlines.length === 0) {
+      this.calendarImportStatusMessage = '暂无已收藏日程。';
+      return;
+    }
+    if (this.isSampleMode()) {
+      this.calendarImportStatusMessage = '示例模式已模拟导入 ' +
+        this.favoriteDeadlines.length.toString() + ' 条收藏日程，未写入系统日历';
+      return;
+    }
+    if (this.isImportingCalendar) {
+      return;
+    }
+    this.isImportingCalendar = true;
+    this.calendarImportToken++;
+    const importToken: number = this.calendarImportToken;
+    this.calendarImportStatusMessage = '正在导入已收藏日程…';
+    const generation: number = this.localDataGeneration;
+    const favorites: PublicDeadlineItem[] = this.favoriteDeadlines.slice();
+    const work: Promise<void> = (async (): Promise<void> => {
+      try {
+        const result: CalendarImportResult = await this.calendarImporter.importFavorites(favorites);
+        if (generation !== this.localDataGeneration || importToken !== this.calendarImportToken) {
+          return;
+        }
+        this.calendarImportStatusMessage = '收藏日程同步完成：新增 ' + result.inserted.toString() +
+          '，更新 ' + result.updated.toString() + '，删除 ' + result.deleted.toString() +
+          '，已存在 ' + result.unchanged.toString();
+      } catch (e) {
+        if (generation !== this.localDataGeneration || importToken !== this.calendarImportToken) {
+          return;
+        }
+        this.calendarImportStatusMessage = e instanceof Error ? e.message : '';
+      } finally {
+        if (importToken === this.calendarImportToken) {
+          this.isImportingCalendar = false;
+        }
+      }
+    })();
+    work.catch(() => {
+      // 已在内部处理。
+    });
+  }
+
   // ---------- 空教室刷新 ----------
 
   refreshClassroomsIfNeeded(): void {
@@ -1606,6 +1651,15 @@ export class AppModel {
     }).catch(() => {
       // 公开 DDL 源在内部降级，不让预取失败泄漏为未处理 Promise。
     });
+  }
+
+  prewarmCalendarViewport(selectedDate: DateParts, markerDays: DateParts[],
+    holidayYears: number[]): void {
+    for (const year of holidayYears) {
+      this.ensureHolidays(year, false);
+    }
+    this.prefetchCalendarMarkers(markerDays);
+    this.loadCalendarDailyInfo(StrictDates.formatDateParts(selectedDate));
   }
 
   private async prefetchAssignmentMarkers(dates: string[], revision: number): Promise<void> {

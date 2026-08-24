@@ -45,11 +45,12 @@ import {
   buildMonthDays,
   calendarDeadlineBorderKinds,
   calendarDeadlineBorderPriority,
+  calendarSurfaceKey,
+  calendarTransition,
   buildingsForCampus,
   calendarMonthExpansion,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
-  calendarWeekOfYear,
   calendarSwipeDirection,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
@@ -160,6 +161,7 @@ const EN_TEXT = Object.freeze({
   '暂无匹配空教室': 'No matching empty classrooms',
   '获取/刷新个人课表': 'Load / refresh my schedule',
   '导入苹果日历': 'Import into Apple Calendar',
+  '导入已收藏日程': 'Import favorite events',
   '收起月历': 'Collapse month',
   '展开月历': 'Expand month',
   '月历': 'Month calendar',
@@ -273,6 +275,7 @@ const EN_TEXT = Object.freeze({
   '赛': 'C',
   '试': 'Exam',
   '已生成日历文件并打开苹果日历：': 'Calendar file created and opened in Apple Calendar: ',
+  '没有可导入的收藏日程。': 'There are no favorite events to import.',
   '移动教务实时接口': 'Mobile academic system live API',
   'Jraaay 公共实时数据': 'Jraaay public live data',
   '微信教务实时接口': 'WeChat academic system live API',
@@ -568,7 +571,7 @@ function browserPreviewCommand(name, payload = {}) {
       courses: [],
     }
   }
-  if (name === 'import_schedule_to_calendar') {
+  if (name === 'import_schedule_to_calendar' || name === 'import_favorite_deadlines_to_calendar') {
     throw new Error('手机浏览器预览不支持导入苹果日历，请在 macOS App 中使用。')
   }
   if (name === 'fetch_weather') {
@@ -1235,9 +1238,13 @@ function App() {
   const deadlinePreheatPromiseRef = useRef(null)
   const deadlinePreheatTimerRef = useRef(null)
   const deadlinePreheatEnabledRef = useRef(false)
+  const calendarDateRef = useRef(calendarDate)
+  const almanacByDateRef = useRef(almanacByDate)
   const todayDate = shanghaiDateString(now)
   const todayYear = todayDate.slice(0, 4)
   const loading = loadingTasks[loadingTasks.length - 1] || ''
+  calendarDateRef.current = calendarDate
+  almanacByDateRef.current = almanacByDate
 
   useEffect(() => {
     try {
@@ -1285,15 +1292,13 @@ function App() {
         moveCalendar(1)
       } else if (event.key === 'Home' && !event.altKey) {
         event.preventDefault()
-        startCalendarMotion(todayDate < calendarDate ? 'previous' : 'next')
-        setCalendarDate(todayDate)
+        transitionCalendar(todayDate, calendarView)
       }
     }
     window.addEventListener('keydown', handleDesktopShortcut)
     return () => window.removeEventListener('keydown', handleDesktopShortcut)
   }, [activePage, calendarDate, calendarView, todayDate])
 
-  const calendarSupplementYear = dateFromString(calendarDate).getFullYear()
   const calendarMonthKey = calendarDate.slice(0, 7)
 
   useEffect(() => {
@@ -1636,14 +1641,6 @@ function App() {
   }, [settings.customDeadlinesEnabled, settings.customDeadlinesUrl])
 
   useEffect(() => {
-    if (activePage !== 'calendar' || calendarView !== 'month' || !settings.almanacEnabled) return undefined
-    void loadAlmanac(calendarDate)
-    return () => {
-      almanacRevisionRef.current += 1
-    }
-  }, [activePage, calendarDate, calendarView, settings.almanacEnabled])
-
-  useEffect(() => {
     const plan = settingsLoaded
       ? deadlinePreheatPlan(settings, `${todayYear}-01-01`)
       : null
@@ -1662,50 +1659,72 @@ function App() {
     todayYear,
   ])
 
-  // Prime the full selected year once settings are available. Date selection,
-  // view changes, and month paging then read local state instead of launching
-  // network work from the transition path. Moving into another year starts one
-  // independent annual refresh without blocking the calendar animation.
+  // Calendar network work is owned by this background controller. Navigation
+  // only updates calendarDateRef and finishes the current visual transition;
+  // the controller observes/coalesces the new target afterwards and fills the
+  // local maps. No view or active-page state participates in this lifecycle.
   useEffect(() => {
-    if (!settingsLoaded || !Number.isInteger(calendarSupplementYear)) return
-    const anyDeadlineTypeEnabled = settings.competitionDeadlinesEnabled
-      || settings.schoolContestNoticesEnabled
-      || settings.summerCampDeadlinesEnabled
-      || settings.hackathonDeadlinesEnabled
-    void loadCalendarSupplements(
-      `${calendarSupplementYear}-01-01`,
-      `${calendarSupplementYear}-12-31`,
-      anyDeadlineTypeEnabled,
+    if (!settingsLoaded) return undefined
+    let stopped = false
+    let observedDate = ''
+    let pendingTimer = 0
+
+    const refreshTarget = async (periodic = false) => {
+      if (stopped) return
+      const targetDate = calendarDateRef.current
+      const target = dateFromString(targetDate)
+      if (Number.isNaN(target.getTime())) return
+      const targetYear = target.getFullYear()
+      ;[targetYear - 1, targetYear, targetYear + 1].forEach((year) => {
+        void loadHolidayYear(year)
+      })
+      if (settings.almanacEnabled) void loadAlmanac(targetDate, periodic)
+
+      const startDate = `${targetYear}-01-01`
+      const endDate = `${targetYear}-12-31`
+      if (periodic) invalidateCalendarSupplementRange(startDate, endDate)
+      const anyDeadlineTypeEnabled = settings.competitionDeadlinesEnabled
+        || settings.schoolContestNoticesEnabled
+        || settings.summerCampDeadlinesEnabled
+        || settings.hackathonDeadlinesEnabled
+      await loadCalendarSupplements(
+        startDate,
+        endDate,
+        anyDeadlineTypeEnabled,
+        periodic,
+      )
+    }
+
+    const queueObservedDate = () => {
+      const targetDate = calendarDateRef.current
+      if (targetDate === observedDate) return
+      observedDate = targetDate
+      window.clearTimeout(pendingTimer)
+      pendingTimer = window.setTimeout(() => void refreshTarget(false), 320)
+    }
+
+    queueObservedDate()
+    const observer = window.setInterval(queueObservedDate, 100)
+    const periodicRefresh = window.setInterval(
+      () => void refreshTarget(true),
+      DEADLINE_SOURCE_REFRESH_MS,
     )
+    return () => {
+      stopped = true
+      almanacRevisionRef.current += 1
+      window.clearTimeout(pendingTimer)
+      window.clearInterval(observer)
+      window.clearInterval(periodicRefresh)
+    }
   }, [
     calendarSupplementRevision,
-    calendarSupplementYear,
-    settingsLoaded,
+    settings.almanacEnabled,
     settings.competitionDeadlinesEnabled,
+    settings.customDeadlinesEnabled,
+    settings.customDeadlinesUrl,
     settings.hackathonDeadlinesEnabled,
     settings.schoolContestNoticesEnabled,
     settings.summerCampDeadlinesEnabled,
-    settings.customDeadlinesEnabled,
-    settings.customDeadlinesUrl,
-  ])
-
-  useEffect(() => {
-    const customURL = String(settings.customDeadlinesUrl || '').trim()
-    if (!settingsLoaded || !settings.customDeadlinesEnabled || !customURL
-      || !Number.isInteger(calendarSupplementYear)) return undefined
-    const timer = window.setInterval(() => {
-      void loadCalendarSupplements(
-        `${calendarSupplementYear}-01-01`,
-        `${calendarSupplementYear}-12-31`,
-        false,
-        true,
-      )
-    }, DEADLINE_SOURCE_REFRESH_MS)
-    return () => window.clearInterval(timer)
-  }, [
-    calendarSupplementYear,
-    settings.customDeadlinesEnabled,
-    settings.customDeadlinesUrl,
     settingsLoaded,
   ])
 
@@ -1895,10 +1914,6 @@ function App() {
     if (calendarView === 'month') return buildMonthDays(calendarDate)
     return []
   }, [calendarDate, calendarView])
-  const visibleHolidayYears = useMemo(() => {
-    const dates = calendarView === 'year' ? [calendarDate] : visibleCalendarDays
-    return [...new Set(dates.map((dateString) => dateFromString(dateString).getFullYear()))]
-  }, [calendarDate, calendarView, visibleCalendarDays])
   const calendarYearMonths = useMemo(() => {
     const year = dateFromString(calendarDate).getFullYear()
     return Array.from({ length: 12 }, (_, monthIndex) => ({
@@ -1941,35 +1956,6 @@ function App() {
       top: ((minutes - visibleStart) / (visibleEnd - visibleStart)) * 100,
     }
   }, [calendarDate, calendarView, now, todayDate, visibleCalendarDays])
-
-  useEffect(() => {
-    visibleHolidayYears.forEach((year) => {
-      if (requestedHolidayYears.current.has(year)) return
-      requestedHolidayYears.current.add(year)
-
-      command('fetch_holidays', { year })
-        .then((data) => {
-          setHolidayDataByYear((current) => ({
-            ...current,
-            [data.year]: data,
-          }))
-        })
-        .catch(() => {
-          setHolidayDataByYear((current) => {
-            if (current[year]) return current
-            return {
-              ...current,
-              [year]: {
-                year,
-                source: 'fallback',
-                fetched_at: '',
-                items: fallbackHolidayItems(year),
-              },
-            }
-          })
-        })
-    })
-  }, [visibleHolidayYears])
 
   useEffect(() => {
     let cancelled = false
@@ -2134,11 +2120,7 @@ function App() {
 
   function chooseCalendarDate(dateString) {
     if (Date.now() < suppressCalendarClickUntilRef.current) return
-    if (calendarView === 'month' && dateString.slice(0, 7) !== calendarDate.slice(0, 7)) {
-      startCalendarMotion(dateString > calendarDate ? 'next' : 'previous')
-    }
-    setCalendarDate(dateString)
-    setCalendarPopover(null)
+    transitionCalendar(dateString, calendarView)
   }
 
   function chooseCalendarDateFromInput(event) {
@@ -2155,7 +2137,7 @@ function App() {
     const source = calendarAnimatedSurfaceRef.current
     calendarOutgoingSurfaceRef.current?.remove()
     calendarOutgoingSurfaceRef.current = null
-    if (!host || !source || !compactCalendarLayout
+    if (!host || !source
       || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     const outgoing = source.cloneNode(true)
@@ -2175,6 +2157,7 @@ function App() {
   }
 
   function startCalendarMotion(motion) {
+    if (!motion) return
     stageCalendarTransition(motion)
     setCalendarMotion(motion)
     window.clearTimeout(calendarMotionTimerRef.current)
@@ -2182,13 +2165,27 @@ function App() {
       setCalendarMotion('')
       calendarOutgoingSurfaceRef.current?.remove()
       calendarOutgoingSurfaceRef.current = null
-    }, 300)
+    }, compactCalendarLayout ? 300 : 220)
+  }
+
+  function transitionCalendar(targetDate, targetView = calendarView) {
+    const transition = calendarTransition(
+      calendarDateRef.current,
+      calendarView,
+      targetDate,
+      targetView,
+    )
+    setCalendarPopover(null)
+    if (transition.motion) startCalendarMotion(transition.motion)
+    if (transition.date !== calendarDateRef.current) {
+      calendarDateRef.current = transition.date
+      setCalendarDate(transition.date)
+    }
+    if (transition.view !== calendarView) setCalendarView(transition.view)
   }
 
   function moveCalendar(direction) {
-    setCalendarPopover(null)
-    startCalendarMotion(direction > 0 ? 'next' : 'previous')
-    setCalendarDate((current) => shiftDate(current, calendarView, direction))
+    transitionCalendar(shiftDate(calendarDateRef.current, calendarView, direction), calendarView)
   }
 
   function beginCalendarSwipe(event) {
@@ -2226,11 +2223,7 @@ function App() {
       blocked: false,
       pointerId: event.pointerId,
       pointerTarget: event.currentTarget,
-    }
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      // Pointer capture is optional in older embedded WebViews.
+      pointerCaptured: false,
     }
   }
 
@@ -2245,6 +2238,14 @@ function App() {
     }
 
     if (start.axis === 'horizontal') {
+      if (!start.pointerCaptured) {
+        try {
+          start.pointerTarget.setPointerCapture(event.pointerId)
+          start.pointerCaptured = true
+        } catch {
+          // Pointer capture is optional in older embedded WebViews.
+        }
+      }
       lockCalendarVerticalScroll(start)
       event.preventDefault()
     }
@@ -2255,10 +2256,12 @@ function App() {
     if (!start || start.view === 'month' || start.pointerId !== event.pointerId) return
     calendarGestureRef.current = null
     unlockCalendarVerticalScroll(start)
-    try {
-      start.pointerTarget.releasePointerCapture(event.pointerId)
-    } catch {
-      // The browser may release capture before pointerup.
+    if (start.pointerCaptured) {
+      try {
+        start.pointerTarget.releasePointerCapture(event.pointerId)
+      } catch {
+        // The browser may release capture before pointerup.
+      }
     }
 
     if (start.axis !== 'horizontal') return
@@ -2563,7 +2566,7 @@ function App() {
     if (horizontalOffset !== undefined) {
       event.preventDefault()
       suppressCalendarClickUntilRef.current = Date.now() + 400
-      setCalendarDate((current) => addDays(current, horizontalOffset))
+      transitionCalendar(addDays(calendarDateRef.current, horizontalOffset), calendarView)
       return
     }
     const wantsExpanded = event.key === 'ArrowDown' ? true : event.key === 'ArrowUp' ? false : null
@@ -2573,7 +2576,7 @@ function App() {
       // Already in the target state: move by a week instead.
       const weekOffset = wantsExpanded ? 7 : -7
       suppressCalendarClickUntilRef.current = Date.now() + 400
-      setCalendarDate((current) => addDays(current, weekOffset))
+      transitionCalendar(addDays(calendarDateRef.current, weekOffset), calendarView)
       return
     }
     setMonthExpanded(wantsExpanded)
@@ -2582,29 +2585,20 @@ function App() {
   function jumpFromYearPopover(view) {
     const date = calendarPopover?.date
     if (!date) return
-    const currentIndex = CALENDAR_VIEWS.findIndex((item) => item.id === calendarView)
-    const nextIndex = CALENDAR_VIEWS.findIndex((item) => item.id === view)
-    startCalendarMotion(nextIndex >= currentIndex ? 'next' : 'previous')
-    setCalendarDate(date)
-    setCalendarView(view)
-    setCalendarPopover(null)
+    transitionCalendar(date, view)
   }
 
   function chooseCalendarView(view) {
     if (view === calendarView) return
-    const currentIndex = CALENDAR_VIEWS.findIndex((item) => item.id === calendarView)
-    const nextIndex = CALENDAR_VIEWS.findIndex((item) => item.id === view)
-    startCalendarMotion(nextIndex >= currentIndex ? 'next' : 'previous')
-    setCalendarPopover(null)
-    setCalendarView(view)
+    transitionCalendar(calendarDateRef.current, view)
   }
 
   function openYearDayPopover(event, dateString) {
     const popoverWidth = 300
-    const popoverHeight = 340
+    const popoverHeight = 440
     const x = Math.min(event.clientX + 12, window.innerWidth - popoverWidth - 12)
     const y = Math.min(event.clientY + 12, window.innerHeight - popoverHeight - 12)
-    setCalendarDate(dateString)
+    transitionCalendar(dateString, 'year')
     setCalendarPopover({
       date: dateString,
       x: Math.max(12, x),
@@ -2630,10 +2624,7 @@ function App() {
     if (compactCalendarLayout) return
     event.preventDefault()
     window.clearTimeout(yearClickTimerRef.current)
-    startCalendarMotion('previous')
-    setCalendarDate(dateString)
-    setCalendarView('month')
-    setCalendarPopover(null)
+    transitionCalendar(dateString, 'month')
   }
 
   async function runTask(name, task) {
@@ -2731,8 +2722,31 @@ function App() {
     }
   }
 
+  async function loadHolidayYear(year) {
+    if (!Number.isInteger(year) || requestedHolidayYears.current.has(year)) return
+    requestedHolidayYears.current.add(year)
+    try {
+      const data = await command('fetch_holidays', { year })
+      setHolidayDataByYear((current) => ({ ...current, [data.year]: data }))
+    } catch {
+      requestedHolidayYears.current.delete(year)
+      setHolidayDataByYear((current) => {
+        if (current[year]) return current
+        return {
+          ...current,
+          [year]: {
+            year,
+            source: 'fallback',
+            fetched_at: '',
+            items: fallbackHolidayItems(year),
+          },
+        }
+      })
+    }
+  }
+
   async function loadAlmanac(date = calendarDate, force = false) {
-    if (!force && almanacByDate[date]) return
+    if (!force && almanacByDateRef.current[date]) return
     const revision = almanacRevisionRef.current + 1
     almanacRevisionRef.current = revision
     setAlmanacLoadingDate(date)
@@ -2796,6 +2810,16 @@ function App() {
     })
   }
 
+  function invalidateCalendarSupplementRange(startDate, endDate) {
+    const rangeSuffix = `:${startDate}:${endDate}`
+    requestedCalendarSupplementRanges.current = new Set(
+      [...requestedCalendarSupplementRanges.current].filter((key) => (
+        !String(key).endsWith(rangeSuffix)
+        || String(key).startsWith('deadlines:')
+      )),
+    )
+  }
+
   function scheduleDeadlinePreheat(plan, delay) {
     window.clearTimeout(deadlinePreheatTimerRef.current)
     if (!deadlinePreheatEnabledRef.current) return
@@ -2857,12 +2881,13 @@ function App() {
     const deadlineKey = `deadlines:${startDate}:${endDate}`
     const customURL = String(settings.customDeadlinesUrl || '').trim()
     const customDeadlineKey = `custom-deadlines:${customURL}:${startDate}:${endDate}`
-    const selectedDateInRange = calendarDate >= startDate && calendarDate <= endDate
+    const selectedDate = calendarDateRef.current
+    const selectedDateInRange = selectedDate >= startDate && selectedDate <= endDate
     const tasks = []
 
     if (!requestedCalendarSupplementRanges.current.has(assignmentKey)) {
       requestedCalendarSupplementRanges.current.add(assignmentKey)
-      if (selectedDateInRange) setAssignmentsLoadingDate(calendarDate)
+      if (selectedDateInRange) setAssignmentsLoadingDate(selectedDate)
       tasks.push(command('fetch_assignment_calendar', {
         start_date: startDate,
         end_date: endDate,
@@ -2907,7 +2932,7 @@ function App() {
     const deadlineRangeCovered = rangeDates.every((date) => deadlineCoveredDatesRef.current.has(date))
     if (includeDeadlines && !deadlineRangeCovered && !requestedCalendarSupplementRanges.current.has(deadlineKey)) {
       requestedCalendarSupplementRanges.current.add(deadlineKey)
-      if (selectedDateInRange) setDeadlinesLoadingDate(calendarDate)
+      if (selectedDateInRange) setDeadlinesLoadingDate(selectedDate)
       tasks.push((async () => {
         try {
           const preheat = deadlinePreheatPromiseRef.current
@@ -2940,7 +2965,7 @@ function App() {
     if (settings.customDeadlinesEnabled && customURL
       && !requestedCalendarSupplementRanges.current.has(customDeadlineKey)) {
       requestedCalendarSupplementRanges.current.add(customDeadlineKey)
-      if (selectedDateInRange) setCustomDeadlinesLoadingDate(calendarDate)
+      if (selectedDateInRange) setCustomDeadlinesLoadingDate(selectedDate)
       tasks.push(command('fetch_custom_deadline_calendar', {
         url: customURL,
         start_date: startDate,
@@ -2987,6 +3012,16 @@ function App() {
     if (settingsSaving) return
     await runTask('calendar-import', async () => {
       const path = await command('import_schedule_to_calendar')
+      setCalendarImportedPath(path)
+    })
+  }
+
+  async function importFavoriteDeadlines() {
+    if (settingsSaving || !favoriteDeadlines.length) return
+    await runTask('favorite-calendar-import', async () => {
+      const path = await command('import_favorite_deadlines_to_calendar', {
+        items: normalizeFavoriteDeadlines(favoriteDeadlines),
+      })
       setCalendarImportedPath(path)
     })
   }
@@ -3045,8 +3080,12 @@ function App() {
 
   return (
     <main className="app-shell" lang={uiLanguage === 'en' ? 'en' : 'zh-Hans'}>
-      <div className="app-frame">
-        <aside className="side-nav">
+      <div
+        className={`app-frame ${favoriteManagerOpen ? 'favorite-manager-open' : ''}`}
+        aria-hidden={favoriteManagerOpen ? true : undefined}
+        inert={favoriteManagerOpen ? true : undefined}
+      >
+        {!favoriteManagerOpen ? <aside className="side-nav">
           <div className="side-brand">
             <p className="eyebrow">BUPT</p>
             <strong>Where To Study</strong>
@@ -3067,7 +3106,7 @@ function App() {
               </button>
             ))}
           </nav>
-        </aside>
+        </aside> : null}
 
         <section
           ref={pageContentRef}
@@ -3357,10 +3396,16 @@ function App() {
                     {t('获取/刷新个人课表')}
                   </button>
                   {metadata.supports_calendar_import ? (
-                    <button type="button" onClick={importSystemCalendar} disabled={settingsSaving || !!loading || !courses.length}>
-                      {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
-                      {t('导入苹果日历')}
-                    </button>
+                    <div className="calendar-import-actions">
+                      <button type="button" onClick={importSystemCalendar} disabled={settingsSaving || !!loading || !courses.length}>
+                        {loading === 'calendar-import' ? <Loader2 className="spin" size={16} /> : <CalendarPlus size={16} />}
+                        {t('导入苹果日历')}
+                      </button>
+                      <button type="button" onClick={importFavoriteDeadlines} disabled={settingsSaving || !!loading || !favoriteDeadlines.length}>
+                        {loading === 'favorite-calendar-import' ? <Loader2 className="spin" size={16} /> : <Star size={16} />}
+                        {t('导入已收藏日程')}
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -3372,7 +3417,7 @@ function App() {
                 {calendarView === 'day' || calendarView === 'week' ? (
                   <div
                     ref={calendarAnimatedSurfaceRef}
-                    key={`${calendarView}-${calendarDate}`}
+                    key={calendarSurfaceKey(calendarView, calendarDate)}
                     className={`time-calendar calendar-swipe-surface ${calendarView === 'day' ? 'single-day' : 'week-calendar'} ${visibleAllDayItems ? 'has-all-day' : ''} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
                     style={{ '--day-count': visibleCalendarDays.length }}
                     onTouchStart={beginCalendarSwipe}
@@ -3383,8 +3428,8 @@ function App() {
                     onPointerUp={finishCalendarPointerSwipe}
                     onPointerCancel={cancelCalendarPointerSwipe}
                   >
-                    <div className="time-corner" />
-                    {visibleCalendarDays.map((dateString) => {
+                    <div className="time-corner" style={{ gridColumn: '1 / span 2', gridRow: 1 }} />
+                    {visibleCalendarDays.map((dateString, dayIndex) => {
                       const date = dateFromString(dateString)
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
                       return (
@@ -3392,6 +3437,7 @@ function App() {
                           key={`head-${dateString}`}
                           type="button"
                           className={`time-day-head ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                          style={{ gridColumn: dayIndex + 3, gridRow: 1 }}
                           aria-label={`${formatUiCourseDate(dateString, uiLanguage)} · ${dayState.dayCourses.length ? (uiLanguage === 'en' ? `${dayState.dayCourses.length} courses` : `${dayState.dayCourses.length} 门课`) : t('无课程')}`}
                           onClick={() => chooseCalendarDate(dateString)}
                         >
@@ -3408,13 +3454,14 @@ function App() {
                     })}
                     {visibleAllDayItems ? (
                       <>
-                        <div className="time-all-day-label">{t('全天')}</div>
-                        {visibleCalendarDays.map((dateString) => {
+                        <div className="time-all-day-label" style={{ gridColumn: '1 / span 2', gridRow: 2 }}>{t('全天')}</div>
+                        {visibleCalendarDays.map((dateString, dayIndex) => {
                           const summary = summarizeMonthEntries(allDayEntriesFor(dateString), 2)
                           return (
                             <div
                               key={`all-day-${dateString}`}
                               className="time-all-day-cell"
+                              style={{ gridColumn: dayIndex + 3, gridRow: 2 }}
                               data-selected={dateString === calendarDate}
                               role="button"
                               tabIndex={0}
@@ -3427,23 +3474,40 @@ function App() {
                                 }
                               }}
                             >
-                              {summary.visible.map((item) => (
-                                <button
-                                  key={`${dateString}-${item.key}`}
-                                  type="button"
-                                  className={`time-all-day-item ${item.type}`}
-                                  title={item.label}
-                                  aria-label={`${item.label} · ${t('打开全天日程详情')}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })
-                                  }}
-                                >
-                                  {item.type === 'holiday' || item.type === 'workday'
-                                    ? item.label
-                                    : `${supplementalEntryPrefix(item, t)} ${item.label}`}
-                                </button>
-                              ))}
+                              {summary.visible.map((item) => {
+                                const label = item.type === 'holiday' || item.type === 'workday'
+                                  ? item.label
+                                  : `${supplementalEntryPrefix(item, t)} ${item.label}`
+                                const content = (
+                                  <>
+                                    <span>{label}</span>
+                                    {item.time ? <time>{item.time}</time> : null}
+                                  </>
+                                )
+                                return item.url ? (
+                                  <a
+                                    key={`${dateString}-${item.key}`}
+                                    className={`time-all-day-item ${item.type}`}
+                                    href={item.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={`${item.label} · ${item.time || t('时间待定')}`}
+                                    onClick={(event) => event.stopPropagation()}
+                                  >{content}</a>
+                                ) : (
+                                  <button
+                                    key={`${dateString}-${item.key}`}
+                                    type="button"
+                                    className={`time-all-day-item ${item.type}`}
+                                    title={`${item.label} · ${item.time || t('时间待定')}`}
+                                    aria-label={`${item.label} · ${t('打开全天日程详情')}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })
+                                    }}
+                                  >{content}</button>
+                                )
+                              })}
                               {summary.hiddenCount ? (
                                 <button
                                   type="button"
@@ -3460,13 +3524,13 @@ function App() {
                         })}
                       </>
                     ) : null}
-                    <div className="time-labels">
+                    <div className="time-labels" style={{ gridColumn: 1, gridRow: visibleAllDayItems ? 3 : 2 }}>
                       {calendarHours.map((hour) => {
                         const top = (((hour * 60) - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
                         return <span key={hour} style={{ top: `${top}%` }}>{String(hour).padStart(2, '0')}:00</span>
                       })}
                     </div>
-                    <div className="slot-time-labels">
+                    <div className="slot-time-labels" style={{ gridColumn: 2, gridRow: visibleAllDayItems ? 3 : 2 }}>
                       <div className="slot-axis-grid-lines" aria-hidden="true">
                         {calendarHours.map((hour) => {
                           const top = (((hour * 60) - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
@@ -3490,7 +3554,7 @@ function App() {
                         )
                       })}
                     </div>
-                    {visibleCalendarDays.map((dateString) => {
+                    {visibleCalendarDays.map((dateString, dayIndex) => {
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
                       const visibleStart = CALENDAR_START_HOUR * 60
                       const visibleEnd = CALENDAR_END_HOUR * 60
@@ -3499,6 +3563,7 @@ function App() {
                         <div
                           key={`lane-${dateString}`}
                           className={`time-day-lane ${dateString === calendarDate ? 'selected' : ''}`}
+                          style={{ gridColumn: dayIndex + 3, gridRow: visibleAllDayItems ? 3 : 2 }}
                           role="button"
                           tabIndex={0}
                           aria-label={formatUiCourseDate(dateString, uiLanguage)}
@@ -3563,7 +3628,7 @@ function App() {
                 {calendarView === 'month' ? (
                   <div
                     ref={calendarAnimatedSurfaceRef}
-                    key={`month-${calendarMonthKey}`}
+                    key={calendarSurfaceKey('month', calendarDate)}
                     className={`month-view ${compactCalendarLayout ? (monthExpanded ? 'expanded' : 'compact') : 'expanded desktop-month-view'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
                     onPointerDown={compactCalendarLayout ? beginMonthPointerSwipe : undefined}
                     onPointerMove={compactCalendarLayout ? updateMonthPointerSwipe : undefined}
@@ -3593,38 +3658,23 @@ function App() {
                         const [, deadlineBorderSecondary] = calendarDeadlineBorderKinds(supplementalEntries)
                         const deadlineBorderPriority = calendarDeadlineBorderPriority(supplementalEntries)
                         const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length + supplementalEntries.length, 3)
-                        const monthAgendaEntries = [
-                          ...calendarItems.map((item) => ({
-                            key: `${dateString}-${item.type}-${item.name}`,
-                            label: `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`,
-                            desktopLabel: item.name,
-                            type: item.type,
-                          })),
-                          ...dayState.dayCourses.map((course) => {
-                            const bounds = courseTimeBounds(course, slotMeta)
-                            return {
-                              key: `${dateString}-${course.id}`,
-                              label: course.name,
-                              compactLabel: `${course.is_exam ? `${t('试')} ` : ''}${course.name}`,
-                              desktopLabel: course.name,
-                              type: 'course',
-                              subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
-                              time: `${bounds.start}-${bounds.end}`,
-                            }
-                          }),
-                          ...supplementalEntries.map((item) => ({
-                            ...item,
-                            key: `${dateString}-${item.key}`,
-                            compactLabel: `${supplementalEntryPrefix(item, t)} ${item.label}`,
-                            desktopLabel: item.label,
-                          })),
-                        ]
-                        const monthEntries = monthAgendaEntries.map((item) => ({
-                          ...item,
-                          label: item.compactLabel || item.label,
-                        }))
+                        const monthCourseEntries = dayState.dayCourses.map((course) => {
+                          const bounds = courseTimeBounds(course, slotMeta)
+                          return {
+                            key: `${dateString}-${course.id}`,
+                            label: course.name,
+                            compactLabel: `${course.is_exam ? `${t('试')} ` : ''}${course.name}`,
+                            desktopLabel: course.name,
+                            type: 'course',
+                            subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
+                            time: `${bounds.start}-${bounds.end}`,
+                          }
+                        })
                         const monthEntrySummary = summarizeMonthEntries(
-                          monthEntries,
+                          monthCourseEntries.map((item) => ({
+                            ...item,
+                            label: item.compactLabel || item.label,
+                          })),
                           compactCalendarLayout ? 2 : desktopMonthEventRows,
                         )
                         return (
@@ -3634,14 +3684,9 @@ function App() {
                             onClick={() => chooseCalendarDate(dateString)}
                           >
                             <div className="month-cell-head">
-                              {date.getDay() === 1 ? (
+                              {date.getDay() === 1 && dayState.weekNumber > 0 ? (
                                 <span className="month-week-number">
-                                  <span>{uiLanguage === 'en'
-                                    ? `Week ${calendarWeekOfYear(dateString)}`
-                                    : `第 ${calendarWeekOfYear(dateString)} 周`}</span>
-                                  {dayState.weekNumber > 0 ? (
-                                    <small>{formatUiTeachingWeek(dayState.weekNumber, uiLanguage)}</small>
-                                  ) : null}
+                                  <span>{formatUiTeachingWeek(dayState.weekNumber, uiLanguage)}</span>
                                 </span>
                               ) : null}
                               <button
@@ -3658,55 +3703,24 @@ function App() {
                               {Array.from({ length: compactMarkers }, (_, index) => <i key={index} />)}
                             </div>
                             <div className="month-cell-details">
-                              {monthEntrySummary.visible.map((entry) => (
-                                <small
-                                  key={entry.key}
-                                  className={`month-entry ${entry.type}`}
-                                  title={entry.label}
-                                >
-                                  {entry.type !== 'course' ? (
-                                    <span className={`month-entry-icon ${entry.type}`} aria-hidden="true">
-                                      {entry.type === 'holiday'
-                                        ? '★'
-                                        : entry.type === 'workday'
-                                          ? '◆'
-                                          : entry.type === 'assignment'
-                                            ? '▤'
-                                            : entry.type === 'school-notice' ? '◆' : '⚑'}
+                              <div className="month-course-entries">
+                                {monthEntrySummary.visible.map((entry) => (
+                                  <small key={entry.key} className="month-entry course" title={entry.label}>
+                                    <span className="month-entry-title">
+                                      <span className="month-entry-title-mobile">{entry.label}</span>
+                                      <span className="month-entry-title-desktop">{entry.desktopLabel || entry.label}</span>
                                     </span>
-                                  ) : null}
-                                  <span className="month-entry-title">
-                                    <span className="month-entry-title-mobile">{entry.label}</span>
-                                    <span className="month-entry-title-desktop">
-                                      {entry.desktopLabel || entry.label}
-                                    </span>
-                                  </span>
-                                  {entry.time ? (
-                                    <time>{String(entry.time).split('-')[0]}</time>
-                                  ) : null}
-                                </small>
-                              ))}
+                                    {entry.time ? <time>{String(entry.time).split('-')[0]}</time> : null}
+                                  </small>
+                                ))}
+                              </div>
                               {monthEntrySummary.hiddenCount ? (
-                                <button
-                                  type="button"
-                                  className="month-entry-overflow"
-                                  aria-label={uiLanguage === 'en'
-                                    ? `${monthEntrySummary.hiddenCount} more all-day events on ${dateString}`
-                                    : `${dateString} 还有 ${monthEntrySummary.hiddenCount} 项全天日程`}
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    setCalendarAgendaDialog({
-                                      date: dateString,
-                                      sourceView: 'month',
-                                      entries: monthAgendaEntries,
-                                    })
-                                  }}
-                                >
+                                <small className="month-entry-overflow" aria-hidden="true">
                                   <span className="month-overflow-mobile">+{monthEntrySummary.hiddenCount}</span>
                                   <span className="month-overflow-desktop">
                                     +{monthEntrySummary.hiddenCount}{uiLanguage === 'en' ? '' : ' 项'}
                                   </span>
-                                </button>
+                                </small>
                               ) : null}
                             </div>
                           </div>
@@ -3795,7 +3809,7 @@ function App() {
                 {calendarView === 'year' ? (
                   <div
                     ref={calendarAnimatedSurfaceRef}
-                    key={`year-${calendarDate}`}
+                    key={calendarSurfaceKey('year', calendarDate)}
                     className={`year-calendar ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
                   >
                     {calendarYearMonths.map((month) => (
@@ -3856,9 +3870,12 @@ function App() {
                     role="dialog"
                     aria-label={`${formatUiCourseDate(calendarPopover.date, uiLanguage)} ${t('全天日程')}`}
                   >
-                    <span>{formatUiCourseDate(calendarPopover.date, uiLanguage)}</span>
-                    <strong>{uiLanguage === 'en' ? `${calendarPopoverState.dayCourses.length} courses` : `${calendarPopoverState.dayCourses.length} 门课`}</strong>
-                    <small>{formatUiTeachingWeek(calendarPopoverState.weekNumber, uiLanguage)}</small>
+                    <header className="year-day-popover-header">
+                      <span>{formatUiCourseDate(calendarPopover.date, uiLanguage)}</span>
+                      <strong>{uiLanguage === 'en' ? `${calendarPopoverState.dayCourses.length} courses` : `${calendarPopoverState.dayCourses.length} 门课`}</strong>
+                      <small>{formatUiTeachingWeek(calendarPopoverState.weekNumber, uiLanguage)}</small>
+                    </header>
+                    <div className="year-day-popover-scroll">
                     {calendarItemsFor(calendarPopover.date).length ? (
                       <div className="popover-holiday-list">
                         {calendarItemsFor(calendarPopover.date).map((item) => (
@@ -3913,6 +3930,7 @@ function App() {
                       }) : (
                         <p>{t('当天没有课程')}</p>
                       )}
+                    </div>
                     </div>
                     <div className="popover-view-actions" aria-label={t('打开所选日期')}>
                       <button type="button" onClick={() => jumpFromYearPopover('day')}>{t('查看日')}</button>

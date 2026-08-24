@@ -546,6 +546,17 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testTimelineAllDayHeadersReserveTheLastRowForOverflow() {
+        XCTAssertEqual(
+            CalendarTimelineLogic.allDayHeaderLayout(eventCount: 2),
+            .init(visibleEventCount: 2, hiddenEventCount: 0, rowCount: 2)
+        )
+        XCTAssertEqual(
+            CalendarTimelineLogic.allDayHeaderLayout(eventCount: 4),
+            .init(visibleEventCount: 2, hiddenEventCount: 2, rowCount: 3)
+        )
+    }
+
     func testMobileTimelineViewportAdaptsToPhoneAndTabletSizeClasses() {
         XCTAssertEqual(CalendarTimelineLogic.mobileViewportHeight(
             compactWidth: true,
@@ -934,6 +945,14 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testCalendarBackgroundPrewarmUsesTheSameVisibleRangesAsEveryView() throws {
+        let date = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-24"))
+        XCTAssertEqual(TeachingCalendarLogic.visibleDates(containing: date, modeRawValue: "日").count, 1)
+        XCTAssertEqual(TeachingCalendarLogic.visibleDates(containing: date, modeRawValue: "周").count, 7)
+        XCTAssertEqual(TeachingCalendarLogic.visibleDates(containing: date, modeRawValue: "月").count, 42)
+        XCTAssertEqual(TeachingCalendarLogic.visibleDates(containing: date, modeRawValue: "年").count, 365)
+    }
+
     func testDeadlineAgendaChromeHasCompleteEnglishLocalization() {
         XCTAssertEqual(
             AppLocalization.string("月视图全天日程", language: .english),
@@ -952,12 +971,12 @@ final class ScheduleLogicTests: XCTestCase {
             "Close all-day events"
         )
         XCTAssertEqual(
-            AppLocalization.string("公历第 %lld 周", language: .english),
-            "Calendar week %lld"
+            AppLocalization.string("第 %lld 教学周", language: .english),
+            "Teaching week %lld"
         )
         XCTAssertEqual(
-            AppLocalization.string("公历第 %lld 周 · 教学第 %lld 周", language: .english),
-            "Calendar week %lld · Teaching week %lld"
+            AppLocalization.string("非教学周", language: .english),
+            "Outside teaching weeks"
         )
         XCTAssertEqual(
             AppLocalization.string("自定义日程源", language: .english),
@@ -1010,8 +1029,10 @@ final class ScheduleLogicTests: XCTestCase {
 
         session.applyKeyboardAction(.nextPeriod, calendar: calendar)
         XCTAssertEqual(StrictContractDateParser.string(from: session.selectedDate), "2026-08-31")
+        XCTAssertEqual(session.transitionDirection, 1)
         session.applyKeyboardAction(.previousPeriod, calendar: calendar)
         XCTAssertEqual(StrictContractDateParser.string(from: session.selectedDate), "2026-08-24")
+        XCTAssertEqual(session.transitionDirection, -1)
 
         for (action, mode) in [
             (AppKeyboardAction.dayView, "日"),
@@ -1022,8 +1043,10 @@ final class ScheduleLogicTests: XCTestCase {
             session.applyKeyboardAction(action, calendar: calendar)
             XCTAssertEqual(session.modeRawValue, mode)
         }
+        XCTAssertEqual(session.transitionDirection, 1)
         session.applyKeyboardAction(.today, now: today, calendar: calendar)
         XCTAssertEqual(session.selectedDate, today)
+        XCTAssertEqual(session.transitionDirection, 1)
 
         let originalDismissGeneration = session.dismissOverlayGeneration
         session.applyKeyboardAction(.dismissOverlay, calendar: calendar)
@@ -1044,6 +1067,16 @@ final class ScheduleLogicTests: XCTestCase {
         )
         XCTAssertEqual(AppKeyboardCommandNotification.action(from: valid), .monthView)
         XCTAssertNil(AppKeyboardCommandNotification.action(from: invalid))
+    }
+
+    func testCalendarNavigationMotionUsesOneDirectionContractForDatesAndModes() throws {
+        let earlier = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-23"))
+        let later = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-24"))
+
+        XCTAssertEqual(TeachingCalendarNavigationMotion.direction(from: earlier, to: later), 1)
+        XCTAssertEqual(TeachingCalendarNavigationMotion.direction(from: later, to: earlier), -1)
+        XCTAssertEqual(TeachingCalendarNavigationMotion.modeDirection(from: "日", to: "年"), 1)
+        XCTAssertEqual(TeachingCalendarNavigationMotion.modeDirection(from: "年", to: "周"), -1)
     }
     #endif
 
@@ -1080,7 +1113,7 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
-    func testCalendarPeriodTitlesKeepWeekInPrimaryTitle() throws {
+    func testCalendarPeriodTitlesUseScheduleTeachingWeekInsteadOfCivilWeek() throws {
         let calendar = Calendar.shanghai
         let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 14)))
 
@@ -1089,8 +1122,17 @@ final class ScheduleLogicTests: XCTestCase {
             "2026年8月14日"
         )
         XCTAssertEqual(
+            TeachingCalendarLogic.periodTitle(
+                for: date,
+                modeRawValue: "周",
+                teachingWeekNumber: 3,
+                calendar: calendar
+            ),
+            "2026年8月 第 3 教学周"
+        )
+        XCTAssertEqual(
             TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "周", calendar: calendar),
-            "2026年8月 第 33 周"
+            "2026年8月"
         )
         XCTAssertEqual(
             TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "月", calendar: calendar),
@@ -1121,9 +1163,10 @@ final class ScheduleLogicTests: XCTestCase {
             TeachingCalendarLogic.periodTitle(
                 for: date,
                 modeRawValue: "周",
+                teachingWeekNumber: 9,
                 language: .english,
                 calendar: calendar
-            ).contains("Week")
+            ).contains("Teaching Week 9")
         )
     }
 

@@ -11,18 +11,24 @@ enum CalendarAllDayEventKind: String, Equatable, Sendable {
 struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
+    let time: String?
     let kind: CalendarAllDayEventKind
+    let destinationURL: URL?
     let deadlineItem: PublicDeadlineItem?
 
     init(
         id: String,
         title: String,
+        time: String? = nil,
         kind: CalendarAllDayEventKind,
+        destinationURL: URL? = nil,
         deadlineItem: PublicDeadlineItem? = nil
     ) {
         self.id = id
         self.title = title
+        self.time = time
         self.kind = kind
+        self.destinationURL = destinationURL
         self.deadlineItem = deadlineItem
     }
 }
@@ -104,8 +110,34 @@ struct CalendarTimelineDay: Identifiable {
 }
 
 enum CalendarTimelineLogic {
+    struct AllDayHeaderLayout: Equatable {
+        let visibleEventCount: Int
+        let hiddenEventCount: Int
+        let rowCount: Int
+    }
+
     static let startMinute = 8 * 60
     static let endMinute = 22 * 60
+
+    static func allDayHeaderLayout(
+        eventCount: Int,
+        maximumRows: Int = 3
+    ) -> AllDayHeaderLayout {
+        let count = max(eventCount, 0)
+        let rows = max(maximumRows, 0)
+        guard count > rows, rows > 0 else {
+            return AllDayHeaderLayout(
+                visibleEventCount: min(count, rows),
+                hiddenEventCount: 0,
+                rowCount: min(count, rows)
+            )
+        }
+        return AllDayHeaderLayout(
+            visibleEventCount: rows - 1,
+            hiddenEventCount: count - rows + 1,
+            rowCount: rows
+        )
+    }
 
     static func minute(of value: String) -> Int? {
         let parts = value.split(separator: ":")
@@ -174,6 +206,7 @@ struct CalendarTimelineView: View {
     let days: [CalendarTimelineDay]
     let selectedDate: Date
     var onSelectDay: ((Date) -> Void)?
+    var onSelectAllDayEvent: ((Date, CalendarAllDayEvent) -> Void)?
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -183,10 +216,23 @@ struct CalendarTimelineView: View {
     private let calendar = Calendar.shanghai
     private let hourAxisWidth: CGFloat = 52
     private let slotAxisWidth: CGFloat = 104
-    private let headerHeight: CGFloat = 72
+    private let baseHeaderHeight: CGFloat = 72
+    private let allDayRowHeight: CGFloat = 22
+    private let maximumVisibleAllDayRows = 3
     private let hourHeight: CGFloat = 64
 
     private var timelineHeight: CGFloat { hourHeight * 14 }
+    private var visibleAllDayRowCount: Int {
+        days.map {
+            CalendarTimelineLogic.allDayHeaderLayout(
+                eventCount: $0.allDayEvents.count,
+                maximumRows: maximumVisibleAllDayRows
+            ).rowCount
+        }.max() ?? 0
+    }
+    private var headerHeight: CGFloat {
+        baseHeaderHeight + CGFloat(visibleAllDayRowCount) * allDayRowHeight
+    }
     private var totalHeight: CGFloat { headerHeight + timelineHeight + 2 }
     private var contentLeft: CGFloat { hourAxisWidth + slotAxisWidth }
     private var minimumDayAreaWidth: CGFloat {
@@ -261,6 +307,7 @@ struct CalendarTimelineView: View {
             selectedColumn(dayWidth: dayWidth)
             dayGrid(width: width, dayWidth: dayWidth)
             dayHeaders(dayWidth: dayWidth, now: now)
+            allDayHeaderRows(dayWidth: dayWidth)
             courseBlocks(dayWidth: dayWidth)
             currentTimeLine(width: width, dayWidth: dayWidth, now: now)
         }
@@ -360,12 +407,22 @@ struct CalendarTimelineView: View {
         Group {
             Text("整点")
                 .font(.caption.bold())
-                .frame(width: hourAxisWidth, height: headerHeight)
-                .position(x: hourAxisWidth / 2, y: headerHeight / 2)
+                .frame(width: hourAxisWidth, height: baseHeaderHeight)
+                .position(x: hourAxisWidth / 2, y: baseHeaderHeight / 2)
             Text("课程节次")
                 .font(.caption.bold())
-                .frame(width: slotAxisWidth, height: headerHeight)
-                .position(x: hourAxisWidth + slotAxisWidth / 2, y: headerHeight / 2)
+                .frame(width: slotAxisWidth, height: baseHeaderHeight)
+                .position(x: hourAxisWidth + slotAxisWidth / 2, y: baseHeaderHeight / 2)
+            if visibleAllDayRowCount > 0 {
+                Text("全天")
+                    .font(.caption2.weight(.semibold))
+                    .frame(width: slotAxisWidth, height: CGFloat(visibleAllDayRowCount) * allDayRowHeight)
+                    .position(
+                        x: hourAxisWidth + slotAxisWidth / 2,
+                        y: baseHeaderHeight
+                            + CGFloat(visibleAllDayRowCount) * allDayRowHeight / 2
+                    )
+            }
         }
         .foregroundStyle(AppTheme.text)
     }
@@ -428,8 +485,9 @@ struct CalendarTimelineView: View {
                         .minimumScaleFactor(0.75)
                 }
                 .padding(.horizontal, 4)
-                .frame(width: dayWidth, height: headerHeight)
+                .frame(width: dayWidth, height: baseHeaderHeight)
                 .background(isSelected ? AppTheme.selectedDate : Color.clear)
+                .contentShape(Rectangle())
                 .overlay(alignment: .bottom) {
                     if isToday {
                         Rectangle().fill(Self.nowRed).frame(height: 3).padding(.horizontal, 6)
@@ -440,9 +498,99 @@ struct CalendarTimelineView: View {
             .disabled(onSelectDay == nil)
             .position(
                 x: dayWidth * (CGFloat(index) + 0.5),
-                y: headerHeight / 2
+                y: baseHeaderHeight / 2
             )
             .accessibilityLabel(dayAccessibilityLabel(day))
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityIdentifier(
+                "calendar.timeline.day-header.\(StrictContractDateParser.string(from: day.date))"
+            )
+        }
+    }
+
+    private func allDayHeaderRows(dayWidth: CGFloat) -> some View {
+        ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+            VStack(spacing: 0) {
+                let layout = CalendarTimelineLogic.allDayHeaderLayout(
+                    eventCount: day.allDayEvents.count,
+                    maximumRows: maximumVisibleAllDayRows
+                )
+                ForEach(Array(day.allDayEvents.prefix(layout.visibleEventCount))) { event in
+                    allDayHeaderEvent(event, on: day.date)
+                }
+                if layout.hiddenEventCount > 0,
+                   let first = day.allDayEvents.first {
+                    Button {
+                        onSelectAllDayEvent?(day.date, first)
+                    } label: {
+                        Text("+\(layout.hiddenEventCount)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: allDayRowHeight)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(AppTheme.secondaryText)
+                }
+            }
+            .frame(
+                width: dayWidth,
+                height: CGFloat(visibleAllDayRowCount) * allDayRowHeight,
+                alignment: .top
+            )
+            .position(
+                x: dayWidth * (CGFloat(index) + 0.5),
+                y: baseHeaderHeight + CGFloat(visibleAllDayRowCount) * allDayRowHeight / 2
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func allDayHeaderEvent(_ event: CalendarAllDayEvent, on date: Date) -> some View {
+        if let destination = event.destinationURL ?? event.deadlineItem?.officialURL {
+            Link(destination: destination) {
+                allDayHeaderEventLabel(event)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(
+                "calendar.timeline.all-day.\(StrictContractDateParser.string(from: date)).\(event.id)"
+            )
+        } else {
+            Button {
+                onSelectAllDayEvent?(date, event)
+            } label: {
+                allDayHeaderEventLabel(event)
+            }
+            .buttonStyle(.plain)
+            .disabled(onSelectAllDayEvent == nil)
+            .accessibilityIdentifier(
+                "calendar.timeline.all-day.\(StrictContractDateParser.string(from: date)).\(event.id)"
+            )
+        }
+    }
+
+    private func allDayHeaderEventLabel(_ event: CalendarAllDayEvent) -> some View {
+        HStack(spacing: 3) {
+            Text(event.time ?? model.localized("全天"))
+                .monospacedDigit()
+            Text(event.title)
+                .lineLimit(1)
+        }
+        .font(.system(size: 9, weight: .semibold))
+        .foregroundStyle(allDayTint(event.kind))
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, minHeight: allDayRowHeight, alignment: .leading)
+        .background(allDayTint(event.kind).opacity(0.10))
+        .contentShape(Rectangle())
+        .accessibilityLabel("\(event.time ?? model.localized("全天"))，\(event.title)")
+    }
+
+    private func allDayTint(_ kind: CalendarAllDayEventKind) -> Color {
+        switch kind {
+        case .holiday: AppTheme.danger
+        case .workday: AppTheme.primary
+        case .assignment: AppTheme.assignment
+        case .schoolNotice: AppTheme.schoolNotice
+        case .publicDeadline: AppTheme.publicDeadline
         }
     }
 

@@ -49,7 +49,7 @@ struct PrivacyPolicyView: View {
                     )
                     privacySection(
                         title: "系统日历、通知与小组件 / Calendar, notifications, and widgets",
-                        body: "只有在你主动操作并授予权限后，应用才会写入系统日历或安排本地课程通知；只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供。相关数据不上传给维护者。\n\nCalendar writes and local course notifications require your action and permission, and only marked events are managed. Course widgets exist only on supported platforms. This data is not uploaded to the maintainer."
+                        body: "只有在你主动操作并授予权限后，应用才会把个人课程或已收藏日程写入系统日历，或安排本地课程通知；只管理带 Where To Study 标记的事件。收藏导入使用本机完整快照与稳定标记，重复导入会更新同一事件。课程小组件只在支持的平台提供。相关数据不上传给维护者。\n\nCalendar writes and local course notifications require your action and permission. You can import personal courses or favorite-event snapshots; stable local markers update the same event on repeated imports, and only Where To Study-marked events are managed. Course widgets exist only on supported platforms. This data is not uploaded to the maintainer."
                     )
                     privacySection(
                         title: "不收集的数据与第三方元数据 / Data not collected and third-party metadata",

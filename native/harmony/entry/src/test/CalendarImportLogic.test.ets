@@ -5,6 +5,9 @@ import {
   CalendarEventDraft, CalendarExistingEvent, CalendarImportLogic, CalendarSyncPlan
 } from '../main/ets/calendar/CalendarImportLogic';
 import { scheduleText } from './fixtures/schedule';
+import {
+  PublicDeadlineItem, PublicDeadlineKind, PublicDeadlineSource
+} from '../main/ets/net/CalendarDailyInfoClient';
 
 export default function calendarImportLogicTest() {
   describe('CalendarImportLogicTest', () => {
@@ -69,5 +72,49 @@ export default function calendarImportLogicTest() {
         .assertEqual(CalendarImportLogic.markerPrefix + 'abc');
       expect(CalendarImportLogic.markerInNotes('无标记')).assertNull();
     });
+
+    it('favorite_drafts_keep_stable_markers_and_exact_deadline_instant', 0, () => {
+      const item: PublicDeadlineItem = favorite('contest-42',
+        '2026-05-01T23:59:00.123+08:00');
+      const first: CalendarEventDraft[] = CalendarImportLogic.favoriteDrafts([item, item]);
+      const second: CalendarEventDraft[] = CalendarImportLogic.favoriteDrafts([item]);
+      expect(first.length).assertEqual(1);
+      expect(first[0].marker).assertEqual(second[0].marker);
+      expect(first[0].marker.startsWith(CalendarImportLogic.favoriteMarkerPrefix)).assertTrue();
+      expect(first[0].endEpochMs - first[0].startEpochMs).assertEqual(30 * 60 * 1000);
+      expect(first[0].notes.includes('由 Where To Study 导入')).assertTrue();
+      expect(CalendarImportLogic.favoritePlan([item]).drafts.length).assertEqual(1);
+    });
+
+    it('favorite_sync_updates_one_copy_without_touching_course_markers', 0, () => {
+      const draft: CalendarEventDraft[] = CalendarImportLogic.favoriteDrafts([
+        favorite('keep', '2026-05-01T23:59:00+08:00')]);
+      const existing: CalendarExistingEvent[] = [
+        existingEvent('favorite-1', draft[0]),
+        existingEvent('favorite-2', draft[0]),
+        new CalendarExistingEvent(
+          'course-1', CalendarImportLogic.markerPrefix + 'course', '课程', '', '',
+          draft[0].startEpochMs, draft[0].endEpochMs, '', 'Asia/Shanghai', [-5])
+      ];
+      const plan: CalendarSyncPlan = CalendarImportLogic.syncPlan(
+        draft, CalendarImportLogic.favoritePlan([
+          favorite('keep', '2026-05-01T23:59:00+08:00')]).scope,
+        existing, '', CalendarImportLogic.favoriteMarkerPrefix);
+      expect(plan.matches.length).assertEqual(1);
+      expect(plan.deleteIdentifiers.length).assertEqual(1);
+      expect(plan.deleteIdentifiers[0]).assertEqual('favorite-2');
+    });
   });
+}
+
+function favorite(id: string, deadline: string): PublicDeadlineItem {
+  return new PublicDeadlineItem(id, '收藏日程 ' + id, PublicDeadlineKind.competition,
+    PublicDeadlineSource.contestDDL, deadline, '测试组织方', 'https://example.com/' + id,
+    'Contest DDL', 'https://example.com');
+}
+
+function existingEvent(identifier: string, draft: CalendarEventDraft): CalendarExistingEvent {
+  return new CalendarExistingEvent(
+    identifier, draft.marker, draft.title, draft.location, draft.notes,
+    draft.startEpochMs, draft.endEpochMs, '', 'Asia/Shanghai', [-5]);
 }

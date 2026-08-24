@@ -10,6 +10,7 @@ fn main() {
         "load_saved_classrooms_for_scope",
         "fetch_schedule",
         "import_schedule_to_calendar",
+        "import_favorite_deadlines_to_calendar",
         "fetch_classrooms",
         "fetch_holidays",
         "fetch_weather",

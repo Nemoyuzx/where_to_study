@@ -10,6 +10,7 @@ import { ScheduleFetching } from '../net/SjdScheduleClient';
 import { ClassroomFetching } from '../net/SjdClassroomClient';
 import { HolidayFetching } from '../net/HolidayClient';
 import { CampusWeather, WeatherFetching } from '../net/DailyInfoClient';
+import { PublicDeadlineItem } from '../net/CalendarDailyInfoClient';
 import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
 import { CalendarImporting } from '../calendar/CalendarImporter';
 import { CalendarImportResult } from '../calendar/CalendarImportLogic';
@@ -193,6 +194,10 @@ class SampleWeatherClient implements WeatherFetching {
 
 class SampleCalendarImporter implements CalendarImporting {
   async importSchedule(schedule: ScheduleSnapshot): Promise<CalendarImportResult> {
+    throw new Error('示例模式不会访问外部服务或系统数据。');
+  }
+
+  async importFavorites(items: PublicDeadlineItem[]): Promise<CalendarImportResult> {
     throw new Error('示例模式不会访问外部服务或系统数据。');
   }
 }

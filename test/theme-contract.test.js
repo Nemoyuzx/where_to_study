@@ -338,7 +338,7 @@ test('calendar chrome is compact and all-day events stay above the timeline', ()
   assert.match(appSource, /calendarHeaderTitle = calendarView === 'week'/)
   assert.match(appSource, /formatUiTeachingWeek\(calendarWeekState\.weekNumber, uiLanguage\)/)
   assert.doesNotMatch(appSource, /className="topbar-subtitle"/)
-  assert.match(appSource, /className="time-all-day-label">\{t\('全天'\)\}</)
+  assert.match(appSource, /className="time-all-day-label"[\s\S]*>\{t\('全天'\)\}</)
   assert.match(appSource, /className="time-all-day-cell"/)
   assert.match(appCss, /\.calendar-view-switch\s*\{[^}]*border:\s*0/s)
   assert.match(appCss, /\.teaching-calendar-main\s*\{[^}]*border:\s*0/s)
@@ -351,10 +351,11 @@ test('calendar chrome is compact and all-day events stay above the timeline', ()
 test('desktop calendar supplements are year-preheated, cached, and rendered in every view', () => {
   assert.match(appSource, /command\('fetch_assignment_calendar'/)
   assert.match(appSource, /command\('fetch_deadline_calendar'/)
-  assert.match(appSource, /const calendarSupplementYear = dateFromString\(calendarDate\)\.getFullYear\(\)/)
-  assert.match(appSource, /`\$\{calendarSupplementYear\}-01-01`/)
-  assert.match(appSource, /`\$\{calendarSupplementYear\}-12-31`/)
-  assert.doesNotMatch(appSource, /if \(activePage !== 'calendar' \|\| !settingsLoaded\) return[\s\S]{0,320}loadCalendarSupplements/)
+  assert.match(appSource, /const targetYear = target\.getFullYear\(\)/)
+  assert.match(appSource, /const startDate = `\$\{targetYear\}-01-01`/)
+  assert.match(appSource, /const endDate = `\$\{targetYear\}-12-31`/)
+  assert.match(appSource, /Calendar network work is owned by this background controller/)
+  assert.doesNotMatch(appSource, /useEffect\(\(\) => \{[\s\S]{0,240}activePage !== 'calendar'[\s\S]{0,240}loadCalendarSupplements/)
   assert.match(appSource, /requestedCalendarSupplementRanges/)
   assert.match(tauriAssignmentSource, /fetch_assignment_calendar/)
   assert.match(tauriAssignmentSource, /cached_items\(account_scope\)/)
@@ -368,17 +369,15 @@ test('desktop calendar supplements are year-preheated, cached, and rendered in e
     /const visibleAllDayItems = visibleCalendarDays\.reduce\([\s\S]*allDayEntriesFor\(dateString\)\.length/,
   )
   assert.match(appSource, /calendar-agenda-dialog/)
-  assert.ok(appSource.includes('className={`month-entry ${entry.type}`}'))
+  assert.doesNotMatch(appSource, /month-all-day-entry|month-all-day-entries/)
   assert.match(appSource, /className="school-notice"/)
   assert.match(appSource, /type: 'public-deadline'/)
   assert.match(appSource, /deadlineItemEnabled\(item, enabledDeadlineTypes\)/)
-  assert.match(appSource, /sourceView: 'month'/)
-  assert.match(appSource, /entries: monthAgendaEntries/)
+  assert.doesNotMatch(appSource, /sourceView: 'month'/)
+  assert.doesNotMatch(appSource, /entries: monthAgendaEntries/)
   assert.match(appSource, /sourceView: calendarView/)
   assert.match(appSource, /agendaViewLabel\(calendarAgendaDialog\.sourceView, t\)/)
-  assert.match(appCss, /\.month-cell small\.month-entry\.assignment/)
-  assert.match(appCss, /\.month-cell small\.month-entry\.school-notice/)
-  assert.match(appCss, /\.month-cell small\.month-entry\.public-deadline/)
+  assert.doesNotMatch(appCss, /\.month-cell \.month-entry\.(?:assignment|school-notice|public-deadline)/)
   assert.match(appCss, /\.time-all-day-cell > \.time-all-day-item\.public-deadline/)
   assert.match(appCss, /\.calendar-agenda-list \.public-deadline/)
   assert.match(appCss, /\.popover-supplement-list/)
@@ -410,7 +409,16 @@ test('native calendars render public deadlines, centered agendas, and shared mon
   assert.match(appleCalendarSource, /case publicDeadline/)
   assert.match(appleCalendarSource, /CalendarDeadlinePresentation\.topTwoDeadlineKinds/)
   assert.match(appleTimelineSource, /showsSecondaryTodayIndicator/)
-  assert.match(appleCalendarSource, /calendar\.regular\.month-agenda-dialog/)
+  assert.doesNotMatch(appleCalendarSource, /calendar\.regular\.month-agenda-dialog/)
+  assert.doesNotMatch(appleMobileCalendarSource, /calendar\.mobile\.month-agenda-dialog/)
+  assert.match(
+    appleCalendarSource,
+    /if layout\.hiddenEventCount > 0 \{[\s\S]*?Button \{[\s\S]*?selectMonthDay\(day\)/,
+  )
+  assert.match(
+    appleMobileCalendarSource,
+    /if eventLayout\.hiddenEventCount > 0 \{[\s\S]*?Button \{[\s\S]*?requestMonthDaySelection\(day\)/,
+  )
   assert.match(appleMobileCalendarSource, /calendar\.mobile\.week-agenda-dialog/)
   assert.match(appleMobileCalendarSource, /if deadlineKinds\.count > 1/)
   assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)[\s\S]*AppTheme\.danger/)
@@ -440,7 +448,11 @@ test('native calendars render public deadlines, centered agendas, and shared mon
   assert.match(harmonyCalendarLogicSource, /yearDeadlineBorderLayers/)
   assert.match(harmonyMobileCalendarSource, /presentAllDayDialog/)
   assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day/)
-  assert.match(harmonyExpandedCalendarSource, /monthAllDayDialogOverlay/)
+  assert.doesNotMatch(harmonyExpandedCalendarSource, /monthAllDayDialogOverlay/)
+  assert.match(
+    harmonyCalendarLogicSource,
+    /supportsAllDayDialog\(mode: CalendarMode\): boolean \{[\s\S]*mode === CalendarMode\.day \|\| mode === CalendarMode\.week/,
+  )
   assert.match(harmonyExpandedCalendarSource, /yearDeadlineBorderColor/)
   assert.match(harmonyAppModelSource, /assignmentMarkerLoadingDates/)
   assert.match(harmonyAppModelSource, /deadlineMarkerLoadingDates/)
@@ -579,7 +591,7 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   assert.match(harmonyMobileCalendarSource, /this\.presentAllDayDialog\(day, CalendarMode\.week\)/)
   assert.match(
     harmonyCalendarLogicSource,
-    /static agendaDialogChangesSelectedDate\(mode: CalendarMode\): boolean \{\s*return mode !== CalendarMode\.week/,
+    /static agendaDialogChangesSelectedDate\(mode: CalendarMode\): boolean \{\s*return mode === CalendarMode\.day/,
   )
 })
 
@@ -795,7 +807,10 @@ test('desktop calendar keeps full month and single-select double-open year behav
     appSource,
     /onDoubleClick=\{\(event\) => currentMonth && openDesktopYearMonth\(event, dateString\)\}/,
   )
-  assert.match(appleCalendarSource, /count: 2[\s\S]*mode = \.month/)
+  assert.match(
+    appleCalendarSource,
+    /SpatialTapGesture\(\s*count: 2[\s\S]*?case \.first:[\s\S]*?session\.setMode\(CalendarMode\.month\.rawValue\)/,
+  )
   assert.match(appleCalendarSource, /#if !os\(macOS\)[\s\S]*isMonthExpanded\.toggle\(\)/)
   assert.match(appCss, /\.planner-page-content \.planner-workspace,[\s\S]*margin:\s*0 16px 16px/)
   assert.match(applePlannerSource, /#if os\(macOS\)[\s\S]*page[\s\S]*\.padding\(16\)/)

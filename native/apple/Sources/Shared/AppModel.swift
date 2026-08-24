@@ -1009,6 +1009,47 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func importFavoriteDeadlinesToCalendar() {
+        let items = favoriteDeadlines
+        guard !items.isEmpty else {
+            calendarImportStatusMessage = "暂无已收藏日程可导入"
+            return
+        }
+        guard !isSampleMode else {
+            calendarImportStatusMessage = localizedFormat(
+                "示例模式已模拟同步 %d 个收藏日程，未写入系统日历",
+                items.count
+            )
+            return
+        }
+        guard !isImportingCalendar else { return }
+        isImportingCalendar = true
+        calendarImportToken &+= 1
+        let importToken = calendarImportToken
+        calendarImportStatusMessage = "正在导入已收藏日程…"
+        let generation = localDataGeneration
+
+        Task {
+            defer {
+                if importToken == calendarImportToken { isImportingCalendar = false }
+            }
+            do {
+                let result = try await calendarImporter.importFavorites(items)
+                guard generation == localDataGeneration, importToken == calendarImportToken else { return }
+                calendarImportStatusMessage = localizedFormat(
+                    "收藏日程同步完成：新增 %d，更新 %d，删除 %d，已存在 %d",
+                    result.inserted,
+                    result.updated,
+                    result.deleted,
+                    result.unchanged
+                )
+            } catch {
+                guard generation == localDataGeneration, importToken == calendarImportToken else { return }
+                calendarImportStatusMessage = error.localizedDescription
+            }
+        }
+    }
+
     func refreshClassroomsIfNeeded() {
         guard !isSampleMode else { return }
         guard classroomsCache?.targetDate != Self.todayString else { return }

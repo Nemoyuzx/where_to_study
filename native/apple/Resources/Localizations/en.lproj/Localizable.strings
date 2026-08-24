@@ -94,8 +94,8 @@
 "地点" = "Location";
 "教师" = "Instructor";
 "教学周" = "Teaching weeks";
-"公历第 %lld 周" = "Calendar week %lld";
-"公历第 %lld 周 · 教学第 %lld 周" = "Calendar week %lld · Teaching week %lld";
+"第 %lld 教学周" = "Teaching week %lld";
+"非教学周" = "Outside teaching weeks";
 "考试周" = "Exam weeks";
 "未标注" = "Not specified";
 "类型" = "Type";
@@ -248,6 +248,11 @@
 "每日课程摘要已关闭" = "Daily course summaries are disabled";
 "示例模式不会访问系统日历" = "Demo mode does not access the system calendar";
 "正在导入系统日历…" = "Importing into the system calendar…";
+"导入已收藏日程" = "Import Favorite Events";
+"暂无已收藏日程可导入" = "There are no favorite events to import";
+"正在导入已收藏日程…" = "Importing favorite events…";
+"示例模式已模拟同步 %d 个收藏日程，未写入系统日历" = "Demo mode simulated syncing %d favorite events without writing to the system calendar";
+"收藏日程同步完成：新增 %d，更新 %d，删除 %d，已存在 %d" = "Favorite sync completed: %d inserted, %d updated, %d deleted, %d unchanged";
 "课表中没有可导入的课程日期" = "No course dates are available to import";
 "当天空教室已更新" = "Today's empty rooms are up to date";
 "本地数据已清除" = "Local data cleared";
@@ -270,3 +275,4 @@
 "没有日历完整访问权限，请在系统设置中允许后重试。" = "Full calendar access is unavailable. Allow it in System Settings and try again.";
 "系统中没有可写入的默认日历。" = "No writable default calendar is available.";
 "系统日历在同步期间发生变化，请重试。" = "The system calendar changed during synchronization. Try again.";
+"收藏日程“%@”的截止时间不正确。" = "The deadline for favorite event “%@” is invalid.";

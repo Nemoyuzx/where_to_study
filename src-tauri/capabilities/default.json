@@ -15,6 +15,7 @@
     "allow-load-saved-classrooms-for-scope",
     "allow-fetch-schedule",
     "allow-import-schedule-to-calendar",
+    "allow-import-favorite-deadlines-to-calendar",
     "allow-fetch-classrooms",
     "allow-fetch-holidays",
     "allow-fetch-weather",

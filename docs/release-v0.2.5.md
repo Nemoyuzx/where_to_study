@@ -7,8 +7,9 @@
 - Android 日/周课程摘要改用真实展开图标，收起与展开拥有一致的空状态高度、更紧凑的字号与行距，并加入平滑高度和箭头旋转动画；月视图同时减少了底部导航预留空间。
 - iOS 月视图减少重复聚合和大范围隐式动画，修正跨月日期、反向连续翻页、切换日期及折叠状态的动画时序和性能。
 - 全平台点击月视图中的非本月日期时，会按正确方向过渡到目标月份并选中对应日期。
-- 桌面端改进日/周/月/年过渡；周视图全天日程按日期列对齐，日期标题、全天区和对应时间列均可选中。
-- 月视图星期一格显示公历周数，并在存在有效课表周次时同时显示教学周；周视图同样显示有效教学周，超出实际课表范围不再伪造周次。
+- 桌面端统一日/周/月/年的按钮、键盘和手势过渡方向；周视图全天日程按日期列对齐并显示截止时间，日期标题、全天区和对应时间列均可选中，带链接的事件可整卡访问。
+- 月视图和周视图只显示由个人课表学期起始日与真实课程周次计算出的教学周，不再混入公历周数；超出实际课表范围不再伪造周次。
+- 桌面月视图把课程与全天日程分层显示且不再弹出月日程窗口；年视图日期详情改为独立可滚动正文。
 - macOS、Windows/Linux Tauri 与 HarmonyOS PC 增加合理键盘操作：栏目切换、日/周/月/年切换、前后翻页、回到今天和关闭弹层。
 
 ### 收藏与自定义日程
@@ -18,6 +19,7 @@
 - 设置中的“日期详情与生活信息”新增独立收藏管理页，可返回设置并逐条取消收藏；清除本地数据会同时删除收藏。
 - 新增用户自定义 HTTPS JSON 日程源，接口格式见 [`custom-schedule-api.md`](custom-schedule-api.md)。客户端执行无凭据、无 Cookie GET，拒绝重定向、本机和私有/保留 IP 字面量，限制 2 MiB、5000 条、每天 100 条和 370 天范围，并缓存成功响应 5 分钟。
 - 内置 DDL、云课堂作业和自定义日程在设置加载后按自然年独立预热；普通日期选择、同年翻页和视图切换只读内存缓存，不再把网络请求放进动画路径。
+- 支持系统日历的平台可在课程导入按钮下方单独导入本地已收藏日程，保留截止时间、来源详情与官方链接。
 
 ### 一致性、设置与隐私
 
@@ -29,9 +31,9 @@
 
 ### 版本与分发
 
-- Android：`0.2.5 (38)`。
-- iOS 与原生 macOS：`0.2.5 (66)`，通过本地 Xcode 归档并上传 TestFlight；Apple 制品不进入 GitHub Release。
-- HarmonyOS：`0.2.5 (1002005)`，构建与本地单元测试通过；AGC 发布仍需要维护者账号签名配置。
+- Android：`0.2.5 (39)`。
+- iOS 与原生 macOS：`0.2.5 (67)`，通过本地 Xcode 归档并上传 TestFlight；Apple 制品不进入 GitHub Release。
+- HarmonyOS：`0.2.5 (1002006)`，构建与本地单元测试通过；AGC 发布仍需要维护者账号签名配置。
 - GitHub Release：Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及维护者签名的 Android APK/AAB；`.sha256` 仅供发布校验，不作为附件。
 
 ## English
@@ -41,8 +43,9 @@
 - Android now uses a real disclosure icon for the day/week course summary, keeps empty expanded and collapsed heights consistent, tightens typography and spacing, animates both height and chevron rotation, and reduces excess month-view bottom-navigation reserve.
 - iOS month rendering performs less repeated aggregation and avoids broad implicit animations, improving cross-month selection, reverse paging, date changes, and sheet-state transitions.
 - Selecting an out-of-month date now animates in the correct direction and lands on that date on every graphical platform.
-- Desktop day/week/month/year transitions were refined. Week all-day events align with their date columns, and the date header, all-day cell, and matching timeline lane are selectable.
-- Monday month cells show the Gregorian week number plus the teaching week only when it falls inside the actual timetable. Week view follows the same bounded teaching-week rule.
+- Desktop button, keyboard, and gesture navigation now share the same directional transition. Week all-day events align with their date columns, show deadline times, and open linked cards directly; the date header, all-day cell, and matching timeline lane are selectable.
+- Month and week views display only teaching weeks derived from the personal timetable's authoritative term start and actual course weeks; Gregorian week numbers are no longer mixed into this label.
+- Desktop month cells separate courses from all-day events without a month-agenda modal, while year-day details use a dedicated scrollable body.
 - macOS, Windows/Linux Tauri, and HarmonyOS PC now provide keyboard actions for sections, calendar modes, paging, Today, and dismissing overlays.
 
 ### Favorites and custom feeds
@@ -52,6 +55,7 @@
 - Settings now includes an independent Favorite Management page. Local-data reset removes favorites as well.
 - Users can add a custom HTTPS JSON schedule feed documented in [`custom-schedule-api.md`](custom-schedule-api.md). Clients send credential-free, cookie-free GET requests; reject redirects and local/private/reserved literal addresses; enforce 2 MiB, 5000-item, 100-per-day, and 370-day limits; and cache successful responses for five minutes.
 - Built-in deadlines, UCloud assignments, and custom events are prewarmed independently for the calendar year after settings load. Normal selection, same-year paging, and view changes read memory state instead of starting network work from an animation path.
+- Platforms with system-calendar support can separately import locally saved favorite events, including their deadline time, source details, and official link.
 
 ### Consistency, settings, and privacy
 
@@ -62,7 +66,7 @@
 
 ### Versions and distribution
 
-- Android: `0.2.5 (38)`.
-- Native iOS and macOS: `0.2.5 (66)`, archived and uploaded to TestFlight with local Xcode. Apple artifacts are excluded from GitHub Release.
-- HarmonyOS: `0.2.5 (1002005)`, locally built and unit-tested; AGC distribution still requires maintainer signing configuration.
+- Android: `0.2.5 (39)`.
+- Native iOS and macOS: `0.2.5 (67)`, archived and uploaded to TestFlight with local Xcode. Apple artifacts are excluded from GitHub Release.
+- HarmonyOS: `0.2.5 (1002006)`, locally built and unit-tested; AGC distribution still requires maintainer signing configuration.
 - GitHub Release scope: Windows x64 NSIS; Linux arm64/x86_64 Debian, AppImage, CLI, and TUI; and maintainer-signed Android APK/AAB. `.sha256` files remain verification-only and are not attached.

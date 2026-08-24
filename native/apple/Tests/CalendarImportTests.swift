@@ -57,6 +57,91 @@ final class CalendarImportTests: XCTestCase {
         )
     }
 
+    func testFavoritePlanPreservesSnapshotAndUsesStableIndependentMarkers() throws {
+        let item = PublicDeadlineItem(
+            id: "contest-1",
+            name: "示例竞赛",
+            kind: .competition,
+            source: .contestDDL,
+            deadline: "2026-08-23T18:30:00+08:00",
+            organizer: "示例组委会",
+            officialURL: URL(string: "https://example.com/contest")
+        )
+
+        let firstPlan = try XCTUnwrap(CalendarImportLogic.favoritePlan(from: [item]))
+        let secondPlan = try XCTUnwrap(CalendarImportLogic.favoritePlan(from: [item]))
+        let draft = try XCTUnwrap(firstPlan.drafts.first)
+
+        XCTAssertEqual(firstPlan, secondPlan)
+        XCTAssertTrue(draft.marker.hasPrefix(CalendarImportLogic.favoriteMarkerPrefix))
+        XCTAssertFalse(draft.marker.hasPrefix(CalendarImportLogic.markerPrefix))
+        XCTAssertEqual(CalendarImportLogic.marker(in: draft.notes), draft.marker)
+        XCTAssertEqual(draft.title, item.name)
+        XCTAssertEqual(draft.location, item.organizer)
+        XCTAssertTrue(draft.notes.contains("https://example.com/contest"))
+        XCTAssertEqual(Self.formatter.string(from: draft.startDate), "2026-08-23 18:30")
+        XCTAssertEqual(Self.formatter.string(from: draft.endDate), "2026-08-23 19:00")
+    }
+
+    func testFavoriteSyncUpdatesOwnedSnapshotWithoutTouchingCourseEvents() throws {
+        let item = PublicDeadlineItem(
+            id: "contest-1",
+            name: "示例竞赛",
+            kind: .competition,
+            source: .contestDDL,
+            deadline: "2026-08-23 18:30:00",
+            organizer: nil,
+            officialURL: nil
+        )
+        let favoritePlan = try XCTUnwrap(CalendarImportLogic.favoritePlan(from: [item]))
+        let draft = try XCTUnwrap(favoritePlan.drafts.first)
+        let changedFavorite = existingEvent(
+            identifier: "favorite",
+            marker: draft.marker,
+            draft: draft,
+            title: "旧标题"
+        )
+        let courseMarker = CalendarImportLogic.eventMarker(
+            termID: "2025-2026-2",
+            courseID: "course-1",
+            week: 1
+        )
+        let courseEvent = existingEvent(
+            identifier: "course",
+            marker: courseMarker,
+            draft: draft
+        )
+
+        let sync = CalendarImportLogic.syncPlan(
+            drafts: favoritePlan.drafts,
+            scope: favoritePlan.scope,
+            existingEvents: [changedFavorite, courseEvent],
+            destinationCalendarIdentifier: "destination",
+            ownedMarkerPrefix: CalendarImportLogic.favoriteMarkerPrefix
+        )
+
+        XCTAssertEqual(sync.matches.map(\.existingIdentifier), ["favorite"])
+        XCTAssertEqual(sync.matches.first?.needsUpdate, true)
+        XCTAssertTrue(sync.inserts.isEmpty)
+        XCTAssertFalse(sync.deleteIdentifiers.contains("course"))
+    }
+
+    func testFavoritePlanRejectsMalformedDeadlineAndEmptyListNeedsNoPermission() {
+        let malformed = PublicDeadlineItem(
+            id: "bad",
+            name: "错误日程",
+            kind: .custom,
+            source: .custom,
+            deadline: "not-a-date",
+            organizer: nil,
+            officialURL: nil
+        )
+        XCTAssertNil(try CalendarImportLogic.favoritePlan(from: []))
+        XCTAssertThrowsError(try CalendarImportLogic.favoritePlan(from: [malformed])) { error in
+            XCTAssertEqual(error as? CalendarImportError, .invalidFavoriteDeadline("错误日程"))
+        }
+    }
+
     func testInvalidTermDateAndSlotFailInsteadOfCreatingWrongEvents() {
         for value in ["not-a-date", "2026-02-30", "2026-13-01"] {
             let invalidDate = ScheduleSnapshot(

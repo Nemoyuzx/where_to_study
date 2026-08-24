@@ -36,4 +36,8 @@ export class AppSectionInfo {
   static accessibilityId(section: AppSection): string {
     return 'navigation.' + section;
   }
+
+  static showsPhoneNavigation(section: AppSection, favoriteManagerVisible: boolean): boolean {
+    return !(section === AppSection.settings && favoriteManagerVisible);
+  }
 }

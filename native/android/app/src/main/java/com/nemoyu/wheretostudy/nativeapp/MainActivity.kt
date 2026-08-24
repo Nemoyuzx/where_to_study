@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     }
 
     private enum class SettingsRoute { MAIN, FAVORITES }
+    private enum class CalendarImportKind { SCHEDULE, FAVORITES }
 
     private lateinit var content: FrameLayout
     private lateinit var adaptiveRoot: FrameLayout
@@ -87,6 +88,7 @@ class MainActivity : Activity() {
     private var calendarImportInFlight = false
     private var calendarPermissionRequestPending = false
     private var calendarImportToken: Long? = null
+    private var calendarImportKind = CalendarImportKind.SCHEDULE
     private var pendingCalendarImport: PendingCalendarImport? = null
     private var notificationPermissionRequestPending = false
     private var pendingNotificationPermissionCompletion: ((Boolean) -> Unit)? = null
@@ -129,6 +131,10 @@ class MainActivity : Activity() {
         calendarImportToken = savedInstanceState
             ?.getLong(CALENDAR_IMPORT_TOKEN_KEY, NO_CALENDAR_IMPORT_TOKEN)
             ?.takeUnless { it == NO_CALENDAR_IMPORT_TOKEN }
+        calendarImportKind = savedInstanceState
+            ?.getString(CALENDAR_IMPORT_KIND_KEY)
+            ?.let { saved -> CalendarImportKind.entries.firstOrNull { it.name == saved } }
+            ?: CalendarImportKind.SCHEDULE
         calendarImportInFlight = calendarImportToken != null
         notificationPermissionRequestPending = savedInstanceState
             ?.getBoolean(NOTIFICATION_PERMISSION_PENDING_KEY, false)
@@ -613,6 +619,7 @@ class MainActivity : Activity() {
             )
             UiText.localizeTree(view)
         }
+        updatePhoneNavigationVisibility()
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(
                 this,
@@ -639,7 +646,6 @@ class MainActivity : Activity() {
                     activity = this,
                     preferences = preferences,
                     availableWidthDp = currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
-                    usesBottomNavigation = currentLayoutSpec?.usesBottomNavigation == true,
                 ).build()
             } else {
                 SettingsPage(
@@ -677,6 +683,18 @@ class MainActivity : Activity() {
     fun closeFavoriteManagement() {
         settingsRoute = SettingsRoute.MAIN
         navigate(Destination.SETTINGS)
+    }
+
+    private fun updatePhoneNavigationVisibility() {
+        if (currentLayoutSpec?.usesBottomNavigation != true) return
+        adaptiveRoot.findViewById<View?>(R.id.phone_navigation)?.visibility =
+            if (selectedDestination == Destination.SETTINGS &&
+                settingsRoute == SettingsRoute.FAVORITES
+            ) {
+                View.GONE
+            } else {
+                View.VISIBLE
+            }
     }
 
     @SuppressLint("GestureBackNavigation")
@@ -793,7 +811,39 @@ class MainActivity : Activity() {
         }
 
         calendarImportInFlight = true
-        val pending = PendingCalendarImport(schedule, onComplete)
+        calendarImportKind = CalendarImportKind.SCHEDULE
+        val pending = PendingCalendarImport.Schedule(schedule, onComplete)
+        if (hasCalendarPermissions()) {
+            startCalendarImport(pending)
+            return
+        }
+        pendingCalendarImport = pending
+        calendarPermissionRequestPending = true
+        runCatching {
+            requestPermissions(CALENDAR_PERMISSIONS, CALENDAR_PERMISSION_REQUEST_CODE)
+        }.onFailure { error ->
+            finishCalendarImport(
+                pending,
+                Result.failure(SystemCalendarImportException("无法申请系统日历权限。", error)),
+            )
+        }
+    }
+
+    fun importFavoriteDeadlinesToSystemCalendar(
+        onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+    ) {
+        val favorites = preferences.favoriteDeadlines
+        if (favorites.isEmpty()) {
+            onComplete(Result.failure(SystemCalendarImportException("暂无已收藏日程。")))
+            return
+        }
+        if (calendarImportInFlight || systemCalendarImporter.isImporting) {
+            onComplete(Result.failure(SystemCalendarImportException("日历正在导入，请稍后重试。")))
+            return
+        }
+        calendarImportInFlight = true
+        calendarImportKind = CalendarImportKind.FAVORITES
+        val pending = PendingCalendarImport.Favorites(favorites, onComplete)
         if (hasCalendarPermissions()) {
             startCalendarImport(pending)
             return
@@ -843,7 +893,7 @@ class MainActivity : Activity() {
             }
         } else {
             val failure = Result.failure<SystemCalendarImportResult>(
-                SystemCalendarImportException("需要允许日历读写权限才能导入课程。"),
+                SystemCalendarImportException("需要允许日历读写权限才能导入日程。"),
             )
             if (pending != null) {
                 finishCalendarImport(pending, failure)
@@ -865,6 +915,7 @@ class MainActivity : Activity() {
             CALENDAR_IMPORT_TOKEN_KEY,
             calendarImportToken ?: NO_CALENDAR_IMPORT_TOKEN,
         )
+        outState.putString(CALENDAR_IMPORT_KIND_KEY, calendarImportKind.name)
         outState.putBoolean(
             NOTIFICATION_PERMISSION_PENDING_KEY,
             notificationPermissionRequestPending,
@@ -976,8 +1027,13 @@ class MainActivity : Activity() {
     private fun startCalendarImport(pending: PendingCalendarImport) {
         pendingCalendarImport = null
         calendarPermissionRequestPending = false
-        val registration = systemCalendarImporter.importSchedule(pending.schedule) { result ->
-            finishCalendarImport(pending, result)
+        val registration = when (pending) {
+            is PendingCalendarImport.Schedule -> systemCalendarImporter.importSchedule(
+                pending.schedule,
+            ) { result -> finishCalendarImport(pending, result) }
+            is PendingCalendarImport.Favorites -> systemCalendarImporter.importFavorites(
+                pending.favorites,
+            ) { result -> finishCalendarImport(pending, result) }
         }
         registration.onSuccess { calendarImportToken = it.token }
             .onFailure { error ->
@@ -1015,23 +1071,34 @@ class MainActivity : Activity() {
 
     private fun resumeCalendarImportAfterRecreation() {
         calendarPermissionRequestPending = false
-        val schedule = scheduleRepository.schedule
-        if (schedule == null) {
-            showCalendarImportResult(
-                Result.failure(SystemCalendarImportException("请先获取个人课表。")),
-            )
-            return
-        }
         if (systemCalendarImporter.isImporting) return
         calendarImportInFlight = true
-        startCalendarImport(PendingCalendarImport(schedule, ::showCalendarImportResult))
+        when (calendarImportKind) {
+            CalendarImportKind.SCHEDULE -> {
+                val schedule = scheduleRepository.schedule
+                if (schedule == null) {
+                    calendarImportInFlight = false
+                    showCalendarImportResult(
+                        Result.failure(SystemCalendarImportException("请先获取个人课表。")),
+                    )
+                    return
+                }
+                startCalendarImport(PendingCalendarImport.Schedule(schedule, ::showCalendarImportResult))
+            }
+            CalendarImportKind.FAVORITES -> startCalendarImport(
+                PendingCalendarImport.Favorites(
+                    preferences.favoriteDeadlines,
+                    ::showCalendarImportResult,
+                ),
+            )
+        }
     }
 
     private fun showCalendarImportResult(result: Result<SystemCalendarImportResult>) {
         result.onSuccess { summary ->
             android.widget.Toast.makeText(
                 this,
-                uiText("已同步 ${summary.totalEvents} 条课程到系统日历。"),
+                uiText("已同步 ${summary.totalEvents} 条${summary.itemLabel}到系统日历。"),
                 android.widget.Toast.LENGTH_LONG,
             ).show()
         }.onFailure { error ->
@@ -1091,6 +1158,7 @@ class MainActivity : Activity() {
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"
         const val CALENDAR_IMPORT_TOKEN_KEY = "calendar_import_token"
+        const val CALENDAR_IMPORT_KIND_KEY = "calendar_import_kind"
         const val NO_CALENDAR_IMPORT_TOKEN = 0L
         const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4108
         const val NOTIFICATION_PERMISSION_PENDING_KEY = "notification_permission_request_pending"
@@ -1110,8 +1178,17 @@ class MainActivity : Activity() {
         )
     }
 
-    private data class PendingCalendarImport(
-        val schedule: ScheduleSnapshot,
-        val onComplete: (Result<SystemCalendarImportResult>) -> Unit,
-    )
+    private sealed class PendingCalendarImport(
+        open val onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+    ) {
+        data class Schedule(
+            val schedule: ScheduleSnapshot,
+            override val onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+        ) : PendingCalendarImport(onComplete)
+
+        data class Favorites(
+            val favorites: List<PublicDeadlineItem>,
+            override val onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+        ) : PendingCalendarImport(onComplete)
+    }
 }

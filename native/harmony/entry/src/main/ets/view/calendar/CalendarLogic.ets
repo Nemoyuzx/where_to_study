@@ -141,6 +141,7 @@ export class CalendarTimelineLogic {
 }
 
 export class TeachingCalendarLogic {
+  static readonly pageTransitionDuration: number = 300;
   static readonly swipeThreshold: number = 72;
   static readonly expansionVelocityThreshold: number = 640;
   static readonly monthSheetExpandedPosition: number = 0;
@@ -228,7 +229,30 @@ export class TeachingCalendarLogic {
   }
 
   static agendaDialogChangesSelectedDate(mode: CalendarMode): boolean {
-    return mode !== CalendarMode.week;
+    return mode === CalendarMode.day;
+  }
+
+  static supportsAllDayDialog(mode: CalendarMode): boolean {
+    return mode === CalendarMode.day || mode === CalendarMode.week;
+  }
+
+  static expandedMonthGridShowsChip(kind: string): boolean {
+    return kind === 'course';
+  }
+
+  static allDayTimeLabel(value: string, allDayLabel: string = '全天'): string {
+    if (value.length >= 16 && (value.charAt(10) === 'T' || value.charAt(10) === ' ')) {
+      return value.substring(11, 16);
+    }
+    return allDayLabel;
+  }
+
+  static allDayCardAction(linkURL: string | null): string {
+    return linkURL !== null && linkURL.length > 0 ? 'link' : 'details';
+  }
+
+  static expandedYearDetailScrollHeight(viewportHeight: number): number {
+    return Math.min(Math.max(Math.floor(viewportHeight * 0.52), 240), 420);
   }
 
   static periodTitle(date: DateParts, mode: CalendarMode, english: boolean = false): string {
@@ -238,8 +262,7 @@ export class TeachingCalendarLogic {
           date.year.toString();
       }
       if (mode === CalendarMode.week) {
-        return CalendarFormatters.englishMonth(date.month) + ' ' + date.year.toString() +
-          ' · Week ' + TeachingCalendarLogic.weekOfYear(date).toString();
+        return CalendarFormatters.englishMonth(date.month) + ' ' + date.year.toString();
       }
       if (mode === CalendarMode.year) {
         return date.year.toString();
@@ -250,8 +273,7 @@ export class TeachingCalendarLogic {
       return date.year.toString() + '年' + date.month.toString() + '月' + date.day.toString() + '日';
     }
     if (mode === CalendarMode.week) {
-      return date.year.toString() + '年' + date.month.toString() + '月 第' +
-        TeachingCalendarLogic.weekOfYear(date).toString() + '周';
+      return date.year.toString() + '年' + date.month.toString() + '月';
     }
     if (mode === CalendarMode.year) {
       return date.year.toString() + '年';
@@ -285,15 +307,6 @@ export class TeachingCalendarLogic {
     const maxDay: number = StrictDates.daysInMonth(year, month + 1);
     const day: number = Math.min(date.day, maxDay);
     return new DateParts(year, month + 1, day);
-  }
-
-  // 与 Calendar.shanghai（firstWeekday=2，minDaysInFirstWeek=1）的 weekOfYear 一致。
-  static weekOfYear(date: DateParts): number {
-    const dayOfYear: number =
-      StrictDates.epochDay(date.year, date.month, date.day) -
-      StrictDates.epochDay(date.year, 1, 1) + 1;
-    const jan1Weekday: number = StrictDates.weekdayMonday1(new DateParts(date.year, 1, 1));
-    return Math.floor((dayOfYear - 1 + (jan1Weekday - 1)) / 7) + 1;
   }
 
   static swipeDirection(

@@ -56,12 +56,6 @@ private struct MobileMonthDaySnapshot: Identifiable {
     var id: Date { date }
 }
 
-private struct MobileMonthAgendaSelection: Identifiable {
-    let id = UUID()
-    let date: Date
-    let events: [MobileMonthEvent]
-}
-
 private struct MobileWeekAgendaSelection: Identifiable {
     let id = UUID()
     let date: Date
@@ -195,9 +189,7 @@ struct MobileTeachingCalendarView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var session: TeachingCalendarSessionState
     @State private var presentedDetail: MobileCalendarDetailSelection?
-    @State private var presentedMonthAgenda: MobileMonthAgendaSelection?
     @State private var presentedWeekAgenda: MobileWeekAgendaSelection?
-    @State private var pageDirection = 1
     @State private var isHorizontalPaging = false
     @State private var suppressesEventSelection = false
     @State private var monthDragTranslation: CGFloat = 0
@@ -261,22 +253,15 @@ struct MobileTeachingCalendarView: View {
                 .presentationDetents([.medium, .large])
         }
         .overlay {
-            if let selection = presentedMonthAgenda {
-                monthAgendaDialog(selection)
-            } else if let selection = presentedWeekAgenda {
+            if let selection = presentedWeekAgenda {
                 weekAgendaDialog(selection)
             }
         }
         .onAppear {
-            ensureVisibleHolidays()
             normalizeMonthPositionForLayout()
         }
         .onChange(of: selectedDate) { _ in
             resetMonthDetailsScroll()
-            ensureVisibleHolidays()
-        }
-        .onChange(of: mode) { _ in
-            ensureVisibleHolidays()
         }
         .onChange(of: verticalSizeClass) { _ in
             normalizeMonthPositionForLayout()
@@ -290,11 +275,17 @@ struct MobileTeachingCalendarView: View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(periodTitle)
-                        .font(.title2.bold())
-                        .foregroundStyle(AppTheme.text)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
+                    ZStack(alignment: .leading) {
+                        Text(periodTitle)
+                            .id(periodTitle)
+                            .transition(pageTransition)
+                            .font(.title2.bold())
+                            .foregroundStyle(AppTheme.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    }
+                    .clipped()
+                    .animation(TeachingCalendarNavigationMotion.pageAnimation, value: periodTitle)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(periodTitle)
@@ -330,6 +321,7 @@ struct MobileTeachingCalendarView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .animation(TeachingCalendarNavigationMotion.pageAnimation, value: mode)
             .accessibilityIdentifier("calendar.mobile.mode")
 
             if mode == .week {
@@ -377,6 +369,16 @@ struct MobileTeachingCalendarView: View {
                 )
             }
             .disabled(model.schedule == nil || model.isRefreshingSchedule || model.isImportingCalendar)
+
+            Button {
+                model.importFavoriteDeadlinesToCalendar()
+            } label: {
+                Label(
+                    model.isImportingCalendar ? "正在导入…" : "导入已收藏日程",
+                    systemImage: "star.square.on.square"
+                )
+            }
+            .disabled(model.favoriteDeadlines.isEmpty || model.isImportingCalendar)
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.title3)
@@ -390,16 +392,16 @@ struct MobileTeachingCalendarView: View {
         return HStack(spacing: 0) {
             if mode == .week {
                 VStack(spacing: 0) {
-                    Text("\(calendar.component(.weekOfYear, from: selectedDate))")
+                    Text(teachingWeekNumber(on: selectedDate).map(String.init) ?? "—")
                         .font(.caption.weight(.semibold).monospacedDigit())
-                    Text("周")
+                    Text("教学周")
                         .font(.caption2)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
                 }
                 .foregroundStyle(AppTheme.secondaryText)
                 .frame(width: MobileCalendarTimelineLayout.axisWidth, height: 56)
-                .accessibilityLabel(
-                    "第 \(calendar.component(.weekOfYear, from: selectedDate)) 周"
-                )
+                .accessibilityLabel(weekContextText)
             }
             ForEach(days, id: \.self) { day in
                 dateStripButton(day)
@@ -963,10 +965,7 @@ struct MobileTeachingCalendarView: View {
                     if eventLayout.hiddenEventCount > 0 {
                         Button {
                             AppHaptics.selection()
-                            presentedMonthAgenda = MobileMonthAgendaSelection(
-                                date: day,
-                                events: events
-                            )
+                            requestMonthDaySelection(day)
                         } label: {
                             Text("+\(eventLayout.hiddenEventCount)")
                                 .font(.system(size: 9, weight: .semibold))
@@ -1642,24 +1641,6 @@ struct MobileTeachingCalendarView: View {
         return String(value[start...].prefix(5))
     }
 
-    private func monthAgendaDialog(_ selection: MobileMonthAgendaSelection) -> some View {
-        centeredAgendaDialog(
-            titleKey: "月视图全天日程",
-            date: selection.date,
-            accessibilityIdentifier: "calendar.mobile.month-agenda-dialog",
-            dismiss: { presentedMonthAgenda = nil }
-        ) {
-            ForEach(selection.events) { event in
-                agendaRow(
-                    title: event.title,
-                    categoryKey: event.categoryKey,
-                    tint: event.tint,
-                    deadlineItem: event.deadlineItem
-                )
-            }
-        }
-    }
-
     private func weekAgendaDialog(_ selection: MobileWeekAgendaSelection) -> some View {
         centeredAgendaDialog(
             titleKey: "周视图全天日程",
@@ -1983,9 +1964,13 @@ struct MobileTeachingCalendarView: View {
     ) -> some View {
         Button(model.localized("\(title)视图")) {
             AppHaptics.selection()
-            withAnimation(Self.viewAnimation) {
+            session.prepareTransition(direction: TeachingCalendarNavigationMotion.modeDirection(
+                from: mode.rawValue,
+                to: targetMode.rawValue
+            ))
+            withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
                 selectedDate = day
-                mode = targetMode
+                session.setMode(targetMode.rawValue)
             }
             presentedDetail = nil
         }
@@ -1996,10 +1981,13 @@ struct MobileTeachingCalendarView: View {
 
     private func jumpToMonth(_ month: Date) {
         AppHaptics.selection()
-        pageDirection = month > selectedDate ? 1 : -1
-        withAnimation(Self.pageAnimation) {
+        session.prepareTransition(direction: TeachingCalendarNavigationMotion.direction(
+            from: selectedDate,
+            to: month
+        ))
+        withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
             selectedDate = month
-            mode = .month
+            session.setMode(MobileCalendarMode.month.rawValue)
         }
     }
 
@@ -2022,6 +2010,7 @@ struct MobileTeachingCalendarView: View {
         TeachingCalendarLogic.periodTitle(
             for: selectedDate,
             modeRawValue: mode.rawValue,
+            teachingWeekNumber: teachingWeekNumber(on: selectedDate),
             language: model.appLanguage,
             calendar: calendar
         )
@@ -2099,13 +2088,16 @@ struct MobileTeachingCalendarView: View {
             CalendarAllDayEvent(
                 id: "\(dateKey)-assignment-\(assignment.id)",
                 title: assignment.title,
-                kind: .assignment
+                time: deadlineTime(assignment.deadline),
+                kind: .assignment,
+                destinationURL: CalendarDeadlineSources.assignments
             )
         }
         let schoolNoticeEvents = schoolNotices.map { notice in
             CalendarAllDayEvent(
                 id: "\(dateKey)-school-\(notice.id)",
                 title: notice.name,
+                time: deadlineTime(notice.deadline),
                 kind: .schoolNotice,
                 deadlineItem: notice
             )
@@ -2114,6 +2106,7 @@ struct MobileTeachingCalendarView: View {
             CalendarAllDayEvent(
                 id: "\(dateKey)-public-\(item.id)",
                 title: item.name,
+                time: deadlineTime(item.deadline),
                 kind: .publicDeadline,
                 deadlineItem: item
             )
@@ -2193,28 +2186,18 @@ struct MobileTeachingCalendarView: View {
         let request = dailyDetailsLoadID
         guard !request.dates.isEmpty else { return }
 
-        async let calendarEvents: Void = calendarDeadlines.loadCalendarEvents(
-            dates: request.dates,
-            sampleMode: request.sampleMode,
-            includesPublicDeadlines: request.loadsPublicDeadlines,
-            customSourceURL: request.customSourceURL.flatMap(URL.init(string:))
-        )
-        async let almanac: Void = loadAlmanacIfNeeded(
-            request.loadsAlmanac,
-            date: request.almanacDate,
-            sampleMode: request.sampleMode
-        )
-        _ = await (calendarEvents, almanac)
+        await loadSampleCalendarEvents(request)
     }
 
     @MainActor
-    private func loadAlmanacIfNeeded(
-        _ enabled: Bool,
-        date: String?,
-        sampleMode: Bool
-    ) async {
-        guard enabled, let date, !Task.isCancelled else { return }
-        await dailyInfo.loadAlmanac(date: date, sampleMode: sampleMode)
+    private func loadSampleCalendarEvents(_ request: MobileCalendarDailyDetailsLoadID) async {
+        guard request.sampleMode else { return }
+        await calendarDeadlines.loadCalendarEvents(
+            dates: request.dates,
+            sampleMode: true,
+            includesPublicDeadlines: request.loadsPublicDeadlines,
+            customSourceURL: nil
+        )
     }
 
     private func moveDate(_ direction: Int) {
@@ -2228,8 +2211,10 @@ struct MobileTeachingCalendarView: View {
             if mode == .month {
                 prepareMonthPageChange(to: date, direction: direction)
             } else {
-                pageDirection = direction
-                withAnimation(Self.pageAnimation) { selectedDate = date }
+                session.prepareTransition(direction: direction)
+                withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
+                    selectedDate = date
+                }
             }
         }
     }
@@ -2246,12 +2231,14 @@ struct MobileTeachingCalendarView: View {
             ) {
                 prepareMonthPageChange(to: date, direction: monthDirection)
             } else {
-                pageDirection = direction
+                session.prepareTransition(direction: direction)
                 selectedDate = date
             }
         } else {
-            pageDirection = direction
-            withAnimation(Self.pageAnimation) { selectedDate = date }
+            session.prepareTransition(direction: direction)
+            withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
+                selectedDate = date
+            }
         }
     }
 
@@ -2259,7 +2246,7 @@ struct MobileTeachingCalendarView: View {
         var pagingState = monthPagingState
         let generation = pagingState.prepare(direction: direction)
         monthPagingState = pagingState
-        pageDirection = pagingState.preparedDirection
+        session.prepareTransition(direction: pagingState.preparedDirection)
 
         // The outgoing grid owns the removal half of its transition. Give
         // SwiftUI one update cycle to install the new direction on that grid
@@ -2404,11 +2391,10 @@ struct MobileTeachingCalendarView: View {
             get: { mode },
             set: { newMode in
                 guard newMode != mode else { return }
-                let currentIndex = MobileCalendarMode.allCases.firstIndex(of: mode) ?? 0
-                let newIndex = MobileCalendarMode.allCases.firstIndex(of: newMode) ?? currentIndex
-                pageDirection = newIndex > currentIndex ? 1 : -1
                 AppHaptics.selection()
-                withAnimation(Self.pageAnimation) { mode = newMode }
+                withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
+                    session.setMode(newMode.rawValue)
+                }
             }
         )
     }
@@ -2499,15 +2485,10 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var weekContextText: String {
-        let civilWeek = calendar.component(.weekOfYear, from: selectedDate)
         if let teachingWeek = teachingWeekNumber(on: selectedDate) {
-            return model.localizedFormat(
-                "公历第 %lld 周 · 教学第 %lld 周",
-                Int64(civilWeek),
-                Int64(teachingWeek)
-            )
+            return model.localizedFormat("第 %lld 教学周", Int64(teachingWeek))
         }
-        return model.localizedFormat("公历第 %lld 周", Int64(civilWeek))
+        return model.localized("非教学周")
     }
 
     private func teachingWeekNumber(on date: Date) -> Int? {
@@ -2523,10 +2504,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var pageTransition: AnyTransition {
-        if pageDirection >= 0 {
-            return .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
-        }
-        return .asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing))
+        TeachingCalendarNavigationMotion.transition(direction: session.transitionDirection)
     }
 
     private func dateStripForeground(holiday: HolidayItem?) -> Color {
@@ -2560,8 +2538,8 @@ struct MobileTeachingCalendarView: View {
     }
 
     private static let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
-    private static let viewAnimation = Animation.easeInOut(duration: 0.24)
-    private static let pageAnimation = Animation.easeInOut(duration: 0.3)
+    private static let viewAnimation = TeachingCalendarNavigationMotion.pageAnimation
+    private static let pageAnimation = TeachingCalendarNavigationMotion.pageAnimation
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
     private static let detailsContentAnimation = Animation.easeOut(duration: 0.16)
     private static let yearMonthKeyFormatter = formatter("yyyy-MM")

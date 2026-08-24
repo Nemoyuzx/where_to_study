@@ -5,15 +5,39 @@ import { Course } from '../main/ets/common/Models';
 import {
   CalendarMode, CalendarTimelineLogic, CalendarYearDeadlinePriority, TeachingCalendarLogic
 } from '../main/ets/view/calendar/CalendarLogic';
+import { AppSection, AppSectionInfo } from '../main/ets/common/AppSection';
+import {
+  CalendarViewportPreloadController, CalendarViewportPreloadPlan,
+  CalendarViewportPreloadPlanner, CalendarViewportPreloadTarget
+} from '../main/ets/view/calendar/CalendarViewportPreloadController';
+import { MobileCalendarTimelineLayout } from
+  '../main/ets/view/calendar/MobileCalendarTimelineView';
+
+class CalendarPreloadProbe implements CalendarViewportPreloadTarget {
+  calls: number = 0;
+  selectedDate: DateParts | null = null;
+  markerCount: number = 0;
+  holidayYears: number[] = [];
+
+  prewarmCalendarViewport(selectedDate: DateParts, markerDays: DateParts[],
+    holidayYears: number[]): void {
+    this.calls++;
+    this.selectedDate = selectedDate;
+    this.markerCount = markerDays.length;
+    this.holidayYears = holidayYears;
+  }
+}
 
 export default function teachingCalendarLogicTest() {
   describe('TeachingCalendarLogicTest', () => {
-    it('period_titles_keep_week_in_primary_title', 0, () => {
+    it('period_titles_reserve_week_label_for_real_teaching_metadata', 0, () => {
       const date: DateParts = new DateParts(2026, 8, 14);
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.day))
         .assertEqual('2026年8月14日');
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.week))
-        .assertEqual('2026年8月 第33周');
+        .assertEqual('2026年8月');
+      expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.week, true))
+        .assertEqual('August 2026');
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.month))
         .assertEqual('2026年8月');
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.year))
@@ -113,15 +137,15 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.showsTodayMarker(false)).assertFalse();
     });
 
-    it('month_and_week_all_day_dialogs_keep_distinct_bilingual_titles', 0, () => {
+    it('only_day_and_week_use_all_day_dialogs_while_month_stays_inline', 0, () => {
       expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.week, false))
         .assertEqual('周视图 · 全天');
-      expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.month, false))
-        .assertEqual('月视图 · 全天');
       expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.week, true))
         .assertEqual('Week View · All-day');
-      expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.month, true))
-        .assertEqual('Month View · All-day');
+      expect(TeachingCalendarLogic.supportsAllDayDialog(CalendarMode.day)).assertTrue();
+      expect(TeachingCalendarLogic.supportsAllDayDialog(CalendarMode.week)).assertTrue();
+      expect(TeachingCalendarLogic.supportsAllDayDialog(CalendarMode.month)).assertFalse();
+      expect(TeachingCalendarLogic.supportsAllDayDialog(CalendarMode.year)).assertFalse();
     });
 
     it('day_and_week_top_agenda_share_only_the_selected_date', 0, () => {
@@ -135,8 +159,77 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.timelineAgendaSortOrder('school_notice')).assertEqual(2);
       expect(TeachingCalendarLogic.timelineAgendaSortOrder('public_deadline')).assertEqual(3);
       expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.day)).assertTrue();
-      expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.month)).assertTrue();
+      expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.month)).assertFalse();
       expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.week)).assertFalse();
+    });
+
+    it('mode_indicator_and_page_share_transition_duration', 0, () => {
+      expect(TeachingCalendarLogic.pageTransitionDuration).assertEqual(300);
+      expect(TeachingCalendarLogic.modeTransitionDirection(CalendarMode.year, CalendarMode.month))
+        .assertEqual(-1);
+    });
+
+    it('favorite_management_hides_only_the_phone_navigation', 0, () => {
+      expect(AppSectionInfo.showsPhoneNavigation(AppSection.settings, true)).assertFalse();
+      expect(AppSectionInfo.showsPhoneNavigation(AppSection.settings, false)).assertTrue();
+      expect(AppSectionInfo.showsPhoneNavigation(AppSection.calendar, true)).assertTrue();
+    });
+
+    it('expanded_month_grid_reserves_chips_for_courses_only', 0, () => {
+      expect(TeachingCalendarLogic.expandedMonthGridShowsChip('course')).assertTrue();
+      expect(TeachingCalendarLogic.expandedMonthGridShowsChip('holiday')).assertFalse();
+      expect(TeachingCalendarLogic.expandedMonthGridShowsChip('assignment')).assertFalse();
+      expect(TeachingCalendarLogic.expandedMonthGridShowsChip('school_notice')).assertFalse();
+      expect(TeachingCalendarLogic.expandedMonthGridShowsChip('public_deadline')).assertFalse();
+    });
+
+    it('expanded_all_day_cards_show_time_and_route_link_or_details', 0, () => {
+      expect(TeachingCalendarLogic.allDayTimeLabel('2026-08-24T23:59:00+08:00'))
+        .assertEqual('23:59');
+      expect(TeachingCalendarLogic.allDayTimeLabel('2026-08-24 08:05:00'))
+        .assertEqual('08:05');
+      expect(TeachingCalendarLogic.allDayTimeLabel('', 'All-day')).assertEqual('All-day');
+      expect(TeachingCalendarLogic.allDayCardAction('https://example.com/event'))
+        .assertEqual('link');
+      expect(TeachingCalendarLogic.allDayCardAction(null)).assertEqual('details');
+    });
+
+    it('expanded_year_detail_has_a_bounded_scrollable_viewport', 0, () => {
+      expect(TeachingCalendarLogic.expandedYearDetailScrollHeight(300)).assertEqual(240);
+      expect(TeachingCalendarLogic.expandedYearDetailScrollHeight(700)).assertEqual(364);
+      expect(TeachingCalendarLogic.expandedYearDetailScrollHeight(1200)).assertEqual(420);
+    });
+
+    it('calendar_viewport_preloader_is_independent_and_single_flight_by_viewport', 0, () => {
+      const selected: DateParts = new DateParts(2026, 8, 24);
+      const month: CalendarViewportPreloadPlan =
+        CalendarViewportPreloadPlanner.plan(CalendarMode.month, selected);
+      expect(month.markerDays.length).assertEqual(42);
+      expect(month.holidayYears.includes(2026)).assertTrue();
+      const year: CalendarViewportPreloadPlan =
+        CalendarViewportPreloadPlanner.plan(CalendarMode.year, selected);
+      expect(year.markerDays.length).assertEqual(365);
+
+      const controller: CalendarViewportPreloadController =
+        new CalendarViewportPreloadController();
+      const probe: CalendarPreloadProbe = new CalendarPreloadProbe();
+      controller.prewarm(probe, CalendarMode.month, selected);
+      expect(probe.calls).assertEqual(1);
+      expect(probe.markerCount).assertEqual(42);
+      controller.prewarm(probe, CalendarMode.month, selected);
+      expect(probe.calls).assertEqual(1);
+      controller.prewarm(probe, CalendarMode.week, selected);
+      expect(probe.calls).assertEqual(2);
+      expect(probe.markerCount).assertEqual(7);
+      controller.prewarm(probe, CalendarMode.week, selected, true);
+      expect(probe.calls).assertEqual(3);
+    });
+
+    it('week_column_selection_stays_behind_course_pointer_targets', 0, () => {
+      expect(MobileCalendarTimelineLayout.columnSelectionLayerZ <
+        MobileCalendarTimelineLayout.courseBlockLayerZ).assertTrue();
+      expect(MobileCalendarTimelineLayout.columnTapSelectsDay(false)).assertTrue();
+      expect(MobileCalendarTimelineLayout.columnTapSelectsDay(true)).assertFalse();
     });
 
     it('timeline_minute_and_metadata_helpers', 0, () => {

@@ -4,6 +4,7 @@ import { calendarManager } from '@kit.CalendarKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { abilityAccessCtrl, Permissions, PermissionRequestResult } from '@kit.AbilityKit';
 import { ScheduleSnapshot } from '../common/Models';
+import { PublicDeadlineItem } from '../net/CalendarDailyInfoClient';
 import { AppContext } from '../store/AppContext';
 import {
   CalendarEventDraft, CalendarExistingEvent, CalendarImportError, CalendarImportLogic,
@@ -12,6 +13,7 @@ import {
 
 export interface CalendarImporting {
   importSchedule(schedule: ScheduleSnapshot): Promise<CalendarImportResult>;
+  importFavorites(items: PublicDeadlineItem[]): Promise<CalendarImportResult>;
 }
 
 export class HarmonyCalendarImporter implements CalendarImporting {
@@ -22,6 +24,16 @@ export class HarmonyCalendarImporter implements CalendarImporting {
       throw CalendarImportError.permissionDenied();
     }
     return await HarmonyCalendarImporter.write(importPlan);
+  }
+
+  async importFavorites(items: PublicDeadlineItem[]): Promise<CalendarImportResult> {
+    const importPlan: CalendarScheduleImportPlan = CalendarImportLogic.favoritePlan(items);
+    const granted: boolean = await HarmonyCalendarImporter.requestAccess();
+    if (!granted) {
+      throw CalendarImportError.permissionDenied();
+    }
+    return await HarmonyCalendarImporter.write(
+      importPlan, CalendarImportLogic.favoriteMarkerPrefix);
   }
 
   private static async requestAccess(): Promise<boolean> {
@@ -47,7 +59,8 @@ export class HarmonyCalendarImporter implements CalendarImporting {
     return new Error(operation + '失败' + detail);
   }
 
-  private static async write(importPlan: CalendarScheduleImportPlan): Promise<CalendarImportResult> {
+  private static async write(importPlan: CalendarScheduleImportPlan,
+    managedMarkerPrefix: string = CalendarImportLogic.markerPrefix): Promise<CalendarImportResult> {
     const calendar: calendarManager.Calendar =
       await calendarManager.getCalendarManager(AppContext.get()).getCalendar();
 
@@ -92,7 +105,7 @@ export class HarmonyCalendarImporter implements CalendarImporting {
     }
 
     const syncPlan: CalendarSyncPlan = CalendarImportLogic.syncPlan(
-      importPlan.drafts, importPlan.scope, indexed, '');
+      importPlan.drafts, importPlan.scope, indexed, '', managedMarkerPrefix);
 
     for (const identifier of syncPlan.deleteIdentifiers) {
       const event: calendarManager.Event | undefined = eventById.get(identifier);

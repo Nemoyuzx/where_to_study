@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.2.5"
-    CURRENT_PROJECT_VERSION: "66"
+    CURRENT_PROJECT_VERSION: "67"
     CODE_SIGN_STYLE: Automatic
 targets:
   WhereToStudyMac:
@@ -40,8 +40,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         LSApplicationCategoryType: public.app-category.education
-        NSCalendarsFullAccessUsageDescription: 将个人课表中的课程写入系统日历，并在重复导入时更新已有课程。
-        NSCalendarsUsageDescription: 将个人课表中的课程写入系统日历。
+        NSCalendarsFullAccessUsageDescription: 将个人课表课程或你主动选择的收藏日程写入系统日历，并在重复导入时更新已有事件。
+        NSCalendarsUsageDescription: 将个人课表课程或你主动选择的收藏日程写入系统日历。
         NSAppTransportSecurity:
           NSExceptionDomains:
             101.201.29.29:
@@ -121,8 +121,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
-        NSCalendarsFullAccessUsageDescription: 将个人课表中的课程写入系统日历，并在重复导入时更新已有课程。
-        NSCalendarsUsageDescription: 将个人课表中的课程写入系统日历。
+        NSCalendarsFullAccessUsageDescription: 将个人课表课程或你主动选择的收藏日程写入系统日历，并在重复导入时更新已有事件。
+        NSCalendarsUsageDescription: 将个人课表课程或你主动选择的收藏日程写入系统日历。
         NSAppTransportSecurity:
           NSExceptionDomains:
             101.201.29.29:

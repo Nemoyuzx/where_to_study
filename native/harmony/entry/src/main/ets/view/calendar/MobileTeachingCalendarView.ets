@@ -62,6 +62,7 @@ export struct MobileTeachingCalendarView {
   @Local pageTransitionActive: boolean = false;
   @Local incomingDate: DateParts = StrictDates.todayParts();
   @Local incomingModeRawValue: string = CalendarMode.week;
+  @Local modeIndicatorRawValue: string = CalendarMode.week;
   @Local monthSheetPosition: number = TeachingCalendarLogic.monthSheetExpandedPosition;
   @Local monthDragStartPosition: number = TeachingCalendarLogic.monthSheetExpandedPosition;
   @Local monthDragging: boolean = false;
@@ -77,6 +78,7 @@ export struct MobileTeachingCalendarView {
   private timelineScrollTimer: number = -1;
 
   aboutToAppear(): void {
+    this.modeIndicatorRawValue = this.session.modeRawValue;
     this.monthSheetPosition = this.session.isMonthExpanded ?
       TeachingCalendarLogic.monthSheetExpandedPosition :
       TeachingCalendarLogic.monthSheetDetailsPosition;
@@ -104,6 +106,9 @@ export struct MobileTeachingCalendarView {
 
   @Monitor('session.modeRawValue')
   onModeChange(monitor: IMonitor): void {
+    if (!this.pageAnimating) {
+      this.modeIndicatorRawValue = this.session.modeRawValue;
+    }
     this.ensureVisibleHolidays();
     this.ensureVisibleCalendarData();
   }
@@ -118,6 +123,10 @@ export struct MobileTeachingCalendarView {
 
   private mode(): CalendarMode {
     return CalendarModeInfo.fromRawValue(this.session.modeRawValue);
+  }
+
+  private indicatorMode(): CalendarMode {
+    return CalendarModeInfo.fromRawValue(this.modeIndicatorRawValue);
   }
 
   private isEnglish(): boolean {
@@ -301,7 +310,9 @@ export struct MobileTeachingCalendarView {
 
     // 先挂载相邻页面，下一帧再让两页同时移动，避免旧实现中间出现空白帧。
     setTimeout(() => {
-      animateTo({ duration: 300, curve: Curve.EaseInOut }, (): void => {
+      animateTo({ duration: TeachingCalendarLogic.pageTransitionDuration,
+        curve: Curve.EaseInOut }, (): void => {
+        this.modeIndicatorRawValue = targetMode;
         this.pageOffsetX = -direction * distance;
         this.incomingPageOffsetX = 0;
       });
@@ -458,11 +469,7 @@ export struct MobileTeachingCalendarView {
         this.dayDetailOverlay()
       }
       if (this.allDayDialogDay !== null) {
-        if (this.allDayDialogModeRawValue === CalendarMode.month) {
-          this.monthAllDayDialogOverlay()
-        } else {
-          this.weekAllDayDialogOverlay()
-        }
+        this.weekAllDayDialogOverlay()
       }
       if (this.showingActions) {
         this.actionsOverlay()
@@ -570,13 +577,16 @@ export struct MobileTeachingCalendarView {
         ForEach(CalendarModeInfo.all, (item: CalendarMode) => {
           Text(this.model.text(item))
             .fontSize(14)
-            .fontWeight(this.mode() === item ? FontWeight.Medium : FontWeight.Regular)
+            .fontWeight(this.indicatorMode() === item ? FontWeight.Medium : FontWeight.Regular)
             .fontColor(AppTheme.text())
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
             .height(32)
-            .backgroundColor(this.mode() === item ? AppTheme.segmentedSelection() : Color.Transparent)
+            .backgroundColor(this.indicatorMode() === item ?
+              AppTheme.segmentedSelection() : Color.Transparent)
             .borderRadius(6)
+            .animation({ duration: TeachingCalendarLogic.pageTransitionDuration,
+              curve: Curve.EaseInOut })
             .onClick(() => {
               this.animateMode(item);
             })
@@ -605,11 +615,12 @@ export struct MobileTeachingCalendarView {
     Row({ space: 0 }) {
       if (this.mode() === CalendarMode.week) {
         Column({ space: 0 }) {
-          Text(TeachingCalendarLogic.weekOfYear(this.selectedDate()).toString())
+          Text(this.model.weekNumberOn(this.selectedDate()) === null ? '—' :
+            (this.model.weekNumberOn(this.selectedDate()) as number).toString())
             .fontSize(9.5)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.secondaryText())
-          Text(this.model.text('周'))
+          Text(this.isEnglish() ? 'T week' : '教学周')
             .fontSize(9.5)
             .fontColor(AppTheme.secondaryText())
         }
@@ -1319,11 +1330,6 @@ export struct MobileTeachingCalendarView {
           .textAlign(TextAlign.Start)
           .borderRadius(4)
           .backgroundColor(day.equals(renderDate) ? AppTheme.selectedDateStrong() : AppTheme.selection())
-          .onClick(() => {
-            if (interactive) {
-              this.presentAllDayDialog(day, CalendarMode.month);
-            }
-          })
         }
       }
     .width('100%')
@@ -1633,9 +1639,12 @@ export struct MobileTeachingCalendarView {
     return AppTheme.publicDeadline();
   }
 
-  // ---------- 月/周全天日程弹窗 ----------
+  // ---------- 日/周全天日程弹窗 ----------
 
   private presentAllDayDialog(day: DateParts, mode: CalendarMode): void {
+    if (!TeachingCalendarLogic.supportsAllDayDialog(mode)) {
+      return;
+    }
     if (TeachingCalendarLogic.agendaDialogChangesSelectedDate(mode)) {
       this.setSelectedDate(day);
     }
@@ -1647,11 +1656,6 @@ export struct MobileTeachingCalendarView {
   @Builder
   weekAllDayDialogOverlay() {
     this.centeredAllDayDialog(CalendarModeInfo.fromRawValue(this.allDayDialogModeRawValue))
-  }
-
-  @Builder
-  monthAllDayDialogOverlay() {
-    this.centeredAllDayDialog(CalendarMode.month)
   }
 
   @Builder
@@ -1976,6 +1980,29 @@ export struct MobileTeachingCalendarView {
           if (this.model.schedule !== null && !this.model.isRefreshingSchedule &&
             !this.model.isImportingCalendar) {
             this.model.importScheduleToCalendar();
+          }
+        })
+
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.star'))
+            .fontSize(16)
+            .fontColor([AppTheme.text()])
+          Text(this.model.isImportingCalendar ? this.model.text('正在导入…') :
+            this.model.text('导入已收藏日程'))
+            .fontSize(14)
+            .fontColor(AppTheme.text())
+        }
+        .width('100%')
+        .height(40)
+        .padding({ left: 12, right: 12 })
+        .alignItems(VerticalAlign.Center)
+        .backgroundColor(AppTheme.background())
+        .borderRadius(8)
+        .opacity(this.model.favoriteDeadlines.length > 0 && !this.model.isImportingCalendar ? 1 : 0.55)
+        .onClick(() => {
+          this.showingActions = false;
+          if (this.model.favoriteDeadlines.length > 0 && !this.model.isImportingCalendar) {
+            this.model.importFavoritesToCalendar();
           }
         })
       }

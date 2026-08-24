@@ -23,6 +23,7 @@ data class SystemCalendarImportResult(
     val updatedEvents: Int,
     val removedDuplicates: Int,
     val removedStaleEvents: Int,
+    val itemLabel: String = "课程",
 )
 
 class SystemCalendarImportException(message: String, cause: Throwable? = null) :
@@ -156,6 +157,31 @@ class SystemCalendarImporter(context: Context) {
         return Result.success(registration)
     }
 
+    internal fun importFavorites(
+        favorites: List<PublicDeadlineItem>,
+        onComplete: (Result<SystemCalendarImportResult>) -> Unit,
+    ): Result<CalendarImportRegistration> {
+        if (closed.get()) {
+            return Result.failure(SystemCalendarImportException("日历导入服务已关闭。"))
+        }
+        if (favorites.isEmpty()) {
+            return Result.failure(SystemCalendarImportException("暂无已收藏日程。"))
+        }
+        val registration = processCoordinator.start(observerID, completion(onComplete))
+            ?: return Result.failure(SystemCalendarImportException("日历正在导入，请稍后重试。"))
+        val accepted = processWorker.execute {
+            val result = runCatching { importFavoritesOnWorker(favorites) }
+            processCoordinator.complete(registration.token, result).forEach { observer ->
+                observer(registration.token, result)
+            }
+        }
+        if (!accepted) {
+            processCoordinator.cancelStart(registration.token)
+            return Result.failure(SystemCalendarImportException("日历导入服务已关闭。"))
+        }
+        return Result.success(registration)
+    }
+
     internal fun attach(
         token: Long,
         onComplete: (Result<SystemCalendarImportResult>) -> Unit,
@@ -198,7 +224,7 @@ class SystemCalendarImporter(context: Context) {
         }
         val drafts = ScheduleCalendarLogic.expand(schedule)
         val calendar = findPrimaryWritableCalendar()
-        val existingEvents = existingEvents()
+        val existingEvents = existingEvents(ScheduleCalendarLogic.markerPrefix)
         val plan = CalendarSyncPlanner.plan(schedule, drafts, existingEvents)
         val operations = mutableListOf<ContentProviderOperation>()
 
@@ -230,6 +256,47 @@ class SystemCalendarImporter(context: Context) {
             updatedEvents = plan.updates.size,
             removedDuplicates = plan.duplicateEventIDs.size,
             removedStaleEvents = plan.staleEventIDs.size,
+        )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun importFavoritesOnWorker(
+        favorites: List<PublicDeadlineItem>,
+    ): SystemCalendarImportResult {
+        if (!hasCalendarPermissions()) {
+            throw SystemCalendarImportException("需要日历读写权限才能导入收藏日程。")
+        }
+        val drafts = FavoriteCalendarLogic.expand(favorites)
+        val calendar = findPrimaryWritableCalendar()
+        val existingEvents = existingEvents(FavoriteCalendarLogic.markerPrefix)
+        val plan = CalendarSyncPlanner.planFavorites(drafts, existingEvents)
+        val operations = mutableListOf<ContentProviderOperation>()
+        (plan.duplicateEventIDs + plan.staleEventIDs).distinct().forEach { eventID ->
+            operations += ContentProviderOperation.newDelete(
+                ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventID),
+            ).build()
+        }
+        plan.updates.forEach { update ->
+            operations += ContentProviderOperation.newUpdate(
+                ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, update.eventID),
+            ).withValues(eventValues(update.draft, calendar.id)).build()
+        }
+        plan.inserts.forEach { draft ->
+            operations += ContentProviderOperation.newInsert(CalendarContract.Events.CONTENT_URI)
+                .withValues(eventValues(draft, calendar.id))
+                .build()
+        }
+        operations.chunked(MAX_OPERATIONS_PER_BATCH).forEach { batch ->
+            resolver.applyBatch(CalendarContract.AUTHORITY, ArrayList(batch))
+        }
+        return SystemCalendarImportResult(
+            calendarName = calendar.name,
+            totalEvents = drafts.size,
+            insertedEvents = plan.inserts.size,
+            updatedEvents = plan.updates.size,
+            removedDuplicates = plan.duplicateEventIDs.size,
+            removedStaleEvents = plan.staleEventIDs.size,
+            itemLabel = "收藏日程",
         )
     }
 
@@ -268,7 +335,7 @@ class SystemCalendarImporter(context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun existingEvents(): List<ManagedCalendarEvent> {
+    private fun existingEvents(markerPrefix: String): List<ManagedCalendarEvent> {
         val projection = arrayOf(
             CalendarContract.Events._ID,
             CalendarContract.Events.CUSTOM_APP_URI,
@@ -279,7 +346,7 @@ class SystemCalendarImporter(context: Context) {
             "${CalendarContract.Events.DELETED} = 0"
         val selectionArgs = arrayOf(
             appContext.packageName,
-            "${ScheduleCalendarLogic.markerPrefix}%",
+            "$markerPrefix%",
         )
         val events = mutableListOf<ManagedCalendarEvent>()
         resolver.query(
