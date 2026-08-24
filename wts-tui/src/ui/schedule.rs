@@ -88,11 +88,11 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         Constraint::Length(10),
         Constraint::Length(10),
     ];
-    let table = Table::new(rows, widths).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(format!("本周课表 · 第 {week} 周")),
-    );
+    let table =
+        Table::new(rows, widths).block(Block::default().borders(Borders::ALL).title(format!(
+            "本周课表 · 公历第 {} 周 · 教学第 {week} 周",
+            today_in_app_tz().iso_week().week()
+        )));
 
     frame.render_widget(table, area);
 }

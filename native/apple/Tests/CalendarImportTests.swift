@@ -36,7 +36,7 @@ final class CalendarImportTests: XCTestCase {
         let drafts = try CalendarImportLogic.eventDrafts(from: schedule)
 
         XCTAssertEqual(drafts.count, 2)
-        XCTAssertEqual(drafts.map(\.title), ["数据挖掘", "试 数据挖掘"])
+        XCTAssertEqual(drafts.map(\.title), ["数据挖掘", "数据挖掘"])
         XCTAssertEqual(drafts.map(\.location), ["教二楼-3-335", "教二楼-3-335"])
         XCTAssertEqual(Self.formatter.string(from: drafts[0].startDate), "2026-03-02 09:50")
         XCTAssertEqual(Self.formatter.string(from: drafts[0].endDate), "2026-03-02 12:15")

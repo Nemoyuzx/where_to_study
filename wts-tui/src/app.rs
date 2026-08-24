@@ -306,7 +306,7 @@ mod tests {
                     room: "教3-539".to_string(),
                     week_text: "1-2".to_string(),
                     week_numbers: vec![1, 2],
-                    exam_week_numbers: vec![2],
+                    exam_week_numbers: vec![],
                     weekday: 1,
                     start_slot: 7,
                     end_slot: 8,

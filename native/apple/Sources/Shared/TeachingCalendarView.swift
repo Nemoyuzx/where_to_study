@@ -295,6 +295,29 @@ private struct CalendarMonthDaySnapshot: Identifiable {
     var id: Date { date }
 }
 
+private final class CalendarMonthSnapshotCache: ObservableObject {
+    private var key: String?
+    private var snapshots = [CalendarMonthDaySnapshot]()
+
+    func values(
+        for key: String,
+        build: () -> [CalendarMonthDaySnapshot]
+    ) -> [CalendarMonthDaySnapshot] {
+        if self.key == key { return snapshots }
+        let values = build()
+        self.key = key
+        snapshots = values
+        return values
+    }
+
+    func invalidate() {
+        guard key != nil else { return }
+        objectWillChange.send()
+        key = nil
+        snapshots = []
+    }
+}
+
 #if os(macOS)
 private struct DesktopMonthEvent: Identifiable {
     enum Kind: Equatable {
@@ -472,10 +495,13 @@ enum TeachingCalendarLogic {
                 return formatter.string(from: date)
             case CalendarMode.week.rawValue:
                 formatter.dateFormat = "MMMM yyyy"
-                if let teachingWeekNumber {
-                    return "\(formatter.string(from: date)) · Teaching Week \(teachingWeekNumber)"
-                }
-                return formatter.string(from: date)
+                let context = weekContext(
+                    for: date,
+                    teachingWeekNumber: teachingWeekNumber,
+                    language: language,
+                    calendar: calendar
+                )
+                return "\(formatter.string(from: date)) · \(context)"
             case CalendarMode.year.rawValue:
                 return "\(year)"
             default:
@@ -487,15 +513,50 @@ enum TeachingCalendarLogic {
         case CalendarMode.day.rawValue:
             return "\(year)年\(month)月\(calendar.component(.day, from: date))日"
         case CalendarMode.week.rawValue:
-            if let teachingWeekNumber {
-                return "\(year)年\(month)月 第 \(teachingWeekNumber) 教学周"
-            }
-            return "\(year)年\(month)月"
+            let context = weekContext(
+                for: date,
+                teachingWeekNumber: teachingWeekNumber,
+                language: language,
+                calendar: calendar
+            )
+            return "\(year)年\(month)月 · \(context)"
         case CalendarMode.year.rawValue:
             return "\(year)年"
         default:
             return "\(year)年\(month)月"
         }
+    }
+
+    static func civilWeekNumber(
+        on date: Date,
+        calendar: Calendar = .shanghai
+    ) -> Int {
+        ScheduleLogic.civilWeekNumber(on: date, calendar: calendar)
+    }
+
+    static func weekContext(
+        for date: Date,
+        teachingWeekNumber: Int?,
+        language: AppLanguage = .simplifiedChinese,
+        calendar: Calendar = .shanghai,
+        compact: Bool = false
+    ) -> String {
+        let civilWeek = civilWeekNumber(on: date, calendar: calendar)
+        if language.resolvedResourceName == "en" {
+            if compact {
+                return teachingWeekNumber.map { "C\(civilWeek) · T\($0)" }
+                    ?? "C\(civilWeek) · Outside term"
+            }
+            return teachingWeekNumber.map {
+                "Calendar Week \(civilWeek) · Teaching Week \($0)"
+            } ?? "Calendar Week \(civilWeek) · Outside teaching weeks"
+        }
+        if compact {
+            return teachingWeekNumber.map { "公\(civilWeek) · 教\($0)" }
+                ?? "公\(civilWeek) · 非教学周"
+        }
+        return teachingWeekNumber.map { "公历第 \(civilWeek) 周 · 第 \($0) 教学周" }
+            ?? "公历第 \(civilWeek) 周 · 非教学周"
     }
 
     static func movedDate(
@@ -753,11 +814,13 @@ struct TeachingCalendarView: View {
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @ObservedObject var session: TeachingCalendarSessionState
+    @StateObject private var monthSnapshotCache = CalendarMonthSnapshotCache()
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
     @State private var showingDatePicker = false
     @State private var presentedTimelineAgenda: CalendarAgendaSelection?
     @State private var monthPagingGeneration = 0
+    @State private var yearPopoverScrollTarget = TeachingCalendarView.yearPopoverTopID
 
     private let calendar = Calendar.shanghai
 
@@ -802,7 +865,9 @@ struct TeachingCalendarView: View {
             }
             #endif
 
+            #if !os(macOS)
             yearPopoverOverlay
+            #endif
             if let selection = presentedTimelineAgenda {
                 calendarAgendaDialog(
                     selection,
@@ -815,6 +880,72 @@ struct TeachingCalendarView: View {
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.calendar")
         .coordinateSpace(name: Self.calendarCoordinateSpace)
+        #if os(macOS)
+        .popover(isPresented: yearPopoverPresentation, arrowEdge: .top) {
+            if let day = yearPopoverDate {
+                ScrollViewReader { proxy in
+                    VStack(spacing: 0) {
+                        HStack(spacing: 8) {
+                            Text("日期详情")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.secondaryText)
+                            Spacer(minLength: 8)
+                            Text(
+                                yearPopoverScrollTarget == Self.yearPopoverBottomID
+                                    ? "底部"
+                                    : "顶部"
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .accessibilityIdentifier("calendar.desktop.year-popover-position")
+                            Button {
+                                yearPopoverScrollTarget = Self.yearPopoverTopID
+                            } label: {
+                                Image(systemName: "arrow.up.to.line")
+                            }
+                            .buttonStyle(.bordered)
+                            .help("滚动到顶部")
+                            .accessibilityIdentifier("calendar.desktop.year-popover-top")
+                            Button {
+                                yearPopoverScrollTarget = Self.yearPopoverBottomID
+                            } label: {
+                                Image(systemName: "arrow.down.to.line")
+                            }
+                            .buttonStyle(.bordered)
+                            .help("滚动到底部")
+                            .accessibilityIdentifier("calendar.desktop.year-popover-bottom")
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        Divider()
+                        ScrollView(.vertical) {
+                            VStack(spacing: 0) {
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id(Self.yearPopoverTopID)
+                                selectedDayPopover(day)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(16)
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id(Self.yearPopoverBottomID)
+                            }
+                        }
+                        .scrollIndicators(.visible)
+                        .accessibilityLabel("年视图日期详情滚动区")
+                        .accessibilityIdentifier("calendar.desktop.year-popover-scroll")
+                    }
+                    .onChange(of: yearPopoverScrollTarget) { target in
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            proxy.scrollTo(target, anchor: target == Self.yearPopoverBottomID ? .bottom : .top)
+                        }
+                    }
+                }
+                .frame(width: 320, height: 360)
+                .background(AppTheme.surface)
+            }
+        }
+        #endif
         .onChange(of: mode) { _ in
             dismissYearPopover()
             presentedTimelineAgenda = nil
@@ -823,6 +954,12 @@ struct TeachingCalendarView: View {
             dismissYearPopover()
             showingDatePicker = false
             presentedTimelineAgenda = nil
+        }
+        .onReceive(model.objectWillChange) { _ in
+            monthSnapshotCache.invalidate()
+        }
+        .onReceive(calendarDeadlines.objectWillChange) { _ in
+            monthSnapshotCache.invalidate()
         }
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
@@ -1056,6 +1193,16 @@ struct TeachingCalendarView: View {
 
     private var dayView: some View {
         return VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text(monthWeekContextText(date: selectedDate))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            } icon: {
+                Image(systemName: "graduationcap")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppTheme.secondaryText)
+            .accessibilityIdentifier("calendar.regular.day-week-context")
             CalendarTimelineView(
                 days: [timelineDay(selectedDate)],
                 selectedDate: selectedDate,
@@ -1113,7 +1260,7 @@ struct TeachingCalendarView: View {
         #else
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         let days = monthGridDates(containing: first)
-        let daySnapshots = monthDaySnapshots(for: days)
+        let daySnapshots = cachedDaySnapshots(for: days, scope: "month")
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return VStack(alignment: .leading, spacing: 12) {
             #if !os(macOS)
@@ -1167,7 +1314,7 @@ struct TeachingCalendarView: View {
     private var desktopMonthView: some View {
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         let days = monthGridDates(containing: first)
-        let daySnapshots = monthDaySnapshots(for: days)
+        let daySnapshots = cachedDaySnapshots(for: days, scope: "month")
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 0), count: 7)
 
         return GeometryReader { proxy in
@@ -1387,11 +1534,46 @@ struct TeachingCalendarView: View {
         .frame(maxWidth: .infinity, minHeight: 15, maxHeight: 15, alignment: .leading)
         .background(tint.opacity(0.15))
         .clipShape(RoundedRectangle(cornerRadius: 3))
+        .accessibilityIdentifier("calendar.desktop.month-event.\(event.id)")
     }
 
     private func desktopMonthEvents(_ snapshot: CalendarMonthDaySnapshot) -> [DesktopMonthEvent] {
         let dateKey = snapshot.dateKey
-        return snapshot.courses.map { course in
+        let holidayEvents = snapshot.holidays.map { holiday in
+            DesktopMonthEvent(
+                id: "\(dateKey)|holiday|\(holiday.id)",
+                title: "\(model.localized(holiday.type == "holiday" ? "休" : "班")) \(holiday.name)",
+                time: nil,
+                kind: holiday.type == "holiday" ? .holiday : .workday
+            )
+        }
+        let assignmentEvents = snapshot.assignments.map { assignment in
+            DesktopMonthEvent(
+                id: "\(dateKey)|assignment|\(assignment.id)",
+                title: assignment.title,
+                time: deadlineTime(assignment.deadline),
+                kind: .assignment
+            )
+        }
+        let schoolNoticeEvents = snapshot.schoolNotices.map { notice in
+            DesktopMonthEvent(
+                id: "\(dateKey)|school|\(notice.id)",
+                title: notice.name,
+                time: deadlineTime(notice.deadline),
+                kind: .schoolNotice,
+                deadlineItem: notice
+            )
+        }
+        let publicDeadlineEvents = snapshot.publicDeadlines.map { item in
+            DesktopMonthEvent(
+                id: "\(dateKey)|public|\(item.id)",
+                title: item.name,
+                time: deadlineTime(item.deadline),
+                kind: .publicDeadline,
+                deadlineItem: item
+            )
+        }
+        let courseEvents = snapshot.courses.map { course in
             DesktopMonthEvent(
                 id: "\(dateKey)|course|\(course.id)",
                 title: course.name,
@@ -1399,6 +1581,11 @@ struct TeachingCalendarView: View {
                 kind: .course
             )
         }
+        return holidayEvents
+            + assignmentEvents
+            + schoolNoticeEvents
+            + publicDeadlineEvents
+            + courseEvents
     }
 
     private func desktopMonthEventTint(_ kind: DesktopMonthEvent.Kind) -> Color {
@@ -1595,8 +1782,16 @@ struct TeachingCalendarView: View {
     }
 
     private var yearView: some View {
+        let yearDays = TeachingCalendarLogic.datesInYear(
+            containing: selectedDate,
+            calendar: calendar
+        )
+        let snapshotsByDate = Dictionary(
+            uniqueKeysWithValues: cachedDaySnapshots(for: yearDays, scope: "year")
+                .map { ($0.dateKey, $0) }
+        )
         #if os(macOS)
-        return desktopYearView
+        return desktopYearView(snapshotsByDate: snapshotsByDate)
         #else
         let year = calendar.component(.year, from: selectedDate)
         let months = (1 ... 12).compactMap {
@@ -1606,7 +1801,7 @@ struct TeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 12) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
                 ForEach(months, id: \.self) { month in
-                    miniMonth(month)
+                    miniMonth(month, snapshotsByDate: snapshotsByDate)
                 }
             }
         }
@@ -1614,7 +1809,9 @@ struct TeachingCalendarView: View {
     }
 
     #if os(macOS)
-    private var desktopYearView: some View {
+    private func desktopYearView(
+        snapshotsByDate: [String: CalendarMonthDaySnapshot]
+    ) -> some View {
         let year = calendar.component(.year, from: selectedDate)
         let months = (1 ... 12).compactMap {
             calendar.date(from: DateComponents(year: year, month: $0, day: 1))
@@ -1629,7 +1826,11 @@ struct TeachingCalendarView: View {
 
             LazyVGrid(columns: columns, alignment: .leading, spacing: layout.rowSpacing) {
                 ForEach(months, id: \.self) { month in
-                    desktopMiniMonth(month, layout: layout)
+                    desktopMiniMonth(
+                        month,
+                        layout: layout,
+                        snapshotsByDate: snapshotsByDate
+                    )
                 }
             }
             .frame(
@@ -1644,7 +1845,8 @@ struct TeachingCalendarView: View {
 
     private func desktopMiniMonth(
         _ month: Date,
-        layout: TeachingCalendarLogic.DesktopYearLayout
+        layout: TeachingCalendarLogic.DesktopYearLayout,
+        snapshotsByDate: [String: CalendarMonthDaySnapshot]
     ) -> some View {
         let days = monthGridDates(containing: month)
         let columns = Array(
@@ -1671,7 +1873,12 @@ struct TeachingCalendarView: View {
                 }
 
                 ForEach(days, id: \.self) { day in
-                    desktopYearDay(day, month: month, layout: layout)
+                    desktopYearDay(
+                        day,
+                        month: month,
+                        layout: layout,
+                        snapshot: snapshotsByDate[StrictContractDateParser.string(from: day)]
+                    )
                 }
             }
         }
@@ -1687,15 +1894,16 @@ struct TeachingCalendarView: View {
     private func desktopYearDay(
         _ day: Date,
         month: Date,
-        layout: TeachingCalendarLogic.DesktopYearLayout
+        layout: TeachingCalendarLogic.DesktopYearLayout,
+        snapshot: CalendarMonthDaySnapshot?
     ) -> some View {
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
         if inMonth {
-            let dayCourses = courses(on: day)
-            let holidays = holidayItems(on: day)
+            let dayCourses = snapshot?.courses ?? []
+            let holidays = snapshot?.holidays ?? []
             let isToday = sameDay(day, .now)
             let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-                in: allDayEvents(on: day)
+                in: snapshot?.allDayEvents ?? []
             )
             let isSelected = sameDay(selectedDate, day)
             let baseColor = dayCourses.isEmpty
@@ -1810,7 +2018,10 @@ struct TeachingCalendarView: View {
     }
     #endif
 
-    private func miniMonth(_ month: Date) -> some View {
+    private func miniMonth(
+        _ month: Date,
+        snapshotsByDate: [String: CalendarMonthDaySnapshot]
+    ) -> some View {
         let days = monthGridDates(containing: month)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 2), count: 7)
         return VStack(alignment: .leading, spacing: 6) {
@@ -1823,21 +2034,29 @@ struct TeachingCalendarView: View {
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(days, id: \.self) { day in
-                    yearDayButton(day, month: month)
+                    yearDayButton(
+                        day,
+                        month: month,
+                        snapshot: snapshotsByDate[StrictContractDateParser.string(from: day)]
+                    )
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func yearDayButton(_ day: Date, month: Date) -> some View {
+    private func yearDayButton(
+        _ day: Date,
+        month: Date,
+        snapshot: CalendarMonthDaySnapshot?
+    ) -> some View {
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
         if inMonth {
-            let dayCourses = courses(on: day)
-            let holidays = holidayItems(on: day)
+            let dayCourses = snapshot?.courses ?? []
+            let holidays = snapshot?.holidays ?? []
             let isToday = sameDay(day, .now)
             let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-                in: allDayEvents(on: day)
+                in: snapshot?.allDayEvents ?? []
             )
             let isSelected = sameDay(selectedDate, day)
             let cell = VStack(spacing: 0) {
@@ -1957,10 +2176,14 @@ struct TeachingCalendarView: View {
                         .contentShape(Rectangle())
                         .onTapGesture(perform: dismissYearPopover)
 
-                    ScrollView {
+                    ScrollView(.vertical) {
                         selectedDayPopover(day)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .scrollIndicators(.visible)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("年视图日期详情滚动区")
+                    .accessibilityIdentifier("calendar.desktop.year-popover-scroll")
                     .frame(
                         width: panelWidth - 32,
                         height: panelHeight - 32,
@@ -1976,7 +2199,9 @@ struct TeachingCalendarView: View {
                     .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
                     .offset(x: originX, y: originY)
                     .contentShape(Rectangle())
-                    .onTapGesture { }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("年视图日期详情")
+                    .accessibilityIdentifier("calendar.desktop.year-popover")
                 }
             }
             .zIndex(20)
@@ -2045,17 +2270,8 @@ struct TeachingCalendarView: View {
 
     private func selectedDaySummary(_ day: Date) -> some View {
         let dayCourses = courses(on: day)
-        let holidays = holidayItems(on: day)
-        let assignments = assignmentItems(on: day)
-        let schoolNotices = schoolNoticeItems(on: day)
-        let publicDeadlines = otherPublicDeadlineItems(on: day)
         return VStack(alignment: .leading, spacing: 8) {
             Text(fullDateFormatter.string(from: day)).font(.headline)
-            ForEach(holidays) { item in
-                Text("\(model.localized(item.type == "holiday" ? "休" : "班")) \(item.name)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Self.holidayColor(item))
-            }
             if dayCourses.isEmpty {
                 Text("暂无课程").foregroundStyle(AppTheme.secondaryText)
             } else {
@@ -2075,17 +2291,9 @@ struct TeachingCalendarView: View {
                     }
                 }
             }
-            if !assignments.isEmpty {
-                compactAssignmentRows(assignments)
-            }
-            if !schoolNotices.isEmpty {
-                compactSchoolNoticeRows(schoolNotices)
-            }
-            if !publicDeadlines.isEmpty {
-                compactPublicDeadlineRows(publicDeadlines)
-            }
         }
         .padding(.top, 4)
+        .accessibilityIdentifier("calendar.regular.selected-day-courses")
     }
 
     private func compactAssignmentRows(_ items: [AssignmentDeadlineItem]) -> some View {
@@ -2830,6 +3038,10 @@ struct TeachingCalendarView: View {
             grouping: years.flatMap { model.holidayItems(for: $0) },
             by: \.date
         )
+        let favoritesByDate = Dictionary(
+            grouping: model.favoriteDeadlines,
+            by: { String($0.deadline.prefix(10)) }
+        )
 
         return days.map { day in
             let dateKey = StrictContractDateParser.string(from: day)
@@ -2837,7 +3049,7 @@ struct TeachingCalendarView: View {
             let assignments = calendarDeadlines.assignmentsByDate[dateKey] ?? []
             let publicItems = model.visibleDeadlineItems(
                 liveItems: calendarDeadlines.publicItems(for: dateKey),
-                on: dateKey
+                favoriteItems: favoritesByDate[dateKey] ?? []
             )
             let schoolNotices = publicItems.filter { $0.source == .schoolNotice }
             let publicDeadlines = publicItems.filter { $0.source != .schoolNotice }
@@ -2857,6 +3069,17 @@ struct TeachingCalendarView: View {
                     publicDeadlines: publicDeadlines
                 )
             )
+        }
+    }
+
+    private func cachedDaySnapshots(
+        for days: [Date],
+        scope: String
+    ) -> [CalendarMonthDaySnapshot] {
+        let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
+        let key = "\(scope)|\(firstDate)|\(days.count)"
+        return monthSnapshotCache.values(for: key) {
+            monthDaySnapshots(for: days)
         }
     }
 
@@ -3030,6 +3253,16 @@ struct TeachingCalendarView: View {
     private func dismissYearPopover() {
         yearPopoverDate = nil
         yearPopoverLocation = nil
+        yearPopoverScrollTarget = Self.yearPopoverTopID
+    }
+
+    private var yearPopoverPresentation: Binding<Bool> {
+        Binding(
+            get: { yearPopoverDate != nil },
+            set: { isPresented in
+                if !isPresented { dismissYearPopover() }
+            }
+        )
     }
 
     private var monthGridIdentity: String {
@@ -3055,8 +3288,9 @@ struct TeachingCalendarView: View {
         case .month:
             return mode.rawValue
         case .year:
-            referenceDate = calendar.dateInterval(of: .year, for: selectedDate)?.start
-                ?? selectedDate
+            // A year grid contains hundreds of cells. Update it in place so
+            // page navigation never renders the old and new years together.
+            return mode.rawValue
         }
         return "\(mode.rawValue)-\(referenceDate.timeIntervalSinceReferenceDate)"
     }
@@ -3066,10 +3300,13 @@ struct TeachingCalendarView: View {
     }
 
     private func monthWeekContextText(date: Date) -> String {
-        if let teachingWeek = teachingWeekNumber(on: date) {
-            return model.localizedFormat("第 %lld 教学周", Int64(teachingWeek))
-        }
-        return model.localized("非教学周")
+        TeachingCalendarLogic.weekContext(
+            for: date,
+            teachingWeekNumber: teachingWeekNumber(on: date),
+            language: model.appLanguage,
+            calendar: calendar,
+            compact: mode == .month
+        )
     }
 
     private func teachingWeekNumber(on date: Date) -> Int? {
@@ -3137,6 +3374,8 @@ struct TeachingCalendarView: View {
     private static let nowRed = AppTheme.danger
     private static let holidayRed = AppTheme.danger
     private static let calendarCoordinateSpace = "teaching-calendar"
+    private static let yearPopoverTopID = "year-popover-top"
+    private static let yearPopoverBottomID = "year-popover-bottom"
     private static let viewAnimation = TeachingCalendarNavigationMotion.pageAnimation
     private static let pageAnimation = TeachingCalendarNavigationMotion.pageAnimation
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)

@@ -282,7 +282,6 @@ fn courses_on_day(
                 "time_range": course.time_range,
                 "start_slot": course.start_slot + 1,
                 "end_slot": course.end_slot + 1,
-                "is_exam": course.exam_week_numbers.contains(&week),
             })
         })
         .collect()
@@ -371,6 +370,33 @@ mod tests {
             fetched_at: String::new(),
             courses: Vec::new(),
         }
+    }
+
+    #[test]
+    fn schedule_json_does_not_expose_removed_exam_week_semantics() {
+        let date = NaiveDate::from_ymd_opt(2026, 3, 2).unwrap();
+        let schedule = ScheduleResponse {
+            term_id: "2025-2026-2".to_string(),
+            term_start_date: "2026-03-02".to_string(),
+            fetched_at: String::new(),
+            courses: vec![Course {
+                id: "legacy".to_string(),
+                name: "旧缓存课程".to_string(),
+                teacher: String::new(),
+                room: String::new(),
+                week_text: "1".to_string(),
+                week_numbers: vec![1],
+                exam_week_numbers: vec![1],
+                weekday: 1,
+                start_slot: 0,
+                end_slot: 1,
+                section_text: "1-2节".to_string(),
+                time_range: "08:00-09:35".to_string(),
+            }],
+        };
+        let courses = courses_on_day(&schedule, date, 1);
+        assert_eq!(courses.len(), 1);
+        assert!(courses[0].get("is_exam").is_none());
     }
 
     #[test]

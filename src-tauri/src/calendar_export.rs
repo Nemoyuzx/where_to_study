@@ -76,10 +76,6 @@ fn event_description(course: &Course) -> String {
     lines.join("\n")
 }
 
-fn is_exam_course_week(course: &Course, week_number: i64) -> bool {
-    course.exam_week_numbers.contains(&week_number)
-}
-
 fn build_ics(schedule: &ScheduleResponse) -> ServiceResult<String> {
     let term_start_date = NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d")
         .map_err(|_| ServiceError::new("第一周周一日期格式不正确，无法导入苹果日历。"))?;
@@ -121,19 +117,13 @@ fn build_ics(schedule: &ScheduleResponse) -> ServiceResult<String> {
                 week_number
             );
 
-            let summary = if is_exam_course_week(course, *week_number) {
-                format!("【试】{}", course.name)
-            } else {
-                course.name.clone()
-            };
-
             lines.extend([
                 "BEGIN:VEVENT".to_string(),
                 format!("UID:{uid}"),
                 format!("DTSTAMP:{dtstamp}"),
                 format!("DTSTART;TZID=Asia/Shanghai:{date_stamp}T{start_stamp}00"),
                 format!("DTEND;TZID=Asia/Shanghai:{date_stamp}T{end_stamp}00"),
-                format!("SUMMARY:{}", escape_ics_text(&summary)),
+                format!("SUMMARY:{}", escape_ics_text(&course.name)),
                 format!("LOCATION:{}", escape_ics_text(&course.room)),
                 format!(
                     "DESCRIPTION:{}",

@@ -337,7 +337,6 @@ enum CalendarImportLogic {
 
                 let marker = eventMarker(termID: schedule.termID, courseID: course.id, week: week)
                 guard markers.insert(marker).inserted else { continue }
-                let title = course.examWeekNumbers.contains(week) ? "试 \(course.name)" : course.name
                 let detailLines = [
                     course.teacher.isEmpty ? nil : "教师：\(course.teacher)",
                     course.sectionText.isEmpty ? nil : "节次：\(course.sectionText)",
@@ -346,7 +345,7 @@ enum CalendarImportLogic {
                 ].compactMap { $0 }
                 drafts.append(CalendarEventDraft(
                     marker: marker,
-                    title: title,
+                    title: course.name,
                     location: course.room,
                     notes: detailLines.joined(separator: "\n"),
                     startDate: startDate,

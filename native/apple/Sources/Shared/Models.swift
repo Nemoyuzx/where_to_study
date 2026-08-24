@@ -209,9 +209,14 @@ enum ClassroomDefaults {
 }
 
 enum ScheduleLogic {
-    static func examWeeks(in courses: [Course]) -> Set<Int> {
-        let weeks = Array(Set(courses.flatMap(\.weekNumbers).filter { $0 > 0 })).sorted()
-        return Set([weeks[safe: 16], weeks[safe: 17]].compactMap { $0 })
+    static func civilWeekNumber(
+        on date: Date,
+        calendar: Calendar = .shanghai
+    ) -> Int {
+        var isoCalendar = calendar
+        isoCalendar.firstWeekday = 2
+        isoCalendar.minimumDaysInFirstWeek = 4
+        return isoCalendar.component(.weekOfYear, from: date)
     }
 
     static func weekNumber(on date: Date, termStart: Date, calendar: Calendar = .shanghai) -> Int {
@@ -256,8 +261,9 @@ enum ScheduleLogic {
         }
     }
 
-    static func applyingExamWeeks(to courses: [Course]) -> [Course] {
-        let examWeeks = examWeeks(in: courses)
+    /// `exam_week_numbers` remains decodable for old caches and the shared
+    /// wire contract, but Apple clients no longer infer or present exam weeks.
+    static func clearingLegacyExamWeeks(in courses: [Course]) -> [Course] {
         return courses.map { course in
             Course(
                 id: course.id,
@@ -266,7 +272,7 @@ enum ScheduleLogic {
                 room: course.room,
                 weekText: course.weekText,
                 weekNumbers: course.weekNumbers,
-                examWeekNumbers: course.weekNumbers.filter(examWeeks.contains),
+                examWeekNumbers: [],
                 weekday: course.weekday,
                 startSlot: course.startSlot,
                 endSlot: course.endSlot,

@@ -249,6 +249,20 @@ export function calendarSurfaceKey(view, dateString) {
   return `${view}:${dateString}`
 }
 
+// ISO 8601: weeks start on Monday and week 1 is the week containing January 4.
+// Use UTC calendar arithmetic so the displayed week never depends on the
+// device timezone or daylight-saving transitions.
+export function calendarWeekOfYear(dateString) {
+  const date = dateFromString(dateString)
+  if (Number.isNaN(date.getTime())) return 0
+  const [year, month, day] = dateString.split('-').map(Number)
+  const thursday = new Date(Date.UTC(year, month - 1, day))
+  const isoWeekday = thursday.getUTCDay() || 7
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - isoWeekday)
+  const isoYearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1))
+  return Math.ceil((((thursday - isoYearStart) / 86_400_000) + 1) / 7)
+}
+
 export function calendarTransition(currentDate, currentView, targetDate, targetView = currentView) {
   const currentViewIndex = CALENDAR_VIEWS.findIndex((item) => item.id === currentView)
   const targetViewIndex = CALENDAR_VIEWS.findIndex((item) => item.id === targetView)
@@ -713,15 +727,6 @@ export function isValidAccountScope(value) {
   return /^opaque-v1:[0-9a-f]{64}$/.test(String(value || ''))
 }
 
-// Exam weeks come exclusively from the backend, which annotates each course
-// (annotate_exam_weeks on parse and on cache load). Keeping a second positional
-// guess here would OR extra weeks into authoritative data once real exam weeks
-// are provided, so the frontend must not duplicate the heuristic.
-function isExamCourseOccurrence(course, weekNumber) {
-  const savedExamWeeks = Array.isArray(course.exam_week_numbers) ? course.exam_week_numbers : []
-  return savedExamWeeks.includes(weekNumber)
-}
-
 function dateOrdinal(dateString) {
   const [year, month, day] = dateString.split('-').map(Number)
   return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000)
@@ -748,10 +753,6 @@ export function getWeekState(courses, termStartDate, targetDate) {
   const dayCourses = courses
     .filter((course) => course.weekday === weekday
       && Array.isArray(course.week_numbers) && course.week_numbers.includes(weekNumber))
-    .map((course) => ({
-      ...course,
-      is_exam: isExamCourseOccurrence(course, weekNumber),
-    }))
     .sort((a, b) => a.start_slot - b.start_slot || a.name.localeCompare(b.name, 'zh-Hans-CN'))
   const maxSlotIndex = FALLBACK_SLOTS.length - 1
   const busySlots = [...new Set(dayCourses.flatMap((course) => {

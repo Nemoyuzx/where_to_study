@@ -27,9 +27,10 @@ pub fn print_schedule_day(
     let weekday = WEEKDAY_LABELS[date.weekday().num_days_from_monday() as usize];
     let courses = day_courses(schedule, date, week);
     println!(
-        "{} {} · 第 {} 周 · {} 门课",
+        "{} {} · 公历第 {} 周 · 教学第 {} 周 · {} 门课",
         date.format("%Y-%m-%d"),
         weekday,
+        date.iso_week().week(),
         week,
         courses.len()
     );
@@ -42,11 +43,6 @@ pub fn print_schedule_day(
         return Ok(());
     }
     for course in &courses {
-        let exam = if course.exam_week_numbers.contains(&week) {
-            "【试】"
-        } else {
-            ""
-        };
         let time = if course.time_range.is_empty() {
             format!(
                 "{}-{}",
@@ -66,7 +62,7 @@ pub fn print_schedule_day(
         } else {
             &course.teacher
         };
-        println!("  {exam}{}  {}  {}  {}", course.name, time, room, teacher);
+        println!("  {}  {}  {}  {}", course.name, time, room, teacher);
     }
     Ok(())
 }
@@ -81,7 +77,12 @@ pub fn print_schedule_week(
             date.weekday().num_days_from_monday() as u64
         ))
         .unwrap_or(date);
-    println!("第 {} 周（{} 起）", week, monday.format("%Y-%m-%d"));
+    println!(
+        "公历第 {} 周 · 教学第 {} 周（{} 起）",
+        monday.iso_week().week(),
+        week,
+        monday.format("%Y-%m-%d")
+    );
     for offset in 0..7 {
         let day = monday + Duration::days(offset);
         let courses = day_courses(schedule, day, week);
@@ -92,11 +93,6 @@ pub fn print_schedule_week(
         }
         println!("  {} {}：", day.format("%m-%d"), weekday);
         for course in &courses {
-            let exam = if course.exam_week_numbers.contains(&week) {
-                "【试】"
-            } else {
-                ""
-            };
             let time = if course.time_range.is_empty() {
                 format!(
                     "{}-{}",
@@ -111,7 +107,7 @@ pub fn print_schedule_week(
             } else {
                 &course.room
             };
-            println!("    {exam}{}  {}  {}", course.name, time, room);
+            println!("    {}  {}  {}", course.name, time, room);
         }
     }
     Ok(())

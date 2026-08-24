@@ -28,7 +28,7 @@ class TodayCourseWidgetLogicTest {
         val content = TodayCourseWidgetLogic.content(schedule(), mondayMorning)
 
         assertEquals(listOf("early", "later"), content.courses.map(Course::id))
-        assertEquals("3月2日 · 周一 · 第1周", content.dateContext)
+        assertEquals("3月2日 · 周一 · 公历第10周 · 教学第1周", content.dateContext)
         assertEquals("下一节 · 09:50", content.statusText)
         assertEquals("下一节 · 数据挖掘", TodayCourseWidgetLogic.title(content.courses.first(), content))
         assertEquals(

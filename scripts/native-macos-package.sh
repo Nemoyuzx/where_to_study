@@ -10,8 +10,9 @@ APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-macOS"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.5}"
+RELEASE_LABEL="${1:-v0.2.6}"
 ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-macos-universal.zip"
+DMG="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-macos-universal.dmg"
 validate_release_label "$RELEASE_LABEL"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/where-to-study-native-macos.XXXXXX")"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
@@ -153,10 +154,23 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 ditto -c -k --sequesterRsrc --keepParent "$PACKAGE_APP" "$ARCHIVE"
+DMG_ROOT="$TEMP_DIR/dmg-root"
+mkdir -p "$DMG_ROOT"
+ditto "$PACKAGE_APP" "$DMG_ROOT/Where To Study.app"
+ln -s /Applications "$DMG_ROOT/Applications"
+hdiutil create \
+  -volname "Where To Study" \
+  -srcfolder "$DMG_ROOT" \
+  -ov \
+  -format UDZO \
+  "$DMG" >/dev/null
+hdiutil verify "$DMG" >/dev/null
 (
   cd "$OUTPUT_DIR"
   shasum -a 256 "$(basename "$ARCHIVE")" > "$(basename "$ARCHIVE").sha256"
+  shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256"
 )
 
-echo "Native macOS package ready at:"
+echo "Native macOS packages ready at:"
 echo "  $ARCHIVE"
+echo "  $DMG"

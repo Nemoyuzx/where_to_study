@@ -21,7 +21,9 @@ object ScheduleJsonCodec {
                 room = item.optString("room"),
                 weekText = item.optString("week_text"),
                 weekNumbers = item.optJSONArray("week_numbers").integers(),
-                examWeekNumbers = item.optJSONArray("exam_week_numbers").integers(),
+                // Kept in the model/JSON shape for backward compatibility,
+                // but legacy inferred exam markers no longer enter runtime state.
+                examWeekNumbers = emptyList(),
                 weekday = item.getInt("weekday"),
                 startSlot = item.getInt("start_slot"),
                 endSlot = item.getInt("end_slot"),
@@ -33,7 +35,7 @@ object ScheduleJsonCodec {
             termID = root.getString("term_id"),
             termStartDate = root.getString("term_start_date"),
             fetchedAt = root.getString("fetched_at"),
-            courses = ScheduleLogic.applyingExamWeeks(courses),
+            courses = courses,
         )
     }
 
@@ -50,7 +52,7 @@ object ScheduleJsonCodec {
                     .put("room", course.room)
                     .put("week_text", course.weekText)
                     .put("week_numbers", JSONArray(course.weekNumbers))
-                    .put("exam_week_numbers", JSONArray(course.examWeekNumbers))
+                    .put("exam_week_numbers", JSONArray())
                     .put("weekday", course.weekday)
                     .put("start_slot", course.startSlot)
                     .put("end_slot", course.endSlot)

@@ -39,7 +39,7 @@ struct FileScheduleStore: ScheduleStoring {
             termID: decoded.termID,
             termStartDate: decoded.termStartDate,
             fetchedAt: decoded.fetchedAt,
-            courses: ScheduleLogic.applyingExamWeeks(to: decoded.courses)
+            courses: ScheduleLogic.clearingLegacyExamWeeks(in: decoded.courses)
         )
     }
 

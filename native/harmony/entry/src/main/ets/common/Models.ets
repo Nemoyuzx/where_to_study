@@ -81,7 +81,8 @@ export class Course {
       JsonUtil.string(raw['room']),
       JsonUtil.string(raw['week_text']),
       JsonUtil.numberArray(raw['week_numbers']),
-      JsonUtil.numberArray(raw['exam_week_numbers']),
+      // v1 契约暂时保留该字段以兼容旧缓存，但考试周推导功能已全平台移除。
+      [],
       weekday,
       startSlot,
       endSlot,

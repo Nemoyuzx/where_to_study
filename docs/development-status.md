@@ -1,14 +1,14 @@
-# 稳定版发布检查点（2026-08-24）
+# 稳定版发布检查点（2026-08-25）
 
 ## 当前状态
 
 - 分支：`main`
-- 当前发布版本：[v0.2.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.5)
-- 应用版本：`0.2.5`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=69`；Android `versionCode=41`；HarmonyOS `versionCode=1002008`；Tauri Android `versionCode=2008`
+- 当前发布版本：[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6)
+- 应用版本：`0.2.6`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=70`；Android `versionCode=42`；HarmonyOS `versionCode=1002009`；Tauri Android `versionCode=2009`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布验证后的 `/Applications`、iOS 模拟器与 Android 模拟器均未保留 Where To Study 安装副本；Xcode 构建副本已清理
-- 发布边界：`v0.2.5` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 69 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.6` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 70 通过 TestFlight 分发；GitHub Release 恢复未公证的原生 macOS Universal DMG，但不上传 iOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -17,7 +17,7 @@
 - 固化 `contracts/v1` 的课表、空教室和法定节假日契约及脱敏夹具。
 - Rust、Swift、Kotlin 统一教室解析：普通教室保留三位号，`202-203`、`217-218` 等双门号码保持为同一间教室。
 - 空教室严格只查询当天，保留原教学楼集合；个人课表页面不会跳转到联动查询；“推荐同一教室”已移除。
-- 个人课表查询后按账号范围持久化；课程实际存在的第 17、18 个周次标记为“试”。
+- 个人课表查询后按账号范围持久化；公历周统一使用 ISO 8601 并与教学周并列显示，不再推断或标注考试周。
 - 法定节假日自动读取固定版本 `holiday-calendar@1.3.3` 的中国年度数据，严格校验后缓存，并提供 2026 年离线兜底。
 
 ### Tauri / Windows / Linux
@@ -39,11 +39,11 @@
 ### Apple 原生端
 
 - SwiftUI macOS/iOS 已实现空教室、教学日历、设置三页和自适应手机、平板、桌面布局。
-- 接入 Keychain、本地账号范围缓存、SJD 课表/空教室、节假日、EventKit 真同步和考试标题。
+- 接入 Keychain、本地账号范围缓存、SJD 课表/空教室、节假日和 EventKit 真同步；考试周推断与考试标题已移除。
 - macOS 菜单栏显示今日/明日课程；关闭主窗口后应用继续驻留。
 - macOS 侧栏品牌标题与系统导航行内容对齐，实机窗口截图确认标题、三项导航和 14 个节次均无重叠。
 - 可选 07:30 本地课程摘要会在系统上限内安排最多 63 个未来有课日；关闭提醒、撤销权限、切换账号或清除数据会立即撤销旧通知。
-- 发布脚本生成 arm64 + x86_64 通用 macOS 预览包和 arm64 无签名 iOS archive，并校验版本、架构、隐私清单、HTTPS 数据源与本地路径泄漏；App Store 脚本另支持双平台正式分发签名、归档、导出与上传。
+- 发布脚本生成 arm64 + x86_64 通用 macOS ZIP/DMG 预览包和 arm64 无签名 iOS archive，并校验版本、架构、隐私清单、HTTPS 数据源与本地路径泄漏；App Store 脚本另支持双平台正式分发签名、归档、导出与上传。
 - 二进制内容校验只依赖 macOS/Linux runner 自带的 `grep`，不再要求额外安装 `ripgrep`；退役 HTTP 地址按固定字符串实际检查。
 - Apple 测试脚本按 UDID 选择 runner 上真实存在的 iPhone 模拟器，不再假设指定机型一定安装在全局最新 iOS runtime。
 - iPhone/iPad 教学日历使用独立移动布局：紧凑日期导航、可横向切换的完整周日期、日/周/月/年视图，以及不会遮挡时间轴内容的底部导航。
@@ -86,9 +86,25 @@
 - “今日课程”服务卡片补齐课程数量、地点和教师展示偏好，并统一无课状态。
 - 联动查询页补齐两校区天气与默认折叠卡片，折叠时保留摘要，展开后显示今日和明日详情。
 - 月视图日期详情补齐云课堂原生 CAS 登录与实时作业同步、黄历宜忌与竞赛/夏令营/黑客松统一 DDL 卡片，设置页提供天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松六个独立开关与来源声明。
-- 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年双层 DDL 同心边框、只折叠课程的日周摘要、独立的今天/选中状态、范围缓存和中英文界面；日/周时间轴轴区与日期区均使用整点实线和节次虚线；构建及 91 项 ArkTS 单元测试通过。
+- 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年双层 DDL 同心边框、只折叠课程的日周摘要、独立的今天/选中状态、范围缓存和中英文界面；日/周时间轴轴区与日期区均使用整点实线和节次虚线；构建及 112 项 ArkTS 单元测试通过。
 
-## 0.2.5 最终本地验证
+## 0.2.6 最终本地验证
+
+| 范围 | 结果 |
+| --- | --- |
+| React/Tauri UI | 114/114 Node 契约与主题测试、Vite 生产构建、许可证新鲜度检查通过；Playwright 覆盖宽/窄屏、深/浅色、中/英文的联动查询、日/周/月/年、设置与收藏，年弹卡真实滚轮 `scrollTop 0 → 420` |
+| Rust/Tauri | 146 项自动测试通过，1 项依赖本机安全存储与北邮在线服务的真实作业同步测试按设计忽略；共享 Core 55/55、CLI 14/14、TUI 14/14 通过 |
+| macOS SwiftUI | 204 项 XCTest、严格 Swift 6/警告即错误 Universal 构建、月格 DDL 去重、年弹卡滚动和宽屏空教室两栏视觉回归通过 |
+| iOS SwiftUI | 210 项 XCTest、iPhone 两项核心 UI、示例模式导航和 iPad Pro 13 英寸横屏回归通过；收藏管理为顶层页，公历周/教学周与宽屏双栏均有截图证据 |
+| TestFlight | iOS 与 macOS `0.2.6 (70)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
+| Android | `0.2.6 (42)` 的 186/186 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Phone/Fold UI smoke 与平板/折叠屏视觉检查通过 |
+| HarmonyOS | `0.2.6 (1002009)` 签名 HAP/App 构建与 112/112 ArkTS 单元测试通过；ISO 公历周、考试周清理、月格 DDL、收藏顶层页、宽屏双栏均通过编译与契约测试 |
+| macOS DMG | 原生 Universal DMG 的 `0.2.6 (70)`、`arm64 + x86_64`、主应用/Widget 临时签名、Applications 快捷方式与 `hdiutil verify` 均通过；该 GitHub 预览包未做 Developer ID 公证 |
+| 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、完整本地收藏快照及中英双语隐私说明通过；v1 `exam_week_numbers` 仅作兼容且新数据始终为空 |
+
+完整中英文变更见 [`release-v0.2.6.md`](release-v0.2.6.md)，自定义日程公开契约见 [`custom-schedule-api.md`](custom-schedule-api.md)。
+
+## 0.2.5 最终本地验证（历史）
 
 | 范围 | 结果 |
 | --- | --- |
@@ -133,6 +149,10 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 - macOS：0.2.4 最终源码 159/159 项逻辑测试通过
 - iOS：0.2.4 最终源码 166/166 项逻辑测试通过；17 项 UI smoke 中 15 项通过、2 项仅 iPad 条件跳过、0 项失败
 - 通知权限超时精确测试：20 轮、40/40 通过
+
+## 0.2.6 稳定版发布制品
+
+`v0.2.6` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.6 (42)` APK/AAB，以及恢复提供的原生 macOS `0.2.6 (70)` Universal DMG 预览包。iOS 与正式签名 macOS build 70 由本地 Xcode 上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证，TestFlight 仍是推荐的 macOS 分发渠道。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
 
 ## 0.2.5 稳定版发布制品
 

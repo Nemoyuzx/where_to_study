@@ -4,12 +4,14 @@ pub mod planner;
 pub mod schedule;
 pub mod settings;
 
+use chrono::Datelike;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Wrap;
 use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
 use ratatui::Frame;
+use where_to_study_lib::config::today_in_app_tz;
 
 use crate::app::{App, TAB_LABELS};
 use crate::theme::Theme;
@@ -95,7 +97,12 @@ fn status_line(app: &App) -> String {
     let date = crate::date_today_label();
     let week = app
         .current_week()
-        .map(|week| format!("第 {week} 周"))
+        .map(|week| {
+            format!(
+                "公历第 {} 周 · 教学第 {week} 周",
+                today_in_app_tz().iso_week().week()
+            )
+        })
         .unwrap_or_default();
     parts.push(format!("{date} {week}"));
     if parts.is_empty() {

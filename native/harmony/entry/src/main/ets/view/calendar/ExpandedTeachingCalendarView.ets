@@ -201,24 +201,31 @@ export struct ExpandedTeachingCalendarView {
   private periodTitle(): string {
     const base: string = TeachingCalendarLogic.periodTitle(
       this.selectedDate(), this.mode(), this.isEnglish());
-    const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
-    if (this.mode() !== CalendarMode.week || teachingWeek === null) {
+    if (this.mode() !== CalendarMode.week) {
       return base;
     }
-    return base + (this.isEnglish() ? ' · Teaching week ' : ' · 第') +
-      teachingWeek.toString() + (this.isEnglish() ? '' : '教学周');
+    const calendarWeek: number = StrictDates.isoWeekNumber(this.selectedDate());
+    const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
+    if (this.isEnglish()) {
+      return base + ' · Calendar week ' + calendarWeek.toString() + ' · Teaching week ' +
+        (teachingWeek === null ? '—' : teachingWeek.toString());
+    }
+    return base + ' · 公历第' + calendarWeek.toString() + '周 · 第' +
+      (teachingWeek === null ? '—' : teachingWeek.toString()) + '教学周';
   }
 
   private monthWeekLabel(day: DateParts): string {
-    if (!this.isPc || StrictDates.weekdayMonday1(day) !== 1) {
+    if (StrictDates.weekdayMonday1(day) !== 1) {
       return '';
     }
+    const calendarWeek: number = StrictDates.isoWeekNumber(day);
     const teachingWeek: number | null = this.model.weekNumberOn(day);
-    if (teachingWeek === null) {
-      return '';
+    if (this.isEnglish()) {
+      return 'Cal ' + calendarWeek.toString() + ' · Teach ' +
+        (teachingWeek === null ? '—' : teachingWeek.toString());
     }
-    return this.isEnglish() ? 'Teaching ' + teachingWeek.toString() :
-      '第' + teachingWeek.toString() + '教学周';
+    return '公历' + calendarWeek.toString() + ' · 教学' +
+      (teachingWeek === null ? '—' : teachingWeek.toString());
   }
 
   private statusMessages(): string[] {
@@ -750,10 +757,28 @@ export struct ExpandedTeachingCalendarView {
 
   private monthEvents(day: DateParts): MonthEventItem[] {
     const result: MonthEventItem[] = [];
+    for (const item of this.holidayItemsOn(day)) {
+      result.push(new MonthEventItem(
+        'holiday-' + item.id(),
+        this.model.text(item.type === 'holiday' ? '休' : '班') + ' ' + item.name,
+        item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary()));
+    }
     if (TeachingCalendarLogic.expandedMonthGridShowsChip('course')) {
       for (const course of this.coursesOn(day)) {
         result.push(new MonthEventItem('course-' + course.id, course.name, AppTheme.primary()));
       }
+    }
+    const date: string = StrictDates.formatDateParts(day);
+    for (const item of this.model.assignmentDeadlinesByDate.get(date) ?? []) {
+      result.push(new MonthEventItem('assignment-' + item.id,
+        this.model.text('作业') + ' ' + item.title, AppTheme.assignment()));
+    }
+    for (const item of this.model.deadlineItems(date)) {
+      const school: boolean = item.source === PublicDeadlineSource.schoolNotice;
+      result.push(new MonthEventItem('deadline-' + item.id,
+        (school ? this.model.text('校内') :
+          this.model.text(PublicDeadlineKindInfo.title(item.kind))) + ' ' + item.name,
+        school ? AppTheme.schoolNotice() : AppTheme.publicDeadline()));
     }
     return result;
   }

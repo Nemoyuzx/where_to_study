@@ -31,7 +31,7 @@ CLI 不依赖正在运行的 Secret Service、GNOME Keyring 或 macOS Keychain�
 ```bash
 mkdir -p ~/.local/bin
 curl -L -o where-to-study-cli.tar.gz \
-  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.5/where-to-study-cli-linux-x86_64.tar.gz
+  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.6/where-to-study-cli-linux-x86_64.tar.gz
 tar -xzf where-to-study-cli.tar.gz
 install -m 0755 where-to-study-cli ~/.local/bin/where-to-study-cli
 where-to-study-cli --version

@@ -1,7 +1,6 @@
 // 移动教务课表响应解析（纯模块，无平台依赖，可被主机侧单元测试引用）。
 // 与 iOS 端 SJDScheduleParser 一一对应。
 import { Course, ScheduleSnapshot, SlotMetadata } from '../../common/Models';
-import { ScheduleLogic } from '../../common/ScheduleLogic';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { JsonUtil } from '../../common/JsonUtil';
 import { RegexUtil } from '../../common/RegexUtil';
@@ -67,8 +66,7 @@ export class SJDScheduleParser {
       seen.add(course.id);
       courses.push(course);
     }
-    const withExamWeeks: Course[] = ScheduleLogic.applyingExamWeeks(courses);
-    withExamWeeks.sort((lhs: Course, rhs: Course) => {
+    courses.sort((lhs: Course, rhs: Course) => {
       if (lhs.weekday !== rhs.weekday) {
         return lhs.weekday - rhs.weekday;
       }
@@ -77,7 +75,7 @@ export class SJDScheduleParser {
       }
       return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
     });
-    return new ScheduleSnapshot(termID, termStartDate, at, withExamWeeks);
+    return new ScheduleSnapshot(termID, termStartDate, at, courses);
   }
 
   // 与 iOS 参考实现的 64 层一致：防止畸形响应导致栈溢出（BUG-011 修复）。

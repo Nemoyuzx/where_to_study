@@ -27,13 +27,13 @@ class ScheduleCalendarLogicTest {
     }
 
     @Test
-    fun prefixesOnlyExamWeekEvents() {
+    fun legacyExamMetadataDoesNotAlterImportedEventTitles() {
         val events = ScheduleCalendarLogic.expand(
             schedule(course(weekNumbers = listOf(1, 3), examWeekNumbers = listOf(3))),
         )
 
         assertEquals("数据挖掘", events[0].title)
-        assertEquals("试 数据挖掘", events[1].title)
+        assertEquals("数据挖掘", events[1].title)
     }
 
     @Test
@@ -213,10 +213,27 @@ class ScheduleCalendarLogicTest {
 
     @Test
     fun teachingWeekLabelsNeverFallbackToGregorianWeekNumbers() {
-        assertEquals("2026年5月", TeachingCalendarLogic.weekPeriodTitle("2026年5月", null))
-        assertEquals("2026年5月 第9教学周", TeachingCalendarLogic.weekPeriodTitle("2026年5月", 9))
-        assertEquals("教学\n—", TeachingCalendarLogic.teachingWeekAxisLabel(null))
-        assertEquals("教学\n第9周", TeachingCalendarLogic.teachingWeekAxisLabel(9))
+        assertEquals("公历 20\n教学 —", TeachingCalendarLogic.weekAxisLabel(20, null))
+        assertEquals("公历 20\n教学 9", TeachingCalendarLogic.weekAxisLabel(20, 9))
+        assertEquals("Cal 20\nTeach —", TeachingCalendarLogic.weekAxisLabel(20, null, true))
+        assertEquals("Cal 20\nTeach 9", TeachingCalendarLogic.weekAxisLabel(20, 9, true))
+        assertEquals(
+            "公历第20周，第9教学周",
+            TeachingCalendarLogic.weekAccessibilityLabel(20, 9),
+        )
+        assertEquals(
+            "Calendar week 20, teaching week unavailable",
+            TeachingCalendarLogic.weekAccessibilityLabel(20, null, true),
+        )
+        assertEquals(
+            1,
+            TeachingCalendarLogic.calendarWeekNumber(Calendar.getInstance(
+                TimeZone.getTimeZone("Asia/Shanghai"),
+            ).apply {
+                clear()
+                set(2027, Calendar.JANUARY, 4, 12, 0, 0)
+            }),
+        )
         val snapshot = schedule(course(weekNumbers = listOf(1, 18)))
         val duringTerm = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
             set(2026, Calendar.MARCH, 2, 12, 0, 0)

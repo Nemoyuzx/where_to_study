@@ -618,12 +618,14 @@ export struct MobileTeachingCalendarView {
     Row({ space: 0 }) {
       if (this.mode() === CalendarMode.week) {
         Column({ space: 0 }) {
-          Text(this.model.weekNumberOn(this.selectedDate()) === null ? '—' :
-            (this.model.weekNumberOn(this.selectedDate()) as number).toString())
+          Text((this.isEnglish() ? 'Cal ' : '公历 ') +
+            StrictDates.isoWeekNumber(this.selectedDate()).toString())
             .fontSize(9.5)
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.secondaryText())
-          Text(this.isEnglish() ? 'T week' : '教学周')
+          Text((this.isEnglish() ? 'Teach ' : '教学 ') +
+            (this.model.weekNumberOn(this.selectedDate()) === null ? '—' :
+              (this.model.weekNumberOn(this.selectedDate()) as number).toString()))
             .fontSize(9.5)
             .fontColor(AppTheme.secondaryText())
         }
@@ -2023,12 +2025,17 @@ export struct MobileTeachingCalendarView {
   private periodTitle(): string {
     const base: string = TeachingCalendarLogic.periodTitle(
       this.selectedDate(), this.mode(), this.isEnglish());
-    const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
-    if (this.mode() !== CalendarMode.week || teachingWeek === null) {
+    if (this.mode() !== CalendarMode.week) {
       return base;
     }
-    return base + (this.isEnglish() ? ' · Teaching week ' : ' · 第') +
-      teachingWeek.toString() + (this.isEnglish() ? '' : '教学周');
+    const calendarWeek: number = StrictDates.isoWeekNumber(this.selectedDate());
+    const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
+    if (this.isEnglish()) {
+      return base + ' · Calendar week ' + calendarWeek.toString() + ' · Teaching week ' +
+        (teachingWeek === null ? '—' : teachingWeek.toString());
+    }
+    return base + ' · 公历第' + calendarWeek.toString() + '周 · 第' +
+      (teachingWeek === null ? '—' : teachingWeek.toString()) + '教学周';
   }
 
   private shanghaiHour(): number {

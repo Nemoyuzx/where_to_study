@@ -28,6 +28,10 @@ class PlannerQueryState(defaultCampusID: String) {
         private set
     var weatherExpanded: Boolean = false
         private set
+    val selectedSlots: MutableSet<Int> = mutableSetOf()
+    val selectedBuildings: MutableSet<String> = mutableSetOf()
+    var usePersonalSchedule: Boolean = true
+    private var slotSelectionInitialized: Boolean = false
 
     fun selectCampus(campusID: String) {
         this.campusID = campusID
@@ -35,6 +39,12 @@ class PlannerQueryState(defaultCampusID: String) {
 
     fun toggleWeather() {
         weatherExpanded = !weatherExpanded
+    }
+
+    fun ensureSlotSelection(allSlots: Iterable<Int>, personalBusySlots: Set<Int>) {
+        if (slotSelectionInitialized) return
+        selectedSlots += allSlots.filterNot { usePersonalSchedule && it in personalBusySlots }
+        slotSelectionInitialized = true
     }
 }
 
@@ -51,15 +61,21 @@ class PlannerPage(
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val today = Calendar.getInstance(shanghai)
     private val personalBusySlots = ScheduleLogic.busySlots(scheduleRepository.schedule, today)
-    private val selectedSlots = AppMetadata.slots.mapNotNullTo(mutableSetOf()) { slot ->
-        slot.index.takeUnless(personalBusySlots::contains)
-    }
-    private val selectedBuildings = mutableSetOf<String>()
-    private var usePersonalSchedule = true
+    private val selectedSlots: MutableSet<Int> = queryState.selectedSlots
+    private val selectedBuildings: MutableSet<String> = queryState.selectedBuildings
+    private var usePersonalSchedule: Boolean
+        get() = queryState.usePersonalSchedule
+        set(value) {
+            queryState.usePersonalSchedule = value
+        }
     private lateinit var resultsContainer: LinearLayout
     private lateinit var summaryContainer: LinearLayout
 
     fun build(): ScrollView {
+        queryState.ensureSlotSelection(
+            AppMetadata.slots.map(SlotMetadata::index),
+            personalBusySlots,
+        )
         if (preferences.weatherEnabled) {
             weatherRepository.load(queryState.campusID) {
                 activity.refreshPlannerIfVisible()
@@ -798,9 +814,37 @@ class PlannerPage(
             resultsContainer.addView(emptyMessage(message))
             return
         }
-        presentation.rooms.forEachIndexed { index, room ->
-            resultsContainer.addView(classroomRow(room))
-            if (index < presentation.rooms.lastIndex) {
+        val columns = AdaptiveContentLogic.plannerResultColumns(availableWidthDp)
+        val resultRows = presentation.rooms.chunked(columns)
+        resultRows.forEachIndexed { rowIndex, rowRooms ->
+            if (columns == 1) {
+                resultsContainer.addView(classroomRow(rowRooms.single()))
+            } else {
+                resultsContainer.addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    rowRooms.forEachIndexed { columnIndex, room ->
+                        addView(
+                            classroomRow(room),
+                            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                                .apply {
+                                    marginStart = if (columnIndex == 0) 0 else activity.dp(12)
+                                    marginEnd = if (columnIndex == 0) activity.dp(12) else 0
+                                },
+                        )
+                        if (columnIndex == 0) {
+                            addView(View(activity).apply {
+                                setBackgroundColor(Palette.border)
+                            }, LinearLayout.LayoutParams(activity.dp(1), ViewGroup.LayoutParams.MATCH_PARENT))
+                        }
+                    }
+                    if (rowRooms.size < columns) {
+                        addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f).apply {
+                            marginStart = activity.dp(12)
+                        })
+                    }
+                })
+            }
+            if (rowIndex < resultRows.lastIndex) {
                 resultsContainer.addView(View(activity).apply {
                     setBackgroundColor(Palette.border)
                     layoutParams = LinearLayout.LayoutParams(
@@ -977,11 +1021,7 @@ class PlannerPage(
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(activity).apply {
-                text = if (course.examWeekNumbers.isEmpty()) {
-                    course.name
-                } else {
-                    "${activity.uiText("试")}  ${course.name}"
-                }
+                text = course.name
                 UiText.preserveRawText(this)
                 textSize = if (isCompact) 14f else 15f
                 setTextColor(Palette.text)

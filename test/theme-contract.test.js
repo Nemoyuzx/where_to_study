@@ -312,7 +312,7 @@ test('mobile navigation keeps the same icon and label hierarchy as iOS tabs', ()
 })
 
 test('every client uses the concise linked-query page title', () => {
-  assert.match(appSource, /activePage === 'settings' \? t\('设置'\) : t\('联动查询'\)/)
+  assert.match(appSource, /: t\('联动查询'\)/)
   assert.match(applePlannerSource, /title: "联动查询"/)
   assert.match(androidPlannerSource, /"联动查询"/)
   for (const source of [appSource, applePlannerSource, androidPlannerSource]) {
@@ -335,9 +335,11 @@ test('mobile week calendar stays in one viewport and pages from the full timelin
 })
 
 test('calendar chrome is compact and all-day events stay above the timeline', () => {
-  assert.match(appSource, /calendarHeaderTitle = calendarView === 'week'/)
+  assert.match(appSource, /const calendarHeaderTitle = formatUiCalendarTitle/)
+  assert.match(appSource, /const calendarWeekContext = \[/)
+  assert.match(appSource, /formatUiCalendarWeek\(calendarDate, uiLanguage\)/)
   assert.match(appSource, /formatUiTeachingWeek\(calendarWeekState\.weekNumber, uiLanguage\)/)
-  assert.doesNotMatch(appSource, /className="topbar-subtitle"/)
+  assert.match(appSource, /className="calendar-week-context"/)
   assert.match(appSource, /className="time-all-day-label"[\s\S]*>\{t\('全天'\)\}</)
   assert.match(appSource, /className="time-all-day-cell"/)
   assert.match(appCss, /\.calendar-view-switch\s*\{[^}]*border:\s*0/s)
@@ -369,15 +371,22 @@ test('desktop calendar supplements are year-preheated, cached, and rendered in e
     /const visibleAllDayItems = visibleCalendarDays\.reduce\([\s\S]*allDayEntriesFor\(dateString\)\.length/,
   )
   assert.match(appSource, /calendar-agenda-dialog/)
-  assert.doesNotMatch(appSource, /month-all-day-entry|month-all-day-entries/)
+  assert.match(appSource, /const monthAgendaEntries = \[/)
+  assert.match(appSource, /className=\{`month-entry \$\{entry\.type\}`\}/)
   assert.match(appSource, /className="school-notice"/)
   assert.match(appSource, /type: 'public-deadline'/)
   assert.match(appSource, /deadlineItemEnabled\(item, enabledDeadlineTypes\)/)
-  assert.doesNotMatch(appSource, /sourceView: 'month'/)
-  assert.doesNotMatch(appSource, /entries: monthAgendaEntries/)
+  assert.match(appSource, /sourceView: 'month'/)
+  assert.match(appSource, /entries: allDayEntriesFor\(dateString\)/)
+  assert.match(
+    appSource,
+    /className="month-detail-stack"[\s\S]*<SelectedDaySchedule[\s\S]*<AssignmentDeadlineCard[\s\S]*<AlmanacCard[\s\S]*<ContestDeadlineCard/,
+  )
   assert.match(appSource, /sourceView: calendarView/)
   assert.match(appSource, /agendaViewLabel\(calendarAgendaDialog\.sourceView, t\)/)
-  assert.doesNotMatch(appCss, /\.month-cell \.month-entry\.(?:assignment|school-notice|public-deadline)/)
+  assert.match(appCss, /\.month-cell \.month-entry\.assignment/)
+  assert.match(appCss, /\.month-cell \.month-entry\.school-notice/)
+  assert.match(appCss, /\.month-cell \.month-entry\.public-deadline/)
   assert.match(appCss, /\.time-all-day-cell > \.time-all-day-item\.public-deadline/)
   assert.match(appCss, /\.calendar-agenda-list \.public-deadline/)
   assert.match(appCss, /\.popover-supplement-list/)
@@ -875,13 +884,20 @@ test('collapsed Android foldable rail centers icons inside selection frames', ()
   )?.[1] ?? ''
   assert.match(
     collapsedBranch,
-    /setCompoundDrawablesRelativeWithIntrinsicBounds\(\s*0,\s*destination\.iconResource,\s*0,\s*0,?\s*\)/,
+    /setCompoundDrawablesRelativeWithIntrinsicBounds\(\s*0,\s*0,\s*0,\s*0,?\s*\)/,
   )
+  assert.match(collapsedBranch, /view\.foreground = getDrawable\(destination\.iconResource\)/)
+  assert.match(collapsedBranch, /view\.foregroundGravity = Gravity\.CENTER/)
   assert.doesNotMatch(
     collapsedBranch,
     /setCompoundDrawablesRelativeWithIntrinsicBounds\(\s*destination\.iconResource,\s*0,\s*0,\s*0/,
   )
+  assert.doesNotMatch(
+    collapsedBranch,
+    /setCompoundDrawablesRelativeWithIntrinsicBounds\(\s*0,\s*destination\.iconResource/,
+  )
   assert.match(presentation, /view\.gravity = if \(navigationRailCollapsed\) Gravity\.CENTER/)
+  assert.match(androidMainActivitySource, /view\.foregroundTintList = ColorStateList\.valueOf\(contentColor\)/)
 })
 
 test('light and dark text combinations meet WCAG AA contrast', () => {

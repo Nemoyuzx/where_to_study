@@ -395,7 +395,6 @@ enum SJDScheduleParser {
 
         var seen = Set<String>()
         var courses = rawCourses.compactMap(parseCourse).filter { seen.insert($0.id).inserted }
-        courses = ScheduleLogic.applyingExamWeeks(to: courses)
         courses.sort {
             ($0.weekday, $0.startSlot, $0.name) < ($1.weekday, $1.startSlot, $1.name)
         }

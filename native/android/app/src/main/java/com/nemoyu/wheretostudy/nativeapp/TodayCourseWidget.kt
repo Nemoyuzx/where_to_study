@@ -172,8 +172,9 @@ object TodayCourseWidgetLogic {
         val values = mutableListOf(
             "${target.get(Calendar.MONTH) + 1}月${target.get(Calendar.DAY_OF_MONTH)}日",
             weekdays[target.get(Calendar.DAY_OF_WEEK) - 1],
+            "公历第${TeachingCalendarLogic.calendarWeekNumber(target)}周",
         )
-        if (week != null) values += "第${week}周"
+        if (week != null) values += "教学第${week}周"
         return values.joinToString(" · ")
     }
 

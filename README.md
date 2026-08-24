@@ -11,7 +11,7 @@ Silicon 兼容构建。
 - 空教室查询支持按个人空闲节次和教学楼筛选；Tauri 桌面端另支持最少座位数筛选。
 - macOS 与 Windows 桌面端可在设置中开启每天 7:30 的今日课程系统通知；仅在原生 iOS、macOS 与 Android 等具备系统小组件能力的平台保留今日课程小组件，Windows 与 Linux 不提供应用内课程浮窗。
 - SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
-- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
+- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；ISO 8601 公历周与教学周并列显示，且不再推断或标注考试周。日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 - 联动查询顶部提供默认折叠的今日/明日校区天气卡片；月视图日期详情按“课程日程 → 云课堂作业 DDL → 黄历宜忌 → 统一活动 DDL”排列，学科竞赛、校内竞赛通知、夏令营与黑客松均可独立关闭。
 - 作业 DDL、校内竞赛、公开活动和自定义日程同时进入日/周全天区、月格和年视图日期详情；超出紧凑区域时使用可点击的 `+N` 展开完整列表。
 - 活动日程可以收藏为完整的本地快照：即使关闭对应来源、接口暂时失败或上游删除条目，收藏仍会保留在原日期；设置中提供独立收藏管理页。还可填写符合[自定义日程接口规范](./docs/custom-schedule-api.md)的 HTTPS JSON 地址，将自有日程并入同一教学日历。
@@ -24,20 +24,20 @@ Silicon 兼容构建。
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.5 (69)` 正式签名 Universal 构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| Android | Kotlin + Android Views | `0.2.5 (41)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.6 (70)` 正式签名 Universal 构建已上传 TestFlight；GitHub Release 同时恢复原生 Universal DMG 预览包 |
+| Android | Kotlin + Android Views | `0.2.6 (42)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.5 (69)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.5 (1002008)` 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 112 项单元测试；发布签名与 AGC 上架尚待配置 |
+| iOS | SwiftUI 原生 | `0.2.6 (70)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.6 (1002009)` 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 112 项单元测试；已生成并验证本地签名构建，AGC 分发状态见发布说明 |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
 
 ## 下载
 
-[v0.2.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.5) 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版加入最多 500 条完整本地日程收藏、自定义 HTTPS JSON 日程源与独立收藏管理页；内置 DDL、作业和自定义源按自然年独立预热，日期选择、同年翻页和视图切换不再触发网络请求。Android 的课程摘要、月视图底部间距、设置控件和动画进一步对齐 iOS；iOS 修复年视图与日/周/月之间反向切换时旧页面复用错误退出边的问题；自动学期检测会读取教务真实学期号、周次与日期，并在启动时自动校验；桌面端补齐全天日程列、教学周和键盘操作；HarmonyOS 同步手机与 PC 语义。完整中英文改动见 [0.2.5 发布说明](./docs/release-v0.2.5.md)。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.5 (69)` 已由本地 Xcode 上传 TestFlight。
+[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB，以及恢复提供的原生 macOS Universal DMG。本版统一 ISO 公历周与教学周、移除考试周推断，修复 Android 平板/折叠屏导航与日历分页、macOS 年视图弹卡滚动、收藏管理层级和桌面月格 DDL 去重；宽屏空教室结果使用双栏。Apple 月/年网格通过日期索引、快照缓存与单网格复用减少重复计算。完整中英文改动见 [0.2.6 发布说明](./docs/release-v0.2.6.md)。构建流程仍会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.6 (70)` 已由本地 Xcode 上传 TestFlight；GitHub DMG 是未公证的开源预览包，优先推荐 TestFlight 版本。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
@@ -124,8 +124,8 @@ Linux 终端客户端可以直接从 Release 安装。以 x86_64 为例：
 
 ```bash
 mkdir -p ~/.local/bin
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.5/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.5/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.6/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.6/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
 install -m 0755 where-to-study-cli where-to-study-tui ~/.local/bin/
 ```
 
@@ -156,7 +156,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 
 Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri 或 WebView。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
-生成本地签名 Android APK/AAB、macOS Universal ZIP 和无签名 iOS 真机 archive：
+生成本地签名 Android APK/AAB、macOS Universal ZIP/DMG 和无签名 iOS 真机 archive：
 
 ```bash
 ./scripts/native-android-signing-init.sh
@@ -165,7 +165,7 @@ Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程�
 ./scripts/native-ios-package.sh vX.Y.Z
 ```
 
-Android 脚本会运行 Release 单元测试与 Lint，构建并校验签名 APK 与 AAB；macOS 脚本构建双架构 Release 应用、进行临时签名和签名校验；iOS 脚本构建 arm64 真机 archive，并检查应用图标和隐私清单。三个脚本都会在 `release-artifacts/` 中生成产物和 SHA-256 文件。Android 脚本需要本地、已忽略的 release keystore；macOS 包不包含 Developer ID 公证票据；iOS archive 未签名，不能直接安装到 iPhone。发布前还应另外运行完整测试和所需的人工运行检查。
+Android 脚本会运行 Release 单元测试与 Lint，构建并校验签名 APK 与 AAB；macOS 脚本构建双架构 Release 应用、进行临时签名和签名校验，并生成带 Applications 快捷方式且通过 `hdiutil verify` 的 DMG；iOS 脚本构建 arm64 真机 archive，并检查应用图标和隐私清单。三个脚本都会在 `release-artifacts/` 中生成产物和 SHA-256 文件。Android 脚本需要本地、已忽略的 release keystore；macOS GitHub 包不包含 Developer ID 公证票据；iOS archive 未签名，不能直接安装到 iPhone。发布前还应另外运行完整测试和所需的人工运行检查。
 
 面向 Mac App Store、iOS App Store 或 TestFlight 的正式签名归档使用：
 

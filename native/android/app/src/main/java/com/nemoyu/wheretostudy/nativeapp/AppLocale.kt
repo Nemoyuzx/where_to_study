@@ -153,9 +153,7 @@ object UiText {
         "地点" to "Location",
         "教师" to "Instructor",
         "教学周" to "Teaching Weeks",
-        "教学\n—" to "Teaching\n—",
         "暂无教学周信息" to "Teaching week unavailable",
-        "考试周" to "Exam Weeks",
         "未标注" to "Not specified",
         "关闭" to "Close",
         "完成" to "Done",
@@ -201,7 +199,6 @@ object UiText {
         "赛" to "Competition",
         "营" to "Camp",
         "黑" to "Hackathon",
-        "试" to "Exam",
         "休" to "Off",
         "班" to "Work",
         "宜" to "Good for",
@@ -394,14 +391,23 @@ object UiText {
         Regex("^进行中 · (.+) 下课$").matchEntire(source)?.let {
             return "In progress · ends at ${it.groupValues[1]}"
         }
+        Regex("^公历 (\\d+)\\n教学 (\\d+|—)$").matchEntire(source)?.let {
+            return "Calendar ${it.groupValues[1]}\nTeaching ${it.groupValues[2]}"
+        }
+        Regex("^公历第(\\d+)周，第(\\d+)教学周$").matchEntire(source)?.let {
+            return "Calendar week ${it.groupValues[1]}, teaching week ${it.groupValues[2]}"
+        }
+        Regex("^公历第(\\d+)周，暂无教学周信息$").matchEntire(source)?.let {
+            return "Calendar week ${it.groupValues[1]}, teaching week unavailable"
+        }
         longPolicyText(source)?.let { return it }
         if (source.endsWith("，点击重试")) {
             return englishStatusFallback(source.removeSuffix("，点击重试")) +
                 ", tap to retry"
         }
         dateText(source)?.let { return it }
-        if (source.contains("（试）") || source.contains("；")) {
-            return source.replace("（试）", " (Exam)").replace("；", "; ")
+        if (source.contains("；")) {
+            return source.replace("；", "; ")
         }
         if (source.startsWith("正在") && source.endsWith("…")) return "Loading…"
         if (source.startsWith("暂无")) return "No data available"
@@ -473,7 +479,12 @@ object UiText {
     fun widgetContext(context: Context, source: String): String {
         if (!AppLocale.isEnglish(context)) return source
         return source.split(" · ").joinToString(" · ") { part ->
-            exactEnglish[part] ?: dateText(part) ?: part
+            exactEnglish[part] ?: dateText(part) ?:
+                Regex("^公历第(\\d+)周$").matchEntire(part)?.let {
+                    "Calendar week ${it.groupValues[1]}"
+                } ?: Regex("^教学第(\\d+)周$").matchEntire(part)?.let {
+                    "Teaching week ${it.groupValues[1]}"
+                } ?: part
         }
     }
 

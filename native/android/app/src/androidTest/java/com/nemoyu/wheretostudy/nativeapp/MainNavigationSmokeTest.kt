@@ -504,7 +504,7 @@ class MainNavigationSmokeTest {
                     activity.findViewById<TextView?>(R.id.calendar_week_number)?.let { weekLabel ->
                         assertTrue(
                             "Week view must show the schedule's teaching week when available",
-                            weekLabel.text.contains("第1周"),
+                            weekLabel.text.contains("教学 1"),
                         )
                     }
                     weekCourseSummary = courseSummaryPresentation(activity)
@@ -1290,6 +1290,7 @@ class MainNavigationSmokeTest {
                     val overflow = activity.findViewById<View>(R.id.calendar_overflow_button)
                     val period = activity.findViewById<TextView>(R.id.calendar_period_label)
                     val strip = activity.findViewById<View>(R.id.calendar_date_strip)
+                    val weekNumber = activity.findViewById<TextView>(R.id.calendar_week_number)
                     assertTrue(
                         "Calendar overflow control must be vertically centered in the phone header",
                         kotlin.math.abs(
@@ -1305,6 +1306,8 @@ class MainNavigationSmokeTest {
                         0,
                         period.layout?.getEllipsisCount(0) ?: 0,
                     )
+                    assertTrue(weekNumber.text.contains("公历"))
+                    assertTrue(weekNumber.text.contains("教学"))
                 }
                 click(device, "calendar_overflow_button")
                 assertTrue(
@@ -1567,6 +1570,9 @@ class MainNavigationSmokeTest {
                 assertTextChanged(device, "calendar_period_label", monthBeforeSwipe)
                 click(device, "calendar_mode_year")
                 assertVisible(device, "calendar_period_label")
+                val yearBeforeSwipe = objectText(device, "calendar_period_label")
+                swipeResource(device, "calendar_year_view", horizontalDirection = 1)
+                assertTextChanged(device, "calendar_period_label", yearBeforeSwipe)
                 click(device, "calendar_mode_week")
                 assertVisible(device, "calendar_date_strip")
             } else {
@@ -1834,6 +1840,38 @@ class MainNavigationSmokeTest {
                         depthFirstIndex(settingsContent, localData),
                 )
             }
+            scenario.onActivity { activity -> activity.openFavoriteManagement() }
+            instrumentation.waitForIdleSync()
+            assertVisible(device, "favorite_deadlines_page")
+            scenario.onActivity { activity ->
+                val adaptiveRoot = activity.findViewById<ViewGroup>(R.id.adaptive_root)
+                val overlay = activity.findViewById<View>(R.id.favorite_deadlines_page)
+                assertTrue(
+                    "Favorite management must be mounted as an adaptive-root overlay",
+                    overlay.parent === adaptiveRoot,
+                )
+                assertEquals(adaptiveRoot.paddingLeft, overlay.left)
+                assertEquals(adaptiveRoot.paddingTop, overlay.top)
+                assertEquals(adaptiveRoot.width - adaptiveRoot.paddingRight, overlay.right)
+                assertEquals(adaptiveRoot.height - adaptiveRoot.paddingBottom, overlay.bottom)
+                activity.findViewById<View?>(R.id.phone_navigation)?.let { phoneNavigation ->
+                    assertEquals(
+                        "The underlying phone navigation stays mounted and visible under the overlay",
+                        View.VISIBLE,
+                        phoneNavigation.visibility,
+                    )
+                    assertTrue(overlay.left <= phoneNavigation.left)
+                    assertTrue(overlay.top <= phoneNavigation.top)
+                    assertTrue(overlay.right >= phoneNavigation.right)
+                    assertTrue(overlay.bottom >= phoneNavigation.bottom)
+                }
+            }
+            device.pressBack()
+            assertVisible(device, "page_settings")
+            scenario.onActivity { activity ->
+                assertNull(activity.findViewById<View?>(R.id.favorite_deadlines_page))
+            }
+            scrollUntilVisible(device, "privacy_policy_button")
             val hapticsBeforePrivacy = hapticCount(scenario)
             click(device, "privacy_policy_button")
             assertEquals(
@@ -2200,13 +2238,23 @@ class MainNavigationSmokeTest {
                     "Collapsed rail navigation icons must be centered in the 72dp container",
                     kotlin.math.abs(location[0] + navigation.width / 2 - railCenterX) <= activity.dp(1),
                 )
-                assertNotNull(
-                    "Collapsed rail must use a centered top drawable",
-                    navigation.compoundDrawablesRelative[1],
+                assertTrue(
+                    "Collapsed rail must not retain compound-drawable text metrics",
+                    navigation.compoundDrawablesRelative.all { it == null },
                 )
-                assertNull(
-                    "Collapsed rail must not leave the icon in the leading drawable slot",
-                    navigation.compoundDrawablesRelative[0],
+                val icon = navigation.foreground
+                assertNotNull(
+                    "Collapsed rail must render its icon as a centered foreground",
+                    icon,
+                )
+                val iconBounds = checkNotNull(icon).bounds
+                assertTrue(
+                    "Collapsed rail icon must be horizontally centered in its selected square",
+                    kotlin.math.abs(iconBounds.centerX() - navigation.width / 2) <= activity.dp(1),
+                )
+                assertTrue(
+                    "Collapsed rail icon must be vertically centered in its selected square",
+                    kotlin.math.abs(iconBounds.centerY() - navigation.height / 2) <= activity.dp(1),
                 )
             }
         }

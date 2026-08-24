@@ -291,7 +291,6 @@ export class CalendarImportLogic {
           continue;
         }
         markers.add(marker);
-        const title: string = course.examWeekNumbers.includes(week) ? '试 ' + course.name : course.name;
         const detailLines: string[] = [];
         if (course.teacher.length > 0) {
           detailLines.push('教师：' + course.teacher);
@@ -302,7 +301,7 @@ export class CalendarImportLogic {
         detailLines.push('由 Where To Study 导入');
         detailLines.push(marker);
         drafts.push(new CalendarEventDraft(
-          marker, title, course.room, detailLines.join('\n'), startEpochMs, endEpochMs));
+          marker, course.name, course.room, detailLines.join('\n'), startEpochMs, endEpochMs));
       }
     }
     drafts.sort((lhs: CalendarEventDraft, rhs: CalendarEventDraft) => {

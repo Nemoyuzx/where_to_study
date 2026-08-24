@@ -32,7 +32,7 @@ use std::time::Duration;
 use tempfile::NamedTempFile;
 
 #[cfg(not(mobile))]
-use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Datelike, Duration as ChronoDuration, NaiveDate, NaiveDateTime, NaiveTime};
 #[cfg(not(mobile))]
 use tauri::image::Image;
 #[cfg(not(mobile))]
@@ -1226,6 +1226,7 @@ enum TrayCourseContent {
 struct TrayDayCourses {
     label: String,
     date: String,
+    calendar_week_number: i64,
     week_number: i64,
     courses: Vec<String>,
 }
@@ -1502,19 +1503,14 @@ fn course_time_label(course: &crate::models::Course) -> String {
 }
 
 #[cfg(not(mobile))]
-fn format_course_menu_line(course: &crate::models::Course, week_number: i64) -> String {
+fn format_course_menu_line(course: &crate::models::Course) -> String {
     let room = if course.room.trim().is_empty() {
         desktop_text("地点未标注", "Location unavailable").to_string()
     } else {
         course.room.clone()
     };
-    let course_name = if course.exam_week_numbers.contains(&week_number) {
-        format!("{} {}", desktop_text("试", "Exam"), course.name)
-    } else {
-        course.name.clone()
-    };
     truncate_menu_label(
-        format!("{}  {}  @ {}", course_time_label(course), course_name, room),
+        format!("{}  {}  @ {}", course_time_label(course), course.name, room),
         42,
     )
 }
@@ -1550,13 +1546,27 @@ fn append_course_section<M: Manager<tauri::Wry>>(
         format!("{id_prefix}_title"),
         if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
             format!(
-                "{} courses · {} · Week {}",
-                day.label, day.date, day.week_number
+                "{} courses · {} · Calendar week {} · {}",
+                day.label,
+                day.date,
+                day.calendar_week_number,
+                if day.week_number > 0 {
+                    format!("Teaching week {}", day.week_number)
+                } else {
+                    "Outside teaching weeks".to_string()
+                }
             )
         } else {
             format!(
-                "{}课程 · {} · 第 {} 周",
-                day.label, day.date, day.week_number
+                "{}课程 · {} · 公历第 {} 周 · {}",
+                day.label,
+                day.date,
+                day.calendar_week_number,
+                if day.week_number > 0 {
+                    format!("第 {} 教学周", day.week_number)
+                } else {
+                    "非教学周".to_string()
+                }
             )
         },
         true,
@@ -1709,12 +1719,33 @@ fn build_tray_day_courses(
     TrayDayCourses {
         label: label.to_string(),
         date: target_date.to_string(),
+        calendar_week_number: desktop_calendar_week_number(target_date),
         week_number: state.week_number,
-        courses: state
-            .courses
-            .iter()
-            .map(|course| format_course_menu_line(course, state.week_number))
-            .collect(),
+        courses: state.courses.iter().map(format_course_menu_line).collect(),
+    }
+}
+
+#[cfg(not(mobile))]
+fn desktop_calendar_week_number(date: NaiveDate) -> i64 {
+    i64::from(date.iso_week().week())
+}
+
+#[cfg(all(test, not(mobile)))]
+mod desktop_calendar_week_tests {
+    use super::*;
+
+    #[test]
+    fn calendar_week_matches_iso_8601_at_year_boundaries() {
+        for (date, expected) in [
+            ("2026-01-01", 1),
+            ("2026-08-24", 35),
+            ("2026-12-27", 52),
+            ("2026-12-28", 53),
+            ("2021-01-01", 53),
+        ] {
+            let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap();
+            assert_eq!(desktop_calendar_week_number(date), expected);
+        }
     }
 }
 
@@ -2237,7 +2268,7 @@ fn daily_course_notification_content(
         .courses
         .iter()
         .take(4)
-        .map(|course| format_course_menu_line(course, state.week_number))
+        .map(format_course_menu_line)
         .collect();
     if state.courses.len() > lines.len() {
         lines.push(format!(

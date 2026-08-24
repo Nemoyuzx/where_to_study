@@ -139,11 +139,9 @@ enum DailyCourseNotificationPlanner {
                 calendar: calendar
             )
             guard !courses.isEmpty else { continue }
-            let week = ScheduleLogic.weekNumber(on: day, termStart: termStart, calendar: calendar)
             let entries = courses.map { course in
-                let name = course.examWeekNumbers.contains(week) ? "\(course.name)（试）" : course.name
                 let location = course.room.isEmpty ? "" : " @ \(course.room)"
-                return "\(course.timeRange) \(name)\(location)"
+                return "\(course.timeRange) \(course.name)\(location)"
             }
             let date = StrictContractDateParser.string(from: day, calendar: calendar)
             requests.append(DailyCourseNotificationRequest(

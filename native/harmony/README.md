@@ -38,7 +38,7 @@
 
 手动命令（hvigorw 在 DevEco 安装目录下）：`hvigorw assembleHap` 与
 `hvigorw test --mode module -p module=entry -p buildMode=test`。
-测试源码在 `entry/src/test`（80 个契约用例：日期/节次/考试周/表单编码/URL 策略/
+测试源码在 `entry/src/test`（契约用例覆盖日期/节次/公历周与教学周/表单编码/URL 策略/
 课表解析/空教室解析/节假日解析/天气与黄历解析、云课堂作业契约、公开 DDL、折叠策略、日历纯逻辑/通知规划与协调）与
 `entry/src/ohosTest`（DevEco 内运行的 UI 冒烟套件，对应
 native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历断言）。

@@ -70,14 +70,30 @@ export struct RootView {
   }
 
   build() {
-    Column() {
-      if (this.model.isSampleMode()) {
-        this.sampleModeBanner()
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        if (this.model.isSampleMode()) {
+          this.sampleModeBanner()
+        }
+        if (AdaptiveLayoutPolicy.useSidebar(this.containerWidth)) {
+          this.sidebarLayout()
+        } else {
+          this.tabLayout()
+        }
       }
-      if (AdaptiveLayoutPolicy.useSidebar(this.containerWidth)) {
-        this.sidebarLayout()
-      } else {
-        this.tabLayout()
+      .width('100%')
+      .height('100%')
+
+      if (this.settingsFavoriteManagerVisible) {
+        SettingsView({
+          favoriteManagerOnly: true,
+          onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
+            this.settingsFavoriteManagerVisible = visible;
+          }
+        })
+          .width('100%')
+          .height('100%')
+          .zIndex(100)
       }
     }
     .width('100%')
@@ -124,7 +140,11 @@ export struct RootView {
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
         } else {
-          SettingsView()
+          SettingsView({
+            onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
+              this.settingsFavoriteManagerVisible = visible;
+            }
+          })
         }
       }
       .layoutWeight(1)
@@ -200,8 +220,7 @@ export struct RootView {
       .width('100%')
       .height('100%')
 
-      if (AppSectionInfo.showsPhoneNavigation(
-        this.currentSection, this.settingsFavoriteManagerVisible)) {
+      if (AppSectionInfo.showsPhoneNavigation(this.currentSection, false)) {
         Row({ space: 4 }) {
           ForEach(AppSectionInfo.all, (section: AppSection) => {
             this.phoneNavigationItem(section)

@@ -99,6 +99,7 @@ class MainActivity : Activity() {
     private var navigationRailBrand: LinearLayout? = null
     private var navigationRailToggle: TextView? = null
     private var foldingFeatureSpacer: View? = null
+    private var favoriteDeadlinesOverlay: View? = null
     private var navigationRailAnimator: ValueAnimator? = null
     internal var controlHapticEventCount = 0
         private set
@@ -364,6 +365,7 @@ class MainActivity : Activity() {
         navigationRailBrand = null
         navigationRailToggle = null
         foldingFeatureSpacer = null
+        favoriteDeadlinesOverlay = null
         adaptiveRoot.removeAllViews()
         val layout = if (spec.usesBottomNavigation) {
             phoneLayout()
@@ -378,6 +380,7 @@ class MainActivity : Activity() {
             ),
         )
         navigate(selectedDestination)
+        if (settingsRoute == SettingsRoute.FAVORITES) showFavoriteManagementOverlay()
     }
 
     private fun resolveAdaptiveLayout(
@@ -465,20 +468,17 @@ class MainActivity : Activity() {
         }
 
     private fun applyNavigationRailTabPresentation(view: TextView, destination: Destination) {
-        // A null label lets TextView center a top drawable as the complete
-        // compound content. An empty string still creates a text line and
-        // shifts the icon vertically; a leading drawable also makes the icon
-        // appear horizontally off-center inside the square selection surface.
         view.text = if (navigationRailCollapsed) null else uiText(destination.label)
         view.gravity = if (navigationRailCollapsed) Gravity.CENTER else Gravity.CENTER_VERTICAL
         if (navigationRailCollapsed) {
-            view.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                0,
-                destination.iconResource,
-                0,
-                0,
-            )
+            // Foreground gravity centers the icon against the selected square
+            // itself. TextView compound drawables retain an empty text line
+            // and can sit a few pixels high even when the label is null.
+            view.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
+            view.foreground = getDrawable(destination.iconResource)?.mutate()
+            view.foregroundGravity = Gravity.CENTER
         } else {
+            view.foreground = null
             view.setCompoundDrawablesRelativeWithIntrinsicBounds(
                 destination.iconResource,
                 0,
@@ -608,6 +608,7 @@ class MainActivity : Activity() {
             val contentColor = if (selected) Palette.primaryText else Palette.muted
             view.setTextColor(contentColor)
             view.compoundDrawableTintList = ColorStateList.valueOf(contentColor)
+            view.foregroundTintList = ColorStateList.valueOf(contentColor)
             view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
             view.background = roundedBackground(
                 this,
@@ -643,23 +644,15 @@ class MainActivity : Activity() {
                 teachingCalendarSessionState,
                 currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
-            Destination.SETTINGS -> if (settingsRoute == SettingsRoute.FAVORITES) {
-                FavoriteDeadlinesPage(
-                    activity = this,
-                    preferences = preferences,
-                    availableWidthDp = currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
-                ).build()
-            } else {
-                SettingsPage(
-                    this,
-                    credentialStore,
-                    preferences,
-                    scheduleRepository,
-                    classroomRepository,
-                    currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
-                    currentLayoutSpec?.usesBottomNavigation == true,
-                ).build()
-            }
+            Destination.SETTINGS -> SettingsPage(
+                this,
+                credentialStore,
+                preferences,
+                scheduleRepository,
+                classroomRepository,
+                currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
+                currentLayoutSpec?.usesBottomNavigation == true,
+            ).build()
         }
         page.id = destination.pageViewID
         UiText.localizeTree(page)
@@ -674,29 +667,47 @@ class MainActivity : Activity() {
     }
 
     fun refreshCurrentPage() {
+        if (settingsRoute == SettingsRoute.FAVORITES) {
+            showFavoriteManagementOverlay()
+            return
+        }
         navigate(selectedDestination)
     }
 
     fun openFavoriteManagement() {
         settingsRoute = SettingsRoute.FAVORITES
-        navigate(Destination.SETTINGS)
+        showFavoriteManagementOverlay()
     }
 
     fun closeFavoriteManagement() {
         settingsRoute = SettingsRoute.MAIN
-        navigate(Destination.SETTINGS)
+        favoriteDeadlinesOverlay?.let(adaptiveRoot::removeView)
+        favoriteDeadlinesOverlay = null
     }
 
     private fun updatePhoneNavigationVisibility() {
         if (currentLayoutSpec?.usesBottomNavigation != true) return
-        adaptiveRoot.findViewById<View?>(R.id.phone_navigation)?.visibility =
-            if (selectedDestination == Destination.SETTINGS &&
-                settingsRoute == SettingsRoute.FAVORITES
-            ) {
-                View.GONE
-            } else {
-                View.VISIBLE
-            }
+        adaptiveRoot.findViewById<View?>(R.id.phone_navigation)?.visibility = View.VISIBLE
+    }
+
+    private fun showFavoriteManagementOverlay() {
+        if (!::adaptiveRoot.isInitialized || selectedDestination != Destination.SETTINGS) return
+        favoriteDeadlinesOverlay?.let(adaptiveRoot::removeView)
+        val overlay = FavoriteDeadlinesPage(
+            activity = this,
+            preferences = preferences,
+            availableWidthDp = currentWindowWidthDp(),
+        ).build().apply {
+            elevation = dp(24).toFloat()
+        }
+        favoriteDeadlinesOverlay = overlay
+        adaptiveRoot.addView(
+            overlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
     }
 
     @SuppressLint("GestureBackNavigation")
