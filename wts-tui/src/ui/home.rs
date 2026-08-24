@@ -21,8 +21,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     // Week & date summary
     let week_text = match (app.current_week(), &app.schedule) {
         (Some(week), Some(schedule)) => format!(
-            "第 {week} 周 · 学期 {} · 第一周周一 {}",
-            schedule.term_id, schedule.term_start_date
+            "公历第 {} 周 · 教学第 {week} 周 · 学期 {} · 第一周周一 {}",
+            today_in_app_tz().iso_week().week(),
+            schedule.term_id,
+            schedule.term_start_date
         ),
         _ => "未获取课表".to_string(),
     };
@@ -36,14 +38,6 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let courses = app.today_courses();
     let mut lines = vec![format!("今天共 {} 门课", courses.len())];
     for course in &courses {
-        let exam = if course
-            .exam_week_numbers
-            .contains(&app.current_week().unwrap_or(0))
-        {
-            "【试】"
-        } else {
-            ""
-        };
         let time = if course.time_range.is_empty() {
             format!("第{}-{}节", course.start_slot + 1, course.end_slot + 1)
         } else {
@@ -54,7 +48,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         } else {
             course.room.clone()
         };
-        lines.push(format!("  {exam}{}  {time}  {room}", course.name));
+        lines.push(format!("  {}  {time}  {room}", course.name));
     }
     if lines.len() == 1 {
         lines.push("  （今天没有课程）".to_string());

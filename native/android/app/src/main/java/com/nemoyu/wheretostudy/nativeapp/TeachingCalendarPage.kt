@@ -91,6 +91,7 @@ internal class TeachingCalendarSessionState(
     var monthDetailsScrollY: Int = initialMonthDetailsScrollY.coerceAtLeast(0)
         private set
     var dayWeekAgendaExpanded: Boolean = initialDayWeekAgendaExpanded
+    var preferredDayOfMonth: Int = selectedDate.get(Calendar.DAY_OF_MONTH)
 
     fun savedMonthDetailsScrollY(dateKey: String): Int {
         if (monthDetailsDateKey != dateKey) resetMonthDetailsScroll(dateKey)
@@ -244,11 +245,51 @@ object TeachingCalendarLogic {
         )
     }
 
-    fun weekPeriodTitle(base: String, teachingWeek: Int?): String =
-        teachingWeek?.takeIf { it > 0 }?.let { "$base 第${it}教学周" } ?: base
+    fun calendarWeekNumber(date: Calendar): Int = (date.clone() as Calendar).apply {
+        firstDayOfWeek = Calendar.MONDAY
+        minimalDaysInFirstWeek = 4
+    }.get(Calendar.WEEK_OF_YEAR)
 
-    fun teachingWeekAxisLabel(teachingWeek: Int?): String =
-        teachingWeek?.takeIf { it > 0 }?.let { "教学\n第${it}周" } ?: "教学\n—"
+    fun movedMonth(date: Calendar, direction: Int, preferredDayOfMonth: Int): Calendar =
+        (date.clone() as Calendar).apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            add(Calendar.MONTH, direction)
+            set(
+                Calendar.DAY_OF_MONTH,
+                preferredDayOfMonth.coerceIn(1, getActualMaximum(Calendar.DAY_OF_MONTH)),
+            )
+        }
+
+    fun movedYear(date: Calendar, direction: Int, preferredDayOfMonth: Int): Calendar =
+        (date.clone() as Calendar).apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            add(Calendar.YEAR, direction)
+            set(
+                Calendar.DAY_OF_MONTH,
+                preferredDayOfMonth.coerceIn(1, getActualMaximum(Calendar.DAY_OF_MONTH)),
+            )
+        }
+
+    fun weekAxisLabel(calendarWeek: Int, teachingWeek: Int?, english: Boolean = false): String {
+        val teaching = teachingWeek?.takeIf { it > 0 } ?: "—"
+        return if (english) {
+            "Cal $calendarWeek\nTeach $teaching"
+        } else {
+            "公历 $calendarWeek\n教学 $teaching"
+        }
+    }
+
+    fun weekAccessibilityLabel(
+        calendarWeek: Int,
+        teachingWeek: Int?,
+        english: Boolean = false,
+    ): String = if (english) {
+        "Calendar week $calendarWeek, " +
+            (teachingWeek?.let { "teaching week $it" } ?: "teaching week unavailable")
+    } else {
+        "公历第${calendarWeek}周，" +
+            (teachingWeek?.let { "第${it}教学周" } ?: "暂无教学周信息")
+    }
 
     fun monthOverflowDescription(hiddenCount: Int): String =
         "月视图还有 ${hiddenCount.coerceAtLeast(0)} 项日程，请选择日期后在下方查看"
@@ -490,9 +531,6 @@ object TeachingCalendarLogic {
         add("地点：${course.room.ifEmpty { "未标注" }}")
         add("教师：${course.teacher.ifEmpty { "未标注" }}")
         add("周次：${course.weekText.ifEmpty { course.weekNumbers.joinToString(",") }}")
-        if (course.examWeekNumbers.isNotEmpty()) {
-            add("考试周：${course.examWeekNumbers.joinToString(",")} 周")
-        }
     }
 
 }
@@ -991,7 +1029,7 @@ internal class TeachingCalendarPage(
             }
             val replacement = dayWeekAgendaSection(
                 days = days,
-                compact = availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp,
+                compact = true,
             )
             UiText.localizeTree(replacement)
             parent.removeViewAt(index)
@@ -1019,11 +1057,10 @@ internal class TeachingCalendarPage(
         }
     }
 
-    fun build(): View = if (availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp) {
-        phoneBuild()
-    } else {
-        expandedBuild()
-    }
+    // Phone, tablet, foldable and desktop-width windows share one calendar
+    // header/mode switch and one pager state machine. Width only changes the
+    // content density inside day/week/month/year views.
+    fun build(): View = phoneBuild()
 
     private fun expandedBuild(): ScrollView {
         val scrollView = ScrollView(activity).apply {
@@ -1228,7 +1265,7 @@ internal class TeachingCalendarPage(
         fun render() {
             calendarRenderAction = ::render
             dismissYearPopover()
-            pageSurface.swipeEnabled = selectedMode != Mode.YEAR
+            pageSurface.swipeEnabled = true
             pageSurface.monthSheetPosition = monthSheetPosition
             pageSurface.onMonthSheetSettled = if (selectedMode == Mode.MONTH) {
                 ::settleMonthSheet
@@ -1241,6 +1278,7 @@ internal class TeachingCalendarPage(
                 null
             }
             periodLabel.text = periodTitle()
+            periodLabel.textSize = 22f
             val pageView: View = if (selectedMode == Mode.DAY || selectedMode == Mode.WEEK) {
                 phoneDayWeekContent(::render)
             } else {
@@ -1319,12 +1357,10 @@ internal class TeachingCalendarPage(
         }
 
         pageSurface.onPageSwipe = { direction ->
-            if (selectedMode != Mode.YEAR) {
-                performCalendarHaptic()
-                stepDate(direction)
-                pendingPageDirection = direction
-                render()
-            }
+            performCalendarHaptic()
+            stepDate(direction)
+            pendingPageDirection = direction
+            render()
         }
 
         root.addView(LinearLayout(activity).apply {
@@ -1340,7 +1376,7 @@ internal class TeachingCalendarPage(
             periodLabel.setOnClickListener { showDatePicker(::render) }
             addView(phoneNavigationButton("今天", 52) {
                 performCalendarHaptic()
-                selectedDate.timeInMillis = Calendar.getInstance(shanghai).timeInMillis
+                selectDate(Calendar.getInstance(shanghai))
                 requestCalendarDataForSelection()
                 render()
             })
@@ -1367,9 +1403,7 @@ internal class TeachingCalendarPage(
                 val tab = fixedTab(activity, mode.label) {
                     if (selectedMode == mode) return@fixedTab
                     performCalendarHaptic()
-                    pendingModeSelectionFrom = selectedMode.takeIf {
-                        availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp
-                    }
+                    pendingModeSelectionFrom = selectedMode
                     pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
                         selectedMode.ordinal,
                         mode.ordinal,
@@ -1491,7 +1525,9 @@ internal class TeachingCalendarPage(
 
         oldPage.animate().cancel()
         oldPage.alpha = 1f
-        oldPage.translationX = 0f
+        // Keep the exact in-flight X when the user reverses direction before
+        // the previous transition ends. Resetting to zero causes a visible
+        // one-frame jump before the new outgoing animation starts.
         oldPage.translationY = 0f
         page.animate().cancel()
         if (pageDirection != 0) {
@@ -1579,7 +1615,7 @@ internal class TeachingCalendarPage(
             val callback: ((Calendar) -> Unit)? = if (selectedMode == Mode.WEEK) {
                 { day ->
                     if (!sameDay(selectedDate, day)) performCalendarHaptic()
-                    selectedDate.timeInMillis = day.timeInMillis
+                    selectDate(day)
                     requestCalendarDataForSelection()
                     onDateChanged()
                 }
@@ -1962,8 +1998,7 @@ internal class TeachingCalendarPage(
             activity,
             { _, year, month, day ->
                 performCalendarHaptic()
-                selectedDate.set(year, month, day, 12, 0, 0)
-                selectedDate.set(Calendar.MILLISECOND, 0)
+                selectDate(year, month, day)
                 requestCalendarDataForSelection()
                 onChanged()
             },
@@ -1985,12 +2020,7 @@ internal class TeachingCalendarPage(
                 timeZone = shanghai
             }.format(selectedDate.time)
         }
-        return if (selectedMode == Mode.WEEK) {
-            val teachingWeek = ScheduleLogic.weekNumber(scheduleRepository.schedule, selectedDate)
-            TeachingCalendarLogic.weekPeriodTitle(date, teachingWeek)
-        } else {
-            date
-        }
+        return date
     }
 
     private fun phoneDateStrip(onDateChanged: () -> Unit): LinearLayout =
@@ -2010,17 +2040,19 @@ internal class TeachingCalendarPage(
                         scheduleRepository.schedule,
                         selectedDate,
                     )
-                    text = TeachingCalendarLogic.teachingWeekAxisLabel(teachingWeek)
+                    val calendarWeek = TeachingCalendarLogic.calendarWeekNumber(selectedDate)
+                    val english = AppLocale.isEnglish(activity)
+                    text = TeachingCalendarLogic.weekAxisLabel(calendarWeek, teachingWeek, english)
                     textSize = 9.5f
                     gravity = Gravity.CENTER
                     setTextColor(Palette.muted)
                     includeFontPadding = false
                     maxLines = 2
-                    contentDescription = if (teachingWeek != null) {
-                        "第${teachingWeek}教学周"
-                    } else {
-                        "暂无教学周信息"
-                    }
+                    contentDescription = TeachingCalendarLogic.weekAccessibilityLabel(
+                        calendarWeek,
+                        teachingWeek,
+                        english,
+                    )
                 }, LinearLayout.LayoutParams(
                     activity.dp(leadingWidth),
                     activity.dp(TeachingCalendarLogic.phoneDateStripHeightDp),
@@ -2065,7 +2097,7 @@ internal class TeachingCalendarPage(
                     contentDescription = displayMonthDayWithWeekday(day)
                     setOnClickListener {
                         if (!sameDay(selectedDate, day)) performCalendarHaptic()
-                        selectedDate.timeInMillis = day.timeInMillis
+                        selectDate(day)
                         requestCalendarDataForSelection()
                         onDateChanged()
                     }
@@ -2148,8 +2180,7 @@ internal class TeachingCalendarPage(
                 DatePickerDialog(
                     activity,
                     { _, year, month, day ->
-                        selectedDate.set(year, month, day, 12, 0, 0)
-                        selectedDate.set(Calendar.MILLISECOND, 0)
+                        selectDate(year, month, day)
                         requestCalendarDataForSelection()
                         onChanged()
                     },
@@ -2164,7 +2195,7 @@ internal class TeachingCalendarPage(
             }
         })
         addView(navigationButton("今天", width = 66) {
-            selectedDate.timeInMillis = Calendar.getInstance(shanghai).timeInMillis
+            selectDate(Calendar.getInstance(shanghai))
             requestCalendarDataForSelection()
             onChanged()
         })
@@ -2235,7 +2266,7 @@ internal class TeachingCalendarPage(
         val days = weekDates()
         val timelineDays = days.map(::timelineDay)
         val selectDay: (Calendar) -> Unit = { day ->
-            selectedDate.timeInMillis = day.timeInMillis
+            selectDate(day)
             requestCalendarDataForSelection()
             onDateChanged()
         }
@@ -2463,7 +2494,7 @@ internal class TeachingCalendarPage(
                 )
                 val targetPosition = TeachingCalendarLogic.monthDaySelectionTargetPosition()
                 monthExpansionAnimator?.cancel()
-                selectedDate.timeInMillis = day.timeInMillis
+                selectDate(day)
                 monthSheetPosition = targetPosition
                 renderedMonthSheetPosition = previousPosition
                 pendingMonthSelectionStartPosition = previousPosition
@@ -2850,12 +2881,12 @@ internal class TeachingCalendarPage(
                 initialSelectedDate = selectedDate,
                 onDateSelected = { anchor, day, tapX, tapY ->
                     performCalendarHaptic()
-                    selectedDate.timeInMillis = day.timeInMillis
+                    selectDate(day)
                     showDayPopover(anchor, day, tapX, tapY, onDateChanged)
                 },
                 onMonthSelected = { month ->
                     performCalendarHaptic()
-                    selectedDate.timeInMillis = month.timeInMillis
+                    selectDate(month)
                     pendingModeSelectionFrom = selectedMode
                     pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
                         selectedMode.ordinal,
@@ -3190,10 +3221,8 @@ internal class TeachingCalendarPage(
                     listOf(Mode.DAY, Mode.WEEK, Mode.MONTH).forEach { mode ->
                         addView(fixedTab(activity, mode.label) {
                             performCalendarHaptic()
-                            selectedDate.timeInMillis = day.timeInMillis
-                            pendingModeSelectionFrom = selectedMode.takeIf {
-                                availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp
-                            }
+                            selectDate(day)
+                            pendingModeSelectionFrom = selectedMode
                             pendingPageDirection = TeachingCalendarLogic.modeTransitionDirection(
                                 selectedMode.ordinal,
                                 mode.ordinal,
@@ -3811,11 +3840,7 @@ internal class TeachingCalendarPage(
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(TextView(activity).apply {
-                    text = if (course.examWeekNumbers.isEmpty()) {
-                        course.name
-                    } else {
-                        "${activity.uiText("试")}  ${course.name}"
-                    }
+                    text = course.name
                     UiText.preserveRawText(this)
                     textSize = 18f
                     setTextColor(Palette.text)
@@ -3858,9 +3883,6 @@ internal class TeachingCalendarPage(
             add("地点" to course.room.ifEmpty { "未标注" })
             add("教师" to course.teacher.ifEmpty { "未标注" })
             add("教学周" to course.weekText.ifEmpty { course.weekNumbers.joinToString("、") })
-            if (course.examWeekNumbers.isNotEmpty()) {
-                add("考试周" to course.examWeekNumbers.joinToString("、") { "$it 周" })
-            }
         }.forEachIndexed { index, (label, value) ->
             card.addView(courseDetailRow(label, value), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -4171,16 +4193,40 @@ internal class TeachingCalendarPage(
 
     private fun stepDate(direction: Int) {
         when (selectedMode) {
-            Mode.DAY -> selectedDate.add(Calendar.DAY_OF_MONTH, direction)
-            Mode.WEEK -> selectedDate.add(Calendar.DAY_OF_MONTH, direction * 7)
-            Mode.MONTH -> selectedDate.add(Calendar.MONTH, direction)
-            Mode.YEAR -> selectedDate.add(Calendar.YEAR, direction)
+            Mode.DAY -> {
+                selectedDate.add(Calendar.DAY_OF_MONTH, direction)
+                sessionState.preferredDayOfMonth = selectedDate.get(Calendar.DAY_OF_MONTH)
+            }
+            Mode.WEEK -> {
+                selectedDate.add(Calendar.DAY_OF_MONTH, direction * 7)
+                sessionState.preferredDayOfMonth = selectedDate.get(Calendar.DAY_OF_MONTH)
+            }
+            Mode.MONTH -> selectedDate.timeInMillis = TeachingCalendarLogic.movedMonth(
+                selectedDate,
+                direction,
+                sessionState.preferredDayOfMonth,
+            ).timeInMillis
+            Mode.YEAR -> selectedDate.timeInMillis = TeachingCalendarLogic.movedYear(
+                selectedDate,
+                direction,
+                sessionState.preferredDayOfMonth,
+            ).timeInMillis
         }
         requestCalendarDataForSelection()
     }
 
+    private fun selectDate(day: Calendar) {
+        selectedDate.timeInMillis = day.timeInMillis
+        sessionState.preferredDayOfMonth = selectedDate.get(Calendar.DAY_OF_MONTH)
+    }
+
+    private fun selectDate(year: Int, month: Int, day: Int) {
+        selectedDate.set(year, month, day, 12, 0, 0)
+        selectedDate.set(Calendar.MILLISECOND, 0)
+        sessionState.preferredDayOfMonth = selectedDate.get(Calendar.DAY_OF_MONTH)
+    }
+
     private fun performCalendarHaptic() {
-        if (availableWidthDp >= TeachingCalendarLogic.compactCalendarBreakpointDp) return
         activity.window.decorView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
     }
 

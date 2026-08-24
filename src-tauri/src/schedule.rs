@@ -17,8 +17,6 @@ use crate::config::{
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{Course, ScheduleRequest, ScheduleResponse};
 
-const EXAM_WEEK_ORDINALS: [usize; 2] = [17, 18];
-
 pub fn expand_week_numbers(week_text: &str) -> Vec<i64> {
     let mut raw = week_text.replace('，', ",").replace(' ', "");
     // Global odd/even markers ("1-5(单)") apply to items without their own
@@ -60,30 +58,6 @@ pub fn expand_week_numbers(week_text: &str) -> Vec<i64> {
     week_numbers.sort_unstable();
     week_numbers.dedup();
     week_numbers
-}
-
-pub fn annotate_exam_weeks(courses: &mut [Course]) {
-    let mut existing_weeks: Vec<i64> = courses
-        .iter()
-        .flat_map(|course| course.week_numbers.iter().copied())
-        .filter(|week| *week > 0)
-        .collect();
-    existing_weeks.sort_unstable();
-    existing_weeks.dedup();
-
-    let exam_weeks: HashSet<i64> = EXAM_WEEK_ORDINALS
-        .iter()
-        .filter_map(|ordinal| existing_weeks.get(ordinal - 1).copied())
-        .collect();
-
-    for course in courses {
-        course.exam_week_numbers = course
-            .week_numbers
-            .iter()
-            .copied()
-            .filter(|week| exam_weeks.contains(week))
-            .collect();
-    }
 }
 
 fn json_string(value: Option<&Value>) -> String {
@@ -319,7 +293,6 @@ pub fn parse_sjd_courses(
         });
     }
 
-    annotate_exam_weeks(&mut courses);
     courses.sort_by(|left, right| {
         (left.weekday, left.start_slot, &left.name).cmp(&(
             right.weekday,
@@ -683,45 +656,6 @@ mod tests {
 
         let prefixed = serde_json::json!({ "classWeekDetails": "第1周,第3周" });
         assert_eq!(parse_sjd_week_numbers(&prefixed), vec![1, 3]);
-    }
-
-    #[test]
-    fn annotate_exam_weeks_counts_existing_weeks_in_order() {
-        let mut courses = vec![
-            Course {
-                id: "weekly".to_string(),
-                name: "周课".to_string(),
-                teacher: String::new(),
-                room: String::new(),
-                week_text: "2-19".to_string(),
-                week_numbers: (2..=19).collect(),
-                exam_week_numbers: Vec::new(),
-                weekday: 1,
-                start_slot: 0,
-                end_slot: 1,
-                section_text: String::new(),
-                time_range: String::new(),
-            },
-            Course {
-                id: "literal-17".to_string(),
-                name: "原始第十七周".to_string(),
-                teacher: String::new(),
-                room: String::new(),
-                week_text: "17".to_string(),
-                week_numbers: vec![17],
-                exam_week_numbers: Vec::new(),
-                weekday: 2,
-                start_slot: 0,
-                end_slot: 1,
-                section_text: String::new(),
-                time_range: String::new(),
-            },
-        ];
-
-        annotate_exam_weeks(&mut courses);
-
-        assert_eq!(courses[0].exam_week_numbers, vec![18, 19]);
-        assert!(courses[1].exam_week_numbers.is_empty());
     }
 
     #[test]

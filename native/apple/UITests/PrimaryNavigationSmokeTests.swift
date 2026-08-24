@@ -92,11 +92,18 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         navigate(to: "教学日历", in: app)
         let periodLabel = app.staticTexts.matching(
-            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月 第 [0-9]+ 教学周$")
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
         ).firstMatch
         XCTAssertTrue(periodLabel.waitForExistence(timeout: 5))
-        XCTAssertTrue(periodLabel.label.contains("第 "))
-        XCTAssertTrue(periodLabel.label.hasSuffix(" 教学周"))
+        let weekContext = app.staticTexts.matching(
+            NSPredicate(
+                format: "label MATCHES %@",
+                "^公历第 [0-9]+ 周 · 第 [0-9]+ 教学周$"
+            )
+        ).firstMatch
+        XCTAssertTrue(weekContext.waitForExistence(timeout: 5))
+        XCTAssertTrue(weekContext.label.contains("公历第 "))
+        XCTAssertTrue(weekContext.label.contains("教学周"))
         attachScreenshot(named: "calendar-week-single-viewport")
         let courseSummaryToggle = app.buttons.matching(
             NSPredicate(format: "label CONTAINS '门课'")
@@ -110,11 +117,11 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons.matching(
             NSPredicate(format: "label CONTAINS '全天' AND label CONTAINS '+'")
         ).firstMatch.waitForExistence(timeout: 5))
-        let initialWeek = periodLabel.label
+        let initialWeek = weekContext.label
         horizontalSwipe(in: app, atY: 0.29, toLeft: true)
-        XCTAssertTrue(waitForLabelChange(of: periodLabel, from: initialWeek))
+        XCTAssertTrue(waitForLabelChange(of: weekContext, from: initialWeek))
         horizontalSwipe(in: app, atY: 0.29, toLeft: false)
-        XCTAssertEqual(periodLabel.label, initialWeek)
+        XCTAssertEqual(weekContext.label, initialWeek)
 
         app.segmentedControls.buttons["日"].tap()
         let dayHeader = app.staticTexts.matching(
@@ -491,11 +498,11 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         revealByScrolling(visibleElement: management, in: app)
         management.tap()
         XCTAssertTrue(app.descendants(matching: .any)["favorites.page"].waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            app.tabBars.firstMatch.waitForNonExistence(timeout: 3),
-            "收藏管理是独立页面，底部主导航必须隐藏"
-        )
+        XCTAssertTrue(app.buttons["favorites.dismiss"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.firstMatch.exists)
+        XCTAssertFalse(app.tabBars.firstMatch.isHittable, "收藏管理页面必须覆盖在主导航之上")
         XCTAssertTrue(app.staticTexts["全国大学生示例竞赛"].waitForExistence(timeout: 5))
+        attachScreenshot(named: "favorites-fullscreen-management")
         let remove = app.buttons["favorites.remove.contest_ddl.sample-competition"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.tap()
@@ -1006,7 +1013,27 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             weatherToggle.tap()
             XCTAssertTrue(waitForValue("已展开", of: weatherToggle))
         }
+        let clearSlots = app.buttons["清空"]
+        if clearSlots.waitForExistence(timeout: 3) {
+            clearSlots.tap()
+            let firstSlot = app.buttons.matching(
+                NSPredicate(format: "label CONTAINS %@", "第 1 节")
+            ).firstMatch
+            XCTAssertTrue(firstSlot.waitForExistence(timeout: 3))
+            firstSlot.tap()
+        }
+        for building in ["教1", "教2", "主楼"] {
+            let button = app.buttons[building]
+            if button.waitForExistence(timeout: 3) {
+                button.tap()
+            }
+        }
         attachScreenshot(named: "effect-ipad-13-landscape-planner")
+        let firstRoom = app.staticTexts["教1-101"]
+        if firstRoom.waitForExistence(timeout: 3) {
+            revealByScrolling(visibleElement: firstRoom, in: app)
+            attachScreenshot(named: "effect-ipad-13-landscape-planner-results")
+        }
 
         navigateFromSidebar(to: "教学日历", in: app)
         assertScreen("screen.calendar", in: app)

@@ -205,6 +205,10 @@ class AdaptiveLayoutLogicTest {
         assertEquals(3, AdaptiveContentLogic.plannerSummaryColumns(320))
         assertEquals(3, AdaptiveContentLogic.plannerSummaryColumns(479))
         assertEquals(3, AdaptiveContentLogic.plannerSummaryColumns(480))
+
+        assertEquals(1, AdaptiveContentLogic.plannerResultColumns(599))
+        assertEquals(2, AdaptiveContentLogic.plannerResultColumns(600))
+        assertEquals(2, AdaptiveContentLogic.plannerResultColumns(840))
     }
 
     @Test
@@ -227,6 +231,21 @@ class AdaptiveLayoutLogicTest {
         assertTrue(queryState.weatherExpanded)
         queryState.toggleWeather()
         assertFalse(queryState.weatherExpanded)
+    }
+
+    @Test
+    fun plannerSelectionsSurviveAdaptivePageRebuilds() {
+        val state = PlannerQueryState("01")
+        state.ensureSlotSelection(0..5, personalBusySlots = setOf(1, 2))
+        state.selectedBuildings += "教1"
+        state.selectedSlots.remove(4)
+
+        // A new PlannerPage calls ensure again after a rail/fold rebuild; it
+        // must not replace the user's existing filters with fresh defaults.
+        state.ensureSlotSelection(0..5, personalBusySlots = setOf(3))
+
+        assertEquals(setOf(0, 3, 5), state.selectedSlots)
+        assertEquals(setOf("教1"), state.selectedBuildings)
     }
 
     @Test

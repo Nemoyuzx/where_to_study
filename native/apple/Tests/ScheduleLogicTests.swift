@@ -139,7 +139,7 @@ final class ScheduleLogicTests: XCTestCase {
         }
     }
 
-    func testExamWeeksUseSeventeenthAndEighteenthExistingWeeks() {
+    func testLegacyExamWeekMetadataIsClearedWithoutChangingCourseWeeks() throws {
         let weekly = Course(
             id: "weekly",
             name: "测试课程",
@@ -147,7 +147,7 @@ final class ScheduleLogicTests: XCTestCase {
             room: "测试楼-101",
             weekText: "2-19",
             weekNumbers: Array(2...19),
-            examWeekNumbers: [],
+            examWeekNumbers: [18, 19],
             weekday: 1,
             startSlot: 0,
             endSlot: 1,
@@ -155,7 +155,9 @@ final class ScheduleLogicTests: XCTestCase {
             timeRange: "08:00-09:35"
         )
 
-        XCTAssertEqual(ScheduleLogic.examWeeks(in: [weekly]), Set([18, 19]))
+        let normalized = try XCTUnwrap(ScheduleLogic.clearingLegacyExamWeeks(in: [weekly]).first)
+        XCTAssertTrue(normalized.examWeekNumbers.isEmpty)
+        XCTAssertEqual(normalized.weekNumbers, Array(2 ... 19))
     }
 
     func testWeekNumberUsesTermStartDate() {
@@ -164,6 +166,14 @@ final class ScheduleLogicTests: XCTestCase {
         let target = calendar.date(byAdding: .day, value: 14, to: start)!
 
         XCTAssertEqual(ScheduleLogic.weekNumber(on: target, termStart: start), 3)
+    }
+
+    func testCivilWeekNumberUsesISO8601YearBoundaries() throws {
+        let firstJanuary = try XCTUnwrap(StrictContractDateParser.date(from: "2021-01-01"))
+        let finalMonday = try XCTUnwrap(StrictContractDateParser.date(from: "2026-12-28"))
+
+        XCTAssertEqual(ScheduleLogic.civilWeekNumber(on: firstJanuary), 53)
+        XCTAssertEqual(ScheduleLogic.civilWeekNumber(on: finalMonday), 53)
     }
 
     func testDateBeforeTermHasNoActiveWeek() {
@@ -255,11 +265,17 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     func testSharedSJDFixturesProduceContractSchedule() throws {
-        let expected = try JSONDecoder().decode(
+        let contract = try JSONDecoder().decode(
             ScheduleSnapshot.self,
             from: fixtureData("schedule.json")
         )
-        let fetchedAt = ISO8601DateFormatter().date(from: expected.fetchedAt)!
+        let expected = ScheduleSnapshot(
+            termID: contract.termID,
+            termStartDate: contract.termStartDate,
+            fetchedAt: contract.fetchedAt,
+            courses: ScheduleLogic.clearingLegacyExamWeeks(in: contract.courses)
+        )
+        let fetchedAt = ISO8601DateFormatter().date(from: contract.fetchedAt)!
         let parsed = try SJDScheduleParser.parse(
             currentData: fixtureData("sjd-current-week.json"),
             curriculumData: fixtureData("sjd-curriculum.json"),
@@ -1224,7 +1240,7 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
-    func testCalendarPeriodTitlesUseScheduleTeachingWeekInsteadOfCivilWeek() throws {
+    func testCalendarPeriodTitlesShowCivilAndTeachingWeeksTogether() throws {
         let calendar = Calendar.shanghai
         let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 14)))
 
@@ -1239,11 +1255,11 @@ final class ScheduleLogicTests: XCTestCase {
                 teachingWeekNumber: 3,
                 calendar: calendar
             ),
-            "2026年8月 第 3 教学周"
+            "2026年8月 · 公历第 33 周 · 第 3 教学周"
         )
         XCTAssertEqual(
             TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "周", calendar: calendar),
-            "2026年8月"
+            "2026年8月 · 公历第 33 周 · 非教学周"
         )
         XCTAssertEqual(
             TeachingCalendarLogic.periodTitle(for: date, modeRawValue: "月", calendar: calendar),
@@ -1270,14 +1286,14 @@ final class ScheduleLogicTests: XCTestCase {
             ),
             "August 23, 2026"
         )
-        XCTAssertTrue(
-            TeachingCalendarLogic.periodTitle(
+        XCTAssertEqual(
+            TeachingCalendarLogic.weekContext(
                 for: date,
-                modeRawValue: "周",
                 teachingWeekNumber: 9,
                 language: .english,
                 calendar: calendar
-            ).contains("Teaching Week 9")
+            ),
+            "Calendar Week 34 · Teaching Week 9"
         )
     }
 
@@ -1548,6 +1564,23 @@ final class ScheduleLogicTests: XCTestCase {
                 modeRawValue: "日",
                 selectedDate: nextDay
             )
+        )
+    }
+
+    func testMobileYearAnimationReusesSingleGridShell() throws {
+        let firstYear = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-23"))
+        let nextYear = try XCTUnwrap(StrictContractDateParser.date(from: "2027-08-23"))
+
+        XCTAssertEqual(
+            MobileCalendarAnimationPartition.contentIdentity(
+                modeRawValue: "年",
+                selectedDate: firstYear
+            ),
+            MobileCalendarAnimationPartition.contentIdentity(
+                modeRawValue: "年",
+                selectedDate: nextYear
+            ),
+            "Year navigation must not render two complete year grids at once"
         )
     }
 

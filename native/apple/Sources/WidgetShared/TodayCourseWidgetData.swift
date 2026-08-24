@@ -102,7 +102,6 @@ enum TodayCourseWidgetData {
         let sectionText: String?
         let weekday: Int
         let weekNumbers: [Int]
-        let examWeekNumbers: [Int]
         let startSlot: Int
         let endSlot: Int?
 
@@ -115,7 +114,6 @@ enum TodayCourseWidgetData {
             sectionText: String? = nil,
             weekday: Int,
             weekNumbers: [Int],
-            examWeekNumbers: [Int],
             startSlot: Int,
             endSlot: Int? = nil
         ) {
@@ -127,7 +125,6 @@ enum TodayCourseWidgetData {
             self.sectionText = sectionText
             self.weekday = weekday
             self.weekNumbers = weekNumbers
-            self.examWeekNumbers = examWeekNumbers
             self.startSlot = startSlot
             self.endSlot = endSlot
         }
@@ -165,7 +162,6 @@ enum TodayCourseWidgetData {
                     sectionText: $0.sectionText,
                     weekday: $0.weekday,
                     weekNumbers: $0.weekNumbers,
-                    examWeekNumbers: $0.examWeekNumbers,
                     startSlot: $0.startSlot,
                     endSlot: $0.endSlot
                 )
@@ -263,14 +259,18 @@ enum TodayCourseWidgetData {
             let termStart = StrictContractDateParser.date(from: archive.termStartDate, calendar: calendar)
         else { return nil }
         let week = ScheduleLogic.weekNumber(on: date, termStart: termStart, calendar: calendar)
-        return week > 0 ? week : nil
+        guard let lastTeachingWeek = archive.courses.flatMap(\.weekNumbers).max(),
+              lastTeachingWeek > 0
+        else { return nil }
+        return (1 ... lastTeachingWeek).contains(week) ? week : nil
     }
 
     static func dayContext(
         on date: Date,
         weekNumber: Int?,
         language: Language = .simplifiedChinese,
-        calendar: Calendar = .shanghai
+        calendar: Calendar = .shanghai,
+        compact: Bool = false
     ) -> String {
         if language == .english {
             let formatter = DateFormatter()
@@ -279,8 +279,13 @@ enum TodayCourseWidgetData {
             formatter.timeZone = calendar.timeZone
             formatter.dateFormat = "MMM d · EEE"
             var values = [formatter.string(from: date)]
+            values.append(compact
+                ? "Cal W\(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))"
+                : "Calendar Week \(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))")
             if let weekNumber, weekNumber > 0 {
-                values.append("Week \(weekNumber)")
+                values.append(compact ? "Teach W\(weekNumber)" : "Teaching Week \(weekNumber)")
+            } else {
+                values.append(compact ? "Outside term" : "Outside teaching weeks")
             }
             return values.joined(separator: " · ")
         }
@@ -288,9 +293,17 @@ enum TodayCourseWidgetData {
         let day = calendar.component(.day, from: date)
         let weekdayIndex = ((calendar.component(.weekday, from: date) + 5) % 7)
         let weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
-        var values = ["\(month)月\(day)日", weekdays[weekdayIndex]]
+        var values = [
+            "\(month)月\(day)日",
+            weekdays[weekdayIndex],
+            compact
+                ? "公历\(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))周"
+                : "公历第\(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))周"
+        ]
         if let weekNumber, weekNumber > 0 {
-            values.append("第\(weekNumber)周")
+            values.append(compact ? "教学\(weekNumber)周" : "第\(weekNumber)教学周")
+        } else {
+            values.append("非教学周")
         }
         return values.joined(separator: " · ")
     }
@@ -376,7 +389,6 @@ enum TodayCourseWidgetData {
                 sectionText: "1-2节",
                 weekday: 1,
                 weekNumbers: [8],
-                examWeekNumbers: [],
                 startSlot: 0,
                 endSlot: 1
             ),
@@ -389,7 +401,6 @@ enum TodayCourseWidgetData {
                 sectionText: "3-5节",
                 weekday: 1,
                 weekNumbers: [8],
-                examWeekNumbers: [],
                 startSlot: 2,
                 endSlot: 4
             ),
@@ -402,7 +413,6 @@ enum TodayCourseWidgetData {
                 sectionText: "6-7节",
                 weekday: 1,
                 weekNumbers: [8],
-                examWeekNumbers: [],
                 startSlot: 5,
                 endSlot: 6
             ),
@@ -415,7 +425,6 @@ enum TodayCourseWidgetData {
                 sectionText: "8-9节",
                 weekday: 1,
                 weekNumbers: [8],
-                examWeekNumbers: [],
                 startSlot: 7,
                 endSlot: 8
             ),
@@ -428,7 +437,6 @@ enum TodayCourseWidgetData {
                 sectionText: "10-11节",
                 weekday: 1,
                 weekNumbers: [8],
-                examWeekNumbers: [],
                 startSlot: 9,
                 endSlot: 10
             ),
@@ -441,7 +449,6 @@ enum TodayCourseWidgetData {
                 sectionText: "12-13节",
                 weekday: 1,
                 weekNumbers: [8],
-                examWeekNumbers: [],
                 startSlot: 11,
                 endSlot: 12
             )

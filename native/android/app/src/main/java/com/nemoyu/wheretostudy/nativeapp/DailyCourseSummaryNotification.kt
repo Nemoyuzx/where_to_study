@@ -73,12 +73,9 @@ object DailyCourseSummaryLogic {
         val target = Calendar.getInstance(shanghai).apply { timeInMillis = nowMillis }
         val courses = ScheduleLogic.courses(schedule, target)
         if (courses.isEmpty()) return null
-        val termStart = parseContractDate(schedule.termStartDate) ?: return null
-        val week = ScheduleLogic.weekNumber(termStart, target)
         val entries = courses.map { course ->
-            val name = if (week in course.examWeekNumbers) "${course.name}（试）" else course.name
             val location = course.room.takeIf(String::isNotBlank)?.let { " @ $it" }.orEmpty()
-            "${course.timeRange} $name$location"
+            "${course.timeRange} ${course.name}$location"
         }
         return DailyCourseSummaryDraft(
             title = "今日课程 · ${courses.size} 门",
@@ -86,16 +83,6 @@ object DailyCourseSummaryLogic {
         )
     }
 
-    private fun parseContractDate(value: String): Calendar? {
-        val parts = value.split('-').mapNotNull(String::toIntOrNull)
-        if (parts.size != 3) return null
-        val date = Calendar.getInstance(shanghai).apply {
-            isLenient = false
-            clear()
-            set(parts[0], parts[1] - 1, parts[2], 0, 0, 0)
-        }
-        return runCatching { date.timeInMillis }.map { date }.getOrNull()
-    }
 }
 
 enum class DailyCourseSummaryScheduleAction {

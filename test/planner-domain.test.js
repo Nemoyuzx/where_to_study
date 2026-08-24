@@ -12,6 +12,7 @@ import {
   calendarMonthExpansionTarget,
   calendarSurfaceKey,
   calendarTransition,
+  calendarWeekOfYear,
   calendarSwipeDirection,
   DEFAULT_SETTINGS,
   desktopMonthGridMetrics,
@@ -115,9 +116,18 @@ test('expanded month cells reserve the last row for a hidden-entry count', () =>
   })
 })
 
-test('teaching week labels never fall back to Gregorian week wording', () => {
+test('teaching week labels remain distinct from Gregorian week wording', () => {
   assert.equal(formatTeachingWeek(8), '第 8 教学周')
   assert.equal(formatTeachingWeek(0), '非教学周')
+})
+
+test('Gregorian calendar weeks follow ISO 8601 on year boundaries', () => {
+  assert.equal(calendarWeekOfYear('2026-01-01'), 1)
+  assert.equal(calendarWeekOfYear('2026-08-24'), 35)
+  assert.equal(calendarWeekOfYear('2026-12-27'), 52)
+  assert.equal(calendarWeekOfYear('2026-12-28'), 53)
+  assert.equal(calendarWeekOfYear('2021-01-01'), 53)
+  assert.equal(calendarWeekOfYear('invalid'), 0)
 })
 
 test('calendar period keys and transition direction share one navigation contract', () => {
@@ -202,7 +212,6 @@ test('teaching week calculation uses calendar days and reports busy slots', () =
     name: '数据挖掘',
     weekday: 1,
     week_numbers: [1, 2],
-    exam_week_numbers: [],
     start_slot: 2,
     end_slot: 4,
   }]
@@ -211,7 +220,7 @@ test('teaching week calculation uses calendar days and reports busy slots', () =
   assert.equal(state.weekNumber, 2)
   assert.equal(state.weekday, 1)
   assert.deepEqual(state.busySlots, [2, 3, 4])
-  assert.equal(state.dayCourses[0].is_exam, false)
+  assert.equal('is_exam' in state.dayCourses[0], false)
 })
 
 test('teaching week is hidden without a timetable or beyond its actual final week', () => {
@@ -221,7 +230,6 @@ test('teaching week is hidden without a timetable or beyond its actual final wee
     name: 'Short course',
     weekday: 1,
     week_numbers: [1, 2],
-    exam_week_numbers: [],
     start_slot: 0,
     end_slot: 1,
   }]
@@ -229,10 +237,10 @@ test('teaching week is hidden without a timetable or beyond its actual final wee
   assert.equal(getWeekState(shortSchedule, '2026-03-02', '2026-03-16').weekNumber, 0)
 })
 
-test('exam badges follow the backend-provided exam week numbers only', () => {
+test('deprecated exam week metadata never changes a course occurrence', () => {
   const course = {
-    id: 'exam-course',
-    name: '考试课程',
+    id: 'legacy-course',
+    name: '兼容课程',
     weekday: 1,
     week_numbers: [1, 2, 25],
     exam_week_numbers: [25],
@@ -240,9 +248,7 @@ test('exam badges follow the backend-provided exam week numbers only', () => {
     end_slot: 1,
   }
 
-  assert.equal(getWeekState([course], '2026-01-05', '2026-06-22').dayCourses[0].is_exam, true)
-  const plainCourse = { ...course, exam_week_numbers: [] }
-  assert.equal(getWeekState([plainCourse], '2026-01-05', '2026-06-22').dayCourses[0].is_exam, false)
+  assert.deepEqual(getWeekState([course], '2026-01-05', '2026-06-22').dayCourses[0], course)
 })
 
 test('shanghai date helpers are independent of the device timezone', () => {

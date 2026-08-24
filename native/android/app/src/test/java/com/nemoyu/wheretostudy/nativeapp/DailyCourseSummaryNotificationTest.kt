@@ -62,13 +62,13 @@ class DailyCourseSummaryNotificationTest {
     }
 
     @Test
-    fun draftMarksExamCourses() {
+    fun legacyExamMetadataDoesNotAlterNotificationCopy() {
         val draft = DailyCourseSummaryLogic.draft(
             schedule(listOf(course(examWeeks = listOf(1)))),
             millis(2026, 3, 2, 7, 30),
         )
 
-        assertEquals("09:50-10:35 数据挖掘（试） @ 教二楼-335", draft?.body)
+        assertEquals("09:50-10:35 数据挖掘 @ 教二楼-335", draft?.body)
     }
 
     @Test

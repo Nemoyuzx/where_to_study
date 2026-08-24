@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.nemoyu.wheretostudy.native.harmony",
     "vendor": "nemoyu",
-    "versionCode": 1002008,
-    "versionName": "0.2.5",
+    "versionCode": 1002009,
+    "versionName": "0.2.6",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }

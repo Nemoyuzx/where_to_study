@@ -67,9 +67,12 @@ struct TodayCourseWidgetCard: View {
             Text(TodayCourseWidgetData.dayContext(
                 on: date,
                 weekNumber: weekNumber,
-                language: language
+                language: language,
+                compact: family == .systemSmall
             ))
                 .lineLimit(1)
+                .minimumScaleFactor(0.55)
+                .allowsTightening(true)
             if family != .systemSmall {
                 Text("·")
                 Text(TodayCourseWidgetData.statusSummary(

@@ -37,6 +37,13 @@ export default function strictDatesTest() {
       expect(StrictDates.weekdayMonday1(new DateParts(1900, 1, 1))).assertEqual(1);
     });
 
+    it('iso_week_number_handles_year_boundaries', 0, () => {
+      expect(StrictDates.isoWeekNumber(new DateParts(2026, 1, 1))).assertEqual(1);
+      expect(StrictDates.isoWeekNumber(new DateParts(2026, 8, 25))).assertEqual(35);
+      expect(StrictDates.isoWeekNumber(new DateParts(2021, 1, 1))).assertEqual(53);
+      expect(StrictDates.isoWeekNumber(new DateParts(2021, 1, 4))).assertEqual(1);
+    });
+
     it('epoch_day_round_trips', 0, () => {
       expect(StrictDates.epochDay(1970, 1, 1)).assertEqual(0);
       const parts: DateParts = StrictDates.partsFromEpochDay(20000);

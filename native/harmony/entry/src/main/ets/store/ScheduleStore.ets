@@ -1,7 +1,6 @@
 // 与 iOS 端 ScheduleStore.swift 对应的课表本地缓存。
-// 加载时校验第一周周一日期并重新应用考试周推导，保存使用原子写入。
+// 加载时校验第一周周一日期，保存使用原子写入。
 import { ScheduleSnapshot } from '../common/Models';
-import { ScheduleLogic } from '../common/ScheduleLogic';
 import { StrictDates } from '../common/StrictDates';
 import { AppContext } from './AppContext';
 import { JsonFile } from './JsonFile';
@@ -79,7 +78,7 @@ export class FileScheduleStore implements ScheduleStoring {
       snapshot.termID,
       snapshot.termStartDate,
       snapshot.fetchedAt,
-      ScheduleLogic.applyingExamWeeks(snapshot.courses)
+      snapshot.courses
     );
   }
 

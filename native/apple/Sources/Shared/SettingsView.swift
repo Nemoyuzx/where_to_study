@@ -46,9 +46,6 @@ private struct FavoriteDeadlineManagementView: View {
         }
         .background(AppTheme.background)
         .navigationTitle("收藏管理")
-        #if os(iOS)
-        .toolbar(.hidden, for: .tabBar)
-        #endif
         .accessibilityIdentifier("favorites.page")
     }
 
@@ -92,6 +89,24 @@ private struct FavoriteDeadlineManagementView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border, lineWidth: 1))
     }
 }
+
+#if os(iOS)
+private struct FavoriteDeadlineManagementPresentation: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            FavoriteDeadlineManagementView()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { dismiss() }
+                            .accessibilityIdentifier("favorites.dismiss")
+                    }
+                }
+        }
+    }
+}
+#endif
 
 enum SettingsLayoutPolicy {
     static let leadingColumn: [SettingsSurfaceID] = [
@@ -171,6 +186,7 @@ struct SettingsView: View {
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @State private var showingClearDataConfirmation = false
     @State private var showingPrivacyPolicy = false
+    @State private var showingFavoriteManagement = false
     @State private var widgetPreviewSize: WidgetPreviewSize = .medium
     @State private var customFeedValidationStatus = ""
     @State private var isValidatingCustomFeed = false
@@ -250,6 +266,11 @@ struct SettingsView: View {
         .sheet(isPresented: $showingPrivacyPolicy) {
             PrivacyPolicyView()
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showingFavoriteManagement) {
+            FavoriteDeadlineManagementPresentation()
+        }
+        #endif
         .confirmationDialog(
             "清除本地数据？",
             isPresented: $showingClearDataConfirmation,
@@ -644,11 +665,22 @@ struct SettingsView: View {
                 Text("自定义源只发送不带凭据的 HTTPS GET；普通条目随开关隐藏，收藏快照始终保留在本机。")
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
-                NavigationLink {
-                    FavoriteDeadlineManagementView()
-                } label: {
-                    Label("收藏管理", systemImage: "star")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Group {
+                    #if os(iOS)
+                    Button {
+                        showingFavoriteManagement = true
+                    } label: {
+                        Label("收藏管理", systemImage: "star")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    #else
+                    NavigationLink {
+                        FavoriteDeadlineManagementView()
+                    } label: {
+                        Label("收藏管理", systemImage: "star")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    #endif
                 }
                 .buttonStyle(.bordered)
                 .accessibilityIdentifier("settings.favorite-management")

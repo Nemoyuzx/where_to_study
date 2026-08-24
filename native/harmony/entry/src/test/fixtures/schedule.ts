@@ -1,2 +1,37 @@
-// 由 contracts/v1/fixtures/schedule.json 生成的文本常量（本地单元测试用）。
-export const scheduleText: string = "{\n  \"term_id\": \"2025-2026-2\",\n  \"term_start_date\": \"2026-03-02\",\n  \"fetched_at\": \"2026-03-02T00:00:00Z\",\n  \"courses\": [\n    {\n      \"id\": \"0cb282cebe22\",\n      \"name\": \"\u793a\u4f8b\u8bfe\u7a0b\",\n      \"teacher\": \"\u6d4b\u8bd5\u6559\u5e08\",\n      \"room\": \"\u6559\u4e00\u697c-101\",\n      \"week_text\": \"1-18\",\n      \"week_numbers\": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],\n      \"exam_week_numbers\": [17, 18],\n      \"weekday\": 1,\n      \"start_slot\": 2,\n      \"end_slot\": 4,\n      \"section_text\": \"3-5\u8282\",\n      \"time_range\": \"09:50-12:15\"\n    },\n    {\n      \"id\": \"9fcc32896745\",\n      \"name\": \"\u793a\u4f8b\u5b9e\u9a8c\",\n      \"teacher\": \"\u6d4b\u8bd5\u6559\u5e08\",\n      \"room\": \"\u4e3b\u697c-201\",\n      \"week_text\": \"2-18\u53cc\",\n      \"week_numbers\": [2, 4, 6, 8, 10, 12, 14, 16, 18],\n      \"exam_week_numbers\": [18],\n      \"weekday\": 2,\n      \"start_slot\": 5,\n      \"end_slot\": 6,\n      \"section_text\": \"6-7\u8282\",\n      \"time_range\": \"13:00-14:35\"\n    }\n  ]\n}\n";
+// Embedded copy of the shared v1 fixture for ArkTS host-side tests.
+export const scheduleText: string = `{
+  "term_id": "2025-2026-2",
+  "term_start_date": "2026-03-02",
+  "fetched_at": "2026-03-02T00:00:00Z",
+  "courses": [
+    {
+      "id": "0cb282cebe22",
+      "name": "示例课程",
+      "teacher": "测试教师",
+      "room": "教一楼-101",
+      "week_text": "1-18",
+      "week_numbers": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+      "exam_week_numbers": [],
+      "weekday": 1,
+      "start_slot": 2,
+      "end_slot": 4,
+      "section_text": "3-5节",
+      "time_range": "09:50-12:15"
+    },
+    {
+      "id": "9fcc32896745",
+      "name": "示例实验",
+      "teacher": "测试教师",
+      "room": "主楼-201",
+      "week_text": "2-18双",
+      "week_numbers": [2, 4, 6, 8, 10, 12, 14, 16, 18],
+      "exam_week_numbers": [],
+      "weekday": 2,
+      "start_slot": 5,
+      "end_slot": 6,
+      "section_text": "6-7节",
+      "time_range": "13:00-14:35"
+    }
+  ]
+}
+`;

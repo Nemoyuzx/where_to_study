@@ -805,9 +805,19 @@ final class AppModel: ObservableObject {
         liveItems: [PublicDeadlineItem],
         on date: String
     ) -> [PublicDeadlineItem] {
+        visibleDeadlineItems(
+            liveItems: liveItems,
+            favoriteItems: favoriteDeadlineItems(on: date)
+        )
+    }
+
+    func visibleDeadlineItems(
+        liveItems: [PublicDeadlineItem],
+        favoriteItems: [PublicDeadlineItem]
+    ) -> [PublicDeadlineItem] {
         var seen = Set<String>()
         var result = [PublicDeadlineItem]()
-        for item in liveItems.filter(isDeadlineEnabled) + favoriteDeadlineItems(on: date) {
+        for item in liveItems.filter(isDeadlineEnabled) + favoriteItems {
             if seen.insert(item.favoriteID).inserted {
                 result.append(item)
             }

@@ -131,6 +131,8 @@ jobs:
           path: |
             release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-macos-universal.zip
             release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-macos-universal.zip.sha256
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-macos-universal.dmg
+            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-macos-universal.dmg.sha256
           if-no-files-found: error
 
       - name: Upload unsigned native iOS archive

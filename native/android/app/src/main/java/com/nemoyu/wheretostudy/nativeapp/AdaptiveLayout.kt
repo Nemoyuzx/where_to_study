@@ -112,4 +112,7 @@ object AdaptiveContentLogic {
     }
 
     fun plannerSummaryColumns(@Suppress("UNUSED_PARAMETER") contentWidthDp: Int): Int = 3
+
+    fun plannerResultColumns(contentWidthDp: Int): Int =
+        if (contentWidthDp >= 600) 2 else 1
 }

@@ -63,7 +63,7 @@ struct MacMenuBarView: View {
             Button("\(label)暂无课程") { showMainWindow(section: .calendar) }
         } else {
             ForEach(courses.prefix(8)) { course in
-                Button(courseLine(course, week: week)) {
+                Button(courseLine(course)) {
                     showMainWindow(section: .calendar)
                 }
             }
@@ -79,14 +79,18 @@ struct MacMenuBarView: View {
 
     private func sectionTitle(label: String, date: Date, week: Int?) -> String {
         let dateLabel = Self.dateFormatter.string(from: date)
-        if let week { return "\(label)课程 · \(dateLabel) · 第 \(week) 周" }
-        return "\(label)课程 · \(dateLabel)"
+        let weekContext = TeachingCalendarLogic.weekContext(
+            for: date,
+            teachingWeekNumber: week,
+            calendar: calendar,
+            compact: true
+        )
+        return "\(label)课程 · \(dateLabel) · \(weekContext)"
     }
 
-    private func courseLine(_ course: Course, week: Int?) -> String {
-        let title = week.map(course.examWeekNumbers.contains) == true ? "试 \(course.name)" : course.name
+    private func courseLine(_ course: Course) -> String {
         let room = course.room.isEmpty ? "地点未标注" : course.room
-        return "\(timeLabel(course))  \(title)  @ \(room)"
+        return "\(timeLabel(course))  \(course.name)  @ \(room)"
     }
 
     private func timeLabel(_ course: Course) -> String {

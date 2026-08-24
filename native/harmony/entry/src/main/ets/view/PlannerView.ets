@@ -577,7 +577,7 @@ export struct PlannerView {
   courseRow(course: Course) {
     Row({ space: 12 }) {
       Column({ space: 1 }) {
-        Text(course.examWeekNumbers.length > 0 ? this.model.text('试') + '  ' + course.name : course.name)
+        Text(course.name)
           .fontSize(this.isCompact() ? 14 : 15)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
@@ -666,15 +666,18 @@ export struct PlannerView {
       } else if (this.model.matchingRooms().length === 0) {
         this.emptyMessage('暂无匹配空教室')
       } else {
-        ForEach(this.model.matchingRooms(), (room: Classroom, index: number) => {
-          Column() {
-            this.classroomRow(room)
-            if (index < this.model.matchingRooms().length - 1) {
-              Divider().color(AppTheme.border())
+        Grid() {
+          ForEach(this.model.matchingRooms(), (room: Classroom) => {
+            GridItem() {
+              this.classroomRow(room)
             }
-          }
-          .width('100%')
-        }, (room: Classroom) => room.id)
+            .width('100%')
+          }, (room: Classroom) => room.id)
+        }
+        .columnsTemplate(this.twoColumn() ? 'repeat(2, 1fr)' : '1fr')
+        .columnsGap(this.twoColumn() ? 12 : 0)
+        .rowsGap(0)
+        .width('100%')
       }
     }
     .padding(this.surfacePadding())
@@ -705,6 +708,7 @@ export struct PlannerView {
     }
     .width('100%')
     .padding({ top: this.isCompact() ? 7 : 10, bottom: this.isCompact() ? 7 : 10 })
+    .border({ width: { bottom: 1 }, color: AppTheme.border() })
     .alignItems(HorizontalAlign.Start)
   }
 

@@ -50,8 +50,14 @@ pub fn load(app: &AppHandle, account_scope: &str) -> ServiceResult<Option<Schedu
     else {
         return Ok(None);
     };
-    crate::schedule::annotate_exam_weeks(&mut schedule.courses);
+    clear_deprecated_exam_weeks(&mut schedule);
     Ok(Some(schedule))
+}
+
+fn clear_deprecated_exam_weeks(schedule: &mut ScheduleResponse) {
+    for course in &mut schedule.courses {
+        course.exam_week_numbers.clear();
+    }
 }
 
 pub fn save(
@@ -157,6 +163,20 @@ mod tests {
             serde_json::to_value(actual).unwrap(),
             serde_json::to_value(expected).unwrap()
         );
+    }
+
+    #[test]
+    fn legacy_exam_week_values_are_cleared_without_new_inference() {
+        let mut schedule = fixture_schedule();
+        schedule.courses[0].exam_week_numbers = vec![17, 18];
+        schedule.courses[1].exam_week_numbers = vec![18];
+
+        clear_deprecated_exam_weeks(&mut schedule);
+
+        assert!(schedule
+            .courses
+            .iter()
+            .all(|course| course.exam_week_numbers.is_empty()));
     }
 
     #[test]

@@ -79,14 +79,14 @@ final class DailyCourseNotificationTests: XCTestCase {
         }
     }
 
-    func testPlannerMarksExamCourseTitle() throws {
+    func testPlannerIgnoresLegacyExamWeekMetadata() throws {
         let requests = DailyCourseNotificationPlanner.requests(
             for: schedule(courses: [course(examWeeks: [1])]),
             after: try date("2026-03-02 06:00"),
             scanDayLimit: 1
         )
 
-        XCTAssertEqual(requests.first?.body, "09:50-10:35 数据挖掘（试） @ 教二楼-335")
+        XCTAssertEqual(requests.first?.body, "09:50-10:35 数据挖掘 @ 教二楼-335")
     }
 
     func testPlannerCapsWindowBelowSystemPendingLimit() throws {

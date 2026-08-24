@@ -199,26 +199,6 @@ class ScheduleLogicTest {
     }
 
     @Test
-    fun examWeeksUseSeventeenthAndEighteenthExistingWeeks() {
-        val course = Course(
-            id = "fixture-course",
-            name = "测试课程",
-            teacher = "测试教师",
-            room = "测试楼-101",
-            weekText = "2-19",
-            weekNumbers = (2..19).toList(),
-            examWeekNumbers = emptyList(),
-            weekday = 1,
-            startSlot = 0,
-            endSlot = 1,
-            sectionText = "1-2节",
-            timeRange = "08:00-09:35",
-        )
-
-        assertEquals(setOf(18, 19), ScheduleLogic.examWeeks(listOf(course)))
-    }
-
-    @Test
     fun weekNumberUsesTermStartDate() {
         val zone = TimeZone.getTimeZone("Asia/Shanghai")
         val start = Calendar.getInstance(zone).apply { set(2026, Calendar.MARCH, 2, 0, 0, 0) }
@@ -248,6 +228,7 @@ class ScheduleLogicTest {
         )
 
         assertEquals(expected, actual)
+        assertTrue(actual.courses.all { it.examWeekNumbers.isEmpty() })
     }
 
     @Test
@@ -714,6 +695,29 @@ class ScheduleLogicTest {
             0,
             TeachingCalendarLogic.monthSelectionTransitionDirection(2026, 5, 2026, 5),
         )
+    }
+
+    @Test
+    fun monthAndYearPagingPreserveThePreferredDayAcrossClampedDates() {
+        val zone = TimeZone.getTimeZone("Asia/Shanghai")
+        val january31 = Calendar.getInstance(zone).apply {
+            clear()
+            set(2026, Calendar.JANUARY, 31, 12, 0, 0)
+        }
+        val february = TeachingCalendarLogic.movedMonth(january31, 1, preferredDayOfMonth = 31)
+        val march = TeachingCalendarLogic.movedMonth(february, 1, preferredDayOfMonth = 31)
+        assertEquals(28, february.get(Calendar.DAY_OF_MONTH))
+        assertEquals(Calendar.MARCH, march.get(Calendar.MONTH))
+        assertEquals(31, march.get(Calendar.DAY_OF_MONTH))
+
+        val leapDay = Calendar.getInstance(zone).apply {
+            clear()
+            set(2028, Calendar.FEBRUARY, 29, 12, 0, 0)
+        }
+        val nextYear = TeachingCalendarLogic.movedYear(leapDay, 1, preferredDayOfMonth = 29)
+        val leapYearAgain = TeachingCalendarLogic.movedYear(nextYear, -1, preferredDayOfMonth = 29)
+        assertEquals(28, nextYear.get(Calendar.DAY_OF_MONTH))
+        assertEquals(29, leapYearAgain.get(Calendar.DAY_OF_MONTH))
     }
 
     @Test

@@ -94,9 +94,9 @@
 "地点" = "Location";
 "教师" = "Instructor";
 "教学周" = "Teaching weeks";
+"公历 / 教学" = "Civil / Teaching";
 "第 %lld 教学周" = "Teaching week %lld";
 "非教学周" = "Outside teaching weeks";
-"考试周" = "Exam weeks";
 "未标注" = "Not specified";
 "类型" = "Type";
 "法定节假日" = "Public holiday";

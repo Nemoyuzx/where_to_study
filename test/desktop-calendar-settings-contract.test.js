@@ -6,6 +6,8 @@ const indexCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf
 const appCss = readFileSync(new URL('../src/App.css', import.meta.url), 'utf8')
 const appSource = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
 const calendarExportSource = readFileSync(new URL('../src-tauri/src/calendar_export.rs', import.meta.url), 'utf8')
+const scheduleSource = readFileSync(new URL('../src-tauri/src/schedule.rs', import.meta.url), 'utf8')
+const scheduleStoreSource = readFileSync(new URL('../src-tauri/src/schedule_store.rs', import.meta.url), 'utf8')
 const tauriSource = readFileSync(new URL('../src-tauri/src/lib.rs', import.meta.url), 'utf8')
 const tauriCapabilities = readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8')
 
@@ -78,9 +80,10 @@ test('desktop month geometry and typography mirror the native macOS grid', () =>
   assert.match(appSource, /setDesktopMonthEventRows/)
   assert.match(appSource, /compactCalendarLayout \? 2 : desktopMonthEventRows/)
   assert.match(appSource, /className="month-cell-head"/)
-  assert.match(appSource, /date\.getDay\(\) === 1 && dayState\.weekNumber > 0/)
+  assert.match(appSource, /date\.getDay\(\) === 1/)
+  assert.match(appSource, /formatUiCalendarWeek\(dateString, uiLanguage\)/)
   assert.match(appSource, /formatUiTeachingWeek\(dayState\.weekNumber, uiLanguage\)/)
-  assert.doesNotMatch(appSource, /calendarWeekOfYear\(dateString\)/)
+  assert.match(appSource, /calendarWeekOfYear\(dateString\)/)
   assert.match(appSource, /className="month-weekday-desktop"/)
   assert.match(appSource, /className="month-entry-title"/)
   assert.match(appSource, /<time>\{String\(entry\.time\)\.split\('-'\)\[0\]\}<\/time>/)
@@ -112,15 +115,15 @@ test('desktop month geometry and typography mirror the native macOS grid', () =>
     appCss,
     /\.desktop-month-view \.month-cell \.month-entry-overflow\s*\{[^}]*font-size:\s*9px;[^}]*height:\s*15px;[^}]*padding:\s*0 6px;/s,
   )
-  assert.match(appSource, /const monthCourseEntries = dayState\.dayCourses\.map/)
-  assert.match(appSource, /className="month-course-entries"/)
+  assert.match(appSource, /const monthAgendaEntries = \[/)
+  assert.match(appSource, /className="month-agenda-entries"/)
   assert.match(appSource, /const monthEntrySummary = summarizeMonthEntries\(/)
   assert.doesNotMatch(appSource, /monthAllDayEntries|month-all-day-entries|month-all-day-entry/)
   assert.match(
     appSource,
     /const compactMarkers = Math\.min\(calendarItems\.length \+ dayState\.dayCourses\.length \+ supplementalEntries\.length, 3\)/,
   )
-  assert.doesNotMatch(appSource, /sourceView: 'month'/)
+  assert.match(appSource, /sourceView: 'month'/)
 })
 
 test('desktop week all-day row stays in each date column and opens the whole event card', () => {
@@ -198,11 +201,23 @@ test('desktop settings expose matching deadline color dots and switch controls',
   )
 })
 
-test('favorite management removes the underlying navigation from the modal accessibility tree', () => {
-  assert.match(appSource, /aria-hidden=\{favoriteManagerOpen \? true : undefined\}/)
-  assert.match(appSource, /inert=\{favoriteManagerOpen \? true : undefined\}/)
-  assert.match(appSource, /\{!favoriteManagerOpen \? <aside className="side-nav">/)
-  assert.match(appCss, /\.app-frame\.favorite-manager-open\s*\{[^}]*display:\s*none;/s)
+test('favorite management is a settings subpage that preserves primary navigation', () => {
+  assert.match(appSource, /<aside className="side-nav">/)
+  assert.match(appSource, /activePage === 'settings' && favoriteManagerOpen/)
+  assert.match(appSource, /activePage === 'settings' && !favoriteManagerOpen/)
+  assert.match(appSource, /className="favorite-topbar-title"/)
+  assert.match(appSource, /aria-label=\{t\('返回设置'\)\}/)
+  assert.doesNotMatch(appSource, /aria-hidden=\{favoriteManagerOpen/)
+  assert.doesNotMatch(appCss, /\.app-frame\.favorite-manager-open/)
+  assert.match(appCss, /\.favorite-manager-page\s*\{[^}]*min-height:/s)
+  assert.doesNotMatch(appCss, /\.favorite-manager-page\s*\{[^}]*position:\s*fixed/s)
+})
+
+test('wide empty-classroom results switch to two columns', () => {
+  assert.match(
+    appCss,
+    /@media \(min-width: 1180px\)[\s\S]*\.planner-results-panel \.room-list\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s,
+  )
 })
 
 test('desktop calendar imports locally persisted favorite event snapshots', () => {
@@ -214,6 +229,15 @@ test('desktop calendar imports locally persisted favorite event snapshots', () =
   assert.match(calendarExportSource, /fn build_favorite_ics\(/)
   assert.match(calendarExportSource, /DTSTART;TZID=Asia\/Shanghai/)
   assert.match(calendarExportSource, /URL:\{url\}/)
+})
+
+test('deprecated exam-week metadata has no desktop presentation or backend application', () => {
+  assert.doesNotMatch(appSource, /course\.is_exam|course-exam-badge/)
+  assert.doesNotMatch(scheduleSource, /annotate_exam_weeks|EXAM_WEEK_ORDINALS/)
+  assert.doesNotMatch(scheduleStoreSource, /annotate_exam_weeks/)
+  assert.match(scheduleStoreSource, /course\.exam_week_numbers\.clear\(\)/)
+  assert.doesNotMatch(calendarExportSource, /exam_week_numbers|\u3010试】/)
+  assert.doesNotMatch(tauriSource, /exam_week_numbers\.contains|desktop_text\("试"/)
 })
 
 test('desktop day and week timelines separate hour and course-slot grid lines', () => {

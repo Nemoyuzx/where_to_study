@@ -66,6 +66,7 @@ final class TodayCourseWidgetDataTests: XCTestCase {
         let secondWeek = try XCTUnwrap(StrictContractDateParser.date(from: "2026-03-09"))
 
         XCTAssertTrue(TodayCourseWidgetData.courses(on: secondWeek, archive: archive).isEmpty)
+        XCTAssertNil(TodayCourseWidgetData.weekNumber(on: secondWeek, archive: archive))
     }
 
     func testWidgetPreferencesNormalizeCourseLimit() {
@@ -130,7 +131,7 @@ final class TodayCourseWidgetDataTests: XCTestCase {
                 weekNumber: 1,
                 language: .english
             ),
-            "Mar 2 · Mon · Week 1"
+            "Mar 2 · Mon · Calendar Week 10 · Teaching Week 1"
         )
         XCTAssertEqual(TodayCourseWidgetData.previewCourses().first?.name, "高等数学")
     }
@@ -149,7 +150,6 @@ final class TodayCourseWidgetDataTests: XCTestCase {
             timeRange: "09:50-10:35",
             weekday: weekday,
             weekNumbers: weeks,
-            examWeekNumbers: [],
             startSlot: startSlot
         )
     }

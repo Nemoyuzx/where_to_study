@@ -56,6 +56,29 @@ private struct MobileMonthDaySnapshot: Identifiable {
     var id: Date { date }
 }
 
+private final class MobileCalendarSnapshotCache: ObservableObject {
+    private var key: String?
+    private var snapshots = [MobileMonthDaySnapshot]()
+
+    func values(
+        for key: String,
+        build: () -> [MobileMonthDaySnapshot]
+    ) -> [MobileMonthDaySnapshot] {
+        if self.key == key { return snapshots }
+        let values = build()
+        self.key = key
+        snapshots = values
+        return values
+    }
+
+    func invalidate() {
+        guard key != nil else { return }
+        objectWillChange.send()
+        key = nil
+        snapshots = []
+    }
+}
+
 private struct MobileWeekAgendaSelection: Identifiable {
     let id = UUID()
     let date: Date
@@ -91,8 +114,9 @@ enum MobileCalendarAnimationPartition {
             // horizontal page transition.
             return "月"
         case "年":
-            referenceDate = calendar.dateInterval(of: .year, for: selectedDate)?.start
-                ?? selectedDate
+            // Reusing the year shell avoids keeping two 12-month/365-day
+            // grids alive during an animated year change.
+            return "年"
         default:
             referenceDate = calendar.startOfDay(for: selectedDate)
         }
@@ -188,6 +212,7 @@ struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var session: TeachingCalendarSessionState
+    @StateObject private var snapshotCache = MobileCalendarSnapshotCache()
     @State private var presentedDetail: MobileCalendarDetailSelection?
     @State private var presentedWeekAgenda: MobileWeekAgendaSelection?
     @State private var isHorizontalPaging = false
@@ -266,6 +291,12 @@ struct MobileTeachingCalendarView: View {
         .onChange(of: verticalSizeClass) { _ in
             normalizeMonthPositionForLayout()
         }
+        .onReceive(model.objectWillChange) { _ in
+            snapshotCache.invalidate()
+        }
+        .onReceive(calendarDeadlines.objectWillChange) { _ in
+            snapshotCache.invalidate()
+        }
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
         }
@@ -324,18 +355,19 @@ struct MobileTeachingCalendarView: View {
             .animation(TeachingCalendarNavigationMotion.pageAnimation, value: mode)
             .accessibilityIdentifier("calendar.mobile.mode")
 
-            if mode == .week {
+            if mode == .day || mode == .week {
                 Label {
                     Text(weekContextText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
-                        .accessibilityIdentifier("calendar.mobile.teaching-week")
                 } icon: {
                     Image(systemName: "graduationcap")
                 }
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(AppTheme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("calendar.mobile.teaching-week")
             }
 
             if mode == .day || mode == .week {
@@ -392,9 +424,12 @@ struct MobileTeachingCalendarView: View {
         return HStack(spacing: 0) {
             if mode == .week {
                 VStack(spacing: 0) {
-                    Text(teachingWeekNumber(on: selectedDate).map(String.init) ?? "—")
+                    Text(
+                        "\(TeachingCalendarLogic.civilWeekNumber(on: selectedDate, calendar: calendar)) / "
+                        + (teachingWeekNumber(on: selectedDate).map(String.init) ?? "—")
+                    )
                         .font(.caption.weight(.semibold).monospacedDigit())
-                    Text("教学周")
+                    Text(model.localized("公历 / 教学"))
                         .font(.caption2)
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
@@ -702,7 +737,7 @@ struct MobileTeachingCalendarView: View {
     private var monthView: some View {
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         let days = monthGridDates(containing: first)
-        let daySnapshots = monthDaySnapshots(for: days)
+        let daySnapshots = cachedDaySnapshots(for: days, scope: "month")
 
         return GeometryReader { proxy in
             let bottomInset = MobileCalendarTimelineLayout.contentBottomInset(
@@ -1088,6 +1123,10 @@ struct MobileTeachingCalendarView: View {
             grouping: years.flatMap { model.holidayItems(for: $0) },
             by: \.date
         )
+        let favoritesByDate = Dictionary(
+            grouping: model.favoriteDeadlines,
+            by: { String($0.deadline.prefix(10)) }
+        )
 
         return days.map { day in
             let dateKey = StrictContractDateParser.string(from: day)
@@ -1096,7 +1135,7 @@ struct MobileTeachingCalendarView: View {
             let assignments = calendarDeadlines.assignmentsByDate[dateKey] ?? []
             let publicItems = model.visibleDeadlineItems(
                 liveItems: calendarDeadlines.publicItems(for: dateKey),
-                on: dateKey
+                favoriteItems: favoritesByDate[dateKey] ?? []
             )
             let schoolNotices = publicItems.filter { $0.source == .schoolNotice }
             let publicDeadlines = publicItems.filter { $0.source != .schoolNotice }
@@ -1121,6 +1160,17 @@ struct MobileTeachingCalendarView: View {
                     publicDeadlines: publicDeadlines
                 )
             )
+        }
+    }
+
+    private func cachedDaySnapshots(
+        for days: [Date],
+        scope: String
+    ) -> [MobileMonthDaySnapshot] {
+        let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
+        let key = "\(scope)|\(firstDate)|\(days.count)"
+        return snapshotCache.values(for: key) {
+            monthDaySnapshots(for: days)
         }
     }
 
@@ -1180,6 +1230,14 @@ struct MobileTeachingCalendarView: View {
 
     private var yearView: some View {
         let year = calendar.component(.year, from: selectedDate)
+        let yearDays = TeachingCalendarLogic.datesInYear(
+            containing: selectedDate,
+            calendar: calendar
+        )
+        let snapshotsByDate = Dictionary(
+            uniqueKeysWithValues: cachedDaySnapshots(for: yearDays, scope: "year")
+                .map { ($0.dateKey, $0) }
+        )
         let months = (1 ... 12).compactMap {
             calendar.date(from: DateComponents(year: year, month: $0, day: 1))
         }
@@ -1192,7 +1250,7 @@ struct MobileTeachingCalendarView: View {
                     .foregroundStyle(AppTheme.secondaryText)
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
                     ForEach(months, id: \.self) { month in
-                        miniMonth(month)
+                        miniMonth(month, snapshotsByDate: snapshotsByDate)
                     }
                 }
             }
@@ -1203,7 +1261,10 @@ struct MobileTeachingCalendarView: View {
         .accessibilityIdentifier("calendar.mobile.year")
     }
 
-    private func miniMonth(_ month: Date) -> some View {
+    private func miniMonth(
+        _ month: Date,
+        snapshotsByDate: [String: MobileMonthDaySnapshot]
+    ) -> some View {
         let days = monthGridDates(containing: month)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 1), count: 7)
         return VStack(alignment: .leading, spacing: 6) {
@@ -1230,20 +1291,28 @@ struct MobileTeachingCalendarView: View {
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(days, id: \.self) { day in
-                    yearDayButton(day, month: month)
+                    yearDayButton(
+                        day,
+                        month: month,
+                        snapshot: snapshotsByDate[StrictContractDateParser.string(from: day)]
+                    )
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func yearDayButton(_ day: Date, month: Date) -> some View {
+    private func yearDayButton(
+        _ day: Date,
+        month: Date,
+        snapshot: MobileMonthDaySnapshot?
+    ) -> some View {
         if calendar.isDate(day, equalTo: month, toGranularity: .month) {
-            let count = courses(on: day).count
+            let count = snapshot?.courses.count ?? 0
             let today = sameDay(day, .now)
             let selected = sameDay(day, selectedDate)
             let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-                in: allDayEvents(on: day)
+                in: snapshot?.allDayEvents ?? []
             )
             Button {
                 AppHaptics.selection()
@@ -1895,9 +1964,6 @@ struct MobileTeachingCalendarView: View {
             detailRow("地点", course.room.isEmpty ? "未标注" : course.room)
             detailRow("教师", course.teacher.isEmpty ? "未标注" : course.teacher)
             detailRow("教学周", course.weekText)
-            if !course.examWeekNumbers.isEmpty {
-                detailRow("考试周", course.examWeekNumbers.map(String.init).joined(separator: "、"))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
@@ -1995,8 +2061,10 @@ struct MobileTeachingCalendarView: View {
     private var periodTitle: String {
         TeachingCalendarLogic.periodTitle(
             for: selectedDate,
-            modeRawValue: mode.rawValue,
-            teachingWeekNumber: teachingWeekNumber(on: selectedDate),
+            // The compact header keeps the date readable beside its action
+            // buttons; both week numbers live together in the dedicated row.
+            modeRawValue: mode == .week ? MobileCalendarMode.month.rawValue : mode.rawValue,
+            teachingWeekNumber: mode == .week ? nil : teachingWeekNumber(on: selectedDate),
             language: model.appLanguage,
             calendar: calendar
         )
@@ -2475,10 +2543,12 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var weekContextText: String {
-        if let teachingWeek = teachingWeekNumber(on: selectedDate) {
-            return model.localizedFormat("第 %lld 教学周", Int64(teachingWeek))
-        }
-        return model.localized("非教学周")
+        TeachingCalendarLogic.weekContext(
+            for: selectedDate,
+            teachingWeekNumber: teachingWeekNumber(on: selectedDate),
+            language: model.appLanguage,
+            calendar: calendar
+        )
     }
 
     private func teachingWeekNumber(on date: Date) -> Int? {

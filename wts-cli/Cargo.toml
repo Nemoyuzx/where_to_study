@@ -1,6 +1,6 @@
 [package]
 name = "where-to-study-cli"
-version = "0.2.5"
+version = "0.2.6"
 description = "Where To Study command-line client (BUPT empty classroom planner)"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"

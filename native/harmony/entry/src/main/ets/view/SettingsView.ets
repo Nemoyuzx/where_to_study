@@ -16,11 +16,11 @@ import { PublicDeadlineItem, PublicDeadlineKindInfo,
 @ComponentV2
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
+  @Param favoriteManagerOnly: boolean = false;
   @Event onFavoriteManagerVisibilityChanged: (visible: boolean) => void = () => {
   };
   @Local contentWidth: number = 350;
   @Local showingPrivacyPolicy: boolean = false;
-  @Local showingFavoriteManager: boolean = false;
   @Local customDeadlineURLDraft: string = '';
   // 样式预览容量（紧凑 1 / 标准 3 / 展开 6，对应 Android 预览 Spinner）。
   @Local previewCapacity: number = 3;
@@ -41,7 +41,7 @@ export struct SettingsView {
         }
       })
         .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
-    } else if (this.showingFavoriteManager) {
+    } else if (this.favoriteManagerOnly) {
       this.favoriteManagerView()
     } else {
       this.settingsContent()
@@ -60,7 +60,6 @@ export struct SettingsView {
 
   private setFavoriteManagerVisible(visible: boolean): void {
     this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
-      this.showingFavoriteManager = visible;
       this.onFavoriteManagerVisibilityChanged(visible);
     });
   }

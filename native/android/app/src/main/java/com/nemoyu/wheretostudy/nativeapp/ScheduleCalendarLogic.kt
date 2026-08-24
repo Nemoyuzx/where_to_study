@@ -80,11 +80,7 @@ object ScheduleCalendarLogic {
                     add(
                         CalendarEventDraft(
                             marker = stableMarker(schedule.termID, course.id, week),
-                            title = if (week in course.examWeekNumbers) {
-                                "试 ${course.name}"
-                            } else {
-                                course.name
-                            },
+                            title = course.name,
                             location = course.room,
                             description = listOf(course.teacher, course.sectionText)
                                 .filter(String::isNotBlank)

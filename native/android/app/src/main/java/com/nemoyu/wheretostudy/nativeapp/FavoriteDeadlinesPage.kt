@@ -17,12 +17,12 @@ internal class FavoriteDeadlinesPage(
     private val availableWidthDp: Int,
 ) {
     fun build(): ScrollView = ScrollView(activity).apply {
+        id = R.id.favorite_deadlines_page
         isFillViewport = true
         clipToPadding = false
         scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
         setBackgroundColor(Palette.background)
         addView(verticalPage(activity).apply {
-            id = R.id.favorite_deadlines_page
             if (availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP) {
                 setPadding(
                     activity.dp(20),

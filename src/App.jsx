@@ -51,6 +51,7 @@ import {
   calendarMonthExpansion,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
+  calendarWeekOfYear,
   calendarSwipeDirection,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
@@ -277,7 +278,6 @@ const EN_TEXT = Object.freeze({
   '班': 'Work',
   '作': 'A',
   '赛': 'C',
-  '试': 'Exam',
   '已生成日历文件并打开苹果日历：': 'Calendar file created and opened in Apple Calendar: ',
   '没有可导入的收藏日程。': 'There are no favorite events to import.',
   '移动教务实时接口': 'Mobile academic system live API',
@@ -469,6 +469,52 @@ function hasTauriRuntime() {
   return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__?.invoke)
 }
 
+function browserPreviewSchedule(termId = '2026-2027-1', termStartDate = '2026-08-31') {
+  const everyWeek = Array.from({ length: 18 }, (_, index) => index + 1)
+  return {
+    term_id: termId,
+    term_start_date: termStartDate,
+    fetched_at: contractTimestamp(),
+    courses: [
+      { id: 'preview-course-1', name: '计算机网络', teacher: '张老师', room: '教3-201', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 1, start_slot: 0, end_slot: 1, section_text: '1-2节', time_range: '08:00-09:35' },
+      { id: 'preview-course-2', name: '数据库系统', teacher: '李老师', room: '主楼-301', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 2, start_slot: 2, end_slot: 3, section_text: '3-4节', time_range: '09:50-11:25' },
+      { id: 'preview-course-3', name: '人工智能导论', teacher: '王老师', room: '教2-401', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 3, start_slot: 5, end_slot: 6, section_text: '6-7节', time_range: '13:00-14:35' },
+      { id: 'preview-course-4', name: '软件工程', teacher: '赵老师', room: '教4-101', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 4, start_slot: 7, end_slot: 8, section_text: '8-9节', time_range: '14:45-16:20' },
+    ],
+  }
+}
+
+function browserPreviewClassrooms(targetDate = localDateString()) {
+  const rooms = [
+    ['教1-101', '教1', '101', 80, [0, 1, 2, 3, 4, 5, 6, 7]],
+    ['教1-203', '教1', '203', 60, [0, 1, 4, 5, 8, 9, 10, 11]],
+    ['教2-301', '教2', '301', 120, [2, 3, 4, 5, 6, 7, 8, 9]],
+    ['教2-405', '教2', '405', 45, [0, 1, 2, 3, 8, 9, 10, 11]],
+    ['教3-201', '教3', '201', 90, [4, 5, 6, 7, 10, 11, 12, 13]],
+    ['教3-406', '教3', '406', 36, [0, 1, 2, 3, 4, 5, 12, 13]],
+    ['教4-101', '教4', '101', 72, [2, 3, 6, 7, 8, 9, 10, 11]],
+    ['主楼-301', '主楼', '301', 150, [0, 1, 4, 5, 6, 7, 12, 13]],
+  ].map(([id, building, room, size, availableSlots]) => ({
+    id,
+    name: id,
+    building,
+    room,
+    size,
+    available_slots: availableSlots,
+  }))
+  return {
+    cache_version: 2,
+    target_date: targetDate,
+    fetched_at: contractTimestamp(),
+    realtime: true,
+    provider: 'browser-preview',
+    campuses: [
+      { campus_id: '01', campus_name: '西土城', target_date: targetDate, fetched_at: contractTimestamp(), realtime: true, provider: 'browser-preview', rooms },
+      { campus_id: '04', campus_name: '沙河', target_date: targetDate, fetched_at: contractTimestamp(), realtime: true, provider: 'browser-preview', rooms: [] },
+    ],
+  }
+}
+
 function browserPreviewCommand(name, payload = {}) {
   const year = payload.year || new Date().getFullYear()
   if (name === 'get_metadata') {
@@ -526,14 +572,8 @@ function browserPreviewCommand(name, payload = {}) {
       custom_deadlines_url: String(payload.custom_deadlines_url || '').trim(),
     }
   }
-  if (
-    name === 'load_saved_schedule'
-    || name === 'load_saved_schedule_for_scope'
-    || name === 'load_saved_classrooms'
-    || name === 'load_saved_classrooms_for_scope'
-  ) {
-    return null
-  }
+  if (name === 'load_saved_schedule' || name === 'load_saved_schedule_for_scope') return browserPreviewSchedule()
+  if (name === 'load_saved_classrooms' || name === 'load_saved_classrooms_for_scope') return browserPreviewClassrooms()
   if (name === 'fetch_holidays') {
     return {
       year,
@@ -543,33 +583,7 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'fetch_classrooms') {
-    return {
-      cache_version: 2,
-      target_date: localDateString(),
-      fetched_at: contractTimestamp(),
-      realtime: true,
-      provider: 'browser-preview',
-      campuses: [
-        {
-          campus_id: '01',
-          campus_name: '西土城',
-          target_date: localDateString(),
-          fetched_at: contractTimestamp(),
-          realtime: true,
-          provider: 'browser-preview',
-          rooms: [],
-        },
-        {
-          campus_id: '04',
-          campus_name: '沙河',
-          target_date: localDateString(),
-          fetched_at: contractTimestamp(),
-          realtime: true,
-          provider: 'browser-preview',
-          rooms: [],
-        },
-      ],
-    }
+    return browserPreviewClassrooms(payload.target_date || localDateString())
   }
   if (name === 'fetch_schedule') {
     const automaticTerm = payload.automatic_term_detection_enabled !== false
@@ -587,12 +601,7 @@ function browserPreviewCommand(name, payload = {}) {
           termId: payload.term_id || DEFAULT_SETTINGS.termId,
           termStartDate: payload.term_start_date || DEFAULT_SETTINGS.termStartDate,
         }
-    return {
-      term_id: fallbackTerm.termId,
-      term_start_date: fallbackTerm.termStartDate,
-      fetched_at: contractTimestamp(),
-      courses: [],
-    }
+    return browserPreviewSchedule(fallbackTerm.termId, fallbackTerm.termStartDate)
   }
   if (name === 'import_schedule_to_calendar' || name === 'import_favorite_deadlines_to_calendar') {
     throw new Error('手机浏览器预览不支持导入苹果日历，请在 macOS App 中使用。')
@@ -648,7 +657,10 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'fetch_deadline_calendar') {
-    const startDate = payload.start_date
+    const today = localDateString()
+    const startDate = today >= payload.start_date && today <= payload.end_date
+      ? today
+      : payload.start_date
     const secondDate = addDays(startDate, 1)
     const thirdDate = addDays(startDate, 2)
     const fourthDate = addDays(startDate, 3)
@@ -669,6 +681,10 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'fetch_custom_deadline_calendar') {
+    const today = localDateString()
+    const previewDate = today >= payload.start_date && today <= payload.end_date
+      ? today
+      : payload.start_date
     return {
       start_date: payload.start_date,
       end_date: payload.end_date,
@@ -680,7 +696,7 @@ function browserPreviewCommand(name, payload = {}) {
         name: '自定义日程示例',
         event_type: 'custom',
         source_type: 'custom',
-        primary_deadline: `${payload.start_date}T21:30:00+08:00`,
+        primary_deadline: `${previewDate}T21:30:00+08:00`,
         organizer: '示例自定义来源',
         official_url: null,
         source_name: '示例自定义来源',
@@ -697,12 +713,16 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'fetch_assignment_calendar') {
+    const today = localDateString()
+    const previewDate = today >= payload.start_date && today <= payload.end_date
+      ? today
+      : payload.start_date
     return {
       start_date: payload.start_date,
       end_date: payload.end_date,
       source: 'https://ucloud.bupt.edu.cn/uclass/',
       items: [
-        { id: 'preview-assignment-range', title: '课程作业示例', course_name: '示例课程', deadline: `${payload.start_date}T23:59:00+08:00`, status: '未提交' },
+        { id: 'preview-assignment-range', title: '课程作业示例', course_name: '示例课程', deadline: `${previewDate}T23:59:00+08:00`, status: '未提交' },
       ],
     }
   }
@@ -801,7 +821,7 @@ function SelectedDaySchedule({ date, weekState, slotMeta, language, t }) {
         <CalendarDays size={18} />
         <div>
           <h2>{formatUiCourseDate(date, language)}</h2>
-          <span>{formatUiTeachingWeek(weekState.weekNumber, language)} · {language === 'en' ? `${weekState.dayCourses.length} courses` : `${weekState.dayCourses.length} 门课`}</span>
+          <span>{formatUiCalendarWeek(date, language)} · {formatUiTeachingWeek(weekState.weekNumber, language)} · {language === 'en' ? `${weekState.dayCourses.length} courses` : `${weekState.dayCourses.length} 门课`}</span>
         </div>
       </div>
       <div className="selected-day-course-list">
@@ -941,6 +961,11 @@ function formatUiCourseDate(dateString, language) {
 function formatUiTeachingWeek(weekNumber, language) {
   if (language !== 'en') return formatTeachingWeek(weekNumber)
   return weekNumber > 0 ? `Teaching week ${weekNumber}` : 'Outside teaching weeks'
+}
+
+function formatUiCalendarWeek(dateString, language) {
+  const weekNumber = calendarWeekOfYear(dateString)
+  return language === 'en' ? `Calendar week ${weekNumber}` : `公历第 ${weekNumber} 周`
 }
 
 function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) {
@@ -1087,18 +1112,9 @@ function ContestDeadlineCard({
   )
 }
 
-function FavoriteDeadlineManager({ items, onRemove, onClose, t }) {
+function FavoriteDeadlineManager({ items, onRemove, t }) {
   return (
     <section className="favorite-manager-page" aria-label={t('收藏管理')}>
-      <header>
-        <button type="button" onClick={onClose} aria-label={t('返回设置')}>
-          <ChevronLeft size={20} />
-        </button>
-        <div>
-          <span>Where To Study</span>
-          <h2>{t('收藏管理')}</h2>
-        </div>
-      </header>
       {items.length ? (
         <div className="favorite-manager-list">
           {items.map((item) => {
@@ -1143,12 +1159,7 @@ function FavoriteDeadlineManager({ items, onRemove, onClose, t }) {
 }
 
 function CourseName({ course, t }) {
-  return (
-    <span className="course-name-with-badge">
-      {course.is_exam ? <em className="course-exam-badge">{t('试')}</em> : null}
-      <span>{course.name}</span>
-    </span>
-  )
+  return <span className="course-name-with-badge"><span>{course.name || t('课程名称未标注')}</span></span>
 }
 
 async function command(name, payload) {
@@ -1394,7 +1405,7 @@ function App() {
 
   useEffect(() => {
     pageContentRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, [activePage])
+  }, [activePage, favoriteManagerOpen])
 
   useLayoutEffect(() => {
     if (activePage !== 'calendar' || calendarView !== 'month' || !compactCalendarLayout) {
@@ -1959,9 +1970,11 @@ function App() {
     }))
   }, [calendarDate, uiLanguage])
   const calendarDetailCourse = calendarWeekState.dayCourses[0] || null
-  const calendarHeaderTitle = calendarView === 'week'
-    ? `${formatUiCalendarTitle(calendarDate, calendarView, uiLanguage)} · ${formatUiTeachingWeek(calendarWeekState.weekNumber, uiLanguage)}`
-    : formatUiCalendarTitle(calendarDate, calendarView, uiLanguage)
+  const calendarHeaderTitle = formatUiCalendarTitle(calendarDate, calendarView, uiLanguage)
+  const calendarWeekContext = [
+    formatUiCalendarWeek(calendarDate, uiLanguage),
+    formatUiTeachingWeek(calendarWeekState.weekNumber, uiLanguage),
+  ].join(' · ')
   // Use the same merged entry path as the rendered all-day cells so a custom
   // item or a locally persisted favorite can create the row even when every
   // corresponding remote-source switch is off.
@@ -3138,12 +3151,8 @@ function App() {
 
   return (
     <main className="app-shell" lang={uiLanguage === 'en' ? 'en' : 'zh-Hans'}>
-      <div
-        className={`app-frame ${favoriteManagerOpen ? 'favorite-manager-open' : ''}`}
-        aria-hidden={favoriteManagerOpen ? true : undefined}
-        inert={favoriteManagerOpen ? true : undefined}
-      >
-        {!favoriteManagerOpen ? <aside className="side-nav">
+      <div className="app-frame">
+        <aside className="side-nav">
           <div className="side-brand">
             <p className="eyebrow">BUPT</p>
             <strong>Where To Study</strong>
@@ -3154,7 +3163,10 @@ function App() {
                 key={id}
                 type="button"
                 className={activePage === id ? 'active' : ''}
-                onClick={() => setActivePage(id)}
+                onClick={() => {
+                  setFavoriteManagerOpen(false)
+                  setActivePage(id)
+                }}
                 aria-label={t(label)}
                 aria-keyshortcuts={`Alt+${NAV_ITEMS.findIndex((item) => item.id === id) + 1}`}
                 title={t(label)}
@@ -3164,7 +3176,7 @@ function App() {
               </button>
             ))}
           </nav>
-        </aside> : null}
+        </aside>
 
         <section
           ref={pageContentRef}
@@ -3172,10 +3184,27 @@ function App() {
           className={`page-content ${activePage}-page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
         >
           <header className={`topbar ${activePage}-topbar`}>
-            <div>
-              <p className="eyebrow">{activePage === 'calendar' ? 'BUPT Classroom Planner' : 'Where To Study'}</p>
-              <h1>{activePage === 'calendar' ? calendarHeaderTitle : activePage === 'settings' ? t('设置') : t('联动查询')}</h1>
-            </div>
+            {activePage === 'settings' && favoriteManagerOpen ? (
+              <div className="favorite-topbar-title">
+                <button type="button" onClick={() => setFavoriteManagerOpen(false)} aria-label={t('返回设置')}>
+                  <ChevronLeft size={20} />
+                </button>
+                <div>
+                  <p className="eyebrow">Where To Study</p>
+                  <h1>{t('收藏管理')}</h1>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="eyebrow">{activePage === 'calendar' ? 'BUPT Classroom Planner' : 'Where To Study'}</p>
+                <h1>{activePage === 'calendar'
+                  ? calendarHeaderTitle
+                  : activePage === 'settings'
+                    ? t('设置')
+                    : t('联动查询')}</h1>
+                {activePage === 'calendar' ? <p className="calendar-week-context">{calendarWeekContext}</p> : null}
+              </div>
+            )}
             {activePage === 'calendar' ? (
               <div className="calendar-toolbar-actions">
                 <div className="calendar-view-switch" aria-label={t('日历视图')}>
@@ -3323,7 +3352,7 @@ function App() {
                 })}
               </div>
               <p className="muted">
-                {formatUiTeachingWeek(plannerWeekState.weekNumber, uiLanguage)} · {uiLanguage === 'en' ? 'Selected: ' : '选中范围：'}
+                {formatUiCalendarWeek(todayDate, uiLanguage)} · {formatUiTeachingWeek(plannerWeekState.weekNumber, uiLanguage)} · {uiLanguage === 'en' ? 'Selected: ' : '选中范围：'}
                 {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : t('未选择')}
               </p>
             </section>
@@ -3716,20 +3745,34 @@ function App() {
                         const [, deadlineBorderSecondary] = calendarDeadlineBorderKinds(supplementalEntries)
                         const deadlineBorderPriority = calendarDeadlineBorderPriority(supplementalEntries)
                         const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length + supplementalEntries.length, 3)
-                        const monthCourseEntries = dayState.dayCourses.map((course) => {
-                          const bounds = courseTimeBounds(course, slotMeta)
-                          return {
-                            key: `${dateString}-${course.id}`,
-                            label: course.name,
-                            compactLabel: `${course.is_exam ? `${t('试')} ` : ''}${course.name}`,
-                            desktopLabel: course.name,
-                            type: 'course',
-                            subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
-                            time: `${bounds.start}-${bounds.end}`,
-                          }
-                        })
+                        const monthAgendaEntries = [
+                          ...calendarItems.map((item) => ({
+                            key: `${dateString}-${item.type}-${item.name}`,
+                            label: `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`,
+                            desktopLabel: item.name,
+                            type: item.type,
+                            time: '',
+                          })),
+                          ...dayState.dayCourses.map((course) => {
+                            const bounds = courseTimeBounds(course, slotMeta)
+                            return {
+                              key: `${dateString}-${course.id}`,
+                              label: course.name,
+                              desktopLabel: course.name,
+                              type: 'course',
+                              subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
+                              time: `${bounds.start}-${bounds.end}`,
+                            }
+                          }),
+                          ...supplementalEntries.map((item) => ({
+                            ...item,
+                            key: `${dateString}-${item.key}`,
+                            compactLabel: `${supplementalEntryPrefix(item, t)} ${item.label}`,
+                            desktopLabel: `${supplementalEntryPrefix(item, t)} ${item.label}`,
+                          })),
+                        ]
                         const monthEntrySummary = summarizeMonthEntries(
-                          monthCourseEntries.map((item) => ({
+                          monthAgendaEntries.map((item) => ({
                             ...item,
                             label: item.compactLabel || item.label,
                           })),
@@ -3742,9 +3785,10 @@ function App() {
                             onClick={() => chooseCalendarDate(dateString)}
                           >
                             <div className="month-cell-head">
-                              {date.getDay() === 1 && dayState.weekNumber > 0 ? (
+                              {date.getDay() === 1 ? (
                                 <span className="month-week-number">
-                                  <span>{formatUiTeachingWeek(dayState.weekNumber, uiLanguage)}</span>
+                                  <span>{formatUiCalendarWeek(dateString, uiLanguage)}</span>
+                                  <small>{formatUiTeachingWeek(dayState.weekNumber, uiLanguage)}</small>
                                 </span>
                               ) : null}
                               <button
@@ -3761,24 +3805,58 @@ function App() {
                               {Array.from({ length: compactMarkers }, (_, index) => <i key={index} />)}
                             </div>
                             <div className="month-cell-details">
-                              <div className="month-course-entries">
+                              <div className="month-agenda-entries">
                                 {monthEntrySummary.visible.map((entry) => (
-                                  <small key={entry.key} className="month-entry course" title={entry.label}>
+                                  <button
+                                    key={entry.key}
+                                    type="button"
+                                    className={`month-entry ${entry.type}`}
+                                    title={entry.label}
+                                    aria-label={entry.type === 'course'
+                                      ? entry.label
+                                      : `${entry.label} · ${t('打开全天日程详情')}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      chooseCalendarDate(dateString)
+                                      if (entry.type !== 'course') {
+                                        setCalendarAgendaDialog({
+                                          date: dateString,
+                                          sourceView: 'month',
+                                          entries: allDayEntriesFor(dateString),
+                                        })
+                                      }
+                                    }}
+                                  >
                                     <span className="month-entry-title">
                                       <span className="month-entry-title-mobile">{entry.label}</span>
                                       <span className="month-entry-title-desktop">{entry.desktopLabel || entry.label}</span>
                                     </span>
                                     {entry.time ? <time>{String(entry.time).split('-')[0]}</time> : null}
-                                  </small>
+                                  </button>
                                 ))}
                               </div>
                               {monthEntrySummary.hiddenCount ? (
-                                <small className="month-entry-overflow" aria-hidden="true">
+                                <button
+                                  type="button"
+                                  className="month-entry-overflow"
+                                  aria-label={uiLanguage === 'en'
+                                    ? `${monthEntrySummary.hiddenCount} more events on ${dateString}`
+                                    : `${dateString} 还有 ${monthEntrySummary.hiddenCount} 项日程`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    chooseCalendarDate(dateString)
+                                    setCalendarAgendaDialog({
+                                      date: dateString,
+                                      sourceView: 'month',
+                                      entries: allDayEntriesFor(dateString),
+                                    })
+                                  }}
+                                >
                                   <span className="month-overflow-mobile">+{monthEntrySummary.hiddenCount}</span>
                                   <span className="month-overflow-desktop">
                                     +{monthEntrySummary.hiddenCount}{uiLanguage === 'en' ? '' : ' 项'}
                                   </span>
-                                </small>
+                                </button>
                               ) : null}
                             </div>
                           </div>
@@ -3927,11 +4005,12 @@ function App() {
                     style={{ left: calendarPopover.x, top: calendarPopover.y }}
                     role="dialog"
                     aria-label={`${formatUiCourseDate(calendarPopover.date, uiLanguage)} ${t('全天日程')}`}
+                    onWheel={(event) => event.stopPropagation()}
                   >
                     <header className="year-day-popover-header">
                       <span>{formatUiCourseDate(calendarPopover.date, uiLanguage)}</span>
                       <strong>{uiLanguage === 'en' ? `${calendarPopoverState.dayCourses.length} courses` : `${calendarPopoverState.dayCourses.length} 门课`}</strong>
-                      <small>{formatUiTeachingWeek(calendarPopoverState.weekNumber, uiLanguage)}</small>
+                      <small>{formatUiCalendarWeek(calendarPopover.date, uiLanguage)} · {formatUiTeachingWeek(calendarPopoverState.weekNumber, uiLanguage)}</small>
                     </header>
                     <div className="year-day-popover-scroll">
                     {calendarItemsFor(calendarPopover.date).length ? (
@@ -4004,7 +4083,15 @@ function App() {
         </section>
           ) : null}
 
-          {activePage === 'settings' ? (
+          {activePage === 'settings' && favoriteManagerOpen ? (
+            <FavoriteDeadlineManager
+              items={favoriteDeadlines}
+              onRemove={toggleFavoriteDeadline}
+              t={t}
+            />
+          ) : null}
+
+          {activePage === 'settings' && !favoriteManagerOpen ? (
         <section className="settings-layout">
           <section className="panel settings-reference-notice" aria-label={t('数据参考提示')}>
             <strong>{t('显示数据仅供参考，请以实际情况为准。')}</strong>
@@ -4271,14 +4358,6 @@ function App() {
           ) : null}
         </section>
       </div>
-      {favoriteManagerOpen ? (
-        <FavoriteDeadlineManager
-          items={favoriteDeadlines}
-          onRemove={toggleFavoriteDeadline}
-          onClose={() => setFavoriteManagerOpen(false)}
-          t={t}
-        />
-      ) : null}
       {calendarAgendaDialog ? (
         <div
           className="calendar-agenda-backdrop"

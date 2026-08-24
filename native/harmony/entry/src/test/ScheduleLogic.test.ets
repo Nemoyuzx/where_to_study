@@ -11,17 +11,6 @@ function course(weekday: number, startSlot: number, endSlot: number, weeks: numb
 
 export default function scheduleLogicTest() {
   describe('ScheduleLogicTest', () => {
-    it('exam_weeks_use_17th_18th_existing_weeks', 0, () => {
-      const weeks: number[] = [];
-      for (let w = 2; w <= 19; w++) {
-        weeks.push(w);
-      }
-      const result: Set<number> = ScheduleLogic.examWeeks([course(1, 0, 1, weeks)]);
-      expect(result.size).assertEqual(2);
-      expect(result.has(18)).assertTrue();
-      expect(result.has(19)).assertTrue();
-    });
-
     it('week_number_uses_term_start_date', 0, () => {
       const start: DateParts = new DateParts(2026, 3, 2);
       expect(ScheduleLogic.weekNumber(StrictDates.addDays(start, 14), start)).assertEqual(3);

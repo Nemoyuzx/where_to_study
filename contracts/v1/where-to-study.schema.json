@@ -73,7 +73,7 @@
         "room": { "type": "string" },
         "week_text": { "type": "string" },
         "week_numbers": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true },
-        "exam_week_numbers": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true },
+        "exam_week_numbers": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "uniqueItems": true, "description": "Deprecated v1 compatibility field. Providers return an empty array and clients must not infer exam-week semantics." },
         "weekday": { "type": "integer", "minimum": 1, "maximum": 7 },
         "start_slot": { "type": "integer", "minimum": 0, "maximum": 13 },
         "end_slot": { "type": "integer", "minimum": 0, "maximum": 13 },

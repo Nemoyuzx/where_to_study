@@ -123,6 +123,17 @@ export class StrictDates {
     return (((e % 7) + 10) % 7) + 1;
   }
 
+  // ISO 8601 公历周：周一为一周起点，包含当年首个星期四的周为第 1 周。
+  // 只返回周序号；跨年边界由“移到本周星期四”统一处理。
+  static isoWeekNumber(parts: DateParts): number {
+    const weekday: number = StrictDates.weekdayMonday1(parts);
+    const thursday: DateParts = StrictDates.addDays(parts, 4 - weekday);
+    const firstDayOfISOYear: number = StrictDates.epochDay(thursday.year, 1, 1);
+    const thursdayEpoch: number = StrictDates.epochDay(
+      thursday.year, thursday.month, thursday.day);
+    return Math.floor((thursdayEpoch - firstDayOfISOYear) / 7) + 1;
+  }
+
   // fetched_at 契约：不含小数秒的 RFC 3339，使用上海偏移 +08:00。
   static formatFetchedAt(epochMs: number): string {
     const shifted: Date = new Date(epochMs + SHANGHAI_OFFSET_MS);

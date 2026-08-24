@@ -297,8 +297,7 @@ object SjdScheduleParser {
         collectCourses(curriculumRoot.opt("item") ?: curriculumRoot.opt("courses"), rawCourses)
         val seen = mutableSetOf<String>()
         var courses = rawCourses.mapNotNull(::parseCourse).filter { seen.add(it.id) }
-        courses = ScheduleLogic.applyingExamWeeks(courses)
-            .sortedWith(compareBy(Course::weekday, Course::startSlot, Course::name))
+        courses = courses.sortedWith(compareBy(Course::weekday, Course::startSlot, Course::name))
         return ScheduleSnapshot(termID, termStartDate, fetchedAt, courses)
     }
 

@@ -90,13 +90,10 @@ export class DailyCourseNotificationPlanner {
       if (courses.length === 0) {
         continue;
       }
-      const week: number = ScheduleLogic.weekNumber(day, termStart);
       const entries: string[] = [];
       for (const course of courses) {
-        const name: string = course.examWeekNumbers.includes(week) ?
-          course.name + (english ? ' (Exam)' : '（试）') : course.name;
         const location: string = course.room.length === 0 ? '' : ' @ ' + course.room;
-        entries.push(course.timeRange + ' ' + name + location);
+        entries.push(course.timeRange + ' ' + course.name + location);
       }
       const date: string = StrictDates.formatDateParts(day);
       requests.push(new DailyCourseNotificationRequest(

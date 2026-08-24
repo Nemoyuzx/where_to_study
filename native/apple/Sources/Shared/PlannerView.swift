@@ -58,7 +58,7 @@ struct PlannerView: View {
 
                         VStack(spacing: 16) {
                             todayCoursesSurface
-                            resultsSurface
+                            resultsSurface(columnCount: columnCount)
                             summarySurface
                         }
                         .frame(width: widths.trailing, alignment: .top)
@@ -74,7 +74,7 @@ struct PlannerView: View {
 
                         VStack(spacing: 16) {
                             todayCoursesSurface
-                            resultsSurface
+                            resultsSurface(columnCount: columnCount)
                             summarySurface
                         }
                         .frame(maxWidth: .infinity, alignment: .top)
@@ -86,7 +86,7 @@ struct PlannerView: View {
                         slotSurface
                         todayCoursesSurface
                         buildingsSurface
-                        resultsSurface
+                        resultsSurface(columnCount: columnCount)
                         summarySurface
                     }
                 }
@@ -409,17 +409,7 @@ struct PlannerView: View {
     private func courseRow(_ course: Course) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    if !course.examWeekNumbers.isEmpty {
-                        Text("试")
-                            .font(.caption2.bold())
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 3)
-                            .background(AppTheme.accent)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
-                    Text(course.name).font(.headline)
-                }
+                Text(course.name).font(.headline)
                 Text(course.room.isEmpty ? model.localized("地点未标注") : course.room)
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
@@ -469,7 +459,7 @@ struct PlannerView: View {
         }
     }
 
-    private var resultsSurface: some View {
+    private func resultsSurface(columnCount: Int) -> some View {
         Surface {
             VStack(alignment: .leading, spacing: 12) {
                 Label("空教室结果", systemImage: "checkmark.circle")
@@ -484,10 +474,36 @@ struct PlannerView: View {
                     emptyMessage("暂无匹配空教室")
                 } else {
                     let rooms = model.matchingRooms
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(rooms.indices, id: \.self) { index in
-                            classroomRow(rooms[index])
-                            if index < rooms.count - 1 { Divider() }
+                    if columnCount == 2 {
+                        LazyVGrid(
+                            columns: Array(
+                                repeating: GridItem(.flexible(minimum: 0), spacing: 8),
+                                count: 2
+                            ),
+                            alignment: .leading,
+                            spacing: 8
+                        ) {
+                            ForEach(rooms) { room in
+                                classroomRow(room)
+                                    .padding(10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(
+                                        AppTheme.background,
+                                        in: RoundedRectangle(cornerRadius: 8)
+                                    )
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(AppTheme.border, lineWidth: 1)
+                                    }
+                            }
+                        }
+                        .accessibilityIdentifier("planner.results.two-columns")
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(rooms.indices, id: \.self) { index in
+                                classroomRow(rooms[index])
+                                if index < rooms.count - 1 { Divider() }
+                            }
                         }
                     }
                 }
