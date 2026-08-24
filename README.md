@@ -1,5 +1,4 @@
 （进来给个🌟吧） 赞助：https://ifdian.net/a/Nemoyuzx，建站和apple年费真的很昂贵
-bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 # Where To Study
 
@@ -22,6 +21,8 @@ Silicon 兼容构建。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
+
+bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 ## 平台状态
 
