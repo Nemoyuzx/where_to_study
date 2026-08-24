@@ -22,8 +22,8 @@
 
 - Android：`0.2.6 (42)`，固定维护者证书签名的 Universal APK/AAB。
 - iOS 与原生 macOS：`0.2.6 (70)`，本地 Xcode 归档并上传 TestFlight；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`，按约定未继续检查 App Store Connect processing。
-- HarmonyOS：`0.2.6 (1002009)`，签名 HAP/App 构建与 112 项单元测试通过；AGC 测试分发结果在最终发布记录中说明。
-- GitHub Release 恢复原生 macOS Universal DMG，同时继续提供 Windows、Linux、CLI/TUI 和 Android 制品。DMG 包含 `arm64 + x86_64`、标准 Applications 快捷方式并通过签名和镜像校验，但未使用 Developer ID 公证；优先推荐 TestFlight 版本。
+- HarmonyOS：`0.2.6 (1002009)`，签名 HAP/App 构建与 112 项单元测试通过；DevEco 上传向导显示当前 AGC 账户没有已注册应用，确定按钮被禁用，因此无法创建内测。GitHub Release 改为提供已验证的签名 APP/HAP 构建。
+- GitHub Release 恢复原生 macOS Universal DMG，同时继续提供 Windows、Linux、CLI/TUI、Android 和 HarmonyOS 制品。DMG 包含 `arm64 + x86_64`、标准 Applications 快捷方式并通过签名和镜像校验，但未使用 Developer ID 公证；优先推荐 TestFlight 版本。
 
 ### 验证
 
@@ -56,8 +56,8 @@
 
 - Android: `0.2.6 (42)`, pinned-maintainer-certificate Universal APK/AAB.
 - Native iOS and macOS: `0.2.6 (70)`, archived and uploaded with local Xcode. Both uploads returned `Upload succeeded` and `EXPORT SUCCEEDED`; App Store Connect processing was intentionally not inspected afterward.
-- HarmonyOS: `0.2.6 (1002009)`, signed HAP/App build plus 112 unit tests passed. The final release record states the AGC test-distribution outcome.
-- GitHub Release restores a native universal macOS DMG alongside Windows, Linux, CLI/TUI, and Android artifacts. The DMG contains `arm64 + x86_64`, an Applications shortcut, and passed signature/image validation, but is not Developer-ID notarized; TestFlight remains the recommended macOS channel.
+- HarmonyOS: `0.2.6 (1002009)`, signed HAP/App build plus 112 unit tests passed. DevEco's upload wizard found no registered app in the current AGC account and disabled submission, so verified signed APP/HAP artifacts are published on GitHub instead.
+- GitHub Release restores a native universal macOS DMG alongside Windows, Linux, CLI/TUI, Android, and HarmonyOS artifacts. The DMG contains `arm64 + x86_64`, an Applications shortcut, and passed signature/image validation, but is not Developer-ID notarized; TestFlight remains the recommended macOS channel.
 
 ### Validation
 

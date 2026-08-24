@@ -98,7 +98,7 @@
 | iOS SwiftUI | 210 项 XCTest、iPhone 两项核心 UI、示例模式导航和 iPad Pro 13 英寸横屏回归通过；收藏管理为顶层页，公历周/教学周与宽屏双栏均有截图证据 |
 | TestFlight | iOS 与 macOS `0.2.6 (70)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.6 (42)` 的 186/186 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Phone/Fold UI smoke 与平板/折叠屏视觉检查通过 |
-| HarmonyOS | `0.2.6 (1002009)` 签名 HAP/App 构建与 112/112 ArkTS 单元测试通过；ISO 公历周、考试周清理、月格 DDL、收藏顶层页、宽屏双栏均通过编译与契约测试 |
+| HarmonyOS | `0.2.6 (1002009)` 签名 HAP/App 构建与 112/112 ArkTS 单元测试通过；DevEco 上传向导因当前 AGC 账户无已注册应用而禁用提交，改由 GitHub Release 提供已验证签名 APP/HAP |
 | macOS DMG | 原生 Universal DMG 的 `0.2.6 (70)`、`arm64 + x86_64`、主应用/Widget 临时签名、Applications 快捷方式与 `hdiutil verify` 均通过；该 GitHub 预览包未做 Developer ID 公证 |
 | 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、完整本地收藏快照及中英双语隐私说明通过；v1 `exam_week_numbers` 仅作兼容且新数据始终为空 |
 
@@ -152,7 +152,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.6 稳定版发布制品
 
-`v0.2.6` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.6 (42)` APK/AAB，以及恢复提供的原生 macOS `0.2.6 (70)` Universal DMG 预览包。iOS 与正式签名 macOS build 70 由本地 Xcode 上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证，TestFlight 仍是推荐的 macOS 分发渠道。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
+`v0.2.6` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.6 (42)` APK/AAB、HarmonyOS `0.2.6 (1002009)` 签名 APP/HAP，以及恢复提供的原生 macOS `0.2.6 (70)` Universal DMG 预览包。iOS 与正式签名 macOS build 70 由本地 Xcode 上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证，TestFlight 仍是推荐的 macOS 分发渠道。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
 
 ## 0.2.5 稳定版发布制品
 

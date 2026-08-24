@@ -32,7 +32,7 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap + 80 个契约单元测试
+./scripts/native-harmony-build.sh      # assembleHap + 112 个契约单元测试
 ./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（13 个断言，对应 iOS UITests）
 ```
 
@@ -92,7 +92,7 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历�
 默认不常驻高频轮询；保持空教室、教学日历、设置三个一级页面的颜色、术语与状态语义一致。
 
 > 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
-> 的 assembleHap 编译（debug 产物 entry-default-unsigned.hap）；80 个契约单元测试
-> 与 13 个 UI 冒烟断言全部通过；已在 Pura 90 模拟器（HarmonyOS 6.1.1 / API 24）
-> 完成安装、启动与空教室/教学日历（日周月年）/设置页面的验证。
-> 待补：发布签名与 AGC 上架（需要维护者的华为开发者账号，见“签名与发布”）。
+> 的 assembleHap/assembleApp 编译；0.2.6 (1002009) 签名 APP/HAP 已通过 SHA-256
+> 摘要与华为签名链校验，112 个契约单元测试全部通过。DevEco“上传产品”向导已检查，
+> 当前 AGC 账户的已注册应用列表为空，无法提交内测；需账号持有人先在 AppGallery
+> Connect 创建匹配 Bundle ID 的应用记录。GitHub Release 提供本次签名构建。
