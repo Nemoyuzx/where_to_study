@@ -443,10 +443,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.segmentedControls.buttons["Month"].exists)
         XCTAssertTrue(app.segmentedControls.buttons["Year"].exists)
         let weekContext = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Teaching week")
+            NSPredicate(format: "label BEGINSWITH %@", "Calendar Week ")
         ).firstMatch
         XCTAssertTrue(weekContext.waitForExistence(timeout: 5))
-        XCTAssertTrue(weekContext.label.hasPrefix("Teaching week"))
+        XCTAssertTrue(weekContext.label.contains(" · Teaching Week "))
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(weekContext.frame))
         XCTAssertTrue(app.staticTexts["Data Mining"].exists == false)
         XCTAssertTrue(app.staticTexts["数据挖掘"].waitForExistence(timeout: 5))
