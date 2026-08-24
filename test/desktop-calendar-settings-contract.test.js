@@ -152,7 +152,7 @@ test('desktop calendar navigation, background data, and year scrolling stay inde
   assert.doesNotMatch(transitionSource, /command\(|fetch_/)
 
   const controllerStart = appSource.indexOf('// Calendar network work is owned by this background controller.')
-  const controllerEnd = appSource.indexOf('useEffect(() => {\n    const todayVisible', controllerStart)
+  const controllerEnd = appSource.indexOf('const todayVisible', controllerStart)
   const controllerSource = appSource.slice(controllerStart, controllerEnd)
   assert.match(controllerSource, /window\.setTimeout\(\(\) => void refreshTarget\(false\), 320\)/)
   assert.match(controllerSource, /calendarDateRef\.current/)
