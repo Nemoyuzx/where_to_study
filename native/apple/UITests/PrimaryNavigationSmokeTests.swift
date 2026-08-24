@@ -289,6 +289,60 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         }
     }
 
+    func testMobileCalendarModeTransitionsEnterFromHierarchyDirection() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo", "--ui-test-slow-calendar-animation"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer {
+            app.terminate()
+            XCUIDevice.shared.orientation = .portrait
+        }
+
+        navigate(to: "教学日历", in: app)
+        let monthButton = app.segmentedControls.buttons["月"]
+        let yearButton = app.segmentedControls.buttons["年"]
+        let dayButton = app.segmentedControls.buttons["日"]
+        XCTAssertTrue(monthButton.waitForExistence(timeout: 5))
+
+        monthButton.tap()
+        XCTAssertTrue(waitForSelected(monthButton))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
+        ).firstMatch.waitForExistence(timeout: 5))
+
+        yearButton.tap()
+        XCTAssertTrue(waitForSelected(yearButton))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年$")
+        ).firstMatch.waitForExistence(timeout: 5))
+
+        monthButton.tap()
+        XCTAssertTrue(waitForSelected(monthButton))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月$")
+        ).firstMatch.waitForExistence(timeout: 5))
+
+        dayButton.tap()
+        XCTAssertTrue(waitForSelected(dayButton))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月[0-9]+日$")
+        ).firstMatch.waitForExistence(timeout: 5))
+        yearButton.tap()
+        XCTAssertTrue(waitForSelected(yearButton))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年$")
+        ).firstMatch.waitForExistence(timeout: 5))
+
+        dayButton.tap()
+        XCTAssertTrue(waitForSelected(dayButton))
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[0-9]{4}年[0-9]+月[0-9]+日$")
+        ).firstMatch.waitForExistence(timeout: 5))
+    }
+
     func testMobileWeekUsesCenteredDialogAndMonthKeepsDetailsInline() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false

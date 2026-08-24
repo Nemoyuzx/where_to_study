@@ -247,8 +247,14 @@ struct RootView: View {
             notification in
             guard let action = AppKeyboardCommandNotification.action(from: notification) else { return }
             if action == .dismissOverlay || model.selectedSection == .calendar {
-                withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
-                    teachingCalendarSession.applyKeyboardAction(action)
+                if let targetMode = action.targetCalendarModeRawValue {
+                    Task { @MainActor in
+                        await teachingCalendarSession.requestModeChange(to: targetMode)
+                    }
+                } else {
+                    withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
+                        teachingCalendarSession.applyKeyboardAction(action)
+                    }
                 }
             }
         }

@@ -6,6 +6,7 @@
 
 - Android 日/周课程摘要改用真实展开图标，收起与展开拥有一致的空状态高度、更紧凑的字号与行距，并加入平滑高度和箭头旋转动画；月视图同时减少了底部导航预留空间。
 - iOS 月视图减少重复聚合和大范围隐式动画，修正跨月日期、反向连续翻页、切换日期及折叠状态的动画时序和性能。
+- iOS/macOS 模式切换改为先稳定方向、下一渲染事务再替换页面，修复月/日与年视图反向切换时旧页面沿错误方向退出；Picker、年视图跳转和键盘共用同一入口。
 - 全平台点击月视图中的非本月日期时，会按正确方向过渡到目标月份并选中对应日期。
 - 桌面端统一日/周/月/年的按钮、键盘和手势过渡方向；周视图全天日程按日期列对齐并显示截止时间，日期标题、全天区和对应时间列均可选中，带链接的事件可整卡访问。
 - 月视图和周视图只显示由个人课表学期起始日与真实课程周次计算出的教学周，不再混入公历周数；超出实际课表范围不再伪造周次。
@@ -31,9 +32,9 @@
 
 ### 版本与分发
 
-- Android：`0.2.5 (39)`。
-- iOS 与原生 macOS：`0.2.5 (67)`，通过本地 Xcode 归档并上传 TestFlight；Apple 制品不进入 GitHub Release。
-- HarmonyOS：`0.2.5 (1002006)`，构建与本地单元测试通过；AGC 发布仍需要维护者账号签名配置。
+- Android：`0.2.5 (40)`。
+- iOS 与原生 macOS：`0.2.5 (68)`，通过本地 Xcode 归档并上传 TestFlight；Apple 制品不进入 GitHub Release。
+- HarmonyOS：`0.2.5 (1002007)`，构建与本地单元测试通过；AGC 发布仍需要维护者账号签名配置。
 - GitHub Release：Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及维护者签名的 Android APK/AAB；`.sha256` 仅供发布校验，不作为附件。
 
 ## English
@@ -42,6 +43,7 @@
 
 - Android now uses a real disclosure icon for the day/week course summary, keeps empty expanded and collapsed heights consistent, tightens typography and spacing, animates both height and chevron rotation, and reduces excess month-view bottom-navigation reserve.
 - iOS month rendering performs less repeated aggregation and avoids broad implicit animations, improving cross-month selection, reverse paging, date changes, and sheet-state transitions.
+- iOS/macOS mode changes now prepare direction before replacing page identity in the next render transaction, fixing stale exit edges when reversing between year and day/month views; pickers, year jumps, and keyboard commands share the same path.
 - Selecting an out-of-month date now animates in the correct direction and lands on that date on every graphical platform.
 - Desktop button, keyboard, and gesture navigation now share the same directional transition. Week all-day events align with their date columns, show deadline times, and open linked cards directly; the date header, all-day cell, and matching timeline lane are selectable.
 - Month and week views display only teaching weeks derived from the personal timetable's authoritative term start and actual course weeks; Gregorian week numbers are no longer mixed into this label.
@@ -66,7 +68,7 @@
 
 ### Versions and distribution
 
-- Android: `0.2.5 (39)`.
-- Native iOS and macOS: `0.2.5 (67)`, archived and uploaded to TestFlight with local Xcode. Apple artifacts are excluded from GitHub Release.
-- HarmonyOS: `0.2.5 (1002006)`, locally built and unit-tested; AGC distribution still requires maintainer signing configuration.
+- Android: `0.2.5 (40)`.
+- Native iOS and macOS: `0.2.5 (68)`, archived and uploaded to TestFlight with local Xcode. Apple artifacts are excluded from GitHub Release.
+- HarmonyOS: `0.2.5 (1002007)`, locally built and unit-tested; AGC distribution still requires maintainer signing configuration.
 - GitHub Release scope: Windows x64 NSIS; Linux arm64/x86_64 Debian, AppImage, CLI, and TUI; and maintainer-signed Android APK/AAB. `.sha256` files remain verification-only and are not attached.

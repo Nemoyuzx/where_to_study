@@ -1964,14 +1964,7 @@ struct MobileTeachingCalendarView: View {
     ) -> some View {
         Button(model.localized("\(title)视图")) {
             AppHaptics.selection()
-            session.prepareTransition(direction: TeachingCalendarNavigationMotion.modeDirection(
-                from: mode.rawValue,
-                to: targetMode.rawValue
-            ))
-            withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
-                selectedDate = day
-                session.setMode(targetMode.rawValue)
-            }
+            changeMode(to: targetMode, selecting: day)
             presentedDetail = nil
         }
         .buttonStyle(.bordered)
@@ -1981,14 +1974,7 @@ struct MobileTeachingCalendarView: View {
 
     private func jumpToMonth(_ month: Date) {
         AppHaptics.selection()
-        session.prepareTransition(direction: TeachingCalendarNavigationMotion.direction(
-            from: selectedDate,
-            to: month
-        ))
-        withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
-            selectedDate = month
-            session.setMode(MobileCalendarMode.month.rawValue)
-        }
+        changeMode(to: .month, selecting: month)
     }
 
     private func presentCourse(_ course: Course, on day: Date) {
@@ -2392,11 +2378,15 @@ struct MobileTeachingCalendarView: View {
             set: { newMode in
                 guard newMode != mode else { return }
                 AppHaptics.selection()
-                withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
-                    session.setMode(newMode.rawValue)
-                }
+                changeMode(to: newMode)
             }
         )
+    }
+
+    private func changeMode(to newMode: MobileCalendarMode, selecting date: Date? = nil) {
+        Task { @MainActor in
+            await session.requestModeChange(to: newMode.rawValue, selecting: date)
+        }
     }
 
     private var currentMonthPosition: TeachingCalendarLogic.MonthPosition {

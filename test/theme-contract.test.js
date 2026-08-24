@@ -809,7 +809,11 @@ test('desktop calendar keeps full month and single-select double-open year behav
   )
   assert.match(
     appleCalendarSource,
-    /SpatialTapGesture\(\s*count: 2[\s\S]*?case \.first:[\s\S]*?session\.setMode\(CalendarMode\.month\.rawValue\)/,
+    /SpatialTapGesture\(\s*count: 2[\s\S]*?case \.first:[\s\S]*?changeMode\(to: \.month, selecting: day\)/,
+  )
+  assert.match(
+    appleCalendarSource,
+    /requestModeChange\(to rawValue: String,[\s\S]*?prepareModeTransition[\s\S]*?await Task\.yield\(\)[\s\S]*?commitModeTransition/,
   )
   assert.match(appleCalendarSource, /#if !os\(macOS\)[\s\S]*isMonthExpanded\.toggle\(\)/)
   assert.match(appCss, /\.planner-page-content \.planner-workspace,[\s\S]*margin:\s*0 16px 16px/)

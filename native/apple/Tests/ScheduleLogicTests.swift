@@ -1068,6 +1068,7 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(AppKeyboardCommandNotification.action(from: valid), .monthView)
         XCTAssertNil(AppKeyboardCommandNotification.action(from: invalid))
     }
+    #endif
 
     func testCalendarNavigationMotionUsesOneDirectionContractForDatesAndModes() throws {
         let earlier = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-23"))
@@ -1077,8 +1078,55 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(TeachingCalendarNavigationMotion.direction(from: later, to: earlier), -1)
         XCTAssertEqual(TeachingCalendarNavigationMotion.modeDirection(from: "日", to: "年"), 1)
         XCTAssertEqual(TeachingCalendarNavigationMotion.modeDirection(from: "年", to: "周"), -1)
+        XCTAssertEqual(
+            TeachingCalendarNavigationMotion.transitionEdges(direction: 1),
+            .init(insertion: .trailing, removal: .leading)
+        )
+        XCTAssertEqual(
+            TeachingCalendarNavigationMotion.transitionEdges(direction: -1),
+            .init(insertion: .leading, removal: .trailing)
+        )
     }
-    #endif
+
+    func testCalendarModeTransitionPreparesDirectionBeforeCommittingIdentity() {
+        let session = TeachingCalendarSessionState()
+        session.modeRawValue = "月"
+
+        let enterYear = session.prepareModeTransition(to: "年")
+        XCTAssertNotNil(enterYear)
+        XCTAssertEqual(session.modeRawValue, "月", "Outgoing page must render the prepared edge first")
+        XCTAssertEqual(session.transitionDirection, 1)
+        XCTAssertTrue(session.commitModeTransition(to: "年", generation: enterYear!))
+        XCTAssertEqual(session.modeRawValue, "年")
+
+        let returnToMonth = session.prepareModeTransition(to: "月")
+        XCTAssertNotNil(returnToMonth)
+        XCTAssertEqual(session.modeRawValue, "年")
+        XCTAssertEqual(session.transitionDirection, -1)
+        XCTAssertTrue(session.commitModeTransition(to: "月", generation: returnToMonth!))
+        XCTAssertEqual(session.modeRawValue, "月")
+
+        session.modeRawValue = "日"
+        let dayToYear = session.prepareModeTransition(to: "年")
+        XCTAssertEqual(session.transitionDirection, 1)
+        XCTAssertTrue(session.commitModeTransition(to: "年", generation: dayToYear!))
+        let yearToDay = session.prepareModeTransition(to: "日")
+        XCTAssertEqual(session.transitionDirection, -1)
+        XCTAssertTrue(session.commitModeTransition(to: "日", generation: yearToDay!))
+    }
+
+    func testCalendarModeTransitionRejectsAStaleCommit() {
+        let session = TeachingCalendarSessionState()
+        session.modeRawValue = "月"
+
+        let yearGeneration = session.prepareModeTransition(to: "年")!
+        let dayGeneration = session.prepareModeTransition(to: "日")!
+
+        XCTAssertFalse(session.commitModeTransition(to: "年", generation: yearGeneration))
+        XCTAssertEqual(session.modeRawValue, "月")
+        XCTAssertTrue(session.commitModeTransition(to: "日", generation: dayGeneration))
+        XCTAssertEqual(session.modeRawValue, "日")
+    }
 
     func testCalendarNavigationMovesByVisiblePeriod() throws {
         let calendar = Calendar.shanghai

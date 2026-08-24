@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.TransitionDrawable
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.MotionEvent
@@ -395,6 +396,63 @@ class MainNavigationSmokeTest {
                     assertEquals(1f, settledPage.alpha, 0.01f)
                     assertEquals(0f, settledPage.translationX, 0.01f)
                     assertEquals(0f, settledPage.translationY, 0.01f)
+                }
+            }
+        } finally {
+            device.executeShellCommand("settings put global animator_duration_scale 0")
+        }
+    }
+
+    @Test
+    fun compactModePagerMovesForwardThenBackwardWithTheIndicator() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val device = UiDevice.getInstance(instrumentation)
+        val launchIntent = Intent(
+            instrumentation.targetContext,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        device.executeShellCommand("settings put global animator_duration_scale 1")
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                    assertTrue(activity.findViewById<View>(R.id.calendar_mode_day).performClick())
+                }
+                SystemClock.sleep(TeachingCalendarLogic.pageAnimationDurationMillis + 80L)
+                instrumentation.waitForIdleSync()
+
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.calendar_mode_year).performClick())
+                    val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    assertEquals(2, surface.childCount)
+                    assertTrue(
+                        "Forward mode changes must mount the incoming page on the right",
+                        surface.getChildAt(1).translationX > 0f,
+                    )
+                    assertTrue(
+                        "The mode indicator must animate in the same render transaction",
+                        activity.findViewById<View>(R.id.calendar_mode_year).background is
+                            TransitionDrawable,
+                    )
+                }
+                SystemClock.sleep(TeachingCalendarLogic.pageAnimationDurationMillis + 80L)
+                instrumentation.waitForIdleSync()
+
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.calendar_mode_day).performClick())
+                    val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    assertEquals(2, surface.childCount)
+                    assertTrue(
+                        "Backward mode changes must mount the incoming page on the left",
+                        surface.getChildAt(1).translationX < 0f,
+                    )
+                    assertTrue(
+                        "The reverse indicator transition must start with the page transition",
+                        activity.findViewById<View>(R.id.calendar_mode_day).background is
+                            TransitionDrawable,
+                    )
                 }
             }
         } finally {

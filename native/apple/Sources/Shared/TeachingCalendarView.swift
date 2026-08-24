@@ -1,7 +1,20 @@
 import SwiftUI
 
 enum TeachingCalendarNavigationMotion {
-    static let pageAnimation = Animation.easeInOut(duration: 0.24)
+    enum PageEdge: Equatable {
+        case leading
+        case trailing
+    }
+
+    struct TransitionEdges: Equatable {
+        let insertion: PageEdge
+        let removal: PageEdge
+    }
+
+    static var pageAnimation: Animation {
+        let duration = AppLaunchConfiguration.usesSlowCalendarAnimation ? 2.0 : 0.24
+        return .easeInOut(duration: duration)
+    }
 
     static func direction(from current: Date, to destination: Date) -> Int {
         destination < current ? -1 : 1
@@ -14,21 +27,39 @@ enum TeachingCalendarNavigationMotion {
         return destinationIndex < currentIndex ? -1 : 1
     }
 
+    static func transitionEdges(direction: Int) -> TransitionEdges {
+        direction < 0
+            ? TransitionEdges(insertion: .leading, removal: .trailing)
+            : TransitionEdges(insertion: .trailing, removal: .leading)
+    }
+
     static func transition(direction: Int, includesOpacity: Bool = false) -> AnyTransition {
-        let transition: AnyTransition = direction < 0
-            ? .asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .trailing))
-            : .asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .leading))
+        let edges = transitionEdges(direction: direction)
+        let insertionEdge: Edge = edges.insertion == .leading ? .leading : .trailing
+        let removalEdge: Edge = edges.removal == .leading ? .leading : .trailing
+        let transition = AnyTransition.asymmetric(
+            insertion: .move(edge: insertionEdge),
+            removal: .move(edge: removalEdge)
+        )
         return includesOpacity ? transition.combined(with: .opacity) : transition
     }
 }
 
 final class TeachingCalendarSessionState: ObservableObject {
+    private struct PendingModeTransition {
+        let generation: UInt
+        let source: String
+        let destination: String
+    }
+
     @Published var selectedDate = Date()
     @Published var modeRawValue = "周"
     @Published var isMonthExpanded = true
     @Published var isMonthDetailRaised = false
     @Published private(set) var transitionDirection = 1
     @Published private(set) var dismissOverlayGeneration = 0
+    private var modeTransitionGeneration: UInt = 0
+    private var pendingModeTransition: PendingModeTransition?
 
     func applyKeyboardAction(
         _ action: AppKeyboardAction,
@@ -73,12 +104,57 @@ final class TeachingCalendarSessionState: ObservableObject {
     }
 
     func setMode(_ rawValue: String) {
-        guard rawValue != modeRawValue else { return }
+        guard let generation = prepareModeTransition(to: rawValue) else { return }
+        commitModeTransition(to: rawValue, generation: generation)
+    }
+
+    @discardableResult
+    func prepareModeTransition(to rawValue: String) -> UInt? {
+        guard rawValue != modeRawValue else { return nil }
+        modeTransitionGeneration &+= 1
+        let generation = modeTransitionGeneration
+        pendingModeTransition = PendingModeTransition(
+            generation: generation,
+            source: modeRawValue,
+            destination: rawValue
+        )
         prepareTransition(direction: TeachingCalendarNavigationMotion.modeDirection(
             from: modeRawValue,
             to: rawValue
         ))
+        return generation
+    }
+
+    @discardableResult
+    func commitModeTransition(to rawValue: String, generation: UInt) -> Bool {
+        guard let pendingModeTransition,
+              pendingModeTransition.generation == generation,
+              pendingModeTransition.source == modeRawValue,
+              pendingModeTransition.destination == rawValue
+        else { return false }
+        self.pendingModeTransition = nil
         modeRawValue = rawValue
+        return true
+    }
+
+    @MainActor
+    @discardableResult
+    func requestModeChange(to rawValue: String, selecting date: Date? = nil) async -> Bool {
+        guard let generation = prepareModeTransition(to: rawValue) else {
+            if let date { selectedDate = date }
+            return false
+        }
+
+        // AnyTransition stores the removal edge on the outgoing view. A render
+        // pass must install the prepared direction before the mode changes its
+        // identity; otherwise a reversal can reuse the preceding insertion edge.
+        await Task.yield()
+        guard !Task.isCancelled else { return false }
+        return withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
+            guard commitModeTransition(to: rawValue, generation: generation) else { return false }
+            if let date { selectedDate = date }
+            return true
+        }
     }
 }
 
@@ -91,6 +167,16 @@ enum AppKeyboardAction: String, Equatable, Sendable {
     case nextPeriod
     case today
     case dismissOverlay
+
+    var targetCalendarModeRawValue: String? {
+        switch self {
+        case .dayView: "日"
+        case .weekView: "周"
+        case .monthView: "月"
+        case .yearView: "年"
+        default: nil
+        }
+    }
 }
 
 enum AppKeyboardCommandNotification {
@@ -1694,10 +1780,7 @@ struct TeachingCalendarView: View {
                     yearPopoverLocation = nil
                 }
                 .accessibilityAction(named: Text("查看月份")) {
-                    selectedDate = day
-                    withAnimation(Self.viewAnimation) {
-                        session.setMode(CalendarMode.month.rawValue)
-                    }
+                    changeMode(to: .month, selecting: day)
                 }
                 .gesture(
                     SpatialTapGesture(
@@ -1713,10 +1796,7 @@ struct TeachingCalendarView: View {
                     .onEnded { value in
                         switch value {
                         case .first:
-                            selectedDate = day
-                            withAnimation(Self.viewAnimation) {
-                                session.setMode(CalendarMode.month.rawValue)
-                            }
+                            changeMode(to: .month, selecting: day)
                         case let .second(tap):
                             selectedDate = day
                             yearPopoverDate = day
@@ -1812,10 +1892,7 @@ struct TeachingCalendarView: View {
                     yearPopoverLocation = nil
                 }
                 .accessibilityAction(named: Text("查看月份")) {
-                    selectedDate = day
-                    withAnimation(Self.viewAnimation) {
-                        session.setMode(CalendarMode.month.rawValue)
-                    }
+                    changeMode(to: .month, selecting: day)
                 }
                 .gesture(
                     SpatialTapGesture(
@@ -1831,10 +1908,7 @@ struct TeachingCalendarView: View {
                     .onEnded { value in
                         switch value {
                         case .first:
-                            selectedDate = day
-                            withAnimation(Self.viewAnimation) {
-                                session.setMode(CalendarMode.month.rawValue)
-                            }
+                            changeMode(to: .month, selecting: day)
                         case let .second(tap):
                             selectedDate = day
                             yearPopoverDate = day
@@ -1962,10 +2036,7 @@ struct TeachingCalendarView: View {
         day: Date
     ) -> some View {
         Button(model.localized("\(title)视图")) {
-            withAnimation(Self.viewAnimation) {
-                selectedDate = day
-                session.setMode(targetMode.rawValue)
-            }
+            changeMode(to: targetMode, selecting: day)
             dismissYearPopover()
         }
         .buttonStyle(.bordered)
@@ -2927,11 +2998,15 @@ struct TeachingCalendarView: View {
             get: { mode },
             set: { newMode in
                 guard newMode != mode else { return }
-                withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
-                    session.setMode(newMode.rawValue)
-                }
+                changeMode(to: newMode)
             }
         )
+    }
+
+    private func changeMode(to newMode: CalendarMode, selecting date: Date? = nil) {
+        Task { @MainActor in
+            await session.requestModeChange(to: newMode.rawValue, selecting: date)
+        }
     }
 
     private var datePickerSelection: Binding<Date> {

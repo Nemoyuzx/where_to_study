@@ -4,6 +4,7 @@ enum AppLaunchConfiguration {
     static let uiTestingArgument = "--ui-testing"
     static let uiTestingLiveArgument = "--ui-testing-live"
     static let reviewDemoArgument = "--review-demo"
+    static let slowCalendarAnimationArgument = "--ui-test-slow-calendar-animation"
 
     static var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestingArgument)
@@ -16,6 +17,10 @@ enum AppLaunchConfiguration {
 
     static var isUITestingLive: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestingLiveArgument)
+    }
+
+    static var usesSlowCalendarAnimation: Bool {
+        ProcessInfo.processInfo.arguments.contains(slowCalendarAnimationArgument)
     }
 
     static var isXCTestRunning: Bool {

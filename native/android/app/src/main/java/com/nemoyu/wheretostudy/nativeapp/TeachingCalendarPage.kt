@@ -232,6 +232,18 @@ object TeachingCalendarLogic {
         else -> 0
     }
 
+    internal fun pageTransitionOffsets(
+        direction: Int,
+        distance: Float,
+    ): CalendarPageTransitionOffsets {
+        val resolvedDirection = direction.compareTo(0)
+        val resolvedDistance = abs(distance)
+        return CalendarPageTransitionOffsets(
+            incomingStartX = resolvedDirection * resolvedDistance,
+            outgoingEndX = -resolvedDirection * resolvedDistance,
+        )
+    }
+
     fun weekPeriodTitle(base: String, teachingWeek: Int?): String =
         teachingWeek?.takeIf { it > 0 }?.let { "$base 第${it}教学周" } ?: base
 
@@ -484,6 +496,11 @@ object TeachingCalendarLogic {
     }
 
 }
+
+internal data class CalendarPageTransitionOffsets(
+    val incomingStartX: Float,
+    val outgoingEndX: Float,
+)
 
 private class CalendarSwipeContainer(
     context: MainActivity,
@@ -1211,7 +1228,6 @@ internal class TeachingCalendarPage(
         fun render() {
             calendarRenderAction = ::render
             dismissYearPopover()
-            updatePhoneModeTabs(tabs)
             pageSurface.swipeEnabled = selectedMode != Mode.YEAR
             pageSurface.monthSheetPosition = monthSheetPosition
             pageSurface.onMonthSheetSettled = if (selectedMode == Mode.MONTH) {
@@ -1286,6 +1302,10 @@ internal class TeachingCalendarPage(
                 pageSurface,
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
             )
+            // Build the incoming page first, then start the tab and page
+            // transitions together. Starting the tab cross-fade before page
+            // construction makes the indicator visibly lead heavier views.
+            updatePhoneModeTabs(tabs)
             replacePhonePage(
                 pageSurface,
                 pageView,
@@ -1477,12 +1497,16 @@ internal class TeachingCalendarPage(
         if (pageDirection != 0) {
             val distance = container.width.takeIf { it > 0 } ?: activity.dp(availableWidthDp)
             page.alpha = 1f
-            page.translationX = pageDirection * distance.toFloat()
+            val offsets = TeachingCalendarLogic.pageTransitionOffsets(
+                pageDirection,
+                distance.toFloat(),
+            )
+            page.translationX = offsets.incomingStartX
             page.translationY = 0f
             container.addView(page, layoutParams)
             val interpolator = AccelerateDecelerateInterpolator()
             oldPage.animate()
-                .translationX(-pageDirection * distance.toFloat())
+                .translationX(offsets.outgoingEndX)
                 .setDuration(TeachingCalendarLogic.pageAnimationDurationMillis)
                 .setInterpolator(interpolator)
                 .withEndAction {
@@ -1521,8 +1545,9 @@ internal class TeachingCalendarPage(
         if (direction == 0) return
         content.animate().cancel()
         val distance = content.width.takeIf { it > 0 } ?: activity.dp(availableWidthDp)
+        val offsets = TeachingCalendarLogic.pageTransitionOffsets(direction, distance.toFloat())
         content.alpha = 1f
-        content.translationX = direction * distance.toFloat()
+        content.translationX = offsets.incomingStartX
         content.translationY = 0f
         content.animate()
             .translationX(0f)

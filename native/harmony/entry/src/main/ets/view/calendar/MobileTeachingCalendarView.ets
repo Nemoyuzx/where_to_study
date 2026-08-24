@@ -8,7 +8,8 @@ import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { PageTitle, SurfaceCard } from '../SharedComponents';
 import {
-  CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarTimelineDay,
+  CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets,
+  CalendarTimelineDay,
   CalendarTimelineLogic, CalendarYearDeadlinePriority, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
@@ -305,7 +306,9 @@ export struct MobileTeachingCalendarView {
     this.incomingDate = targetDate;
     this.incomingModeRawValue = targetMode;
     this.ensureHolidays(targetMode, targetDate);
-    this.incomingPageOffsetX = direction * distance;
+    const offsets: CalendarPageTransitionOffsets =
+      TeachingCalendarLogic.pageTransitionOffsets(direction, distance);
+    this.incomingPageOffsetX = offsets.incomingStartX;
     this.pageTransitionActive = true;
 
     // 先挂载相邻页面，下一帧再让两页同时移动，避免旧实现中间出现空白帧。
@@ -313,7 +316,7 @@ export struct MobileTeachingCalendarView {
       animateTo({ duration: TeachingCalendarLogic.pageTransitionDuration,
         curve: Curve.EaseInOut }, (): void => {
         this.modeIndicatorRawValue = targetMode;
-        this.pageOffsetX = -direction * distance;
+        this.pageOffsetX = offsets.outgoingEndX;
         this.incomingPageOffsetX = 0;
       });
       setTimeout(() => {

@@ -162,6 +162,14 @@ export class TeachingCalendarLogic {
     return 0;
   }
 
+  static pageTransitionOffsets(direction: number, distance: number): CalendarPageTransitionOffsets {
+    const resolvedDirection: number = Math.sign(direction);
+    const resolvedDistance: number = Math.abs(distance);
+    return new CalendarPageTransitionOffsets(
+      resolvedDirection * resolvedDistance,
+      -resolvedDirection * resolvedDistance);
+  }
+
   static yearCourseOpacity(courseCount: number): number {
     if (courseCount <= 0) {
       return 0;
@@ -450,6 +458,16 @@ export class TeachingCalendarLogic {
       return [0, total];
     }
     return [rows - 1, total - rows + 1];
+  }
+}
+
+export class CalendarPageTransitionOffsets {
+  readonly incomingStartX: number;
+  readonly outgoingEndX: number;
+
+  constructor(incomingStartX: number, outgoingEndX: number) {
+    this.incomingStartX = incomingStartX;
+    this.outgoingEndX = outgoingEndX;
   }
 }
 

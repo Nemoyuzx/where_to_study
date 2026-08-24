@@ -623,11 +623,29 @@ class ScheduleLogicTest {
     }
 
     @Test
-    fun calendarModeTransitionsFollowTheIosDirection() {
-        assertEquals(1, TeachingCalendarLogic.modeTransitionDirection(0, 3))
-        assertEquals(-1, TeachingCalendarLogic.modeTransitionDirection(3, 2))
-        assertEquals(-1, TeachingCalendarLogic.modeTransitionDirection(3, 0))
-        assertEquals(0, TeachingCalendarLogic.modeTransitionDirection(2, 2))
+    fun calendarModeTransitionsFollowCanonicalForwardThenBackwardGeometry() {
+        val modes = TeachingCalendarMode.entries
+        val forwardDirections = modes.zipWithNext { from, to ->
+            TeachingCalendarLogic.modeTransitionDirection(from.ordinal, to.ordinal)
+        }
+        val backwardDirections = modes.reversed().zipWithNext { from, to ->
+            TeachingCalendarLogic.modeTransitionDirection(from.ordinal, to.ordinal)
+        }
+        assertEquals(listOf(1, 1, 1), forwardDirections)
+        assertEquals(listOf(-1, -1, -1), backwardDirections)
+        assertEquals(
+            CalendarPageTransitionOffsets(incomingStartX = 320f, outgoingEndX = -320f),
+            TeachingCalendarLogic.pageTransitionOffsets(forwardDirections.first(), 320f),
+        )
+        assertEquals(
+            CalendarPageTransitionOffsets(incomingStartX = -320f, outgoingEndX = 320f),
+            TeachingCalendarLogic.pageTransitionOffsets(backwardDirections.first(), 320f),
+        )
+        assertEquals(
+            CalendarPageTransitionOffsets(incomingStartX = 0f, outgoingEndX = 0f),
+            TeachingCalendarLogic.pageTransitionOffsets(0, 320f),
+        )
+        assertEquals(300L, TeachingCalendarLogic.pageAnimationDurationMillis)
     }
 
     @Test

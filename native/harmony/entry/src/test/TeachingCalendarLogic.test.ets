@@ -3,7 +3,8 @@ import { describe, it, expect } from '@ohos/hypium';
 import { DateParts, StrictDates } from '../main/ets/common/StrictDates';
 import { Course } from '../main/ets/common/Models';
 import {
-  CalendarMode, CalendarTimelineLogic, CalendarYearDeadlinePriority, TeachingCalendarLogic
+  CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets, CalendarTimelineLogic,
+  CalendarYearDeadlinePriority, TeachingCalendarLogic
 } from '../main/ets/view/calendar/CalendarLogic';
 import { AppSection, AppSectionInfo } from '../main/ets/common/AppSection';
 import {
@@ -163,10 +164,26 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.week)).assertFalse();
     });
 
-    it('mode_indicator_and_page_share_transition_duration', 0, () => {
+    it('mode_indicator_and_page_share_forward_then_backward_transition_contract', 0, () => {
       expect(TeachingCalendarLogic.pageTransitionDuration).assertEqual(300);
-      expect(TeachingCalendarLogic.modeTransitionDirection(CalendarMode.year, CalendarMode.month))
-        .assertEqual(-1);
+      const forwardModes: CalendarMode[] = CalendarModeInfo.all;
+      for (let index = 0; index < forwardModes.length - 1; index++) {
+        expect(TeachingCalendarLogic.modeTransitionDirection(
+          forwardModes[index], forwardModes[index + 1])).assertEqual(1);
+      }
+      const backwardModes: CalendarMode[] = CalendarModeInfo.all.slice().reverse();
+      for (let index = 0; index < backwardModes.length - 1; index++) {
+        expect(TeachingCalendarLogic.modeTransitionDirection(
+          backwardModes[index], backwardModes[index + 1])).assertEqual(-1);
+      }
+      const forwardOffsets: CalendarPageTransitionOffsets =
+        TeachingCalendarLogic.pageTransitionOffsets(1, 320);
+      expect(forwardOffsets.incomingStartX).assertEqual(320);
+      expect(forwardOffsets.outgoingEndX).assertEqual(-320);
+      const backwardOffsets: CalendarPageTransitionOffsets =
+        TeachingCalendarLogic.pageTransitionOffsets(-1, 320);
+      expect(backwardOffsets.incomingStartX).assertEqual(-320);
+      expect(backwardOffsets.outgoingEndX).assertEqual(320);
     });
 
     it('favorite_management_hides_only_the_phone_navigation', 0, () => {
