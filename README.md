@@ -34,6 +34,7 @@ Silicon 兼容构建。
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.5 (1002008)` 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 112 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
+> Apple 平台公测链接（版本可能不是最新，最新需要等待审核通过）：https://testflight.apple.com/join/yuzpAtDJ
 
 ## 下载
 
