@@ -1,7 +1,7 @@
 // 与 Android ThemePalettes / Palette 对应的主题入口。
 // 颜色值定义在 resources/base/element/color.json（浅色）与
 // resources/dark/element/color.json（深色）中，引用后自动随系统深色模式切换，
-// 调色板数值与 Android 端 light / dark 完全一致。
+// 核心品牌调色板与 Android light / dark 对齐；日程分类色复用鸿蒙日历现有语义。
 
 export class AppTheme {
   static primary(): Resource {
@@ -10,6 +10,19 @@ export class AppTheme {
 
   static primaryFill(): Resource {
     return $r('app.color.app_primary_fill');
+  }
+
+  // 日期选择使用独立蓝色，不再与课程/导航主绿色混淆。
+  static selectedDate(): Resource {
+    return $r('app.color.app_selected_date');
+  }
+
+  static selectedDateStrong(): Resource {
+    return $r('app.color.app_selected_date_strong');
+  }
+
+  static selectedDateSurface(): Resource {
+    return $r('app.color.app_selected_date_surface');
   }
 
   static accent(): Resource {
@@ -56,6 +69,18 @@ export class AppTheme {
   // 法定节假日文字（对应 Android Palette.holiday）。
   static holiday(): Resource {
     return $r('app.color.app_holiday');
+  }
+
+  static assignment(): Resource {
+    return $r('app.color.app_assignment');
+  }
+
+  static schoolNotice(): Resource {
+    return $r('app.color.app_school_notice');
+  }
+
+  static publicDeadline(): Resource {
+    return $r('app.color.app_public_deadline');
   }
 
   // 主色深档（对应 Android Palette.primaryDark，两模式同值）。

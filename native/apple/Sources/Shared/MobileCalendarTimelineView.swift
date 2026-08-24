@@ -172,8 +172,8 @@ struct MobileCalendarTimelineView: View {
         return TimelineView(.periodic(from: .now, by: 60)) { context in
             ZStack(alignment: .topLeading) {
                 AppTheme.surface
-                grid(width: width, dayWidth: dayWidth)
                 selectedColumn(dayWidth: dayWidth)
+                grid(width: width, dayWidth: dayWidth)
                 if !showsWeekColumns {
                     slotGuides(width: width)
                 }
@@ -222,7 +222,7 @@ struct MobileCalendarTimelineView: View {
         if showsWeekColumns,
            let index = days.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: selectedDate) }) {
             Rectangle()
-                .fill(AppTheme.primary.opacity(0.045))
+                .fill(AppTheme.selectedDate.opacity(0.10))
                 .frame(width: dayWidth, height: MobileCalendarTimelineLayout.timelineHeight)
                 .offset(x: CGFloat(index) * dayWidth)
                 .allowsHitTesting(false)

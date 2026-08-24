@@ -9,12 +9,15 @@
 - 日、周、月、年使用按可见范围预取的本地快照。日期选择和翻页动画先完成，网络结果只局部更新当前数据，不再因未缓存请求造成横向抖动、动画截断或整页重建。
 - 公开竞赛数据使用短时缓存，移动原生端会把并发范围请求合并为 single-flight；云课堂作业按账户复用一次全量同步，再在本地按日期过滤。
 - 公开竞赛与校内通知在应用启动、回前台或相关开关开启时后台预热；完整 feed 每次只解析一次并建立日期索引，日/周/月/年翻页仅查本地缓存。全年作业与公开 DDL 作为独立任务并发物化，各自完成即刷新，公开信息不再等待 UCloud 登录。
-- iOS、Android 与 HarmonyOS 手机端的日/周课程摘要区均可折叠；Android 补齐与 iOS 一致的日期下方课程信息。
+- iOS、Android 与 HarmonyOS 手机端的日/周课程摘要区统一为“只折叠课程、全天日程始终可见”；日视图使用横向 3 项胶囊与 `+N`，周视图使用 7 列首项与 `+N`，并显示选中日期的完整课程列表。
+- 全平台选中日期改用独立的高对比蓝色，浅色为 `#2563EB`、深色为 `#1D4ED8`；今天标记和“作业 > 校内竞赛 > 其它 DDL”分类边框仍独立保留。设置页同步显示课程作业、校内竞赛和其它 DDL 的分类色点。
+- 桌面与平板的日/周时间轴补齐整点实线和课程节次起止虚线，选中列不会遮住网格线；月格按 iOS 语义保持无时间轴。Android 应用内全部字号整体缩小一级，桌面小组件字号同步调整。
 
 ### 多语言与跨平台一致性
 
 - 图形客户端设置新增“跟随系统 / 简体中文 / English”，并持久化界面语言。导航、教学日历、空教室、设置、状态、错误与来源说明均提供英文静态文案；课程、天气、黄历、作业与竞赛 API 返回内容保持原文。
 - 各端语言卡片统一移动到设置页底部，并位于隐私与本地数据之前；iOS 修复 English 切回中文后底部导航尺寸和位置未恢复的问题。
+- 各平台“应用设置”和受支持系统的“桌面小组件”布尔项统一使用 iOS 风格滑块开关；数值与枚举选择器保持原有语义，Windows/Linux 不新增课程小组件入口。
 - iOS 月视图翻页改为先准备本次方向、再提交目标月份，连续左滑后右滑或右滑后左滑都使用正确的进入/退出动画。
 - HarmonyOS 手机端同步近期移动月视图的滚动所有权、折叠状态、遮罩层级、无横向抖动与异步局部更新逻辑，同时保留折叠屏、平板和 PC 自适应布局。
 - Windows 与 Linux 延续原生桌面布局，不提供课程小组件；课程小组件只保留在系统能力完整且已实现对应组件的平台。
@@ -34,15 +37,18 @@
 - Month and week views use separate centered schedule dialogs whose content matches each `+N` count. Month and year cells use assignment > school notice > other deadline outer-border priority while preserving today with an independent inner ring or date dot.
 - Calendar paging is decoupled from networking. Visible-range snapshots, account-scoped assignment reuse, short-lived contest caches, and single-flight range loading on native mobile clients prevent incomplete animations and unnecessary repeated requests.
 - Public contest and school-notice feeds now prewarm at startup, foreground entry, or when a related switch is enabled. Each full feed is parsed once into a date index, so calendar paging performs local lookups only. Year assignment and public-feed materialization run independently and repaint as soon as each source completes.
-- Day/week course summaries are collapsible on iOS, Android, and HarmonyOS; Android now shows the same date-level course summary as iOS.
+- iOS, Android, and HarmonyOS now share the same mobile day/week presentation: only the selected date's complete course list collapses, all-day events stay visible, day view uses three horizontal capsules plus `+N`, and week view uses seven first-item-plus-`+N` columns.
+- Every platform now uses a dedicated high-contrast selected-date blue (`#2563EB` in light mode and `#1D4ED8` in dark mode) while preserving today and deadline-priority indicators. Settings also show matching color dots for assignments, school notices, and other public deadlines.
+- Desktop and tablet day/week timelines now keep solid hour lines and dashed course-slot boundaries visible above the selected-date lane. Month grids remain timeline-free, matching iOS. Android app typography and widget text are reduced by one size step.
 - Graphical clients add a persistent System / Simplified Chinese / English interface setting. Static UI is localized while third-party API content remains unchanged.
 - Language cards now sit immediately before privacy and local-data settings. iOS also restores tab-bar geometry after an English-to-Chinese round trip and correctly animates month swipes when direction reverses.
+- Boolean app and supported-widget settings now consistently use iOS-style switch controls; numeric and enum pickers retain their semantics, and Windows/Linux still do not expose course widgets.
 - HarmonyOS receives the recent mobile calendar gesture, clipping, rendering, and async-update refinements. Windows and Linux retain their desktop layouts and do not expose course widgets.
 - Windows and Linux now align the weather card with the empty-room workspace gutters and center both lines inside every period selector.
 - Linux AppImages are repacked without the stale bundled Wayland ABI libraries that conflict with newer host Mesa/EGL stacks, and their GIO module lookup is isolated to the bundle.
 
 ## Distribution
 
-- GitHub Release: Windows x64 NSIS, Linux Debian/AppImage and CLI/TUI builds, plus the maintainer-signed Android `0.2.3 (35)` APK/AAB.
-- TestFlight: native iOS and macOS `0.2.3 (63)` builds. Apple artifacts are not attached to GitHub Release.
+- GitHub Release: Windows x64 NSIS, Linux Debian/AppImage and CLI/TUI builds, plus the maintainer-signed Android `0.2.3 (36)` APK/AAB.
+- TestFlight: native iOS and macOS `0.2.3 (64)` builds. Apple artifacts are not attached to GitHub Release.
 - Checksum sidecars are used for verification but are not attached to the public GitHub Release.

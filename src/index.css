@@ -39,6 +39,10 @@
   --primary-border: #c7ded6;
   --primary-border-soft: #cfe0d8;
   --primary-outline: #0c3f36;
+  --selected-date-fill: #2563EB;
+  --selected-date-lane: #EFF6FF;
+  --selected-date-outline: #1D4ED8;
+  --selected-date-text: #FFFFFF;
   --on-primary: #ffffff;
   --on-primary-muted: rgba(255, 255, 255, 0.9);
   --gold: #e2bc62;
@@ -138,6 +142,10 @@
     --primary-border: #356b5e;
     --primary-border-soft: #315b50;
     --primary-outline: #6fd1ba;
+    --selected-date-fill: #1D4ED8;
+    --selected-date-lane: #172554;
+    --selected-date-outline: #60A5FA;
+    --selected-date-text: #FFFFFF;
     --gold: #876622;
     --gold-surface: #3b321b;
     --gold-surface-soft: #332b19;

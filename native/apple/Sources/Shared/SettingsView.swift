@@ -483,25 +483,30 @@ struct SettingsView: View {
                     set: model.setAlmanacEnabled
                 )
                 Divider()
+                deadlineLegend("课程作业 DDL", color: AppTheme.assignment)
                 featureToggle(
                     "学科竞赛 DDL",
                     isOn: model.competitionDeadlinesEnabled,
-                    set: model.setCompetitionDeadlinesEnabled
+                    set: model.setCompetitionDeadlinesEnabled,
+                    markerColor: AppTheme.publicDeadline
                 )
                 featureToggle(
                     "校内竞赛通知",
                     isOn: model.schoolContestNoticesEnabled,
-                    set: model.setSchoolContestNoticesEnabled
+                    set: model.setSchoolContestNoticesEnabled,
+                    markerColor: AppTheme.schoolNotice
                 )
                 featureToggle(
                     "夏令营 DDL",
                     isOn: model.summerCampDeadlinesEnabled,
-                    set: model.setSummerCampDeadlinesEnabled
+                    set: model.setSummerCampDeadlinesEnabled,
+                    markerColor: AppTheme.publicDeadline
                 )
                 featureToggle(
                     "黑客松 DDL",
                     isOn: model.hackathonDeadlinesEnabled,
-                    set: model.setHackathonDeadlinesEnabled
+                    set: model.setHackathonDeadlinesEnabled,
+                    markerColor: AppTheme.publicDeadline
                 )
                 Text("天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。")
                     .font(.caption)
@@ -528,10 +533,10 @@ struct SettingsView: View {
     private func featureToggle(
         _ title: String,
         isOn: Bool,
-        set: @escaping (Bool) -> Void
+        set: @escaping (Bool) -> Void,
+        markerColor: Color? = nil
     ) -> some View {
         Toggle(
-            model.localized(title),
             isOn: Binding(
                 get: { isOn },
                 set: { enabled in
@@ -539,10 +544,33 @@ struct SettingsView: View {
                     set(enabled)
                 }
             )
-        )
+        ) {
+            HStack(spacing: 8) {
+                Text(model.localized(title))
+                Spacer(minLength: 8)
+                if let markerColor {
+                    Circle()
+                        .fill(markerColor)
+                        .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
         .toggleStyle(.switch)
         .tint(AppTheme.primary)
         .disabled(model.isSampleMode)
+    }
+
+    private func deadlineLegend(_ title: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Text(model.localized(title))
+            Spacer(minLength: 8)
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var widgetSurface: some View {

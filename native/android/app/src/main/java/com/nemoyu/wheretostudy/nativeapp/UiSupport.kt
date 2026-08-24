@@ -19,6 +19,7 @@ data class ThemeColors(
     val primaryDark: Int,
     val primaryText: Int,
     val onPrimary: Int,
+    val selectedDate: Int,
     val accent: Int,
     val onAccent: Int,
     val background: Int,
@@ -44,7 +45,8 @@ object ThemePalettes {
     val light = ThemeColors(
         primary = 0xFF166B5D.toInt(), primaryFill = 0xFF166B5D.toInt(),
         primaryDark = 0xFF0C4A42.toInt(), primaryText = 0xFF166B5D.toInt(),
-        onPrimary = 0xFFFFFFFF.toInt(), accent = 0xFFE2BC62.toInt(),
+        onPrimary = 0xFFFFFFFF.toInt(), selectedDate = 0xFF2563EB.toInt(),
+        accent = 0xFFE2BC62.toInt(),
         onAccent = 0xFF151515.toInt(), background = 0xFFF2F2F7.toInt(),
         surface = 0xFFFFFFFF.toInt(), surfaceVariant = 0xFFE5E5EA.toInt(),
         text = 0xFF111111.toInt(), muted = 0xFF6E6E73.toInt(),
@@ -60,7 +62,8 @@ object ThemePalettes {
     val dark = ThemeColors(
         primary = 0xFF5AD2B8.toInt(), primaryFill = 0xFF197565.toInt(),
         primaryDark = 0xFF0C4A42.toInt(), primaryText = 0xFF5AD2B8.toInt(),
-        onPrimary = 0xFFFFFFFF.toInt(), accent = 0xFF876622.toInt(),
+        onPrimary = 0xFFFFFFFF.toInt(), selectedDate = 0xFF1D4ED8.toInt(),
+        accent = 0xFF876622.toInt(),
         onAccent = 0xFFFFFFFF.toInt(), background = 0xFF000000.toInt(),
         surface = 0xFF1C1C1E.toInt(), surfaceVariant = 0xFF2C2C2E.toInt(),
         text = 0xFFFFFFFF.toInt(), muted = 0xFF98989D.toInt(),
@@ -87,6 +90,7 @@ object Palette {
     val primaryDark get() = colors.primaryDark
     val primaryText get() = colors.primaryText
     val onPrimary get() = colors.onPrimary
+    val selectedDate get() = colors.selectedDate
     val accent get() = colors.accent
     val onAccent get() = colors.onAccent
     val background get() = colors.background

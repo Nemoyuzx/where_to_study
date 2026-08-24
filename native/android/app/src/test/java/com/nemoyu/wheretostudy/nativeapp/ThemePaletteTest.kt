@@ -13,6 +13,9 @@ class ThemePaletteTest {
     fun lightAndDarkThemesKeepBrandColorsAndUseDistinctSurfaces() {
         assertNotEquals(ThemePalettes.light.primary, ThemePalettes.dark.primary)
         assertNotEquals(ThemePalettes.light.primaryFill, ThemePalettes.dark.primaryFill)
+        assertEquals(0xFF2563EB.toInt(), ThemePalettes.light.selectedDate)
+        assertEquals(0xFF1D4ED8.toInt(), ThemePalettes.dark.selectedDate)
+        assertNotEquals(ThemePalettes.light.selectedDate, ThemePalettes.dark.selectedDate)
         assertNotEquals(ThemePalettes.light.background, ThemePalettes.dark.background)
         assertNotEquals(ThemePalettes.light.surface, ThemePalettes.dark.surface)
         assertNotEquals(ThemePalettes.light.text, ThemePalettes.dark.text)
@@ -26,6 +29,7 @@ class ThemePaletteTest {
             assertContrast("muted on surface", colors.muted, colors.surface)
             assertContrast("brand text on surface", colors.primaryText, colors.surface)
             assertContrast("selected text on primary fill", colors.onPrimary, colors.primaryFill)
+            assertContrast("selected date text", colors.onPrimary, colors.selectedDate)
             assertContrast("busy-slot text on accent", colors.onAccent, colors.accent)
             assertContrast("danger text on danger surface", colors.danger, colors.dangerSurface)
             assertContrast("holiday text on surface", colors.holiday, colors.surface)

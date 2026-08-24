@@ -67,6 +67,7 @@ class YearCalendarView(
     private val year: Int,
     days: List<YearCalendarDay>,
     private val availableWidthDp: Int,
+    initialSelectedDate: Calendar?,
     private val onDateSelected: (YearCalendarView, Calendar, Float, Float) -> Unit,
     private val onMonthSelected: (Calendar) -> Unit,
 ) : View(context) {
@@ -96,7 +97,9 @@ class YearCalendarView(
         textAlign = Paint.Align.LEFT
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
-    private var selectedDate: Calendar? = null
+    private var selectedDate: Calendar? = initialSelectedDate
+        ?.takeIf { date -> date.get(Calendar.YEAR) == year }
+        ?.clone() as? Calendar
     private var downX = 0f
     private var downY = 0f
 
@@ -117,10 +120,27 @@ class YearCalendarView(
         invalidate()
     }
 
-    fun clearSelection() {
-        if (selectedDate == null) return
-        selectedDate = null
-        invalidate()
+    internal fun selectedDateKey(): String? = selectedDate?.let(::key)
+
+    internal fun dateCenter(date: Calendar): Pair<Float, Float>? {
+        if (date.get(Calendar.YEAR) != year || width <= 0) return null
+        val monthIndex = date.get(Calendar.MONTH)
+        val month = monthIndex + 1
+        val day = date.get(Calendar.DAY_OF_MONTH)
+        val first = calendar(month, 1)
+        val leadingDays = (first.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        val cellIndex = leadingDays + day - 1
+        val dayRow = cellIndex / 7
+        val dayColumn = cellIndex % 7
+        val monthColumn = monthIndex % columns
+        val monthRow = monthIndex / columns
+        val resolvedMonthWidth = monthWidth()
+        val cellWidth = resolvedMonthWidth / 7f
+        return Pair(
+            monthColumn * (resolvedMonthWidth + monthGap) + cellWidth * (dayColumn + 0.5f),
+            monthRow * monthHeight + monthTitleHeight + weekdayHeight +
+                dayCellHeight * (dayRow + 0.5f),
+        )
     }
 
     fun updateDay(day: YearCalendarDay) {
@@ -249,7 +269,7 @@ class YearCalendarView(
         val selected = selectedDate?.let { sameDay(it, day.date) } == true
         val today = sameDay(day.date, Calendar.getInstance(shanghai))
         fillPaint.color = when {
-            selected -> Palette.primaryFill
+            selected -> Palette.selectedDate
             day.courseCount <= 0 -> Palette.background
             else -> blend(
                 foreground = Palette.primary,
@@ -263,7 +283,7 @@ class YearCalendarView(
             YearCalendarSupplementaryKind.ASSIGNMENT -> Palette.assignment
             YearCalendarSupplementaryKind.SCHOOL_NOTICE -> Palette.schoolNotice
             YearCalendarSupplementaryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
-            null -> if (today) Palette.primary else Palette.border
+            null -> if (today) Palette.nowIndicator else Palette.border
         }
         borderPaint.strokeWidth = resources.displayMetrics.density * when {
             day.supplementaryKind != null -> 1.8f

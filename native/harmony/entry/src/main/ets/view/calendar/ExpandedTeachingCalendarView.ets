@@ -497,7 +497,7 @@ export struct ExpandedTeachingCalendarView {
     const date: string = StrictDates.formatDateParts(day);
     for (const item of this.model.assignmentDeadlinesByDate.get(date) ?? []) {
       result.push(new ExpandedAllDayItem(date + '.assignment.' + item.id,
-        this.model.text('作业') + ' · ' + item.title, '#3478F6', '#153478F6'));
+        this.model.text('作业') + ' · ' + item.title, AppTheme.assignment(), '#153478F6'));
     }
     const snapshot: PublicDeadlineSnapshot | undefined = this.model.publicDeadlinesByDate.get(date);
     if (snapshot !== undefined) {
@@ -509,7 +509,8 @@ export struct ExpandedTeachingCalendarView {
           this.model.text('校内') + ' · ' + item.name :
           this.model.text(PublicDeadlineKindInfo.title(item.kind)) + ' · ' + item.name;
         result.push(new ExpandedAllDayItem(date + '.deadline.' + item.id, title,
-          item.source === PublicDeadlineSource.schoolNotice ? AppTheme.holiday() : '#C06A00',
+          item.source === PublicDeadlineSource.schoolNotice ?
+            AppTheme.schoolNotice() : AppTheme.publicDeadline(),
           item.source === PublicDeadlineSource.schoolNotice ? '#15FF3B30' : '#15C06A00'));
       }
     }
@@ -602,7 +603,7 @@ export struct ExpandedTeachingCalendarView {
             .height(14)
             .textAlign(TextAlign.Start)
             .backgroundColor(day.equals(this.selectedDate()) ?
-              AppTheme.primaryDark() : Color.Transparent)
+              AppTheme.selectedDateStrong() : Color.Transparent)
             .borderRadius(3)
         }, (event: MonthEventItem) => 'month-event.' + event.id)
         if (this.monthEvents(day).length > 2) {
@@ -627,16 +628,13 @@ export struct ExpandedTeachingCalendarView {
     .height(this.isPc ? 96 : 82)
     .borderRadius(this.isPc ? 5 : 9)
     .backgroundColor(day.equals(this.selectedDate()) ?
-      AppTheme.primaryFill() : this.monthBackground(day))
+      AppTheme.selectedDate() : this.monthBackground(day))
     .border({
-      // PC（Tauri）今日环在选中时也显示；平板（Android）仅未选中时显示红环。
       width: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ||
-        (day.equals(StrictDates.todayParts()) &&
-          (this.isPc || !day.equals(this.selectedDate()))) ? 2 : 0,
+        day.equals(StrictDates.todayParts()) ? 2 : 0,
       color: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ?
         this.yearDeadlineBorderColor(this.yearDeadlinePriority(day)) :
-        (day.equals(StrictDates.todayParts()) &&
-          (this.isPc || !day.equals(this.selectedDate())) ?
+        (day.equals(StrictDates.todayParts()) ?
           AppTheme.nowIndicator() : Color.Transparent)
     })
     .clip(true)
@@ -659,17 +657,18 @@ export struct ExpandedTeachingCalendarView {
     const date: string = StrictDates.formatDateParts(day);
     for (const item of this.model.assignmentDeadlinesByDate.get(date) ?? []) {
       result.push(new MonthEventItem('assignment-' + item.id,
-        this.model.text('作业') + ' ' + item.title, '#3478F6'));
+        this.model.text('作业') + ' ' + item.title, AppTheme.assignment()));
     }
     const snapshot: PublicDeadlineSnapshot | undefined = this.model.publicDeadlinesByDate.get(date);
     if (snapshot !== undefined) {
       for (const item of snapshot.items) {
         if (this.model.deadlineItemEnabled(item)) {
-          result.push(new MonthEventItem('deadline-' + item.id,
+        result.push(new MonthEventItem('deadline-' + item.id,
             item.source === PublicDeadlineSource.schoolNotice ?
               this.model.text('校内') + ' ' + item.name :
               this.model.text(PublicDeadlineKindInfo.title(item.kind)) + ' ' + item.name,
-          item.source === PublicDeadlineSource.schoolNotice ? AppTheme.holiday() : '#C06A00'));
+          item.source === PublicDeadlineSource.schoolNotice ?
+            AppTheme.schoolNotice() : AppTheme.publicDeadline()));
         }
       }
     }
@@ -810,14 +809,14 @@ export struct ExpandedTeachingCalendarView {
         .alignItems(VerticalAlign.Center)
         .borderRadius(3)
         .backgroundColor(day.equals(this.selectedDate()) ?
-          AppTheme.primaryFill() : CalendarColors.primaryWithAlpha(
+          AppTheme.selectedDate() : CalendarColors.primaryWithAlpha(
             TeachingCalendarLogic.yearCourseOpacity(this.markerCount(day)), this.isDarkMode))
         .border({
           width: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ||
-            (day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate())) ? 2 : 0,
+            day.equals(StrictDates.todayParts()) ? 2 : 0,
           color: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ?
             this.yearDeadlineBorderColor(this.yearDeadlinePriority(day)) :
-            (day.equals(StrictDates.todayParts()) && !day.equals(this.selectedDate()) ?
+            (day.equals(StrictDates.todayParts()) ?
               AppTheme.nowIndicator() : Color.Transparent)
         })
         .onClick(() => {
@@ -860,12 +859,12 @@ export struct ExpandedTeachingCalendarView {
 
   private yearDeadlineBorderColor(priority: CalendarYearDeadlinePriority): ResourceColor {
     if (priority === CalendarYearDeadlinePriority.assignment) {
-      return '#3478F6';
+      return AppTheme.assignment();
     }
     if (priority === CalendarYearDeadlinePriority.schoolNotice) {
-      return AppTheme.holiday();
+      return AppTheme.schoolNotice();
     }
-    return '#C06A00';
+    return AppTheme.publicDeadline();
   }
 
   private presentAllDayDialog(day: DateParts, mode: CalendarMode): void {

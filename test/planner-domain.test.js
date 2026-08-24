@@ -20,6 +20,7 @@ import {
   isValidTermId,
   isValidTermStartDate,
   msUntilNextShanghaiMidnight,
+  nonHourlyCourseBoundaryMinutes,
   suggestTermForDate,
   termMatchesCurrentPeriod,
   normalizeClassroomsCache,
@@ -209,6 +210,19 @@ test('slot ranges merge adjacent sections and preserve gaps', () => {
     { start: 0, end: 1, label: '08:00-09:35' },
     { start: 3, end: 3, label: '10:40-11:25' },
   ])
+})
+
+test('timeline course boundaries include every unique non-hour slot edge', () => {
+  assert.deepEqual(nonHourlyCourseBoundaryMinutes(FALLBACK_SLOTS), [
+    525, 530, 575, 590, 635, 640, 685, 690, 735, 825, 830, 875, 885,
+    930, 940, 985, 995, 1040, 1045, 1090, 1110, 1155, 1160, 1205, 1210, 1255,
+  ])
+  assert.deepEqual(nonHourlyCourseBoundaryMinutes([
+    { start: 'invalid', end: '24:20' },
+    { start: '07:50', end: '22:10' },
+    { start: '09:00', end: '09:45' },
+    { start: '09:45', end: '09:45' },
+  ]), [585])
 })
 
 test('saved settings never hydrate a password into web state', () => {

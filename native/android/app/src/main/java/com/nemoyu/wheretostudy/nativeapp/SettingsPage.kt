@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -698,19 +699,49 @@ class SettingsPage(
                 topMargin = activity.dp(8)
                 bottomMargin = activity.dp(8)
             })
-        addView(featureSwitch("学科竞赛 DDL", preferences.competitionDeadlinesEnabled) {
+        addView(deadlineLegendRow(
+            label = "课程作业 DDL",
+            rowID = R.id.settings_assignment_deadline_legend_row,
+            dotID = R.id.settings_assignment_deadline_legend_dot,
+            color = Palette.assignment,
+        ))
+        addView(featureSwitchLegendRow(
+            label = "学科竞赛 DDL",
+            checked = preferences.competitionDeadlinesEnabled,
+            switchID = R.id.settings_competition_deadlines_switch,
+            dotID = R.id.settings_competition_deadlines_dot,
+            color = Palette.publicDeadline,
+        ) {
             preferences.competitionDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
-        addView(featureSwitch("校内竞赛通知", preferences.schoolContestNoticesEnabled) {
+        addView(featureSwitchLegendRow(
+            label = "校内竞赛通知",
+            checked = preferences.schoolContestNoticesEnabled,
+            switchID = R.id.settings_school_contest_notices_switch,
+            dotID = R.id.settings_school_contest_notices_dot,
+            color = Palette.schoolNotice,
+        ) {
             preferences.schoolContestNoticesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
-        addView(featureSwitch("夏令营 DDL", preferences.summerCampDeadlinesEnabled) {
+        addView(featureSwitchLegendRow(
+            label = "夏令营 DDL",
+            checked = preferences.summerCampDeadlinesEnabled,
+            switchID = R.id.settings_summer_camp_deadlines_switch,
+            dotID = R.id.settings_summer_camp_deadlines_dot,
+            color = Palette.publicDeadline,
+        ) {
             preferences.summerCampDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
-        addView(featureSwitch("黑客松 DDL", preferences.hackathonDeadlinesEnabled) {
+        addView(featureSwitchLegendRow(
+            label = "黑客松 DDL",
+            checked = preferences.hackathonDeadlinesEnabled,
+            switchID = R.id.settings_hackathon_deadlines_switch,
+            dotID = R.id.settings_hackathon_deadlines_dot,
+            color = Palette.publicDeadline,
+        ) {
             preferences.hackathonDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
@@ -748,6 +779,77 @@ class SettingsPage(
             save(enabled)
         }
     }
+
+    private fun deadlineLegendRow(
+        label: String,
+        rowID: Int,
+        dotID: Int,
+        color: Int,
+    ): LinearLayout = LinearLayout(activity).apply {
+        id = rowID
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        isClickable = false
+        isFocusable = false
+        minimumHeight = activity.dp(UiMetrics.controlHeightDp)
+        addView(deadlineLegendLabel(label, dotID, color), LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+    }
+
+    private fun featureSwitchLegendRow(
+        label: String,
+        checked: Boolean,
+        switchID: Int,
+        dotID: Int,
+        color: Int,
+        save: (Boolean) -> Unit,
+    ): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(deadlineLegendLabel(label, dotID, color), LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f,
+        ))
+        addView(featureSwitch(label, checked, save).apply {
+            id = switchID
+            text = ""
+            contentDescription = activity.uiText(label)
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+    }
+
+    private fun deadlineLegendLabel(label: String, dotID: Int, color: Int): LinearLayout =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(activity).apply {
+                text = label
+                textSize = 15f
+                setTextColor(Palette.text)
+                includeFontPadding = false
+            })
+            addView(deadlineLegendDot(label, dotID, color))
+        }
+
+    private fun deadlineLegendDot(label: String, dotID: Int, color: Int): View =
+        View(activity).apply {
+            id = dotID
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(color)
+            }
+            contentDescription = "$label 图例颜色"
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            layoutParams = LinearLayout.LayoutParams(activity.dp(10), activity.dp(10)).apply {
+                marginStart = activity.dp(8)
+            }
+        }
 
     private fun settingsActionButton(
         label: String,

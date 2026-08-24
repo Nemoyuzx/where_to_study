@@ -30,6 +30,22 @@ const appleLocalizationSource = readFileSync(
   new URL('../native/apple/Sources/Shared/AppLocalization.swift', import.meta.url),
   'utf8',
 )
+const appleThemeSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/AppTheme.swift', import.meta.url),
+  'utf8',
+)
+const appleSettingsSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/SettingsView.swift', import.meta.url),
+  'utf8',
+)
+const appleTimelineSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/CalendarTimelineView.swift', import.meta.url),
+  'utf8',
+)
+const appleMobileTimelineSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/MobileCalendarTimelineView.swift', import.meta.url),
+  'utf8',
+)
 const appleWidgetDataSource = readFileSync(
   new URL('../native/apple/Sources/WidgetShared/TodayCourseWidgetData.swift', import.meta.url),
   'utf8',
@@ -124,6 +140,29 @@ const harmonyMobileCalendarSource = readFileSync(
     '../native/harmony/entry/src/main/ets/view/calendar/MobileTeachingCalendarView.ets',
     import.meta.url,
   ),
+  'utf8',
+)
+const harmonyTimelineSource = readFileSync(
+  new URL(
+    '../native/harmony/entry/src/main/ets/view/calendar/MobileCalendarTimelineView.ets',
+    import.meta.url,
+  ),
+  'utf8',
+)
+const harmonySettingsSource = readFileSync(
+  new URL('../native/harmony/entry/src/main/ets/view/SettingsView.ets', import.meta.url),
+  'utf8',
+)
+const harmonyThemeSource = readFileSync(
+  new URL('../native/harmony/entry/src/main/ets/common/AppTheme.ets', import.meta.url),
+  'utf8',
+)
+const harmonyLightColors = readFileSync(
+  new URL('../native/harmony/entry/src/main/resources/base/element/color.json', import.meta.url),
+  'utf8',
+)
+const harmonyDarkColors = readFileSync(
+  new URL('../native/harmony/entry/src/main/resources/dark/element/color.json', import.meta.url),
   'utf8',
 )
 const harmonyExpandedCalendarSource = readFileSync(
@@ -394,6 +433,171 @@ test('native calendars render public deadlines, centered agendas, and shared mon
   assert.match(harmonyAppModelSource, /deadlineWork\.finally/)
   assert.match(harmonyAppModelSource, /this\.assignmentDeadlinesByDate = assignments/)
   assert.match(harmonyAppModelSource, /this\.publicDeadlinesByDate = deadlines/)
+})
+
+test('Apple calendars and settings preserve selected-date, timeline, and category-color semantics', () => {
+  assert.match(appleThemeSource, /selectedDate: AppThemeColor\(red: 37, green: 99, blue: 235\)/)
+  assert.match(appleThemeSource, /selectedDate: AppThemeColor\(red: 29, green: 78, blue: 216\)/)
+  assert.match(appleThemeSource, /static let selectedDate = adaptiveColor\(\\\.selectedDate\)/)
+  for (const source of [appleCalendarSource, appleMobileCalendarSource, appleTimelineSource]) {
+    assert.match(source, /AppTheme\.selectedDate/)
+  }
+  assert.match(appleMobileTimelineSource, /AppTheme\.selectedDate\.opacity\(0\.10\)/)
+  assert.ok(
+    appleTimelineSource.indexOf('selectedColumn(dayWidth: dayWidth)') <
+      appleTimelineSource.indexOf('dayGrid(width: width, dayWidth: dayWidth)'),
+    'wide Apple selected column must be painted before solid and dashed timeline lines',
+  )
+  assert.ok(
+    appleMobileTimelineSource.indexOf('selectedColumn(dayWidth: dayWidth)') <
+      appleMobileTimelineSource.indexOf('grid(width: width, dayWidth: dayWidth)'),
+    'mobile Apple selected column must be painted before solid and dashed timeline lines',
+  )
+  assert.match(appleCalendarSource, /deadlineKind != nil, isToday/)
+  assert.match(appleMobileCalendarSource, /deadlineKind != nil, today/)
+
+  assert.match(appleSettingsSource, /deadlineLegend\("课程作业 DDL", color: AppTheme\.assignment\)/)
+  assert.match(appleSettingsSource, /markerColor: AppTheme\.schoolNotice/)
+  assert.match(appleSettingsSource, /markerColor: AppTheme\.publicDeadline/)
+  assert.match(appleSettingsSource, /Toggle\([\s\S]*\.toggleStyle\(\.switch\)/)
+  assert.match(appleSettingsSource, /ForEach\(1 \.\.\. TodayCourseWidgetData\.maximumCourseLimit/)
+  assert.match(appleSettingsSource, /Picker\("预览尺寸"/)
+
+  assert.match(
+    appleTimelineSource,
+    /for minute in CalendarTimelineLogic\.wholeHourMinutes[\s\S]*context\.stroke\(hourLines, with: \.color\(AppTheme\.border\), lineWidth: 1\)/,
+  )
+  assert.match(
+    appleTimelineSource,
+    /for minute in CalendarTimelineLogic\.nonHourlyCourseBoundaryMinutes[\s\S]*StrokeStyle\(lineWidth: 0\.7, dash: \[4, 4\]\)/,
+  )
+  assert.equal(
+    appleTimelineSource.match(/for minute in CalendarTimelineLogic\.wholeHourMinutes/g)?.length,
+    2,
+    'axis and day areas must both draw solid whole-hour lines',
+  )
+  assert.equal(
+    appleTimelineSource.match(/for minute in CalendarTimelineLogic\.nonHourlyCourseBoundaryMinutes/g)
+      ?.length,
+    2,
+    'axis and day areas must both draw dashed non-hour course boundaries',
+  )
+})
+
+test('Android and Harmony mobile day-week chrome follows the iOS presentation contract', () => {
+  assert.match(androidLocaleSource, /const val oneStepSmallerScale = 0\.92f/)
+  assert.match(
+    androidLocaleSource,
+    /fontScale = AppTypography\.adjustedFontScale\(base\.resources\.configuration\.fontScale\)/,
+  )
+  assert.match(
+    androidMainActivitySource,
+    /override fun attachBaseContext\(newBase: Context\)[\s\S]*super\.attachBaseContext\(AppLocale\.wrap\(newBase, languageCode\)\)/,
+  )
+
+  const androidAgendaSection = androidCalendarSource.match(
+    /private fun dayWeekAgendaSection\([\s\S]*?private fun compactCourseArea/,
+  )?.[0] ?? ''
+  assert.match(androidAgendaSection, /firstOrNull \{ sameDay\(it\.date, selectedDate\) \}/)
+  assert.match(androidAgendaSection, /calendar_day_week_agenda_content/)
+  assert.match(
+    androidAgendaSection,
+    /visibility = if \(sessionState\.dayWeekAgendaExpanded\) View\.VISIBLE else View\.GONE/,
+  )
+  assert.match(androidAgendaSection, /addView\(compactCourseArea\(selectedDay\.date, compact\)\)/)
+  assert.ok(
+    androidAgendaSection.indexOf('addView(allDayStrip(days, compact))') >
+      androidAgendaSection.indexOf('calendar_day_week_agenda_content'),
+    'Android all-day events must remain outside the course-only collapsed container',
+  )
+
+  assert.match(
+    androidCalendarSource,
+    /private fun singleDayAllDayStrip\([\s\S]*?\): HorizontalScrollView = HorizontalScrollView\(activity\)/,
+  )
+  const androidAllDaySection = androidCalendarSource.match(
+    /private fun allDayStrip\([\s\S]*?private fun singleDayAllDayStrip/,
+  )?.[0] ?? ''
+  assert.match(androidAllDaySection, /if \(days\.size == 1\)/)
+  assert.match(androidAllDaySection, /days\.forEach \{ day ->/)
+  assert.match(androidAllDaySection, /val compactWeek = compact && days\.size > 1/)
+  assert.match(
+    androidCalendarSource,
+    /fun agendaVisibleItemCount\([\s\S]*if \(compactWeek\) 1 else 3/,
+  )
+  assert.match(androidTimelineSource, /if \(compact\) return 56/)
+  assert.match(androidCalendarSource, /const val bottomNavigationContentInsetDp = 104/)
+  assert.match(
+    androidCalendarSource,
+    /if \(usesBottomNavigation\) bottomNavigationContentInsetDp else 0/,
+  )
+
+  const harmonyTimelineSection = harmonyMobileCalendarSource.match(
+    /timelineContent\(renderMode:[\s\S]*?private timelineDays/,
+  )?.[0] ?? ''
+  assert.match(harmonyTimelineSection, /timelineCourseSummaryDate\(renderMode, renderDate\)/)
+  assert.match(
+    harmonyTimelineSection,
+    /if \(this\.courseSectionExpanded\) \{[\s\S]*this\.selectedDateCourses/,
+  )
+  assert.ok(
+    harmonyTimelineSection.indexOf('this.allDayItems(renderMode, renderDate, interactive)') >
+      harmonyTimelineSection.indexOf('if (this.courseSectionExpanded)'),
+    'Harmony all-day events must remain visible when only the course list is collapsed',
+  )
+  assert.match(harmonyMobileCalendarSource, /dayAllDayItems\(renderDate:/)
+  assert.match(harmonyMobileCalendarSource, /allDayItemsOn\(renderDate\)\.slice\(0, 3\)/)
+  assert.match(
+    harmonyMobileCalendarSource,
+    /weekAllDayItems\(renderDate:[\s\S]*ForEach\(this\.weekDates\(renderDate\)[\s\S]*\.fontSize\(9\.5\)[\s\S]*\.height\(40\)/,
+  )
+  assert.match(harmonyMobileCalendarSource, /this\.presentAllDayDialog\(day, CalendarMode\.week\)/)
+  assert.match(
+    harmonyCalendarLogicSource,
+    /static agendaDialogChangesSelectedDate\(mode: CalendarMode\): boolean \{\s*return mode !== CalendarMode\.week/,
+  )
+})
+
+test('Harmony selected dates, deadline legends, switches, and timeline lines stay visible', () => {
+  const light = JSON.parse(harmonyLightColors).color
+  const dark = JSON.parse(harmonyDarkColors).color
+  const colorValue = (colors, name) => colors.find((entry) => entry.name === name)?.value
+  assert.equal(colorValue(light, 'app_selected_date'), '#2563EB')
+  assert.equal(colorValue(dark, 'app_selected_date'), '#1D4ED8')
+  assert.match(harmonyThemeSource, /static selectedDate\(\): Resource/)
+  assert.match(harmonyThemeSource, /static assignment\(\): Resource/)
+  assert.match(harmonyThemeSource, /static schoolNotice\(\): Resource/)
+  assert.match(harmonyThemeSource, /static publicDeadline\(\): Resource/)
+
+  assert.match(
+    harmonyMobileCalendarSource,
+    /backgroundColor\(day\.equals\(this\.selectedDate\(\)\) \? AppTheme\.selectedDate\(\)/,
+  )
+  assert.match(
+    harmonyMobileCalendarSource,
+    /backgroundColor\(day\.equals\(this\.selectedDate\(\)\) \?\s*AppTheme\.selectedDate\(\)/,
+  )
+  assert.match(
+    harmonyExpandedCalendarSource,
+    /backgroundColor\(day\.equals\(this\.selectedDate\(\)\) \?\s*AppTheme\.selectedDate\(\)/,
+  )
+  assert.match(
+    harmonyMobileCalendarSource,
+    /yearDeadlinePriority\(day\) !== CalendarYearDeadlinePriority\.none \|\|\s*day\.equals\(StrictDates\.todayParts\(\)\) \? 2 : 0/,
+  )
+
+  const selectedLayer = harmonyTimelineSource.indexOf("'selected-column.'")
+  const hourLayer = harmonyTimelineSource.indexOf('// 小时线', selectedLayer)
+  const slotLayer = harmonyTimelineSource.indexOf('// 课程节次边界', hourLayer)
+  assert.ok(selectedLayer >= 0 && selectedLayer < hourLayer && hourLayer < slotLayer)
+  assert.match(harmonyTimelineSource, /'axis-hour-line\.'/)
+  assert.match(harmonyTimelineSource, /'axis-slot-line\.'/)
+  assert.match(harmonyTimelineSource, /style: BorderStyle\.Dashed/)
+
+  assert.match(harmonySettingsSource, /deadlineLegend\('课程作业 DDL', AppTheme\.assignment\(\)\)/)
+  assert.match(harmonySettingsSource, /'校内竞赛通知'[\s\S]*AppTheme\.schoolNotice\(\), true/)
+  assert.match(harmonySettingsSource, /'学科竞赛 DDL'[\s\S]*AppTheme\.publicDeadline\(\), true/)
+  assert.match(harmonySettingsSource, /Toggle\(\{ type: ToggleType\.Switch, isOn: isOn \}\)/)
 })
 
 test('desktop calendar supplement commands are exposed by the Tauri capability manifest', () => {

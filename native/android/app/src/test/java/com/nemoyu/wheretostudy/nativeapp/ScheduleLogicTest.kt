@@ -22,6 +22,13 @@ class ScheduleLogicTest {
     }
 
     @Test
+    fun applicationTypographyMovesEverySpSizeDownOneScaleStep() {
+        assertEquals(0.92f, AppTypography.adjustedFontScale(1f), 0.0001f)
+        assertEquals(1.84f, AppTypography.adjustedFontScale(2f), 0.0001f)
+        assertEquals(0.736f, AppTypography.adjustedFontScale(0.8f), 0.0001f)
+    }
+
+    @Test
     fun teachingCalendarSessionStateKeepsDateModeAndExpansionAcrossPageRebuilds() {
         val date = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
             set(2026, Calendar.SEPTEMBER, 18, 12, 0, 0)
@@ -439,9 +446,9 @@ class ScheduleLogicTest {
         assertTrue(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 51))
         assertFalse(CalendarTimelineLogic.hourLabelIsObscured(17 * 60, 16 * 60 + 47))
         assertEquals(312f to 468f, CalendarTimelineLogic.dayColumnBounds(2, 156f, 1_092f))
-        assertEquals(48, CalendarTimelineLogic.axisWidthDp(compact = true))
+        assertEquals(56, CalendarTimelineLogic.axisWidthDp(compact = true))
         assertEquals(
-            48,
+            56,
             CalendarTimelineLogic.axisWidthDp(compact = true, showCourseSlots = false),
         )
         assertEquals(144, CalendarTimelineLogic.axisWidthDp(compact = false))
@@ -452,7 +459,7 @@ class ScheduleLogicTest {
         assertTrue(20 * 60 + 55 in CalendarTimelineLogic.courseSlotBoundaryMinutes())
         assertEquals(1_010, CalendarTimelineLogic.totalHeightDp(compact = true, showDayHeader = false))
         assertEquals(1_026, CalendarTimelineLogic.totalHeightDp(compact = false, showDayHeader = true))
-        assertEquals(0.045f, CalendarTimelineLogic.selectedColumnOpacity, 0.0001f)
+        assertEquals(0.10f, CalendarTimelineLogic.selectedColumnOpacity, 0.0001f)
         assertEquals(3, CalendarTimelineLogic.courseAccentWidthDp)
         assertEquals(38, CalendarTimelineLogic.courseMinimumHeightDp)
     }
@@ -679,11 +686,11 @@ class ScheduleLogicTest {
             ),
         )
         assertEquals(
-            ThemePalettes.light.primaryDark,
+            ThemePalettes.light.selectedDate,
             TeachingCalendarLogic.monthEntryBackgroundColor(
                 selected = true,
                 surfaceVariantColor = ThemePalettes.light.surfaceVariant,
-                primaryDarkColor = ThemePalettes.light.primaryDark,
+                selectedDateColor = ThemePalettes.light.selectedDate,
             ),
         )
     }
@@ -703,8 +710,7 @@ class ScheduleLogicTest {
         assertEquals(4, TeachingCalendarLogic.agendaHiddenItemCount(5, compactWeek = true))
         assertEquals(3, TeachingCalendarLogic.agendaVisibleItemCount(5, compactWeek = false))
         assertEquals(2, TeachingCalendarLogic.agendaHiddenItemCount(5, compactWeek = false))
-        assertEquals(3, TeachingCalendarLogic.compactCourseVisibleCount(8))
-        assertEquals(5, TeachingCalendarLogic.compactCourseHiddenCount(8))
+        assertEquals(8, TeachingCalendarLogic.dayWeekVisibleCourseCount(8))
     }
 
     @Test
@@ -718,8 +724,50 @@ class ScheduleLogicTest {
     }
 
     @Test
+    fun timelineDrawsSelectedDateBehindSolidHoursAndNonHourlyDashedSlots() {
+        assertEquals(
+            listOf(
+                CalendarTimelineGridLayer.SELECTED_DATE_BACKGROUND,
+                CalendarTimelineGridLayer.HOUR_LINES,
+                CalendarTimelineGridLayer.COURSE_SLOT_LINES,
+            ),
+            CalendarTimelineLogic.gridLayerOrder(),
+        )
+        val boundaries = CalendarTimelineLogic.nonHourlyCourseSlotBoundaryMinutes()
+        assertTrue(boundaries.isNotEmpty())
+        assertTrue(boundaries.all { minute -> minute % 60 != 0 })
+        assertFalse(8 * 60 in boundaries)
+        assertTrue(8 * 60 + 45 in boundaries)
+        assertEquals(0.44f, CalendarTimelineLogic.courseSlotLineAlpha, 0.0001f)
+        assertEquals(
+            (0x70 shl 24) or (ThemePalettes.light.muted and 0x00FFFFFF),
+            CalendarTimelineLogic.courseSlotLineColor(ThemePalettes.light.muted),
+        )
+        assertEquals(
+            (0x70 shl 24) or (ThemePalettes.dark.muted and 0x00FFFFFF),
+            CalendarTimelineLogic.courseSlotLineColor(ThemePalettes.dark.muted),
+        )
+        assertEquals(
+            ThemePalettes.light.selectedDate,
+            CalendarTimelineLogic.dayHeaderBackgroundColor(
+                selected = true,
+                selectedDateColor = ThemePalettes.light.selectedDate,
+                surfaceColor = ThemePalettes.light.surface,
+            ),
+        )
+        assertEquals(
+            ThemePalettes.light.onPrimary,
+            CalendarTimelineLogic.dayHeaderTextColor(
+                selected = true,
+                onPrimaryColor = ThemePalettes.light.onPrimary,
+                defaultColor = ThemePalettes.light.text,
+            ),
+        )
+    }
+
+    @Test
     fun sideNavigationCalendarDoesNotReservePhoneNavigationSpace() {
-        assertEquals(84, TeachingCalendarLogic.calendarContentBottomInsetDp(true))
+        assertEquals(104, TeachingCalendarLogic.calendarContentBottomInsetDp(true))
         assertEquals(0, TeachingCalendarLogic.calendarContentBottomInsetDp(false))
     }
 

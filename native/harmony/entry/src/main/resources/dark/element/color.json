@@ -13,6 +13,18 @@
       "value": "#197565"
     },
     {
+      "name": "app_selected_date",
+      "value": "#1D4ED8"
+    },
+    {
+      "name": "app_selected_date_strong",
+      "value": "#1E3A8A"
+    },
+    {
+      "name": "app_selected_date_surface",
+      "value": "#401D4ED8"
+    },
+    {
       "name": "app_accent",
       "value": "#876622"
     },
@@ -67,6 +79,18 @@
     {
       "name": "app_holiday",
       "value": "#FF9A9D"
+    },
+    {
+      "name": "app_assignment",
+      "value": "#64A3FF"
+    },
+    {
+      "name": "app_school_notice",
+      "value": "#FF9A9D"
+    },
+    {
+      "name": "app_public_deadline",
+      "value": "#FFB45C"
     },
     {
       "name": "app_primary_dark",

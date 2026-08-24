@@ -229,6 +229,7 @@ struct CalendarTimelineView: View {
         let dayWidth = width / CGFloat(max(days.count, 1))
         return ZStack(alignment: .topLeading) {
             AppTheme.surface
+            selectedColumn(dayWidth: dayWidth)
             dayGrid(width: width, dayWidth: dayWidth)
             dayHeaders(dayWidth: dayWidth, now: now)
             courseBlocks(dayWidth: dayWidth)
@@ -236,6 +237,19 @@ struct CalendarTimelineView: View {
         }
         .frame(width: width, height: totalHeight)
         .clipped()
+    }
+
+    @ViewBuilder
+    private func selectedColumn(dayWidth: CGFloat) -> some View {
+        if let index = days.firstIndex(where: {
+            calendar.isDate($0.date, inSameDayAs: selectedDate)
+        }) {
+            Rectangle()
+                .fill(AppTheme.selectedDate.opacity(0.10))
+                .frame(width: dayWidth, height: totalHeight)
+                .offset(x: CGFloat(index) * dayWidth)
+                .allowsHitTesting(false)
+        }
     }
 
     private var axisGrid: some View {
@@ -377,16 +391,16 @@ struct CalendarTimelineView: View {
                 VStack(spacing: 5) {
                     Text(dayHeaderFormatter.string(from: day.date))
                         .font(.caption.bold())
-                        .foregroundStyle(AppTheme.text)
+                        .foregroundStyle(isSelected ? AppTheme.onPrimary : AppTheme.text)
                     Text(headerDetail(for: day))
                         .font(.system(size: 10))
-                        .foregroundStyle(headerDetailColor(for: day))
+                        .foregroundStyle(isSelected ? AppTheme.onPrimary : headerDetailColor(for: day))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
                 .padding(.horizontal, 4)
                 .frame(width: dayWidth, height: headerHeight)
-                .background(isSelected ? AppTheme.primary.opacity(0.10) : Color.clear)
+                .background(isSelected ? AppTheme.selectedDate : Color.clear)
                 .overlay(alignment: .bottom) {
                     if isToday {
                         Rectangle().fill(Self.nowRed).frame(height: 3).padding(.horizontal, 6)

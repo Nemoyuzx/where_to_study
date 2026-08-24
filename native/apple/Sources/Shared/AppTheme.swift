@@ -29,19 +29,22 @@ struct AppThemePalette: Equatable, Sendable {
     let primaryFill: AppThemeColor
     let accent: AppThemeColor
     let onPrimary: AppThemeColor
+    let selectedDate: AppThemeColor
 
     static let light = AppThemePalette(
         primary: AppThemeColor(red: 22, green: 107, blue: 93),
         primaryFill: AppThemeColor(red: 22, green: 107, blue: 93),
         accent: AppThemeColor(red: 226, green: 188, blue: 98),
-        onPrimary: AppThemeColor(red: 255, green: 255, blue: 255)
+        onPrimary: AppThemeColor(red: 255, green: 255, blue: 255),
+        selectedDate: AppThemeColor(red: 37, green: 99, blue: 235)
     )
 
     static let dark = AppThemePalette(
         primary: AppThemeColor(red: 90, green: 210, blue: 184),
         primaryFill: AppThemeColor(red: 25, green: 117, blue: 101),
         accent: AppThemeColor(red: 135, green: 102, blue: 34),
-        onPrimary: AppThemeColor(red: 255, green: 255, blue: 255)
+        onPrimary: AppThemeColor(red: 255, green: 255, blue: 255),
+        selectedDate: AppThemeColor(red: 29, green: 78, blue: 216)
     )
 }
 
@@ -50,6 +53,7 @@ enum AppTheme {
     static let primaryFill = adaptiveColor(\.primaryFill)
     static let accent = adaptiveColor(\.accent)
     static let onPrimary = adaptiveColor(\.onPrimary)
+    static let selectedDate = adaptiveColor(\.selectedDate)
 
     #if os(macOS)
     static let background = Color(nsColor: .windowBackgroundColor)

@@ -677,22 +677,26 @@ export struct SettingsView {
       this.featureToggle('黄历与宜忌', this.model.almanacEnabled, (value: boolean): void => {
         this.model.setAlmanacEnabled(value);
       })
+      Divider()
+        .color(AppTheme.border())
+        .margin({ top: 8, bottom: 8 })
+      this.deadlineLegend('课程作业 DDL', AppTheme.assignment())
       this.featureToggle('学科竞赛 DDL', this.model.competitionDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setCompetitionDeadlinesEnabled(value);
-        })
+        }, AppTheme.publicDeadline(), true)
       this.featureToggle('校内竞赛通知', this.model.schoolContestNoticesEnabled,
         (value: boolean): void => {
           this.model.setSchoolContestNoticesEnabled(value);
-        })
+        }, AppTheme.schoolNotice(), true)
       this.featureToggle('夏令营 DDL', this.model.summerCampDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setSummerCampDeadlinesEnabled(value);
-        })
+        }, AppTheme.publicDeadline(), true)
       this.featureToggle('黑客松 DDL', this.model.hackathonDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setHackathonDeadlinesEnabled(value);
-        })
+        }, AppTheme.publicDeadline(), true)
 
       Text(this.model.text('天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。'))
         .fontSize(12)
@@ -709,11 +713,38 @@ export struct SettingsView {
   }
 
   @Builder
-  featureToggle(label: string, isOn: boolean, onChangeValue: (value: boolean) => void) {
+  deadlineLegend(label: string, markerColor: ResourceColor) {
     Row({ space: 8 }) {
       Text(this.model.text(label))
         .fontSize(15)
         .fontColor(AppTheme.text())
+      Column()
+        .width(8)
+        .height(8)
+        .borderRadius(4)
+        .backgroundColor(markerColor)
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 36 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  featureToggle(label: string, isOn: boolean, onChangeValue: (value: boolean) => void,
+    markerColor: ResourceColor = Color.Transparent, showsMarker: boolean = false) {
+    Row({ space: 8 }) {
+      Row({ space: 6 }) {
+        Text(this.model.text(label))
+          .fontSize(15)
+          .fontColor(AppTheme.text())
+        if (showsMarker) {
+          Column()
+            .width(8)
+            .height(8)
+            .borderRadius(4)
+            .backgroundColor(markerColor)
+        }
+      }
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: isOn })
         .selectedColor(AppTheme.primaryFill())

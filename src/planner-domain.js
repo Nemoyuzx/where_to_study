@@ -338,6 +338,29 @@ export function parseTimeMinutes(value) {
   return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0)
 }
 
+export function nonHourlyCourseBoundaryMinutes(
+  slotMeta,
+  startMinute = CALENDAR_START_HOUR * 60,
+  endMinute = CALENDAR_END_HOUR * 60,
+) {
+  const boundaryMinutes = (Array.isArray(slotMeta) ? slotMeta : [])
+    .flatMap((slot) => [slot?.start, slot?.end])
+    .map((value) => {
+      const match = /^(\d{2}):([0-5]\d)$/.exec(String(value || ''))
+      if (!match) return null
+      const hour = Number(match[1])
+      if (hour > 23) return null
+      return hour * 60 + Number(match[2])
+    })
+    .filter((minute) => (
+      minute != null
+      && minute >= startMinute
+      && minute <= endMinute
+      && minute % 60 !== 0
+    ))
+  return [...new Set(boundaryMinutes)].sort((left, right) => left - right)
+}
+
 export function courseTimeBounds(course, slotMeta) {
   const start = slotMeta[course.start_slot]?.start || '08:00'
   const end = slotMeta[course.end_slot]?.end || start

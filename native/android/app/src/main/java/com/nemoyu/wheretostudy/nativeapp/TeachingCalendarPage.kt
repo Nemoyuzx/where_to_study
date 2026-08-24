@@ -30,6 +30,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.LinearLayout
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.PopupMenu
 import android.widget.PopupWindow
 import android.widget.ScrollView
@@ -204,7 +205,7 @@ object TeachingCalendarLogic {
     const val monthWeekdayHeaderBottomMarginDp = 8
     const val monthDragHandleHeightDp = 28
     const val compactCalendarBreakpointDp = 1200
-    const val bottomNavigationContentInsetDp = 84
+    const val bottomNavigationContentInsetDp = 104
 
     fun modeTransitionDirection(fromIndex: Int, toIndex: Int): Int = when {
         toIndex > fromIndex -> 1
@@ -383,10 +384,7 @@ object TeachingCalendarLogic {
     fun agendaHiddenItemCount(itemCount: Int, compactWeek: Boolean): Int =
         (itemCount - agendaVisibleItemCount(itemCount, compactWeek)).coerceAtLeast(0)
 
-    fun compactCourseVisibleCount(courseCount: Int): Int = courseCount.coerceIn(0, 3)
-
-    fun compactCourseHiddenCount(courseCount: Int): Int =
-        (courseCount - compactCourseVisibleCount(courseCount)).coerceAtLeast(0)
+    fun dayWeekVisibleCourseCount(courseCount: Int): Int = courseCount.coerceAtLeast(0)
 
     fun monthHorizontalPaddingDp(usesBottomNavigation: Boolean): Int =
         if (usesBottomNavigation) 0 else 16
@@ -427,8 +425,8 @@ object TeachingCalendarLogic {
     fun monthEntryBackgroundColor(
         selected: Boolean,
         surfaceVariantColor: Int,
-        primaryDarkColor: Int,
-    ): Int = if (selected) primaryDarkColor else surfaceVariantColor
+        selectedDateColor: Int,
+    ): Int = if (selected) selectedDateColor else surfaceVariantColor
 
     fun courseDetailLines(course: Course): List<String> = buildList {
         add("时间：${course.timeRange.ifEmpty { "未标注" }}")
@@ -873,22 +871,24 @@ internal class TeachingCalendarPage(
                 weekDates().mapTo(mutableSetOf()) { contractDate().format(it.time) }
             }
             if (expectedDateKey !in visibleKeys) return@post
-            val section = root.findViewById<LinearLayout?>(R.id.calendar_day_week_agenda_content)
+            val oldSection = root.findViewById<LinearLayout?>(R.id.calendar_day_week_agenda)
                 ?: return@post
-            populateDayWeekAgendaContent(
-                section,
-                if (selectedMode == Mode.DAY) listOf(timelineDay(selectedDate)) else weekDates().map(::timelineDay),
+            val parent = oldSection.parent as? ViewGroup ?: return@post
+            val index = parent.indexOfChild(oldSection)
+            val layoutParams = oldSection.layoutParams
+            val days = if (selectedMode == Mode.DAY) {
+                listOf(timelineDay(selectedDate))
+            } else {
+                weekDates().map(::timelineDay)
+            }
+            val replacement = dayWeekAgendaSection(
+                days = days,
                 compact = availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp,
-                onDaySelected = if (selectedMode == Mode.WEEK) {
-                    { day ->
-                        selectedDate.timeInMillis = day.timeInMillis
-                        requestCalendarDataForSelection()
-                        calendarRenderAction?.invoke()
-                    }
-                } else {
-                    null
-                },
+                onStateChanged = { calendarRenderAction?.invoke() },
             )
+            UiText.localizeTree(replacement)
+            parent.removeViewAt(index)
+            parent.addView(replacement, index, layoutParams)
         }
     }
 
@@ -1412,7 +1412,6 @@ internal class TeachingCalendarPage(
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Palette.surface)
             setPadding(0, activity.dp(6), 0, 0)
-            addView(phoneDateSummary())
             holidayStatus()?.let { message ->
                 addView(TextView(activity).apply {
                     text = message
@@ -1420,8 +1419,8 @@ internal class TeachingCalendarPage(
                     setTextColor(Palette.muted)
                     setPadding(activity.dp(16), activity.dp(4), activity.dp(16), activity.dp(4))
                 })
+                addView(spacer(activity, 4))
             }
-            addView(spacer(activity, 6))
             val timelineDays = if (selectedMode == Mode.DAY) {
                 listOf(timelineDay(selectedDate))
             } else {
@@ -1440,7 +1439,6 @@ internal class TeachingCalendarPage(
             addView(dayWeekAgendaSection(
                 days = timelineDays,
                 compact = true,
-                onDaySelected = callback,
                 onStateChanged = onDateChanged,
             ))
             addView(ScrollView(activity).apply {
@@ -1469,29 +1467,50 @@ internal class TeachingCalendarPage(
     private fun dayWeekAgendaSection(
         days: List<TimelineDay>,
         compact: Boolean,
-        onDaySelected: ((Calendar) -> Unit)?,
         onStateChanged: () -> Unit,
     ): LinearLayout = LinearLayout(activity).apply {
         id = R.id.calendar_day_week_agenda
         orientation = LinearLayout.VERTICAL
         setBackgroundColor(Palette.surface)
-        addView(TextView(activity).apply {
+        val selectedDay = days.firstOrNull { sameDay(it.date, selectedDate) }
+            ?: days.firstOrNull()
+            ?: return@apply
+        val courses = coursesOn(selectedDay.date)
+        addView(LinearLayout(activity).apply {
             id = R.id.calendar_day_week_agenda_toggle
-            text = if (sessionState.dayWeekAgendaExpanded) "课程与全天  ⌃" else "课程与全天  ⌄"
-            textSize = if (compact) 11.5f else 13f
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setTextColor(Palette.primaryText)
-            setTypeface(typeface, Typeface.BOLD)
-            includeFontPadding = false
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             isClickable = true
             isFocusable = true
             contentDescription = if (sessionState.dayWeekAgendaExpanded) {
-                "收起课程与全天事项"
+                "收起当前日期课程"
             } else {
-                "展开课程与全天事项"
+                "展开当前日期课程"
             }
-            background = roundedBackground(activity, Palette.selectionSurface, radius = 7)
-            setPadding(activity.dp(if (compact) 12 else 14), 0, activity.dp(12), 0)
+            setPadding(activity.dp(if (compact) 16 else 14), 0, activity.dp(12), 0)
+            addView(TextView(activity).apply {
+                text = if (compact) displayMonthDayWithWeekday(selectedDay.date) else "当日课程"
+                textSize = if (compact) 13f else 14f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+                includeFontPadding = false
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(TextView(activity).apply {
+                text = if (courses.isEmpty()) "暂无课程" else "${courses.size} 门课"
+                textSize = if (compact) 11f else 12f
+                setTextColor(Palette.muted)
+                includeFontPadding = false
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            })
+            addView(TextView(activity).apply {
+                text = if (sessionState.dayWeekAgendaExpanded) "⌃" else "⌄"
+                textSize = 12f
+                setTextColor(Palette.muted)
+                includeFontPadding = false
+                gravity = Gravity.CENTER
+            }, LinearLayout.LayoutParams(activity.dp(24), ViewGroup.LayoutParams.MATCH_PARENT))
             setOnClickListener {
                 performCalendarHaptic()
                 sessionState.dayWeekAgendaExpanded = !sessionState.dayWeekAgendaExpanded
@@ -1499,38 +1518,22 @@ internal class TeachingCalendarPage(
             }
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(if (compact) 34 else 38),
+            activity.dp(if (compact) 40 else 42),
         ).apply {
-            marginStart = activity.dp(if (compact) 12 else 0)
-            marginEnd = activity.dp(if (compact) 12 else 0)
-            bottomMargin = activity.dp(if (sessionState.dayWeekAgendaExpanded) 4 else 0)
+            bottomMargin = activity.dp(if (sessionState.dayWeekAgendaExpanded) 2 else 0)
         })
         addView(LinearLayout(activity).apply {
             id = R.id.calendar_day_week_agenda_content
             orientation = LinearLayout.VERTICAL
             visibility = if (sessionState.dayWeekAgendaExpanded) View.VISIBLE else View.GONE
             if (sessionState.dayWeekAgendaExpanded) {
-                populateDayWeekAgendaContent(this, days, compact, onDaySelected)
+                addView(compactCourseArea(selectedDay.date, compact))
             }
         })
-    }
-
-    private fun populateDayWeekAgendaContent(
-        container: LinearLayout,
-        days: List<TimelineDay>,
-        compact: Boolean,
-        onDaySelected: ((Calendar) -> Unit)?,
-    ) {
-        container.removeAllViews()
         val hasSupplementaryItems = days.any { supplementaryItemsOn(it.date).isNotEmpty() }
         if (hasSupplementaryItems) {
-            container.addView(allDayStrip(days, compact, onDaySelected))
+            addView(allDayStrip(days, compact))
         }
-        val selectedDay = days.firstOrNull { sameDay(it.date, selectedDate) }
-            ?: days.firstOrNull()
-            ?: return
-        container.addView(compactCourseArea(selectedDay.date, compact))
-        UiText.localizeTree(container)
     }
 
     private fun compactCourseArea(day: Calendar, compact: Boolean): LinearLayout =
@@ -1539,62 +1542,52 @@ internal class TeachingCalendarPage(
             orientation = LinearLayout.VERTICAL
             setPadding(
                 activity.dp(if (compact) 12 else 4),
-                activity.dp(4),
+                activity.dp(2),
                 activity.dp(if (compact) 12 else 4),
-                activity.dp(4),
+                activity.dp(6),
             )
-            addView(TextView(activity).apply {
-                text = "当日课程"
-                textSize = 11f
-                setTextColor(Palette.muted)
-                setTypeface(typeface, Typeface.BOLD)
-                includeFontPadding = false
-            })
             val courses = coursesOn(day)
-            if (courses.isEmpty()) {
-                addView(TextView(activity).apply {
-                    text = "暂无课程"
-                    textSize = 12f
-                    setTextColor(Palette.muted)
-                    setPadding(0, activity.dp(4), 0, activity.dp(2))
-                })
-                return@apply
-            }
-            courses.take(TeachingCalendarLogic.compactCourseVisibleCount(courses.size))
-                .forEach { course -> addView(selectedDayCourseRow(day, course)) }
-            TeachingCalendarLogic.compactCourseHiddenCount(courses.size)
-                .takeIf { it > 0 }
-                ?.let { hiddenCount ->
-                    addView(TextView(activity).apply {
-                        text = "+$hiddenCount"
-                        textSize = 12f
-                        gravity = Gravity.CENTER
-                        setTextColor(Palette.primaryText)
-                        setTypeface(typeface, Typeface.BOLD)
-                        isClickable = true
-                        isFocusable = true
-                        contentDescription = "查看全部 ${courses.size} 门课程"
-                        background = roundedBackground(activity, Palette.selectionSurface, radius = 6)
-                        setOnClickListener { showCourseListDialog(day, courses) }
-                    }, LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        activity.dp(30),
-                    ).apply { topMargin = activity.dp(3) })
-                }
+            courses.take(TeachingCalendarLogic.dayWeekVisibleCourseCount(courses.size))
+                .forEach { course -> addView(dayWeekCourseRow(day, course)) }
         }
 
-    private fun showCourseListDialog(day: Calendar, courses: List<Course>) {
-        val content = LinearLayout(activity).apply {
+    private fun dayWeekCourseRow(day: Calendar, course: Course): LinearLayout =
+        LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(16), activity.dp(8), activity.dp(16), activity.dp(8))
-            courses.forEach { course -> addView(selectedDayCourseRow(day, course)) }
+            isClickable = true
+            isFocusable = true
+            contentDescription = listOf(
+                course.name,
+                course.timeRange,
+                course.room,
+                course.teacher,
+            ).filter(String::isNotEmpty).joinToString("，")
+            setPadding(0, activity.dp(4), 0, activity.dp(4))
+            addView(TextView(activity).apply {
+                text = course.name
+                UiText.preserveRawText(this)
+                textSize = 13f
+                setTextColor(Palette.text)
+                setTypeface(typeface, Typeface.BOLD)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                includeFontPadding = false
+            })
+            addView(TextView(activity).apply {
+                text = listOf(
+                    course.timeRange,
+                    course.room,
+                    course.teacher.takeIf(String::isNotEmpty)?.let { "教师：$it" }.orEmpty(),
+                ).filter(String::isNotEmpty).joinToString(" · ")
+                textSize = 11f
+                setTextColor(Palette.muted)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                includeFontPadding = false
+                setPadding(0, activity.dp(2), 0, 0)
+            })
+            setOnClickListener { showCourseDetails(day, course) }
         }
-        AlertDialog.Builder(activity)
-            .setTitle("当日课程（${courses.size}）")
-            .setView(ScrollView(activity).apply { addView(content) })
-            .setPositiveButton(activity.uiText("完成"), null)
-            .showLocalized()
-    }
 
     private fun calendarImportButton(compact: Boolean = false): TextView = TextView(activity).apply {
         id = R.id.calendar_overflow_button
@@ -1793,15 +1786,15 @@ internal class TeachingCalendarPage(
                     setTypeface(typeface, if (selected || isToday) Typeface.BOLD else Typeface.NORMAL)
                     background = roundedBackground(
                         activity,
-                        if (selected) Palette.primaryFill else Color.TRANSPARENT,
+                        if (selected) Palette.selectedDate else Color.TRANSPARENT,
                         when {
-                            selected -> Palette.primaryFill
-                            isToday -> Palette.primary
+                            isToday -> Palette.nowIndicator
+                            selected -> Palette.selectedDate
                             else -> Color.TRANSPARENT
                         },
                         radius = 10,
                     ).apply {
-                        if (isToday && !selected) setStroke(activity.dp(2), Palette.primary)
+                        if (isToday) setStroke(activity.dp(2), Palette.nowIndicator)
                     }
                     isClickable = true
                     isFocusable = true
@@ -1960,7 +1953,6 @@ internal class TeachingCalendarPage(
         addView(dayWeekAgendaSection(
             days = days,
             compact = false,
-            onDaySelected = null,
             onStateChanged = onDateChanged,
         ))
         val timeline = CalendarTimelineView(
@@ -1987,7 +1979,6 @@ internal class TeachingCalendarPage(
         addView(dayWeekAgendaSection(
             days = timelineDays,
             compact = false,
-            onDaySelected = selectDay,
             onStateChanged = onDateChanged,
         ))
         addView(
@@ -2565,7 +2556,7 @@ internal class TeachingCalendarPage(
         background = roundedBackground(
             activity,
             if (selected) {
-                blend(accent, Palette.primaryDark, 0.52f)
+                blend(accent, Palette.selectedDate, 0.52f)
             } else {
                 blend(accent, Palette.surface, 0.14f)
             },
@@ -2593,8 +2584,10 @@ internal class TeachingCalendarPage(
                 year = year,
                 days = yearCalendarDays(year),
                 availableWidthDp = availableWidthDp,
+                initialSelectedDate = selectedDate,
                 onDateSelected = { anchor, day, tapX, tapY ->
                     performCalendarHaptic()
+                    selectedDate.timeInMillis = day.timeInMillis
                     showDayPopover(anchor, day, tapX, tapY, onDateChanged)
                 },
                 onMonthSelected = { month ->
@@ -2608,7 +2601,10 @@ internal class TeachingCalendarPage(
                     requestCalendarDataForSelection()
                     onDateChanged()
                 },
-            ).also { activeYearCalendar = it },
+            ).also {
+                it.id = R.id.calendar_year_view
+                activeYearCalendar = it
+            },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -2619,27 +2615,30 @@ internal class TeachingCalendarPage(
     private fun allDayStrip(
         days: List<TimelineDay>,
         compact: Boolean,
-        onDaySelected: ((Calendar) -> Unit)?,
-    ): LinearLayout = LinearLayout(activity).apply {
-        id = R.id.calendar_all_day_strip
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setBackgroundColor(Palette.surface)
-        val showCourseSlots = !compact || days.size == 1
-        addView(TextView(activity).apply {
+    ): View {
+        if (days.size == 1) {
+            return singleDayAllDayStrip(days.first())
+        }
+        return LinearLayout(activity).apply {
+            id = R.id.calendar_all_day_strip
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(Palette.surface)
+            val showCourseSlots = !compact || days.size == 1
+            addView(TextView(activity).apply {
             text = "全天"
             textSize = if (compact) 11f else 12f
             gravity = Gravity.CENTER
             setTextColor(Palette.muted)
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
-        }, LinearLayout.LayoutParams(
-            activity.dp(CalendarTimelineLogic.axisWidthDp(compact, showCourseSlots)),
-            activity.dp(40),
-        ))
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            days.forEach { day ->
+            }, LinearLayout.LayoutParams(
+                activity.dp(CalendarTimelineLogic.axisWidthDp(compact, showCourseSlots)),
+                activity.dp(40),
+            ))
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                days.forEach { day ->
                 val items = supplementaryItemsOn(day.date)
                 val compactWeek = compact && days.size > 1
                 val visibleCount = TeachingCalendarLogic.agendaVisibleItemCount(
@@ -2650,21 +2649,8 @@ internal class TeachingCalendarPage(
                     items.size,
                     compactWeek,
                 )
-                val dominantKind = when {
-                    items.any { it.kind == CalendarSupplementaryKind.ASSIGNMENT } ->
-                        CalendarSupplementaryKind.ASSIGNMENT
-                    items.any { it.kind == CalendarSupplementaryKind.SCHOOL_NOTICE } ->
-                        CalendarSupplementaryKind.SCHOOL_NOTICE
-                    items.any { it.kind == CalendarSupplementaryKind.PUBLIC_DEADLINE } ->
-                        CalendarSupplementaryKind.PUBLIC_DEADLINE
-                    else -> CalendarSupplementaryKind.HOLIDAY
-                }
-                val accent = when (dominantKind) {
-                    CalendarSupplementaryKind.HOLIDAY -> Palette.holiday
-                    CalendarSupplementaryKind.ASSIGNMENT -> Palette.assignment
-                    CalendarSupplementaryKind.SCHOOL_NOTICE -> Palette.schoolNotice
-                    CalendarSupplementaryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
-                }
+                val accent = items.firstOrNull()?.let { supplementaryAccent(it.kind) }
+                    ?: Palette.muted
                 addView(TextView(activity).apply {
                     text = buildList {
                         items.take(visibleCount).forEach { add(it.title) }
@@ -2698,7 +2684,6 @@ internal class TeachingCalendarPage(
                     }
                     setOnClickListener {
                         if (items.isNotEmpty()) {
-                            onDaySelected?.invoke(day.date.clone() as Calendar)
                             showDayWeekAllDayDialog(day.date, items)
                         }
                     }
@@ -2706,8 +2691,86 @@ internal class TeachingCalendarPage(
                     marginStart = activity.dp(2)
                     marginEnd = activity.dp(2)
                 })
+                }
+            }, LinearLayout.LayoutParams(0, activity.dp(if (compact && days.size > 1) 40 else 52), 1f))
+        }
+    }
+
+    private fun singleDayAllDayStrip(
+        day: TimelineDay,
+    ): HorizontalScrollView = HorizontalScrollView(activity).apply {
+        id = R.id.calendar_all_day_strip
+        isHorizontalScrollBarEnabled = false
+        overScrollMode = View.OVER_SCROLL_NEVER
+        setBackgroundColor(Palette.surface)
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(activity.dp(16), activity.dp(8), activity.dp(16), activity.dp(8))
+            addView(TextView(activity).apply {
+                text = "全天"
+                textSize = 12f
+                setTextColor(Palette.muted)
+                includeFontPadding = false
+                gravity = Gravity.CENTER_VERTICAL
+            })
+            val items = supplementaryItemsOn(day.date)
+            items.take(3).forEach { item ->
+                val accent = supplementaryAccent(item.kind)
+                addView(TextView(activity).apply {
+                    text = "${displayMonthDay(day.date)} · ${item.title}"
+                    textSize = 11f
+                    setTextColor(accent)
+                    setTypeface(typeface, Typeface.BOLD)
+                    includeFontPadding = false
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.END
+                    background = roundedBackground(
+                        activity,
+                        blend(accent, Palette.surface, 0.13f),
+                        blend(accent, Palette.border, 0.35f),
+                        radius = 12,
+                        borderWidthDp = 0.75f,
+                    )
+                    setPadding(activity.dp(10), activity.dp(5), activity.dp(10), activity.dp(5))
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = "${displayMonthDay(day.date)}，全天，${item.title}"
+                    setOnClickListener {
+                        showDayWeekAllDayDialog(day.date, items)
+                    }
+                }, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = activity.dp(8) })
             }
-        }, LinearLayout.LayoutParams(0, activity.dp(if (compact && days.size > 1) 40 else 52), 1f))
+            val hiddenCount = (items.size - 3).coerceAtLeast(0)
+            if (hiddenCount > 0) {
+                addView(TextView(activity).apply {
+                    text = "+$hiddenCount"
+                    textSize = 11f
+                    setTextColor(Palette.primaryText)
+                    setTypeface(typeface, Typeface.BOLD)
+                    includeFontPadding = false
+                    gravity = Gravity.CENTER
+                    background = roundedBackground(
+                        activity,
+                        Palette.surfaceVariant,
+                        Palette.border,
+                        radius = 7,
+                    )
+                    setPadding(activity.dp(9), activity.dp(5), activity.dp(9), activity.dp(5))
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = "查看其余 $hiddenCount 项全天日程"
+                    setOnClickListener { showDayWeekAllDayDialog(day.date, items) }
+                }, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = activity.dp(8) })
+            }
+        })
     }
 
     private fun showDayWeekAllDayDialog(
@@ -2723,7 +2786,9 @@ internal class TeachingCalendarPage(
                     accent = supplementaryAccent(item.kind),
                 )
             },
-            contentDescription = activity.uiText("周视图全天日程弹窗"),
+            contentDescription = activity.uiText(
+                if (selectedMode == Mode.WEEK) "周视图全天日程弹窗" else "日视图全天日程弹窗",
+            ),
         )
     }
 
@@ -2919,7 +2984,7 @@ internal class TeachingCalendarPage(
             elevation = activity.dp(10).toFloat()
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             setOnDismissListener {
-                anchor.clearSelection()
+                anchor.selectDate(selectedDate)
                 if (activePopup === popup) {
                     activePopup = null
                     activePopupAnchor = null
@@ -3610,7 +3675,7 @@ internal class TeachingCalendarPage(
         activePopupDetailsHost = null
         activePopupDateMillis = null
         if (popup?.isShowing == true) popup.dismiss()
-        activePopupAnchor?.clearSelection()
+        activePopupAnchor?.selectDate(selectedDate)
         activePopupAnchor = null
     }
 
@@ -3622,7 +3687,7 @@ internal class TeachingCalendarPage(
         supplementaryKind: YearCalendarSupplementaryKind? = null,
     ): GradientDrawable {
         val fill = when {
-            selected -> Palette.primaryFill
+            selected -> Palette.selectedDate
             muted -> Color.TRANSPARENT
             courseCount <= 0 -> Color.TRANSPARENT
             else -> blend(

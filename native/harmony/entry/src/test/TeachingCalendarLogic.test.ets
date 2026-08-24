@@ -117,6 +117,21 @@ export default function teachingCalendarLogicTest() {
         .assertEqual('Month View · All-day');
     });
 
+    it('day_and_week_top_agenda_share_only_the_selected_date', 0, () => {
+      const selected: DateParts = new DateParts(2026, 8, 24);
+      expect(TeachingCalendarLogic.timelineCourseSummaryDate(CalendarMode.day, selected)
+        .equals(selected)).assertTrue();
+      expect(TeachingCalendarLogic.timelineCourseSummaryDate(CalendarMode.week, selected)
+        .equals(selected)).assertTrue();
+      expect(TeachingCalendarLogic.timelineAgendaSortOrder('holiday')).assertEqual(0);
+      expect(TeachingCalendarLogic.timelineAgendaSortOrder('assignment')).assertEqual(1);
+      expect(TeachingCalendarLogic.timelineAgendaSortOrder('school_notice')).assertEqual(2);
+      expect(TeachingCalendarLogic.timelineAgendaSortOrder('public_deadline')).assertEqual(3);
+      expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.day)).assertTrue();
+      expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.month)).assertTrue();
+      expect(TeachingCalendarLogic.agendaDialogChangesSelectedDate(CalendarMode.week)).assertFalse();
+    });
+
     it('timeline_minute_and_metadata_helpers', 0, () => {
       expect(CalendarTimelineLogic.minuteOf('09:50')).assertEqual(9 * 60 + 50);
       expect(CalendarTimelineLogic.minuteOf('24:00')).assertNull();

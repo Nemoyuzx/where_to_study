@@ -223,6 +223,30 @@ export struct MobileCalendarTimelineView {
         this.dayHeaderRow()
       }
       Stack({ alignContent: Alignment.TopStart }) {
+        // 左侧整点/节次轴与日期网格使用同一组线型；先画线、后画标签，
+        // 保证平板和 PC 宽屏不会只在右侧日期列看到网格。
+        ForEach(this.hours, (hour: number) => {
+          Divider()
+            .strokeWidth(0.5)
+            .color(AppTheme.border())
+            .width(this.axisWidth())
+            .position({ x: 0, y: this.yPos(hour * 60) })
+        }, (hour: number) => 'axis-hour-line.' + hour.toString())
+        if (this.expanded) {
+          ForEach(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes(), (minute: number) => {
+            Column()
+              .width(this.slotAxisWidth())
+              .height(2)
+              .border({
+                width: { top: 1.2 },
+                color: AppTheme.secondaryText(),
+                style: BorderStyle.Dashed
+              })
+              .opacity(0.56)
+              .position({ x: this.hourAxisWidth(), y: this.yPos(minute) })
+          }, (minute: number) => 'axis-slot-line.' + minute.toString())
+        }
+
         // 小时轴
         Column() {
           ForEach(this.hours, (hour: number) => {
@@ -264,6 +288,20 @@ export struct MobileCalendarTimelineView {
 
         // 右侧网格视口
         Stack({ alignContent: Alignment.TopStart }) {
+          // 选中日期列先铺底，确保后绘制的整点实线和节次虚线始终清晰可见。
+          if (this.showsWeekColumns) {
+            ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
+              if (day.date.equals(this.selectedDate)) {
+                Column()
+                  .width(this.dayWidthValue())
+                  .height(this.bodyHeight())
+                  .backgroundColor(AppTheme.selectedDateSurface())
+                  .hitTestBehavior(HitTestMode.None)
+                  .position({ x: index * this.dayWidthValue(), y: 0 })
+              }
+            }, (day: CalendarTimelineDay) => 'selected-column.' + this.dayKey(day))
+          }
+
           // 小时线
           ForEach(this.hours, (hour: number) => {
             Divider()
@@ -298,20 +336,6 @@ export struct MobileCalendarTimelineView {
                 .height(this.bodyHeight())
                 .position({ x: index * this.dayWidthValue(), y: 0 })
             }, (day: CalendarTimelineDay) => 'grid-column.' + this.dayKey(day))
-          }
-
-          // 选中列高亮
-          if (this.showsWeekColumns) {
-            ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
-              if (day.date.equals(this.selectedDate)) {
-                Column()
-                  .width(this.dayWidthValue())
-                  .height(this.bodyHeight())
-                  .backgroundColor('#0B166B5D')
-                  .hitTestBehavior(HitTestMode.None)
-                  .position({ x: index * this.dayWidthValue(), y: 0 })
-              }
-            }, (day: CalendarTimelineDay) => 'selected-column.' + this.dayKey(day))
           }
 
           // 单日模式的节次胶囊
@@ -401,16 +425,17 @@ export struct MobileCalendarTimelineView {
             Text(CalendarFormatters.weekdayLabels[StrictDates.weekdayMonday1(day.date) - 1])
               .fontSize(12)
               .fontWeight(FontWeight.Bold)
-              .fontColor(AppTheme.text())
+              .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() : AppTheme.text())
             Text(day.date.month.toString() + '/' + day.date.day.toString())
               .fontSize(12)
               .fontWeight(FontWeight.Bold)
-              .fontColor(AppTheme.text())
+              .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() : AppTheme.text())
           }
           Text(this.model.text(day.courses.length === 0 ? '无课程' :
             day.courses.length.toString() + ' 门课'))
             .fontSize(10)
-            .fontColor(day.courses.length > 0 ? AppTheme.primary() : AppTheme.secondaryText())
+            .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() :
+              (day.courses.length > 0 ? AppTheme.primary() : AppTheme.secondaryText()))
             .maxLines(1)
           // 今日红条：日头底部 3vp systemRed 横条（对应 Tauri inset 0 -3px 0 #FF3B30）。
           if (day.date.equals(StrictDates.todayParts())) {
@@ -425,7 +450,7 @@ export struct MobileCalendarTimelineView {
         .height(this.headerHeight())
         .justifyContent(FlexAlign.Center)
         .border({ width: { left: 1, bottom: 1 }, color: AppTheme.border() })
-        .backgroundColor(day.date.equals(this.selectedDate) ? '#0B166B5D' : AppTheme.surface())
+        .backgroundColor(day.date.equals(this.selectedDate) ? AppTheme.selectedDate() : AppTheme.surface())
         .onClick(() => {
           this.onSelectDay(day.date);
         })

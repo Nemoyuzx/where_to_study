@@ -555,6 +555,42 @@ button:disabled {
   line-height: 1.3;
 }
 
+.settings-color-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  justify-self: start;
+}
+
+.settings-color-dot {
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 9px;
+  height: 9px;
+  width: 9px;
+}
+
+.settings-color-dot.assignment {
+  background: var(--busy-border);
+  color: var(--busy-border);
+}
+
+.settings-color-dot.school-notice {
+  background: var(--gold-outline);
+  color: var(--gold-outline);
+}
+
+.settings-color-dot.public-deadline {
+  background: var(--other-deadline-outline);
+  color: var(--other-deadline-outline);
+}
+
+.settings-readonly-color-row {
+  border-bottom: 1px solid var(--divider);
+  padding-bottom: 10px;
+}
+
 .settings-switch-row > div > span {
   color: var(--text-secondary);
   font-size: 13px;
@@ -1128,53 +1164,8 @@ button:disabled {
   position: relative;
 }
 
-.planner-switch-row input {
-  height: 1px;
-  min-height: 0;
-  min-width: 0;
-  opacity: 0;
-  padding: 0;
-  position: absolute;
-  width: 1px;
-}
-
-.planner-switch-row i {
-  background: var(--switch-track);
-  border: 1px solid var(--switch-border);
-  border-radius: 999px;
-  cursor: pointer;
-  flex: 0 0 44px;
-  height: 26px;
-  padding: 2px;
-  transition: background-color 0.18s ease, border-color 0.18s ease;
-}
-
-.planner-switch-row:hover i {
+.planner-switch-row:hover .settings-switch {
   border-color: var(--primary-border-soft);
-}
-
-.planner-switch-row i::after {
-  background: var(--switch-knob);
-  border-radius: 50%;
-  box-shadow: var(--switch-shadow);
-  content: '';
-  display: block;
-  height: 20px;
-  transition: transform 0.18s ease;
-  width: 20px;
-}
-
-.planner-switch-row input:checked + i {
-  background: var(--primary);
-  border-color: var(--primary);
-}
-
-.planner-switch-row input:checked + i::after {
-  transform: translateX(18px);
-}
-
-.planner-switch-row input:focus-visible + i {
-  outline: 2px solid var(--focus-ring);
 }
 
 .filter-toggles {
@@ -1740,7 +1731,14 @@ button:disabled {
 }
 
 .time-day-head.selected {
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  background: var(--selected-date-fill);
+  color: var(--selected-date-text);
+}
+
+.time-day-head.selected span,
+.time-day-head.selected strong,
+.time-day-head.selected small {
+  color: var(--selected-date-text);
 }
 
 .calendar-day-tags {
@@ -1796,6 +1794,10 @@ button:disabled {
   display: flex;
   min-height: 34px;
   padding: 4px 6px;
+}
+
+.time-all-day-cell[data-selected='true'] {
+  background: var(--selected-date-lane);
 }
 
 .time-all-day-label {
@@ -1890,9 +1892,8 @@ button:disabled {
   font-size: 12px;
 }
 
-.slot-time-labels span {
+.slot-time-labels > span {
   align-content: center;
-  border-top: 1px solid var(--divider);
   display: grid;
   gap: 2px;
   left: 0;
@@ -1900,6 +1901,24 @@ button:disabled {
   padding: 4px 8px;
   position: absolute;
   right: 0;
+}
+
+.slot-axis-grid-lines {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.slot-axis-grid-lines i {
+  border-top: 1px solid var(--divider);
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.slot-axis-grid-lines i.slot-boundary-line {
+  border-top-color: color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  border-top-style: dashed;
 }
 
 .slot-time-labels strong {
@@ -1923,7 +1942,7 @@ button:disabled {
 }
 
 .time-day-lane.selected {
-  background: var(--primary-surface-lane);
+  background: var(--selected-date-lane);
 }
 
 .time-grid-lines span {
@@ -1931,6 +1950,11 @@ button:disabled {
   left: 0;
   position: absolute;
   right: 0;
+}
+
+.time-grid-lines span.slot-boundary-line {
+  border-top-color: color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  border-top-style: dashed;
 }
 
 .time-course-layer {
@@ -2289,16 +2313,16 @@ button:disabled {
 }
 
 .month-cell.selected {
-  background: var(--primary-fill);
+  background: var(--selected-date-fill);
   box-shadow: none;
 }
 
 .month-cell.selected:hover {
-  background: var(--primary-fill);
+  background: var(--selected-date-fill);
 }
 
 .month-cell.today.selected {
-  background: var(--primary-fill);
+  background: var(--selected-date-fill);
   box-shadow: inset 0 0 0 2px var(--current-time);
 }
 
@@ -2314,7 +2338,7 @@ button:disabled {
 }
 
 .month-cell.selected .month-cell-date-button {
-  color: var(--on-primary);
+  color: var(--selected-date-text);
 }
 
 .month-cell.today .month-cell-date-button {
@@ -2322,7 +2346,7 @@ button:disabled {
 }
 
 .month-cell.today.selected .month-cell-date-button {
-  color: var(--on-primary);
+  color: var(--selected-date-text);
 }
 
 .month-cell.has-holiday {
@@ -2331,6 +2355,11 @@ button:disabled {
 
 .month-cell.has-workday {
   background: var(--gold-surface-calendar);
+}
+
+.month-cell.has-holiday.selected,
+.month-cell.has-workday.selected {
+  background: var(--selected-date-fill);
 }
 
 .month-cell small,
@@ -2463,15 +2492,14 @@ button:disabled {
 }
 
 .mini-month-grid button.selected {
-  background: var(--primary-fill);
-  color: var(--on-primary);
+  background: var(--selected-date-fill);
+  color: var(--selected-date-text);
   box-shadow: none;
 }
 
 .mini-month-grid button.today.selected {
-  background: var(--primary-fill);
-  color: var(--on-primary);
-  box-shadow: inset 0 0 0 2px var(--current-time);
+  background: var(--selected-date-fill);
+  color: var(--selected-date-text);
 }
 
 .mini-month-grid button.has-holiday {
@@ -2482,11 +2510,11 @@ button:disabled {
   box-shadow: inset 0 0 0 1px var(--gold-outline);
 }
 
-.mini-month-grid button.has-holiday.selected,
-.mini-month-grid button.has-workday.selected,
-.mini-month-grid button.has-holiday.today,
-.mini-month-grid button.has-workday.today {
-  box-shadow: inset 0 0 0 2px currentColor;
+/* Today stays red even when a holiday/workday marker is present. Deadline
+   borders below intentionally win, with the red date badge as the secondary
+   today indicator. */
+.mini-month-grid button.today {
+  box-shadow: inset 0 0 0 2px var(--current-time);
 }
 
 .mini-month-grid button.deadline-border-assignment {
@@ -3882,21 +3910,21 @@ button:disabled {
 }
 
 .month-cell.selected {
-  background: var(--primary-surface-selected);
-  box-shadow: inset 0 0 0 1px var(--primary-border);
+  background: var(--selected-date-fill);
+  box-shadow: inset 0 0 0 1px var(--selected-date-outline);
 }
 
 .month-cell.today.selected {
-  background: var(--primary-surface-selected);
-  box-shadow: inset 0 0 0 1px var(--primary-border);
+  background: var(--selected-date-fill);
+  box-shadow: inset 0 0 0 2px var(--current-time);
 }
 
 .month-cell.selected:hover {
-  background: var(--primary-surface-selected);
+  background: var(--selected-date-fill);
 }
 
 .month-cell.selected .month-cell-date-button {
-  color: var(--text-primary);
+  color: var(--selected-date-text);
 }
 
 .month-cell.today .month-cell-date-button,

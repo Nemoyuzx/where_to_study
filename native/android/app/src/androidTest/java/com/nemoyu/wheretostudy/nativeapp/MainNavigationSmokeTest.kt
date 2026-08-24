@@ -4,6 +4,8 @@ import android.app.NotificationManager
 import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.MotionEvent
@@ -13,6 +15,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Switch
 import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -29,10 +32,51 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class MainNavigationSmokeTest {
+    @Test
+    fun appTypographyFontScaleAppliesToActivityAndSpText() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val systemFontScale = context.resources.configuration.fontScale
+        val launchIntent = Intent(
+            context,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        assertEquals(0.92f, AppTypography.adjustedFontScale(1f), 0.0001f)
+        assertEquals(0.46f, AppTypography.adjustedFontScale(0.5f), 0.0001f)
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Activity resources must apply the shared one-step-smaller typography scale",
+                    AppTypography.adjustedFontScale(systemFontScale),
+                    activity.resources.configuration.fontScale,
+                    0.0001f,
+                )
+                val text = TextView(activity).apply { textSize = 15f }
+                assertEquals(
+                    "Programmatic TextViews must consume the scaled SP density",
+                    TypedValue.applyDimension(
+                        TypedValue.COMPLEX_UNIT_SP,
+                        15f,
+                        activity.resources.displayMetrics,
+                    ),
+                    text.textSize,
+                    0.5f,
+                )
+            }
+        }
+    }
+
     @Test
     fun dailyClassroomRefreshCanBeScheduledWithSavedCredentials() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -352,6 +396,234 @@ class MainNavigationSmokeTest {
     fun dayWeekAgendaShowsSupplementaryItemsAndKeepsCollapsedState() {
         clearCredentialRecord()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        val scheduleStore = ScheduleStore(context)
+        val previousSchedule = runCatching(scheduleStore::load).getOrNull()
+        scheduleStore.save(dayWeekAgendaTestSchedule())
+        val launchIntent = Intent(
+            context,
+            MainActivity::class.java,
+        ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                click(device, "navigation_calendar")
+                SystemClock.sleep(700L)
+                instrumentation.waitForIdleSync()
+
+                var weekCourseSummary: CourseSummaryPresentation? = null
+                var selectedDateLabelBeforeWeekDialog = ""
+                scenario.onActivity { activity ->
+                    val content = activity.findViewById<ViewGroup>(R.id.calendar_day_week_agenda_content)
+                    assertEquals(View.VISIBLE, content.visibility)
+                    assertTrue(activity.findViewById<View>(R.id.calendar_day_week_course_area).isShown)
+                    weekCourseSummary = courseSummaryPresentation(activity)
+                    assertCourseSummaryMatchesIosMobileStyle(activity, checkNotNull(weekCourseSummary))
+                    assertEquals(
+                        "The deterministic selected day must expose every course row without +N truncation",
+                        4,
+                        checkNotNull(weekCourseSummary).rows.size,
+                    )
+
+                    val allDay = activity.findViewById<ViewGroup>(R.id.calendar_all_day_strip)
+                    assertFalse("Week all-day layout must use seven fixed columns", allDay is HorizontalScrollView)
+                    assertEquals(2, allDay.childCount)
+                    val dayRow = allDay.getChildAt(1) as ViewGroup
+                    assertEquals("Week all-day layout must expose Monday through Sunday", 7, dayRow.childCount)
+                    val cells = List(dayRow.childCount) { index -> dayRow.getChildAt(index) as TextView }
+                    cells.forEach { cell ->
+                        val label = cell.text.toString()
+                        assertTrue("Each week column must show its first item and +N: $label", label.isNotBlank())
+                        assertTrue("Each week column must end with +N: $label", Regex("\\+\\d+$").containsMatchIn(label))
+                        assertEquals("Each week column must expose one overflow count", 1, label.count { it == '+' })
+                        assertEquals(1, cell.maxLines)
+                        assertTrue(cell.isClickable)
+                    }
+
+                    selectedDateLabelBeforeWeekDialog = courseSummaryTitle(activity)
+                    val targetCell = cells.firstOrNull { cell ->
+                        val date = cell.contentDescription?.toString()
+                            ?.substringBefore("，全天")
+                            .orEmpty()
+                        date.isNotEmpty() && !selectedDateLabelBeforeWeekDialog.contains(date)
+                    } ?: cells.last()
+                    assertTrue(targetCell.performClick())
+                }
+                assertTrue(
+                    "The week dialog must expose the complete school-notice item",
+                    device.wait(Until.hasObject(By.textContains("校内竞赛")), UI_TIMEOUT_MILLIS),
+                )
+                assertTrue(
+                    "The week dialog must expose enabled public deadlines",
+                    device.wait(Until.hasObject(By.textContains("示例高校夏令营")), UI_TIMEOUT_MILLIS),
+                )
+                val weekDialogBounds = checkNotNull(
+                    device.wait(
+                        Until.findObject(By.desc("周视图全天日程弹窗")),
+                        UI_TIMEOUT_MILLIS,
+                    ),
+                ).visibleBounds
+                assertTrue(
+                    "Week all-day dialog must be horizontally centered",
+                    abs(weekDialogBounds.centerX() - device.displayWidth / 2) <= 24,
+                )
+                assertTrue(
+                    "Week all-day dialog must be vertically centered",
+                    abs(weekDialogBounds.centerY() - device.displayHeight / 2) <= 80,
+                )
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Opening a week all-day dialog must not change the selected date",
+                        selectedDateLabelBeforeWeekDialog,
+                        courseSummaryTitle(activity),
+                    )
+                }
+                device.findObject(By.text("完成")).click()
+                instrumentation.waitForIdleSync()
+
+                click(device, "calendar_mode_day")
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val dayCourseSummary = courseSummaryPresentation(activity)
+                    assertCourseSummaryMatchesIosMobileStyle(activity, dayCourseSummary)
+                    assertEquals(
+                        "Day and week must render identical selected-day course content and styles",
+                        weekCourseSummary,
+                        dayCourseSummary,
+                    )
+
+                    val allDay = activity.findViewById<View>(R.id.calendar_all_day_strip)
+                    assertTrue("Day all-day layout must be horizontally scrollable", allDay is HorizontalScrollView)
+                    val row = (allDay as HorizontalScrollView).getChildAt(0) as ViewGroup
+                    assertEquals("全天", (row.getChildAt(0) as TextView).text.toString())
+                    val itemViews = List(row.childCount - 1) { index -> row.getChildAt(index + 1) as TextView }
+                    val overflow = itemViews.singleOrNull { it.text.toString().startsWith("+") }
+                    val capsules = itemViews.filterNot { it.text.toString().startsWith("+") }
+                    assertEquals("Day all-day layout must expose at most the first three independent capsules", 3, capsules.size)
+                    assertNotNull("Sample all-day data must expose a +N overflow control", overflow)
+                    assertTrue(capsules.all { it.isClickable && it.background != null && it.maxLines == 1 })
+                    assertTrue(
+                        "Independent day capsules must retain per-kind accent colors",
+                        capsules.map { it.currentTextColor }.distinct().size >= 2,
+                    )
+                    assertTrue(capsules.first().performClick())
+                }
+                val dayDialogBounds = checkNotNull(
+                    device.wait(
+                        Until.findObject(By.desc("日视图全天日程弹窗")),
+                        UI_TIMEOUT_MILLIS,
+                    ),
+                ).visibleBounds
+                assertTrue(
+                    "Day all-day dialog must be horizontally centered",
+                    abs(dayDialogBounds.centerX() - device.displayWidth / 2) <= 24,
+                )
+                assertTrue(
+                    "Day all-day dialog must be vertically centered",
+                    abs(dayDialogBounds.centerY() - device.displayHeight / 2) <= 80,
+                )
+                device.findObject(By.text("完成")).click()
+                instrumentation.waitForIdleSync()
+
+                click(device, "calendar_mode_month")
+                SystemClock.sleep(700L)
+                instrumentation.waitForIdleSync()
+                val monthOverflow = checkNotNull(
+                    device.wait(Until.findObject(By.textStartsWith("+")), UI_TIMEOUT_MILLIS),
+                )
+                monthOverflow.click()
+                val monthDialogBounds = checkNotNull(
+                    device.wait(
+                        Until.findObject(By.desc("月视图溢出日程弹窗")),
+                        UI_TIMEOUT_MILLIS,
+                    ),
+                ).visibleBounds
+                assertTrue(
+                    "Month schedule dialog must be horizontally centered",
+                    abs(monthDialogBounds.centerX() - device.displayWidth / 2) <= 24,
+                )
+                assertTrue(
+                    "Month schedule dialog must be vertically centered",
+                    abs(monthDialogBounds.centerY() - device.displayHeight / 2) <= 80,
+                )
+                device.findObject(By.text("完成")).click()
+                assertTrue(
+                    "Month agenda dialog must be gone before switching modes",
+                    device.wait(
+                        Until.gone(By.desc("月视图溢出日程弹窗")),
+                        UI_TIMEOUT_MILLIS,
+                    ),
+                )
+                val weekMode = checkNotNull(
+                    device.wait(
+                        Until.findObject(By.res(TARGET_PACKAGE, "calendar_mode_week")),
+                        UI_TIMEOUT_MILLIS,
+                    ),
+                )
+                assertTrue("Week mode control must accept the transition click", weekMode.isClickable)
+                weekMode.click()
+                device.waitForIdle()
+                assertActivityViewMounted(
+                    scenario,
+                    R.id.calendar_day_week_agenda_toggle,
+                    expected = true,
+                )
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertTrue(
+                        checkNotNull(
+                            activity.findViewById<View?>(R.id.calendar_day_week_agenda_toggle),
+                        ).performClick(),
+                    )
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Collapsing the selected-day summary must hide only course rows",
+                        View.GONE,
+                        activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
+                    )
+                    assertTrue(
+                        "All-day events must remain visible when courses are collapsed",
+                        activity.findViewById<View>(R.id.calendar_all_day_strip).isShown,
+                    )
+                }
+                click(device, "calendar_mode_month")
+                click(device, "calendar_mode_week")
+                assertActivityViewMounted(
+                    scenario,
+                    R.id.calendar_day_week_agenda_toggle,
+                    expected = true,
+                )
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Course collapse must survive calendar mode changes",
+                        View.GONE,
+                        activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
+                    )
+                    assertTrue(activity.findViewById<View>(R.id.calendar_all_day_strip).isShown)
+                }
+                scenario.recreate()
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "Course collapse must survive activity recreation",
+                        View.GONE,
+                        activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
+                    )
+                    assertTrue(activity.findViewById<View>(R.id.calendar_all_day_strip).isShown)
+                }
+            }
+        } finally {
+            if (previousSchedule == null) scheduleStore.clear() else scheduleStore.save(previousSchedule)
+        }
+    }
+
+    @Test
+    fun yearSelectionSurvivesPopoverDismissAndModeRoundTrip() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
         val device = UiDevice.getInstance(instrumentation)
         val launchIntent = Intent(
             instrumentation.targetContext,
@@ -360,97 +632,71 @@ class MainNavigationSmokeTest {
 
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
             click(device, "navigation_calendar")
-            SystemClock.sleep(700L)
-            instrumentation.waitForIdleSync()
+            click(device, "calendar_mode_year")
+            assertActivityViewMounted(scenario, R.id.calendar_year_view, expected = true)
+
+            var expectedSelection = ""
             scenario.onActivity { activity ->
-                val content = activity.findViewById<ViewGroup>(R.id.calendar_day_week_agenda_content)
-                assertEquals(View.VISIBLE, content.visibility)
-                val visibleText = descendantText(content)
-                assertTrue(visibleText.contains("作业 DDL"))
-                assertTrue(
-                    "Compact week overflow must expose +N",
-                    Regex("\\+\\d+").containsMatchIn(visibleText),
-                )
-                assertTrue(activity.findViewById<View>(R.id.calendar_day_week_course_area).isShown)
-                val allDay = activity.findViewById<ViewGroup>(R.id.calendar_all_day_strip)
-                val dayRow = allDay.getChildAt(1) as ViewGroup
-                assertTrue(dayRow.getChildAt(0).performClick())
+                val yearView = activity.findViewById<YearCalendarView>(R.id.calendar_year_view)
+                val initialSelection = checkNotNull(yearView.selectedDateKey()) {
+                    "Year view must initialize from TeachingCalendarSession selectedDate"
+                }
+                val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+                    timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+                }
+                val targetDate = Calendar.getInstance(formatter.timeZone).apply {
+                    time = checkNotNull(formatter.parse(initialSelection))
+                    if (get(Calendar.DAY_OF_MONTH) < getActualMaximum(Calendar.DAY_OF_MONTH)) {
+                        add(Calendar.DAY_OF_MONTH, 1)
+                    } else {
+                        add(Calendar.DAY_OF_MONTH, -1)
+                    }
+                }
+                expectedSelection = formatter.format(targetDate.time)
+                val center = checkNotNull(yearView.dateCenter(targetDate))
+                val downTime = SystemClock.uptimeMillis()
+                listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP).forEachIndexed { index, action ->
+                    MotionEvent.obtain(
+                        downTime,
+                        downTime + index * 16L,
+                        action,
+                        center.first,
+                        center.second,
+                        0,
+                    ).also { event ->
+                        assertTrue(yearView.dispatchTouchEvent(event))
+                        event.recycle()
+                    }
+                }
             }
             assertTrue(
-                "The +N dialog must expose the complete school-notice item",
-                device.wait(Until.hasObject(By.textContains("校内竞赛")), UI_TIMEOUT_MILLIS),
+                "Selecting a year date must open its detail popover",
+                device.wait(Until.hasObject(By.text("跳转到")), UI_TIMEOUT_MILLIS),
             )
+            device.pressBack()
             assertTrue(
-                "The +N dialog must expose enabled public deadlines",
-                device.wait(Until.hasObject(By.textContains("示例高校夏令营")), UI_TIMEOUT_MILLIS),
+                "Back must dismiss the year popover before changing pages",
+                device.wait(Until.gone(By.text("跳转到")), UI_TIMEOUT_MILLIS),
             )
-            val weekDialogBounds = checkNotNull(
-                device.wait(
-                    Until.findObject(By.desc("周视图全天日程弹窗")),
-                    UI_TIMEOUT_MILLIS,
-                ),
-            ).visibleBounds
-            assertTrue(
-                "Week all-day dialog must be horizontally centered",
-                abs(weekDialogBounds.centerX() - device.displayWidth / 2) <= 24,
-            )
-            assertTrue(
-                "Week all-day dialog must be vertically centered",
-                abs(weekDialogBounds.centerY() - device.displayHeight / 2) <= 80,
-            )
-            device.findObject(By.text("完成")).click()
-            instrumentation.waitForIdleSync()
+            scenario.onActivity { activity ->
+                assertEquals(
+                    "Dismissing the popover must retain the session-backed blue date selection",
+                    expectedSelection,
+                    activity.findViewById<YearCalendarView>(R.id.calendar_year_view)
+                        .selectedDateKey(),
+                )
+            }
 
             click(device, "calendar_mode_month")
-            SystemClock.sleep(700L)
-            instrumentation.waitForIdleSync()
-            val monthOverflow = checkNotNull(
-                device.wait(Until.findObject(By.textStartsWith("+")), UI_TIMEOUT_MILLIS),
-            )
-            monthOverflow.click()
-            val monthDialogBounds = checkNotNull(
-                device.wait(
-                    Until.findObject(By.desc("月视图溢出日程弹窗")),
-                    UI_TIMEOUT_MILLIS,
-                ),
-            ).visibleBounds
-            assertTrue(
-                "Month schedule dialog must be horizontally centered",
-                abs(monthDialogBounds.centerX() - device.displayWidth / 2) <= 24,
-            )
-            assertTrue(
-                "Month schedule dialog must be vertically centered",
-                abs(monthDialogBounds.centerY() - device.displayHeight / 2) <= 80,
-            )
-            device.findObject(By.text("完成")).click()
-            click(device, "calendar_mode_week")
-            instrumentation.waitForIdleSync()
-            scenario.onActivity { activity ->
-                assertTrue(activity.findViewById<View>(R.id.calendar_day_week_agenda_toggle).performClick())
-            }
-            instrumentation.waitForIdleSync()
+            assertActivityViewMounted(scenario, R.id.calendar_month_grid, expected = true)
+            click(device, "calendar_mode_year")
+            assertActivityViewMounted(scenario, R.id.calendar_year_view, expected = true)
             scenario.onActivity { activity ->
                 assertEquals(
-                    View.GONE,
-                    activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
-                )
-            }
-            click(device, "calendar_mode_month")
-            click(device, "calendar_mode_week")
-            scenario.onActivity { activity ->
-                assertEquals(
-                    "Agenda collapse must survive calendar mode changes",
-                    View.GONE,
-                    activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
-                )
-            }
-            scenario.recreate()
-            instrumentation.waitForIdleSync()
-            scenario.onActivity { activity ->
-                assertEquals(
-                    "Agenda collapse must survive activity recreation",
-                    View.GONE,
-                    activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility,
+                    "Rebuilding year view after a month round-trip must restore the same selection",
+                    expectedSelection,
+                    activity.findViewById<YearCalendarView>(R.id.calendar_year_view)
+                        .selectedDateKey(),
                 )
             }
         }
@@ -511,11 +757,11 @@ class MainNavigationSmokeTest {
                 SystemClock.sleep(700L)
                 instrumentation.waitForIdleSync()
                 scenario.onActivity { activity ->
-                    val content = activity.findViewById<ViewGroup>(
-                        R.id.calendar_day_week_agenda_content,
-                    )
-                    assertTrue(descendantText(content).contains("Assignment DDL"))
                     val allDay = activity.findViewById<ViewGroup>(R.id.calendar_all_day_strip)
+                    assertTrue(
+                        "English assignment labels must be read from the always-visible all-day strip",
+                        descendantText(allDay).contains("Assignment DDL"),
+                    )
                     assertTrue((allDay.getChildAt(1) as ViewGroup).getChildAt(0).performClick())
                 }
                 assertTrue(
@@ -795,17 +1041,31 @@ class MainNavigationSmokeTest {
                             date.maxLines <= 2,
                         )
                     }
-                    val summary = activity.findViewById<ViewGroup>(R.id.calendar_date_summary)
+                    val selectedDates = (0 until strip.childCount)
+                        .map { index -> strip.getChildAt(index) as TextView }
+                        .filter { date -> date.currentTextColor == Palette.onPrimary }
+                    assertEquals("Exactly one compact date must be selected", 1, selectedDates.size)
                     assertEquals(
-                        "Compact date summary must stay on one low-height row",
-                        LinearLayout.HORIZONTAL,
-                        (summary as LinearLayout).orientation,
+                        "Compact day/week selection must use the independent selected-date token",
+                        Palette.selectedDate,
+                        gradientFillColor(selectedDates.single()),
                     )
+                    val summary = activity.findViewById<LinearLayout>(
+                        R.id.calendar_day_week_agenda_toggle,
+                    )
+                    assertEquals(
+                        "Compact course summary toggle must stay on one low-height row",
+                        LinearLayout.HORIZONTAL,
+                        summary.orientation,
+                    )
+                    assertEquals(3, summary.childCount)
+                    assertTrue((summary.getChildAt(0) as TextView).text.isNotBlank())
+                    assertTrue((summary.getChildAt(1) as TextView).text.isNotBlank())
                     assertTrue(
                         "Compact timeline axis must leave more width for course content",
                         (activity.findViewById<ViewGroup>(R.id.calendar_timeline)
                             .getChildAt(0) as ViewGroup)
-                            .getChildAt(0).width <= activity.dp(48),
+                            .getChildAt(0).width <= activity.dp(56),
                     )
                 }
                 val dayBeforeSwipe = objectText(device, "calendar_period_label")
@@ -1179,6 +1439,51 @@ class MainNavigationSmokeTest {
                     activity.findViewById<TextView>(R.id.widget_course_details_1)
                         .text.contains("示例教师"),
                 )
+
+                val assignmentRow = activity.findViewById<ViewGroup>(
+                    R.id.settings_assignment_deadline_legend_row,
+                )
+                assertFalse(
+                    "Course assignments must remain a read-only legend row",
+                    containsSwitch(assignmentRow),
+                )
+                assertLegendDot(
+                    activity,
+                    R.id.settings_assignment_deadline_legend_dot,
+                    Palette.assignment,
+                )
+
+                val preferences = AppPreferences(activity)
+                listOf(
+                    Triple(
+                        R.id.settings_competition_deadlines_switch,
+                        R.id.settings_competition_deadlines_dot,
+                        Palette.publicDeadline to preferences.competitionDeadlinesEnabled,
+                    ),
+                    Triple(
+                        R.id.settings_school_contest_notices_switch,
+                        R.id.settings_school_contest_notices_dot,
+                        Palette.schoolNotice to preferences.schoolContestNoticesEnabled,
+                    ),
+                    Triple(
+                        R.id.settings_summer_camp_deadlines_switch,
+                        R.id.settings_summer_camp_deadlines_dot,
+                        Palette.publicDeadline to preferences.summerCampDeadlinesEnabled,
+                    ),
+                    Triple(
+                        R.id.settings_hackathon_deadlines_switch,
+                        R.id.settings_hackathon_deadlines_dot,
+                        Palette.publicDeadline to preferences.hackathonDeadlinesEnabled,
+                    ),
+                ).forEach { (switchID, dotID, expected) ->
+                    val toggle = activity.findViewById<View>(switchID)
+                    assertTrue("Deadline controls must remain native Android Switches", toggle is Switch)
+                    toggle as Switch
+                    assertTrue("Legend Switches must leave their labels in the adjacent label group", toggle.text.isEmpty())
+                    assertTrue(toggle.contentDescription?.isNotBlank() == true)
+                    assertEquals(expected.second, toggle.isChecked)
+                    assertLegendDot(activity, dotID, expected.first)
+                }
             }
             scrollUntilVisible(device, "privacy_policy_button")
             assertVisible(device, "settings_github_link")
@@ -1227,6 +1532,7 @@ class MainNavigationSmokeTest {
             UI_TIMEOUT_MILLIS,
         )
         assertNotNull("Missing clickable view: $resourceName", view)
+        assertTrue("View is mounted but not clickable: $resourceName", view.isClickable)
         view.click()
         device.waitForIdle()
     }
@@ -1251,6 +1557,140 @@ class MainNavigationSmokeTest {
         val height: Int,
         val childBounds: List<List<Int>>,
     )
+
+    private data class CourseRowPresentation(
+        val title: String,
+        val subtitle: String,
+        val titleSizePx: Float,
+        val subtitleSizePx: Float,
+        val titleTypefaceStyle: Int,
+        val titleMaxLines: Int,
+        val subtitleMaxLines: Int,
+        val paddingTop: Int,
+        val paddingBottom: Int,
+    )
+
+    private data class CourseSummaryPresentation(
+        val title: String,
+        val count: String,
+        val indicator: String,
+        val toggleHeight: Int,
+        val titleSizePx: Float,
+        val countSizePx: Float,
+        val indicatorSizePx: Float,
+        val areaPadding: List<Int>,
+        val rows: List<CourseRowPresentation>,
+    )
+
+    private fun courseSummaryPresentation(activity: MainActivity): CourseSummaryPresentation {
+        val toggle = activity.findViewById<ViewGroup>(R.id.calendar_day_week_agenda_toggle)
+        assertEquals("Course summary toggle must expose title, count, and indicator", 3, toggle.childCount)
+        val title = toggle.getChildAt(0) as TextView
+        val count = toggle.getChildAt(1) as TextView
+        val indicator = toggle.getChildAt(2) as TextView
+        val area = activity.findViewById<ViewGroup>(R.id.calendar_day_week_course_area)
+        val rows = List(area.childCount) { index ->
+            val row = area.getChildAt(index) as ViewGroup
+            assertEquals("Each selected-day course row must expose title and metadata", 2, row.childCount)
+            val courseTitle = row.getChildAt(0) as TextView
+            val courseSubtitle = row.getChildAt(1) as TextView
+            CourseRowPresentation(
+                title = courseTitle.text.toString(),
+                subtitle = courseSubtitle.text.toString(),
+                titleSizePx = courseTitle.textSize,
+                subtitleSizePx = courseSubtitle.textSize,
+                titleTypefaceStyle = courseTitle.typeface?.style ?: Typeface.NORMAL,
+                titleMaxLines = courseTitle.maxLines,
+                subtitleMaxLines = courseSubtitle.maxLines,
+                paddingTop = row.paddingTop,
+                paddingBottom = row.paddingBottom,
+            )
+        }
+        return CourseSummaryPresentation(
+            title = title.text.toString(),
+            count = count.text.toString(),
+            indicator = indicator.text.toString(),
+            toggleHeight = toggle.height,
+            titleSizePx = title.textSize,
+            countSizePx = count.textSize,
+            indicatorSizePx = indicator.textSize,
+            areaPadding = listOf(area.paddingLeft, area.paddingTop, area.paddingRight, area.paddingBottom),
+            rows = rows,
+        )
+    }
+
+    private fun courseSummaryTitle(activity: MainActivity): String =
+        (activity.findViewById<ViewGroup>(R.id.calendar_day_week_agenda_toggle)
+            .getChildAt(0) as TextView).text.toString()
+
+    private fun assertCourseSummaryMatchesIosMobileStyle(
+        activity: MainActivity,
+        summary: CourseSummaryPresentation,
+    ) {
+        fun sp(value: Float): Float = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_SP,
+            value,
+            activity.resources.displayMetrics,
+        )
+
+        assertEquals(activity.dp(40), summary.toggleHeight)
+        assertEquals(sp(13f), summary.titleSizePx, 0.5f)
+        assertEquals(sp(11f), summary.countSizePx, 0.5f)
+        assertEquals(sp(12f), summary.indicatorSizePx, 0.5f)
+        assertTrue(summary.title.isNotBlank())
+        assertTrue(summary.count.isNotBlank())
+        assertTrue(summary.indicator == "⌃" || summary.indicator == "⌄")
+        summary.rows.forEach { row ->
+            assertEquals(sp(13f), row.titleSizePx, 0.5f)
+            assertEquals(sp(11f), row.subtitleSizePx, 0.5f)
+            assertEquals(Typeface.BOLD, row.titleTypefaceStyle)
+            assertEquals(1, row.titleMaxLines)
+            assertEquals(1, row.subtitleMaxLines)
+            assertEquals(activity.dp(4), row.paddingTop)
+            assertEquals(activity.dp(4), row.paddingBottom)
+        }
+    }
+
+    private fun dayWeekAgendaTestSchedule(): ScheduleSnapshot {
+        val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
+        val selectedDate = Calendar.getInstance(shanghai).apply {
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val weekday = ((selectedDate.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+        val weekStart = (selectedDate.clone() as Calendar).apply {
+            add(Calendar.DAY_OF_MONTH, -(weekday - 1))
+        }
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+            timeZone = shanghai
+        }
+        val starts = listOf(0, 2, 4, 6)
+        val courses = starts.mapIndexed { index, startSlot ->
+            val slot = AppMetadata.slots[startSlot]
+            Course(
+                id = "day-week-test-$index",
+                name = "测试课程 ${index + 1}",
+                teacher = "测试教师 ${index + 1}",
+                room = "测试教室 ${index + 1}",
+                weekText = "1周",
+                weekNumbers = listOf(1),
+                examWeekNumbers = emptyList(),
+                weekday = weekday,
+                startSlot = startSlot,
+                endSlot = startSlot,
+                sectionText = "第${slot.label}节",
+                timeRange = "${slot.start}-${slot.end}",
+            )
+        }
+        return ScheduleSnapshot(
+            termID = "day-week-ui-test",
+            termStartDate = formatter.format(weekStart.time),
+            fetchedAt = "2026-08-24T00:00:00+08:00",
+            courses = courses,
+        )
+    }
 
     private fun phoneNavigationGeometry(activity: MainActivity): PhoneNavigationGeometry {
         val navigation = checkNotNull(
@@ -1293,6 +1733,30 @@ class MainNavigationSmokeTest {
         if (root !is ViewGroup) return ""
         return (0 until root.childCount)
             .joinToString(" ") { index -> descendantText(root.getChildAt(index)) }
+    }
+
+    private fun containsSwitch(root: View): Boolean {
+        if (root is Switch) return true
+        if (root !is ViewGroup) return false
+        return (0 until root.childCount).any { index -> containsSwitch(root.getChildAt(index)) }
+    }
+
+    private fun gradientFillColor(view: View): Int? =
+        (view.background as? GradientDrawable)?.color?.defaultColor
+
+    private fun assertLegendDot(activity: MainActivity, dotID: Int, expectedColor: Int) {
+        val dot = activity.findViewById<View>(dotID)
+        assertEquals(expectedColor, gradientFillColor(dot))
+        assertEquals(activity.dp(10), dot.layoutParams.width)
+        assertEquals(activity.dp(10), dot.layoutParams.height)
+        val labelGroup = dot.parent as ViewGroup
+        val label = labelGroup.getChildAt(0) as TextView
+        assertTrue(label.text.isNotBlank())
+        assertEquals(
+            "Legend dots must sit immediately after their text instead of at the card edge",
+            activity.dp(8),
+            dot.left - label.right,
+        )
     }
 
     private fun assertCollapsibleNavigationRailWhenAvailable(
@@ -1495,6 +1959,20 @@ class MainNavigationSmokeTest {
                 "Selecting a month day must use the middle anchor and retain every month row",
                 grid.childCount,
                 (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
+            )
+            val selectedCells = buildList {
+                repeat(grid.childCount) { rowIndex ->
+                    val row = grid.getChildAt(rowIndex) as ViewGroup
+                    repeat(row.childCount) { cellIndex ->
+                        val cell = row.getChildAt(cellIndex)
+                        if (gradientFillColor(cell) == Palette.selectedDate) add(cell)
+                    }
+                }
+            }
+            assertEquals(
+                "Month selection must use the independent selected-date token exactly once",
+                1,
+                selectedCells.size,
             )
             repeat(grid.childCount) { rowIndex ->
                 val row = grid.getChildAt(rowIndex) as ViewGroup

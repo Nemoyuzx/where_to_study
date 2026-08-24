@@ -400,10 +400,10 @@ struct MobileTeachingCalendarView: View {
             }
             .foregroundStyle(selected ? AppTheme.onPrimary : dateStripForeground(holiday: holiday))
             .frame(maxWidth: .infinity, minHeight: 56)
-            .background(selected ? AppTheme.primaryFill : Color.clear)
+            .background(selected ? AppTheme.selectedDate : Color.clear)
             .overlay {
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(today && !selected ? AppTheme.primary : Color.clear, lineWidth: 2)
+                    .stroke(today ? AppTheme.danger : Color.clear, lineWidth: 2)
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
@@ -978,12 +978,12 @@ struct MobileTeachingCalendarView: View {
                 RoundedRectangle(cornerRadius: 9)
                     .stroke(
                         deadlineKind.map { allDayEventTint($0) }
-                            ?? (today && !selected ? AppTheme.primary : Color.clear),
-                        lineWidth: deadlineKind != nil || (today && !selected) ? 2 : 0
+                            ?? (today ? AppTheme.danger : Color.clear),
+                        lineWidth: deadlineKind != nil || today ? 2 : 0
                     )
                 if deadlineKind != nil, today {
                     RoundedRectangle(cornerRadius: 7)
-                        .stroke(AppTheme.primary, lineWidth: 1)
+                        .stroke(AppTheme.danger, lineWidth: 1)
                         .padding(2)
                 }
             }
@@ -1131,6 +1131,7 @@ struct MobileTeachingCalendarView: View {
         if calendar.isDate(day, equalTo: month, toGranularity: .month) {
             let count = courses(on: day).count
             let today = sameDay(day, .now)
+            let selected = sameDay(day, selectedDate)
             let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
                 in: allDayEvents(on: day)
             )
@@ -1141,15 +1142,21 @@ struct MobileTeachingCalendarView: View {
             } label: {
                 Text("\(calendar.component(.day, from: day))")
                     .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(AppTheme.text)
+                    .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
                     .frame(maxWidth: .infinity, minHeight: 24)
-                    .background(AppTheme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: count)))
+                    .background(
+                        selected
+                            ? AppTheme.selectedDate
+                            : AppTheme.primary.opacity(
+                                TeachingCalendarLogic.yearCourseOpacity(courseCount: count)
+                            )
+                    )
                     .overlay {
                         ZStack {
                             RoundedRectangle(cornerRadius: 4)
                                 .stroke(
                                     deadlineKind.map { allDayEventTint($0) }
-                                        ?? (today ? AppTheme.primary : AppTheme.border),
+                                        ?? (today ? AppTheme.danger : AppTheme.border),
                                     lineWidth: deadlineKind != nil || today ? 2 : 0.5
                                 )
                             if CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
@@ -1157,7 +1164,7 @@ struct MobileTeachingCalendarView: View {
                                 deadlineKind: deadlineKind
                             ) {
                                 RoundedRectangle(cornerRadius: 2)
-                                    .stroke(AppTheme.primary, lineWidth: 1)
+                                    .stroke(AppTheme.danger, lineWidth: 1)
                                     .padding(2)
                             }
                         }
@@ -2310,7 +2317,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func monthBackground(selected: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.primaryFill }
+        if selected { return AppTheme.selectedDate }
         guard courseCount > 0 else { return Color.clear }
         return AppTheme.primary.opacity(min(0.08 + Double(courseCount) * 0.08, 0.36))
     }

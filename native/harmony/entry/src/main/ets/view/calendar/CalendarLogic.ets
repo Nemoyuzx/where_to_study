@@ -201,6 +201,28 @@ export class TeachingCalendarLogic {
     return isToday && priority !== CalendarYearDeadlinePriority.none;
   }
 
+  static timelineCourseSummaryDate(mode: CalendarMode, selectedDate: DateParts): DateParts {
+    // 手机日/周共用一个课程折叠区；mode 只决定下方时间线的列数。
+    return selectedDate;
+  }
+
+  static timelineAgendaSortOrder(category: string): number {
+    if (category === 'holiday' || category === 'workday') {
+      return 0;
+    }
+    if (category === 'assignment') {
+      return 1;
+    }
+    if (category === 'school_notice') {
+      return 2;
+    }
+    return 3;
+  }
+
+  static agendaDialogChangesSelectedDate(mode: CalendarMode): boolean {
+    return mode !== CalendarMode.week;
+  }
+
   static periodTitle(date: DateParts, mode: CalendarMode, english: boolean = false): string {
     if (english) {
       if (mode === CalendarMode.day) {

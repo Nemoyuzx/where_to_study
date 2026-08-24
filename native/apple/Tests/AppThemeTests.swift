@@ -12,6 +12,13 @@ final class AppThemeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(contrast(.white, AppThemePalette.dark.primaryFill), 4.5)
     }
 
+    func testSelectedDateMaintainsReadableWhiteTextInBothAppearances() {
+        XCTAssertGreaterThanOrEqual(contrast(.white, AppThemePalette.light.selectedDate), 4.5)
+        XCTAssertGreaterThanOrEqual(contrast(.white, AppThemePalette.dark.selectedDate), 4.5)
+        XCTAssertNotEqual(AppThemePalette.light.selectedDate, AppThemePalette.light.primaryFill)
+        XCTAssertNotEqual(AppThemePalette.dark.selectedDate, AppThemePalette.dark.primaryFill)
+    }
+
     func testBrandForegroundMaintainsContrastAgainstPageBackgrounds() {
         let lightBackground = AppThemeColor(red: 244, green: 247, blue: 244)
         let darkBackground = AppThemeColor(red: 24, green: 28, blue: 26)

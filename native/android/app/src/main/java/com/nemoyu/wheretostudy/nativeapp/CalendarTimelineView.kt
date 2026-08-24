@@ -23,6 +23,7 @@ import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 data class TimelineDay(
     val date: Calendar,
@@ -30,10 +31,17 @@ data class TimelineDay(
     val holidays: List<HolidayItem>,
 )
 
+enum class CalendarTimelineGridLayer {
+    SELECTED_DATE_BACKGROUND,
+    HOUR_LINES,
+    COURSE_SLOT_LINES,
+}
+
 object CalendarTimelineLogic {
     const val startMinute = 8 * 60
     const val endMinute = 22 * 60
-    const val selectedColumnOpacity = 0.045f
+    const val selectedColumnOpacity = 0.10f
+    const val courseSlotLineAlpha = 0.44f
     const val courseAccentWidthDp = 3
     const val courseMinimumHeightDp = 38
 
@@ -66,7 +74,7 @@ object CalendarTimelineLogic {
     }
 
     fun axisWidthDp(compact: Boolean, showCourseSlots: Boolean = true): Int {
-        if (compact) return 48
+        if (compact) return 56
         val hourWidth = if (compact) 42 else 48
         val slotWidth = if (compact) 70 else 96
         return hourWidth + if (showCourseSlots) slotWidth else 0
@@ -83,6 +91,31 @@ object CalendarTimelineLogic {
         .flatMap { slot -> listOfNotNull(minuteOfDay(slot.start), minuteOfDay(slot.end)) }
         .distinct()
         .sorted()
+
+    fun nonHourlyCourseSlotBoundaryMinutes(): List<Int> =
+        courseSlotBoundaryMinutes().filter { minute -> minute % 60 != 0 }
+
+    fun courseSlotLineColor(mutedColor: Int): Int =
+        (mutedColor and 0x00FFFFFF) or
+            ((255 * courseSlotLineAlpha).roundToInt().coerceIn(0, 255) shl 24)
+
+    fun gridLayerOrder(): List<CalendarTimelineGridLayer> = listOf(
+        CalendarTimelineGridLayer.SELECTED_DATE_BACKGROUND,
+        CalendarTimelineGridLayer.HOUR_LINES,
+        CalendarTimelineGridLayer.COURSE_SLOT_LINES,
+    )
+
+    fun dayHeaderBackgroundColor(
+        selected: Boolean,
+        selectedDateColor: Int,
+        surfaceColor: Int,
+    ): Int = if (selected) selectedDateColor else surfaceColor
+
+    fun dayHeaderTextColor(
+        selected: Boolean,
+        onPrimaryColor: Int,
+        defaultColor: Int,
+    ): Int = if (selected) onPrimaryColor else defaultColor
 }
 
 @SuppressLint("ViewConstructor")
@@ -177,8 +210,8 @@ private class CalendarTimelineCanvas(
         strokeWidth = (resources.displayMetrics.density * 0.5f).coerceAtLeast(1f)
     }
     private val slotLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = (Palette.muted and 0x00FFFFFF) or (0x3D shl 24)
-        strokeWidth = (resources.displayMetrics.density * 0.5f).coerceAtLeast(1f)
+        color = CalendarTimelineLogic.courseSlotLineColor(Palette.muted)
+        strokeWidth = (resources.displayMetrics.density * 0.75f).coerceAtLeast(1f)
         pathEffect = DashPathEffect(
             floatArrayOf(
                 resources.displayMetrics.density * 4f,
@@ -363,7 +396,7 @@ private class CalendarTimelineCanvas(
         }
 
         if (showCourseSlots) {
-            CalendarTimelineLogic.courseSlotBoundaryMinutes().forEach { minute ->
+            CalendarTimelineLogic.nonHourlyCourseSlotBoundaryMinutes().forEach { minute ->
                 val y = yForMinute(minute)
                 canvas.drawLine(hourAxisWidth, y, width.toFloat(), y, slotLinePaint)
             }
@@ -437,27 +470,30 @@ private class CalendarTimelineCanvas(
             canvas.drawRect(0f, 0f, width.toFloat(), headerHeight, fillPaint)
         }
 
-        if (days.size > 1) {
-            val selectedIndex = days.indexOfFirst { sameDay(it.date, selectedDate) }
-            if (selectedIndex >= 0) {
-                fillPaint.color = blend(
-                    Palette.primary,
-                    Palette.surface,
-                    CalendarTimelineLogic.selectedColumnOpacity,
-                )
-                val left = dayWidth * selectedIndex
-                canvas.drawRect(left, 0f, left + dayWidth, totalHeight, fillPaint)
-            }
-        }
-
-        for (hour in 8..22) {
-            val y = yForMinute(hour * 60)
-            canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
-        }
-        if (showCourseSlots) {
-            CalendarTimelineLogic.courseSlotBoundaryMinutes().forEach { minute ->
-                val y = yForMinute(minute)
-                canvas.drawLine(0f, y, width.toFloat(), y, slotLinePaint)
+        CalendarTimelineLogic.gridLayerOrder().forEach { layer ->
+            when (layer) {
+                CalendarTimelineGridLayer.SELECTED_DATE_BACKGROUND -> if (days.size > 1) {
+                    val selectedIndex = days.indexOfFirst { sameDay(it.date, selectedDate) }
+                    if (selectedIndex >= 0) {
+                        fillPaint.color = blend(
+                            Palette.selectedDate,
+                            Palette.surface,
+                            CalendarTimelineLogic.selectedColumnOpacity,
+                        )
+                        val left = dayWidth * selectedIndex
+                        canvas.drawRect(left, 0f, left + dayWidth, totalHeight, fillPaint)
+                    }
+                }
+                CalendarTimelineGridLayer.HOUR_LINES -> for (hour in 8..22) {
+                    val y = yForMinute(hour * 60)
+                    canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
+                }
+                CalendarTimelineGridLayer.COURSE_SLOT_LINES -> if (showCourseSlots) {
+                    CalendarTimelineLogic.nonHourlyCourseSlotBoundaryMinutes().forEach { minute ->
+                        val y = yForMinute(minute)
+                        canvas.drawLine(0f, y, width.toFloat(), y, slotLinePaint)
+                    }
+                }
             }
         }
         for (index in 0..days.size) {
@@ -471,7 +507,21 @@ private class CalendarTimelineCanvas(
             days.forEachIndexed { index, day ->
                 val left = dayWidth * index
                 val right = left + dayWidth
-                boldPaint.color = Palette.text
+                val selected = sameDay(day.date, selectedDate)
+                fillPaint.color = CalendarTimelineLogic.dayHeaderBackgroundColor(
+                    selected = selected,
+                    selectedDateColor = Palette.selectedDate,
+                    surfaceColor = Palette.surface,
+                )
+                canvas.drawRect(left, 0f, right, headerHeight, fillPaint)
+                canvas.drawLine(left, 0f, left, headerHeight, linePaint)
+                canvas.drawLine(right, 0f, right, headerHeight, linePaint)
+                canvas.drawLine(left, headerHeight, right, headerHeight, linePaint)
+                boldPaint.color = CalendarTimelineLogic.dayHeaderTextColor(
+                    selected = selected,
+                    onPrimaryColor = Palette.onPrimary,
+                    defaultColor = Palette.text,
+                )
                 boldPaint.textAlign = Paint.Align.CENTER
                 boldPaint.textSize = sp(13f)
                 drawCenteredText(
@@ -482,7 +532,13 @@ private class CalendarTimelineCanvas(
                     boldPaint,
                 )
 
-                textPaint.color = if (day.courses.isEmpty()) Palette.muted else Palette.primaryText
+                textPaint.color = if (selected) {
+                    Palette.onPrimary
+                } else if (day.courses.isEmpty()) {
+                    Palette.muted
+                } else {
+                    Palette.primaryText
+                }
                 textPaint.textAlign = Paint.Align.CENTER
                 textPaint.textSize = sp(10f)
                 val detail = context.uiText(

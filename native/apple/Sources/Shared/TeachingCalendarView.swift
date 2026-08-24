@@ -920,7 +920,7 @@ struct TeachingCalendarView: View {
         )
         .background(
             isSelected
-                ? AppTheme.primary.opacity(0.08)
+                ? AppTheme.selectedDate.opacity(0.14)
                 : (inMonth ? Color.clear : AppTheme.surface.opacity(0.28))
         )
         .overlay {
@@ -959,10 +959,15 @@ struct TeachingCalendarView: View {
             )
             .frame(minWidth: 22, minHeight: 22)
             .background {
-                if isToday {
-                    Circle().fill(Self.nowRed)
-                } else if isSelected {
-                    Circle().fill(AppTheme.primaryFill)
+                ZStack {
+                    if isSelected {
+                        Circle().fill(AppTheme.selectedDate)
+                    } else if isToday {
+                        Circle().fill(Self.nowRed)
+                    }
+                    if isSelected, isToday {
+                        Circle().stroke(Self.nowRed, lineWidth: 2)
+                    }
                 }
             }
     }
@@ -1355,16 +1360,16 @@ struct TeachingCalendarView: View {
             .background {
                 ZStack {
                     RoundedRectangle(cornerRadius: 3).fill(baseColor)
-                    if isToday {
+                    if isSelected {
                         Circle()
-                            .fill(Self.nowRed)
+                            .fill(AppTheme.selectedDate)
                             .frame(
                                 width: layout.selectionDiameter,
                                 height: layout.selectionDiameter
                             )
-                    } else if isSelected {
+                    } else if isToday {
                         Circle()
-                            .fill(AppTheme.primaryFill)
+                            .fill(Self.nowRed)
                             .frame(
                                 width: layout.selectionDiameter,
                                 height: layout.selectionDiameter
@@ -1373,11 +1378,21 @@ struct TeachingCalendarView: View {
                 }
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 3)
-                    .stroke(
-                        deadlineKind.map { allDayEventTint($0) } ?? Color.clear,
-                        lineWidth: deadlineKind == nil ? 0 : 2
-                    )
+                ZStack {
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(
+                            deadlineKind.map { allDayEventTint($0) } ?? Color.clear,
+                            lineWidth: deadlineKind == nil ? 0 : 2
+                        )
+                    if isSelected, isToday {
+                        Circle()
+                            .stroke(Self.nowRed, lineWidth: 1)
+                            .frame(
+                                width: layout.selectionDiameter - 3,
+                                height: layout.selectionDiameter - 3
+                            )
+                    }
+                }
             }
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
@@ -1453,11 +1468,7 @@ struct TeachingCalendarView: View {
             let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
                 in: allDayEvents(on: day)
             )
-            #if os(macOS)
             let isSelected = sameDay(selectedDate, day)
-            #else
-            let isSelected = yearPopoverDate.map { sameDay($0, day) } ?? false
-            #endif
             let cell = VStack(spacing: 0) {
                 Text("\(calendar.component(.day, from: day))")
                 if let item = holidays.first {
@@ -2495,7 +2506,7 @@ struct TeachingCalendarView: View {
     }
 
     private func monthCellColor(selected: Bool, inMonth: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.primaryFill }
+        if selected { return AppTheme.selectedDate }
         if !inMonth { return AppTheme.surface }
         guard courseCount > 0 else { return AppTheme.background }
         return AppTheme.primary.opacity(min(0.08 + Double(courseCount) * 0.10, 0.48))
@@ -2509,7 +2520,7 @@ struct TeachingCalendarView: View {
     }
 
     private func yearCellColor(selected: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.primaryFill }
+        if selected { return AppTheme.selectedDate }
         guard courseCount > 0 else { return AppTheme.background }
         return AppTheme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount))
     }

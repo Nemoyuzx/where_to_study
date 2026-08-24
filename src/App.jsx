@@ -77,6 +77,7 @@ import {
   msUntilNextShanghaiMidnight,
   normalizeClassroomsCache,
   normalizeError,
+  nonHourlyCourseBoundaryMinutes,
   parseTimeMinutes,
   requestBody,
   resolvedUiLanguage,
@@ -218,6 +219,7 @@ const EN_TEXT = Object.freeze({
   '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。': 'Show notices extracted by script from public pages on the university’s internal website.',
   '在统一 DDL 卡片中显示夏令营截止日期。': 'Show summer-camp deadlines in the combined deadline card.',
   '在统一 DDL 卡片中显示黑客松截止日期。': 'Show hackathon deadlines in the combined deadline card.',
+  '课程作业会随账号自动同步，不提供单独关闭开关。': 'Assignment deadlines sync automatically with your account and do not have a separate switch.',
   '天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。': 'Weather, almanac, and deadline cards identify their third-party sources. Academic competitions and script-extracted school notices have separate switches.',
   '显示数据仅供参考，请以实际情况为准。': 'Displayed data is for reference only; rely on official information.',
   '本地数据': 'Local data',
@@ -1515,6 +1517,10 @@ function App() {
     () => Array.from({ length: CALENDAR_END_HOUR - CALENDAR_START_HOUR + 1 }, (_, index) => CALENDAR_START_HOUR + index),
     [],
   )
+  const calendarSlotBoundaryMinutes = useMemo(
+    () => nonHourlyCourseBoundaryMinutes(slotMeta),
+    [slotMeta],
+  )
   const visibleCalendarDays = useMemo(() => {
     if (calendarView === 'day') return [calendarDate]
     if (calendarView === 'week') {
@@ -2754,15 +2760,17 @@ function App() {
                 <Clock3 size={18} />
                 <h2>{t('节次筛选')}</h2>
               </div>
-              <label className="planner-switch-row">
+              <div className="planner-switch-row">
                 <span>{t('使用个人课表排除已有课程')}</span>
-                <input
-                  type="checkbox"
-                  checked={usePersonalSchedule}
-                  onChange={togglePersonalSchedule}
-                />
-                <i aria-hidden="true" />
-              </label>
+                <button
+                  type="button"
+                  className="settings-switch"
+                  role="switch"
+                  aria-checked={usePersonalSchedule}
+                  aria-label={t('使用个人课表排除已有课程')}
+                  onClick={togglePersonalSchedule}
+                ><span aria-hidden="true" /></button>
+              </div>
               <div className="mini-actions planner-slot-actions">
                 <button
                   type="button"
@@ -2988,7 +2996,11 @@ function App() {
                         {visibleCalendarDays.map((dateString) => {
                           const summary = summarizeMonthEntries(allDayEntriesFor(dateString), 2)
                           return (
-                            <div key={`all-day-${dateString}`} className="time-all-day-cell">
+                            <div
+                              key={`all-day-${dateString}`}
+                              className="time-all-day-cell"
+                              data-selected={dateString === calendarDate}
+                            >
                               {summary.visible.map((item) => (
                                 <span key={`${dateString}-${item.key}`} className={item.type} title={item.label}>
                                   {item.type === 'holiday' || item.type === 'workday'
@@ -3016,6 +3028,16 @@ function App() {
                       })}
                     </div>
                     <div className="slot-time-labels">
+                      <div className="slot-axis-grid-lines" aria-hidden="true">
+                        {calendarHours.map((hour) => {
+                          const top = (((hour * 60) - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                          return <i key={`axis-hour-${hour}`} className="hour-line" style={{ top: `${top}%` }} />
+                        })}
+                        {calendarSlotBoundaryMinutes.map((minute) => {
+                          const top = ((minute - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                          return <i key={`axis-slot-${minute}`} className="slot-boundary-line" style={{ top: `${top}%` }} />
+                        })}
+                      </div>
                       {slotMeta.map((slot) => {
                         const start = parseTimeMinutes(slot.start)
                         const end = parseTimeMinutes(slot.end)
@@ -3036,10 +3058,14 @@ function App() {
                       const visibleRange = visibleEnd - visibleStart
                       return (
                         <div key={`lane-${dateString}`} className={`time-day-lane ${dateString === calendarDate ? 'selected' : ''}`}>
-                          <div className="time-grid-lines">
+                          <div className="time-grid-lines" aria-hidden="true">
                             {calendarHours.map((hour) => {
                               const top = (((hour * 60) - visibleStart) / visibleRange) * 100
-                              return <span key={hour} style={{ top: `${top}%` }} />
+                              return <span key={`hour-${hour}`} className="hour-line" style={{ top: `${top}%` }} />
+                            })}
+                            {calendarSlotBoundaryMinutes.map((minute) => {
+                              const top = ((minute - visibleStart) / visibleRange) * 100
+                              return <span key={`slot-${minute}`} className="slot-boundary-line" style={{ top: `${top}%` }} />
                             })}
                           </div>
                           <div className="time-course-layer">
@@ -3271,7 +3297,7 @@ function App() {
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${hasPublicDeadline ? 'has-public-deadline' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${currentMonth && calendarPopover?.date === dateString ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${hasPublicDeadline ? 'has-public-deadline' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${currentMonth && dateString === calendarDate ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
                                 style={courseCount ? { '--course-load-opacity': courseOpacity } : null}
                                 title={[
                                   ...calendarItems.map((item) => `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`),
@@ -3490,17 +3516,29 @@ function App() {
 
             <section className="panel settings-daily-info">
               <div className="panel-title"><CalendarRange size={18} /><h2>{t('生活信息与 DDL')}</h2></div>
+              <div className="settings-switch-row settings-readonly-color-row">
+                <div>
+                  <strong className="settings-color-label">
+                    {t('课程作业 DDL')}
+                    <i className="settings-color-dot assignment" aria-hidden="true" />
+                  </strong>
+                  <span>{t('课程作业会随账号自动同步，不提供单独关闭开关。')}</span>
+                </div>
+              </div>
               {[
-                ['weatherEnabled', '校区天气', '在空教室联动查询上方显示默认折叠的今日、明日天气。'],
-                ['almanacEnabled', '黄历信息', '在月视图日期详情中显示农历、干支与宜忌。'],
-                ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示 Contest DDL 收录的公开学科竞赛截止日期。'],
-                ['schoolContestNoticesEnabled', '校内竞赛通知', '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。'],
-                ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。'],
-                ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。'],
-              ].map(([field, title, description]) => (
+                ['weatherEnabled', '校区天气', '在空教室联动查询上方显示默认折叠的今日、明日天气。', ''],
+                ['almanacEnabled', '黄历信息', '在月视图日期详情中显示农历、干支与宜忌。', ''],
+                ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示 Contest DDL 收录的公开学科竞赛截止日期。', 'public-deadline'],
+                ['schoolContestNoticesEnabled', '校内竞赛通知', '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。', 'school-notice'],
+                ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。', 'public-deadline'],
+                ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。', 'public-deadline'],
+              ].map(([field, title, description, colorKind]) => (
                 <div className="settings-switch-row" key={field}>
                   <div>
-                    <strong>{t(title)}</strong>
+                    <strong className={colorKind ? 'settings-color-label' : undefined}>
+                      {t(title)}
+                      {colorKind ? <i className={`settings-color-dot ${colorKind}`} aria-hidden="true" /> : null}
+                    </strong>
                     <span>{t(description)}</span>
                   </div>
                   <button

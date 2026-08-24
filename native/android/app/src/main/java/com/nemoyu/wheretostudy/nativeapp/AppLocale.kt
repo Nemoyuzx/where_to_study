@@ -20,6 +20,13 @@ enum class AppLanguage(val code: String) {
     ENGLISH("en"),
 }
 
+object AppTypography {
+    const val oneStepSmallerScale = 0.92f
+
+    fun adjustedFontScale(systemFontScale: Float): Float =
+        systemFontScale * oneStepSmallerScale
+}
+
 object AppLocale {
     fun wrap(base: Context, languageCode: String): Context {
         val language = AppLanguage.entries.firstOrNull { it.code == languageCode }
@@ -29,6 +36,7 @@ object AppLocale {
         val configuration = Configuration(base.resources.configuration).apply {
             setLocale(locale)
             setLocales(LocaleList(locale))
+            fontScale = AppTypography.adjustedFontScale(base.resources.configuration.fontScale)
         }
         return base.createConfigurationContext(configuration)
     }
@@ -125,6 +133,8 @@ object UiText {
         "课程与全天  ⌄" to "Courses & All-day  ⌄",
         "收起课程与全天事项" to "Collapse courses and all-day items",
         "展开课程与全天事项" to "Expand courses and all-day items",
+        "收起当前日期课程" to "Collapse courses for the selected date",
+        "展开当前日期课程" to "Expand courses for the selected date",
         "当日课程" to "Courses for This Day",
         "当日日程" to "Schedule for This Day",
         "暂无课程" to "No courses",
@@ -160,6 +170,7 @@ object UiText {
         "月视图日程" to "Month Schedule",
         "打开月视图全天日程" to "Open month all-day schedule",
         "周视图全天日程弹窗" to "Week all-day schedule dialog",
+        "日视图全天日程弹窗" to "Day all-day schedule dialog",
         "月视图溢出日程弹窗" to "Month overflow schedule dialog",
         "收起月历并显示当日日程" to "Collapse month and show day details",
         "展开月历" to "Expand month",
