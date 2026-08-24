@@ -1,3 +1,6 @@
+（进来给个🌟吧） 赞助：https://ifdian.net/a/Nemoyuzx，建站和apple年费真的很昂贵 
+bupt校内的其它非官方学生组织可以联系我在网站上添加友链
+
 # Where To Study
 
 北邮空教室与个人课表联动查询应用。Windows 与 Linux 客户端使用 Tauri 2、React 和 Rust，
