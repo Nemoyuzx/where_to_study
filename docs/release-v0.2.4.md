@@ -18,6 +18,7 @@
 
 - 自动生成的效果截图目录改为本地生成物并加入 Git 忽略规则；现有截图从版本控制移除，发布包与商店素材仍按各自流程单独生成和校验。
 - Android 发布门禁会解析 APK 的编译后 Manifest 与网络安全资源，确认默认禁用明文流量，并只为竞赛备用接口 `101.201.29.29` 保留单域例外。
+- Apple CI 为偶发的 XCUITest 输入/Accessibility 波动增加一次原生失败重试、45 分钟上限和失败 `.xcresult` 留存；持续失败仍会阻止发布。
 - Android 版本为 `0.2.4 (37)`；iOS 与 macOS 版本为 `0.2.4 (65)`。
 - GitHub Release 附件范围：Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。`.sha256` 仅用于内部校验，不作为附件。
 - TestFlight 分发范围：原生 iOS 与 macOS `0.2.4 (65)`，均已由本地 Xcode 完成签名归档并收到上传成功结果。Apple 制品不进入 GitHub Release；按发布约定未再打开 App Store Connect 检查后续状态。
@@ -42,6 +43,7 @@
 
 - Generated screenshot directories are now local build artifacts covered by Git ignore rules. Existing screenshots are removed from source control, while release and store artwork continues to be generated and verified separately.
 - The Android release gate now parses the compiled APK manifest and network-security resource, enforcing HTTPS by default with a single-domain exception for the contest backup endpoint at `101.201.29.29`.
+- Apple CI now retries a transient XCUITest failure once, allows 45 minutes for the full suite, and preserves failed `.xcresult` bundles. Persistent failures still block the release.
 - Android is version `0.2.4 (37)`; native iOS and macOS are version `0.2.4 (65)`.
 - GitHub Release scope: Windows x64 NSIS, Linux arm64/x86_64 Debian/AppImage/CLI/TUI, and maintainer-signed Android APK/AAB. `.sha256` files remain internal verification artifacts and are not attached.
 - TestFlight scope: native iOS and macOS `0.2.4 (65)`. Both platforms completed signed local Xcode archives and returned successful upload results. Apple artifacts are not attached to GitHub Release, and App Store Connect was not opened for a follow-up status check.

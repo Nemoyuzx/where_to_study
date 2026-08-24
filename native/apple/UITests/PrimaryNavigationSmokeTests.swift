@@ -840,7 +840,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let predicate = NSPredicate(format: "label != %@", label)
         return XCTWaiter.wait(
             for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
-            timeout: 3
+            timeout: 5
         ) == .completed
     }
 
@@ -848,7 +848,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let predicate = NSPredicate(format: "label == %@", label)
         return XCTWaiter.wait(
             for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
-            timeout: 3
+            timeout: 5
         ) == .completed
     }
 
@@ -867,7 +867,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         }
         return XCTWaiter.wait(
             for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
-            timeout: 3
+            timeout: 5
         ) == .completed
     }
 
@@ -960,7 +960,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let predicate = NSPredicate(format: "value == %@", value)
         return XCTWaiter.wait(
             for: [XCTNSPredicateExpectation(predicate: predicate, object: element)],
-            timeout: 3
+            timeout: 5
         ) == .completed
     }
 

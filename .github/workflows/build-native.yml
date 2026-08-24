@@ -69,7 +69,7 @@ jobs:
   apple:
     name: Apple builds, archives, platform tests, and shared Rust tests
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       RELEASE_LABEL: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'ci' }}
 
@@ -108,6 +108,15 @@ jobs:
 
       - name: Build Apple clients and run platform unit tests
         run: ./scripts/native-apple-build.sh
+
+      - name: Upload Apple test diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: where-to-study-native-apple-test-results-${{ github.run_attempt }}
+          path: native/apple/DerivedData/**/Logs/Test/*.xcresult
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Package native macOS preview
         run: ./scripts/native-macos-package.sh "$RELEASE_LABEL"

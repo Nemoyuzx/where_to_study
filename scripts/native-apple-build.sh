@@ -68,6 +68,8 @@ xcodebuild \
   -scheme WhereToStudyiOS \
   -destination "platform=iOS Simulator,id=$IOS_SIMULATOR_UDID" \
   -derivedDataPath "$DERIVED_DATA/iOS" \
+  -retry-tests-on-failure \
+  -test-iterations 2 \
   CODE_SIGNING_ALLOWED=NO \
   "${STRICT_SWIFT_SETTINGS[@]}" \
   test

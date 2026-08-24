@@ -180,6 +180,24 @@ test("native Apple targets keep the App Store Connect bundle identifiers", () =>
   );
 });
 
+test("native Apple CI retries transient UI automation failures and preserves diagnostics", () => {
+  const nativeAppleBuildScript = readFileSync(
+    path.join(root, "scripts", "native-apple-build.sh"),
+    "utf8",
+  );
+  const nativeWorkflow = readFileSync(
+    path.join(root, ".github", "workflows", "build-native.yml"),
+    "utf8",
+  );
+
+  assert.match(nativeAppleBuildScript, /-retry-tests-on-failure/);
+  assert.match(nativeAppleBuildScript, /-test-iterations 2/);
+  assert.match(nativeWorkflow, /timeout-minutes: 45/);
+  assert.match(nativeWorkflow, /Upload Apple test diagnostics on failure/);
+  assert.match(nativeWorkflow, /native\/apple\/DerivedData\/\*\*\/Logs\/Test\/\*\.xcresult/);
+  assert.match(nativeWorkflow, /where-to-study-native-apple-test-results-/);
+});
+
 test("Xcode Cloud generates the ignored native Apple project after cloning", () => {
   const cloudScript = readFileSync(
     path.join(root, "native", "apple", "ci_scripts", "ci_post_clone.sh"),
