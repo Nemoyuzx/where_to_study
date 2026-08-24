@@ -1,4 +1,4 @@
-（进来给个🌟吧） 赞助：https://ifdian.net/a/Nemoyuzx，建站和apple年费真的很昂贵
+（进来给个🌟吧） 赞助（建站和apple年费真的很昂贵）：https://ifdian.net/a/Nemoyuzx
 
 # Where To Study
 
