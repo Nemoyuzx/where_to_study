@@ -3,6 +3,7 @@
 // 参考值由 Tauri 参考实现（src/planner-domain.js）在 Node 中运行得出。
 import { describe, it, expect } from '@ohos/hypium';
 import { DateParts, StrictDates } from '../main/ets/common/StrictDates';
+import { ScheduleDefaults } from '../main/ets/common/Models';
 import { SemesterLogic, SemesterSuggestion } from '../main/ets/common/SemesterLogic';
 
 function suggestion(termID: string, termStartDate: string): SemesterSuggestion {
@@ -58,6 +59,69 @@ export default function semesterLogicTest() {
       const jan2027: SemesterSuggestion = SemesterLogic.suggestForDate(new DateParts(2027, 1, 15));
       expect(jan2027.termID).assertEqual('2026-2027-1');
       expect(jan2027.termStartDate).assertEqual('2026-08-31');
+    });
+
+    it('automatic_launch_keeps_only_current_term_cache_metadata', 0, () => {
+      const currentCache: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+        '2026-2027-1', '2026-09-07', new DateParts(2026, 8, 24));
+      expect(currentCache.termID).assertEqual('2026-2027-1');
+      expect(currentCache.termStartDate).assertEqual('2026-09-07');
+      expect(SemesterLogic.canUseAutomaticCachedSchedule(
+        '2026-2027-1', '2026-09-07', new DateParts(2026, 8, 24))).assertTrue();
+
+      const oldCache: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+        '2025-2026-2', '2026-03-02', new DateParts(2026, 8, 24));
+      expect(oldCache.termID).assertEqual('2026-2027-1');
+      expect(oldCache.termStartDate).assertEqual('2026-08-31');
+      expect(SemesterLogic.canUseAutomaticCachedSchedule(
+        '2025-2026-2', '2026-03-02', new DateParts(2026, 8, 24))).assertFalse();
+
+      const invalidDate: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+        '2026-2027-1', '2026-02-30', new DateParts(2026, 12, 31));
+      expect(invalidDate.termID).assertEqual('2026-2027-1');
+      expect(invalidDate.termStartDate).assertEqual('2026-08-31');
+      expect(SemesterLogic.canUseAutomaticCachedSchedule(
+        '2026-2027-1', '2026-02-30', new DateParts(2026, 12, 31))).assertFalse();
+    });
+
+    it('automatic_launch_handles_january_february_year_boundary', 0, () => {
+      const january: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+        '2026-2027-2', '2027-03-01', new DateParts(2027, 1, 1));
+      const february: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+        '2026-2027-1', '2026-08-31', new DateParts(2027, 2, 1));
+      expect(january.termID).assertEqual('2026-2027-1');
+      expect(january.termStartDate).assertEqual('2026-08-31');
+      expect(february.termID).assertEqual('2026-2027-2');
+      expect(february.termStartDate).assertEqual('2027-03-01');
+    });
+
+    it('automatic_launch_refresh_requires_saved_credentials', 0, () => {
+      expect(SemesterLogic.shouldRefreshAutomatically(true, true, 'student')).assertTrue();
+      expect(SemesterLogic.shouldRefreshAutomatically(false, true, 'student')).assertFalse();
+      expect(SemesterLogic.shouldRefreshAutomatically(true, false, 'student')).assertFalse();
+      expect(SemesterLogic.shouldRefreshAutomatically(true, true, '   ')).assertFalse();
+    });
+
+    it('manual_refresh_preserves_validated_manual_term', 0, () => {
+      const automatic: SemesterSuggestion = SemesterLogic.resolveFetchedTerm(
+        true, '2026-2027-1', '2026-09-07', 'manual-term', '2026-08-31');
+      const manual: SemesterSuggestion = SemesterLogic.resolveFetchedTerm(
+        false, '2026-2027-1', '2026-09-07', 'manual-term', '2026-08-31');
+      expect(automatic.termID).assertEqual('2026-2027-1');
+      expect(automatic.termStartDate).assertEqual('2026-09-07');
+      expect(manual.termID).assertEqual('manual-term');
+      expect(manual.termStartDate).assertEqual('2026-08-31');
+      const emptyManual: SemesterSuggestion = SemesterLogic.resolveFetchedTerm(
+        false, '2026-2027-1', '2026-09-07', ScheduleDefaults.termID, ScheduleDefaults.termStartDate);
+      expect(emptyManual.termID).assertEqual('');
+      expect(emptyManual.termStartDate).assertEqual('');
+    });
+
+    it('persisted_term_defaults_are_empty_until_automatic_detection', 0, () => {
+      expect(ScheduleDefaults.termID).assertEqual('');
+      expect(ScheduleDefaults.termStartDate).assertEqual('');
+      expect(SemesterLogic.isValidTermID(ScheduleDefaults.termID)).assertFalse();
+      expect(SemesterLogic.isValidTermStartDate(ScheduleDefaults.termStartDate)).assertFalse();
     });
 
     it('suggest_current_period_equals_suggest_for_date_today', 0, () => {

@@ -80,6 +80,7 @@ import {
   isValidTermId,
   isValidTermStartDate,
   localDateString,
+  manualTermValidationError,
   suggestTermForDate,
   termMatchesCurrentPeriod,
   msUntilNextShanghaiMidnight,
@@ -90,13 +91,16 @@ import {
   parseTimeMinutes,
   requestBody,
   resolvedUiLanguage,
+  scheduleRequestTerm,
   savedCredentialSnapshot,
   savedSettingsToState,
+  settingsWithScheduleTerm,
   settingsToPayload,
   shanghaiDateString,
   shiftDate,
   slotsToRanges,
   startOfWeekMonday,
+  startupSettingsToState,
   summarizeMonthEntries,
   yearCourseOpacity,
 } from './planner-domain.js'
@@ -235,7 +239,7 @@ const EN_TEXT = Object.freeze({
   '自动检测当前学期': 'Detect the current term automatically',
   '学期编号': 'Term ID',
   '第一周周一': 'Monday of week 1',
-  '获取/刷新课表后会自动应用教务返回的学期与开学日期。': 'Loading your schedule automatically applies the term and start date returned by the academic system.',
+  '启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。': 'At launch or after a schedule refresh, the term and start date returned by the academic system are applied automatically.',
   '已关闭自动检测，将使用上方手动填写的学期信息。': 'Automatic detection is off; the term values above will be used.',
   '按当前日期填写': 'Suggest from today',
   '✓ 与当前学期一致': '✓ Matches the current term',
@@ -344,7 +348,7 @@ function loadFavoriteDeadlines() {
 const PRIVACY_SECTIONS = [
   {
     title: '账户与教务请求 / Account and academic requests',
-    body: '学号和密码保存在操作系统的受保护凭据存储中，仅在你请求课表、空教室或作业时按对应用途通过 HTTPS 使用。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。\n\nCredentials stay in protected OS storage and are used over HTTPS only for requested schedules, classrooms, or assignments. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password.',
+    body: '学号和密码保存在操作系统的受保护凭据存储中。保存有效凭据且开启自动学期检测后，启动时会自动刷新一次个人课表，用于校验学期号和第一周周一。你主动请求课表、空教室或作业时也会按对应用途通过 HTTPS 使用凭据。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。\n\nCredentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password.',
   },
   {
     title: '本地数据 / Local data',
@@ -433,7 +437,7 @@ function PrivacyPolicyDialog({ onClose }) {
           <div>
             <p className="eyebrow">Where To Study</p>
             <h2 id="privacy-dialog-title">隐私声明 / Privacy Policy</h2>
-            <span>生效日期 / Effective date: 2026-08-23</span>
+            <span>生效日期 / Effective date: 2026-08-24</span>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
@@ -498,6 +502,10 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'save_saved_settings') {
+    if (payload.automatic_term_detection_enabled === false) {
+      const validationError = manualTermValidationError(payload.term_id, payload.term_start_date)
+      if (validationError) throw new Error(validationError)
+    }
     return {
       account: payload.account || '',
       has_saved_password: Boolean(payload.password),
@@ -564,9 +572,24 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'fetch_schedule') {
+    const automaticTerm = payload.automatic_term_detection_enabled !== false
+    if (!automaticTerm) {
+      const validationError = manualTermValidationError(payload.term_id, payload.term_start_date)
+      if (validationError) throw new Error(validationError)
+    }
+    const fallbackTerm = automaticTerm
+      ? scheduleRequestTerm({
+          automaticTermDetectionEnabled: true,
+          termId: payload.term_id || '',
+          termStartDate: payload.term_start_date || '',
+        })
+      : {
+          termId: payload.term_id || DEFAULT_SETTINGS.termId,
+          termStartDate: payload.term_start_date || DEFAULT_SETTINGS.termStartDate,
+        }
     return {
-      term_id: DEFAULT_SETTINGS.termId,
-      term_start_date: DEFAULT_SETTINGS.termStartDate,
+      term_id: fallbackTerm.termId,
+      term_start_date: fallbackTerm.termStartDate,
       fetched_at: contractTimestamp(),
       courses: [],
     }
@@ -1213,6 +1236,7 @@ function App() {
   const [assignmentsErrorByDate, setAssignmentsErrorByDate] = useState({})
   const [calendarSupplementRevision, setCalendarSupplementRevision] = useState(0)
   const autoFetchedClassroomsDate = useRef('')
+  const autoFetchedScheduleKey = useRef('')
   const calendarPopoverRef = useRef(null)
   const calendarGestureRef = useRef(null)
   const calendarTransitionHostRef = useRef(null)
@@ -1475,58 +1499,68 @@ function App() {
   }, [clearConfirmationOpen])
 
   useEffect(() => {
-    command('get_metadata')
-      .then((data) => {
-        setMetadata(data)
-        setSettings((current) => ({
-          ...current,
-          termId: current.termId || data.default_term_id,
-          termStartDate: current.termStartDate || data.default_term_start_date,
-          campusId: current.campusId || data.campuses[0]?.id || '01',
-        }))
-      })
-      .catch(() => {
-        setMetadata({
-          campuses: [{ id: '01', name: '西土城' }],
-          slots: FALLBACK_SLOTS,
-          supports_calendar_import: false,
-        })
-      })
-  }, [])
-
-  useEffect(() => {
     let cancelled = false
     const revision = credentialStateRevision.current
     const clearRevision = localDataClearRevision.current
 
-    command('load_saved_settings')
-      .then((data) => {
-        if (cancelled) return
-        if (clearRevision !== localDataClearRevision.current) {
-          setSettingsLoaded(true)
-          return
-        }
-        const nextSettings = savedSettingsToState(data)
-        const savedCredential = savedCredentialSnapshot(nextSettings)
-        savedCredentialState.current = savedCredential
-        if (revision === credentialStateRevision.current) {
-          setSettings(nextSettings)
-          setQueryCampusId(nextSettings.campusId)
-          setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
-        } else {
-          setSettings((current) => ({
-            ...current,
-            hasSavedPassword: accountHasSavedPassword(current.account, savedCredential),
-          }))
-        }
+    Promise.allSettled([
+      command('get_metadata'),
+      command('load_saved_settings'),
+      command('load_saved_schedule'),
+    ]).then(([metadataResult, settingsResult, scheduleResult]) => {
+      if (cancelled) return
+      const nextMetadata = metadataResult.status === 'fulfilled'
+        ? metadataResult.value
+        : {
+            campuses: [{ id: '01', name: '西土城' }],
+            slots: FALLBACK_SLOTS,
+            default_term_id: '',
+            default_term_start_date: '',
+            supports_calendar_import: false,
+          }
+      setMetadata(nextMetadata)
+
+      if (clearRevision !== localDataClearRevision.current) {
         setSettingsLoaded(true)
-      })
-      .catch((loadError) => {
-        if (!cancelled) {
-          setError(loadError.message)
-          setSettingsLoaded(true)
-        }
-      })
+        return
+      }
+
+      const savedData = settingsResult.status === 'fulfilled' ? settingsResult.value : {}
+      const cachedSchedule = scheduleResult.status === 'fulfilled' ? scheduleResult.value : null
+      const nextSettings = startupSettingsToState(savedData, nextMetadata, cachedSchedule)
+      if (cachedSchedule && (
+        !nextSettings.automaticTermDetectionEnabled
+        || (cachedSchedule.term_id === nextSettings.termId
+          && isValidTermStartDate(cachedSchedule.term_start_date))
+      )) {
+        setSchedule(cachedSchedule)
+      }
+
+      if (settingsResult.status === 'rejected') {
+        setError(normalizeError(settingsResult.reason))
+      } else if (scheduleResult.status === 'rejected') {
+        setError(normalizeError(scheduleResult.reason))
+      }
+
+      const savedCredential = savedCredentialSnapshot(nextSettings)
+      savedCredentialState.current = savedCredential
+      if (revision === credentialStateRevision.current) {
+        setSettings(nextSettings)
+        setQueryCampusId(nextSettings.campusId)
+        setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
+      } else {
+        setSettings((current) => ({
+          ...current,
+          hasSavedPassword: accountHasSavedPassword(current.account, savedCredential),
+        }))
+      }
+      setSettingsLoaded(true)
+    }).catch((loadError) => {
+      if (!cancelled) {
+        setError(normalizeError(loadError))
+        setSettingsLoaded(true)
+      }
+    })
 
     return () => {
       cancelled = true
@@ -1984,6 +2018,35 @@ function App() {
   }, [todayDate])
 
   useEffect(() => {
+    if (settingsSaving
+      || !settingsLoaded
+      || !settings.account.trim()
+      || !settings.hasSavedPassword) {
+      return
+    }
+    if (!settings.automaticTermDetectionEnabled) {
+      autoFetchedScheduleKey.current = ''
+      return
+    }
+    const requestTerm = scheduleRequestTerm(settings)
+    const refreshKey = `${settings.account.trim()}\u001f${requestTerm.termId}`
+    if (autoFetchedScheduleKey.current === refreshKey) return
+    autoFetchedScheduleKey.current = refreshKey
+    void loadSchedule().then((succeeded) => {
+      if (!succeeded && autoFetchedScheduleKey.current === refreshKey) {
+        autoFetchedScheduleKey.current = ''
+      }
+    })
+  }, [
+    settings.account,
+    settings.automaticTermDetectionEnabled,
+    settings.hasSavedPassword,
+    settingsLoaded,
+    settingsSaving,
+    todayDate,
+  ])
+
+  useEffect(() => {
     if (settingsSaving || !settingsLoaded || !classroomsCacheLoaded || autoFetchedClassroomsDate.current === todayDate) {
       return
     }
@@ -1999,27 +2062,6 @@ function App() {
       if (!succeeded) autoFetchedClassroomsDate.current = ''
     })
   }, [classroomsCache, classroomsCacheLoaded, settings.account, settings.hasSavedPassword, settingsLoaded, settingsSaving, todayDate])
-
-  useEffect(() => {
-    let cancelled = false
-    const accountDataRevision = localDataClearRevision.current
-
-    command('load_saved_schedule')
-      .then((data) => {
-        if (!cancelled && accountDataRevision === localDataClearRevision.current && data) {
-          setSchedule(data)
-        }
-      })
-      .catch((loadError) => {
-        if (!cancelled && accountDataRevision === localDataClearRevision.current) {
-          setError(loadError.message)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   function updateSetting(field, value) {
     setSettingsSaved(false)
@@ -2038,6 +2080,14 @@ function App() {
 
   async function saveCurrentSettings() {
     if (settingsSaving || !settingsLoaded) return
+    if (!settings.automaticTermDetectionEnabled) {
+      const validationError = manualTermValidationError(settings.termId, settings.termStartDate)
+      if (validationError) {
+        setError(validationError)
+        setSettingsSaved(false)
+        return
+      }
+    }
     setError('')
     setSettingsSaved(false)
     setSettingsSaving(true)
@@ -2067,6 +2117,9 @@ function App() {
       setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
       setSelectedBuildings([])
       setSettingsSaved(true)
+      if (nextSettings.automaticTermDetectionEnabled) {
+        autoFetchedScheduleKey.current = ''
+      }
     } catch (saveError) {
       if (saveError.accountScopeCleared) {
         credentialStateRevision.current += 1
@@ -2640,12 +2693,21 @@ function App() {
   }
 
   async function loadSchedule() {
-    if (settingsSaving) return
+    if (settingsSaving || !settingsLoaded) return false
+    if (!settings.automaticTermDetectionEnabled) {
+      const validationError = manualTermValidationError(settings.termId, settings.termStartDate)
+      if (validationError) {
+        setError(validationError)
+        return false
+      }
+    }
+    let succeeded = false
     await runTask('schedule', async () => {
       const accountDataRevision = localDataClearRevision.current
+      const requestTerm = scheduleRequestTerm(settings)
       const data = await command('fetch_schedule', requestBody(settings, {
-        term_id: settings.termId,
-        term_start_date: settings.termStartDate,
+        term_id: requestTerm.termId,
+        term_start_date: requestTerm.termStartDate,
         automatic_term_detection_enabled: settings.automaticTermDetectionEnabled,
       }))
       if (accountDataRevision !== localDataClearRevision.current) return
@@ -2654,21 +2716,17 @@ function App() {
       setUsePersonalSchedule(true)
       // Auto-apply the authoritative term info returned by the backend so
       // users never need to hand-enter the semester id or start date.
-      if (settings.automaticTermDetectionEnabled && isValidTermId(data.term_id) && isValidTermStartDate(data.term_start_date)) {
-        const termChanged = settings.termId !== data.term_id
-          || settings.termStartDate !== data.term_start_date
+      const scheduleSettings = settingsWithScheduleTerm(settings, data)
+      if (scheduleSettings !== settings) {
+        const termChanged = settings.termId !== scheduleSettings.termId
+          || settings.termStartDate !== scheduleSettings.termStartDate
         if (termChanged) {
-          const next = {
-            ...settings,
-            termId: data.term_id,
-            termStartDate: data.term_start_date,
-          }
           // Keep persistence outside the React state updater. Updaters may run
           // more than once in development, while saving credentials/settings
           // must remain a single, observable operation.
-          const persisted = await command('save_saved_settings', settingsToPayload(next))
+          const persisted = await command('save_saved_settings', settingsToPayload(scheduleSettings))
           if (accountDataRevision !== localDataClearRevision.current) return
-          const persistedSettings = savedSettingsToState(persisted, next)
+          const persistedSettings = savedSettingsToState(persisted, scheduleSettings)
           const persistedCredential = savedCredentialSnapshot(persistedSettings)
           savedCredentialState.current = persistedCredential
           setSettings((current) => ({
@@ -2682,7 +2740,9 @@ function App() {
       const nextState = getWeekState(data.courses, data.term_start_date, todayDate)
       const nextFreeSlots = slotMeta.map((slot) => slot.index).filter((slot) => !nextState.busySlots.includes(slot))
       setSelectedSlots(nextFreeSlots)
+      succeeded = true
     })
+    return succeeded
   }
 
   async function loadClassrooms() {
@@ -3031,6 +3091,7 @@ function App() {
       const previousSavedCredential = { ...savedCredentialState.current }
       credentialStateRevision.current += 1
       localDataClearRevision.current += 1
+      autoFetchedScheduleKey.current = ''
       savedCredentialState.current = { account: '', hasSavedPassword: false }
       try {
         await command('clear_local_data')
@@ -3039,10 +3100,7 @@ function App() {
         throw clearError
       }
       setSettings({
-        ...DEFAULT_SETTINGS,
-        termId: metadata.default_term_id || DEFAULT_SETTINGS.termId,
-        termStartDate: metadata.default_term_start_date || DEFAULT_SETTINGS.termStartDate,
-        campusId: metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId,
+        ...startupSettingsToState({}, metadata),
       })
       setQueryCampusId(metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId)
       clearAccountScopedViewState()
@@ -3391,7 +3449,7 @@ function App() {
                   <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label={t('下一段')} aria-keyshortcuts="PageDown Alt+ArrowRight">›</button>
                 </div>
                 <div className="calendar-data-actions">
-                  <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
+                  <button type="button" onClick={loadSchedule} disabled={!settingsLoaded || settingsSaving || !!loading}>
                     {loading === 'schedule' ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
                     {t('获取/刷新个人课表')}
                   </button>
@@ -3994,7 +4052,7 @@ function App() {
               <button type="button" className="primary settings-full-button" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
                 {settingsSaving ? <Loader2 className="spin" size={17} /> : <CheckCircle2 size={17} />} {t('保存设置')}
               </button>
-              <button type="button" className="secondary settings-full-button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
+              <button type="button" className="secondary settings-full-button" onClick={loadSchedule} disabled={!settingsLoaded || settingsSaving || !!loading}>
                 {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />} {t('获取/刷新个人课表')}
               </button>
               {settingsSaved ? <span className="settings-saved-note">{t('已保存')}</span> : null}
@@ -4033,7 +4091,7 @@ function App() {
               </label>
               <p className="term-detect-note">
                 {settings.automaticTermDetectionEnabled
-                  ? t('获取/刷新课表后会自动应用教务返回的学期与开学日期。')
+                  ? t('启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。')
                   : t('已关闭自动检测，将使用上方手动填写的学期信息。')}
               </p>
               {!settings.automaticTermDetectionEnabled ? (

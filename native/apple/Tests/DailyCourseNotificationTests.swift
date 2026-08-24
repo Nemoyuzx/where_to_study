@@ -442,7 +442,7 @@ final class DailyCourseNotificationTests: XCTestCase {
         termStartDate: String = "2026-03-02"
     ) -> ScheduleSnapshot {
         ScheduleSnapshot(
-            termID: "fixture-term",
+            termID: "2025-2026-2",
             termStartDate: termStartDate,
             fetchedAt: "2026-03-01T12:00:00+08:00",
             courses: courses
@@ -504,9 +504,14 @@ final class DailyCourseNotificationTests: XCTestCase {
             calendarImporter: NotificationTestCalendarImporter(),
             dailyCourseNotificationScheduler: notificationScheduler,
             dailyCourseNotificationAuthorizationTimeout: notificationAuthorizationTimeout,
+            now: { Self.modelNow },
             defaults: defaults
         )
     }
+
+    private static let modelNow = Calendar.shanghai.date(
+        from: DateComponents(year: 2026, month: 3, day: 2, hour: 6)
+    )!
 
     @MainActor
     private func waitUntil(

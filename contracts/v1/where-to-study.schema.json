@@ -31,8 +31,13 @@
       "properties": {
         "account": { "type": "string" },
         "has_saved_password": { "type": "boolean" },
-        "term_id": { "type": "string", "minLength": 1 },
-        "term_start_date": { "type": "string", "format": "date" },
+        "term_id": { "type": "string", "pattern": "^(?:|[0-9]{4}-[0-9]{4}-[12])$" },
+        "term_start_date": {
+          "anyOf": [
+            { "const": "" },
+            { "type": "string", "format": "date" }
+          ]
+        },
         "campus_id": { "type": "string", "minLength": 1 },
         "default_min_seats": { "type": "integer", "minimum": 0 },
         "daily_course_notifications_enabled": { "type": "boolean" }
@@ -45,8 +50,13 @@
       "properties": {
         "account": { "type": "string" },
         "password": { "type": ["string", "null"] },
-        "term_id": { "type": "string", "minLength": 1 },
-        "term_start_date": { "type": "string", "format": "date" },
+        "term_id": { "type": "string", "pattern": "^(?:|[0-9]{4}-[0-9]{4}-[12])$" },
+        "term_start_date": {
+          "anyOf": [
+            { "const": "" },
+            { "type": "string", "format": "date" }
+          ]
+        },
         "campus_id": { "type": "string", "minLength": 1 },
         "default_min_seats": { "type": "integer", "minimum": 0 },
         "daily_course_notifications_enabled": { "type": "boolean" }
@@ -76,7 +86,7 @@
       "additionalProperties": false,
       "required": ["term_id", "term_start_date", "fetched_at", "courses"],
       "properties": {
-        "term_id": { "type": "string", "minLength": 1 },
+        "term_id": { "type": "string", "minLength": 1, "pattern": "^[0-9]{4}-[0-9]{4}-[12]$" },
         "term_start_date": { "type": "string", "format": "date" },
         "fetched_at": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})$" },
         "courses": { "type": "array", "items": { "$ref": "#/$defs/course" } }

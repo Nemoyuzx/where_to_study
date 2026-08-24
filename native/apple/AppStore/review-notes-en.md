@@ -1,6 +1,6 @@
 # App Review Notes (English)
 
-Builds prepared for submission: iOS `0.2.5 (68)` and macOS `0.2.5 (68)`. Please review the latest uploaded build for each platform.
+Builds prepared for submission: iOS `0.2.5 (69)` and macOS `0.2.5 (69)`. Please review the latest uploaded build for each platform.
 
 Where To Study is an independent, unofficial schedule and empty-classroom client for students of Beijing University of Posts and Telecommunications. It is not operated by or affiliated with the university. The app has no purchases, subscriptions, advertising, analytics, or tracking SDKs.
 
@@ -21,7 +21,7 @@ Sample mode uses only fictional courses, classrooms, and holiday data bundled wi
 
 ## Live-data path
 
-Live mode requires the user’s own BUPT academic-system credentials. Credentials are stored only in Apple Keychain and are sent over HTTPS to `https://jwglweixin.bupt.edu.cn` when the user requests a schedule or same-day classroom availability. After valid credentials are saved, classroom availability may also refresh automatically on launch, on returning to the foreground, or at approximately 07:00 China Standard Time where the platform permits a scheduled task. The project maintainer does not operate that service and cannot access credentials, schedules, or classroom data. A failed request never falls back to another data source.
+Live mode requires the user’s own BUPT academic-system credentials. Credentials are stored only in Apple Keychain and are sent over HTTPS to `https://jwglweixin.bupt.edu.cn` for personal schedules and same-day classroom availability. After valid credentials are saved and automatic term detection is enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Classroom availability may also refresh automatically on launch, on returning to the foreground, or at approximately 07:00 China Standard Time where the platform permits a scheduled task. The project maintainer does not operate that service and cannot access credentials, schedules, or classroom data. A failed request never falls back to another data source.
 
 Calendar import and the optional 07:30 daily course summary are initiated by the user. All other features remain available if Calendar or Notification permission is denied.
 

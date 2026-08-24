@@ -218,7 +218,7 @@ object UiText {
         "学期编号" to "Semester ID",
         "第一周周一（YYYY-MM-DD）" to "Monday of Week 1 (YYYY-MM-DD)",
         "保存学期设置" to "Save Semester",
-        "获取/刷新课表后会自动应用教务返回的学期与开学日期。" to "Fetching the schedule automatically applies the semester and start date returned by Academic Affairs.",
+        "启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。" to "At launch or after a schedule refresh, the semester and start date returned by Academic Affairs are applied automatically.",
         "关闭自动检测后，将使用手动填写的学期信息。" to "When automatic detection is off, the manually entered semester details are used.",
         "获取/刷新个人课表" to "Fetch / Refresh My Schedule",
         "课程提醒" to "Course Reminders",

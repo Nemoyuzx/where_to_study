@@ -21,11 +21,16 @@ internal object StrictContractDate {
 }
 
 internal object SettingsInputLogic {
-    fun resolveTermStartDate(
-        requestedValue: String,
-        fallbackValue: String = AppMetadata.defaultTermStartDate,
-    ): String {
-        val normalized = requestedValue.trim().ifEmpty { fallbackValue }
+    fun resolveTermID(requestedValue: String): String {
+        val normalized = requestedValue.trim()
+        if (!SemesterLogic.isValidTermId(normalized)) {
+            throw SettingsValidationException("学期编号格式不正确，请使用 YYYY-YYYY-1/2。")
+        }
+        return normalized
+    }
+
+    fun resolveTermStartDate(requestedValue: String): String {
+        val normalized = requestedValue.trim()
         if (!StrictContractDate.isValid(normalized)) {
             throw SettingsValidationException("第一周周一日期格式不正确，请使用 YYYY-MM-DD。")
         }

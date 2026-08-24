@@ -122,6 +122,7 @@ struct RootView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
+            model.refreshScheduleAutomaticallyIfNeeded()
             model.refreshClassroomsIfNeeded()
             #if os(macOS)
             model.startDailyClassroomRefresh()

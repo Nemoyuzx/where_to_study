@@ -51,6 +51,42 @@ export class SemesterLogic {
     return SemesterLogic.suggestForDate(StrictDates.todayParts());
   }
 
+  // 冷启动自动检测以当前上海学期为基线。只有缓存 termID 仍属于当前学期且
+  // 开学日期有效时，才保留教务曾返回的真实日期；旧学期缓存不能反向覆盖。
+  static resolveAutomaticLaunchTerm(cachedTermID: string | null,
+    cachedTermStartDate: string | null, today: DateParts): SemesterSuggestion {
+    const suggested: SemesterSuggestion = SemesterLogic.suggestForDate(today);
+    const cachedID: string = cachedTermID === null ? '' : cachedTermID.trim();
+    const cachedStart: string = cachedTermStartDate === null ? '' : cachedTermStartDate.trim();
+    if (SemesterLogic.canUseAutomaticCachedSchedule(cachedID, cachedStart, today)) {
+      return new SemesterSuggestion(cachedID, cachedStart);
+    }
+    return suggested;
+  }
+
+  static canUseAutomaticCachedSchedule(cachedTermID: string | null,
+    cachedTermStartDate: string | null, today: DateParts): boolean {
+    const suggested: SemesterSuggestion = SemesterLogic.suggestForDate(today);
+    const cachedID: string = cachedTermID === null ? '' : cachedTermID.trim();
+    const cachedStart: string = cachedTermStartDate === null ? '' : cachedTermStartDate.trim();
+    return cachedID === suggested.termID && SemesterLogic.isValidTermStartDate(cachedStart);
+  }
+
+  static shouldRefreshAutomatically(automaticTermDetection: boolean,
+    hasSavedPassword: boolean, account: string): boolean {
+    return automaticTermDetection && hasSavedPassword && account.trim().length > 0;
+  }
+
+  // 教务响应提供课程数据后，自动模式使用响应中的权威学期；手动模式只取课程，
+  // 学期编号和开学日期继续使用请求时已经校验过的手动值。
+  static resolveFetchedTerm(automaticTermDetection: boolean,
+    fetchedTermID: string, fetchedTermStartDate: string,
+    fallbackTermID: string, fallbackTermStartDate: string): SemesterSuggestion {
+    return automaticTermDetection ?
+      new SemesterSuggestion(fetchedTermID, fetchedTermStartDate) :
+      new SemesterSuggestion(fallbackTermID, fallbackTermStartDate);
+  }
+
   // 学期编号形如 2025-2026-2 / 2025-2026-1；首尾空白容忍。
   static isValidTermID(value: string): boolean {
     return SemesterLogic.termIDPattern.test(value.trim());

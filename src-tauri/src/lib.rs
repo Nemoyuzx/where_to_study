@@ -787,11 +787,12 @@ mod local_data_coordination_tests {
 
 #[tauri::command]
 fn get_metadata() -> MetadataResponse {
+    let (default_term_id, default_term_start_date) = config::default_term();
     MetadataResponse {
         campuses: config::campuses_payload(),
         slots: config::slot_payload(),
-        default_term_id: config::default_term_id(),
-        default_term_start_date: config::default_term_start_date(),
+        default_term_id,
+        default_term_start_date,
         supports_calendar_import: calendar_export::is_supported(),
     }
 }
@@ -929,7 +930,7 @@ fn load_saved_schedule_for_scope(
         .with_current_account(generation, || {
             let current_scope = require_saved_account_scope()?;
             validate_account_scope_match(&payload.account_scope, &current_scope)?;
-            schedule_store::load(&app, &current_scope).map_err(|error| error.message)
+            load_schedule_for_scope(&app, &current_scope)
         })
         .map_err(LocalDataAccessError::message)
 }
@@ -1284,11 +1285,90 @@ fn validate_account_scope_match(request_scope: &str, saved_scope: &str) -> Resul
     }
 }
 
+fn visible_cached_schedule(
+    schedule: Option<ScheduleResponse>,
+    automatic_term_detection_enabled: bool,
+    today: NaiveDate,
+) -> Option<ScheduleResponse> {
+    if !automatic_term_detection_enabled {
+        return schedule;
+    }
+    let current_term_id = config::suggested_term_for_date(today).0;
+    schedule.filter(|cached| {
+        let start = cached.term_start_date.trim();
+        cached.term_id.trim() == current_term_id
+            && NaiveDate::parse_from_str(start, "%Y-%m-%d")
+                .is_ok_and(|date| date.to_string() == start)
+    })
+}
+
+fn load_schedule_for_scope(
+    app: &tauri::AppHandle,
+    account_scope: &str,
+) -> Result<Option<ScheduleResponse>, String> {
+    let schedule = schedule_store::load(app, account_scope).map_err(|error| error.message)?;
+    let settings = settings_store::load(app).map_err(|error| error.message)?;
+    Ok(visible_cached_schedule(
+        schedule,
+        settings.automatic_term_detection_enabled,
+        config::today_in_app_tz(),
+    ))
+}
+
 fn load_current_schedule(app: &tauri::AppHandle) -> Result<Option<ScheduleResponse>, String> {
     let Some(account_scope) = saved_account_scope()? else {
         return Ok(None);
     };
-    schedule_store::load(app, &account_scope).map_err(|error| error.message)
+    load_schedule_for_scope(app, &account_scope)
+}
+
+#[cfg(test)]
+mod saved_schedule_visibility_tests {
+    use super::*;
+
+    fn fixture_schedule(term_id: &str, term_start_date: &str) -> ScheduleResponse {
+        ScheduleResponse {
+            term_id: term_id.to_string(),
+            term_start_date: term_start_date.to_string(),
+            fetched_at: "2026-08-24T12:00:00+08:00".to_string(),
+            courses: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn automatic_cache_visibility_requires_current_term_and_strict_start_date() {
+        let today = NaiveDate::from_ymd_opt(2026, 8, 24).unwrap();
+        assert!(visible_cached_schedule(
+            Some(fixture_schedule("2026-2027-1", "2026-09-07")),
+            true,
+            today,
+        )
+        .is_some());
+        assert!(visible_cached_schedule(
+            Some(fixture_schedule("2025-2026-2", "2026-03-02")),
+            true,
+            today,
+        )
+        .is_none());
+        for invalid_start in ["", "2026-02-30", "2026-9-7"] {
+            assert!(visible_cached_schedule(
+                Some(fixture_schedule("2026-2027-1", invalid_start)),
+                true,
+                today,
+            )
+            .is_none());
+        }
+    }
+
+    #[test]
+    fn manual_cache_visibility_preserves_the_saved_schedule() {
+        let today = NaiveDate::from_ymd_opt(2026, 8, 24).unwrap();
+        let cached = fixture_schedule("2025-2026-2", "not-a-date");
+        let visible = visible_cached_schedule(Some(cached), false, today)
+            .expect("manual mode keeps the saved schedule");
+        assert_eq!(visible.term_id, "2025-2026-2");
+        assert_eq!(visible.term_start_date, "not-a-date");
+    }
 }
 
 fn load_current_classrooms(

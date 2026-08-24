@@ -80,7 +80,7 @@
 - Linux/Tauri：与 Windows 共享 React/Rust 功能，使用 Ubuntu 22.04 原生 CI 发布 x86_64 Debian 包与 AppImage。
 - macOS/iOS 原生：共享 SwiftUI 已接入移动教务个人课表、Keychain、本地缓存、法定节假日、日/周/月/年视图、当前时间线、每日课程摘要、天气/黄历、公开与校内竞赛、云课堂作业和两校区空教室；月/年双层 DDL 边框、完整本地收藏、收藏管理、自定义 HTTPS 日程源、按年预热、跨月动画和 macOS 键盘操作已完成。
 - Android 原生：Kotlin + Android Views 已接入移动教务个人课表、Keystore、`AtomicFile` 缓存、法定节假日、日/周/月/年视图、课程摘要、天气/黄历、公开与校内竞赛、云课堂作业和两校区空教室；月/年双层 DDL 边框、完整本地收藏、收藏管理、自定义 HTTPS 日程源、按年预热、真实折叠图标与动画、分段设置控件和跨月动画已完成。
-- 鸿蒙原生：ArkTS + ArkUI 已参考 SwiftUI 移植三页主界面、ASSET 凭据、移动教务、天气/黄历、公开与校内竞赛、云课堂作业、课程摘要、Calendar Kit 和“今日课程”服务卡片；手机、折叠屏、平板与 PC 已同步双层 DDL 边框、完整本地收藏、收藏管理、自定义 HTTPS 日程源、教学周、键盘操作、范围缓存及中英文界面。DevEco Studio 6.1.1 / API 24 的 HAP 与 103 项单元测试通过；待补 AGC 上架。
+- 鸿蒙原生：ArkTS + ArkUI 已参考 SwiftUI 移植三页主界面、ASSET 凭据、移动教务、天气/黄历、公开与校内竞赛、云课堂作业、课程摘要、Calendar Kit 和“今日课程”服务卡片；手机、折叠屏、平板与 PC 已同步双层 DDL 边框、完整本地收藏、收藏管理、自定义 HTTPS 日程源、教学周、键盘操作、范围缓存及中英文界面。DevEco Studio 6.1.1 / API 24 的 HAP 与 112 项单元测试通过；待补 AGC 上架。
 - 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift、Kotlin 和 ArkTS 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
-- 原生分发限制：每日课程摘要已迁移；Android `0.2.5 (40)` 使用固定维护者密钥签名发布；Apple iOS 与 macOS `0.2.5 (68)` 均由本地 Xcode 上传 TestFlight，且不放入 GitHub Release；Windows/Linux 可信签名链路尚未闭环。
+- 原生分发限制：每日课程摘要已迁移；Android `0.2.5 (41)` 使用固定维护者密钥签名发布；Apple iOS 与 macOS `0.2.5 (69)` 均由本地 Xcode 上传 TestFlight，且不放入 GitHub Release；Windows/Linux 可信签名链路尚未闭环。
 - 开源授权：根目录已加入 GPL-3.0-only 标准许可证文本，项目元数据、贡献指南和发布文档使用同一 SPDX 标识。

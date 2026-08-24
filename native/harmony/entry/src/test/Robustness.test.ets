@@ -1,10 +1,64 @@
 // 健壮性回归测试（BUG-018/019/049/062 修复验证）。
 import { describe, it, expect } from '@ohos/hypium';
-import { Course } from '../main/ets/common/Models';
+import { Course, ScheduleSnapshot } from '../main/ets/common/Models';
 import { JsonUtil } from '../main/ets/common/JsonUtil';
 import { Utf8 } from '../main/ets/common/Utf8';
 import { SJDFormURLEncoder } from '../main/ets/net/SjdEncoding';
 import { HolidaySourceParser } from '../main/ets/net/parsers/HolidaySourceParser';
+import {
+  SchedulePersistenceCoordinator, ScheduleStoring
+} from '../main/ets/store/ScheduleStore';
+
+class ControlledScheduleStore implements ScheduleStoring {
+  stored: ScheduleSnapshot | null = null;
+  clearCount: number = 0;
+  readonly firstSaveStarted: Promise<void>;
+  private readonly firstSaveGate: Promise<void>;
+  private markFirstSaveStarted: (() => void) | null = null;
+  private releaseFirstSave: (() => void) | null = null;
+  private delayNextSave: boolean = true;
+
+  constructor() {
+    this.firstSaveStarted = new Promise<void>((resolve) => {
+      this.markFirstSaveStarted = (): void => resolve();
+    });
+    this.firstSaveGate = new Promise<void>((resolve) => {
+      this.releaseFirstSave = (): void => resolve();
+    });
+  }
+
+  async load(): Promise<ScheduleSnapshot | null> {
+    return this.stored;
+  }
+
+  async save(schedule: ScheduleSnapshot): Promise<void> {
+    if (this.delayNextSave) {
+      this.delayNextSave = false;
+      const markStarted: (() => void) | null = this.markFirstSaveStarted;
+      if (markStarted !== null) {
+        markStarted();
+      }
+      await this.firstSaveGate;
+    }
+    this.stored = schedule;
+  }
+
+  async clear(): Promise<void> {
+    this.clearCount++;
+    this.stored = null;
+  }
+
+  resumeFirstSave(): void {
+    const release: (() => void) | null = this.releaseFirstSave;
+    if (release !== null) {
+      release();
+    }
+  }
+}
+
+function persistenceSchedule(termID: string): ScheduleSnapshot {
+  return new ScheduleSnapshot(termID, '2026-08-31', '2026-08-24T12:00:00+08:00', []);
+}
 
 export default function robustnessTest() {
   describe('RobustnessTest', () => {
@@ -59,5 +113,34 @@ export default function robustnessTest() {
       expect(HolidaySourceParser.codePointLength('春节\uD83C\uDF89')).assertEqual(3);
       expect(HolidaySourceParser.codePointLength('a\uD83C\uDF93b')).assertEqual(3);
     });
+
+    it('schedule_persistence_clear_wins_between_old_and_new_saves', 0,
+      async (): Promise<void> => {
+        const store: ControlledScheduleStore = new ControlledScheduleStore();
+        const coordinator: SchedulePersistenceCoordinator =
+          new SchedulePersistenceCoordinator(store);
+        let oldGenerationCurrent: boolean = true;
+
+        const oldSave: Promise<boolean> = coordinator.saveIfCurrent(
+          persistenceSchedule('old-account-term'), (): boolean => oldGenerationCurrent);
+        await store.firstSaveStarted;
+
+        // 模拟 clear/account-change：先使旧 generation 失效，再把 clear 入队；
+        // 新账号 save 必须排在 clear 后面。
+        oldGenerationCurrent = false;
+        const clearWork: Promise<void> = coordinator.clear();
+        const newSave: Promise<boolean> = coordinator.saveIfCurrent(
+          persistenceSchedule('new-account-term'), (): boolean => true);
+        store.resumeFirstSave();
+
+        const oldPublished: boolean = await oldSave;
+        await clearWork;
+        const newPublished: boolean = await newSave;
+
+        expect(oldPublished).assertFalse();
+        expect(newPublished).assertTrue();
+        expect(store.clearCount).assertEqual(1);
+        expect(store.stored?.termID ?? '').assertEqual('new-account-term');
+      });
   });
 }

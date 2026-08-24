@@ -8,9 +8,9 @@ Where To Study is an independent, unofficial client for viewing BUPT schedules, 
 
 ## 账户与教务请求 / Account and academic requests
 
-你输入的学号和密码保存在操作系统的受保护凭据存储中。应用在你主动获取课表、空教室或课程作业时，才会按下述用途通过 HTTPS 使用这些凭据。课表和空教室请求会发送到 `jwglweixin.bupt.edu.cn`；保存有效凭据后，应用还可能在启动、回到前台，或平台允许的每日约 07:00 后台任务中自动刷新当天空教室。项目维护者无法读取这些凭据，设置接口也不会返回已保存的密码。
+你输入的学号和密码保存在操作系统的受保护凭据存储中。应用会在你主动获取课表、空教室或课程作业时，按下述用途通过 HTTPS 使用这些凭据。课表和空教室请求会发送到 `jwglweixin.bupt.edu.cn`；保存有效凭据且开启“自动检测当前学期”后，应用还会在启动时自动刷新一次个人课表，用于校验学期号和第一周周一。当天空教室还可能在启动、回到前台，或平台允许的每日约 07:00 后台任务中自动刷新。项目维护者无法读取这些凭据，设置接口也不会返回已保存的密码。
 
-The account and password you enter are stored in the operating system's protected credential storage. The app uses them over HTTPS only when you request schedules, empty classrooms, or assignments as described below. Schedule and classroom requests are sent to `jwglweixin.bupt.edu.cn`. After valid credentials are saved, the app may also refresh the current day's classroom availability at launch, on returning to the foreground, or around 07:00 where the platform permits background work. The maintainer cannot read these credentials, and settings APIs never return a saved password.
+The account and password you enter are stored in the operating system's protected credential storage. The app uses them over HTTPS when you request schedules, empty classrooms, or assignments as described below. After valid credentials are saved and automatic term detection is enabled, the app also refreshes the personal schedule once at launch to verify the term identifier and first Monday. Schedule and classroom requests are sent to `jwglweixin.bupt.edu.cn`. The current day's classroom availability may additionally refresh at launch, on returning to the foreground, or around 07:00 where the platform permits background work. The maintainer cannot read these credentials, and settings APIs never return a saved password.
 
 ## 本地数据 / Local data
 

@@ -11,6 +11,7 @@ import { classroomsText } from './fixtures/classrooms';
 import { holidaysText } from './fixtures/holidays';
 import { holidaySourceText } from './fixtures/holiday-source';
 import { sjdCurrentWeekText } from './fixtures/sjd-current-week';
+import { sjdBeforeFirstWeekText } from './fixtures/sjd-before-first-week';
 import { sjdCurriculumText } from './fixtures/sjd-curriculum';
 import { sjdClassroomsXituchengText } from './fixtures/sjd-classrooms-xitucheng';
 import { sjdClassroomsShaheText } from './fixtures/sjd-classrooms-shahe';
@@ -58,6 +59,33 @@ export default function parsersContractTest() {
       expect(parsed.termStartDate).assertEqual(expected.termStartDate);
       expect(parsed.fetchedAt).assertEqual(expected.fetchedAt);
       assertCoursesEqual(parsed.courses, expected.courses);
+    });
+
+    it('schedule_parser_uses_fallback_only_when_current_week_metadata_is_missing', 0, () => {
+      const parsed: ScheduleSnapshot = SJDScheduleParser.parse(
+        '{"code":1,"data":[{}]}', sjdCurriculumText,
+        '2026-2027-1', '2026-08-31', '2026-08-24T12:00:00+08:00');
+      expect(parsed.termID).assertEqual('2026-2027-1');
+      expect(parsed.termStartDate).assertEqual('2026-08-31');
+    });
+
+    it('schedule_parser_reads_top_info_and_infers_start_from_week_zero', 0, () => {
+      const parsed: ScheduleSnapshot = SJDScheduleParser.parse(
+        sjdBeforeFirstWeekText, sjdCurriculumText,
+        'fallback-term', '2000-01-03', '2026-08-24T12:00:00+08:00');
+      expect(parsed.termID).assertEqual('2026-2027-1');
+      expect(parsed.termStartDate).assertEqual('2026-08-31');
+    });
+
+    it('schedule_parser_prefers_date_week_and_normalizes_sunday_zero', 0, () => {
+      const current: string = '{"code":1,"data":[{' +
+        '"week":"9","topInfo":[{"semesterId":"2026-2027-1","week":"9"}],' +
+        '"date":[{"mxrq":"2026-08-30","xqid":"0","zc":"0"}]}]}';
+      const parsed: ScheduleSnapshot = SJDScheduleParser.parse(
+        current, sjdCurriculumText,
+        'fallback-term', '2000-01-03', '2026-08-24T12:00:00+08:00');
+      expect(parsed.termID).assertEqual('2026-2027-1');
+      expect(parsed.termStartDate).assertEqual('2026-08-31');
     });
 
     it('schedule_room_normalization_keeps_dual_door_rooms', 0, () => {

@@ -50,6 +50,44 @@ internal object SemesterLogic {
         }
     }
 
+    /**
+     * Resolve the automatic term shown after a cold start. The current
+     * Shanghai calendar period is the baseline. A cached schedule may refine
+     * the real first-week Monday only when it belongs to that same period;
+     * an old-term cache must never roll the automatic setting backwards.
+     */
+    fun resolveAutomaticLaunchTerm(
+        cachedTermId: String?,
+        cachedTermStartDate: String?,
+        date: Calendar = Calendar.getInstance(shanghai),
+    ): SuggestedTerm {
+        val suggested = suggestTermForDate(date)
+        val cachedId = cachedTermId?.trim().orEmpty()
+        val cachedStart = cachedTermStartDate?.trim().orEmpty()
+        return if (canUseAutomaticCachedSchedule(cachedId, cachedStart, date)) {
+            SuggestedTerm(cachedId, cachedStart)
+        } else {
+            suggested
+        }
+    }
+
+    fun canUseAutomaticCachedSchedule(
+        cachedTermId: String?,
+        cachedTermStartDate: String?,
+        date: Calendar = Calendar.getInstance(shanghai),
+    ): Boolean {
+        val suggested = suggestTermForDate(date)
+        return cachedTermId?.trim() == suggested.termId &&
+            isValidTermStartDate(cachedTermStartDate?.trim().orEmpty())
+    }
+
+    fun shouldRefreshAutomatically(
+        automaticTermDetectionEnabled: Boolean,
+        credentials: Credentials?,
+    ): Boolean = automaticTermDetectionEnabled &&
+        !credentials?.account.isNullOrBlank() &&
+        !credentials?.password.isNullOrEmpty()
+
     /** Validate a term id like "2025-2026-2" or "2026-2027-1". */
     fun isValidTermId(value: String): Boolean = termIdPattern.matches(value.trim())
 

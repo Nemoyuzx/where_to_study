@@ -26,6 +26,7 @@ import {
   isValidAccountScope,
   isValidTermId,
   isValidTermStartDate,
+  manualTermValidationError,
   msUntilNextShanghaiMidnight,
   nonHourlyCourseBoundaryMinutes,
   suggestTermForDate,
@@ -33,7 +34,9 @@ import {
   normalizeClassroomsCache,
   normalizeFavoriteDeadlines,
   requestBody,
+  scheduleRequestTerm,
   savedSettingsToState,
+  settingsWithScheduleTerm,
   settingsToPayload,
   normalizeUiLanguage,
   resolvedUiLanguage,
@@ -41,6 +44,7 @@ import {
   shiftDate,
   slotsToRanges,
   summarizeMonthEntries,
+  startupSettingsToState,
   yearCourseOpacity,
 } from '../src/planner-domain.js'
 
@@ -502,6 +506,14 @@ test('suggestTermForDate picks the fall semester in September', () => {
   assert.equal(suggested.termStartDate, '2026-08-31')
 })
 
+test('term detection follows Shanghai across a UTC month boundary', () => {
+  const beforeShanghaiAugust = suggestTermForDate(new Date('2026-07-31T15:59:59Z'))
+  const inShanghaiAugust = suggestTermForDate(new Date('2026-07-31T16:00:00Z'))
+
+  assert.equal(beforeShanghaiAugust.termId, '2025-2026-2')
+  assert.equal(inShanghaiAugust.termId, '2026-2027-1')
+})
+
 test('suggestTermForDate handles spring months 2..7 and fall months 8..12', () => {
   for (const month of [8, 9, 10, 11, 12]) {
     const fall = suggestTermForDate(new Date(2026, month - 1, 15))
@@ -547,4 +559,140 @@ test('termMatchesCurrentPeriod flags mismatched terms', () => {
   assert.equal(termMatchesCurrentPeriod(suggested.termId, suggested.termStartDate), true)
   assert.equal(termMatchesCurrentPeriod('1999-2000-1', '2000-09-04'), false)
   assert.equal(termMatchesCurrentPeriod('garbage', '2026-03-02'), false)
+})
+
+test('term defaults stay empty while automatic startup uses a Shanghai-date suggestion', () => {
+  assert.equal(DEFAULT_SETTINGS.termId, '')
+  assert.equal(DEFAULT_SETTINGS.termStartDate, '')
+  assert.equal(settingsToPayload(DEFAULT_SETTINGS).term_id, '')
+  assert.equal(settingsToPayload(DEFAULT_SETTINGS).term_start_date, '')
+
+  const automatic = startupSettingsToState({}, {}, null, new Date('2026-08-24T04:00:00Z'))
+  assert.equal(automatic.termId, '2026-2027-1')
+  assert.equal(automatic.termStartDate, '2026-08-31')
+})
+
+test('automatic startup trusts same-term cache but never saved term metadata', () => {
+  const now = new Date('2026-08-24T04:00:00Z')
+  const oldSaved = {
+    term_id: '2025-2026-2',
+    term_start_date: '2026-03-02',
+    automatic_term_detection_enabled: true,
+  }
+  const currentCache = {
+    term_id: '2026-2027-1',
+    term_start_date: '2026-09-07',
+  }
+  const fromCache = startupSettingsToState(oldSaved, {}, currentCache, now)
+  assert.equal(fromCache.termId, '2026-2027-1')
+  assert.equal(fromCache.termStartDate, '2026-09-07')
+
+  const fromCurrentSaved = startupSettingsToState({
+    ...oldSaved,
+    term_id: '2026-2027-1',
+    term_start_date: '2026-09-07',
+  }, {}, null, now)
+  assert.equal(fromCurrentSaved.termId, '2026-2027-1')
+  assert.equal(fromCurrentSaved.termStartDate, '2026-08-31')
+
+  const fromDate = startupSettingsToState(oldSaved, {}, {
+    term_id: '2025-2026-2',
+    term_start_date: '2026-03-02',
+  }, now)
+  assert.equal(fromDate.termId, '2026-2027-1')
+  assert.equal(fromDate.termStartDate, '2026-08-31')
+})
+
+test('metadata term defaults cannot overwrite or fill manual settings', () => {
+  const metadata = {
+    default_term_id: '2030-2031-1',
+    default_term_start_date: '2030-09-02',
+    campuses: [{ id: '04', name: '沙河' }],
+  }
+  const manual = startupSettingsToState({
+    term_id: '2024-2025-2',
+    term_start_date: '2025-02-24',
+    campus_id: '01',
+    automatic_term_detection_enabled: false,
+  }, metadata, null, new Date('2026-08-24T04:00:00Z'))
+  assert.equal(manual.termId, '2024-2025-2')
+  assert.equal(manual.termStartDate, '2025-02-24')
+  assert.equal(manual.campusId, '01')
+
+  const emptyManual = startupSettingsToState({
+    term_id: '',
+    term_start_date: '',
+    campus_id: '',
+    automatic_term_detection_enabled: false,
+  }, metadata, null, new Date('2026-08-24T04:00:00Z'))
+  assert.equal(emptyManual.termId, '')
+  assert.equal(emptyManual.termStartDate, '')
+  assert.equal(emptyManual.campusId, '04')
+})
+
+test('schedule refresh uses date fallback in automatic mode and exact manual values otherwise', () => {
+  const now = new Date('2026-08-24T04:00:00Z')
+  assert.deepEqual(scheduleRequestTerm({
+    automaticTermDetectionEnabled: true,
+    termId: '2025-2026-2',
+    termStartDate: '2026-03-02',
+  }, now), {
+    termId: '2026-2027-1',
+    termStartDate: '2026-08-31',
+  })
+  assert.deepEqual(scheduleRequestTerm({
+    automaticTermDetectionEnabled: true,
+    termId: '2026-2027-1',
+    termStartDate: '2026-09-07',
+  }, now), {
+    termId: '2026-2027-1',
+    termStartDate: '2026-09-07',
+  })
+  assert.deepEqual(scheduleRequestTerm({
+    automaticTermDetectionEnabled: false,
+    termId: '2024-2025-2',
+    termStartDate: '2025-02-24',
+  }, now), {
+    termId: '2024-2025-2',
+    termStartDate: '2025-02-24',
+  })
+})
+
+test('manual term validation rejects malformed ids consistently before save or fetch', () => {
+  assert.equal(manualTermValidationError('', '2026-03-02'), '请填写学期编号。')
+  for (const invalid of ['garbage', '2025-2026-3', '2025-26-1']) {
+    assert.equal(
+      manualTermValidationError(invalid, '2026-03-02'),
+      '学期编号格式不正确，请使用 YYYY-YYYY-1 或 YYYY-YYYY-2。',
+    )
+  }
+  assert.equal(manualTermValidationError('2025-2026-2', ''), '请填写第一周周一日期。')
+  assert.equal(
+    manualTermValidationError('2025-2026-2', '2026-02-30'),
+    '第一周周一日期格式不正确，请使用 yyyy-MM-dd。',
+  )
+  assert.equal(manualTermValidationError('2025-2026-2', '2026-03-02'), '')
+})
+
+test('authoritative schedule term wins after a successful automatic refresh', () => {
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    automaticTermDetectionEnabled: true,
+    termId: '2026-2027-1',
+    termStartDate: '2026-08-31',
+  }
+  const resolved = settingsWithScheduleTerm(settings, {
+    term_id: '2026-2027-1',
+    term_start_date: '2026-09-07',
+  })
+  assert.equal(resolved.termStartDate, '2026-09-07')
+
+  const manual = settingsWithScheduleTerm({
+    ...settings,
+    automaticTermDetectionEnabled: false,
+  }, {
+    term_id: '2026-2027-1',
+    term_start_date: '2026-09-07',
+  })
+  assert.equal(manual.termStartDate, '2026-08-31')
 })

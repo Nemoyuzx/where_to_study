@@ -5,6 +5,8 @@ import android.util.AtomicFile
 import java.io.File
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
+import java.util.Calendar
+import java.util.TimeZone
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -98,4 +100,24 @@ class ScheduleStore(context: Context) {
     private companion object {
         const val FILE_NAME = "schedule.json"
     }
+}
+
+internal fun selectUsableSchedule(
+    schedule: ScheduleSnapshot?,
+    automaticTermDetectionEnabled: Boolean,
+    date: Calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")),
+): ScheduleSnapshot? {
+    if (!automaticTermDetectionEnabled || schedule == null) return schedule
+    return schedule.takeIf {
+        SemesterLogic.canUseAutomaticCachedSchedule(it.termID, it.termStartDate, date)
+    }
+}
+
+internal fun loadUsableSchedule(context: Context): ScheduleSnapshot? {
+    val appContext = context.applicationContext
+    val schedule = runCatching { ScheduleStore(appContext).load() }.getOrNull()
+    return selectUsableSchedule(
+        schedule = schedule,
+        automaticTermDetectionEnabled = AppPreferences(appContext).automaticTermDetectionEnabled,
+    )
 }

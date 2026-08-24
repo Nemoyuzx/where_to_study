@@ -390,8 +390,8 @@ export class CampusInfo {
 }
 
 export class ScheduleDefaults {
-  static readonly termID: string = '2025-2026-2';
-  static readonly termStartDate: string = '2026-03-02';
+  static readonly termID: string = '';
+  static readonly termStartDate: string = '';
 }
 
 export class HolidayDefaults {

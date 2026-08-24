@@ -11,8 +11,8 @@ use crate::classrooms::{
     MAX_SJD_DATA_RESPONSE_BYTES,
 };
 use crate::config::{
-    default_term_id, default_term_start_date, now_in_app_tz, SJD_REST_CLASSROOM_PAGE_URL,
-    SJD_STUDENT_CURRICULUM_URL, SLOT_TIMES,
+    is_valid_term_id, now_in_app_tz, suggested_term_for_date, today_in_app_tz,
+    SJD_REST_CLASSROOM_PAGE_URL, SJD_STUDENT_CURRICULUM_URL, SLOT_TIMES,
 };
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{Course, ScheduleRequest, ScheduleResponse};
@@ -337,25 +337,50 @@ pub fn parse_sjd_courses(
 
 pub fn infer_term_start_date(payload: &Value) -> Option<NaiveDate> {
     let root = payload.get("data").and_then(Value::as_array)?.first()?;
-    let week = json_string(root.get("week").or_else(|| {
-        root.get("topInfo")
-            .and_then(Value::as_array)
-            .and_then(|items| items.first())
-            .and_then(|item| item.get("week"))
-    }))
-    .parse::<i64>()
-    .ok()?;
     let dated = root
         .get("date")
         .and_then(Value::as_array)?
         .iter()
         .find(|item| item.get("mxrq").is_some() && json_string(item.get("zc")) != "all")?;
+    let top_info_week = root
+        .get("topInfo")
+        .and_then(Value::as_array)
+        .and_then(|items| items.first())
+        .and_then(|item| item.get("week"));
+    let week = [dated.get("zc"), root.get("week"), top_info_week]
+        .into_iter()
+        .flatten()
+        .find_map(|value| json_string(Some(value)).parse::<i64>().ok())?;
+    if week < 0 {
+        return None;
+    }
     let day = NaiveDate::parse_from_str(&json_string(dated.get("mxrq")), "%Y-%m-%d").ok()?;
-    let weekday = json_string(dated.get("xqid"))
-        .parse::<i64>()
-        .unwrap_or_else(|_| i64::from(day.weekday().number_from_monday()));
+    let weekday = match json_string(dated.get("xqid")).parse::<i64>() {
+        Ok(0) => 7,
+        Ok(value @ 1..=7) => value,
+        _ => i64::from(day.weekday().number_from_monday()),
+    };
     let monday = day - ChronoDuration::days(weekday - 1);
     Some(monday - ChronoDuration::weeks(week - 1))
+}
+
+pub fn infer_term_id(payload: &Value) -> Option<String> {
+    let root = payload.get("data").and_then(Value::as_array)?.first()?;
+    let top_info = root
+        .get("topInfo")
+        .and_then(Value::as_array)
+        .and_then(|items| items.first());
+    [
+        root.get("semesterId"),
+        root.get("xnxq01id"),
+        top_info.and_then(|item| item.get("semesterId")),
+        top_info.and_then(|item| item.get("xnxq01id")),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|value| json_string(Some(value)))
+    .find(|value| !value.trim().is_empty())
+    .map(|value| value.trim().to_string())
 }
 
 async fn fetch_sjd_schedule(
@@ -421,13 +446,7 @@ async fn fetch_sjd_schedule(
 
     let inferred_start =
         infer_term_start_date(&current_payload).unwrap_or(fallback_term_start_date);
-    let inferred_term_id = json_string(
-        current_payload
-            .get("data")
-            .and_then(Value::as_array)
-            .and_then(|items| items.first())
-            .and_then(|item| item.get("semesterId").or_else(|| item.get("xnxq01id"))),
-    );
+    let inferred_term_id = infer_term_id(&current_payload).unwrap_or_default();
     parse_sjd_courses(
         &all_payload,
         if inferred_term_id.is_empty() {
@@ -439,22 +458,50 @@ async fn fetch_sjd_schedule(
     )
 }
 
-pub async fn fetch_schedule(payload: &ScheduleRequest) -> ServiceResult<ScheduleResponse> {
+fn resolve_schedule_term(
+    payload: &ScheduleRequest,
+    current_term: (String, String),
+) -> ServiceResult<(String, NaiveDate)> {
+    let automatic = payload.automatic_term_detection_enabled.unwrap_or(true);
     let user_term_id = payload.term_id.as_deref().unwrap_or_default().trim();
-    let term_id = if user_term_id.is_empty() {
-        default_term_id()
+    let (current_term_id, current_term_start) = current_term;
+    let term_id = if automatic {
+        current_term_id
+    } else if user_term_id.is_empty() {
+        return Err(ServiceError::with_status("请填写学期编号。", 400));
+    } else if !is_valid_term_id(user_term_id) {
+        return Err(ServiceError::with_status(
+            "学期编号格式不正确，请使用 YYYY-YYYY-1 或 YYYY-YYYY-2。",
+            400,
+        ));
     } else {
         user_term_id.to_string()
     };
-    let term_start_source = payload
+    let user_term_start = payload
         .term_start_date
         .as_deref()
         .filter(|value| !value.trim().is_empty())
-        .map(str::trim)
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(default_term_start_date);
+        .map(str::trim);
+    let term_start_source = if automatic {
+        user_term_start
+            .filter(|_| user_term_id == term_id)
+            .filter(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok())
+            .unwrap_or(&current_term_start)
+            .to_string()
+    } else {
+        user_term_start
+            .ok_or_else(|| ServiceError::with_status("请填写第一周周一日期。", 400))?
+            .to_string()
+    };
     let term_start_date = NaiveDate::parse_from_str(&term_start_source, "%Y-%m-%d")
         .map_err(|_| ServiceError::with_status("第一周周一日期格式不正确。", 400))?;
+
+    Ok((term_id, term_start_date))
+}
+
+pub async fn fetch_schedule(payload: &ScheduleRequest) -> ServiceResult<ScheduleResponse> {
+    let current_term = suggested_term_for_date(today_in_app_tz());
+    let (term_id, term_start_date) = resolve_schedule_term(payload, current_term)?;
 
     fetch_sjd_schedule(
         &payload.account,
@@ -474,6 +521,111 @@ mod tests {
         assert_eq!(expand_week_numbers("1-5[周]"), vec![1, 2, 3, 4, 5]);
         assert_eq!(expand_week_numbers("1-5[周](单)"), vec![1, 3, 5]);
         assert_eq!(expand_week_numbers("2,4,6[周]"), vec![2, 4, 6]);
+    }
+
+    #[test]
+    fn automatic_schedule_fallback_uses_the_current_term_not_stale_request_values() {
+        let payload = ScheduleRequest {
+            account: None,
+            password: None,
+            term_id: Some("2025-2026-2".to_string()),
+            term_start_date: Some("2026-03-02".to_string()),
+            automatic_term_detection_enabled: None,
+        };
+
+        let resolved = resolve_schedule_term(
+            &payload,
+            ("2026-2027-1".to_string(), "2026-08-31".to_string()),
+        )
+        .unwrap();
+        assert_eq!(resolved.0, "2026-2027-1");
+        assert_eq!(resolved.1, NaiveDate::from_ymd_opt(2026, 8, 31).unwrap());
+    }
+
+    #[test]
+    fn automatic_schedule_fallback_keeps_a_valid_same_term_start_date() {
+        let payload = ScheduleRequest {
+            account: None,
+            password: None,
+            term_id: Some("2026-2027-1".to_string()),
+            term_start_date: Some("2026-09-07".to_string()),
+            automatic_term_detection_enabled: Some(true),
+        };
+
+        let resolved = resolve_schedule_term(
+            &payload,
+            ("2026-2027-1".to_string(), "2026-08-31".to_string()),
+        )
+        .unwrap();
+        assert_eq!(resolved.0, "2026-2027-1");
+        assert_eq!(resolved.1, NaiveDate::from_ymd_opt(2026, 9, 7).unwrap());
+    }
+
+    #[test]
+    fn manual_schedule_fallback_keeps_user_term_values() {
+        let payload = ScheduleRequest {
+            account: None,
+            password: None,
+            term_id: Some("2025-2026-2".to_string()),
+            term_start_date: Some("2026-03-02".to_string()),
+            automatic_term_detection_enabled: Some(false),
+        };
+
+        let resolved = resolve_schedule_term(
+            &payload,
+            ("2026-2027-1".to_string(), "2026-08-31".to_string()),
+        )
+        .unwrap();
+        assert_eq!(resolved.0, "2025-2026-2");
+        assert_eq!(resolved.1, NaiveDate::from_ymd_opt(2026, 3, 2).unwrap());
+    }
+
+    #[test]
+    fn manual_schedule_requests_reject_empty_term_fields_without_fallback() {
+        for payload in [
+            ScheduleRequest {
+                account: None,
+                password: None,
+                term_id: None,
+                term_start_date: Some("2026-03-02".to_string()),
+                automatic_term_detection_enabled: Some(false),
+            },
+            ScheduleRequest {
+                account: None,
+                password: None,
+                term_id: Some("2025-2026-2".to_string()),
+                term_start_date: None,
+                automatic_term_detection_enabled: Some(false),
+            },
+        ] {
+            assert!(resolve_schedule_term(
+                &payload,
+                ("2026-2027-1".to_string(), "2026-08-31".to_string()),
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn manual_schedule_requests_reject_malformed_term_ids() {
+        for invalid in ["garbage", "2025-2026-3", "2025-26-1"] {
+            let payload = ScheduleRequest {
+                account: None,
+                password: None,
+                term_id: Some(invalid.to_string()),
+                term_start_date: Some("2026-03-02".to_string()),
+                automatic_term_detection_enabled: Some(false),
+            };
+            let error = resolve_schedule_term(
+                &payload,
+                ("2026-2027-1".to_string(), "2026-08-31".to_string()),
+            )
+            .expect_err("malformed manual term id must fail");
+            assert_eq!(
+                error.message,
+                "学期编号格式不正确，请使用 YYYY-YYYY-1 或 YYYY-YYYY-2。"
+            );
+        }
     }
 
     #[test]
@@ -685,6 +837,63 @@ mod tests {
         assert_eq!(
             infer_term_start_date(&payload),
             NaiveDate::from_ymd_opt(2026, 3, 2)
+        );
+    }
+
+    #[test]
+    fn before_first_week_payload_infers_next_monday_and_nested_term_id() {
+        let payload: Value = serde_json::from_str(include_str!(
+            "../../contracts/v1/fixtures/sjd-before-first-week.json"
+        ))
+        .expect("valid before-first-week fixture");
+
+        assert_eq!(infer_term_id(&payload).as_deref(), Some("2026-2027-1"));
+        assert_eq!(
+            infer_term_start_date(&payload),
+            NaiveDate::from_ymd_opt(2026, 8, 31)
+        );
+    }
+
+    #[test]
+    fn term_id_falls_through_empty_semester_fields_to_xnxq_candidates() {
+        let direct = serde_json::json!({
+            "data": [{ "semesterId": "", "xnxq01id": "2026-2027-1" }]
+        });
+        assert_eq!(infer_term_id(&direct).as_deref(), Some("2026-2027-1"));
+
+        let nested = serde_json::json!({
+            "data": [{
+                "semesterId": "",
+                "xnxq01id": "",
+                "topInfo": [{ "semesterId": "", "xnxq01id": "2026-2027-1" }]
+            }]
+        });
+        assert_eq!(infer_term_id(&nested).as_deref(), Some("2026-2027-1"));
+    }
+
+    #[test]
+    fn negative_teaching_weeks_are_not_used_as_term_dates() {
+        let payload = serde_json::json!({
+            "data": [{
+                "week": "-1",
+                "date": [{ "mxrq": "2026-08-24", "xqid": "1", "zc": "-1" }]
+            }]
+        });
+        assert_eq!(infer_term_start_date(&payload), None);
+    }
+
+    #[test]
+    fn date_week_number_wins_and_zero_weekday_means_sunday() {
+        let payload = serde_json::json!({
+            "data": [{
+                "week": "1",
+                "topInfo": [{ "week": "1" }],
+                "date": [{ "mxrq": "2026-08-30", "xqid": "0", "zc": "0" }]
+            }]
+        });
+        assert_eq!(
+            infer_term_start_date(&payload),
+            NaiveDate::from_ymd_opt(2026, 8, 31)
         );
     }
 }

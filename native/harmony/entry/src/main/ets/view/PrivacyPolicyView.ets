@@ -63,7 +63,7 @@ export struct PrivacyPolicyView {
             .width('100%')
 
           this.privacySection('账户与教务请求 / Account and academic requests',
-            '学号和密码保存在操作系统的受保护凭据存储中，仅在你请求课表、空教室或作业时按对应用途通过 HTTPS 使用。维护者无法读取凭据，设置接口也不会返回密码。\n\nCredentials stay in protected OS storage and are used over HTTPS only for requested schedules, classrooms, or assignments. The maintainer cannot read credentials, and settings APIs never return a password.')
+            '学号和密码保存在操作系统的受保护凭据存储中。保存有效凭据且开启自动学期检测后，启动时会自动刷新一次个人课表以校验学期号和第一周周一。你主动请求课表、空教室或作业时也会按对应用途通过 HTTPS 使用凭据。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。\n\nCredentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today\u2019s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password.')
           this.privacySection('本地数据 / Local data',
             '课表、空教室、校区、学期和开关缓存在设备上；收藏会把完整日程快照保存在本机，不上传或跨设备同步。受支持系统的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、收藏、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Favorites keep complete event snapshots on this device and are neither uploaded nor synchronized. Course widgets on supported systems read only a local snapshot. Clear local data removes credentials, caches, favorites, preferences, and app-managed reminders.')
           this.privacySection('节假日数据 / Holiday data',

@@ -26,12 +26,33 @@ export const CALENDAR_VIEWS = [
 export const CALENDAR_START_HOUR = 8
 export const CALENDAR_END_HOUR = 22
 export const CALENDAR_VISIBLE_MINUTES = (CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60
+
+const SHANGHAI_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+// Beijing University of Posts and Telecommunications academic calendar:
+// - Spring semester (term 2): starts early March, ends mid July
+// - Fall semester (term 1): starts early September, ends mid January
+const SPRING_MONTHS = [2, 3, 4, 5, 6, 7]
+
+// The backend treats "today" as the Asia/Shanghai calendar date and rejects
+// any other target_date, so app-facing date decisions must use Shanghai too.
+export function shanghaiDateString(date = new Date()) {
+  const parts = SHANGHAI_DATE_FORMAT.formatToParts(date)
+  const get = (type) => parts.find((part) => part.type === type)?.value
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
 export const DEFAULT_SETTINGS = {
   account: '',
   password: '',
   hasSavedPassword: false,
-  termId: '2025-2026-2',
-  termStartDate: '2026-03-02',
+  termId: '',
+  termStartDate: '',
   campusId: '01',
   defaultMinSeats: 0,
   uiLanguage: 'system',
@@ -76,21 +97,6 @@ export function localDateString(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-const SHANGHAI_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Shanghai',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-})
-
-// The backend treats "today" as the Asia/Shanghai calendar date and rejects
-// any other target_date, so app-facing "today" must use Shanghai too.
-export function shanghaiDateString(date = new Date()) {
-  const parts = SHANGHAI_DATE_FORMAT.formatToParts(date)
-  const get = (type) => parts.find((part) => part.type === type)?.value
-  return `${get('year')}-${get('month')}-${get('day')}`
 }
 
 export function msUntilNextShanghaiMidnight(date = new Date()) {
@@ -486,6 +492,83 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
   }
 }
 
+/**
+ * Resolve startup settings without depending on which asynchronous command
+ * finishes first. Saved values win, metadata only fills empty fields, and an
+ * automatic term advances to the current Shanghai-date suggestion. Only a
+ * same-term schedule cache may retain a different start date, because saved
+ * settings alone cannot prove whether a date came from the academic system or
+ * from an earlier calendar fallback.
+ */
+export function startupSettingsToState(
+  data = {},
+  metadata = {},
+  cachedSchedule = null,
+  date = new Date(),
+) {
+  const suggested = suggestTermForDate(date)
+  const fallback = {
+    ...DEFAULT_SETTINGS,
+    campusId: metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId,
+  }
+  const settings = savedSettingsToState(data, fallback)
+  if (!settings.automaticTermDetectionEnabled) return settings
+
+  const cachedTermIsCurrent = isValidTermId(cachedSchedule?.term_id)
+    && cachedSchedule.term_id.trim() === suggested.termId
+    && isValidTermStartDate(cachedSchedule?.term_start_date)
+  if (cachedTermIsCurrent) {
+    return {
+      ...settings,
+      termId: cachedSchedule.term_id.trim(),
+      termStartDate: cachedSchedule.term_start_date.trim(),
+    }
+  }
+
+  return {
+    ...settings,
+    termId: suggested.termId,
+    termStartDate: suggested.termStartDate,
+  }
+}
+
+/** Apply authoritative term metadata returned by a successful schedule fetch. */
+export function settingsWithScheduleTerm(settings, schedule) {
+  if (!settings.automaticTermDetectionEnabled
+    || !isValidTermId(schedule?.term_id)
+    || !isValidTermStartDate(schedule?.term_start_date)) {
+    return settings
+  }
+  return {
+    ...settings,
+    termId: schedule.term_id.trim(),
+    termStartDate: schedule.term_start_date.trim(),
+  }
+}
+
+/**
+ * Automatic refreshes use a current Shanghai-date fallback. Manual mode keeps
+ * the exact term fields entered by the user.
+ */
+export function scheduleRequestTerm(settings, date = new Date()) {
+  if (settings.automaticTermDetectionEnabled) {
+    const suggested = suggestTermForDate(date)
+    if (isValidTermId(settings.termId)
+      && settings.termId.trim() === suggested.termId
+      && isValidTermStartDate(settings.termStartDate)) {
+      return {
+        termId: suggested.termId,
+        termStartDate: settings.termStartDate.trim(),
+      }
+    }
+    return suggested
+  }
+  return {
+    termId: settings.termId,
+    termStartDate: settings.termStartDate,
+  }
+}
+
 export function savedCredentialSnapshot(settings) {
   return {
     account: settings.account.trim(),
@@ -711,17 +794,12 @@ export function displayBuildingName(name) {
 
 // ---------- Term (semester) auto-detection ----------
 
-// Beijing University of Posts and Telecommunications academic calendar:
-// - Spring semester (term 2): starts early March, ends mid July
-// - Fall semester (term 1): starts early September, ends mid January
-const SPRING_MONTHS = [2, 3, 4, 5, 6, 7]
-
-/** Monday of the week that contains the given date. */
+/** Monday of the week that contains the given date, independent of device TZ. */
 function mondayOfWeekContaining(year, month, day) {
-  const date = new Date(year, month - 1, day)
-  const offset = (date.getDay() + 6) % 7 // days since Monday
-  date.setDate(date.getDate() - offset)
-  return localDateString(date)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  const offset = (date.getUTCDay() + 6) % 7 // days since Monday
+  date.setUTCDate(date.getUTCDate() - offset)
+  return date.toISOString().slice(0, 10)
 }
 
 /**
@@ -732,8 +810,9 @@ function mondayOfWeekContaining(year, month, day) {
  * successful fetch.
  */
 export function suggestTermForDate(date = new Date()) {
-  const month = date.getMonth() + 1
-  const year = date.getFullYear()
+  const shanghaiDate = shanghaiDateString(date)
+  const year = Number(shanghaiDate.slice(0, 4))
+  const month = Number(shanghaiDate.slice(5, 7))
   if (SPRING_MONTHS.includes(month)) {
     // Spring semester starts around March 1-3; the week of March 2 is a
     // stable anchor (2026-03-02, 2025-02-24, 2024-02-26 all match).
@@ -767,12 +846,25 @@ export function isValidTermStartDate(value) {
     && parsed.getDate() === Number(text.slice(8, 10))
 }
 
+/** Return the user-facing validation error for manually entered term fields. */
+export function manualTermValidationError(termId, termStartDate) {
+  if (!String(termId || '').trim()) return '请填写学期编号。'
+  if (!isValidTermId(termId)) {
+    return '学期编号格式不正确，请使用 YYYY-YYYY-1 或 YYYY-YYYY-2。'
+  }
+  if (!String(termStartDate || '').trim()) return '请填写第一周周一日期。'
+  if (!isValidTermStartDate(termStartDate)) {
+    return '第一周周一日期格式不正确，请使用 yyyy-MM-dd。'
+  }
+  return ''
+}
+
 /**
  * True when the given term is the one suggested for the current period.
  */
-export function termMatchesCurrentPeriod(termId, termStartDate) {
+export function termMatchesCurrentPeriod(termId, termStartDate, date = new Date()) {
   if (!isValidTermId(termId)) return false
-  const suggested = suggestTermForDate()
+  const suggested = suggestTermForDate(date)
   return String(termId).trim() === suggested.termId
     && String(termStartDate).trim() === suggested.termStartDate
 }

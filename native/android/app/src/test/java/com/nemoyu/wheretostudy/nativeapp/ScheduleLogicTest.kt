@@ -251,6 +251,58 @@ class ScheduleLogicTest {
     }
 
     @Test
+    fun scheduleParserUsesAutomaticFallbackOnlyWhenResponseMetadataIsMissing() {
+        val actual = SjdScheduleParser.parse(
+            current = JSONObject("""{"code":1,"data":[{}]}"""),
+            curriculum = JSONObject(fixture("sjd-curriculum.json")),
+            fallbackTermID = "2026-2027-1",
+            fallbackTermStartDate = "2026-08-31",
+            fetchedAt = "2026-08-24T12:00:00+08:00",
+        )
+
+        assertEquals("2026-2027-1", actual.termID)
+        assertEquals("2026-08-31", actual.termStartDate)
+    }
+
+    @Test
+    fun scheduleParserReadsTopInfoAndInfersStartFromWeekZero() {
+        val actual = SjdScheduleParser.parse(
+            current = JSONObject(fixture("sjd-before-first-week.json")),
+            curriculum = JSONObject(fixture("sjd-curriculum.json")),
+            fallbackTermID = "fallback-term",
+            fallbackTermStartDate = "2000-01-03",
+            fetchedAt = "2026-08-24T12:00:00+08:00",
+        )
+
+        assertEquals("2026-2027-1", actual.termID)
+        assertEquals("2026-08-31", actual.termStartDate)
+    }
+
+    @Test
+    fun scheduleParserPrefersDateWeekAndNormalizesSundayZero() {
+        val current = JSONObject(
+            """{
+                "code": 1,
+                "data": [{
+                    "week": "9",
+                    "topInfo": [{"semesterId":"2026-2027-1","week":"9"}],
+                    "date": [{"mxrq":"2026-08-30","xqid":"0","zc":"0"}]
+                }]
+            }""".trimIndent(),
+        )
+        val actual = SjdScheduleParser.parse(
+            current = current,
+            curriculum = JSONObject(fixture("sjd-curriculum.json")),
+            fallbackTermID = "fallback-term",
+            fallbackTermStartDate = "2000-01-03",
+            fetchedAt = "2026-08-24T12:00:00+08:00",
+        )
+
+        assertEquals("2026-2027-1", actual.termID)
+        assertEquals("2026-08-31", actual.termStartDate)
+    }
+
+    @Test
     fun scheduleRoomNormalizationKeepsThreeDigitAndDualDoorRooms() {
         assertEquals("335", SjdScheduleParser.normalizeCourseRoom("3-335"))
         assertEquals("101", SjdScheduleParser.normalizeCourseRoom("教1-101"))

@@ -24,6 +24,10 @@
 
 ### 一致性、设置与隐私
 
+- 修复自动学期检测的核心解析：移动教务开学前真实返回的 `week=0`、`topInfo.semesterId`、日期项 `zc` 和 `xqid=0` 均会正确解析，由响应中的周次与日期反推第一周周一。
+- 保存完整教务凭据且开启自动检测时，客户端启动会去重刷新一次个人课表。教务真实元数据优先，同学期有效课表缓存次之，上海时区当前日期推断仅作临时兜底。
+- 自动模式下的旧学期缓存不再进入日历、小组件/服务卡片、桌面托盘、系统日历导入或课程通知；自动刷新失败时也不会把上一学期课程当成当前课程。
+- 全平台的默认学期号和默认第一周周一改为空；手动模式缺少或格式错误时会在保存与联网前明确拒绝，不再静默补入某个固定学期。
 - 全平台统一选中日期、作业 DDL、校内竞赛和其它 DDL 的浅色/深色颜色；月/年日期框继续用最多两层边框显示优先级最高的两类日程。
 - Android 移除设置页 `Spinner`，非二元选择改为动画分段控件；所有二元设置继续使用原生 `Switch`。其它平台的二元项同样使用开关控件。
 - HarmonyOS 手机、折叠屏、平板与 PC 同步收藏、自定义源、动画、颜色、教学周和英文布局语义。
@@ -32,9 +36,9 @@
 
 ### 版本与分发
 
-- Android：`0.2.5 (40)`。
-- iOS 与原生 macOS：`0.2.5 (68)`，通过本地 Xcode 归档并上传 TestFlight；Apple 制品不进入 GitHub Release。
-- HarmonyOS：`0.2.5 (1002007)`，构建与本地单元测试通过；AGC 发布仍需要维护者账号签名配置。
+- Android：`0.2.5 (41)`。
+- iOS 与原生 macOS：`0.2.5 (69)`，通过本地 Xcode 归档并上传 TestFlight；Apple 制品不进入 GitHub Release。
+- HarmonyOS：`0.2.5 (1002008)`，构建与本地单元测试通过；AGC 发布仍需要维护者账号签名配置。
 - GitHub Release：Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及维护者签名的 Android APK/AAB；`.sha256` 仅供发布校验，不作为附件。
 
 ## English
@@ -61,6 +65,10 @@
 
 ### Consistency, settings, and privacy
 
+- Automatic term detection now accepts the academic service's real pre-term `week=0` shape, reads `topInfo.semesterId`, prefers each date row's `zc`, normalizes `xqid=0` as Sunday, and derives the first Monday from the returned week and date.
+- With complete saved credentials and automatic detection enabled, clients perform one deduplicated schedule refresh at launch. Live academic metadata wins, a valid same-term schedule cache is second, and the current Shanghai-date suggestion is only a temporary fallback.
+- In automatic mode, a previous-term cache is excluded from calendars, widgets/service cards, desktop tray content, calendar import, and course notifications. A failed automatic refresh therefore cannot surface last term's courses as current data.
+- Default term ID and first-Monday values are empty on every platform. Manual mode rejects missing or malformed fields before saving or networking instead of silently inserting a fixed semester.
 - Selected-date, assignment, school-notice, and other-deadline colors now match in light and dark appearances on every platform; month/year cells retain up to two concentric priority borders.
 - Android removes Settings `Spinner` controls: multi-choice values use animated segmented controls, while every binary value uses a native `Switch`. Other platforms likewise use switch controls for binary settings.
 - HarmonyOS phone, foldable, tablet, and PC layouts receive the matching favorites, custom-feed, animation, color, teaching-week, and English semantics.
@@ -68,7 +76,7 @@
 
 ### Versions and distribution
 
-- Android: `0.2.5 (40)`.
-- Native iOS and macOS: `0.2.5 (68)`, archived and uploaded to TestFlight with local Xcode. Apple artifacts are excluded from GitHub Release.
-- HarmonyOS: `0.2.5 (1002007)`, locally built and unit-tested; AGC distribution still requires maintainer signing configuration.
+- Android: `0.2.5 (41)`.
+- Native iOS and macOS: `0.2.5 (69)`, archived and uploaded to TestFlight with local Xcode. Apple artifacts are excluded from GitHub Release.
+- HarmonyOS: `0.2.5 (1002008)`, locally built and unit-tested; AGC distribution still requires maintainer signing configuration.
 - GitHub Release scope: Windows x64 NSIS; Linux arm64/x86_64 Debian, AppImage, CLI, and TUI; and maintainer-signed Android APK/AAB. `.sha256` files remain verification-only and are not attached.

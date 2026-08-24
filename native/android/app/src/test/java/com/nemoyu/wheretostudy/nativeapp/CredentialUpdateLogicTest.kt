@@ -69,12 +69,7 @@ class CredentialUpdateLogicTest {
             "2026-03-02",
             SettingsInputLogic.resolveTermStartDate(" 2026-03-02 "),
         )
-        assertEquals(
-            AppMetadata.defaultTermStartDate,
-            SettingsInputLogic.resolveTermStartDate("  "),
-        )
-
-        listOf("2026-02-30", "2026-13-01", "2026-2-03").forEach { invalidDate ->
+        listOf("", "  ", "2026-02-30", "2026-13-01", "2026-2-03").forEach { invalidDate ->
             val error = assertThrows(SettingsValidationException::class.java) {
                 SettingsInputLogic.resolveTermStartDate(invalidDate)
             }
@@ -83,5 +78,22 @@ class CredentialUpdateLogicTest {
                 error.message,
             )
         }
+    }
+
+    @Test
+    fun termIDRejectsBlankAndInvalidManualValues() {
+        assertEquals("2026-2027-1", SettingsInputLogic.resolveTermID(" 2026-2027-1 "))
+        listOf("", "   ", "2026-2027", "2026-2027-3").forEach { invalidTermID ->
+            val error = assertThrows(SettingsValidationException::class.java) {
+                SettingsInputLogic.resolveTermID(invalidTermID)
+            }
+            assertEquals("学期编号格式不正确，请使用 YYYY-YYYY-1/2。", error.message)
+        }
+    }
+
+    @Test
+    fun persistedTermDefaultsStayEmptyUntilAutomaticDetectionRuns() {
+        assertEquals("", AppMetadata.defaultTermID)
+        assertEquals("", AppMetadata.defaultTermStartDate)
     }
 }

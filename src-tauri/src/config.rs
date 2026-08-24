@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, SecondsFormat, Utc};
+use chrono::{Datelike, Duration as ChronoDuration, NaiveDate, SecondsFormat, Utc};
 use chrono_tz::Asia::Shanghai;
 
 use crate::models::{CampusMetadata, SlotMetadata};
@@ -10,9 +10,6 @@ pub const SJD_STUDENT_CURRICULUM_URL: &str =
     "https://jwglweixin.bupt.edu.cn/bjyddx/student/curriculum";
 pub const EMPTY_CLASSROOM_LOGIN_URL: &str = "https://jwglweixin.bupt.edu.cn/bjyddx/login";
 pub const EMPTY_CLASSROOM_TODAY_URL: &str = "https://jwglweixin.bupt.edu.cn/bjyddx/todayClassrooms";
-
-pub const DEFAULT_TERM_ID: &str = "2025-2026-2";
-pub const DEFAULT_TERM_START_DATE: &str = "2026-03-02";
 
 pub const SLOT_TIMES: [(&str, &str); 14] = [
     ("08:00", "08:45"),
@@ -48,12 +45,47 @@ pub const CAMPUSES: [Campus; 2] = [
     },
 ];
 
+pub fn suggested_term_for_date(date: NaiveDate) -> (String, String) {
+    let (term_id, anchor) = if (2..=7).contains(&date.month()) {
+        (
+            format!("{}-{}-2", date.year() - 1, date.year()),
+            NaiveDate::from_ymd_opt(date.year(), 3, 2).expect("valid spring term anchor"),
+        )
+    } else {
+        let fall_start_year = if date.month() == 1 {
+            date.year() - 1
+        } else {
+            date.year()
+        };
+        (
+            format!("{}-{}-1", fall_start_year, fall_start_year + 1),
+            NaiveDate::from_ymd_opt(fall_start_year, 9, 1).expect("valid fall term anchor"),
+        )
+    };
+    let monday = anchor - ChronoDuration::days(i64::from(anchor.weekday().num_days_from_monday()));
+    (term_id, monday.to_string())
+}
+
+pub fn is_valid_term_id(value: &str) -> bool {
+    let bytes = value.trim().as_bytes();
+    bytes.len() == 11
+        && bytes[0..4].iter().all(u8::is_ascii_digit)
+        && bytes[4] == b'-'
+        && bytes[5..9].iter().all(u8::is_ascii_digit)
+        && bytes[9] == b'-'
+        && matches!(bytes[10], b'1' | b'2')
+}
+
+pub fn default_term() -> (String, String) {
+    (String::new(), String::new())
+}
+
 pub fn default_term_id() -> String {
-    std::env::var("DEFAULT_TERM_ID").unwrap_or_else(|_| DEFAULT_TERM_ID.to_string())
+    default_term().0
 }
 
 pub fn default_term_start_date() -> String {
-    std::env::var("DEFAULT_TERM_START_DATE").unwrap_or_else(|_| DEFAULT_TERM_START_DATE.to_string())
+    default_term().1
 }
 
 pub fn campuses_payload() -> Vec<CampusMetadata> {
@@ -107,6 +139,55 @@ pub fn now_in_app_tz() -> String {
 
 pub fn today_in_app_tz() -> NaiveDate {
     Utc::now().with_timezone(&Shanghai).date_naive()
+}
+
+#[cfg(test)]
+mod term_tests {
+    use super::*;
+
+    #[test]
+    fn term_suggestion_tracks_the_shanghai_calendar_period() {
+        assert_eq!(
+            suggested_term_for_date(NaiveDate::from_ymd_opt(2026, 3, 15).unwrap()),
+            ("2025-2026-2".to_string(), "2026-03-02".to_string())
+        );
+        assert_eq!(
+            suggested_term_for_date(NaiveDate::from_ymd_opt(2026, 8, 24).unwrap()),
+            ("2026-2027-1".to_string(), "2026-08-31".to_string())
+        );
+        assert_eq!(
+            suggested_term_for_date(NaiveDate::from_ymd_opt(2026, 1, 15).unwrap()),
+            ("2025-2026-1".to_string(), "2025-09-01".to_string())
+        );
+    }
+
+    #[test]
+    fn persisted_and_metadata_term_defaults_stay_empty() {
+        assert_eq!(default_term(), (String::new(), String::new()));
+        assert!(default_term_id().is_empty());
+        assert!(default_term_start_date().is_empty());
+    }
+
+    #[test]
+    fn term_ids_follow_the_shared_four_digit_contract() {
+        for valid in ["2025-2026-1", "2025-2026-2", " 2025-2026-2 "] {
+            assert!(is_valid_term_id(valid), "valid term id rejected: {valid}");
+        }
+        for invalid in [
+            "",
+            "garbage",
+            "2025-2026",
+            "25-2026-1",
+            "2025-26-1",
+            "2025-2026-0",
+            "2025-2026-3",
+        ] {
+            assert!(
+                !is_valid_term_id(invalid),
+                "invalid term id accepted: {invalid}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

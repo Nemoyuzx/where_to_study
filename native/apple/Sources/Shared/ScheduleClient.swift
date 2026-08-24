@@ -383,7 +383,9 @@ enum SJDScheduleParser {
             throw ScheduleClientError.invalidResponse("移动教务课表返回为空。")
         }
 
-        let termID = [currentRoot["semesterId"], currentRoot["xnxq01id"]]
+        let topInfo = currentRoot["topInfo"] as? [[String: Any]] ?? []
+        let termID = ([currentRoot["semesterId"], currentRoot["xnxq01id"]]
+            + topInfo.flatMap { [$0["semesterId"], $0["xnxq01id"]] })
             .map(SJDScheduleClient.string)
             .first(where: { !$0.isEmpty }) ?? fallbackTermID
         let termStartDate = inferTermStartDate(from: currentRoot) ?? fallbackTermStartDate
@@ -534,18 +536,34 @@ enum SJDScheduleParser {
     }
 
     private static func inferTermStartDate(from root: [String: Any]) -> String? {
-        let weekText = SJDScheduleClient.string(root["week"]).nilIfEmpty
-            ?? ((root["topInfo"] as? [[String: Any]])?.first.map { SJDScheduleClient.string($0["week"]) })
-        guard let week = weekText.flatMap(Int.init), week > 0 else { return nil }
         guard let dated = (root["date"] as? [[String: Any]])?.first(where: {
             $0["mxrq"] != nil && SJDScheduleClient.string($0["zc"]) != "all"
         }) else { return nil }
+        let topInfo = root["topInfo"] as? [[String: Any]] ?? []
+        let week = ([dated["zc"], root["week"]] + topInfo.map { $0["week"] })
+            .map(SJDScheduleClient.string)
+            .compactMap(Int.init)
+            .first(where: { $0 >= 0 })
+        // The current-week endpoint reports the week before classes as week 0.
+        // With the formula below, its Monday is exactly seven days before the
+        // first teaching-week Monday, so it still yields the real term start.
+        guard let week else { return nil }
         guard let day = StrictContractDateParser.date(
             from: SJDScheduleClient.string(dated["mxrq"])
         ) else { return nil }
         let calendarWeekday = Calendar.shanghai.component(.weekday, from: day)
         let mondayBasedWeekday = ((calendarWeekday + 5) % 7) + 1
-        let weekday = Int(SJDScheduleClient.string(dated["xqid"])) ?? mondayBasedWeekday
+        let rawWeekday = Int(SJDScheduleClient.string(dated["xqid"]))
+        let weekday: Int
+        if let rawWeekday {
+            weekday = switch rawWeekday {
+            case 0: 7
+            case 1 ... 7: rawWeekday
+            default: mondayBasedWeekday
+            }
+        } else {
+            weekday = mondayBasedWeekday
+        }
         guard
             let monday = Calendar.shanghai.date(byAdding: .day, value: -(weekday - 1), to: day),
             let termStart = Calendar.shanghai.date(byAdding: .day, value: -((week - 1) * 7), to: monday)

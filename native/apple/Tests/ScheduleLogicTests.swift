@@ -271,6 +271,69 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(parsed, expected)
     }
 
+    func testCurrentWeekMetadataReadsTopInfoAndInfersStartFromWeekZeroOrOne() throws {
+        let curriculum = try JSONSerialization.data(withJSONObject: [
+            "data": [["item": []]],
+        ])
+        let beforeFirstWeek = try SJDScheduleParser.parse(
+            currentData: fixtureData("sjd-before-first-week.json"),
+            curriculumData: curriculum,
+            fallbackTermID: ScheduleDefaults.termID,
+            fallbackTermStartDate: ScheduleDefaults.termStartDate
+        )
+
+        XCTAssertEqual(beforeFirstWeek.termID, "2026-2027-1")
+        XCTAssertEqual(beforeFirstWeek.termStartDate, "2026-08-31")
+
+        let firstWeek = try JSONSerialization.data(withJSONObject: [
+            "data": [[
+                "week": "1",
+                "topInfo": [["semesterId": "2026-2027-1"]],
+                "date": [[
+                    "mxrq": "2026-08-31",
+                    "zc": "1",
+                    "xqid": "1",
+                ]],
+            ]],
+        ])
+        let parsedFirstWeek = try SJDScheduleParser.parse(
+            currentData: firstWeek,
+            curriculumData: curriculum,
+            fallbackTermID: ScheduleDefaults.termID,
+            fallbackTermStartDate: ScheduleDefaults.termStartDate
+        )
+
+        XCTAssertEqual(parsedFirstWeek.termID, "2026-2027-1")
+        XCTAssertEqual(parsedFirstWeek.termStartDate, "2026-08-31")
+    }
+
+    func testTermStartInferencePrefersDateWeekAndTreatsZeroWeekdayAsSunday() throws {
+        let current = try JSONSerialization.data(withJSONObject: [
+            "data": [[
+                "week": "9",
+                "topInfo": [["semesterId": "2026-2027-1", "week": "8"]],
+                "date": [[
+                    "mxrq": "2026-08-30",
+                    "zc": "0",
+                    "xqid": "0",
+                ]],
+            ]],
+        ])
+        let curriculum = try JSONSerialization.data(withJSONObject: [
+            "data": [["item": []]],
+        ])
+
+        let parsed = try SJDScheduleParser.parse(
+            currentData: current,
+            curriculumData: curriculum,
+            fallbackTermID: ScheduleDefaults.termID,
+            fallbackTermStartDate: ScheduleDefaults.termStartDate
+        )
+
+        XCTAssertEqual(parsed.termID, "2026-2027-1")
+        XCTAssertEqual(parsed.termStartDate, "2026-08-31")
+    }
+
     func testScheduleRoomNormalizationKeepsThreeDigitAndDualDoorRooms() {
         XCTAssertEqual(SJDScheduleParser.normalizeCourseRoom("3-335"), "335")
         XCTAssertEqual(SJDScheduleParser.normalizeCourseRoom("教1-101"), "101")
@@ -1748,6 +1811,11 @@ final class SemesterLogicTests: XCTestCase {
         Calendar.shanghai.date(from: DateComponents(year: year, month: month, day: day))!
     }
 
+    func testScheduleDefaultsLeaveBothTermFieldsBlank() {
+        XCTAssertEqual(ScheduleDefaults.termID, "")
+        XCTAssertEqual(ScheduleDefaults.termStartDate, "")
+    }
+
     func testMondayOfWeekContainingAnchorsSpringAndFallStartWeeks() {
         XCTAssertEqual(
             SemesterLogic.mondayOfWeekContaining(year: 2026, month: 3, day: 2),
@@ -1795,6 +1863,120 @@ final class SemesterLogicTests: XCTestCase {
         let suggested = SemesterLogic.suggestTerm(for: shanghaiDate(2026, 1, 1))
         XCTAssertEqual(suggested.termID, "2025-2026-1")
         XCTAssertEqual(suggested.termStartDate, "2025-09-01")
+    }
+
+    func testSuggestTermUsesExpectedMonthBoundaries() {
+        let expectedByMonth = [
+            1: ("2025-2026-1", "2025-09-01"),
+            2: ("2025-2026-2", "2026-03-02"),
+            3: ("2025-2026-2", "2026-03-02"),
+            4: ("2025-2026-2", "2026-03-02"),
+            5: ("2025-2026-2", "2026-03-02"),
+            6: ("2025-2026-2", "2026-03-02"),
+            7: ("2025-2026-2", "2026-03-02"),
+            8: ("2026-2027-1", "2026-08-31"),
+            9: ("2026-2027-1", "2026-08-31"),
+            10: ("2026-2027-1", "2026-08-31"),
+            11: ("2026-2027-1", "2026-08-31"),
+            12: ("2026-2027-1", "2026-08-31"),
+        ]
+
+        for month in 1 ... 12 {
+            let firstDay = SemesterLogic.suggestTerm(for: shanghaiDate(2026, month, 1))
+            let expected = expectedByMonth[month]
+            XCTAssertEqual(firstDay.termID, expected?.0, "month \(month)")
+            XCTAssertEqual(firstDay.termStartDate, expected?.1, "month \(month)")
+        }
+
+        XCTAssertEqual(
+            SemesterLogic.suggestTerm(for: shanghaiDate(2026, 1, 31)).termID,
+            "2025-2026-1"
+        )
+        XCTAssertEqual(
+            SemesterLogic.suggestTerm(for: shanghaiDate(2026, 7, 31)).termID,
+            "2025-2026-2"
+        )
+        XCTAssertEqual(
+            SemesterLogic.suggestTerm(for: shanghaiDate(2026, 12, 31)).termID,
+            "2026-2027-1"
+        )
+    }
+
+    func testSuggestTermUsesShanghaiDateAcrossUTCBoundaries() throws {
+        let formatter = ISO8601DateFormatter()
+        let beforeFebruary = try XCTUnwrap(formatter.date(from: "2026-01-31T15:59:00Z"))
+        let afterFebruary = try XCTUnwrap(formatter.date(from: "2026-01-31T16:00:00Z"))
+        let beforeAugust = try XCTUnwrap(formatter.date(from: "2026-07-31T15:59:00Z"))
+        let afterAugust = try XCTUnwrap(formatter.date(from: "2026-07-31T16:00:00Z"))
+
+        XCTAssertEqual(SemesterLogic.suggestTerm(for: beforeFebruary).termID, "2025-2026-1")
+        XCTAssertEqual(SemesterLogic.suggestTerm(for: afterFebruary).termID, "2025-2026-2")
+        XCTAssertEqual(SemesterLogic.suggestTerm(for: beforeAugust).termID, "2025-2026-2")
+        XCTAssertEqual(SemesterLogic.suggestTerm(for: afterAugust).termID, "2026-2027-1")
+    }
+
+    func testAutomaticSettingsIgnorePersistedDefaultsAndOldTermCache() {
+        let resolved = SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: true,
+            persistedTermID: ScheduleDefaults.termID,
+            persistedTermStartDate: ScheduleDefaults.termStartDate,
+            cachedTermID: "2025-2026-2",
+            cachedTermStartDate: "2026-03-09",
+            for: shanghaiDate(2026, 8, 24)
+        )
+
+        XCTAssertEqual(
+            resolved,
+            SemesterLogic.Settings(termID: "2026-2027-1", termStartDate: "2026-08-31")
+        )
+    }
+
+    func testAutomaticSettingsKeepValidRealStartDateForCurrentCachedTerm() {
+        let resolved = SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: true,
+            persistedTermID: ScheduleDefaults.termID,
+            persistedTermStartDate: ScheduleDefaults.termStartDate,
+            cachedTermID: " 2026-2027-1 ",
+            cachedTermStartDate: " 2026-09-07 ",
+            for: shanghaiDate(2026, 8, 24)
+        )
+
+        XCTAssertEqual(
+            resolved,
+            SemesterLogic.Settings(termID: "2026-2027-1", termStartDate: "2026-09-07")
+        )
+    }
+
+    func testAutomaticSettingsRejectInvalidCurrentTermCachedStartDate() {
+        let resolved = SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: true,
+            persistedTermID: nil,
+            persistedTermStartDate: nil,
+            cachedTermID: "2026-2027-1",
+            cachedTermStartDate: "2026-09-31",
+            for: shanghaiDate(2026, 8, 24)
+        )
+
+        XCTAssertEqual(
+            resolved,
+            SemesterLogic.Settings(termID: "2026-2027-1", termStartDate: "2026-08-31")
+        )
+    }
+
+    func testManualSettingsKeepPersistedValuesAndIgnoreCache() {
+        let resolved = SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: false,
+            persistedTermID: "manual-term",
+            persistedTermStartDate: "2024-10-14",
+            cachedTermID: "2026-2027-1",
+            cachedTermStartDate: "2026-09-07",
+            for: shanghaiDate(2026, 8, 24)
+        )
+
+        XCTAssertEqual(
+            resolved,
+            SemesterLogic.Settings(termID: "manual-term", termStartDate: "2024-10-14")
+        )
     }
 
     func testValidTermIDAcceptsStandardAndRejectsMalformed() {

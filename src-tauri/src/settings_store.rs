@@ -254,7 +254,22 @@ where
     L: FnOnce() -> ServiceResult<Option<Credentials>>,
 {
     request.apply_defaults();
-    if !is_strict_contract_date(&request.term_start_date) {
+    if !request.automatic_term_detection_enabled && request.term_id.trim().is_empty() {
+        return Err(ServiceError::new("请填写学期编号。"));
+    }
+    if !request.automatic_term_detection_enabled
+        && !crate::config::is_valid_term_id(&request.term_id)
+    {
+        return Err(ServiceError::new(
+            "学期编号格式不正确，请使用 YYYY-YYYY-1 或 YYYY-YYYY-2。",
+        ));
+    }
+    if !request.automatic_term_detection_enabled && request.term_start_date.trim().is_empty() {
+        return Err(ServiceError::new("请填写第一周周一日期。"));
+    }
+    if !request.term_start_date.trim().is_empty()
+        && !is_strict_contract_date(&request.term_start_date)
+    {
         return Err(ServiceError::new(
             "第一周周一日期格式不正确，请使用 yyyy-MM-dd。",
         ));
@@ -822,6 +837,52 @@ mod tests {
             assert_eq!(
                 error.message,
                 "第一周周一日期格式不正确，请使用 yyyy-MM-dd。"
+            );
+            assert!(!credentials_loaded.get());
+        }
+    }
+
+    #[test]
+    fn automatic_settings_can_keep_empty_term_defaults_but_manual_settings_cannot() {
+        let mut automatic = fixture_request(Some("replacement-secret"));
+        automatic.term_id.clear();
+        automatic.term_start_date.clear();
+        automatic.automatic_term_detection_enabled = true;
+        let plan = prepare_save_with(automatic, || Ok(None)).expect("automatic empty defaults");
+        assert!(plan.settings.term_id.is_empty());
+        assert!(plan.settings.term_start_date.is_empty());
+
+        for missing_start in [false, true] {
+            let mut manual = fixture_request(Some("replacement-secret"));
+            manual.automatic_term_detection_enabled = false;
+            if missing_start {
+                manual.term_start_date.clear();
+            } else {
+                manual.term_id.clear();
+            }
+            assert!(prepare_save_with(manual, || Ok(None)).is_err());
+        }
+    }
+
+    #[test]
+    fn malformed_manual_term_id_is_rejected_before_credentials_are_loaded() {
+        for invalid in ["garbage", "2025-2026-3", "2025-26-1"] {
+            let credentials_loaded = Cell::new(false);
+            let mut request = fixture_request(Some("replacement-secret"));
+            request.automatic_term_detection_enabled = false;
+            request.term_id = invalid.to_string();
+
+            let result = prepare_save_with(request, || {
+                credentials_loaded.set(true);
+                Ok(None)
+            });
+            let error = match result {
+                Ok(_) => panic!("malformed manual term id must fail"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.message,
+                "学期编号格式不正确，请使用 YYYY-YYYY-1 或 YYYY-YYYY-2。"
             );
             assert!(!credentials_loaded.get());
         }

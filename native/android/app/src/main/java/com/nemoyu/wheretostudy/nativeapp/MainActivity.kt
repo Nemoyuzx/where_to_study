@@ -103,6 +103,7 @@ class MainActivity : Activity() {
     internal var controlHapticEventCount = 0
         private set
     private var currentFoldingFeature: FoldingFeature? = null
+    private var automaticScheduleLaunchRefreshKey: AutomaticScheduleLaunchRefreshKey? = null
     private var windowLayoutListenerRegistered = false
     private val windowInfoTracker by lazy {
         WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this))
@@ -194,6 +195,7 @@ class MainActivity : Activity() {
         updateAdaptiveLayout(force = true)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
         DailyCourseSummaryScheduler.reconcile(this)
+        refreshScheduleAtStartup()
         refreshClassroomsAtStartup()
         if (calendarPermissionRequestPending && hasCalendarPermissions()) {
             resumeCalendarImportAfterRecreation()
@@ -1002,7 +1004,44 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun refreshScheduleAtStartup() {
+        val credentials = credentialStore.load()
+        if (!SemesterLogic.shouldRefreshAutomatically(
+                preferences.automaticTermDetectionEnabled,
+                credentials,
+            )
+        ) {
+            return
+        }
+        val currentTermID = SemesterLogic.suggestTermForDate().termId
+        val key = ProcessAutomaticScheduleLaunchRefreshGate.begin(
+            credentials?.account.orEmpty(),
+            currentTermID,
+        ) ?: return
+        automaticScheduleLaunchRefreshKey = key
+        val scheduled = scheduleRepository.refreshAutomatically { result ->
+            ProcessAutomaticScheduleLaunchRefreshGate.finish(key, result.isSuccess)
+            if (automaticScheduleLaunchRefreshKey == key) {
+                automaticScheduleLaunchRefreshKey = null
+            }
+            if (result.isSuccess) {
+                reconcileDailyCourseNotifications()
+                if (::content.isInitialized) refreshCurrentPage()
+            }
+        }
+        if (!scheduled) {
+            ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
+            if (automaticScheduleLaunchRefreshKey == key) {
+                automaticScheduleLaunchRefreshKey = null
+            }
+        }
+    }
+
     override fun onDestroy() {
+        automaticScheduleLaunchRefreshKey?.let { key ->
+            ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
+            automaticScheduleLaunchRefreshKey = null
+        }
         if (::adaptiveRoot.isInitialized) adaptiveRoot.removeCallbacks(applyAdaptiveLayout)
         navigationRailAnimator?.cancel()
         pendingCalendarImport = null

@@ -49,6 +49,15 @@ class SettingsPage(
         }, 1_800L)
     }
 
+    private fun refreshScheduleAutomaticallyAfterSave() {
+        scheduleRepository.refreshAutomatically { result ->
+            if (result.isSuccess) {
+                activity.reconcileDailyCourseNotifications()
+                activity.refreshCurrentPage()
+            }
+        }
+    }
+
     fun build(): ScrollView = ScrollView(activity).apply {
         isFillViewport = true
         clipToPadding = false
@@ -296,6 +305,7 @@ class SettingsPage(
                 saveSettings().onSuccess { credentials ->
                     applySavedCredentials(credentials)
                     showSavedToast()
+                    refreshScheduleAutomaticallyAfterSave()
                 }.onFailure { error ->
                     Toast.makeText(
                         activity,
@@ -397,7 +407,7 @@ class SettingsPage(
         addView(termStartDate)
         addView(TextView(activity).apply {
             text = if (autoDetect.isChecked) {
-                "获取/刷新课表后会自动应用教务返回的学期与开学日期。"
+                "启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。"
             } else {
                 "关闭自动检测后，将使用手动填写的学期信息。"
             }
@@ -408,7 +418,7 @@ class SettingsPage(
                 activity.performControlHaptic(button)
                 updateManualFields()
                 text = activity.uiText(if (checked) {
-                    "获取/刷新课表后会自动应用教务返回的学期与开学日期。"
+                    "启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。"
                 } else {
                     "关闭自动检测后，将使用手动填写的学期信息。"
                 })
@@ -417,15 +427,26 @@ class SettingsPage(
         updateManualFields()
         addView(settingsActionButton("保存学期设置", primary = false) {
             runCatching {
-                val resolvedStartDate = SettingsInputLogic.resolveTermStartDate(
-                    termStartDate.text.toString(),
-                )
+                if (autoDetect.isChecked) {
+                    val resolved = scheduleRepository.automaticTermForCurrentLaunch()
+                    preferences.termID = resolved.termId
+                    preferences.termStartDate = resolved.termStartDate
+                } else {
+                    val resolvedTermID = SettingsInputLogic.resolveTermID(
+                        termID.text.toString(),
+                    )
+                    val resolvedStartDate = SettingsInputLogic.resolveTermStartDate(
+                        termStartDate.text.toString(),
+                    )
+                    preferences.termID = resolvedTermID
+                    preferences.termStartDate = resolvedStartDate
+                }
                 preferences.automaticTermDetectionEnabled = autoDetect.isChecked
-                preferences.termID = termID.text.toString().trim()
-                    .ifEmpty { AppMetadata.defaultTermID }
-                preferences.termStartDate = resolvedStartDate
             }.onSuccess {
                 showSavedToast()
+                if (autoDetect.isChecked) {
+                    refreshScheduleAutomaticallyAfterSave()
+                }
             }.onFailure { error ->
                 Toast.makeText(
                     activity,
@@ -1210,7 +1231,7 @@ class SettingsPage(
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
-                text = "生效日期 / Effective date: 2026-08-23"
+                text = "生效日期 / Effective date: 2026-08-24"
                 textSize = 13f
                 setTextColor(Palette.muted)
                 setPadding(0, activity.dp(4), 0, activity.dp(14))
@@ -1286,8 +1307,8 @@ class SettingsPage(
 
     private fun privacySections(): List<Pair<String, String>> = listOf(
         "账户与教务请求 / Account and academic requests" to
-            ("学号和密码保存在操作系统的受保护凭据存储中，仅在你请求课表、空教室或作业时按对应用途通过 HTTPS 使用。维护者无法读取凭据，设置接口也不会返回密码。\n\n" +
-                "Credentials stay in protected OS storage and are used over HTTPS only for requested schedules, classrooms, or assignments. The maintainer cannot read credentials, and settings APIs never return a password."),
+            ("学号和密码保存在操作系统的受保护凭据存储中。保存有效凭据且开启自动学期检测后，启动时会自动刷新一次个人课表，用于校验学期号和第一周周一。你主动请求课表、空教室或作业时也会按对应用途通过 HTTPS 使用凭据。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。\n\n" +
+                "Credentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password."),
         "本地数据 / Local data" to
             ("课表、空教室、校区、学期、开关、自定义日程地址和最多 500 条收藏快照保存在设备上；课程小组件只读取本地课表。“清除本地数据”会一并移除这些内容。\n\n" +
                 "Schedules, classroom results, campus, term, switches, the custom feed URL, and up to 500 favorite snapshots stay locally. Course widgets read only the local schedule. Clear local data removes all of these items."),

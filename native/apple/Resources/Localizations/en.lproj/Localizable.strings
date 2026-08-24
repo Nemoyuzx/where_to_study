@@ -192,7 +192,7 @@
 "自动检测当前学期" = "Detect current semester automatically";
 "学期编号" = "Semester ID";
 "第一周周一（YYYY-MM-DD）" = "First Monday (YYYY-MM-DD)";
-"获取/刷新课表后会自动应用教务返回的学期与开学日期。" = "The semester and start date returned by the academic service are applied after refreshing the schedule.";
+"启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。" = "At launch or after a schedule refresh, the semester and start date returned by the academic service are applied automatically.";
 "已关闭自动检测，将使用上方手动填写的学期信息。" = "Automatic detection is off. The semester information entered above will be used.";
 "保存学期设置" = "Save Semester";
 "课程提醒" = "Course Notifications";
@@ -225,6 +225,7 @@
 "无法清除原账号的课表与空教室缓存，账号未更改。" = "The previous account's schedule and room cache could not be cleared, so the account was not changed.";
 "系统日历正在同步，请完成后再更换账号。" = "The system calendar is syncing. Change accounts after it completes.";
 "第一周周一日期格式不正确，请使用 yyyy-MM-dd。" = "The first Monday has an invalid format. Use yyyy-MM-dd.";
+"学期编号格式不正确，请使用 yyyy-yyyy-1 或 yyyy-yyyy-2。" = "The term ID has an invalid format. Use yyyy-yyyy-1 or yyyy-yyyy-2.";
 "设置已保存" = "Settings saved";
 "正在获取个人课表…" = "Fetching personal schedule…";
 

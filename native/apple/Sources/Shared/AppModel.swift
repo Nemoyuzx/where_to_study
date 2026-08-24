@@ -8,6 +8,7 @@ enum CredentialSettingsError: LocalizedError, Equatable {
     case passwordRequiredForChangedAccount
     case accountDataResetFailed
     case calendarImportInProgress
+    case invalidTermID
     case invalidTermStartDate
 
     var errorDescription: String? {
@@ -21,6 +22,8 @@ enum CredentialSettingsError: LocalizedError, Equatable {
             AppLocalization.string("无法清除原账号的课表与空教室缓存，账号未更改。", language: language)
         case .calendarImportInProgress:
             AppLocalization.string("系统日历正在同步，请完成后再更换账号。", language: language)
+        case .invalidTermID:
+            AppLocalization.string("学期编号格式不正确，请使用 yyyy-yyyy-1 或 yyyy-yyyy-2。", language: language)
         case .invalidTermStartDate:
             AppLocalization.string("第一周周一日期格式不正确，请使用 yyyy-MM-dd。", language: language)
         }
@@ -142,6 +145,20 @@ struct HolidayLoadState {
     }
 }
 
+enum AutomaticScheduleRefreshLogic {
+    static func shouldRequest(
+        isSampleMode: Bool,
+        automaticTermDetectionEnabled: Bool,
+        hasSavedPassword: Bool,
+        alreadyRequested: Bool
+    ) -> Bool {
+        !isSampleMode
+            && automaticTermDetectionEnabled
+            && hasSavedPassword
+            && !alreadyRequested
+    }
+}
+
 enum HolidayDisplayLogic {
     static func isAuthoritativeRestDaySource(_ snapshot: HolidaysSnapshot) -> Bool {
         snapshot.source != DeviceCalendarHolidayLogic.sourceLabel
@@ -202,6 +219,7 @@ final class AppModel: ObservableObject {
     private let dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling
     private let dailyCourseNotificationAuthorizationTimeout: Duration
     private let statusMessageAutoDismissDelay: Duration
+    private let now: @Sendable () -> Date
     private let defaults: UserDefaults
     private let supportsRuntimeModeSwitching: Bool
     private var holidayLoads = HolidayLoadState()
@@ -214,6 +232,7 @@ final class AppModel: ObservableObject {
     private var statusMessageDismissTask: Task<Void, Never>?
     private var statusMessageRevision: UInt64 = 0
     private var savedCredentialAccount: String?
+    private var hasRequestedAutomaticScheduleRefresh = false
 
     init(
         runtimeMode: AppRuntimeMode = .live,
@@ -228,6 +247,7 @@ final class AppModel: ObservableObject {
         dailyCourseNotificationScheduler: any DailyCourseNotificationScheduling = UserNotificationCourseScheduler(),
         dailyCourseNotificationAuthorizationTimeout: Duration = .seconds(8),
         statusMessageAutoDismissDelay: Duration = .seconds(4),
+        now: @escaping @Sendable () -> Date = Date.init,
         defaults: UserDefaults = .standard
     ) {
         self.runtimeMode = runtimeMode
@@ -243,11 +263,21 @@ final class AppModel: ObservableObject {
         self.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler
         self.dailyCourseNotificationAuthorizationTimeout = dailyCourseNotificationAuthorizationTimeout
         self.statusMessageAutoDismissDelay = statusMessageAutoDismissDelay
+        self.now = now
         self.defaults = defaults
         appLanguage = AppLocalization.persistedLanguage(defaults: defaults)
-        termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
-        termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
-        automaticTermDetectionEnabled = defaults.object(forKey: Self.automaticTermDetectionKey) as? Bool ?? true
+        let initialAutomaticTermDetection = defaults.object(
+            forKey: Self.automaticTermDetectionKey
+        ) as? Bool ?? true
+        automaticTermDetectionEnabled = initialAutomaticTermDetection
+        let initialTerm = SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: initialAutomaticTermDetection,
+            persistedTermID: defaults.string(forKey: "termID"),
+            persistedTermStartDate: defaults.string(forKey: "termStartDate"),
+            for: now()
+        )
+        termID = initialTerm.termID
+        termStartDate = initialTerm.termStartDate
         let savedCampusID = defaults.string(forKey: "campusID") ?? "01"
         campusID = savedCampusID
         queryCampusID = savedCampusID
@@ -468,9 +498,7 @@ final class AppModel: ObservableObject {
         classroomStatusMessage = ""
         calendarImportStatusMessage = ""
         dailyCourseNotificationStatusMessage = ""
-        termID = defaults.string(forKey: "termID") ?? ScheduleDefaults.termID
-        termStartDate = defaults.string(forKey: "termStartDate") ?? ScheduleDefaults.termStartDate
-        automaticTermDetectionEnabled = defaults.object(forKey: Self.automaticTermDetectionKey) as? Bool ?? true
+        restoreTermSettingsFromDefaults()
         campusID = defaults.string(forKey: "campusID") ?? "01"
         queryCampusID = campusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
@@ -508,14 +536,19 @@ final class AppModel: ObservableObject {
         do {
             let normalizedTermID = termID.trimmingCharacters(in: .whitespacesAndNewlines)
             let normalizedTermStartDate = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
-            let nextTermID = normalizedTermID.isEmpty ? ScheduleDefaults.termID : normalizedTermID
-            let nextTermStartDate = normalizedTermStartDate.isEmpty
-                ? ScheduleDefaults.termStartDate : normalizedTermStartDate
-            guard StrictContractDateParser.date(from: nextTermStartDate) != nil else {
+            let manualTermID = normalizedTermID
+            let manualTermStartDate = normalizedTermStartDate
+            guard automaticTermDetectionEnabled || SemesterLogic.isValidTermID(manualTermID) else {
+                throw CredentialSettingsError.invalidTermID
+            }
+            guard automaticTermDetectionEnabled
+                    || StrictContractDateParser.date(from: manualTermStartDate) != nil
+            else {
                 throw CredentialSettingsError.invalidTermStartDate
             }
 
             let storedCredentials = try credentialStore.load()
+            let hadStoredPassword = !(storedCredentials?.password.isEmpty ?? true)
             let credentialAction = try CredentialSettingsLogic.saveAction(
                 account: account,
                 password: password,
@@ -549,15 +582,35 @@ final class AppModel: ObservableObject {
                 try credentialStore.clear()
                 updateSavedCredentialState(nil)
             }
+            let credentialsBecameAvailable = !hadStoredPassword && hasSavedPassword
+            if accountChanged || credentialsBecameAvailable {
+                hasRequestedAutomaticScheduleRefresh = false
+            }
             account = CredentialSettingsLogic.normalizedAccount(account)
             password = ""
-            termID = nextTermID
-            termStartDate = nextTermStartDate
+            if automaticTermDetectionEnabled {
+                let automaticTerm = accountChanged
+                    ? SemesterLogic.resolveSettings(
+                        automaticDetectionEnabled: true,
+                        persistedTermID: nil,
+                        persistedTermStartDate: nil,
+                        for: now()
+                    )
+                    : automaticTermSettings()
+                termID = automaticTerm.termID
+                termStartDate = automaticTerm.termStartDate
+            } else {
+                termID = manualTermID
+                termStartDate = manualTermStartDate
+            }
             defaults.set(campusID, forKey: "campusID")
             defaults.set(termID, forKey: "termID")
             defaults.set(termStartDate, forKey: "termStartDate")
             defaults.set(automaticTermDetectionEnabled, forKey: Self.automaticTermDetectionKey)
             setStatusMessage("设置已保存", autoDismiss: true)
+            if automaticTermDetectionEnabled && (accountChanged || credentialsBecameAvailable) {
+                refreshScheduleAutomaticallyIfNeeded()
+            }
             return true
         } catch {
             statusMessage = error.localizedDescription
@@ -590,11 +643,34 @@ final class AppModel: ObservableObject {
 
     func setAutomaticTermDetectionEnabled(_ enabled: Bool) {
         guard !isSampleMode else { return }
+        let wasEnabled = automaticTermDetectionEnabled
         automaticTermDetectionEnabled = enabled
         defaults.set(enabled, forKey: Self.automaticTermDetectionKey)
-        if enabled, let schedule {
-            termID = schedule.termID
-            termStartDate = schedule.termStartDate
+        if enabled {
+            if let schedule,
+               SemesterLogic.acceptedCachedSettings(
+                   termID: schedule.termID,
+                   termStartDate: schedule.termStartDate,
+                   for: now()
+               ) == nil {
+                self.schedule = nil
+                synchronizeWidgetSchedule()
+                synchronizeSelectedSlots()
+            }
+            let automaticTerm = automaticTermSettings()
+            termID = automaticTerm.termID
+            termStartDate = automaticTerm.termStartDate
+            defaults.set(termID, forKey: "termID")
+            defaults.set(termStartDate, forKey: "termStartDate")
+            if !wasEnabled {
+                hasRequestedAutomaticScheduleRefresh = false
+                refreshScheduleAutomaticallyIfNeeded()
+            }
+        } else if wasEnabled {
+            termID = ScheduleDefaults.termID
+            termStartDate = ScheduleDefaults.termStartDate
+            defaults.set(termID, forKey: "termID")
+            defaults.set(termStartDate, forKey: "termStartDate")
         }
     }
 
@@ -838,9 +914,15 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: AppLocalization.defaultsKey)
         campusID = "01"
         queryCampusID = "01"
-        termID = ScheduleDefaults.termID
-        termStartDate = ScheduleDefaults.termStartDate
         automaticTermDetectionEnabled = true
+        let clearedTerm = SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: true,
+            persistedTermID: nil,
+            persistedTermStartDate: nil,
+            for: now()
+        )
+        termID = clearedTerm.termID
+        termStartDate = clearedTerm.termStartDate
         widgetShowsLocation = true
         widgetShowsTeacher = true
         widgetCourseLimit = TodayCourseWidgetData.Preferences.default.courseLimit
@@ -882,17 +964,27 @@ final class AppModel: ObservableObject {
         scheduleRefreshToken &+= 1
         let refreshToken = scheduleRefreshToken
         setStatusMessage("正在获取个人课表…")
-        let fallbackTermID = termID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? ScheduleDefaults.termID : termID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fallbackTermStart = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? ScheduleDefaults.termStartDate : termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let usesAutomaticTermDetection = automaticTermDetectionEnabled
+        let automaticFallback = automaticTermSettings()
+        let normalizedTermID = termID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTermStartDate = termStartDate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackTermID = usesAutomaticTermDetection
+            ? automaticFallback.termID
+            : normalizedTermID
+        let fallbackTermStart = usesAutomaticTermDetection
+            ? automaticFallback.termStartDate
+            : normalizedTermStartDate
+        guard usesAutomaticTermDetection || SemesterLogic.isValidTermID(fallbackTermID) else {
+            isRefreshingSchedule = false
+            setStatusMessage(CredentialSettingsError.invalidTermID.localizedDescription)
+            return
+        }
         guard StrictContractDateParser.date(from: fallbackTermStart) != nil else {
             isRefreshingSchedule = false
             setStatusMessage(CredentialSettingsError.invalidTermStartDate.localizedDescription)
             return
         }
         let generation = localDataGeneration
-        let usesAutomaticTermDetection = automaticTermDetectionEnabled
 
         Task {
             defer {
@@ -933,6 +1025,17 @@ final class AppModel: ObservableObject {
                 setStatusMessage(error.localizedDescription)
             }
         }
+    }
+
+    func refreshScheduleAutomaticallyIfNeeded() {
+        guard AutomaticScheduleRefreshLogic.shouldRequest(
+            isSampleMode: isSampleMode,
+            automaticTermDetectionEnabled: automaticTermDetectionEnabled,
+            hasSavedPassword: hasSavedPassword,
+            alreadyRequested: hasRequestedAutomaticScheduleRefresh
+        ) else { return }
+        hasRequestedAutomaticScheduleRefresh = true
+        refreshSchedule()
     }
 
     private func setStatusMessage(_ message: String, autoDismiss: Bool = false) {
@@ -1248,15 +1351,67 @@ final class AppModel: ObservableObject {
 
     private func loadSchedule() {
         do {
-            schedule = try scheduleStore.load()
-            if let schedule {
-                termID = schedule.termID
-                termStartDate = schedule.termStartDate
+            let cachedSchedule = try scheduleStore.load()
+            if isSampleMode {
+                schedule = cachedSchedule
+                if let cachedSchedule {
+                    termID = cachedSchedule.termID
+                    termStartDate = cachedSchedule.termStartDate
+                }
+            } else if automaticTermDetectionEnabled {
+                let currentDate = now()
+                let acceptedSettings = SemesterLogic.acceptedCachedSettings(
+                    termID: cachedSchedule?.termID,
+                    termStartDate: cachedSchedule?.termStartDate,
+                    for: currentDate
+                )
+                schedule = acceptedSettings == nil ? nil : cachedSchedule
+                let automaticTerm = acceptedSettings ?? SemesterLogic.resolveSettings(
+                    automaticDetectionEnabled: true,
+                    persistedTermID: defaults.string(forKey: "termID"),
+                    persistedTermStartDate: defaults.string(forKey: "termStartDate"),
+                    for: currentDate
+                )
+                termID = automaticTerm.termID
+                termStartDate = automaticTerm.termStartDate
+                if acceptedSettings != nil {
+                    defaults.set(termID, forKey: "termID")
+                    defaults.set(termStartDate, forKey: "termStartDate")
+                }
+            } else {
+                schedule = cachedSchedule
             }
             synchronizeWidgetSchedule()
         } catch {
+            schedule = nil
+            synchronizeWidgetSchedule()
             statusMessage = localized("本地课表读取失败：") + error.localizedDescription
         }
+    }
+
+    private func restoreTermSettingsFromDefaults() {
+        automaticTermDetectionEnabled = defaults.object(
+            forKey: Self.automaticTermDetectionKey
+        ) as? Bool ?? true
+        let restoredTerm = SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: automaticTermDetectionEnabled,
+            persistedTermID: defaults.string(forKey: "termID"),
+            persistedTermStartDate: defaults.string(forKey: "termStartDate"),
+            for: now()
+        )
+        termID = restoredTerm.termID
+        termStartDate = restoredTerm.termStartDate
+    }
+
+    private func automaticTermSettings() -> SemesterLogic.Settings {
+        SemesterLogic.resolveSettings(
+            automaticDetectionEnabled: true,
+            persistedTermID: defaults.string(forKey: "termID"),
+            persistedTermStartDate: defaults.string(forKey: "termStartDate"),
+            cachedTermID: schedule?.termID,
+            cachedTermStartDate: schedule?.termStartDate,
+            for: now()
+        )
     }
 
     private func synchronizeWidgetSchedule() {

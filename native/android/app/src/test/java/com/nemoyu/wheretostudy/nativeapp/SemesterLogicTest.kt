@@ -58,6 +58,110 @@ class SemesterLogicTest {
     }
 
     @Test
+    fun automaticLaunchKeepsRealStartDateFromCurrentTermCache() {
+        val resolved = SemesterLogic.resolveAutomaticLaunchTerm(
+            cachedTermId = "2026-2027-1",
+            cachedTermStartDate = "2026-09-07",
+            date = calendarOf(2026, Calendar.AUGUST, 24),
+        )
+
+        assertEquals("2026-2027-1", resolved.termId)
+        assertEquals("2026-09-07", resolved.termStartDate)
+        assertTrue(
+            SemesterLogic.canUseAutomaticCachedSchedule(
+                cachedTermId = "2026-2027-1",
+                cachedTermStartDate = "2026-09-07",
+                date = calendarOf(2026, Calendar.AUGUST, 24),
+            ),
+        )
+    }
+
+    @Test
+    fun automaticLaunchRejectsOldTermCacheAtYearAndSemesterBoundaries() {
+        val august = SemesterLogic.resolveAutomaticLaunchTerm(
+            cachedTermId = "2025-2026-2",
+            cachedTermStartDate = "2026-03-02",
+            date = calendarOf(2026, Calendar.AUGUST, 24),
+        )
+        val january = SemesterLogic.resolveAutomaticLaunchTerm(
+            cachedTermId = "2026-2027-2",
+            cachedTermStartDate = "2027-03-01",
+            date = calendarOf(2027, Calendar.JANUARY, 1),
+        )
+        val february = SemesterLogic.resolveAutomaticLaunchTerm(
+            cachedTermId = "2026-2027-1",
+            cachedTermStartDate = "2026-08-31",
+            date = calendarOf(2027, Calendar.FEBRUARY, 1),
+        )
+
+        assertEquals(SuggestedTerm("2026-2027-1", "2026-08-31"), august)
+        assertEquals(SuggestedTerm("2026-2027-1", "2026-08-31"), january)
+        assertEquals(SuggestedTerm("2026-2027-2", "2027-03-01"), february)
+        assertFalse(
+            SemesterLogic.canUseAutomaticCachedSchedule(
+                cachedTermId = "2025-2026-2",
+                cachedTermStartDate = "2026-03-02",
+                date = calendarOf(2026, Calendar.AUGUST, 24),
+            ),
+        )
+    }
+
+    @Test
+    fun automaticLaunchRejectsInvalidCachedStartDate() {
+        val resolved = SemesterLogic.resolveAutomaticLaunchTerm(
+            cachedTermId = "2026-2027-1",
+            cachedTermStartDate = "2026-02-30",
+            date = calendarOf(2026, Calendar.DECEMBER, 31),
+        )
+
+        assertEquals(SuggestedTerm("2026-2027-1", "2026-08-31"), resolved)
+        assertFalse(
+            SemesterLogic.canUseAutomaticCachedSchedule(
+                cachedTermId = "2026-2027-1",
+                cachedTermStartDate = "2026-02-30",
+                date = calendarOf(2026, Calendar.DECEMBER, 31),
+            ),
+        )
+    }
+
+    @Test
+    fun processLaunchRefreshGateDeduplicatesAndAllowsFailureRetry() {
+        val gate = AutomaticScheduleLaunchRefreshGate()
+        val first = checkNotNull(gate.begin(" student ", " 2026-2027-1 "))
+
+        assertEquals(AutomaticScheduleLaunchRefreshKey("student", "2026-2027-1"), first)
+        assertEquals(null, gate.begin("student", "2026-2027-1"))
+
+        gate.finish(first, succeeded = false)
+        val retry = checkNotNull(gate.begin("student", "2026-2027-1"))
+        gate.finish(retry, succeeded = true)
+        assertEquals(null, gate.begin("student", "2026-2027-1"))
+
+        assertTrue(gate.begin("other", "2026-2027-1") != null)
+        assertTrue(gate.begin("student", "2026-2027-2") != null)
+        assertEquals(null, gate.begin("", "2026-2027-1"))
+        assertEquals(null, gate.begin("student", ""))
+    }
+
+    @Test
+    fun launchRefreshRequiresAutomaticModeAndCompleteSavedCredentials() {
+        assertTrue(
+            SemesterLogic.shouldRefreshAutomatically(
+                automaticTermDetectionEnabled = true,
+                credentials = Credentials("student", "secret"),
+            ),
+        )
+        assertFalse(
+            SemesterLogic.shouldRefreshAutomatically(
+                automaticTermDetectionEnabled = false,
+                credentials = Credentials("student", "secret"),
+            ),
+        )
+        assertFalse(SemesterLogic.shouldRefreshAutomatically(true, null))
+        assertFalse(SemesterLogic.shouldRefreshAutomatically(true, Credentials("student", "")))
+    }
+
+    @Test
     fun springTermAnchorStaysInEarlyMarch() {
         // 2026-03-01 is Sunday; the week of March 2 anchors the start on 03-02.
         val suggested = SemesterLogic.suggestTermForDate(calendarOf(2026, Calendar.MARCH, 1))

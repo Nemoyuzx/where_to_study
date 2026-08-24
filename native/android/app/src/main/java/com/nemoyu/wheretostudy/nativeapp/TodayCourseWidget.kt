@@ -375,9 +375,9 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             manager: AppWidgetManager,
             widgetID: Int,
         ) {
-            val schedule = runCatching { ScheduleStore(context).load() }.getOrNull()
-            val content = TodayCourseWidgetLogic.content(schedule, System.currentTimeMillis())
             val preferences = AppPreferences(context)
+            val schedule = loadUsableSchedule(context)
+            val content = TodayCourseWidgetLogic.content(schedule, System.currentTimeMillis())
             val localizedContext = AppLocale.wrap(context, preferences.languageCode)
             val views = RemoteViews(context.packageName, R.layout.widget_today_course)
             val rowLimit = minOf(

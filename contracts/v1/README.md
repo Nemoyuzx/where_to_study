@@ -10,7 +10,7 @@
 
 - 节次索引从 `0` 开始，用户界面标签从 `1` 开始。
 - `weekday` 使用 `1...7` 表示周一到周日。
-- 日期使用 `YYYY-MM-DD`，时间使用 `HH:mm`。
+- 日期使用 `YYYY-MM-DD`，时间使用 `HH:mm`；设置读写中的学期号和开学日期允许以空字符串表示“没有持久化默认值”。
 - `week_numbers` 是教务返回并解析后的周号。
 - `exam_week_numbers` 是按课表实际存在周正序计数后的第 17、18 周对应周号。
 - 课程地点使用“教学楼-教室号”；移动教务返回的 `3-335` 规范化为 `335`，但 `202-203`、`217-218` 这类双门教室号必须完整保留。
@@ -18,10 +18,12 @@
 - 缓存不得包含账号、密码、token 或 cookie。
 - `saved_settings` 是 Tauri 设置读取响应，只用 `has_saved_password` 表示系统凭据是否存在，绝不包含密码。
 - `save_settings_request.password` 是一次性输入；传 `null` 或空字符串时保留已有密码，只有非空新值才替换系统凭据。
+- `saved_settings` 与 `save_settings_request` 的 `term_id`、`term_start_date` 可以同时为空；自动模式请求课表时临时按上海日期推断，手动模式保存或请求时必须提供完整值。成功的 `schedule` 响应仍必须包含非空学期号和有效开学日期。
 
 修改契约时必须保持向后兼容，破坏性修改需要新建版本目录。
 
-`fixtures/` 只包含虚构、脱敏数据：`sjd-current-week.json` 和
+`fixtures/` 只包含虚构、脱敏数据：`sjd-current-week.json`、
+`sjd-before-first-week.json` 和
 `sjd-curriculum.json` 模拟移动教务课表响应，`schedule.json` 是规范化后的预期课表；
 `sjd-classrooms-xitucheng.json`、`sjd-classrooms-shahe.json` 模拟当天空教室响应，
 `classrooms.json` 是合并两校区后的预期缓存；`holiday-source.json` 模拟节假日数据源响应，

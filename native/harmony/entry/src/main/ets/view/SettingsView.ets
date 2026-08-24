@@ -402,7 +402,7 @@ export struct SettingsView {
         }, !this.model.automaticTermDetection)
 
       Text(this.model.text(this.model.automaticTermDetection ?
-        '获取/刷新课表后会自动应用教务返回的学期与开学日期。' :
+        '启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。' :
         '关闭自动检测后，将使用手动填写的学期信息。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())

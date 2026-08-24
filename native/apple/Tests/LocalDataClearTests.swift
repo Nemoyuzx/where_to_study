@@ -86,6 +86,380 @@ final class LocalDataClearTests: XCTestCase {
         XCTAssertTrue(AppRuntimeMode.sample(review: true).isReviewDemo)
     }
 
+    func testAutomaticScheduleRefreshLaunchGateRequiresEveryCondition() {
+        XCTAssertTrue(AutomaticScheduleRefreshLogic.shouldRequest(
+            isSampleMode: false,
+            automaticTermDetectionEnabled: true,
+            hasSavedPassword: true,
+            alreadyRequested: false
+        ))
+        XCTAssertFalse(AutomaticScheduleRefreshLogic.shouldRequest(
+            isSampleMode: true,
+            automaticTermDetectionEnabled: true,
+            hasSavedPassword: true,
+            alreadyRequested: false
+        ))
+        XCTAssertFalse(AutomaticScheduleRefreshLogic.shouldRequest(
+            isSampleMode: false,
+            automaticTermDetectionEnabled: false,
+            hasSavedPassword: true,
+            alreadyRequested: false
+        ))
+        XCTAssertFalse(AutomaticScheduleRefreshLogic.shouldRequest(
+            isSampleMode: false,
+            automaticTermDetectionEnabled: true,
+            hasSavedPassword: false,
+            alreadyRequested: false
+        ))
+        XCTAssertFalse(AutomaticScheduleRefreshLogic.shouldRequest(
+            isSampleMode: false,
+            automaticTermDetectionEnabled: true,
+            hasSavedPassword: true,
+            alreadyRequested: true
+        ))
+    }
+
+    @MainActor
+    func testManualModeKeepsMissingTermFieldsBlankAndRejectsSaveOrRefresh() async throws {
+        let suiteName = "ManualMissingTermSettings.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: "automaticTermDetectionEnabled")
+        let liveSchedule = ScheduleSnapshot(
+            termID: "2026-2027-1",
+            termStartDate: "2026-09-07",
+            fetchedAt: "2026-08-24T13:00:00Z",
+            courses: []
+        )
+        let scheduleClient = RecordingScheduleClient(snapshot: liveSchedule)
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(
+                credentials: Credentials(account: "fixture-account", password: "fixture-password")
+            ),
+            scheduleStore: RecordingScheduleStore(schedule: nil),
+            scheduleClient: scheduleClient,
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+
+        XCTAssertEqual(model.termID, "")
+        XCTAssertEqual(model.termStartDate, "")
+        XCTAssertFalse(model.saveSettings())
+        XCTAssertEqual(model.statusMessage, CredentialSettingsError.invalidTermID.localizedDescription)
+        model.refreshSchedule()
+        XCTAssertEqual(model.statusMessage, CredentialSettingsError.invalidTermID.localizedDescription)
+        XCTAssertEqual(scheduleClient.callCount, 0)
+
+        model.termID = "2024-2025-1"
+        XCTAssertFalse(model.saveSettings())
+        XCTAssertEqual(
+            model.statusMessage,
+            CredentialSettingsError.invalidTermStartDate.localizedDescription
+        )
+        model.refreshSchedule()
+        XCTAssertEqual(
+            model.statusMessage,
+            CredentialSettingsError.invalidTermStartDate.localizedDescription
+        )
+        XCTAssertEqual(scheduleClient.callCount, 0)
+
+        model.termStartDate = "2024-10-14"
+        XCTAssertTrue(model.saveSettings())
+        model.refreshSchedule()
+        for _ in 0 ..< 100 where scheduleClient.callCount < 1 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(scheduleClient.fallbackTermID, "2024-2025-1")
+        XCTAssertEqual(scheduleClient.fallbackTermStartDate, "2024-10-14")
+        XCTAssertEqual(model.termID, "2024-2025-1")
+        XCTAssertEqual(model.termStartDate, "2024-10-14")
+    }
+
+    @MainActor
+    func testDisablingAutomaticDetectionClearsDerivedTermUntilManualInput() throws {
+        let suiteName = "DisableAutomaticTermDetection.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fixedNow = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 24)
+        ))
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(credentials: nil),
+            scheduleStore: RecordingScheduleStore(schedule: nil),
+            scheduleClient: RecordingScheduleClient(snapshot: ScheduleSnapshot(
+                termID: "2026-2027-1",
+                termStartDate: "2026-09-07",
+                fetchedAt: "2026-08-24T13:00:00Z",
+                courses: []
+            )),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { fixedNow },
+            defaults: defaults
+        )
+
+        XCTAssertEqual(model.termID, "2026-2027-1")
+        XCTAssertEqual(model.termStartDate, "2026-08-31")
+
+        model.setAutomaticTermDetectionEnabled(false)
+
+        XCTAssertEqual(model.termID, "")
+        XCTAssertEqual(model.termStartDate, "")
+        XCTAssertEqual(defaults.string(forKey: "termID"), "")
+        XCTAssertEqual(defaults.string(forKey: "termStartDate"), "")
+        XCTAssertFalse(model.saveSettings())
+        XCTAssertEqual(model.statusMessage, CredentialSettingsError.invalidTermID.localizedDescription)
+    }
+
+    @MainActor
+    func testAutomaticLaunchRejectsOldCacheButKeepsCurrentTermCache() throws {
+        let fixedNow = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 24)
+        ))
+        let year = Calendar.shanghai.component(.year, from: fixedNow)
+        let oldSchedule = ScheduleSnapshot(
+            termID: "2025-2026-2",
+            termStartDate: "2026-03-02",
+            fetchedAt: "2026-07-01T00:00:00Z",
+            courses: []
+        )
+        let currentSchedule = ScheduleSnapshot(
+            termID: "2026-2027-1",
+            termStartDate: "2026-09-07",
+            fetchedAt: "2026-08-24T13:00:00Z",
+            courses: []
+        )
+
+        let oldSuiteName = "RejectOldAutomaticSchedule.\(UUID().uuidString)"
+        let oldDefaults = try XCTUnwrap(UserDefaults(suiteName: oldSuiteName))
+        defer { oldDefaults.removePersistentDomain(forName: oldSuiteName) }
+        let oldStore = RecordingScheduleStore(schedule: oldSchedule)
+        let oldModel = AppModel(
+            credentialStore: InMemoryCredentialStore(credentials: nil),
+            scheduleStore: oldStore,
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: Self.holidays(year: year)),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { fixedNow },
+            defaults: oldDefaults
+        )
+
+        XCTAssertNil(oldModel.schedule)
+        XCTAssertTrue(oldModel.todayCourses.isEmpty)
+        XCTAssertEqual(oldModel.termID, "2026-2027-1")
+        XCTAssertEqual(oldModel.termStartDate, "2026-08-31")
+        XCTAssertEqual(try oldStore.load(), oldSchedule, "The rejected cache remains recoverable on disk")
+
+        let currentSuiteName = "KeepCurrentAutomaticSchedule.\(UUID().uuidString)"
+        let currentDefaults = try XCTUnwrap(UserDefaults(suiteName: currentSuiteName))
+        defer { currentDefaults.removePersistentDomain(forName: currentSuiteName) }
+        let currentModel = AppModel(
+            credentialStore: InMemoryCredentialStore(credentials: nil),
+            scheduleStore: RecordingScheduleStore(schedule: currentSchedule),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: Self.holidays(year: year)),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { fixedNow },
+            defaults: currentDefaults
+        )
+
+        XCTAssertEqual(currentModel.schedule, currentSchedule)
+        XCTAssertEqual(currentModel.termID, currentSchedule.termID)
+        XCTAssertEqual(currentModel.termStartDate, currentSchedule.termStartDate)
+    }
+
+    @MainActor
+    func testAutomaticRefreshUsesAcceptedCachedRealStartDateAsFallback() async throws {
+        let suiteName = "CurrentCacheAutomaticFallback.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fixedNow = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 24)
+        ))
+        let currentSchedule = ScheduleSnapshot(
+            termID: "2026-2027-1",
+            termStartDate: "2026-09-07",
+            fetchedAt: "2026-08-24T13:00:00Z",
+            courses: []
+        )
+        let scheduleStore = RecordingScheduleStore(schedule: currentSchedule)
+        let scheduleClient = RecordingScheduleClient(snapshot: currentSchedule)
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(
+                credentials: Credentials(account: "fixture-account", password: "fixture-password")
+            ),
+            scheduleStore: scheduleStore,
+            scheduleClient: scheduleClient,
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: Self.holidays(year: 2026)),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { fixedNow },
+            defaults: defaults
+        )
+
+        XCTAssertEqual(model.schedule, currentSchedule)
+        model.refreshSchedule()
+        for _ in 0 ..< 100 where scheduleClient.callCount < 1 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(scheduleClient.fallbackTermID, "2026-2027-1")
+        XCTAssertEqual(scheduleClient.fallbackTermStartDate, "2026-09-07")
+    }
+
+    @MainActor
+    func testAutomaticLaunchRefreshUsesDetectedFallbackOnceThenPersistsLiveMetadata() async throws {
+        let suiteName = "AutomaticLaunchScheduleRefresh.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(ScheduleDefaults.termID, forKey: "termID")
+        defaults.set(ScheduleDefaults.termStartDate, forKey: "termStartDate")
+        let fixedNow = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 24)
+        ))
+        let liveSchedule = ScheduleSnapshot(
+            termID: "2026-2027-1",
+            termStartDate: "2026-09-07",
+            fetchedAt: "2026-08-24T13:00:00Z",
+            courses: []
+        )
+        let scheduleStore = RecordingScheduleStore(schedule: nil)
+        let scheduleClient = RecordingScheduleClient(snapshot: liveSchedule)
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(
+                credentials: Credentials(account: "fixture-account", password: "fixture-password")
+            ),
+            scheduleStore: scheduleStore,
+            scheduleClient: scheduleClient,
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { fixedNow },
+            defaults: defaults
+        )
+
+        XCTAssertEqual(model.termID, "2026-2027-1")
+        XCTAssertEqual(model.termStartDate, "2026-08-31")
+
+        model.refreshScheduleAutomaticallyIfNeeded()
+        model.refreshScheduleAutomaticallyIfNeeded()
+        for _ in 0 ..< 100 where scheduleStore.savedSchedule == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(scheduleClient.callCount, 1)
+        XCTAssertEqual(scheduleClient.fallbackTermID, "2026-2027-1")
+        XCTAssertEqual(scheduleClient.fallbackTermStartDate, "2026-08-31")
+        XCTAssertEqual(scheduleStore.savedSchedule, liveSchedule)
+        XCTAssertEqual(model.schedule, liveSchedule)
+        XCTAssertEqual(model.termID, liveSchedule.termID)
+        XCTAssertEqual(model.termStartDate, liveSchedule.termStartDate)
+        XCTAssertEqual(defaults.string(forKey: "termID"), liveSchedule.termID)
+        XCTAssertEqual(defaults.string(forKey: "termStartDate"), liveSchedule.termStartDate)
+    }
+
+    @MainActor
+    func testSavingFirstCredentialsTriggersAutomaticRefreshWithoutAnotherAppear() async throws {
+        let suiteName = "FirstCredentialAutomaticRefresh.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let fixedNow = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 24)
+        ))
+        let liveSchedule = ScheduleSnapshot(
+            termID: "2026-2027-1",
+            termStartDate: "2026-09-07",
+            fetchedAt: "2026-08-24T13:00:00Z",
+            courses: []
+        )
+        let scheduleClient = RecordingScheduleClient(snapshot: liveSchedule)
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(credentials: nil),
+            scheduleStore: RecordingScheduleStore(schedule: nil),
+            scheduleClient: scheduleClient,
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { fixedNow },
+            defaults: defaults
+        )
+
+        model.refreshScheduleAutomaticallyIfNeeded()
+        XCTAssertEqual(scheduleClient.callCount, 0)
+
+        model.account = "new-account"
+        model.password = "new-password"
+        XCTAssertTrue(model.saveSettings())
+        for _ in 0 ..< 100 where model.schedule == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(scheduleClient.callCount, 1)
+        XCTAssertEqual(model.schedule, liveSchedule)
+    }
+
+    @MainActor
+    func testSwitchingFromManualToAutomaticTriggersRefreshAndAccountChangeResetsGate() async throws {
+        let suiteName = "AutomaticRefreshGateReset.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(false, forKey: "automaticTermDetectionEnabled")
+        defaults.set("manual-term", forKey: "termID")
+        defaults.set("2024-10-14", forKey: "termStartDate")
+        let fixedNow = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 24)
+        ))
+        let liveSchedule = ScheduleSnapshot(
+            termID: "2026-2027-1",
+            termStartDate: "2026-09-07",
+            fetchedAt: "2026-08-24T13:00:00Z",
+            courses: []
+        )
+        let oldManualSchedule = ScheduleSnapshot(
+            termID: "2025-2026-2",
+            termStartDate: "2026-03-02",
+            fetchedAt: "2026-07-01T00:00:00Z",
+            courses: []
+        )
+        let scheduleClient = RecordingScheduleClient(snapshot: liveSchedule)
+        let model = AppModel(
+            credentialStore: InMemoryCredentialStore(
+                credentials: Credentials(account: "first-account", password: "first-password")
+            ),
+            scheduleStore: RecordingScheduleStore(schedule: oldManualSchedule),
+            scheduleClient: scheduleClient,
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { fixedNow },
+            defaults: defaults
+        )
+
+        model.refreshScheduleAutomaticallyIfNeeded()
+        XCTAssertEqual(scheduleClient.callCount, 0)
+        XCTAssertEqual(model.schedule, oldManualSchedule)
+
+        model.setAutomaticTermDetectionEnabled(true)
+        XCTAssertNil(model.schedule)
+        for _ in 0 ..< 100 where scheduleClient.callCount < 1 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(scheduleClient.callCount, 1)
+
+        model.account = "second-account"
+        model.password = "second-password"
+        XCTAssertTrue(model.saveSettings())
+        for _ in 0 ..< 100 where scheduleClient.callCount < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(scheduleClient.callCount, 2)
+    }
+
     @MainActor
     func testSampleModeBlocksAccountAndSystemMutations() {
         let suiteName = "ReviewDemoTests.\(UUID().uuidString)"
@@ -255,6 +629,7 @@ final class LocalDataClearTests: XCTestCase {
                 year: Calendar.shanghai.component(.year, from: .now)
             )),
             dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { Self.scheduleNow },
             defaults: defaults
         )
 
@@ -381,11 +756,14 @@ final class LocalDataClearTests: XCTestCase {
             classroomStore: classroomStore,
             holidayStore: holidayStore,
             dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            now: { Self.scheduleNow },
             defaults: defaults
         )
         model.selectedBuildings = ["主楼"]
         model.selectedSlots = [0]
         model.usePersonalSchedule = false
+        model.setAutomaticTermDetectionEnabled(false)
+        model.termID = "2025-2026-2"
 
         XCTAssertEqual(model.account, "fixture-account")
         XCTAssertTrue(model.password.isEmpty)
@@ -406,7 +784,7 @@ final class LocalDataClearTests: XCTestCase {
             XCTAssertEqual(model.classroomsCache, Self.classrooms)
             XCTAssertEqual(try scheduleStore.load(), Self.schedule)
             XCTAssertEqual(try classroomStore.load(), Self.classrooms)
-            XCTAssertEqual(defaults.string(forKey: "termStartDate"), "2026-02-23")
+            XCTAssertEqual(defaults.string(forKey: "termStartDate"), "")
         }
 
         model.termStartDate = "2026-02-23"
@@ -463,8 +841,9 @@ final class LocalDataClearTests: XCTestCase {
         XCTAssertTrue(model.holidayStatusByYear.isEmpty)
         XCTAssertEqual(model.campusID, "01")
         XCTAssertEqual(model.queryCampusID, "01")
-        XCTAssertEqual(model.termID, ScheduleDefaults.termID)
-        XCTAssertEqual(model.termStartDate, ScheduleDefaults.termStartDate)
+        let detectedTerm = SemesterLogic.suggestTerm()
+        XCTAssertEqual(model.termID, detectedTerm.termID)
+        XCTAssertEqual(model.termStartDate, detectedTerm.termStartDate)
         XCTAssertTrue(model.selectedBuildings.isEmpty)
         XCTAssertTrue(model.usePersonalSchedule)
         XCTAssertFalse(model.customDeadlinesEnabled)
@@ -531,10 +910,14 @@ final class LocalDataClearTests: XCTestCase {
         XCTAssertFalse(model.favoriteDeadlines.contains { $0.id == "favorite-0" })
     }
 
+    private static let scheduleNow = Calendar.shanghai.date(
+        from: DateComponents(year: 2026, month: 8, day: 24)
+    )!
+
     private static let schedule = ScheduleSnapshot(
-        termID: "fixture-term",
-        termStartDate: "2026-02-23",
-        fetchedAt: "2026-03-01T00:00:00+08:00",
+        termID: "2026-2027-1",
+        termStartDate: "2026-09-07",
+        fetchedAt: "2026-08-24T13:00:00Z",
         courses: []
     )
 
@@ -615,6 +998,75 @@ private struct ImmediateScheduleClient: ScheduleFetching {
         fallbackTermStartDate _: String
     ) async throws -> ScheduleSnapshot {
         snapshot
+    }
+}
+
+private final class RecordingScheduleClient: ScheduleFetching, @unchecked Sendable {
+    private let lock = NSLock()
+    private let snapshot: ScheduleSnapshot
+    private var recordedCallCount = 0
+    private var recordedFallbackTermID: String?
+    private var recordedFallbackTermStartDate: String?
+
+    init(snapshot: ScheduleSnapshot) {
+        self.snapshot = snapshot
+    }
+
+    var callCount: Int {
+        lock.withLock { recordedCallCount }
+    }
+
+    var fallbackTermID: String? {
+        lock.withLock { recordedFallbackTermID }
+    }
+
+    var fallbackTermStartDate: String? {
+        lock.withLock { recordedFallbackTermStartDate }
+    }
+
+    func fetch(
+        credentials _: Credentials,
+        fallbackTermID: String,
+        fallbackTermStartDate: String
+    ) async throws -> ScheduleSnapshot {
+        lock.withLock {
+            recordedCallCount += 1
+            recordedFallbackTermID = fallbackTermID
+            recordedFallbackTermStartDate = fallbackTermStartDate
+        }
+        return snapshot
+    }
+}
+
+private final class RecordingScheduleStore: ScheduleStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var schedule: ScheduleSnapshot?
+    private var recordedSavedSchedule: ScheduleSnapshot?
+
+    init(schedule: ScheduleSnapshot?) {
+        self.schedule = schedule
+    }
+
+    var savedSchedule: ScheduleSnapshot? {
+        lock.withLock { recordedSavedSchedule }
+    }
+
+    func load() throws -> ScheduleSnapshot? {
+        lock.withLock { schedule }
+    }
+
+    func save(_ schedule: ScheduleSnapshot) throws {
+        lock.withLock {
+            self.schedule = schedule
+            recordedSavedSchedule = schedule
+        }
+    }
+
+    func clear() throws {
+        lock.withLock {
+            schedule = nil
+            recordedSavedSchedule = nil
+        }
     }
 }
 

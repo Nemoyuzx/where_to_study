@@ -506,7 +506,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("field.term-start-date")
                 Text(
                     model.automaticTermDetectionEnabled
-                        ? "获取/刷新课表后会自动应用教务返回的学期与开学日期。"
+                        ? "启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。"
                         : "已关闭自动检测，将使用上方手动填写的学期信息。"
                 )
                 .font(.callout)

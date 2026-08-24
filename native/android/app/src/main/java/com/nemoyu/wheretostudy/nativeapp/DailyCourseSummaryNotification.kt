@@ -251,7 +251,7 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
             return@runCatching true
         }
         val credentials = SecureCredentialStore(appContext).load()
-        val schedule = runCatching { ScheduleStore(appContext).load() }.getOrNull()
+        val schedule = loadUsableSchedule(appContext)
         if (preferences.dailyCourseNotificationsEnabled &&
             (!authorization.isAuthorized || !isJobServiceExplicitlyEnabled(appContext) ||
                 credentials?.account?.isNotBlank() != true ||
@@ -365,7 +365,7 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
 
     private fun canSchedule(context: Context): Boolean {
         val credentials = SecureCredentialStore(context).load()
-        val hasSchedule = runCatching { ScheduleStore(context).load() }.getOrNull() != null
+        val hasSchedule = loadUsableSchedule(context) != null
         return DailyCourseSummaryReconcileLogic.action(
             enabled = AppPreferences(context).dailyCourseNotificationsEnabled &&
                 DailyCourseNotificationAuthorizationStore(context).isAuthorized &&
@@ -449,7 +449,7 @@ class DailyCourseSummaryJobService : JobService() {
                         null
                     } else {
                         DailyCourseSummaryLogic.draft(
-                            ScheduleStore(context).load(),
+                            loadUsableSchedule(context),
                             nowMillis,
                         )
                     }

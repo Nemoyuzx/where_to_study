@@ -71,8 +71,8 @@ impl SavedSettings {
         Self {
             account: String::new(),
             has_saved_password: false,
-            term_id: crate::config::default_term_id(),
-            term_start_date: crate::config::default_term_start_date(),
+            term_id: String::new(),
+            term_start_date: String::new(),
             campus_id: crate::config::CAMPUSES[0].id.to_string(),
             default_min_seats: 0,
             ui_language: "system".to_string(),
@@ -90,12 +90,6 @@ impl SavedSettings {
     }
 
     pub fn apply_defaults(&mut self) {
-        if self.term_id.trim().is_empty() {
-            self.term_id = crate::config::default_term_id();
-        }
-        if self.term_start_date.trim().is_empty() {
-            self.term_start_date = crate::config::default_term_start_date();
-        }
         if self.campus_id.trim().is_empty() {
             self.campus_id = crate::config::CAMPUSES[0].id.to_string();
         }
@@ -145,18 +139,48 @@ pub struct SaveSettingsRequest {
 
 impl SaveSettingsRequest {
     pub fn apply_defaults(&mut self) {
-        if self.term_id.trim().is_empty() {
-            self.term_id = crate::config::default_term_id();
-        }
-        if self.term_start_date.trim().is_empty() {
-            self.term_start_date = crate::config::default_term_start_date();
-        }
         if self.campus_id.trim().is_empty() {
             self.campus_id = crate::config::CAMPUSES[0].id.to_string();
         }
         if !matches!(self.ui_language.as_str(), "system" | "zh-Hans" | "en") {
             self.ui_language = "system".to_string();
         }
+    }
+}
+
+#[cfg(test)]
+mod term_default_tests {
+    use super::*;
+
+    #[test]
+    fn saved_and_request_defaults_do_not_materialize_term_values() {
+        let mut saved = SavedSettings::with_defaults();
+        saved.apply_defaults();
+        assert!(saved.term_id.is_empty());
+        assert!(saved.term_start_date.is_empty());
+
+        let mut request = SaveSettingsRequest {
+            account: String::new(),
+            password: None,
+            term_id: String::new(),
+            term_start_date: String::new(),
+            campus_id: String::new(),
+            default_min_seats: 0,
+            ui_language: String::new(),
+            daily_course_notifications_enabled: false,
+            automatic_term_detection_enabled: true,
+            weather_enabled: true,
+            almanac_enabled: true,
+            competition_deadlines_enabled: true,
+            school_contest_notices_enabled: true,
+            summer_camp_deadlines_enabled: true,
+            hackathon_deadlines_enabled: true,
+            custom_deadlines_enabled: false,
+            custom_deadlines_url: String::new(),
+        };
+        request.apply_defaults();
+        assert!(request.term_id.is_empty());
+        assert!(request.term_start_date.is_empty());
     }
 }
 

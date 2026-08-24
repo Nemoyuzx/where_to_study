@@ -112,6 +112,39 @@ class DailyCourseSummaryNotificationTest {
     }
 
     @Test
+    fun notificationScheduleLoaderRejectsOldAutomaticCacheButKeepsManualCache() {
+        val today = Calendar.getInstance(SHANGHAI).apply {
+            clear()
+            set(2026, Calendar.AUGUST, 24, 12, 0, 0)
+        }
+        val oldTerm = schedule(listOf(course())).copy(
+            termID = "2025-2026-2",
+            termStartDate = "2026-03-02",
+        )
+        val currentTerm = oldTerm.copy(
+            termID = "2026-2027-1",
+            termStartDate = "2026-09-07",
+        )
+
+        assertNull(selectUsableSchedule(oldTerm, automaticTermDetectionEnabled = true, date = today))
+        assertEquals(
+            currentTerm,
+            selectUsableSchedule(currentTerm, automaticTermDetectionEnabled = true, date = today),
+        )
+        assertEquals(
+            oldTerm,
+            selectUsableSchedule(oldTerm, automaticTermDetectionEnabled = false, date = today),
+        )
+        assertNull(
+            selectUsableSchedule(
+                currentTerm.copy(termStartDate = "2026-02-30"),
+                automaticTermDetectionEnabled = true,
+                date = today,
+            ),
+        )
+    }
+
+    @Test
     fun revocationInvalidatesConcurrentWorkEvenWhenDataClearFails() {
         val gate = DailyCourseNotificationExecutionGate()
         gate.authorize()

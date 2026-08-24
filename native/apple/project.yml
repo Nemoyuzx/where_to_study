@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.2.5"
-    CURRENT_PROJECT_VERSION: "68"
+    CURRENT_PROJECT_VERSION: "69"
     CODE_SIGN_STYLE: Automatic
 targets:
   WhereToStudyMac:

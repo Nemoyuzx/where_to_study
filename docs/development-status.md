@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前发布版本：[v0.2.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.5)
 - 应用版本：`0.2.5`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=68`；Android `versionCode=40`；HarmonyOS `versionCode=1002007`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=69`；Android `versionCode=41`；HarmonyOS `versionCode=1002008`；Tauri Android `versionCode=2008`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布验证后的 `/Applications`、iOS 模拟器与 Android 模拟器均未保留 Where To Study 安装副本；Xcode 构建副本已清理
-- 发布边界：`v0.2.5` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 68 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.5` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 69 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -92,13 +92,13 @@
 
 | 范围 | 结果 |
 | --- | --- |
-| React/Tauri UI | 102/102 Node 契约与业务测试、`npm run build` 通过；Playwright 在 `390×844` 与 `1000×900` 验证收藏管理隐藏导航、周全天按日期列、整区选日、时间/外链、月视图无弹窗且只保留课程 chip、年详情滚动、键盘双向动画及动画期间无资源请求 |
-| Rust/Tauri | `cargo fmt --check`、严格 Clippy 与 128/128 自动测试通过；1 项依赖本机安全存储和北邮在线服务的真实作业同步测试按设计忽略；收藏 ICS 改期保持稳定 UID |
-| macOS SwiftUI | 本地 Xcode 26.6 严格 Swift 6 与警告即错误构建通过；186/186 XCTest 通过；周全天列、整区选日、链接、滚动、教学周、独立预热和统一键盘动画覆盖 |
-| iOS SwiftUI | 本地 Xcode 26.6 的 191/191 XCTest 通过；原有 iPhone 聚焦 UI 3/3、13 英寸 iPad 强断言 UI 1/1，新增慢动画方向 UI 1/1 与逐帧录像，覆盖月/日→年右入左出及反向左入右出 |
-| TestFlight | iOS 与 macOS `0.2.5 (68)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未再打开 App Store Connect 检查 processing 或测试组状态 |
-| Android | `0.2.5 (40)` 的 174/174 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Android 16 模拟器 UI 19/19，覆盖长宜忌边界及日→年→日方向与指示条同步 |
-| HarmonyOS | `0.2.5 (1002007)` HAP 构建与 103/103 ArkTS 单元测试通过；收藏导入、月内联、真实教学周、独立视口预热、PC 全天列时间/链接、年详情滚动和点击层级均通过编译与契约测试。当前 `hdc` 无真机目标 |
+| React/Tauri UI | 110/110 Node 契约与业务测试、`npm run build` 通过；Playwright 额外验证自动模式显示当前推断、手动空值/非法学期号拒绝，以及收藏、全天日程、动画和键盘路径 |
+| Rust/Tauri | `cargo fmt --check`、严格 Clippy 与 145/145 自动测试通过；1 项依赖本机安全存储和北邮在线服务的真实作业同步测试按设计忽略；共享 Core 56/56、CLI 13/13、TUI 14/14 同时通过；托盘、导入和通知不再读取旧学期缓存 |
+| macOS SwiftUI | 本地 Xcode 26.6 严格 Swift 6 与警告即错误构建通过；203/203 XCTest 通过，包含自动学期冷启动、旧缓存隔离、凭据变更、空默认与 `week=0` 契约 |
+| iOS SwiftUI | 本地 Xcode 26.6 的 208/208 逻辑测试通过；iPhone UI 回归 19/19 通过，4 项仅限 iPad 的用例按设备条件跳过；语言往返、月视图滚动/分页、年视图反向动画和设置均通过 |
+| TestFlight | iOS 与 macOS `0.2.5 (69)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
+| Android | `0.2.5 (41)` 的 185/185 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；旧学期缓存已从 UI、小组件和课程通知隔离，Android 16 模拟器 UI 19/19 保持通过 |
+| HarmonyOS | `0.2.5 (1002008)` HAP 构建与 112/112 ArkTS 单元测试通过；自动学期、空默认、旧保存/清理并发门禁、收藏导入、月内联、真实教学周和 PC 全天列均通过编译与契约测试。当前 `hdc` 无真机目标 |
 | 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、2 MiB/5000 项/100 项每日/370 天限制、5 分钟刷新、完整本地收藏快照及中英双语隐私说明通过 |
 
 完整中英文变更见 [`release-v0.2.5.md`](release-v0.2.5.md)，自定义日程公开契约见 [`custom-schedule-api.md`](custom-schedule-api.md)。
@@ -136,7 +136,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.5 稳定版发布制品
 
-`v0.2.5` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.5 (40)` APK/AAB。iOS 与 macOS `0.2.5 (68)` 由本地 Xcode 上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
+`v0.2.5` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.5 (41)` APK/AAB。iOS 与 macOS `0.2.5 (69)` 由本地 Xcode 上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
 
 ## 0.2.4 稳定版发布制品
 

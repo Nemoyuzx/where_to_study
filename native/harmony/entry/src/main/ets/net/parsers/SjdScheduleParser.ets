@@ -32,6 +32,16 @@ export class SJDScheduleParser {
       termID = JsonUtil.string(currentRoot['xnxq01id']);
     }
     if (termID.length === 0) {
+      const topInfo: Object[] = JsonUtil.array(currentRoot['topInfo']);
+      if (topInfo.length > 0) {
+        const top: Record<string, Object> = JsonUtil.record(topInfo[0]);
+        termID = JsonUtil.string(top['semesterId']);
+        if (termID.length === 0) {
+          termID = JsonUtil.string(top['xnxq01id']);
+        }
+      }
+    }
+    if (termID.length === 0) {
       termID = fallbackTermID;
     }
     const termStartDate: string = SJDScheduleParser.inferTermStartDate(currentRoot) === null ?
@@ -269,18 +279,6 @@ export class SJDScheduleParser {
   }
 
   private static inferTermStartDate(root: Record<string, Object>): string | null {
-    let weekText: string = JsonUtil.string(root['week']);
-    if (weekText.length === 0) {
-      const topInfo: Object[] = JsonUtil.array(root['topInfo']);
-      if (topInfo.length > 0) {
-        weekText = JsonUtil.string(JsonUtil.record(topInfo[0])['week']);
-      }
-    }
-    const week: number = Number(weekText);
-    if (Number.isNaN(week) || week <= 0) {
-      return null;
-    }
-
     let dated: Record<string, Object> | null = null;
     const dateList: Object[] = JsonUtil.array(root['date']);
     for (const item of dateList) {
@@ -293,6 +291,24 @@ export class SJDScheduleParser {
     if (dated === null) {
       return null;
     }
+    let weekText: string = JsonUtil.string(dated['zc']);
+    if (weekText.length === 0) {
+      weekText = JsonUtil.string(root['week']);
+    }
+    if (weekText.length === 0) {
+      const topInfo: Object[] = JsonUtil.array(root['topInfo']);
+      if (topInfo.length > 0) {
+        weekText = JsonUtil.string(JsonUtil.record(topInfo[0])['week']);
+      }
+    }
+    if (weekText.length === 0) {
+      return null;
+    }
+    const week: number = Number(weekText);
+    // week=0 是开学前一周的真实响应；该周周一向后 7 天即第一周周一。
+    if (Number.isNaN(week) || week < 0) {
+      return null;
+    }
     const day: DateParts | null = StrictDates.parseDateString(JsonUtil.string(dated['mxrq']));
     if (day === null) {
       return null;
@@ -303,7 +319,8 @@ export class SJDScheduleParser {
     if (xqidText.length > 0) {
       const parsed: number = Number(xqidText);
       if (!Number.isNaN(parsed)) {
-        weekday = parsed;
+        // 移动教务以 0 表示周日，其余为周一=1..周六=6。
+        weekday = parsed === 0 ? 7 : (parsed >= 1 && parsed <= 7 ? parsed : mondayBasedWeekday);
       }
     }
     const monday: DateParts = StrictDates.addDays(day, -(weekday - 1));

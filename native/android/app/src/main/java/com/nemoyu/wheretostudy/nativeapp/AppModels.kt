@@ -82,8 +82,8 @@ data class HolidaysSnapshot(
 
 object AppMetadata {
     const val classroomsCacheVersion = 2
-    const val defaultTermID = "2025-2026-2"
-    const val defaultTermStartDate = "2026-03-02"
+    const val defaultTermID = ""
+    const val defaultTermStartDate = ""
 
     val campuses = listOf(
         CampusMetadata(id = "01", name = "西土城"),

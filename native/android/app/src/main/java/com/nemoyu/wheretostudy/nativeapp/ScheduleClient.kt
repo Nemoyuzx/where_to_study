@@ -286,8 +286,11 @@ object SjdScheduleParser {
             ?: throw ScheduleClientException("移动教务课表返回为空。")
         val curriculumRoot = curriculum.optJSONArray("data")?.optJSONObject(0)
             ?: throw ScheduleClientException("移动教务课表返回为空。")
+        val topInfo = currentRoot.optJSONArray("topInfo")?.optJSONObject(0)
         val termID = currentRoot.opt("semesterId").stringValue()
             .ifEmpty { currentRoot.opt("xnxq01id").stringValue() }
+            .ifEmpty { topInfo?.opt("semesterId").stringValue() }
+            .ifEmpty { topInfo?.opt("xnxq01id").stringValue() }
             .ifEmpty { fallbackTermID }
         val termStartDate = inferTermStartDate(currentRoot) ?: fallbackTermStartDate
         val rawCourses = mutableListOf<JSONObject>()
@@ -404,17 +407,25 @@ object SjdScheduleParser {
     }
 
     private fun inferTermStartDate(root: JSONObject): String? {
-        val week = root.opt("week").stringValue().toIntOrNull()
-            ?: root.optJSONArray("topInfo")?.optJSONObject(0)?.opt("week").stringValue().toIntOrNull()
-            ?: return null
-        if (week < 1) return null
         val dates = root.optJSONArray("date") ?: return null
         val dated = (0 until dates.length()).mapNotNull(dates::optJSONObject)
             .firstOrNull { it.has("mxrq") && it.opt("zc").stringValue() != "all" }
             ?: return null
+        val week = dated.opt("zc").stringValue().toIntOrNull()
+            ?: root.opt("week").stringValue().toIntOrNull()
+            ?: root.optJSONArray("topInfo")?.optJSONObject(0)?.opt("week").stringValue().toIntOrNull()
+            ?: return null
+        // week=0 is the real API shape during the week immediately before
+        // classes. Its displayed Monday plus seven days is week 1 Monday.
+        if (week < 0) return null
         val day = parseDate(dated.opt("mxrq").stringValue()) ?: return null
-        val weekday = dated.opt("xqid").stringValue().toIntOrNull()
-            ?: ((day.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+        val calendarWeekday = ((day.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+        val rawWeekday = dated.opt("xqid").stringValue().toIntOrNull()
+        val weekday: Int = when {
+            rawWeekday == 0 -> 7
+            rawWeekday != null && rawWeekday in 1..7 -> rawWeekday
+            else -> calendarWeekday
+        }
         day.add(Calendar.DAY_OF_MONTH, -(weekday - 1) - ((week - 1) * 7))
         return contractDate().format(day.time)
     }

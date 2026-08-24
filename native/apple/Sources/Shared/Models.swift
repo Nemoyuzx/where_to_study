@@ -111,8 +111,8 @@ struct ScheduleSnapshot: Codable, Equatable, Sendable {
 }
 
 enum ScheduleDefaults {
-    static let termID = "2025-2026-2"
-    static let termStartDate = "2026-03-02"
+    static let termID = ""
+    static let termStartDate = ""
 }
 
 struct Classroom: Codable, Identifiable, Equatable, Sendable {
@@ -311,6 +311,11 @@ enum ScheduleLogic {
 enum SemesterLogic {
     private static let springMonths = [2, 3, 4, 5, 6, 7]
 
+    struct Settings: Equatable, Sendable {
+        let termID: String
+        let termStartDate: String
+    }
+
     /// The yyyy-MM-dd date string of the Monday of the week that contains the
     /// given calendar date, using the app-wide Shanghai calendar convention.
     static func mondayOfWeekContaining(
@@ -360,6 +365,57 @@ enum SemesterLogic {
                 year: fallStartYear, month: 9, day: 1, calendar: calendar
             ) ?? ScheduleDefaults.termStartDate
         )
+    }
+
+    /// Resolve the term fields shown on launch without depending on mutable app
+    /// state. Automatic mode starts from the Shanghai-calendar suggestion. A
+    /// cached schedule may refine the real start date only when it belongs to
+    /// that same term; an old-term cache must not move the app backwards.
+    static func resolveSettings(
+        automaticDetectionEnabled: Bool,
+        persistedTermID: String?,
+        persistedTermStartDate: String?,
+        cachedTermID: String? = nil,
+        cachedTermStartDate: String? = nil,
+        for date: Date = .now,
+        calendar: Calendar = .shanghai
+    ) -> Settings {
+        guard automaticDetectionEnabled else {
+            return Settings(
+                termID: persistedTermID ?? ScheduleDefaults.termID,
+                termStartDate: persistedTermStartDate ?? ScheduleDefaults.termStartDate
+            )
+        }
+
+        let suggested = suggestTerm(for: date, calendar: calendar)
+        if let cached = acceptedCachedSettings(
+            termID: cachedTermID,
+            termStartDate: cachedTermStartDate,
+            for: date,
+            calendar: calendar
+        ) {
+            return cached
+        }
+        return Settings(
+            termID: suggested.termID,
+            termStartDate: suggested.termStartDate
+        )
+    }
+
+    static func acceptedCachedSettings(
+        termID: String?,
+        termStartDate: String?,
+        for date: Date = .now,
+        calendar: Calendar = .shanghai
+    ) -> Settings? {
+        let suggested = suggestTerm(for: date, calendar: calendar)
+        let normalizedTermID = termID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedStartDate = termStartDate?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedTermID == suggested.termID,
+              let normalizedStartDate,
+              isValidTermStartDate(normalizedStartDate)
+        else { return nil }
+        return Settings(termID: suggested.termID, termStartDate: normalizedStartDate)
     }
 
     /// Validate a term id like "2025-2026-2" or "2025-2026-1".

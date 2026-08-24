@@ -206,8 +206,8 @@ export class AppLocalization {
     '自动检测当前学期': 'Detect Current Semester Automatically',
     '学期编号': 'Semester ID',
     '第一周周一（YYYY-MM-DD）': 'First Monday (YYYY-MM-DD)',
-    '获取/刷新课表后会自动应用教务返回的学期与开学日期。':
-      'The semester and start date returned by the school service are applied after refresh.',
+    '启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。':
+      'At launch or after a schedule refresh, the semester and start date returned by the school service are applied automatically.',
     '关闭自动检测后，将使用手动填写的学期信息。':
       'Manual semester values are used when automatic detection is off.',
     '保存学期设置': 'Save Semester',

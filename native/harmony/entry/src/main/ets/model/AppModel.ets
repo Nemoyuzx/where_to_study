@@ -5,9 +5,12 @@ import { AppSection } from '../common/AppSection';
 import { Classroom, ClassroomDefaults, ClassroomsCache, Course, HolidayItem,
   HolidaysSnapshot, ScheduleDefaults, ScheduleSnapshot, SlotMetadata } from '../common/Models';
 import { ScheduleLogic } from '../common/ScheduleLogic';
+import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { Credentials, AssetCredentialStore, CredentialStoring } from '../store/CredentialStore';
-import { FileScheduleStore, ScheduleStoring } from '../store/ScheduleStore';
+import {
+  FileScheduleStore, SchedulePersistenceCoordinator, ScheduleStoring
+} from '../store/ScheduleStore';
 import { FileClassroomStore, ClassroomStoring } from '../store/ClassroomStore';
 import { FileHolidayStore, HolidayStoring } from '../store/HolidayStore';
 import { PreferencesStore } from '../store/PreferencesStore';
@@ -63,6 +66,10 @@ export class CredentialSettingsError extends Error {
 
   static invalidTermStartDate(): CredentialSettingsError {
     return new CredentialSettingsError('第一周周一日期格式不正确，请使用 yyyy-MM-dd。');
+  }
+
+  static invalidTermID(): CredentialSettingsError {
+    return new CredentialSettingsError('学期编号格式不正确，请使用 YYYY-YYYY-1/2。');
   }
 }
 
@@ -228,6 +235,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private readonly credentialStore: CredentialStoring;
   private readonly scheduleStore: ScheduleStoring;
+  private readonly schedulePersistence: SchedulePersistenceCoordinator;
   private readonly scheduleClient: ScheduleFetching;
   private readonly classroomStore: ClassroomStoring;
   private readonly classroomClient: ClassroomFetching;
@@ -284,6 +292,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.supportsRuntimeModeSwitching = !runtimeMode.isSample;
     this.credentialStore = credentialStore;
     this.scheduleStore = scheduleStore;
+    this.schedulePersistence = new SchedulePersistenceCoordinator(scheduleStore);
     this.scheduleClient = scheduleClient;
     this.classroomStore = classroomStore;
     this.classroomClient = classroomClient;
@@ -346,14 +355,21 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.prewarmPublicDeadlines();
     this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
     this.systemLanguageID = AppLanguageInfo.systemLanguage();
-    this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
-    this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
-      savedTermStart : ScheduleDefaults.termStartDate;
+    if (this.automaticTermDetection) {
+      const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
+      this.termID = suggested.termID;
+      this.termStartDate = suggested.termStartDate;
+    } else {
+      this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
+      this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
+        savedTermStart : ScheduleDefaults.termStartDate;
+    }
     this.campusID = savedCampusID !== null && savedCampusID.length > 0 ? savedCampusID : '01';
     this.queryCampusID = this.campusID;
     this.dailyCourseNotificationsEnabled = notificationsEnabled;
     await this.loadCredentials();
     await this.loadSchedule();
+    this.refreshScheduleAutomaticallyAtLaunch();
     await this.loadClassrooms();
     this.synchronizeSelectedSlots();
     this.prefetchCurrentYearCalendarMarkers();
@@ -691,9 +707,15 @@ export class AppModel implements CalendarViewportPreloadTarget {
         await this.preferences.getString('favoriteDeadlinesV1'));
       this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
       this.systemLanguageID = AppLanguageInfo.systemLanguage();
-      this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
-      this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
-        savedTermStart : ScheduleDefaults.termStartDate;
+      if (this.automaticTermDetection) {
+        const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
+        this.termID = suggested.termID;
+        this.termStartDate = suggested.termStartDate;
+      } else {
+        this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
+        this.termStartDate = savedTermStart !== null && savedTermStart.length > 0 ?
+          savedTermStart : ScheduleDefaults.termStartDate;
+      }
       this.campusID = savedCampusID !== null && savedCampusID.length > 0 ? savedCampusID : '01';
       this.queryCampusID = this.campusID;
       this.dailyCourseNotificationsEnabled = notificationsEnabled;
@@ -708,6 +730,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       await this.loadSchedule();
     } catch (e) {
     }
+    this.refreshScheduleAutomaticallyAtLaunch();
     try {
       await this.loadClassrooms();
     } catch (e) {
@@ -730,10 +753,15 @@ export class AppModel implements CalendarViewportPreloadTarget {
     try {
       const normalizedTermID: string = this.termID.trim();
       const normalizedTermStartDate: string = this.termStartDate.trim();
-      const nextTermID: string = normalizedTermID.length === 0 ?
-        ScheduleDefaults.termID : normalizedTermID;
-      const nextTermStartDate: string = normalizedTermStartDate.length === 0 ?
-        ScheduleDefaults.termStartDate : normalizedTermStartDate;
+      const automaticTerm: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+        this.schedule?.termID ?? null, this.schedule?.termStartDate ?? null, StrictDates.todayParts());
+      const nextTermID: string = this.automaticTermDetection ? automaticTerm.termID :
+        normalizedTermID;
+      const nextTermStartDate: string = this.automaticTermDetection ? automaticTerm.termStartDate :
+        normalizedTermStartDate;
+      if (!SemesterLogic.isValidTermID(nextTermID)) {
+        throw CredentialSettingsError.invalidTermID();
+      }
       if (StrictDates.parseDateString(nextTermStartDate) === null) {
         throw CredentialSettingsError.invalidTermStartDate();
       }
@@ -776,6 +804,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       await this.preferences.setString('termStartDate', this.termStartDate);
       await this.preferences.setBool('automaticTermDetection', this.automaticTermDetection);
       this.statusMessage = '设置已保存';
+      this.refreshScheduleAutomaticallyAtLaunch();
       return true;
     } catch (e) {
       this.statusMessage = e instanceof Error ? e.message : '设置保存失败。';
@@ -792,10 +821,16 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
     const normalizedTermID: string = this.termID.trim();
     const normalizedTermStartDate: string = this.termStartDate.trim();
-    const nextTermID: string = normalizedTermID.length === 0 ?
-      ScheduleDefaults.termID : normalizedTermID;
-    const nextTermStartDate: string = normalizedTermStartDate.length === 0 ?
-      ScheduleDefaults.termStartDate : normalizedTermStartDate;
+    const automaticTerm: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+      this.schedule?.termID ?? null, this.schedule?.termStartDate ?? null, StrictDates.todayParts());
+    const nextTermID: string = this.automaticTermDetection ? automaticTerm.termID :
+      normalizedTermID;
+    const nextTermStartDate: string = this.automaticTermDetection ? automaticTerm.termStartDate :
+      normalizedTermStartDate;
+    if (!SemesterLogic.isValidTermID(nextTermID)) {
+      this.statusMessage = CredentialSettingsError.invalidTermID().message;
+      return false;
+    }
     if (StrictDates.parseDateString(nextTermStartDate) === null) {
       this.statusMessage = CredentialSettingsError.invalidTermStartDate().message;
       return false;
@@ -807,6 +842,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       await this.preferences.setString('termStartDate', this.termStartDate);
       await this.preferences.setBool('automaticTermDetection', this.automaticTermDetection);
       this.statusMessage = '学期设置已保存';
+      this.refreshScheduleAutomaticallyAtLaunch();
       return true;
     } catch (e) {
       this.statusMessage = e instanceof Error ? e.message : '学期设置保存失败。';
@@ -1189,11 +1225,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.password = '';
     this.updateSavedCredentialState(null);
 
+    this.schedule = null;
+    this.synchronizeWidgetSchedule();
+    this.calendarImportStatusMessage = '';
     try {
-      await this.scheduleStore.clear();
-      this.schedule = null;
-      this.synchronizeWidgetSchedule();
-      this.calendarImportStatusMessage = '';
+      await this.schedulePersistence.clear();
     } catch (e) {
       failures.push('个人课表');
     }
@@ -1273,21 +1309,31 @@ export class AppModel implements CalendarViewportPreloadTarget {
     if (this.isRefreshingSchedule) {
       return;
     }
+    // 在第一个异步凭据读取前占用门控，避免冷启动自动刷新与用户点击同时发起请求。
+    this.isRefreshingSchedule = true;
     let credentials: Credentials;
     try {
       credentials = await this.credentialsForRequest();
     } catch (e) {
+      this.isRefreshingSchedule = false;
       this.setStatusMessage(e instanceof Error ? e.message : '');
       return;
     }
-    this.isRefreshingSchedule = true;
     this.scheduleRefreshToken++;
     const refreshToken: number = this.scheduleRefreshToken;
     this.setStatusMessage('正在获取个人课表…');
-    const fallbackTermID: string = this.termID.trim().length === 0 ?
-      ScheduleDefaults.termID : this.termID.trim();
-    const fallbackTermStart: string = this.termStartDate.trim().length === 0 ?
-      ScheduleDefaults.termStartDate : this.termStartDate.trim();
+    const usesAutomaticTermDetection: boolean = this.automaticTermDetection;
+    const automaticFallback: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+      this.schedule?.termID ?? null, this.schedule?.termStartDate ?? null, StrictDates.todayParts());
+    const fallbackTermID: string = usesAutomaticTermDetection ? automaticFallback.termID :
+      this.termID.trim();
+    const fallbackTermStart: string = usesAutomaticTermDetection ? automaticFallback.termStartDate :
+      this.termStartDate.trim();
+    if (!SemesterLogic.isValidTermID(fallbackTermID)) {
+      this.isRefreshingSchedule = false;
+      this.setStatusMessage(CredentialSettingsError.invalidTermID().message);
+      return;
+    }
     if (StrictDates.parseDateString(fallbackTermStart) === null) {
       this.isRefreshingSchedule = false;
       this.setStatusMessage(CredentialSettingsError.invalidTermStartDate().message);
@@ -1302,22 +1348,33 @@ export class AppModel implements CalendarViewportPreloadTarget {
         if (generation !== this.localDataGeneration || refreshToken !== this.scheduleRefreshToken) {
           return;
         }
-        await this.scheduleStore.save(fetched);
-        this.schedule = fetched;
+        const resolvedTerm: SemesterSuggestion = SemesterLogic.resolveFetchedTerm(
+          usesAutomaticTermDetection, fetched.termID, fetched.termStartDate,
+          fallbackTermID, fallbackTermStart);
+        const resolved: ScheduleSnapshot = new ScheduleSnapshot(
+          resolvedTerm.termID, resolvedTerm.termStartDate, fetched.fetchedAt, fetched.courses);
+        const persisted: boolean = await this.schedulePersistence.saveIfCurrent(
+          resolved, (): boolean => generation === this.localDataGeneration &&
+            refreshToken === this.scheduleRefreshToken);
+        if (!persisted || generation !== this.localDataGeneration ||
+          refreshToken !== this.scheduleRefreshToken) {
+          return;
+        }
+        this.schedule = resolved;
         this.synchronizeWidgetSchedule();
         this.calendarImportStatusMessage = '';
-        if (this.automaticTermDetection) {
+        if (usesAutomaticTermDetection) {
           // 自动检测开启时用教务返回的学期覆盖本地（对应 Android
           // automaticTermDetectionEnabled）；关闭时保留手动填写值。
-          this.termID = fetched.termID;
-          this.termStartDate = fetched.termStartDate;
+          this.termID = resolved.termID;
+          this.termStartDate = resolved.termStartDate;
           await this.preferences.setString('termID', this.termID);
           await this.preferences.setString('termStartDate', this.termStartDate);
         }
         this.synchronizeSelectedSlots();
         this.dailyCourseNotificationDirty = true;
         this.reconcileDailyCourseNotifications(false);
-        this.setStatusMessage('个人课表已更新，共 ' + fetched.courses.length.toString() + ' 门课程', true);
+        this.setStatusMessage('个人课表已更新，共 ' + resolved.courses.length.toString() + ' 门课程', true);
       } catch (e) {
         if (generation !== this.localDataGeneration || refreshToken !== this.scheduleRefreshToken) {
           return;
@@ -2086,14 +2143,14 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.dailyCourseNotificationStatusMessage = '账号已更改，获取课表后将重新安排摘要';
     }
     let failed: boolean = false;
-    try {
-      await this.scheduleStore.clear();
-    } catch (e) {
-      failed = true;
-    }
     this.schedule = null;
     this.synchronizeWidgetSchedule();
     this.calendarImportStatusMessage = '';
+    try {
+      await this.schedulePersistence.clear();
+    } catch (e) {
+      failed = true;
+    }
     try {
       await this.classroomStore.clear();
     } catch (e) {
@@ -2126,15 +2183,46 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private async loadSchedule(): Promise<void> {
     try {
       const loaded: ScheduleSnapshot | null = await this.scheduleStore.load();
-      this.schedule = loaded;
+      let shouldClearLoaded: boolean = false;
+      if (this.isSampleMode()) {
+        this.schedule = loaded;
+        if (loaded !== null) {
+          this.termID = loaded.termID;
+          this.termStartDate = loaded.termStartDate;
+        }
+      } else if (this.automaticTermDetection) {
+        const canUseLoaded: boolean = loaded !== null &&
+          SemesterLogic.canUseAutomaticCachedSchedule(
+            loaded.termID, loaded.termStartDate, StrictDates.todayParts());
+        this.schedule = canUseLoaded ? loaded : null;
+        const resolved: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
+          loaded?.termID ?? null, loaded?.termStartDate ?? null, StrictDates.todayParts());
+        this.termID = resolved.termID;
+        this.termStartDate = resolved.termStartDate;
+        await this.preferences.setString('termID', this.termID);
+        await this.preferences.setString('termStartDate', this.termStartDate);
+        shouldClearLoaded = loaded !== null && !canUseLoaded;
+      } else {
+        // 手动模式继续展示并使用用户明确配置时保存的缓存。
+        this.schedule = loaded;
+      }
+      // 决策完成后再同步卡片，旧学期缓存从未进入 UI 或卡片归档。
       this.synchronizeWidgetSchedule();
-      if (loaded !== null) {
-        this.termID = loaded.termID;
-        this.termStartDate = loaded.termStartDate;
+      if (shouldClearLoaded) {
+        await this.schedulePersistence.clear();
       }
     } catch (e) {
       this.statusMessage = '本地课表读取失败：' + (e instanceof Error ? e.message : '');
     }
+  }
+
+  private refreshScheduleAutomaticallyAtLaunch(): void {
+    if (!SemesterLogic.shouldRefreshAutomatically(
+      this.automaticTermDetection, this.hasSavedPassword, this.account)) {
+      return;
+    }
+    // refreshSchedule 自带 isRefreshingSchedule 门控，启动刷新与用户手动刷新不会并发重复。
+    this.refreshSchedule();
   }
 
   private async loadClassrooms(): Promise<void> {
