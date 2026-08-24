@@ -15,6 +15,8 @@ import {
   DEFAULT_SETTINGS,
   desktopMonthGridMetrics,
   expandedMonthGridMetrics,
+  favoriteDeadlineKey,
+  favoriteDeadlinesForDate,
   FALLBACK_SLOTS,
   fallbackHolidayItems,
   getCampusClassrooms,
@@ -27,6 +29,7 @@ import {
   suggestTermForDate,
   termMatchesCurrentPeriod,
   normalizeClassroomsCache,
+  normalizeFavoriteDeadlines,
   requestBody,
   savedSettingsToState,
   settingsToPayload,
@@ -197,6 +200,21 @@ test('teaching week calculation uses calendar days and reports busy slots', () =
   assert.equal(state.dayCourses[0].is_exam, false)
 })
 
+test('teaching week is hidden without a timetable or beyond its actual final week', () => {
+  assert.equal(getWeekState([], '2026-03-02', '2026-03-02').weekNumber, 0)
+  const shortSchedule = [{
+    id: 'course-1',
+    name: 'Short course',
+    weekday: 1,
+    week_numbers: [1, 2],
+    exam_week_numbers: [],
+    start_slot: 0,
+    end_slot: 1,
+  }]
+  assert.equal(getWeekState(shortSchedule, '2026-03-02', '2026-03-09').weekNumber, 2)
+  assert.equal(getWeekState(shortSchedule, '2026-03-02', '2026-03-16').weekNumber, 0)
+})
+
 test('exam badges follow the backend-provided exam week numbers only', () => {
   const course = {
     id: 'exam-course',
@@ -314,6 +332,75 @@ test('interface language persists safely and follows non-Chinese systems in Engl
   const english = savedSettingsToState({ ui_language: 'en' })
   assert.equal(english.uiLanguage, 'en')
   assert.equal(settingsToPayload(english).ui_language, 'en')
+})
+
+test('custom schedule settings round-trip without leaking into unrelated fields', () => {
+  const state = savedSettingsToState({
+    custom_deadlines_enabled: true,
+    custom_deadlines_url: '  https://example.com/calendar.json  ',
+  })
+
+  assert.equal(state.customDeadlinesEnabled, true)
+  assert.equal(state.customDeadlinesUrl, 'https://example.com/calendar.json')
+  assert.equal(settingsToPayload(state).custom_deadlines_enabled, true)
+  assert.equal(
+    settingsToPayload(state).custom_deadlines_url,
+    'https://example.com/calendar.json',
+  )
+})
+
+test('favorite deadlines keep complete normalized snapshots and survive source switches', () => {
+  const favorite = {
+    id: 'custom-1',
+    name: 'Independent hackathon',
+    event_type: 'hackathon',
+    source_type: 'custom',
+    primary_deadline: '2026-08-24T23:59:00+08:00',
+    organizer: 'Example Lab',
+    official_url: 'https://example.com/events/1',
+    source_name: 'Example Calendar',
+    source_url: 'https://example.com/calendar.json',
+  }
+  const normalized = normalizeFavoriteDeadlines([
+    favorite,
+    { ...favorite, name: 'duplicate with the same stable key' },
+    { ...favorite, id: '', primary_deadline: 'invalid' },
+  ])
+
+  assert.deepEqual(normalized, [favorite])
+  assert.equal(favoriteDeadlineKey(normalized[0]), favoriteDeadlineKey(favorite))
+  assert.deepEqual(favoriteDeadlinesForDate(normalized, '2026-08-24'), [favorite])
+  assert.deepEqual(favoriteDeadlinesForDate(normalized, '2026-08-25'), [])
+})
+
+test('favorite deadline snapshots reject unsafe links and cap local storage', () => {
+  const makeItem = (index) => ({
+    id: `item-${index}`,
+    name: `Item ${index}`,
+    event_type: 'competition',
+    source_type: 'contest_ddl',
+    primary_deadline: `2026-09-${String((index % 28) + 1).padStart(2, '0')}T12:00:00+08:00`,
+    official_url: index === 0 ? 'https://user@example.com/private' : 'https://example.com',
+  })
+  const normalized = normalizeFavoriteDeadlines(Array.from({ length: 8 }, (_, index) => makeItem(index)), 3)
+
+  assert.equal(normalized.length, 3)
+  assert.equal(normalized.find((item) => item.id === 'item-0')?.official_url, null)
+})
+
+test('custom favorites from different feeds keep independent source identities', () => {
+  const base = {
+    id: 'same-id',
+    name: 'Same event',
+    event_type: 'custom',
+    source_type: 'custom',
+    primary_deadline: '2026-09-18T23:59:00+08:00',
+  }
+  const left = { ...base, source_name: 'Left', source_url: 'https://left.example/feed.json' }
+  const right = { ...base, source_name: 'Right', source_url: 'https://right.example/feed.json' }
+
+  assert.notEqual(favoriteDeadlineKey(left), favoriteDeadlineKey(right))
+  assert.equal(normalizeFavoriteDeadlines([left, right]).length, 2)
 })
 
 test('deadline startup preheat follows every shared-feed switch and covers the whole year', () => {

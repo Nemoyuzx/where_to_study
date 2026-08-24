@@ -2,6 +2,10 @@
 
 `where-to-study.schema.json` 是原生客户端与 Windows/Tauri 客户端共享的数据边界。字段沿用现有 Rust `models.rs` 的 snake_case JSON 表示，避免平台间二次命名。
 
+`custom-deadline-feed.schema.json` 定义用户可配置的自定义日程源。它复用现有 DDL 字段，
+由客户端把来源标记为 `custom`，并按 `primary_deadline` 的日期进入教学日历全天区；网络与
+收藏语义见 [自定义日程接口规范](../../docs/custom-schedule-api.md)。
+
 约定：
 
 - 节次索引从 `0` 开始，用户界面标签从 `1` 开始。
@@ -21,7 +25,8 @@
 `sjd-curriculum.json` 模拟移动教务课表响应，`schedule.json` 是规范化后的预期课表；
 `sjd-classrooms-xitucheng.json`、`sjd-classrooms-shahe.json` 模拟当天空教室响应，
 `classrooms.json` 是合并两校区后的预期缓存；`holiday-source.json` 模拟节假日数据源响应，
-`holidays.json` 是规范化后的预期节假日缓存。Rust、Swift 和 Kotlin 测试必须复用这些
+`holidays.json` 是规范化后的预期节假日缓存；`custom-deadline-feed.json` 是自定义日程
+接口的虚构示例。Rust、Swift、Kotlin 与 ArkTS 测试必须复用这些
 文件，防止不同客户端产生不同课程、教学楼、教室号、节次和节假日语义。
 两个节假日 fixture 均为本项目编写的虚构测试数据，不是运行时上游数据的副本。运行时来源、
 HTTPS Raw 地址及其许可证状态说明见根目录 [README](../../README.md#数据来源与数据安全)。

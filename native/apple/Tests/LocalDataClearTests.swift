@@ -440,6 +440,12 @@ final class LocalDataClearTests: XCTestCase {
         XCTAssertNil(try scheduleStore.load())
         XCTAssertNil(try classroomStore.load())
 
+        model.customDeadlinesURL = "https://example.com/feed.json"
+        model.setCustomDeadlinesEnabled(true)
+        XCTAssertEqual(try model.saveCustomDeadlineSettings()?.host, "example.com")
+        model.setFavorite(Self.favorite(id: "clear-me"), isFavorite: true)
+        XCTAssertEqual(model.favoriteDeadlines.count, 1)
+
         model.clearLocalData()
 
         XCTAssertNil(try credentialStore.load())
@@ -461,8 +467,68 @@ final class LocalDataClearTests: XCTestCase {
         XCTAssertEqual(model.termStartDate, ScheduleDefaults.termStartDate)
         XCTAssertTrue(model.selectedBuildings.isEmpty)
         XCTAssertTrue(model.usePersonalSchedule)
+        XCTAssertFalse(model.customDeadlinesEnabled)
+        XCTAssertTrue(model.customDeadlinesURL.isEmpty)
+        XCTAssertTrue(model.favoriteDeadlines.isEmpty)
         XCTAssertEqual(model.selectedSlots, Set(SlotMetadata.defaults.indices))
         XCTAssertEqual(model.statusMessage, "本地数据已清除")
+    }
+
+    @MainActor
+    func testFavoriteSnapshotsPersistAndIgnoreDisabledSourceSwitches() throws {
+        let suiteName = "FavoriteDeadlinePersistence.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let favorite = Self.favorite(id: "persisted")
+        let first = AppModel(
+            scheduleStore: InMemoryScheduleStore(schedule: nil),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+        first.setCompetitionDeadlinesEnabled(false)
+        first.customDeadlinesURL = "https://example.com/feed.json"
+        first.setCustomDeadlinesEnabled(true)
+        XCTAssertNotNil(try first.saveCustomDeadlineSettings())
+        first.setFavorite(favorite, isFavorite: true)
+
+        let relaunched = AppModel(
+            scheduleStore: InMemoryScheduleStore(schedule: nil),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+        XCTAssertEqual(relaunched.favoriteDeadlines, [favorite])
+        XCTAssertTrue(relaunched.customDeadlinesEnabled)
+        XCTAssertEqual(relaunched.customDeadlineSourceURL?.host, "example.com")
+        XCTAssertEqual(
+            relaunched.visibleDeadlineItems(liveItems: [favorite], on: "2026-09-18"),
+            [favorite]
+        )
+        XCTAssertTrue(relaunched.hasCalendarDeadlinesToDisplay)
+    }
+
+    @MainActor
+    func testFavoriteSnapshotStorageIsCappedAtFiveHundred() throws {
+        let suiteName = "FavoriteDeadlineCap.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = AppModel(
+            scheduleStore: InMemoryScheduleStore(schedule: nil),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+        for index in 0 ..< 510 {
+            model.setFavorite(Self.favorite(id: "favorite-\(index)"), isFavorite: true)
+        }
+
+        XCTAssertEqual(model.favoriteDeadlines.count, AppModel.maximumFavoriteDeadlines)
+        XCTAssertEqual(model.favoriteDeadlines.first?.id, "favorite-509")
+        XCTAssertFalse(model.favoriteDeadlines.contains { $0.id == "favorite-0" })
     }
 
     private static let schedule = ScheduleSnapshot(
@@ -489,6 +555,18 @@ final class LocalDataClearTests: XCTestCase {
             source: HolidayDefaults.source,
             fetchedAt: ISO8601DateFormatter().string(from: .now),
             items: []
+        )
+    }
+
+    private static func favorite(id: String) -> PublicDeadlineItem {
+        PublicDeadlineItem(
+            id: id,
+            name: "收藏日程 \(id)",
+            kind: .competition,
+            source: .contestDDL,
+            deadline: "2026-09-18T23:59:00+08:00",
+            organizer: "示例组织方",
+            officialURL: URL(string: "https://example.com/events/\(id)")
         )
     }
 

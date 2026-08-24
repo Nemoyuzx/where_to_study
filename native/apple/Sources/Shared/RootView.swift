@@ -21,6 +21,13 @@ private struct PublicDeadlinePrewarmID: Equatable {
     let isSceneActive: Bool
 }
 
+private struct CustomDeadlinePrewarmID: Equatable {
+    let sourceURL: String?
+    let sampleMode: Bool
+    let isSceneActive: Bool
+    let calendarYear: Int
+}
+
 enum AdaptiveLayoutPolicy {
     static let minimumSidebarWidth: CGFloat = 700
     static let minimumExpandedCalendarWidth: CGFloat = 760
@@ -99,13 +106,37 @@ struct RootView: View {
             #endif
         }
         .task(id: PublicDeadlinePrewarmID(
-            publicDeadlinesEnabled: model.hasEnabledPublicDeadlines,
+            publicDeadlinesEnabled: model.hasEnabledBuiltInPublicDeadlines,
             sampleMode: model.isSampleMode,
             isSceneActive: scenePhase == .active
         )) {
             guard scenePhase == .active else { return }
             await calendarDeadlines.prewarmPublicIfNeeded(
-                publicDeadlinesEnabled: model.hasEnabledPublicDeadlines,
+                publicDeadlinesEnabled: model.hasEnabledBuiltInPublicDeadlines,
+                sampleMode: model.isSampleMode
+            )
+        }
+        .task(id: CustomDeadlinePrewarmID(
+            sourceURL: model.customDeadlineSourceURL?.absoluteString,
+            sampleMode: model.isSampleMode,
+            isSceneActive: scenePhase == .active,
+            calendarYear: Calendar.shanghai.component(.year, from: .now)
+        )) {
+            guard scenePhase == .active,
+                  let sourceURL = model.customDeadlineSourceURL
+            else {
+                if model.customDeadlineSourceURL == nil {
+                    calendarDeadlines.clearCustomSource()
+                }
+                return
+            }
+            let dates = TeachingCalendarLogic.datesInYear(
+                containing: .now,
+                calendar: .shanghai
+            ).map { StrictContractDateParser.string(from: $0) }
+            await calendarDeadlines.prewarmCustomIfNeeded(
+                sourceURL: sourceURL,
+                dates: dates,
                 sampleMode: model.isSampleMode
             )
         }
@@ -117,6 +148,13 @@ struct RootView: View {
         }
         .onChange(of: model.account) { _ in
             calendarDeadlines.clearAssignments()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppKeyboardCommandNotification.name)) {
+            notification in
+            guard let action = AppKeyboardCommandNotification.action(from: notification) else { return }
+            if action == .dismissOverlay || model.selectedSection == .calendar {
+                teachingCalendarSession.applyKeyboardAction(action)
+            }
         }
         .environmentObject(dailyInfo)
         .environmentObject(calendarDeadlines)

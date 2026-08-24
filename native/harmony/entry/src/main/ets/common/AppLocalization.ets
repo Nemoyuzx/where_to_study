@@ -159,6 +159,24 @@ export class AppLocalization {
     '学科竞赛': 'Competition',
     '夏令营': 'Summer Camp',
     '黑客松': 'Hackathon',
+    '自定义日程': 'Custom Schedule',
+    '自定义日程来源：': 'Custom schedule source: ',
+    '自定义日程不符合 v1 接口规范。':
+      'The custom schedule does not conform to the v1 feed contract.',
+    '自定义日程只允许公开、无凭据的 HTTPS URL。':
+      'Custom schedules require a public credential-free HTTPS URL.',
+    '自定义日程接口版本必须为 1。': 'The custom schedule feed version must be 1.',
+    '自定义日程数据格式不正确。': 'The custom schedule JSON is invalid.',
+    '自定义日程日期格式不正确。': 'The custom schedule date is invalid.',
+    '自定义日程更新时间格式不正确。': 'The custom schedule updated_at value is invalid.',
+    '自定义日程条目超过 5000 项。': 'The custom schedule contains more than 5,000 items.',
+    '自定义日程来源主页必须使用安全的 HTTPS URL。':
+      'The custom schedule homepage must be a safe HTTPS URL.',
+    '自定义日程来源名称无效。': 'The custom schedule source name is invalid.',
+    '自定义日程获取失败。': 'Unable to load the custom schedule.',
+    '请先填写有效的 HTTPS 自定义日程地址': 'Enter a valid HTTPS custom schedule URL first',
+    '自定义日程只允许公开、无凭据的 HTTPS URL':
+      'Custom schedules require a public credential-free HTTPS URL',
     '示例数据 · 不连接北邮教务服务': 'Demo data · No connection to BUPT services',
     '显示数据仅供参考，请以实际情况为准。':
       'Displayed data is for reference only; rely on official information.',
@@ -196,6 +214,21 @@ export class AppLocalization {
     '学科竞赛 DDL': 'Competition Deadlines',
     '夏令营 DDL': 'Summer Camp Deadlines',
     '黑客松 DDL': 'Hackathon Deadlines',
+    '自定义日程 HTTPS 地址': 'Custom Schedule HTTPS URL',
+    '保存自定义日程地址': 'Save Custom Schedule URL',
+    '显示自定义日程': 'Show Custom Schedule',
+    '收藏管理': 'Favorite Management',
+    '返回设置': 'Back to Settings',
+    '暂无收藏日程': 'No Favorite Schedules',
+    '在日程详情右侧点击星标后，即使关闭来源或上游删除条目，收藏仍会保存在本机。':
+      'Tap the star in event details to keep a local copy even if its source is disabled or removes it.',
+    '收藏': 'Favorite',
+    '取消收藏': 'Remove Favorite',
+    '自定义日程地址已保存': 'Custom schedule URL saved',
+    '无法保存自定义日程地址': 'Unable to save the custom schedule URL',
+    '无法保存自定义日程开关': 'Unable to save the custom schedule switch',
+    '无法保存收藏': 'Unable to save favorite',
+    '无法删除收藏': 'Unable to remove favorite',
     '天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。':
       'Weather, almanac, and deadlines use public third-party services. Campus notices are script-extracted from public notices on an internal school website; each card identifies its source.',
     '课程提醒': 'Course Reminders',
@@ -205,8 +238,12 @@ export class AppLocalization {
     '本地数据': 'Local Data',
     '个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。':
       'Schedules, room and holiday caches, account, and preferences stay on this device.',
+    '个人课表、空教室缓存、节假日缓存、自定义日程设置、收藏、账号与偏好均只保存在本机。':
+      'Schedules, room and holiday caches, custom schedule settings, favorites, account, and preferences stay on this device.',
     '清除本地数据': 'Clear Local Data',
     '清除全部本地数据？': 'Clear all local data?',
+    '将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏和其它设置。此操作无法撤销。':
+      'This removes saved credentials, schedules, classroom caches, custom schedule settings, favorites, and other settings. This cannot be undone.',
     '将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。':
       'This deletes the saved account, password, schedule, room cache, and settings. It cannot be undone.',
     '取消': 'Cancel',
@@ -291,6 +328,10 @@ export class AppLocalization {
     if (source.startsWith('课程摘要安排失败：')) {
       return 'Unable to schedule course summaries: ' +
         source.substring('课程摘要安排失败：'.length);
+    }
+    if (source.startsWith('自定义日程获取失败：')) {
+      return 'Unable to load the custom schedule: ' +
+        source.substring('自定义日程获取失败：'.length);
     }
     if (source.startsWith('已安排未来 ') && source.endsWith(' 个有课日的课程摘要')) {
       return 'Course summaries scheduled for ' + source.substring('已安排未来 '.length,

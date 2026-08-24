@@ -1,6 +1,6 @@
 # 隐私声明 / Privacy Policy
 
-生效日期 / Effective date: 2026-08-23
+生效日期 / Effective date: 2026-08-24
 
 Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。
 
@@ -14,9 +14,9 @@ The account and password you enter are stored in the operating system's protecte
 
 ## 本地数据 / Local data
 
-个人课表、空教室结果、校区、学期和功能开关会缓存在设备上，以减少重复请求。受支持系统上的课程小组件只读取本地课表快照。你可以在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室和节假日缓存、偏好设置及应用管理的提醒任务。
+个人课表、空教室结果、校区、学期和功能开关会缓存在设备上，以减少重复请求。收藏活动时，应用还会在设备上保存该日程的完整快照，使其在来源关闭、失败或删除条目后仍能显示；收藏不会上传或跨设备同步。受支持系统上的课程小组件只读取本地课表快照。你可以取消单条收藏，或在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室和节假日缓存、收藏、偏好设置及应用管理的提醒任务。
 
-Schedules, classroom results, campus, term, and feature preferences are cached on your device to reduce repeated requests. Course widgets on supported systems read only a local schedule snapshot. You can use “Clear local data” in Settings to remove saved credentials, schedule, classroom and holiday caches, preferences, and app-managed reminder tasks.
+Schedules, classroom results, campus, term, and feature preferences are cached on your device to reduce repeated requests. Favoriting an event also stores its complete snapshot on that device so it remains visible if its source is disabled, unavailable, or removes the item; favorites are neither uploaded nor synchronized between devices. Course widgets on supported systems read only a local schedule snapshot. You can remove individual favorites or use “Clear local data” in Settings to remove saved credentials, schedule, classroom and holiday caches, favorites, preferences, and app-managed reminder tasks.
 
 ## 节假日数据 / Holiday data
 
@@ -29,6 +29,10 @@ The app may retrieve Chinese statutory holiday and transfer-workday data from th
 天气功能通过 UAPI 按所选校区对应的海淀或昌平行政区获取今日、明日天气，不读取 GPS 或精确位置。黄历功能通过 UAPI 获取基础农历信息，并可能通过 Timeless API 补充“宜/忌”。Contest DDL 的 GitHub Pages 主源提供学科竞赛、夏令营和黑客松数据，主源不可用时可能访问固定的 HTTP 备用接口。校内竞赛通知由服务器脚本从学校内部网站的公开通知页提取整理，再由固定的校内通知 API 提供。天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松均有独立开关。
 
 Weather uses UAPI to request today and tomorrow for the Haidian or Changping administrative district associated with the selected campus; it does not read GPS or precise location. Almanac data comes from UAPI, with optional `宜`/`忌` advice from the Timeless API. Contest DDL's GitHub Pages source provides competition, summer-camp, and hackathon data, with a fixed HTTP backup when the primary source is unavailable. School competition notices are extracted and organized by a server-side script from public notice pages on the university's internal website, then exposed through the fixed school-notice API. Weather, almanac, competitions, school notices, summer camps, and hackathons each have a separate switch.
+
+你可以选择填写公开的 HTTPS JSON 地址作为自定义日程来源。应用不会向该地址附带教务凭据、Cookie、token、课表、教室或作业数据；地址不得含用户信息、片段、回环地址或私网 IP 字面量，客户端拒绝重定向并限制响应大小与请求频率。该服务器仍可能按照自己的政策处理 IP 地址、请求时间等普通网络元数据。接口格式与约束见[自定义日程接口规范](docs/custom-schedule-api.md)。
+
+You may optionally provide a public HTTPS JSON URL as a custom schedule source. The app sends no academic credentials, cookies, tokens, schedules, classrooms, or assignments to that URL. URLs containing user information, fragments, loopback hosts, or private literal IP addresses are rejected; redirects, oversized responses, and excessive requests are also rejected. The server may still process ordinary network metadata such as IP address and request time under its own policy. See the [custom schedule feed specification](docs/custom-schedule-api.md) for the format and constraints.
 
 对 `http://101.201.29.29/api/contest-events` 和 `http://101.201.29.29/api/contest-notices` 的明文请求仅为发往固定主机、不接受重定向且限制响应大小的无凭据 `GET`；请求不包含 Cookie、token、课表、教室、作业或其他个人数据。卡片中的所有天气、民俗和截止日期信息均仅供参考，请以实际官方信息为准。
 
@@ -48,9 +52,9 @@ The app writes to the system calendar or schedules local course-summary notifica
 
 ## 不收集的数据与第三方元数据 / Data not collected and third-party metadata
 
-本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages 和固定活动 API 可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。
+本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、固定活动 API 和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。
 
-The project operates no application backend and includes no advertising, analytics, or behavioral-tracking SDK. It does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, and the fixed event APIs may process ordinary network metadata such as IP address and request time under their own policies.
+The project operates no application backend and includes no advertising, analytics, or behavioral-tracking SDK. It does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, fixed event APIs, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies.
 
 ## 保留与删除 / Retention and deletion
 

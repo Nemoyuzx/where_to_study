@@ -577,8 +577,8 @@ button:disabled {
 }
 
 .settings-color-dot.school-notice {
-  background: var(--gold-outline);
-  color: var(--gold-outline);
+  background: var(--school-notice-outline);
+  color: var(--school-notice-outline);
 }
 
 .settings-color-dot.public-deadline {
@@ -792,8 +792,12 @@ button:disabled {
 }
 
 .calendar-agenda-list .workday,
-.calendar-agenda-list .school-notice {
+.calendar-agenda-list .workday {
   border-left-color: var(--gold);
+}
+
+.calendar-agenda-list .school-notice {
+  border-left-color: var(--school-notice-outline);
 }
 
 .calendar-agenda-list .assignment {
@@ -1476,6 +1480,26 @@ button:disabled {
   to { transform: translateX(0); }
 }
 
+@keyframes desktop-calendar-enter-next {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes desktop-calendar-enter-previous {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (min-width: 721px) {
+  .calendar-motion-next {
+    animation: desktop-calendar-enter-next 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .calendar-motion-previous {
+    animation: desktop-calendar-enter-previous 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+}
+
 @keyframes calendar-slide-exit-next {
   from { transform: translateX(0); }
   to { transform: translateX(-100%); }
@@ -1810,13 +1834,23 @@ button:disabled {
 
 .time-all-day-cell {
   border-left: 1px solid var(--border-subtle);
+  cursor: pointer;
   flex-wrap: wrap;
   gap: 3px;
   justify-content: center;
 }
 
-.time-all-day-cell span {
+.time-all-day-cell:focus-visible,
+.time-day-lane:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -3px;
+  position: relative;
+  z-index: 3;
+}
+
+.time-all-day-cell > .time-all-day-item {
   background: var(--primary-surface-holiday-badge);
+  border: 0;
   border-radius: 4px;
   color: var(--primary-text-strong);
   font-size: 10px;
@@ -1829,22 +1863,22 @@ button:disabled {
   white-space: nowrap;
 }
 
-.time-all-day-cell span.workday {
+.time-all-day-cell > .time-all-day-item.workday {
   background: var(--gold-surface);
   color: var(--gold-text-muted);
 }
 
-.time-all-day-cell span.assignment {
+.time-all-day-cell > .time-all-day-item.assignment {
   background: var(--busy-surface);
   color: var(--busy-text);
 }
 
-.time-all-day-cell span.school-notice {
-  background: var(--gold-surface-soft);
-  color: var(--gold-text-muted);
+.time-all-day-cell > .time-all-day-item.school-notice {
+  background: var(--school-notice-surface);
+  color: var(--school-notice-text);
 }
 
-.time-all-day-cell span.public-deadline {
+.time-all-day-cell > .time-all-day-item.public-deadline {
   background: var(--other-deadline-surface);
   color: var(--other-deadline-text);
 }
@@ -2419,9 +2453,9 @@ button:disabled {
 }
 
 .month-cell small.month-entry.school-notice {
-  background: var(--gold-surface-soft);
-  border-color: var(--gold);
-  color: var(--gold-text-muted);
+  background: var(--school-notice-surface);
+  border-color: var(--school-notice-border);
+  color: var(--school-notice-text);
 }
 
 .month-cell small.month-entry.public-deadline {
@@ -2542,7 +2576,7 @@ button:disabled {
 }
 
 .mini-month-grid button.deadline-border-school-notice {
-  --deadline-border-outer: var(--gold-outline);
+  --deadline-border-outer: var(--school-notice-outline);
 }
 
 .mini-month-grid button.deadline-border-public-deadline {
@@ -2550,7 +2584,7 @@ button:disabled {
 }
 
 .mini-month-grid button.deadline-border-inner-school-notice {
-  --deadline-border-inner: var(--gold-outline);
+  --deadline-border-inner: var(--school-notice-outline);
 }
 
 .mini-month-grid button.deadline-border-inner-public-deadline {
@@ -2623,9 +2657,9 @@ button:disabled {
 }
 
 .mini-month-grid button em.school-notice {
-  background: var(--gold-surface-soft);
+  background: var(--school-notice-surface);
   bottom: 1px;
-  color: var(--gold-text-muted);
+  color: var(--school-notice-text);
   right: 1px;
   top: auto;
 }
@@ -2709,7 +2743,7 @@ button:disabled {
 }
 
 .popover-supplement-list .school-notice {
-  border-left: 3px solid var(--gold);
+  border-left: 3px solid var(--school-notice-outline);
 }
 
 .popover-supplement-list .public-deadline {
@@ -3346,7 +3380,7 @@ button:disabled {
     font-size: 9px;
   }
 
-  .time-all-day-cell span {
+  .time-all-day-cell > .time-all-day-item {
     font-size: 8px;
     padding: 2px;
   }
@@ -4005,7 +4039,7 @@ button:disabled {
 }
 
 .month-cell.deadline-border-school-notice {
-  --deadline-border-outer: var(--gold-outline);
+  --deadline-border-outer: var(--school-notice-outline);
 }
 
 .month-cell.deadline-border-public-deadline {
@@ -4013,7 +4047,7 @@ button:disabled {
 }
 
 .month-cell.deadline-border-inner-school-notice {
-  --deadline-border-inner: var(--gold-outline);
+  --deadline-border-inner: var(--school-notice-outline);
 }
 
 .month-cell.deadline-border-inner-public-deadline {
@@ -4079,11 +4113,22 @@ button:disabled {
 }
 
 .desktop-month-view .month-week-number {
+  align-items: flex-start;
   color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
   font-size: 9px;
   font-weight: 500;
-  line-height: 1;
+  gap: 2px;
+  line-height: 1.05;
+  margin-right: auto;
   white-space: nowrap;
+}
+
+.desktop-month-view .month-week-number small {
+  color: var(--primary-text);
+  font-size: 8px;
+  font-weight: 650;
 }
 
 .desktop-month-view .month-cell-date-button,
@@ -4413,6 +4458,48 @@ button:disabled {
   text-decoration: none;
 }
 
+.deadline-list .deadline-favorite-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0;
+}
+
+.deadline-event-main {
+  align-items: center;
+  color: inherit;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 10px 4px 10px 12px;
+  text-decoration: none;
+}
+
+.deadline-favorite-button {
+  align-items: center;
+  align-self: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 36px;
+  justify-content: center;
+  margin-right: 5px;
+  padding: 0;
+  width: 36px;
+}
+
+.deadline-favorite-button:hover,
+.deadline-favorite-button:focus-visible {
+  background: var(--surface-muted);
+  color: var(--other-deadline-outline);
+}
+
+.deadline-favorite-button.active {
+  color: var(--busy-border);
+}
+
 .deadline-list > a:hover {
   background: var(--surface-cool);
   border-color: var(--primary-border);
@@ -4466,6 +4553,147 @@ button:disabled {
   font-size: 12px;
   line-height: 1.55;
   margin: 10px 0 0;
+}
+
+.custom-deadline-url-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.favorite-manager-link {
+  justify-content: center;
+}
+
+.calendar-agenda-list .agenda-favorite-row,
+.popover-supplement-list .popover-favorite-row {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0;
+}
+
+.agenda-event-main,
+.popover-event-main {
+  color: inherit;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 6px 10px 12px;
+  text-decoration: none;
+}
+
+.popover-event-main {
+  padding: 8px 4px 8px 9px;
+}
+
+.favorite-manager-page {
+  animation: privacy-dialog-in 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+  background: var(--app-background);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  inset: 0;
+  overflow: hidden;
+  padding: 24px;
+  position: fixed;
+  z-index: 80;
+}
+
+.favorite-manager-page > header {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  padding: 0 0 16px;
+}
+
+.favorite-manager-page > header > button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--primary-text);
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.favorite-manager-page > header span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.favorite-manager-page > header h2 {
+  color: var(--text-primary);
+  font-size: 24px;
+  margin-top: 2px;
+}
+
+.favorite-manager-list {
+  display: grid;
+  gap: 10px;
+  margin: 18px auto 0;
+  max-width: 900px;
+  overflow-y: auto;
+  padding: 0 2px 24px;
+  width: 100%;
+}
+
+.favorite-manager-list > article {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 68px;
+}
+
+.favorite-manager-list a,
+.favorite-manager-item-main {
+  align-items: center;
+  color: inherit;
+  display: grid;
+  gap: 11px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 12px 6px 12px 14px;
+  text-decoration: none;
+}
+
+.favorite-manager-list a > div,
+.favorite-manager-item-main > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.favorite-manager-list span,
+.favorite-manager-list small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.favorite-manager-empty {
+  align-content: center;
+  color: var(--text-secondary);
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  margin: auto;
+  max-width: 520px;
+  text-align: center;
+}
+
+.favorite-manager-empty strong {
+  color: var(--text-primary);
+  font-size: 17px;
+}
+
+.favorite-manager-empty p {
+  line-height: 1.6;
 }
 
 .settings-layout {
@@ -4562,6 +4790,27 @@ input:disabled {
 }
 
 @media (max-width: 720px) {
+  .favorite-manager-page {
+    padding:
+      max(14px, env(safe-area-inset-top))
+      max(14px, env(safe-area-inset-right))
+      max(14px, env(safe-area-inset-bottom))
+      max(14px, env(safe-area-inset-left));
+  }
+
+  .favorite-manager-page > header {
+    padding-bottom: 12px;
+  }
+
+  .favorite-manager-page > header h2 {
+    font-size: 20px;
+  }
+
+  .favorite-manager-list {
+    margin-top: 12px;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+
   .weather-strip-details {
     grid-template-columns: 1fr;
   }

@@ -21,6 +21,7 @@ export struct RootView {
   @Local currentSection: AppSection = AppSection.planner;
   // 初始值按屏幕宽度预估，避免宽屏启动首帧闪 Tabs（BUG-022 修复）。
   @Local containerWidth: number = DeviceState.screenWidthVp();
+  private deadlineRefreshTimer: number = -1;
 
   private sidebarWidth(): number {
     return this.containerWidth < 1000 ? 210 : 230;
@@ -30,6 +31,18 @@ export struct RootView {
     // 与 iOS 端 AppModel.init + RootView.onAppear 对应：引导加载后按需刷新当天教室。
     this.model.launch();
     this.model.refreshClassroomsIfNeeded();
+    if (this.deadlineRefreshTimer < 0) {
+      this.deadlineRefreshTimer = setInterval(() => {
+        this.model.prewarmPublicDeadlines();
+      }, 5 * 60 * 1000 + 1000);
+    }
+  }
+
+  aboutToDisappear(): void {
+    if (this.deadlineRefreshTimer >= 0) {
+      clearInterval(this.deadlineRefreshTimer);
+      this.deadlineRefreshTimer = -1;
+    }
   }
 
   onPageShow(): void {
@@ -38,6 +51,21 @@ export struct RootView {
     this.model.refreshDailyCourseNotificationAuthorization();
     this.model.refreshSystemLanguage();
     this.model.prewarmPublicDeadlines();
+  }
+
+  private handleDesktopSectionKey(event: KeyEvent): boolean {
+    if (!AdaptiveLayoutPolicy.useSidebar(this.containerWidth) ||
+      event.type !== KeyType.Down || event.metaKey === 0) {
+      return false;
+    }
+    const index: number = event.keyCode === 2001 ? 0 :
+      (event.keyCode === 2002 ? 1 : (event.keyCode === 2003 ? 2 : -1));
+    const section: AppSection | undefined = this.sectionAt(index);
+    if (section === undefined) {
+      return false;
+    }
+    this.selectSection(section);
+    return true;
   }
 
   build() {
@@ -54,6 +82,9 @@ export struct RootView {
     .width('100%')
     .height('100%')
     .backgroundColor(AppTheme.background())
+    .focusable(AdaptiveLayoutPolicy.useSidebar(this.containerWidth))
+    .focusOnTouch(AdaptiveLayoutPolicy.useSidebar(this.containerWidth))
+    .onKeyEvent((event: KeyEvent): boolean => this.handleDesktopSectionKey(event))
     .onAreaChange((oldArea: Area, newArea: Area) => {
       this.containerWidth = Number(newArea.width);
     })

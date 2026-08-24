@@ -348,16 +348,25 @@ test('calendar chrome is compact and all-day events stay above the timeline', ()
   )
 })
 
-test('desktop calendar supplements are range-cached and rendered in every calendar view', () => {
+test('desktop calendar supplements are year-preheated, cached, and rendered in every view', () => {
   assert.match(appSource, /command\('fetch_assignment_calendar'/)
   assert.match(appSource, /command\('fetch_deadline_calendar'/)
-  assert.match(appSource, /calendarSupplementRange/)
+  assert.match(appSource, /const calendarSupplementYear = dateFromString\(calendarDate\)\.getFullYear\(\)/)
+  assert.match(appSource, /`\$\{calendarSupplementYear\}-01-01`/)
+  assert.match(appSource, /`\$\{calendarSupplementYear\}-12-31`/)
+  assert.doesNotMatch(appSource, /if \(activePage !== 'calendar' \|\| !settingsLoaded\) return[\s\S]{0,320}loadCalendarSupplements/)
   assert.match(appSource, /requestedCalendarSupplementRanges/)
   assert.match(tauriAssignmentSource, /fetch_assignment_calendar/)
   assert.match(tauriAssignmentSource, /cached_items\(account_scope\)/)
   assert.match(tauriDeadlineSource, /SOURCE_CACHE_TTL/)
   assert.match(tauriDeadlineSource, /fetch_deadline_calendar/)
   assert.match(appSource, /className="time-all-day-overflow"/)
+  assert.match(appSource, /className=\{`time-all-day-item \$\{item\.type\}`\}/)
+  assert.match(appSource, /setCalendarAgendaDialog\(\{ date: dateString, sourceView: calendarView \}\)/)
+  assert.match(
+    appSource,
+    /const visibleAllDayItems = visibleCalendarDays\.reduce\([\s\S]*allDayEntriesFor\(dateString\)\.length/,
+  )
   assert.match(appSource, /calendar-agenda-dialog/)
   assert.ok(appSource.includes('className={`month-entry ${entry.type}`}'))
   assert.match(appSource, /className="school-notice"/)
@@ -370,7 +379,7 @@ test('desktop calendar supplements are range-cached and rendered in every calend
   assert.match(appCss, /\.month-cell small\.month-entry\.assignment/)
   assert.match(appCss, /\.month-cell small\.month-entry\.school-notice/)
   assert.match(appCss, /\.month-cell small\.month-entry\.public-deadline/)
-  assert.match(appCss, /\.time-all-day-cell span\.public-deadline/)
+  assert.match(appCss, /\.time-all-day-cell > \.time-all-day-item\.public-deadline/)
   assert.match(appCss, /\.calendar-agenda-list \.public-deadline/)
   assert.match(appCss, /\.popover-supplement-list/)
   assert.match(appCss, /\.popover-supplement-list \.public-deadline/)
@@ -471,6 +480,10 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
   assert.match(appleSettingsSource, /Toggle\([\s\S]*\.toggleStyle\(\.switch\)/)
   assert.match(appleSettingsSource, /ForEach\(1 \.\.\. TodayCourseWidgetData\.maximumCourseLimit/)
   assert.match(appleSettingsSource, /Picker\("预览尺寸"/)
+  assert.ok(
+    (appleSettingsSource.match(/\.pickerStyle\(\.segmented\)/g) || []).length >= 4,
+    'Apple campus, language, widget count, and preview size must all use segmented controls',
+  )
 
   assert.match(
     appleTimelineSource,
@@ -511,8 +524,11 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   assert.match(androidAgendaSection, /calendar_day_week_agenda_content/)
   assert.match(
     androidAgendaSection,
-    /visibility = if \(sessionState\.dayWeekAgendaExpanded\) View\.VISIBLE else View\.GONE/,
+    /visibility = if \(TeachingCalendarLogic\.shouldShowDayWeekCourseContent\(/,
   )
+  assert.match(androidAgendaSection, /val indicator = ImageView\(activity\)/)
+  assert.match(androidAgendaSection, /setImageResource\(R\.drawable\.ic_chevron_down\)/)
+  assert.match(androidAgendaSection, /TransitionManager\.beginDelayedTransition/)
   assert.match(androidAgendaSection, /addView\(compactCourseArea\(selectedDay\.date, compact\)\)/)
   assert.ok(
     androidAgendaSection.indexOf('addView(allDayStrip(days, compact))') >
@@ -535,7 +551,7 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
     /fun agendaVisibleItemCount\([\s\S]*if \(compactWeek\) 1 else 3/,
   )
   assert.match(androidTimelineSource, /if \(compact\) return 56/)
-  assert.match(androidCalendarSource, /const val bottomNavigationContentInsetDp = 104/)
+  assert.match(androidCalendarSource, /const val bottomNavigationContentInsetDp = 78/)
   assert.match(
     androidCalendarSource,
     /if \(usesBottomNavigation\) bottomNavigationContentInsetDp else 0/,
@@ -547,7 +563,7 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   assert.match(harmonyTimelineSection, /timelineCourseSummaryDate\(renderMode, renderDate\)/)
   assert.match(
     harmonyTimelineSection,
-    /if \(this\.courseSectionExpanded\) \{[\s\S]*this\.selectedDateCourses/,
+    /if \(this\.courseSectionExpanded && this\.coursesOn\([\s\S]*this\.selectedDateCourses/,
   )
   assert.ok(
     harmonyTimelineSection.indexOf('this.allDayItems(renderMode, renderDate, interactive)') >
@@ -610,6 +626,8 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
   assert.match(harmonySettingsSource, /'校内竞赛通知'[\s\S]*AppTheme\.schoolNotice\(\), true/)
   assert.match(harmonySettingsSource, /'学科竞赛 DDL'[\s\S]*AppTheme\.publicDeadline\(\), true/)
   assert.match(harmonySettingsSource, /Toggle\(\{ type: ToggleType\.Switch, isOn: isOn \}\)/)
+  assert.doesNotMatch(harmonySettingsSource, /\bSelect\(/)
+  assert.match(harmonySettingsSource, /segmentedOptions\(labels: string\[\]/)
 })
 
 test('desktop calendar supplement commands are exposed by the Tauri capability manifest', () => {
@@ -619,6 +637,7 @@ test('desktop calendar supplement commands are exposed by the Tauri capability m
     'fetch_assignments',
     'fetch_deadline_calendar',
     'fetch_assignment_calendar',
+    'fetch_custom_deadline_calendar',
   ]
 
   for (const command of commands) {

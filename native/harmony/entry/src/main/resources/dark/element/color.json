@@ -82,15 +82,27 @@
     },
     {
       "name": "app_assignment",
-      "value": "#64A3FF"
+      "value": "#FFC14D"
+    },
+    {
+      "name": "app_assignment_surface",
+      "value": "#33FFC14D"
     },
     {
       "name": "app_school_notice",
-      "value": "#FF9A9D"
+      "value": "#B7A8FF"
+    },
+    {
+      "name": "app_school_notice_surface",
+      "value": "#33B7A8FF"
     },
     {
       "name": "app_public_deadline",
-      "value": "#FFB45C"
+      "value": "#68D5E5"
+    },
+    {
+      "name": "app_public_deadline_surface",
+      "value": "#3368D5E5"
     },
     {
       "name": "app_primary_dark",

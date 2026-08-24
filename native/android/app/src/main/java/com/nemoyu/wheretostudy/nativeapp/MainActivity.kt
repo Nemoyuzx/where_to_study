@@ -4,6 +4,7 @@ import android.animation.ValueAnimator
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
@@ -24,6 +25,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.window.OnBackInvokedDispatcher
 import androidx.core.util.Consumer
 import androidx.window.java.layout.WindowInfoTrackerCallbackAdapter
 import androidx.window.layout.FoldingFeature
@@ -50,6 +52,8 @@ class MainActivity : Activity() {
         SETTINGS("设置", R.id.navigation_settings, R.id.page_settings, R.drawable.ic_nav_settings),
     }
 
+    private enum class SettingsRoute { MAIN, FAVORITES }
+
     private lateinit var content: FrameLayout
     private lateinit var adaptiveRoot: FrameLayout
     private val navigationViews = mutableMapOf<Destination, TextView>()
@@ -67,6 +71,7 @@ class MainActivity : Activity() {
     private val calendarDailyInfoRepository by lazy {
         CalendarDailyInfoRepository(
             assignmentClient = UCloudAssignmentClient(credentialStore),
+            preferences = preferences,
         )
     }
     private val holidayRepositoryDelegate = lazy {
@@ -78,6 +83,7 @@ class MainActivity : Activity() {
     }
     private val systemCalendarImporter by systemCalendarImporterDelegate
     private var selectedDestination = Destination.PLANNER
+    private var settingsRoute = SettingsRoute.MAIN
     private var calendarImportInFlight = false
     private var calendarPermissionRequestPending = false
     private var calendarImportToken: Long? = null
@@ -134,6 +140,10 @@ class MainActivity : Activity() {
             ?.getString(SELECTED_DESTINATION_KEY)
             ?.let { saved -> Destination.entries.firstOrNull { it.name == saved } }
             ?: Destination.PLANNER
+        settingsRoute = savedInstanceState
+            ?.getString(SETTINGS_ROUTE_KEY)
+            ?.let { saved -> SettingsRoute.entries.firstOrNull { it.name == saved } }
+            ?: SettingsRoute.MAIN
         teachingCalendarSessionState = TeachingCalendarSessionState(
             selectedDateMillis = savedInstanceState
                 ?.getLong(TEACHING_CALENDAR_DATE_KEY, System.currentTimeMillis())
@@ -166,6 +176,13 @@ class MainActivity : Activity() {
         }
         applySystemInsets(adaptiveRoot)
         setContentView(adaptiveRoot)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+            ) {
+                if (!handleAppBack()) finishAfterTransition()
+            }
+        }
         configureSystemBarIcons()
         prewarmPublicDeadlinesIfEnabled()
         updateAdaptiveLayout(force = true)
@@ -424,6 +441,7 @@ class MainActivity : Activity() {
             }
             setOnClickListener {
                 performControlHaptic(it)
+                if (destination == Destination.SETTINGS) settingsRoute = SettingsRoute.MAIN
                 navigate(destination)
             }
             layoutParams = if (compact) {
@@ -571,6 +589,7 @@ class MainActivity : Activity() {
 
     private fun navigate(destination: Destination) {
         selectedDestination = destination
+        if (destination == Destination.SETTINGS) prewarmPublicDeadlinesIfEnabled()
         if (destination == Destination.SETTINGS) {
             window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         } else {
@@ -615,15 +634,24 @@ class MainActivity : Activity() {
                 teachingCalendarSessionState,
                 currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
-            Destination.SETTINGS -> SettingsPage(
-                this,
-                credentialStore,
-                preferences,
-                scheduleRepository,
-                classroomRepository,
-                currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
-                currentLayoutSpec?.usesBottomNavigation == true,
-            ).build()
+            Destination.SETTINGS -> if (settingsRoute == SettingsRoute.FAVORITES) {
+                FavoriteDeadlinesPage(
+                    activity = this,
+                    preferences = preferences,
+                    availableWidthDp = currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
+                    usesBottomNavigation = currentLayoutSpec?.usesBottomNavigation == true,
+                ).build()
+            } else {
+                SettingsPage(
+                    this,
+                    credentialStore,
+                    preferences,
+                    scheduleRepository,
+                    classroomRepository,
+                    currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
+                    currentLayoutSpec?.usesBottomNavigation == true,
+                ).build()
+            }
         }
         page.id = destination.pageViewID
         UiText.localizeTree(page)
@@ -639,6 +667,30 @@ class MainActivity : Activity() {
 
     fun refreshCurrentPage() {
         navigate(selectedDestination)
+    }
+
+    fun openFavoriteManagement() {
+        settingsRoute = SettingsRoute.FAVORITES
+        navigate(Destination.SETTINGS)
+    }
+
+    fun closeFavoriteManagement() {
+        settingsRoute = SettingsRoute.MAIN
+        navigate(Destination.SETTINGS)
+    }
+
+    @SuppressLint("GestureBackNavigation")
+    @Deprecated("Legacy fallback below API 33; predictive back is registered in onCreate")
+    override fun onBackPressed() {
+        if (!handleAppBack()) super.onBackPressed()
+    }
+
+    private fun handleAppBack(): Boolean {
+        if (selectedDestination != Destination.SETTINGS ||
+            settingsRoute != SettingsRoute.FAVORITES
+        ) return false
+        closeFavoriteManagement()
+        return true
     }
 
     fun updateAppLanguage(language: AppLanguage) {
@@ -658,6 +710,18 @@ class MainActivity : Activity() {
     fun prewarmPublicDeadlinesIfEnabled() {
         if (!preferences.hasEnabledPublicDeadlines) return
         calendarDailyInfoRepository.prewarmDeadlines()
+    }
+
+    fun validateCustomDeadlineFeed(
+        sourceURL: String,
+        onComplete: (Result<CustomDeadlineFeedMetadata>) -> Unit,
+    ) {
+        calendarDailyInfoRepository.validateCustomFeed(sourceURL, onComplete)
+    }
+
+    fun reloadDeadlineSettings() {
+        calendarDailyInfoRepository.reloadDeadlineSettings()
+        if (selectedDestination == Destination.CALENDAR) refreshCurrentPage()
     }
 
     fun performControlHaptic(source: View? = null) {
@@ -791,6 +855,7 @@ class MainActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString(SELECTED_DESTINATION_KEY, selectedDestination.name)
+        outState.putString(SETTINGS_ROUTE_KEY, settingsRoute.name)
         outState.putBoolean(NAVIGATION_RAIL_COLLAPSED_KEY, navigationRailCollapsed)
         outState.putBoolean(
             CALENDAR_PERMISSION_PENDING_KEY,
@@ -1022,6 +1087,7 @@ class MainActivity : Activity() {
         const val NAVIGATION_RAIL_ANIMATION_MILLIS = 240L
         const val NAVIGATION_RAIL_COLLAPSED_KEY = "navigation_rail_collapsed"
         const val SELECTED_DESTINATION_KEY = "selected_destination"
+        const val SETTINGS_ROUTE_KEY = "settings_route"
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"
         const val CALENDAR_IMPORT_TOKEN_KEY = "calendar_import_token"

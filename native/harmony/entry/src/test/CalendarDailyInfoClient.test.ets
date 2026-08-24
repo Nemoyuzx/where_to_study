@@ -3,10 +3,12 @@ import {
   AlmanacInfo, AlmanacResponseParser, AssignmentDeadlineItem,
   AssignmentDeadlineResponseParser, PublicDeadlineItem, PublicDeadlineKind,
   PublicDeadlineResponseParser, CalendarDailyInfoClient, CalendarDailyInfoSources,
-  FixedPublicJsonFetching, PublicDeadlineSnapshot
+  CustomDeadlineURLPolicy, FavoriteDeadlineCodec, FixedPublicJsonFetching,
+  PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../main/ets/net/CalendarDailyInfoClient';
 import { UCloudAssignmentClient } from '../main/ets/net/UCloudAssignmentClient';
 import { Credentials } from '../main/ets/store/CredentialStore';
+import { customDeadlineFeedText } from './fixtures/custom-deadline-feed';
 
 export default function calendarDailyInfoClientTest() {
   describe('CalendarDailyInfoClientTest', () => {
@@ -184,12 +186,75 @@ export default function calendarDailyInfoClientTest() {
       expect(contestParses).assertEqual(2);
       expect(schoolParses).assertEqual(2);
     });
+
+    it('custom_feed_and_favorites_follow_the_shared_v1_contract', 0, () => {
+      const index: Map<string, PublicDeadlineItem[]> =
+        PublicDeadlineResponseParser.parseCustomIndex(customDeadlineFeedText);
+      const customItems: PublicDeadlineItem[] = index.get('2026-09-18') ?? [];
+      expect(customItems.length).assertEqual(1);
+      const item: PublicDeadlineItem = customItems[0];
+      expect(item.kind).assertEqual(PublicDeadlineKind.custom);
+      expect(item.source).assertEqual(PublicDeadlineSource.custom);
+      const decoded: PublicDeadlineItem[] = FavoriteDeadlineCodec.decode(
+        FavoriteDeadlineCodec.encode([item]));
+      expect(decoded.length).assertEqual(1);
+      expect(decoded[0].id).assertEqual('custom:example-registration');
+      expect(decoded[0].sourceName).assertEqual('示例自定义日程');
+      expect(decoded[0].sourceHomepage).assertEqual('https://example.com/calendar');
+      expect(CustomDeadlineURLPolicy.allows('https://calendar.example.com/feed.json')).assertTrue();
+      expect(CustomDeadlineURLPolicy.allows('http://calendar.example.com/feed.json')).assertFalse();
+      expect(CustomDeadlineURLPolicy.allows('https://127.0.0.1/feed.json')).assertFalse();
+    });
+
+    it('custom_feed_rejects_invalid_envelopes_and_skips_unsafe_entries', 0, () => {
+      const invalidPayloads: string[] = [
+        '{"version":1,"source":"Missing items"}',
+        '{"version":1,"source":"Bad homepage","homepage":"http://example.com","items":[]}',
+        '{"version":1,"source":"Bad update","updated_at":"2026-08-24","items":[]}',
+        '{"version":1,"source":"Extra key","items":[],"unknown":true}'
+      ];
+      for (const payload of invalidPayloads) {
+        let threw: boolean = false;
+        try {
+          PublicDeadlineResponseParser.parseCustomIndex(payload);
+        } catch (e) {
+          threw = true;
+        }
+        expect(threw).assertTrue();
+      }
+      const oversizedOrganizer: string = 'x'.repeat(201);
+      const entryPayload: string = '{"version":1,"source":"Example","items":[' +
+        '{"id":"unsafe","name":"Unsafe","event_type":"custom",' +
+        '"primary_deadline":"2026-09-18T12:00:00+08:00",' +
+        '"official_url":"http://example.com"},' +
+        '{"id":"organizer","name":"Organizer","event_type":"custom",' +
+        '"primary_deadline":"2026-09-18T13:00:00+08:00",' +
+        '"organizer":"' + oversizedOrganizer + '"}]}';
+      expect(PublicDeadlineResponseParser.parseCustomIndex(entryPayload).size).assertEqual(0);
+    });
+
+    it('custom_feed_dates_share_one_in_flight_request_and_then_use_stale_cache', 0, async () => {
+      const transport: CountingDeadlineTransport = new CountingDeadlineTransport();
+      const client: CalendarDailyInfoClient = new CalendarDailyInfoClient(transport);
+      const url: string = 'https://calendar.example.com/feed.json';
+      const results: PublicDeadlineSnapshot[] = await Promise.all([
+        client.fetchCustomDeadlines(url, '2026-09-18'),
+        client.fetchCustomDeadlines(url, '2026-10-08')
+      ]);
+      expect(transport.customCalls).assertEqual(1);
+      expect(results[0].items[0].id).assertEqual('custom:example-registration');
+      expect(results[1].items[0].id).assertEqual('custom:example-competition');
+
+      await client.fetchCustomDeadlines(url, '2026-09-18');
+      expect(transport.customCalls).assertEqual(1);
+    });
   });
 }
 
 class CountingDeadlineTransport implements FixedPublicJsonFetching {
   primaryCalls: number = 0;
   schoolCalls: number = 0;
+  customCalls: number = 0;
 
   async fetch(url: string, scheme: string, host: string, maximumBytes: number): Promise<string> {
     if (url === CalendarDailyInfoSources.deadlinePrimary) {
@@ -206,5 +271,10 @@ class CountingDeadlineTransport implements FixedPublicJsonFetching {
       return '{"items":[]}';
     }
     throw new Error('unexpected URL');
+  }
+
+  async fetchCustom(url: string, maximumBytes: number): Promise<string> {
+    this.customCalls++;
+    return customDeadlineFeedText;
   }
 }

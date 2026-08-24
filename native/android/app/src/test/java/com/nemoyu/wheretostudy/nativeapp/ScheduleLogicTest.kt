@@ -631,6 +631,32 @@ class ScheduleLogicTest {
     }
 
     @Test
+    fun monthSelectionTransitionsTowardTheTappedAdjacentMonth() {
+        assertEquals(
+            -1,
+            TeachingCalendarLogic.monthSelectionTransitionDirection(2026, 5, 2026, 4),
+        )
+        assertEquals(
+            1,
+            TeachingCalendarLogic.monthSelectionTransitionDirection(2026, 11, 2027, 0),
+        )
+        assertEquals(
+            0,
+            TeachingCalendarLogic.monthSelectionTransitionDirection(2026, 5, 2026, 5),
+        )
+    }
+
+    @Test
+    fun emptyCourseSummaryNeverAddsExpandableHeight() {
+        assertFalse(TeachingCalendarLogic.shouldShowDayWeekCourseContent(0, expanded = false))
+        assertFalse(TeachingCalendarLogic.shouldShowDayWeekCourseContent(0, expanded = true))
+        assertFalse(TeachingCalendarLogic.shouldShowDayWeekCourseContent(3, expanded = false))
+        assertTrue(TeachingCalendarLogic.shouldShowDayWeekCourseContent(3, expanded = true))
+        assertEquals(34, TeachingCalendarLogic.compactAgendaHeaderHeightDp)
+        assertEquals(36, TeachingCalendarLogic.expandedAgendaHeaderHeightDp)
+    }
+
+    @Test
     fun monthSheetPositionTracksTheFingerAcrossThreeContinuousAnchors() {
         assertEquals(0f, TeachingCalendarLogic.monthSheetDragPosition(40f, 0f), 0.001f)
         assertEquals(0.5f, TeachingCalendarLogic.monthSheetDragPosition(-108f, 0f), 0.001f)
@@ -808,7 +834,7 @@ class ScheduleLogicTest {
 
     @Test
     fun sideNavigationCalendarDoesNotReservePhoneNavigationSpace() {
-        assertEquals(104, TeachingCalendarLogic.calendarContentBottomInsetDp(true))
+        assertEquals(78, TeachingCalendarLogic.calendarContentBottomInsetDp(true))
         assertEquals(0, TeachingCalendarLogic.calendarContentBottomInsetDp(false))
     }
 

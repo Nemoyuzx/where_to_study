@@ -222,6 +222,40 @@ enum ScheduleLogic {
         return days / 7 + 1
     }
 
+    static func activeTeachingWeekNumber(
+        on date: Date,
+        termStart: Date,
+        courses: [Course],
+        calendar: Calendar = .shanghai
+    ) -> Int? {
+        guard let lastTeachingWeek = courses.flatMap(\.weekNumbers).max(), lastTeachingWeek > 0 else {
+            return nil
+        }
+        let week = weekNumber(on: date, termStart: termStart, calendar: calendar)
+        return (1 ... lastTeachingWeek).contains(week) ? week : nil
+    }
+
+    static func coursesByDate(
+        for dates: [Date],
+        termStart: Date,
+        courses: [Course],
+        calendar: Calendar = .shanghai
+    ) -> [String: [Course]] {
+        let coursesByWeekday = Dictionary(grouping: courses, by: \.weekday)
+        return dates.reduce(into: [String: [Course]]()) { result, date in
+            let week = weekNumber(on: date, termStart: termStart, calendar: calendar)
+            let weekday = ((calendar.component(.weekday, from: date) + 5) % 7) + 1
+            let matching = (coursesByWeekday[weekday] ?? [])
+                .filter { $0.weekNumbers.contains(week) }
+                .sorted { lhs, rhs in
+                    lhs.startSlot == rhs.startSlot
+                        ? lhs.name < rhs.name
+                        : lhs.startSlot < rhs.startSlot
+                }
+            result[StrictContractDateParser.string(from: date, calendar: calendar)] = matching
+        }
+    }
+
     static func applyingExamWeeks(to courses: [Course]) -> [Course] {
         let examWeeks = examWeeks(in: courses)
         return courses.map { course in

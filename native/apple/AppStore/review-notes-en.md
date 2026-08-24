@@ -1,6 +1,6 @@
 # App Review Notes (English)
 
-Builds prepared for submission: iOS `0.2.4 (65)` and macOS `0.2.4 (65)`. Please review the latest uploaded build for each platform.
+Builds prepared for submission: iOS `0.2.5 (66)` and macOS `0.2.5 (66)`. Please review the latest uploaded build for each platform.
 
 Where To Study is an independent, unofficial schedule and empty-classroom client for students of Beijing University of Posts and Telecommunications. It is not operated by or affiliated with the university. The app has no purchases, subscriptions, advertising, analytics, or tracking SDKs.
 
@@ -13,8 +13,9 @@ Where To Study is an independent, unofficial schedule and empty-classroom client
 5. On iPhone, select a date in Month view and keep swiping upward. After the sheet reaches Details Raised, it continues scrolling through assignments, almanac, and event deadlines.
 6. Select Import to System Calendar. The app displays a simulated result without requesting Calendar access or writing events.
 7. In Settings, review the bilingual reference notice and the separate Competition and School Notice switches, then toggle the 07:30 course summary. Sample mode requests no Notification access.
-8. On iOS or macOS, add the Today’s Courses widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path.
-9. Return to Settings and select Return to Live Data to leave sample mode.
+8. Favorite an event with the star at the right side of its details, then open the independent Favorite Management page in Settings and remove it. Favorites stay only on the device.
+9. On iOS or macOS, add the Today’s Courses widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path.
+10. Return to Settings and select Return to Live Data to leave sample mode.
 
 Sample mode uses only fictional courses, classrooms, and holiday data bundled with the app. It does not connect to the school service or access/modify Keychain credentials, live user caches, Calendar, or Notifications. On iOS and macOS it writes only the fictional schedule to the Widget App Group; leaving sample mode immediately restores the locally cached live schedule snapshot.
 
@@ -24,7 +25,7 @@ Live mode requires the user’s own BUPT academic-system credentials. Credential
 
 Calendar import and the optional 07:30 daily course summary are initiated by the user. All other features remain available if Calendar or Notification permission is denied.
 
-Teaching-calendar date details also retrieve public weather, almanac, and event-deadline data. Competition data comes from Contest DDL. School competition notices are separately extracted by a server-side script from public pages on the university's internal website and exposed through a fixed public endpoint. No academic credentials are attached to those requests. The assignment card uses the university's HTTPS authentication and UCloud APIs only after the user has saved credentials. Authentication tickets, cookies, access tokens, and assignment data are not persisted to disk.
+Teaching-calendar date details also retrieve public weather, almanac, and event-deadline data. Competition data comes from Contest DDL. School competition notices are separately extracted by a server-side script from public pages on the university's internal website and exposed through a fixed public endpoint. Users may also choose a public HTTPS JSON custom schedule feed. These requests carry no academic credentials, cookies, or personal data and reject redirects. Favorited events are complete local snapshots and are neither uploaded nor synchronized. The assignment card uses the university's HTTPS authentication and UCloud APIs only after the user has saved credentials. Authentication tickets, cookies, access tokens, and assignment data are not persisted to disk.
 
 ## macOS behavior
 

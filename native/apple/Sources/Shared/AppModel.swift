@@ -112,6 +112,14 @@ enum AppSection: String, CaseIterable, Identifiable {
     var accessibilityIdentifier: String {
         "navigation.\(rawValue)"
     }
+
+    var keyboardShortcutDigit: Character {
+        switch self {
+        case .planner: "1"
+        case .calendar: "2"
+        case .settings: "3"
+        }
+    }
 }
 
 struct HolidayLoadState {
@@ -175,6 +183,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var schoolContestNoticesEnabled: Bool
     @Published private(set) var summerCampDeadlinesEnabled: Bool
     @Published private(set) var hackathonDeadlinesEnabled: Bool
+    @Published private(set) var customDeadlinesEnabled: Bool
+    @Published var customDeadlinesURL: String
+    @Published private(set) var savedCustomDeadlinesURL: String
+    @Published private(set) var favoriteDeadlines: [PublicDeadlineItem]
     @Published private(set) var appLanguage: AppLanguage
 
     let slots = SlotMetadata.defaults
@@ -260,6 +272,22 @@ final class AppModel: ObservableObject {
         hackathonDeadlinesEnabled = defaults.object(
             forKey: Self.hackathonDeadlinesEnabledKey
         ) as? Bool ?? true
+        if runtimeMode.isSample {
+            customDeadlinesEnabled = false
+            customDeadlinesURL = ""
+            savedCustomDeadlinesURL = ""
+            favoriteDeadlines = []
+        } else {
+            customDeadlinesEnabled = defaults.object(
+                forKey: Self.customDeadlinesEnabledKey
+            ) as? Bool ?? false
+            let storedCustomDeadlinesURL = defaults.string(
+                forKey: Self.customDeadlinesURLKey
+            ) ?? ""
+            customDeadlinesURL = storedCustomDeadlinesURL
+            savedCustomDeadlinesURL = storedCustomDeadlinesURL
+            favoriteDeadlines = Self.loadFavoriteDeadlines(defaults: defaults)
+        }
         loadCredentials()
         loadSchedule()
         loadClassrooms()
@@ -417,6 +445,10 @@ final class AppModel: ObservableObject {
         classroomStatusMessage = "正在展示内置示例空教室，未连接北邮服务"
         calendarImportStatusMessage = ""
         dailyCourseNotificationStatusMessage = ""
+        customDeadlinesEnabled = false
+        customDeadlinesURL = ""
+        savedCustomDeadlinesURL = ""
+        favoriteDeadlines = []
         synchronizeWidgetSchedule()
     }
 
@@ -448,6 +480,12 @@ final class AppModel: ObservableObject {
         widgetCourseLimit = savedWidgetCourseLimit == 0
             ? TodayCourseWidgetData.Preferences.default.courseLimit
             : min(max(savedWidgetCourseLimit, 1), TodayCourseWidgetData.maximumCourseLimit)
+        customDeadlinesEnabled = defaults.object(
+            forKey: Self.customDeadlinesEnabledKey
+        ) as? Bool ?? false
+        customDeadlinesURL = defaults.string(forKey: Self.customDeadlinesURLKey) ?? ""
+        savedCustomDeadlinesURL = customDeadlinesURL
+        favoriteDeadlines = Self.loadFavoriteDeadlines(defaults: defaults)
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         loadCredentials()
@@ -618,6 +656,89 @@ final class AppModel: ObservableObject {
         defaults.set(enabled, forKey: Self.hackathonDeadlinesEnabledKey)
     }
 
+    func setCustomDeadlinesEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        customDeadlinesEnabled = enabled
+        defaults.set(enabled, forKey: Self.customDeadlinesEnabledKey)
+    }
+
+    @discardableResult
+    func saveCustomDeadlineSettings() throws -> URL? {
+        guard !isSampleMode else {
+            throw CalendarDeadlineError.service("示例模式不会保存自定义日程设置。")
+        }
+        let normalized = customDeadlinesURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.isEmpty {
+            guard !customDeadlinesEnabled else {
+                throw CalendarDeadlineError.service("请先填写自定义日程 HTTPS 地址。")
+            }
+            customDeadlinesURL = ""
+            savedCustomDeadlinesURL = ""
+            defaults.removeObject(forKey: Self.customDeadlinesURLKey)
+            return nil
+        }
+        let url = try CustomDeadlineFeedURLValidator.validatedURL(normalized)
+        customDeadlinesURL = url.absoluteString
+        savedCustomDeadlinesURL = customDeadlinesURL
+        defaults.set(customDeadlinesURL, forKey: Self.customDeadlinesURLKey)
+        defaults.set(customDeadlinesEnabled, forKey: Self.customDeadlinesEnabledKey)
+        return url
+    }
+
+    var customDeadlineSourceURL: URL? {
+        guard customDeadlinesEnabled else { return nil }
+        return try? CustomDeadlineFeedURLValidator.validatedURL(savedCustomDeadlinesURL)
+    }
+
+    func isFavorite(_ item: PublicDeadlineItem) -> Bool {
+        favoriteDeadlines.contains { $0.favoriteID == item.favoriteID }
+    }
+
+    func setFavorite(_ item: PublicDeadlineItem, isFavorite: Bool) {
+        let key = item.favoriteID
+        var updated = favoriteDeadlines.filter { $0.favoriteID != key }
+        if isFavorite {
+            updated.insert(item, at: 0)
+            updated = Array(updated.prefix(Self.maximumFavoriteDeadlines))
+        }
+        favoriteDeadlines = updated
+        guard !isSampleMode else { return }
+        persistFavoriteDeadlines()
+    }
+
+    func favoriteDeadlineItems(on date: Date) -> [PublicDeadlineItem] {
+        favoriteDeadlineItems(on: StrictContractDateParser.string(from: date))
+    }
+
+    func favoriteDeadlineItems(on date: String) -> [PublicDeadlineItem] {
+        favoriteDeadlines.filter { String($0.deadline.prefix(10)) == date }
+    }
+
+    func isDeadlineEnabled(_ item: PublicDeadlineItem) -> Bool {
+        CalendarDeadlinePresentation.isVisible(
+            item,
+            competitionEnabled: competitionDeadlinesEnabled,
+            schoolNoticeEnabled: schoolContestNoticesEnabled,
+            summerCampEnabled: summerCampDeadlinesEnabled,
+            hackathonEnabled: hackathonDeadlinesEnabled,
+            customEnabled: customDeadlinesEnabled
+        )
+    }
+
+    func visibleDeadlineItems(
+        liveItems: [PublicDeadlineItem],
+        on date: String
+    ) -> [PublicDeadlineItem] {
+        var seen = Set<String>()
+        var result = [PublicDeadlineItem]()
+        for item in liveItems.filter(isDeadlineEnabled) + favoriteDeadlineItems(on: date) {
+            if seen.insert(item.favoriteID).inserted {
+                result.append(item)
+            }
+        }
+        return result.sorted { ($0.deadline, $0.name) < ($1.deadline, $1.name) }
+    }
+
     func setAppLanguage(_ language: AppLanguage) {
         appLanguage = language
         defaults.set(language.rawValue, forKey: AppLocalization.defaultsKey)
@@ -632,9 +753,17 @@ final class AppModel: ObservableObject {
         String(format: localized(key), locale: appLanguage.locale, arguments: arguments)
     }
 
-    var hasEnabledPublicDeadlines: Bool {
+    var hasEnabledBuiltInPublicDeadlines: Bool {
         competitionDeadlinesEnabled || schoolContestNoticesEnabled
             || summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
+    }
+
+    var hasEnabledPublicDeadlines: Bool {
+        hasEnabledBuiltInPublicDeadlines || customDeadlineSourceURL != nil
+    }
+
+    var hasCalendarDeadlinesToDisplay: Bool {
+        hasEnabledPublicDeadlines || !favoriteDeadlines.isEmpty
     }
 
     func refreshDailyCourseNotificationAuthorization() {
@@ -703,6 +832,9 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: Self.schoolContestNoticesEnabledKey)
         defaults.removeObject(forKey: Self.summerCampDeadlinesEnabledKey)
         defaults.removeObject(forKey: Self.hackathonDeadlinesEnabledKey)
+        defaults.removeObject(forKey: Self.customDeadlinesEnabledKey)
+        defaults.removeObject(forKey: Self.customDeadlinesURLKey)
+        defaults.removeObject(forKey: Self.favoriteDeadlinesKey)
         defaults.removeObject(forKey: AppLocalization.defaultsKey)
         campusID = "01"
         queryCampusID = "01"
@@ -718,6 +850,10 @@ final class AppModel: ObservableObject {
         schoolContestNoticesEnabled = true
         summerCampDeadlinesEnabled = true
         hackathonDeadlinesEnabled = true
+        customDeadlinesEnabled = false
+        customDeadlinesURL = ""
+        savedCustomDeadlinesURL = ""
+        favoriteDeadlines = []
         appLanguage = .system
         selectedBuildings.removeAll()
         usePersonalSchedule = true
@@ -1215,6 +1351,24 @@ final class AppModel: ObservableObject {
     private static let schoolContestNoticesEnabledKey = "schoolContestNoticesEnabled"
     private static let summerCampDeadlinesEnabledKey = "summerCampDeadlinesEnabled"
     private static let hackathonDeadlinesEnabledKey = "hackathonDeadlinesEnabled"
+    private static let customDeadlinesEnabledKey = "customDeadlinesEnabled"
+    private static let customDeadlinesURLKey = "customDeadlinesURL"
+    private static let favoriteDeadlinesKey = "favoriteDeadlines.v1"
+    static let maximumFavoriteDeadlines = 500
+
+    private static func loadFavoriteDeadlines(defaults: UserDefaults) -> [PublicDeadlineItem] {
+        guard let data = defaults.data(forKey: favoriteDeadlinesKey),
+              let decoded = try? JSONDecoder().decode([PublicDeadlineItem].self, from: data)
+        else { return [] }
+        var seen = Set<String>()
+        return Array(decoded.filter { seen.insert($0.favoriteID).inserted }
+            .prefix(maximumFavoriteDeadlines))
+    }
+
+    private func persistFavoriteDeadlines() {
+        guard let data = try? JSONEncoder().encode(favoriteDeadlines) else { return }
+        defaults.set(data, forKey: Self.favoriteDeadlinesKey)
+    }
 }
 
 enum DailyRefreshLogic {

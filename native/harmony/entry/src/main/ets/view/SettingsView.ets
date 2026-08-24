@@ -10,18 +10,26 @@ import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
 } from '../widget/TodayCourseWidgetData';
 import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
+import { PublicDeadlineItem, PublicDeadlineKindInfo,
+  PublicDeadlineSource } from '../net/CalendarDailyInfoClient';
 
 @ComponentV2
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Local contentWidth: number = 350;
   @Local showingPrivacyPolicy: boolean = false;
+  @Local showingFavoriteManager: boolean = false;
+  @Local customDeadlineURLDraft: string = '';
   // 样式预览容量（紧凑 1 / 标准 3 / 展开 6，对应 Android 预览 Spinner）。
   @Local previewCapacity: number = 3;
   private statusDismissRevision: number = 0;
 
   private static readonly projectURL: string =
     'https://github.com/Nemoyuzx/where_to_study';
+
+  aboutToAppear(): void {
+    this.customDeadlineURLDraft = this.model.customDeadlinesURL;
+  }
 
   build() {
     if (this.showingPrivacyPolicy) {
@@ -31,6 +39,8 @@ export struct SettingsView {
         }
       })
         .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+    } else if (this.showingFavoriteManager) {
+      this.favoriteManagerView()
     } else {
       this.settingsContent()
     }
@@ -43,6 +53,12 @@ export struct SettingsView {
   private setPrivacyPolicyVisible(visible: boolean): void {
     this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
       this.showingPrivacyPolicy = visible;
+    });
+  }
+
+  private setFavoriteManagerVisible(visible: boolean): void {
+    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+      this.showingFavoriteManager = visible;
     });
   }
 
@@ -171,33 +187,48 @@ export struct SettingsView {
   }
 
   @Builder
+  segmentedOptions(labels: string[], selectedIndex: number,
+    onSelect: (index: number) => void, compactText: boolean = false) {
+    Row() {
+      ForEach(labels, (label: string, index: number) => {
+        Text(label)
+          .fontSize(compactText ? 11 : 13.5)
+          .fontWeight(selectedIndex === index ? FontWeight.Bold : FontWeight.Regular)
+          .fontColor(AppTheme.text())
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .layoutWeight(1)
+          .height(32)
+          .backgroundColor(selectedIndex === index ?
+            AppTheme.segmentedSelection() : Color.Transparent)
+          .borderRadius(6)
+          .animation({ duration: 160, curve: Curve.EaseOut })
+          .onClick(() => {
+            this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, (): void => {
+              onSelect(index);
+            });
+          })
+      }, (label: string, index: number) => 'segment.' + label + '.' + index.toString())
+    }
+    .width('100%')
+    .height(38)
+    .padding(3)
+    .borderRadius(9)
+    .backgroundColor(AppTheme.surfaceVariant())
+  }
+
+  @Builder
   languageSurface() {
     Column({ space: 8 }) {
       this.sectionTitle('语言')
-      Select([
-        { value: AppLanguageInfo.label(AppLanguage.system, this.model.resolvedLanguage()) },
-        { value: AppLanguageInfo.label(AppLanguage.simplifiedChinese, this.model.resolvedLanguage()) },
-        { value: AppLanguageInfo.label(AppLanguage.english, this.model.resolvedLanguage()) }
-      ])
-        .selected(AppLanguageInfo.all.indexOf(this.model.languageSetting()))
-        .value(AppLanguageInfo.label(this.model.languageSetting(), this.model.resolvedLanguage()))
-        .font({ size: 15 })
-        .fontColor(AppTheme.text())
-        .selectedOptionBgColor(AppTheme.primaryFill())
-        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
-        .selectedOptionFontColor(AppTheme.onPrimary())
-        .optionBgColor(AppTheme.surface())
-        .optionFont({ size: 15 })
-        .optionFontColor(AppTheme.text())
-        .backgroundColor(AppTheme.surface())
-        .border({ width: 1, color: AppTheme.border() })
-        .borderRadius(6)
-        .height(36)
-        .width('100%')
-        .onSelect((index: number) => {
+      this.segmentedOptions([
+        AppLanguageInfo.label(AppLanguage.system, this.model.resolvedLanguage()),
+        AppLanguageInfo.label(AppLanguage.simplifiedChinese, this.model.resolvedLanguage()),
+        AppLanguageInfo.label(AppLanguage.english, this.model.resolvedLanguage())
+      ], AppLanguageInfo.all.indexOf(this.model.languageSetting()), (index: number): void => {
           const target: AppLanguage = AppLanguageInfo.all[Math.min(Math.max(index, 0), 2)];
           this.model.setLanguageSetting(target);
-        })
+        }, true)
     }
     .padding(16)
     .width('100%')
@@ -231,24 +262,10 @@ export struct SettingsView {
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: this.isCompact() ? 10 : 16, bottom: this.isCompact() ? 5 : 7 })
-      Select([{ value: this.model.text('西土城') }, { value: this.model.text('沙河') }])
-        .selected(this.model.campusID === '04' ? 1 : 0)
-        .value(this.model.text(this.model.campusID === '04' ? '沙河' : '西土城'))
-        .font({ size: 15 })
-        .fontColor(AppTheme.text())
-        .selectedOptionBgColor(AppTheme.primaryFill())
-        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
-        .selectedOptionFontColor(AppTheme.onPrimary())
-        .optionBgColor(AppTheme.surface())
-        .optionFont({ size: 15 })
-        .optionFontColor(AppTheme.text())
-        .backgroundColor(AppTheme.surface())
-        .border({ width: 1, color: AppTheme.border() })
-        .borderRadius(6)
-        .height(36)
-        .width('100%')
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onSelect((index: number) => {
+      this.segmentedOptions(
+        [this.model.text('西土城'), this.model.text('沙河')],
+        this.model.campusID === '04' ? 1 : 0,
+        (index: number): void => {
           this.model.campusID = index === 1 ? '04' : '01';
         })
 
@@ -469,28 +486,10 @@ export struct SettingsView {
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: this.isCompact() ? 10 : 14, bottom: 5 })
-      Select([{ value: this.model.text('1 门') }, { value: this.model.text('2 门') },
-        { value: this.model.text('3 门') }, { value: this.model.text('4 门') },
-        { value: this.model.text('5 门') }, { value: this.model.text('6 门') }])
-        .selected(this.model.widgetCourseLimit - 1)
-        .value(this.model.text(this.model.widgetCourseLimit.toString() + ' 门'))
-        .font({ size: 15 })
-        .fontColor(AppTheme.text())
-        .selectedOptionBgColor(AppTheme.primaryFill())
-        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
-        .selectedOptionFontColor(AppTheme.onPrimary())
-        .optionBgColor(AppTheme.surface())
-        .optionFont({ size: 15 })
-        .optionFontColor(AppTheme.text())
-        .backgroundColor(AppTheme.surface())
-        .border({ width: 1, color: AppTheme.border() })
-        .borderRadius(6)
-        .height(36)
-        .width('100%')
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onSelect((index: number) => {
+      this.segmentedOptions(['1', '2', '3', '4', '5', '6'],
+        this.model.widgetCourseLimit - 1, (index: number): void => {
           this.model.setWidgetCourseLimit(index + 1);
-        })
+        }, true)
 
       Divider()
         .strokeWidth(1)
@@ -502,27 +501,10 @@ export struct SettingsView {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
         .width('100%')
-      Select([{ value: this.model.text('紧凑') }, { value: this.model.text('标准') },
-        { value: this.model.text('展开') }])
-        .selected(this.previewCapacity === 1 ? 0 : (this.previewCapacity === 6 ? 2 : 1))
-        .value(this.model.text(this.previewCapacity === 1 ? '紧凑' :
-          (this.previewCapacity === 6 ? '展开' : '标准')))
-        .font({ size: 15 })
-        .fontColor(AppTheme.text())
-        .selectedOptionBgColor(AppTheme.primaryFill())
-        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
-        .selectedOptionFontColor(AppTheme.onPrimary())
-        .optionBgColor(AppTheme.surface())
-        .optionFont({ size: 15 })
-        .optionFontColor(AppTheme.text())
-        .backgroundColor(AppTheme.surface())
-        .border({ width: 1, color: AppTheme.border() })
-        .borderRadius(6)
-        .height(36)
-        .width('100%')
-        .margin({ top: 7 })
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onSelect((index: number) => {
+      this.segmentedOptions(
+        [this.model.text('紧凑'), this.model.text('标准'), this.model.text('展开')],
+        this.previewCapacity === 1 ? 0 : (this.previewCapacity === 6 ? 2 : 1),
+        (index: number): void => {
           this.previewCapacity = index === 0 ? 1 : (index === 2 ? 6 : 3);
         })
 
@@ -698,6 +680,34 @@ export struct SettingsView {
           this.model.setHackathonDeadlinesEnabled(value);
         }, AppTheme.publicDeadline(), true)
 
+      Divider()
+        .color(AppTheme.border())
+        .margin({ top: 8, bottom: 8 })
+      this.field('自定义日程 HTTPS 地址', this.customDeadlineURLDraft, InputType.Normal,
+        (value: string): void => {
+          this.customDeadlineURLDraft = value;
+        })
+      Blank().height(7)
+      this.linkButton('保存自定义日程地址', (): void => {
+        this.model.setCustomDeadlinesURL(this.customDeadlineURLDraft).then((saved: boolean): void => {
+          if (saved) {
+            this.customDeadlineURLDraft = this.model.customDeadlinesURL;
+            this.model.statusMessage = '自定义日程地址已保存';
+          }
+        }).catch(() => {
+          this.model.statusMessage = '无法保存自定义日程地址';
+        });
+      })
+      this.featureToggle('显示自定义日程', this.model.customDeadlinesEnabled,
+        (value: boolean): void => {
+          this.model.setCustomDeadlinesEnabled(value).catch(() => {
+            this.model.statusMessage = '无法保存自定义日程开关';
+          });
+        }, AppTheme.publicDeadline(), true)
+      this.linkButton('收藏管理', (): void => {
+        this.setFavoriteManagerVisible(true);
+      })
+
       Text(this.model.text('天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
@@ -807,7 +817,7 @@ export struct SettingsView {
   localDataSurface() {
     Column() {
       this.sectionTitle('本地数据')
-      Text(this.model.text('个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。'))
+      Text(this.model.text('个人课表、空教室缓存、节假日缓存、自定义日程设置、收藏、账号与偏好均只保存在本机。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .lineHeight(17)
@@ -829,7 +839,7 @@ export struct SettingsView {
         .onClick(() => {
           this.getUIContext().showAlertDialog({
             title: this.model.text('清除全部本地数据？'),
-            message: this.model.text('将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。'),
+            message: this.model.text('将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏和其它设置。此操作无法撤销。'),
             primaryButton: {
               value: this.model.text('取消'),
               action: () => {
@@ -856,6 +866,128 @@ export struct SettingsView {
     .backgroundColor(AppTheme.surface())
     .id('settings_local_data_surface')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  favoriteManagerView() {
+    Column({ space: 14 }) {
+      Row({ space: 10 }) {
+        Button() {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([AppTheme.primary()])
+        }
+        .type(ButtonType.Normal)
+        .width(40)
+        .height(40)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText(this.model.text('返回设置'))
+        .onClick(() => {
+          this.setFavoriteManagerVisible(false);
+        })
+        Text(this.model.text('收藏管理'))
+          .fontSize(this.isCompact() ? 24 : 28)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.text())
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      if (this.model.favoriteDeadlines.length === 0) {
+        Column({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.star'))
+            .fontSize(34)
+            .fontColor([AppTheme.secondaryText()])
+          Text(this.model.text('暂无收藏日程'))
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.text())
+          Text(this.model.text('在日程详情右侧点击星标后，即使关闭来源或上游删除条目，收藏仍会保存在本机。'))
+            .fontSize(12)
+            .fontColor(AppTheme.secondaryText())
+            .lineHeight(17)
+            .textAlign(TextAlign.Center)
+            .width('100%')
+        }
+        .padding(22)
+        .width('100%')
+        .borderRadius(8)
+        .backgroundColor(AppTheme.surface())
+      } else {
+        Scroll() {
+          Column({ space: 10 }) {
+            ForEach(this.model.favoriteDeadlines, (item: PublicDeadlineItem) => {
+              this.favoriteDeadlineRow(item)
+            }, (item: PublicDeadlineItem) => this.model.favoriteDeadlineKey(item))
+          }
+          .width('100%')
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .scrollBar(BarState.Off)
+      }
+    }
+    .padding({ left: 20, right: 20, top: 18, bottom: this.isCompact() ? 88 : 28 })
+    .width('100%')
+    .height('100%')
+    .backgroundColor(AppTheme.background())
+    .alignItems(HorizontalAlign.Start)
+    .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+    .onAreaChange((oldArea: Area, newArea: Area) => {
+      this.contentWidth = Number(newArea.width) - 40;
+    })
+  }
+
+  @Builder
+  favoriteDeadlineRow(item: PublicDeadlineItem) {
+    Row({ space: 10 }) {
+      Column({ space: 3 }) {
+        Text(item.name)
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.text())
+          .maxLines(2)
+          .width('100%')
+        Text(this.favoriteDeadlineSubtitle(item))
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+          .maxLines(2)
+          .width('100%')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Button() {
+        SymbolGlyph($r('sys.symbol.star_fill'))
+          .fontSize(19)
+          .fontColor([AppTheme.assignment()])
+      }
+      .type(ButtonType.Normal)
+      .width(38)
+      .height(38)
+      .backgroundColor(Color.Transparent)
+      .accessibilityText(this.model.text('取消收藏'))
+      .onClick(() => {
+        this.model.removeFavoriteDeadline(item).catch(() => {
+          this.model.statusMessage = '无法删除收藏';
+        });
+      })
+    }
+    .padding(13)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(VerticalAlign.Center)
+  }
+
+  private favoriteDeadlineSubtitle(item: PublicDeadlineItem): string {
+    const source: string = item.source === PublicDeadlineSource.schoolNotice ?
+      this.model.text('校内竞赛通知') :
+      (item.source === PublicDeadlineSource.custom ? this.model.text('自定义日程') :
+        this.model.text(PublicDeadlineKindInfo.title(item.kind)));
+    const time: string = item.deadline.length >= 16 ?
+      item.deadline.substring(0, 16).replace('T', ' ') : item.deadline;
+    return time + ' · ' + source;
   }
 
   @Builder

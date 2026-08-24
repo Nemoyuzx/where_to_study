@@ -42,6 +42,7 @@ wts-tui/target
 
 native/apple/WhereToStudyNative.xcodeproj/
 native/apple/DerivedData/
+native/apple/DerivedData*/
 native/apple/Generated/
 native/android/.gradle/
 native/android/**/build/

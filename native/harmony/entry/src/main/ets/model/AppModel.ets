@@ -17,7 +17,8 @@ import { HolidayFetching, HolidayClient } from '../net/HolidayClient';
 import { CampusWeather, WeatherFetching, UAPIWeatherClient } from '../net/DailyInfoClient';
 import {
   AlmanacInfo, AssignmentDeadlineItem, CalendarDailyInfoClient, CalendarDailyInfoFetching,
-  PublicDeadlineItem, PublicDeadlineKind, PublicDeadlineSnapshot, PublicDeadlineSource
+  CustomDeadlineURLPolicy, FavoriteDeadlineCodec, PublicDeadlineItem, PublicDeadlineKind,
+  PublicDeadlineResponseParser, PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../net/CalendarDailyInfoClient';
 import {
   AssignmentDeadlineFetching, UCloudAssignmentClient
@@ -184,6 +185,9 @@ export class AppModel {
   @Trace schoolContestNoticesEnabled: boolean = true;
   @Trace summerCampDeadlinesEnabled: boolean = true;
   @Trace hackathonDeadlinesEnabled: boolean = true;
+  @Trace customDeadlinesEnabled: boolean = false;
+  @Trace customDeadlinesURL: string = '';
+  @Trace favoriteDeadlines: PublicDeadlineItem[] = [];
   @Trace campusID: string = '01';
   @Trace queryCampusID: string = '01';
   @Trace selectedSlots: Set<number> = new Set<number>();
@@ -333,6 +337,10 @@ export class AppModel {
       'summerCampDeadlinesEnabled', true);
     this.hackathonDeadlinesEnabled = await this.preferences.getBool(
       'hackathonDeadlinesEnabled', true);
+    this.customDeadlinesEnabled = await this.preferences.getBool('customDeadlinesEnabled', false);
+    this.customDeadlinesURL = (await this.preferences.getString('customDeadlinesURL') ?? '').trim();
+    this.favoriteDeadlines = FavoriteDeadlineCodec.decode(
+      await this.preferences.getString('favoriteDeadlinesV1'));
     this.publicDeadlinePreferencesLoaded = true;
     this.prewarmPublicDeadlines();
     this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
@@ -347,9 +355,21 @@ export class AppModel {
     await this.loadSchedule();
     await this.loadClassrooms();
     this.synchronizeSelectedSlots();
+    this.prefetchCurrentYearCalendarMarkers();
     this.ensureHolidays(StrictDates.todayParts().year, false);
     // 冷启动总是对账一次，即使开关已关闭也能移除旧批次。
     this.reconcileDailyCourseNotifications(false);
+  }
+
+  private prefetchCurrentYearCalendarMarkers(): void {
+    const year: number = StrictDates.todayParts().year;
+    const dayCount: number = StrictDates.isLeapYear(year) ? 366 : 365;
+    const firstDay: DateParts = new DateParts(year, 1, 1);
+    const days: DateParts[] = [];
+    for (let offset = 0; offset < dayCount; offset++) {
+      days.push(StrictDates.addDays(firstDay, offset));
+    }
+    this.prefetchCalendarMarkers(days);
   }
 
   private async prepareForLaunch(): Promise<void> {
@@ -437,7 +457,14 @@ export class AppModel {
     if (termStart === null) {
       return null;
     }
-    return ScheduleLogic.weekNumber(date, termStart);
+    const week: number = ScheduleLogic.weekNumber(date, termStart);
+    let maximumWeek: number = 0;
+    for (const course of this.schedule.courses) {
+      for (const number of course.weekNumbers) {
+        maximumWeek = Math.max(maximumWeek, number);
+      }
+    }
+    return week >= 1 && week <= maximumWeek ? week : null;
   }
 
   personalBusySlots(): Set<number> {
@@ -657,6 +684,10 @@ export class AppModel {
         'summerCampDeadlinesEnabled', true);
       this.hackathonDeadlinesEnabled = await this.preferences.getBool(
         'hackathonDeadlinesEnabled', true);
+      this.customDeadlinesEnabled = await this.preferences.getBool('customDeadlinesEnabled', false);
+      this.customDeadlinesURL = (await this.preferences.getString('customDeadlinesURL') ?? '').trim();
+      this.favoriteDeadlines = FavoriteDeadlineCodec.decode(
+        await this.preferences.getString('favoriteDeadlinesV1'));
       this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
       this.systemLanguageID = AppLanguageInfo.systemLanguage();
       this.termID = savedTermID !== null && savedTermID.length > 0 ? savedTermID : ScheduleDefaults.termID;
@@ -860,9 +891,88 @@ export class AppModel {
     }
   }
 
+  async setCustomDeadlinesURL(value: string): Promise<boolean> {
+    const normalized: string = value.trim();
+    if (normalized.length > 0 && !CustomDeadlineURLPolicy.allows(normalized)) {
+      this.statusMessage = '自定义日程只允许公开、无凭据的 HTTPS URL';
+      return false;
+    }
+    this.customDeadlinesURL = normalized;
+    await this.preferences.setString('customDeadlinesURL', normalized);
+    this.resetCalendarDailyInfoState();
+    if (this.customDeadlinesEnabled && normalized.length > 0) {
+      this.prewarmPublicDeadlines(true);
+    }
+    return true;
+  }
+
+  async setCustomDeadlinesEnabled(value: boolean): Promise<boolean> {
+    if (value && !CustomDeadlineURLPolicy.allows(this.customDeadlinesURL)) {
+      this.statusMessage = '请先填写有效的 HTTPS 自定义日程地址';
+      return false;
+    }
+    this.customDeadlinesEnabled = value;
+    await this.preferences.setBool('customDeadlinesEnabled', value);
+    this.resetCalendarDailyInfoState();
+    if (value) {
+      this.prewarmPublicDeadlines(true);
+    }
+    return true;
+  }
+
+  favoriteDeadlineKey(item: PublicDeadlineItem): string {
+    return FavoriteDeadlineCodec.key(item);
+  }
+
+  isFavoriteDeadline(item: PublicDeadlineItem): boolean {
+    const key: string = this.favoriteDeadlineKey(item);
+    return this.favoriteDeadlines.some((favorite: PublicDeadlineItem): boolean =>
+      this.favoriteDeadlineKey(favorite) === key);
+  }
+
+  async toggleFavoriteDeadline(item: PublicDeadlineItem): Promise<void> {
+    const key: string = this.favoriteDeadlineKey(item);
+    const next: PublicDeadlineItem[] = this.favoriteDeadlines.filter(
+      (favorite: PublicDeadlineItem): boolean => this.favoriteDeadlineKey(favorite) !== key);
+    if (next.length === this.favoriteDeadlines.length) {
+      next.push(item);
+    }
+    next.sort((left: PublicDeadlineItem, right: PublicDeadlineItem): number =>
+      left.deadline === right.deadline ?
+        (left.name < right.name ? -1 : (left.name > right.name ? 1 : 0)) :
+        (left.deadline < right.deadline ? -1 : 1));
+    this.favoriteDeadlines = next;
+    await this.preferences.setString('favoriteDeadlinesV1', FavoriteDeadlineCodec.encode(next));
+  }
+
+  async removeFavoriteDeadline(item: PublicDeadlineItem): Promise<void> {
+    if (!this.isFavoriteDeadline(item)) {
+      return;
+    }
+    await this.toggleFavoriteDeadline(item);
+  }
+
+  deadlineItems(date: string): PublicDeadlineItem[] {
+    const current: PublicDeadlineItem[] = [];
+    const snapshot: PublicDeadlineSnapshot | undefined = this.publicDeadlinesByDate.get(date);
+    if (snapshot !== undefined) {
+      for (const item of snapshot.items) {
+        if (this.deadlineItemEnabled(item)) {
+          current.push(item);
+        }
+      }
+    }
+    for (const favorite of this.favoriteDeadlines) {
+      if (favorite.deadline.startsWith(date)) {
+        current.push(favorite);
+      }
+    }
+    return PublicDeadlineResponseParser.merge([current]);
+  }
+
   prewarmPublicDeadlines(forceRemote: boolean = false): void {
     if (!this.publicDeadlinePreferencesLoaded || this.isSampleMode() ||
-      !this.hasEnabledPublicDeadlines() ||
+      !this.hasEnabledRemoteDeadlines() ||
       this.publicDeadlinePrewarmInFlight !== null) {
       return;
     }
@@ -870,17 +980,34 @@ export class AppModel {
     const revision: number = this.calendarDailyInfoRevision;
     const work: Promise<void> = (async (): Promise<void> => {
       try {
-        const fetched: PublicDeadlineSnapshot =
-          await this.calendarDailyInfoClient.prewarmDeadlines(date, forceRemote);
+        const fetched: PublicDeadlineSnapshot = await this.fetchCombinedDeadlines(
+          date, forceRemote, true);
         if (revision !== this.calendarDailyInfoRevision) {
           return;
         }
         const deadlines: Map<string, PublicDeadlineSnapshot> =
           new Map<string, PublicDeadlineSnapshot>(this.publicDeadlinesByDate);
         deadlines.set(date, fetched);
-        this.publicDeadlinesByDate = deadlines;
         const errors: Map<string, string> = new Map<string, string>(this.publicDeadlineErrors);
         errors.delete(date);
+        const materializedDates: string[] = Array.from(deadlines.keys());
+        for (const materializedDate of materializedDates) {
+          if (materializedDate === date) {
+            continue;
+          }
+          try {
+            const refreshed: PublicDeadlineSnapshot = await this.fetchCombinedDeadlines(
+              materializedDate, false, false);
+            if (revision !== this.calendarDailyInfoRevision) {
+              return;
+            }
+            deadlines.set(materializedDate, refreshed);
+            errors.delete(materializedDate);
+          } catch (e) {
+            // 保留该日期已有的陈旧快照，避免周期刷新失败让日历内容消失。
+          }
+        }
+        this.publicDeadlinesByDate = deadlines;
         this.publicDeadlineErrors = errors;
       } catch (e) {
         // 启动/回前台预热失败不阻塞界面；详情卡片仍可显式点击重试。
@@ -897,12 +1024,27 @@ export class AppModel {
   }
 
   hasEnabledPublicDeadlines(): boolean {
+    return this.hasEnabledRemoteDeadlines() || this.favoriteDeadlines.length > 0;
+  }
+
+  private hasEnabledBuiltInDeadlines(): boolean {
     return this.competitionDeadlinesEnabled || this.schoolContestNoticesEnabled ||
       this.summerCampDeadlinesEnabled ||
       this.hackathonDeadlinesEnabled;
   }
 
+  private hasEnabledRemoteDeadlines(): boolean {
+    return this.hasEnabledBuiltInDeadlines() ||
+      (this.customDeadlinesEnabled && CustomDeadlineURLPolicy.allows(this.customDeadlinesURL));
+  }
+
   deadlineItemEnabled(item: PublicDeadlineItem): boolean {
+    if (this.isFavoriteDeadline(item)) {
+      return true;
+    }
+    if (item.source === PublicDeadlineSource.custom) {
+      return this.customDeadlinesEnabled;
+    }
     if (item.source === PublicDeadlineSource.schoolNotice) {
       return this.schoolContestNoticesEnabled;
     }
@@ -1089,6 +1231,9 @@ export class AppModel {
     await this.preferences.remove('schoolContestNoticesEnabled');
     await this.preferences.remove('summerCampDeadlinesEnabled');
     await this.preferences.remove('hackathonDeadlinesEnabled');
+    await this.preferences.remove('customDeadlinesEnabled');
+    await this.preferences.remove('customDeadlinesURL');
+    await this.preferences.remove('favoriteDeadlinesV1');
     await this.preferences.remove('appLanguage');
     this.widgetShowsLocation = true;
     this.widgetShowsTeacher = true;
@@ -1099,6 +1244,9 @@ export class AppModel {
     this.schoolContestNoticesEnabled = true;
     this.summerCampDeadlinesEnabled = true;
     this.hackathonDeadlinesEnabled = true;
+    this.customDeadlinesEnabled = false;
+    this.customDeadlinesURL = '';
+    this.favoriteDeadlines = [];
     this.languageSettingRawValue = AppLanguage.system;
     this.systemLanguageID = AppLanguageInfo.systemLanguage();
     this.campusID = '01';
@@ -1424,7 +1572,7 @@ export class AppModel {
       const needsAssignments: boolean = !this.assignmentDeadlinesByDate.has(date) &&
         !this.assignmentUnavailableByDate.has(date) &&
         !this.assignmentMarkerLoadingDates.has(date);
-      const needsDeadlines: boolean = this.hasEnabledPublicDeadlines() &&
+      const needsDeadlines: boolean = this.hasEnabledRemoteDeadlines() &&
         !this.publicDeadlinesByDate.has(date) &&
         !this.deadlineMarkerLoadingDates.has(date);
       if (needsAssignments) {
@@ -1504,7 +1652,7 @@ export class AppModel {
   }
 
   private async prefetchPublicDeadlineMarkers(dates: string[], revision: number): Promise<void> {
-    if (dates.length === 0 || !this.hasEnabledPublicDeadlines()) {
+    if (dates.length === 0 || !this.hasEnabledRemoteDeadlines()) {
       return;
     }
     const results: Map<string, PublicDeadlineSnapshot> =
@@ -1522,7 +1670,7 @@ export class AppModel {
     } else {
       const requests: Promise<void>[] = [];
       for (const date of dates) {
-        const request: Promise<void> = this.calendarDailyInfoClient.fetchDeadlines(date)
+        const request: Promise<void> = this.fetchCombinedDeadlines(date, false, false)
           .then((snapshot: PublicDeadlineSnapshot): void => {
             results.set(date, snapshot);
           })
@@ -1553,7 +1701,7 @@ export class AppModel {
     if (this.almanacEnabled) {
       this.loadAlmanac(date, forceAlmanac);
     }
-    if (this.hasEnabledPublicDeadlines()) {
+    if (this.hasEnabledRemoteDeadlines()) {
       this.loadPublicDeadlines(date, forceDeadlines);
     }
   }
@@ -1675,7 +1823,7 @@ export class AppModel {
   }
 
   private loadPublicDeadlines(date: string, force: boolean): void {
-    if (!this.hasEnabledPublicDeadlines() ||
+    if (!this.hasEnabledRemoteDeadlines() ||
       (!force && this.publicDeadlinesByDate.has(date)) ||
       this.loadingPublicDeadlineDates.has(date)) {
       return;
@@ -1699,9 +1847,8 @@ export class AppModel {
     const revision: number = this.calendarDailyInfoRevision;
     const work: Promise<void> = (async (): Promise<void> => {
       try {
-        const fetched: PublicDeadlineSnapshot = force ?
-          await this.calendarDailyInfoClient.prewarmDeadlines(date, true) :
-          await this.calendarDailyInfoClient.fetchDeadlines(date);
+        const fetched: PublicDeadlineSnapshot = await this.fetchCombinedDeadlines(
+          date, force, force);
         if (revision !== this.calendarDailyInfoRevision) {
           return;
         }
@@ -1727,6 +1874,43 @@ export class AppModel {
     work.catch(() => {
       // 已在内部处理。
     });
+  }
+
+  private async fetchCombinedDeadlines(date: string, forceRemote: boolean,
+    prewarmBuiltIn: boolean): Promise<PublicDeadlineSnapshot> {
+    const groups: PublicDeadlineItem[][] = [];
+    const errors: string[] = [];
+    let source: string = this.customDeadlinesURL;
+    let usedBackup: boolean = false;
+    if (this.hasEnabledBuiltInDeadlines()) {
+      try {
+        const builtIn: PublicDeadlineSnapshot = prewarmBuiltIn ?
+          await this.calendarDailyInfoClient.prewarmDeadlines(date, forceRemote) :
+          await this.calendarDailyInfoClient.fetchDeadlines(date);
+        groups.push(builtIn.items);
+        source = builtIn.source;
+        usedBackup = builtIn.usedBackup;
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : '公开 DDL 获取失败。');
+      }
+    }
+    if (this.customDeadlinesEnabled && CustomDeadlineURLPolicy.allows(this.customDeadlinesURL)) {
+      try {
+        const custom: PublicDeadlineSnapshot = await this.calendarDailyInfoClient
+          .fetchCustomDeadlines(this.customDeadlinesURL, date, forceRemote, prewarmBuiltIn);
+        groups.push(custom.items);
+        if (source.length === 0) {
+          source = custom.source;
+        }
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : '自定义日程获取失败。');
+      }
+    }
+    if (groups.length === 0) {
+      throw new Error(errors.length > 0 ? errors.join('；') : '当前没有启用的日程来源。');
+    }
+    return new PublicDeadlineSnapshot(
+      date, PublicDeadlineResponseParser.merge(groups), source, usedBackup);
   }
 
   // ---------- 节假日 ----------

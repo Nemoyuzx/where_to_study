@@ -28,6 +28,32 @@ private struct MobileMonthEvent: Identifiable {
     let title: String
     let categoryKey: String
     let tint: Color
+    let deadlineItem: PublicDeadlineItem?
+
+    init(
+        id: String,
+        title: String,
+        categoryKey: String,
+        tint: Color,
+        deadlineItem: PublicDeadlineItem? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.categoryKey = categoryKey
+        self.tint = tint
+        self.deadlineItem = deadlineItem
+    }
+}
+
+private struct MobileMonthDaySnapshot: Identifiable {
+    let date: Date
+    let dateKey: String
+    let courses: [Course]
+    let holiday: HolidayItem?
+    let events: [MobileMonthEvent]
+    let allDayEvents: [CalendarAllDayEvent]
+
+    var id: Date { date }
 }
 
 private struct MobileMonthAgendaSelection: Identifiable {
@@ -109,6 +135,7 @@ private struct MobileCalendarDailyDetailsLoadID: Hashable {
     let sampleMode: Bool
     let loadsAlmanac: Bool
     let loadsPublicDeadlines: Bool
+    let customSourceURL: String?
 }
 
 @MainActor
@@ -223,7 +250,6 @@ struct MobileTeachingCalendarView: View {
                         .transition(pageTransition)
                 }
                 .clipped()
-                .animation(Self.pageAnimation, value: contentIdentity)
             }
             .background(AppTheme.background)
             .ignoresSafeArea(.container, edges: .bottom)
@@ -305,6 +331,20 @@ struct MobileTeachingCalendarView: View {
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("calendar.mobile.mode")
+
+            if mode == .week {
+                Label {
+                    Text(weekContextText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .accessibilityIdentifier("calendar.mobile.teaching-week")
+                } icon: {
+                    Image(systemName: "graduationcap")
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if mode == .day || mode == .week {
                 weekDateStrip
@@ -660,6 +700,7 @@ struct MobileTeachingCalendarView: View {
     private var monthView: some View {
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         let days = monthGridDates(containing: first)
+        let daySnapshots = monthDaySnapshots(for: days)
 
         return GeometryReader { proxy in
             let bottomInset = MobileCalendarTimelineLayout.contentBottomInset(
@@ -702,7 +743,7 @@ struct MobileTeachingCalendarView: View {
                         .padding(.bottom, 8)
                     ZStack(alignment: .top) {
                         monthDateGrid(
-                            days: days,
+                            daySnapshots: daySnapshots,
                             month: first,
                             expansionProgress: expansionProgress,
                             dayCellHeight: cellHeight,
@@ -731,7 +772,7 @@ struct MobileTeachingCalendarView: View {
                             if model.almanacEnabled {
                                 mobileAlmanacCard(selectedDate)
                             }
-                            if model.hasEnabledPublicDeadlines {
+                            if model.hasCalendarDeadlinesToDisplay {
                                 mobileDeadlineCard(selectedDate)
                             }
                         }
@@ -808,7 +849,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func monthDateGrid(
-        days: [Date],
+        daySnapshots: [MobileMonthDaySnapshot],
         month: Date,
         expansionProgress: CGFloat,
         dayCellHeight: CGFloat,
@@ -816,9 +857,9 @@ struct MobileTeachingCalendarView: View {
     ) -> some View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(days, id: \.self) { day in
+            ForEach(daySnapshots) { snapshot in
                 monthDayButton(
-                    day,
+                    snapshot,
                     month: month,
                     expansionProgress: expansionProgress,
                     cellHeight: dayCellHeight,
@@ -858,20 +899,21 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func monthDayButton(
-        _ day: Date,
+        _ snapshot: MobileMonthDaySnapshot,
         month: Date,
         expansionProgress: CGFloat,
         cellHeight: CGFloat,
         dayTopInset: CGFloat
     ) -> some View {
+        let day = snapshot.date
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
         let selected = sameDay(day, selectedDate)
         let today = sameDay(day, .now)
-        let dayCourses = courses(on: day)
-        let holiday = holidayItems(on: day).first
-        let events = monthEvents(on: day)
+        let dayCourses = snapshot.courses
+        let holiday = snapshot.holiday
+        let events = snapshot.events
         let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-            in: allDayEvents(on: day)
+            in: snapshot.allDayEvents
         )
         let eventLayout = TeachingCalendarLogic.monthEventLayout(
             totalCount: events.count,
@@ -892,7 +934,7 @@ struct MobileTeachingCalendarView: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(
-                "calendar.mobile.month-day-number.\(StrictContractDateParser.string(from: day))"
+                "calendar.mobile.month-day-number.\(snapshot.dateKey)"
             )
 
             ZStack(alignment: .top) {
@@ -942,7 +984,7 @@ struct MobileTeachingCalendarView: View {
                             model.localizedFormat("查看其余 %lld 项全天日程", eventLayout.hiddenEventCount)
                         )
                         .accessibilityIdentifier(
-                            "calendar.mobile.month-overflow.\(StrictContractDateParser.string(from: day))"
+                            "calendar.mobile.month-overflow.\(snapshot.dateKey)"
                         )
                     }
                 }
@@ -997,8 +1039,9 @@ struct MobileTeachingCalendarView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
         .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier(
-            "calendar.mobile.month-day-cell.\(StrictContractDateParser.string(from: day))"
+            "calendar.mobile.month-day-cell.\(snapshot.dateKey)"
         )
     }
 
@@ -1028,9 +1071,69 @@ struct MobileTeachingCalendarView: View {
             .accessibilityLabel(event.title)
     }
 
-    private func monthEvents(on day: Date) -> [MobileMonthEvent] {
-        let dateKey = StrictContractDateParser.string(from: day)
-        let holidays = holidayItems(on: day).map { item in
+    private func monthDaySnapshots(for days: [Date]) -> [MobileMonthDaySnapshot] {
+        let coursesByDate: [String: [Course]]
+        if let schedule = model.schedule,
+           let termStart = StrictContractDateParser.date(from: schedule.termStartDate) {
+            coursesByDate = ScheduleLogic.coursesByDate(
+                for: days,
+                termStart: termStart,
+                courses: schedule.courses,
+                calendar: calendar
+            )
+        } else {
+            coursesByDate = [:]
+        }
+        let years = Set(days.map { calendar.component(.year, from: $0) })
+        let holidaysByDate = Dictionary(
+            grouping: years.flatMap { model.holidayItems(for: $0) },
+            by: \.date
+        )
+
+        return days.map { day in
+            let dateKey = StrictContractDateParser.string(from: day)
+            let courses = coursesByDate[dateKey] ?? []
+            let holidays = holidaysByDate[dateKey] ?? []
+            let assignments = calendarDeadlines.assignmentsByDate[dateKey] ?? []
+            let publicItems = model.visibleDeadlineItems(
+                liveItems: calendarDeadlines.publicItems(for: dateKey),
+                on: dateKey
+            )
+            let schoolNotices = publicItems.filter { $0.source == .schoolNotice }
+            let publicDeadlines = publicItems.filter { $0.source != .schoolNotice }
+            return MobileMonthDaySnapshot(
+                date: day,
+                dateKey: dateKey,
+                courses: courses,
+                holiday: holidays.first,
+                events: monthEvents(
+                    dateKey: dateKey,
+                    holidays: holidays,
+                    assignments: assignments,
+                    schoolNotices: schoolNotices,
+                    publicDeadlines: publicDeadlines,
+                    courses: courses
+                ),
+                allDayEvents: calendarAllDayEvents(
+                    dateKey: dateKey,
+                    holidays: holidays,
+                    assignments: assignments,
+                    schoolNotices: schoolNotices,
+                    publicDeadlines: publicDeadlines
+                )
+            )
+        }
+    }
+
+    private func monthEvents(
+        dateKey: String,
+        holidays: [HolidayItem],
+        assignments: [AssignmentDeadlineItem],
+        schoolNotices: [PublicDeadlineItem],
+        publicDeadlines: [PublicDeadlineItem],
+        courses: [Course]
+    ) -> [MobileMonthEvent] {
+        let holidayEvents = holidays.map { item in
             MobileMonthEvent(
                 id: "holiday-\(item.id)",
                 title: "\(model.localized(item.type == "holiday" ? "休" : "班")) \(item.name)",
@@ -1038,7 +1141,7 @@ struct MobileTeachingCalendarView: View {
                 tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary
             )
         }
-        let assignments = assignmentItems(on: day).map { item in
+        let assignmentEvents = assignments.map { item in
             MobileMonthEvent(
                 id: "\(dateKey)-assignment-\(item.id)",
                 title: item.title,
@@ -1046,23 +1149,25 @@ struct MobileTeachingCalendarView: View {
                 tint: AppTheme.assignment
             )
         }
-        let schoolNotices = schoolNoticeItems(on: day).map { item in
+        let schoolNoticeEvents = schoolNotices.map { item in
             MobileMonthEvent(
                 id: "\(dateKey)-school-\(item.id)",
                 title: item.name,
                 categoryKey: "校内竞赛通知",
-                tint: AppTheme.schoolNotice
+                tint: AppTheme.schoolNotice,
+                deadlineItem: item
             )
         }
-        let publicDeadlines = otherPublicDeadlineItems(on: day).map { item in
+        let publicDeadlineEvents = publicDeadlines.map { item in
             MobileMonthEvent(
                 id: "\(dateKey)-public-\(item.id)",
                 title: item.name,
                 categoryKey: item.kind.title,
-                tint: AppTheme.publicDeadline
+                tint: AppTheme.publicDeadline,
+                deadlineItem: item
             )
         }
-        let dayCourses = courses(on: day).map { course in
+        let courseEvents = courses.map { course in
             MobileMonthEvent(
                 id: "course-\(course.id)",
                 title: course.name,
@@ -1070,7 +1175,8 @@ struct MobileTeachingCalendarView: View {
                 tint: AppTheme.primary
             )
         }
-        return holidays + assignments + schoolNotices + publicDeadlines + dayCourses
+        return holidayEvents + assignmentEvents + schoolNoticeEvents
+            + publicDeadlineEvents + courseEvents
     }
 
     private var yearView: some View {
@@ -1375,27 +1481,43 @@ struct MobileTeachingCalendarView: View {
 
     private func mobileDeadlineCard(_ day: Date) -> some View {
         let date = StrictContractDateParser.string(from: day)
-        let snapshot = calendarDeadlines.publicByDate[date]
-        let items = (snapshot?.items ?? []).filter(deadlineIsEnabled)
+        let builtInSnapshot = calendarDeadlines.publicByDate[date]
+        let customSnapshot = calendarDeadlines.customByDate[date]
+        let items = model.visibleDeadlineItems(
+            liveItems: calendarDeadlines.publicItems(for: date),
+            on: date
+        )
+        let isLoading = calendarDeadlines.loadingPublicDates.contains(date)
+            || calendarDeadlines.loadingCustomDates.contains(date)
+        let error = calendarDeadlines.publicErrors[date] ?? calendarDeadlines.customErrors[date]
         return VStack(alignment: .leading, spacing: 10) {
             Label("活动 DDL", systemImage: "flag.checkered")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppTheme.secondaryText)
                 .accessibilityIdentifier("calendar.mobile.deadlines.header")
-            if calendarDeadlines.loadingPublicDates.contains(date), snapshot == nil {
+            if isLoading, builtInSnapshot == nil, customSnapshot == nil, items.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("正在同步活动截止信息…")
                 }
                 .foregroundStyle(AppTheme.secondaryText)
-            } else if let error = calendarDeadlines.publicErrors[date], snapshot == nil {
+            } else if let error, builtInSnapshot == nil, customSnapshot == nil, items.isEmpty {
                 Button {
                     Task {
-                        await calendarDeadlines.loadPublic(
-                            date: date,
-                            sampleMode: model.isSampleMode,
-                            force: true
-                        )
+                        if model.hasEnabledBuiltInPublicDeadlines {
+                            await calendarDeadlines.loadPublic(
+                                date: date,
+                                sampleMode: model.isSampleMode,
+                                force: true
+                            )
+                        }
+                        if let sourceURL = model.customDeadlineSourceURL {
+                            await calendarDeadlines.loadCustom(
+                                dates: [date],
+                                sourceURL: sourceURL,
+                                force: true
+                            )
+                        }
                     }
                 } label: {
                     Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
@@ -1429,6 +1551,20 @@ struct MobileTeachingCalendarView: View {
             }
             .font(.caption2)
             .foregroundStyle(AppTheme.secondaryText)
+            Group {
+                if let customItem = items.first(where: { $0.source == .custom }) {
+                    if let homepage = customItem.sourceHomepage {
+                        Link(
+                            "自定义来源：\(customItem.sourceName ?? customItem.source.title)",
+                            destination: homepage
+                        )
+                    } else {
+                        Text("自定义来源：\(customItem.sourceName ?? customItem.source.title)")
+                    }
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(AppTheme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -1440,11 +1576,14 @@ struct MobileTeachingCalendarView: View {
 
     @ViewBuilder
     private func mobileDeadlineRow(_ item: PublicDeadlineItem) -> some View {
-        if let url = item.officialURL {
-            Link(destination: url) { mobileDeadlineRowContent(item) }
-                .buttonStyle(.plain)
-        } else {
-            mobileDeadlineRowContent(item)
+        HStack(alignment: .center, spacing: 6) {
+            if let url = item.officialURL {
+                Link(destination: url) { mobileDeadlineRowContent(item) }
+                    .buttonStyle(.plain)
+            } else {
+                mobileDeadlineRowContent(item)
+            }
+            favoriteButton(item)
         }
     }
 
@@ -1469,21 +1608,32 @@ struct MobileTeachingCalendarView: View {
                 .foregroundStyle(AppTheme.secondaryText)
         }
         .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private func deadlineIsEnabled(_ item: PublicDeadlineItem) -> Bool {
-        CalendarDeadlinePresentation.isVisible(
-            item,
-            competitionEnabled: model.competitionDeadlinesEnabled,
-            schoolNoticeEnabled: model.schoolContestNoticesEnabled,
-            summerCampEnabled: model.summerCampDeadlinesEnabled,
-            hackathonEnabled: model.hackathonDeadlinesEnabled
-        )
+    private func favoriteButton(_ item: PublicDeadlineItem) -> some View {
+        let isFavorite = model.isFavorite(item)
+        return Button {
+            AppHaptics.selection()
+            model.setFavorite(item, isFavorite: !isFavorite)
+        } label: {
+            Image(systemName: isFavorite ? "star.fill" : "star")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isFavorite ? AppTheme.accent : AppTheme.secondaryText)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFavorite ? "取消收藏" : "收藏日程")
+        .accessibilityIdentifier("calendar.favorite.\(item.source.rawValue).\(item.id)")
     }
 
     private func deadlineCategoryTitle(_ item: PublicDeadlineItem) -> String {
-        model.localized(item.source == .schoolNotice ? item.source.title : item.kind.title)
+        if item.source == .custom, let sourceName = item.sourceName {
+            return "\(model.localized(item.kind.title)) · \(sourceName)"
+        }
+        return model.localized(item.source == .schoolNotice ? item.source.title : item.kind.title)
     }
 
     private func deadlineTime(_ value: String) -> String {
@@ -1503,7 +1653,8 @@ struct MobileTeachingCalendarView: View {
                 agendaRow(
                     title: event.title,
                     categoryKey: event.categoryKey,
-                    tint: event.tint
+                    tint: event.tint,
+                    deadlineItem: event.deadlineItem
                 )
             }
         }
@@ -1520,7 +1671,8 @@ struct MobileTeachingCalendarView: View {
                 agendaRow(
                     title: event.title,
                     categoryKey: allDayEventCategoryKey(event.kind),
-                    tint: allDayEventTint(event.kind)
+                    tint: allDayEventTint(event.kind),
+                    deadlineItem: event.deadlineItem
                 )
             }
         }
@@ -1585,7 +1737,12 @@ struct MobileTeachingCalendarView: View {
         .zIndex(40)
     }
 
-    private func agendaRow(title: String, categoryKey: String, tint: Color) -> some View {
+    private func agendaRow(
+        title: String,
+        categoryKey: String,
+        tint: Color,
+        deadlineItem: PublicDeadlineItem? = nil
+    ) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Circle()
                 .fill(tint)
@@ -1598,6 +1755,9 @@ struct MobileTeachingCalendarView: View {
                 Text(model.localized(categoryKey))
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
+            }
+            if let deadlineItem {
+                favoriteButton(deadlineItem)
             }
         }
         .padding(10)
@@ -1895,51 +2055,70 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func schoolNoticeItems(on date: Date) -> [PublicDeadlineItem] {
-        guard model.schoolContestNoticesEnabled else { return [] }
         let dateKey = StrictContractDateParser.string(from: date)
-        return (calendarDeadlines.publicByDate[dateKey]?.items ?? []).filter {
-            $0.source == .schoolNotice
-        }
+        return model.visibleDeadlineItems(
+            liveItems: calendarDeadlines.publicItems(for: dateKey),
+            on: dateKey
+        ).filter { $0.source == .schoolNotice }
     }
 
     private func otherPublicDeadlineItems(on date: Date) -> [PublicDeadlineItem] {
         let dateKey = StrictContractDateParser.string(from: date)
-        return (calendarDeadlines.publicByDate[dateKey]?.items ?? []).filter {
-            $0.source != .schoolNotice && deadlineIsEnabled($0)
-        }
+        return model.visibleDeadlineItems(
+            liveItems: calendarDeadlines.publicItems(for: dateKey),
+            on: dateKey
+        ).filter { $0.source != .schoolNotice }
     }
 
     private func allDayEvents(on date: Date) -> [CalendarAllDayEvent] {
         let dateKey = StrictContractDateParser.string(from: date)
-        let holidays = holidayItems(on: date).map { holiday in
+        return calendarAllDayEvents(
+            dateKey: dateKey,
+            holidays: holidayItems(on: date),
+            assignments: assignmentItems(on: date),
+            schoolNotices: schoolNoticeItems(on: date),
+            publicDeadlines: otherPublicDeadlineItems(on: date)
+        )
+    }
+
+    private func calendarAllDayEvents(
+        dateKey: String,
+        holidays: [HolidayItem],
+        assignments: [AssignmentDeadlineItem],
+        schoolNotices: [PublicDeadlineItem],
+        publicDeadlines: [PublicDeadlineItem]
+    ) -> [CalendarAllDayEvent] {
+        let holidayEvents = holidays.map { holiday in
             CalendarAllDayEvent(
                 id: "\(dateKey)-holiday-\(holiday.id)",
                 title: "\(model.localized(holiday.type == "holiday" ? "休" : "班")) \(holiday.name)",
                 kind: holiday.type == "holiday" ? .holiday : .workday
             )
         }
-        let assignments = assignmentItems(on: date).map { assignment in
+        let assignmentEvents = assignments.map { assignment in
             CalendarAllDayEvent(
                 id: "\(dateKey)-assignment-\(assignment.id)",
                 title: assignment.title,
                 kind: .assignment
             )
         }
-        let schoolNotices = schoolNoticeItems(on: date).map { notice in
+        let schoolNoticeEvents = schoolNotices.map { notice in
             CalendarAllDayEvent(
                 id: "\(dateKey)-school-\(notice.id)",
                 title: notice.name,
-                kind: .schoolNotice
+                kind: .schoolNotice,
+                deadlineItem: notice
             )
         }
-        let publicDeadlines = otherPublicDeadlineItems(on: date).map { item in
+        let publicDeadlineEvents = publicDeadlines.map { item in
             CalendarAllDayEvent(
                 id: "\(dateKey)-public-\(item.id)",
                 title: item.name,
-                kind: .publicDeadline
+                kind: .publicDeadline,
+                deadlineItem: item
             )
         }
-        return holidays + assignments + schoolNotices + publicDeadlines
+        return holidayEvents + assignmentEvents + schoolNoticeEvents + publicDeadlineEvents
     }
 
     private func weekDates() -> [Date] {
@@ -2000,7 +2179,8 @@ struct MobileTeachingCalendarView: View {
             almanacDate: mode == .month ? StrictContractDateParser.string(from: selectedDate) : nil,
             sampleMode: model.isSampleMode,
             loadsAlmanac: model.almanacEnabled,
-            loadsPublicDeadlines: model.hasEnabledPublicDeadlines
+            loadsPublicDeadlines: model.hasEnabledBuiltInPublicDeadlines,
+            customSourceURL: model.customDeadlineSourceURL?.absoluteString
         )
     }
 
@@ -2016,7 +2196,8 @@ struct MobileTeachingCalendarView: View {
         async let calendarEvents: Void = calendarDeadlines.loadCalendarEvents(
             dates: request.dates,
             sampleMode: request.sampleMode,
-            includesPublicDeadlines: request.loadsPublicDeadlines
+            includesPublicDeadlines: request.loadsPublicDeadlines,
+            customSourceURL: request.customSourceURL.flatMap(URL.init(string:))
         )
         async let almanac: Void = loadAlmanacIfNeeded(
             request.loadsAlmanac,
@@ -2058,16 +2239,15 @@ struct MobileTeachingCalendarView: View {
         AppHaptics.selection()
         let direction = date > selectedDate ? 1 : -1
         if mode == .month {
-            let currentIdentity = monthGridIdentity
-            let destinationIdentity = MobileCalendarAnimationPartition.monthGridIdentity(
-                selectedDate: date,
+            if let monthDirection = TeachingCalendarLogic.monthPageDirection(
+                from: selectedDate,
+                to: date,
                 calendar: calendar
-            )
-            if currentIdentity == destinationIdentity {
+            ) {
+                prepareMonthPageChange(to: date, direction: monthDirection)
+            } else {
                 pageDirection = direction
                 selectedDate = date
-            } else {
-                prepareMonthPageChange(to: date, direction: direction)
             }
         } else {
             pageDirection = direction
@@ -2264,8 +2444,14 @@ struct MobileTeachingCalendarView: View {
         isMonthExpansionSettling = true
         withAnimation(Self.monthExpansionAnimation) {
             monthDragTranslation = 0
-            isMonthExpanded = normalizedTarget == .expanded
-            isMonthDetailRaised = normalizedTarget == .detailRaised
+            let expandsMonth = normalizedTarget == .expanded
+            let raisesDetails = normalizedTarget == .detailRaised
+            if isMonthExpanded != expandsMonth {
+                isMonthExpanded = expandsMonth
+            }
+            if isMonthDetailRaised != raisesDetails {
+                isMonthDetailRaised = raisesDetails
+            }
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(320))
@@ -2308,6 +2494,30 @@ struct MobileTeachingCalendarView: View {
     private var monthGridIdentity: String {
         MobileCalendarAnimationPartition.monthGridIdentity(
             selectedDate: selectedDate,
+            calendar: calendar
+        )
+    }
+
+    private var weekContextText: String {
+        let civilWeek = calendar.component(.weekOfYear, from: selectedDate)
+        if let teachingWeek = teachingWeekNumber(on: selectedDate) {
+            return model.localizedFormat(
+                "公历第 %lld 周 · 教学第 %lld 周",
+                Int64(civilWeek),
+                Int64(teachingWeek)
+            )
+        }
+        return model.localizedFormat("公历第 %lld 周", Int64(civilWeek))
+    }
+
+    private func teachingWeekNumber(on date: Date) -> Int? {
+        guard let schedule = model.schedule,
+              let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
+        else { return nil }
+        return ScheduleLogic.activeTeachingWeekNumber(
+            on: date,
+            termStart: termStart,
+            courses: schedule.courses,
             calendar: calendar
         )
     }

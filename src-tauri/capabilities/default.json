@@ -22,6 +22,7 @@
     "allow-fetch-deadlines",
     "allow-fetch-assignments",
     "allow-fetch-deadline-calendar",
+    "allow-fetch-custom-deadline-calendar",
     "allow-fetch-assignment-calendar"
   ]
 }

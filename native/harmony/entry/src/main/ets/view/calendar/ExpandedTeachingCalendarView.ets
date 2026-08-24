@@ -16,7 +16,7 @@ import { TeachingCalendarSession } from './TeachingCalendarSession';
 import { CoursePlacement, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
 import { CalendarDailyInfoCards } from './CalendarDailyInfoCards';
 import {
-  PublicDeadlineKindInfo, PublicDeadlineSnapshot, PublicDeadlineSource
+  PublicDeadlineItem, PublicDeadlineKindInfo, PublicDeadlineSource
 } from '../../net/CalendarDailyInfoClient';
 import { AppLanguage } from '../../common/AppLocalization';
 
@@ -42,6 +42,8 @@ export struct ExpandedTeachingCalendarView {
   @Local contentWidth: number = 900;
   @Local contentHeight: number = 700;
   @Local isDarkMode: boolean = false;
+  @Local calendarContentOpacity: number = 1;
+  @Local calendarContentAnimating: boolean = false;
   // PC（2in1）按 Windows Tauri 布局；平板/折叠屏按 Android 折叠屏布局。
   @Local isPc: boolean = DeviceState.isPc2in1();
   private darkModeProbe: DarkModeProbe = new DarkModeProbe();
@@ -73,7 +75,8 @@ export struct ExpandedTeachingCalendarView {
   }
 
   @Monitor('model.competitionDeadlinesEnabled', 'model.schoolContestNoticesEnabled',
-    'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled')
+    'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled',
+    'model.customDeadlinesEnabled', 'model.customDeadlinesURL', 'model.favoriteDeadlines')
   onDeadlineFeatureChange(monitor: IMonitor): void {
     this.ensureVisibleDailyInfo();
   }
@@ -194,12 +197,79 @@ export struct ExpandedTeachingCalendarView {
   }
 
   private moveDate(direction: number): void {
-    this.setSelectedDate(TeachingCalendarLogic.movedDate(
+    this.animateSelectedDate(TeachingCalendarLogic.movedDate(
       this.selectedDate(), this.mode(), direction));
   }
 
+  private animateSelectedDate(target: DateParts): void {
+    if (target.equals(this.selectedDate())) {
+      return;
+    }
+    if (this.calendarContentAnimating) {
+      this.setSelectedDate(target);
+      return;
+    }
+    this.calendarContentAnimating = true;
+    this.getUIContext().animateTo({ duration: 90, curve: Curve.EaseOut }, () => {
+      this.calendarContentOpacity = 0.72;
+    });
+    setTimeout(() => {
+      this.setSelectedDate(target);
+      this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut }, () => {
+        this.calendarContentOpacity = 1;
+      });
+      setTimeout(() => {
+        this.calendarContentAnimating = false;
+      }, 150);
+    }, 96);
+  }
+
+  private animateMode(target: CalendarMode): void {
+    if (target === this.mode()) {
+      return;
+    }
+    if (this.calendarContentAnimating) {
+      this.setMode(target);
+      return;
+    }
+    this.calendarContentAnimating = true;
+    this.getUIContext().animateTo({ duration: 90, curve: Curve.EaseOut }, () => {
+      this.calendarContentOpacity = 0.72;
+    });
+    setTimeout(() => {
+      this.setMode(target);
+      this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut }, () => {
+        this.calendarContentOpacity = 1;
+      });
+      setTimeout(() => {
+        this.calendarContentAnimating = false;
+      }, 150);
+    }, 96);
+  }
+
   private periodTitle(): string {
-    return TeachingCalendarLogic.periodTitle(this.selectedDate(), this.mode(), this.isEnglish());
+    const base: string = TeachingCalendarLogic.periodTitle(
+      this.selectedDate(), this.mode(), this.isEnglish());
+    const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
+    if (this.mode() !== CalendarMode.week || teachingWeek === null) {
+      return base;
+    }
+    return base + (this.isEnglish() ? ' · Teaching week ' : ' · 第') +
+      teachingWeek.toString() + (this.isEnglish() ? '' : '教学周');
+  }
+
+  private monthWeekLabel(day: DateParts): string {
+    if (!this.isPc || StrictDates.weekdayMonday1(day) !== 1) {
+      return '';
+    }
+    const calendarWeek: number = TeachingCalendarLogic.weekOfYear(day);
+    const teachingWeek: number | null = this.model.weekNumberOn(day);
+    const base: string = this.isEnglish() ? 'W' + calendarWeek.toString() :
+      '第' + calendarWeek.toString() + '周';
+    if (teachingWeek === null) {
+      return base;
+    }
+    return base + (this.isEnglish() ? ' · T' : ' · 教') + teachingWeek.toString();
   }
 
   private statusMessages(): string[] {
@@ -215,6 +285,38 @@ export struct ExpandedTeachingCalendarView {
       result.push(this.model.calendarImportStatusMessage);
     }
     return result;
+  }
+
+  private handleDesktopKey(event: KeyEvent): boolean {
+    if (!this.isPc || event.type !== KeyType.Down) {
+      return false;
+    }
+    if (event.keyCode === 2068 || event.keyCode === 2014) {
+      this.moveDate(-1);
+      return true;
+    }
+    if (event.keyCode === 2069 || event.keyCode === 2015) {
+      this.moveDate(1);
+      return true;
+    }
+    if (event.keyCode === 2081) {
+      this.animateSelectedDate(StrictDates.todayParts());
+      return true;
+    }
+    const targetMode: CalendarMode | null = event.keyCode === 2020 ? CalendarMode.day :
+      (event.keyCode === 2039 ? CalendarMode.week :
+        (event.keyCode === 2029 ? CalendarMode.month :
+          (event.keyCode === 2041 ? CalendarMode.year : null)));
+    if (targetMode !== null) {
+      this.animateMode(targetMode);
+      return true;
+    }
+    if (event.keyCode === 2070) {
+      this.presentedDay = null;
+      this.allDayDialogDay = null;
+      return true;
+    }
+    return false;
   }
 
   build() {
@@ -237,7 +339,7 @@ export struct ExpandedTeachingCalendarView {
                     AppTheme.primaryFill() : Color.Transparent)
                   .borderRadius(6)
                   .onClick(() => {
-                    this.setMode(item);
+                    this.animateMode(item);
                   })
               }, (item: CalendarMode) => 'mode.' + item)
             }
@@ -261,13 +363,17 @@ export struct ExpandedTeachingCalendarView {
           Divider()
             .color(AppTheme.border())
 
-          if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
-            this.timelineContent()
-          } else if (this.mode() === CalendarMode.month) {
-            this.monthContent()
-          } else {
-            this.yearContent()
+          Column() {
+            if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
+              this.timelineContent()
+            } else if (this.mode() === CalendarMode.month) {
+              this.monthContent()
+            } else {
+              this.yearContent()
+            }
           }
+          .width('100%')
+          .opacity(this.calendarContentOpacity)
         }
         .padding(20)
         .width('100%')
@@ -297,6 +403,9 @@ export struct ExpandedTeachingCalendarView {
     .width('100%')
     .height('100%')
     .backgroundColor(AppTheme.background())
+    .focusable(this.isPc)
+    .focusOnTouch(this.isPc)
+    .onKeyEvent((event: KeyEvent): boolean => this.handleDesktopKey(event))
   }
 
   @Builder
@@ -337,7 +446,7 @@ export struct ExpandedTeachingCalendarView {
         .borderRadius(6)
         .border({ width: 1, color: AppTheme.border() })
         .onClick(() => {
-          this.setSelectedDate(StrictDates.todayParts());
+          this.animateSelectedDate(StrictDates.todayParts());
         })
 
       Text('›')
@@ -497,22 +606,18 @@ export struct ExpandedTeachingCalendarView {
     const date: string = StrictDates.formatDateParts(day);
     for (const item of this.model.assignmentDeadlinesByDate.get(date) ?? []) {
       result.push(new ExpandedAllDayItem(date + '.assignment.' + item.id,
-        this.model.text('作业') + ' · ' + item.title, AppTheme.assignment(), '#153478F6'));
+        this.model.text('作业') + ' · ' + item.title,
+        AppTheme.assignment(), AppTheme.assignmentSurface()));
     }
-    const snapshot: PublicDeadlineSnapshot | undefined = this.model.publicDeadlinesByDate.get(date);
-    if (snapshot !== undefined) {
-      for (const item of snapshot.items) {
-        if (!this.model.deadlineItemEnabled(item)) {
-          continue;
-        }
+    for (const item of this.model.deadlineItems(date)) {
         const title: string = item.source === PublicDeadlineSource.schoolNotice ?
           this.model.text('校内') + ' · ' + item.name :
           this.model.text(PublicDeadlineKindInfo.title(item.kind)) + ' · ' + item.name;
         result.push(new ExpandedAllDayItem(date + '.deadline.' + item.id, title,
           item.source === PublicDeadlineSource.schoolNotice ?
             AppTheme.schoolNotice() : AppTheme.publicDeadline(),
-          item.source === PublicDeadlineSource.schoolNotice ? '#15FF3B30' : '#15C06A00'));
-      }
+          item.source === PublicDeadlineSource.schoolNotice ?
+            AppTheme.schoolNoticeSurface() : AppTheme.publicDeadlineSurface(), item));
     }
     return result;
   }
@@ -572,6 +677,15 @@ export struct ExpandedTeachingCalendarView {
   @Builder
   monthDayCell(day: DateParts) {
     Stack({ alignContent: Alignment.Center }) {
+      if (this.monthWeekLabel(day).length > 0) {
+        Text(this.monthWeekLabel(day))
+          .fontSize(8)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : AppTheme.secondaryText())
+          .maxLines(1)
+          .position({ x: 4, y: 4 })
+          .zIndex(2)
+      }
       Column({ space: 4 }) {
         Row({ space: 3 }) {
           Text(day.day.toString())
@@ -637,7 +751,12 @@ export struct ExpandedTeachingCalendarView {
       AppTheme.selectedDate() : this.monthBackground(day))
     .clip(true)
     .onClick(() => {
-      this.setSelectedDate(day);
+      const selected: DateParts = this.selectedDate();
+      if (day.year !== selected.year || day.month !== selected.month) {
+        this.animateSelectedDate(day);
+      } else {
+        this.setSelectedDate(day);
+      }
     })
   }
 
@@ -657,18 +776,13 @@ export struct ExpandedTeachingCalendarView {
       result.push(new MonthEventItem('assignment-' + item.id,
         this.model.text('作业') + ' ' + item.title, AppTheme.assignment()));
     }
-    const snapshot: PublicDeadlineSnapshot | undefined = this.model.publicDeadlinesByDate.get(date);
-    if (snapshot !== undefined) {
-      for (const item of snapshot.items) {
-        if (this.model.deadlineItemEnabled(item)) {
+    for (const item of this.model.deadlineItems(date)) {
         result.push(new MonthEventItem('deadline-' + item.id,
             item.source === PublicDeadlineSource.schoolNotice ?
               this.model.text('校内') + ' ' + item.name :
               this.model.text(PublicDeadlineKindInfo.title(item.kind)) + ' ' + item.name,
           item.source === PublicDeadlineSource.schoolNotice ?
             AppTheme.schoolNotice() : AppTheme.publicDeadline()));
-        }
-      }
     }
     return result;
   }
@@ -831,18 +945,12 @@ export struct ExpandedTeachingCalendarView {
     const assignmentCount: number = (this.model.assignmentDeadlinesByDate.get(date) ?? []).length;
     let schoolCount: number = 0;
     let otherCount: number = 0;
-    const snapshot: PublicDeadlineSnapshot | undefined = this.model.publicDeadlinesByDate.get(date);
-    if (snapshot !== undefined) {
-      for (const item of snapshot.items) {
-        if (!this.model.deadlineItemEnabled(item)) {
-          continue;
-        }
+    for (const item of this.model.deadlineItems(date)) {
         if (item.source === PublicDeadlineSource.schoolNotice) {
           schoolCount++;
         } else {
           otherCount++;
         }
-      }
     }
     return TeachingCalendarLogic.yearDeadlineBorderLayers(
       assignmentCount, schoolCount, otherCount);
@@ -933,14 +1041,41 @@ export struct ExpandedTeachingCalendarView {
           Column({ space: 8 }) {
             ForEach(this.allDayItemsOn(this.allDayDialogDay as DateParts),
               (item: ExpandedAllDayItem) => {
-                Text(item.title)
-                  .fontSize(13)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(item.tint)
-                  .width('100%')
-                  .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-                  .borderRadius(6)
-                  .backgroundColor(item.fill)
+                Row({ space: 6 }) {
+                  Text(item.title)
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(item.tint)
+                    .maxLines(2)
+                    .layoutWeight(1)
+                  if (item.deadlineItem !== null) {
+                    Button() {
+                      SymbolGlyph(this.model.isFavoriteDeadline(item.deadlineItem as PublicDeadlineItem) ?
+                        $r('sys.symbol.star_fill') : $r('sys.symbol.star'))
+                        .fontSize(18)
+                        .fontColor([this.model.isFavoriteDeadline(item.deadlineItem as PublicDeadlineItem) ?
+                          AppTheme.assignment() : AppTheme.secondaryText()])
+                    }
+                    .type(ButtonType.Normal)
+                    .width(34)
+                    .height(34)
+                    .backgroundColor(Color.Transparent)
+                    .accessibilityText(this.model.text(
+                      this.model.isFavoriteDeadline(item.deadlineItem as PublicDeadlineItem) ?
+                        '取消收藏' : '收藏'))
+                    .onClick(() => {
+                      this.model.toggleFavoriteDeadline(item.deadlineItem as PublicDeadlineItem)
+                        .catch(() => {
+                          this.model.statusMessage = '无法保存收藏';
+                        });
+                    })
+                  }
+                }
+                .width('100%')
+                .padding({ left: 10, right: 6, top: 5, bottom: 5 })
+                .borderRadius(6)
+                .backgroundColor(item.fill)
+                .alignItems(VerticalAlign.Center)
               }, (item: ExpandedAllDayItem) => 'wide-all-day-dialog.' + mode + '.' + item.id)
           }
           .width('100%')
@@ -1075,12 +1210,15 @@ class ExpandedAllDayItem {
   readonly title: string;
   readonly tint: ResourceColor;
   readonly fill: ResourceColor;
+  readonly deadlineItem: PublicDeadlineItem | null;
 
-  constructor(id: string, title: string, tint: ResourceColor, fill: ResourceColor) {
+  constructor(id: string, title: string, tint: ResourceColor, fill: ResourceColor,
+    deadlineItem: PublicDeadlineItem | null = null) {
     this.id = id;
     this.title = title;
     this.tint = tint;
     this.fill = fill;
+    this.deadlineItem = deadlineItem;
   }
 }
 

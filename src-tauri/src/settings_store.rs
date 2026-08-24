@@ -16,7 +16,7 @@ use crate::models::{SaveSettingsRequest, SavedSettings};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 7;
+const SETTINGS_SCHEMA_VERSION: u32 = 8;
 
 fn default_true() -> bool {
     true
@@ -54,6 +54,10 @@ struct SettingsFile {
     summer_camp_deadlines_enabled: bool,
     #[serde(default = "default_true")]
     hackathon_deadlines_enabled: bool,
+    #[serde(default)]
+    custom_deadlines_enabled: bool,
+    #[serde(default)]
+    custom_deadlines_url: String,
 }
 
 #[derive(Serialize)]
@@ -72,6 +76,8 @@ struct PersistedSettings<'a> {
     school_contest_notices_enabled: bool,
     summer_camp_deadlines_enabled: bool,
     hackathon_deadlines_enabled: bool,
+    custom_deadlines_enabled: bool,
+    custom_deadlines_url: &'a str,
 }
 
 fn settings_path(app: &AppHandle) -> ServiceResult<PathBuf> {
@@ -212,6 +218,8 @@ where
         school_contest_notices_enabled: file.school_contest_notices_enabled,
         summer_camp_deadlines_enabled: file.summer_camp_deadlines_enabled,
         hackathon_deadlines_enabled: file.hackathon_deadlines_enabled,
+        custom_deadlines_enabled: file.custom_deadlines_enabled,
+        custom_deadlines_url: file.custom_deadlines_url.clone(),
     };
     settings.apply_defaults();
 
@@ -250,6 +258,10 @@ where
         return Err(ServiceError::new(
             "第一周周一日期格式不正确，请使用 yyyy-MM-dd。",
         ));
+    }
+    request.custom_deadlines_url = request.custom_deadlines_url.trim().to_string();
+    if request.custom_deadlines_enabled {
+        crate::deadlines::validate_custom_feed_endpoint(&request.custom_deadlines_url)?;
     }
     let existing = load_credentials()?;
     let requested_account = request.account.trim();
@@ -304,6 +316,8 @@ where
         school_contest_notices_enabled: request.school_contest_notices_enabled,
         summer_camp_deadlines_enabled: request.summer_camp_deadlines_enabled,
         hackathon_deadlines_enabled: request.hackathon_deadlines_enabled,
+        custom_deadlines_enabled: request.custom_deadlines_enabled,
+        custom_deadlines_url: request.custom_deadlines_url.clone(),
     };
 
     let existing_account = existing
@@ -437,6 +451,8 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         school_contest_notices_enabled: settings.school_contest_notices_enabled,
         summer_camp_deadlines_enabled: settings.summer_camp_deadlines_enabled,
         hackathon_deadlines_enabled: settings.hackathon_deadlines_enabled,
+        custom_deadlines_enabled: settings.custom_deadlines_enabled,
+        custom_deadlines_url: &settings.custom_deadlines_url,
     };
     let bytes = Zeroizing::new(
         serde_json::to_vec_pretty(&persisted)
@@ -595,6 +611,8 @@ mod tests {
             school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
+            custom_deadlines_enabled: true,
+            custom_deadlines_url: "https://example.com/calendar.json".to_string(),
         }
     }
 
@@ -615,6 +633,8 @@ mod tests {
             school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
+            custom_deadlines_enabled: true,
+            custom_deadlines_url: "https://example.com/calendar.json".to_string(),
         }
     }
 
@@ -637,6 +657,11 @@ mod tests {
         assert_eq!(value["school_contest_notices_enabled"], true);
         assert_eq!(value["summer_camp_deadlines_enabled"], true);
         assert_eq!(value["hackathon_deadlines_enabled"], true);
+        assert_eq!(value["custom_deadlines_enabled"], true);
+        assert_eq!(
+            value["custom_deadlines_url"],
+            "https://example.com/calendar.json"
+        );
         assert!(value.get("account").is_none());
         assert!(value.get("password").is_none());
         assert!(!content.contains("fixture-account"));

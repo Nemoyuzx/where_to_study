@@ -30,13 +30,19 @@ struct AppThemePalette: Equatable, Sendable {
     let accent: AppThemeColor
     let onPrimary: AppThemeColor
     let selectedDate: AppThemeColor
+    let assignment: AppThemeColor
+    let schoolNotice: AppThemeColor
+    let publicDeadline: AppThemeColor
 
     static let light = AppThemePalette(
         primary: AppThemeColor(red: 22, green: 107, blue: 93),
         primaryFill: AppThemeColor(red: 22, green: 107, blue: 93),
         accent: AppThemeColor(red: 226, green: 188, blue: 98),
         onPrimary: AppThemeColor(red: 255, green: 255, blue: 255),
-        selectedDate: AppThemeColor(red: 37, green: 99, blue: 235)
+        selectedDate: AppThemeColor(red: 37, green: 99, blue: 235),
+        assignment: AppThemeColor(red: 154, green: 101, blue: 0),
+        schoolNotice: AppThemeColor(red: 91, green: 75, blue: 196),
+        publicDeadline: AppThemeColor(red: 0, green: 124, blue: 145)
     )
 
     static let dark = AppThemePalette(
@@ -44,7 +50,10 @@ struct AppThemePalette: Equatable, Sendable {
         primaryFill: AppThemeColor(red: 25, green: 117, blue: 101),
         accent: AppThemeColor(red: 135, green: 102, blue: 34),
         onPrimary: AppThemeColor(red: 255, green: 255, blue: 255),
-        selectedDate: AppThemeColor(red: 29, green: 78, blue: 216)
+        selectedDate: AppThemeColor(red: 29, green: 78, blue: 216),
+        assignment: AppThemeColor(red: 255, green: 193, blue: 77),
+        schoolNotice: AppThemeColor(red: 183, green: 168, blue: 255),
+        publicDeadline: AppThemeColor(red: 104, green: 213, blue: 229)
     )
 }
 
@@ -54,6 +63,9 @@ enum AppTheme {
     static let accent = adaptiveColor(\.accent)
     static let onPrimary = adaptiveColor(\.onPrimary)
     static let selectedDate = adaptiveColor(\.selectedDate)
+    static let assignment = adaptiveColor(\.assignment)
+    static let schoolNotice = adaptiveColor(\.schoolNotice)
+    static let publicDeadline = adaptiveColor(\.publicDeadline)
 
     #if os(macOS)
     static let background = Color(nsColor: .windowBackgroundColor)
@@ -62,9 +74,6 @@ enum AppTheme {
     static let secondaryText = Color(nsColor: .secondaryLabelColor)
     static let border = Color(nsColor: .separatorColor)
     static let danger = Color(nsColor: .systemRed)
-    static let assignment = Color(nsColor: .systemPurple)
-    static let schoolNotice = Color(nsColor: .systemOrange)
-    static let publicDeadline = Color(nsColor: .systemBlue)
     #else
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
@@ -72,9 +81,6 @@ enum AppTheme {
     static let secondaryText = Color(uiColor: .secondaryLabel)
     static let border = Color(uiColor: .separator)
     static let danger = Color(uiColor: .systemRed)
-    static let assignment = Color(uiColor: .systemPurple)
-    static let schoolNotice = Color(uiColor: .systemOrange)
-    static let publicDeadline = Color(uiColor: .systemBlue)
     #endif
 
     private static func adaptiveColor(

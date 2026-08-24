@@ -383,6 +383,52 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertTrue(store.assignmentUnavailableByDate.isEmpty)
         XCTAssertTrue(store.loadingAssignmentDates.isEmpty)
     }
+
+    @MainActor
+    func testStoreLoadsSwitchesAndClearsCustomFeedIndependently() async throws {
+        let firstURL = try XCTUnwrap(URL(string: "https://example.com/first.json"))
+        let secondURL = try XCTUnwrap(URL(string: "https://example.com/second.json"))
+        let store = CalendarDeadlineStore(
+            assignmentClient: EmptyAssignmentDeadlineClient(),
+            customClientFactory: { StubCustomDeadlineClient(sourceURL: $0) }
+        )
+
+        await store.prewarmCustomIfNeeded(
+            sourceURL: firstURL,
+            dates: ["2026-09-18"],
+            sampleMode: false
+        )
+        XCTAssertEqual(store.customByDate["2026-09-18"]?.items.first?.id, "first.json")
+        XCTAssertEqual(store.publicItems(for: "2026-09-18").count, 1)
+        XCTAssertEqual(store.customSourceMetadata?.sourceName, "Stub")
+
+        await store.loadCustom(dates: ["2026-09-18"], sourceURL: secondURL)
+        XCTAssertEqual(store.customByDate["2026-09-18"]?.items.first?.id, "second.json")
+
+        await store.loadCalendarEvents(
+            dates: ["2026-09-18"],
+            sampleMode: false,
+            includesPublicDeadlines: false,
+            customSourceURL: nil
+        )
+        XCTAssertTrue(store.customByDate.isEmpty)
+        XCTAssertNil(store.customSourceMetadata)
+    }
+
+    @MainActor
+    func testFailedPublicPrewarmDoesNotRetryNetworkDuringDatePaging() async {
+        let client = FailedPrewarmDeadlineClient()
+        let store = CalendarDeadlineStore(client: client)
+
+        await store.prewarmPublicIfNeeded(publicDeadlinesEnabled: true, sampleMode: false)
+        await store.loadPublic(dates: ["2026-09-18"], sampleMode: false)
+
+        XCTAssertNotNil(store.publicErrors["2026-09-18"])
+        let fetchInvocationCount = await client.fetchInvocationCount
+        let prewarmInvocationCount = await client.prewarmInvocationCount
+        XCTAssertEqual(fetchInvocationCount, 0)
+        XCTAssertEqual(prewarmInvocationCount, 1)
+    }
 }
 
 private actor PublicFullFeedRecorder {
@@ -600,5 +646,67 @@ private actor SuspendedAssignmentClient: AssignmentDeadlineFetching {
     func complete(with items: [AssignmentDeadlineItem]) {
         fetchContinuation?.resume(returning: items)
         fetchContinuation = nil
+    }
+}
+
+private struct EmptyAssignmentDeadlineClient: AssignmentDeadlineFetching {
+    func fetch(date _: String) async throws -> [AssignmentDeadlineItem] { [] }
+    func reset() async {}
+}
+
+private struct StubCustomDeadlineClient: CustomDeadlineFeedFetching {
+    let sourceURL: URL
+
+    func fetch(dates: [String]) async throws -> [String: PublicDeadlineSnapshot] {
+        Dictionary(uniqueKeysWithValues: dates.map { date in
+            let item = PublicDeadlineItem(
+                id: sourceURL.lastPathComponent,
+                name: "自定义日程",
+                kind: .custom,
+                source: .custom,
+                deadline: "\(date)T23:59:00+08:00",
+                organizer: nil,
+                officialURL: nil,
+                sourceName: "Stub",
+                sourceHomepage: nil
+            )
+            return (
+                date,
+                PublicDeadlineSnapshot(
+                    date: date,
+                    items: [item],
+                    source: sourceURL,
+                    usedBackup: false
+                )
+            )
+        })
+    }
+
+    func validateFeed() async throws -> CustomDeadlineFeedMetadata {
+        CustomDeadlineFeedMetadata(sourceName: "Stub", homepage: nil, itemCount: 1)
+    }
+
+    func prewarm(dates: [String]) async throws -> [String: PublicDeadlineSnapshot] {
+        try await fetch(dates: dates)
+    }
+}
+
+private actor FailedPrewarmDeadlineClient: PublicDeadlineFetching {
+    private(set) var fetchInvocationCount = 0
+    private(set) var prewarmInvocationCount = 0
+
+    func fetch(date: String) async throws -> PublicDeadlineSnapshot {
+        fetchInvocationCount += 1
+        throw CalendarDeadlineError.service("unexpected fetch for \(date)")
+    }
+
+    func fetch(dates _: [String]) async throws -> [String: PublicDeadlineSnapshot] {
+        fetchInvocationCount += 1
+        throw CalendarDeadlineError.service("unexpected range fetch")
+    }
+
+    func prewarm() async throws -> [String: PublicDeadlineSnapshot] {
+        prewarmInvocationCount += 1
+        throw CalendarDeadlineError.service("prewarm unavailable")
     }
 }

@@ -47,7 +47,7 @@
 
 ## 当前待提交素材
 
-当前待分发构建为 iOS `0.2.4 (65)`、macOS `0.2.4 (65)`。13 英寸 iPad 横屏素材由 Xcode UI 测试的 `testStoreIPad13LandscapeScreenshots` 使用内置示例模式生成；正式提交前仍须逐张检查尺寸、Alpha、敏感信息和界面完整性，并把校验值写入 `screenshot-manifest.md`。不得复用 Build 25 截图作为当前商店素材。
+当前待分发构建为 iOS `0.2.5 (66)`、macOS `0.2.5 (66)`。13 英寸 iPad 横屏素材由 Xcode UI 测试的 `testStoreIPad13LandscapeScreenshots` 使用内置示例模式生成；正式提交前仍须逐张检查尺寸、Alpha、敏感信息和界面完整性，并把校验值写入 `screenshot-manifest.md`。不得复用 Build 25 截图作为当前商店素材。
 
 ## 历史 Build 25 素材（不可用于当前提交）
 

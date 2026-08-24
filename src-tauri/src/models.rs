@@ -60,6 +60,10 @@ pub struct SavedSettings {
     pub summer_camp_deadlines_enabled: bool,
     #[serde(default = "default_true")]
     pub hackathon_deadlines_enabled: bool,
+    #[serde(default)]
+    pub custom_deadlines_enabled: bool,
+    #[serde(default)]
+    pub custom_deadlines_url: String,
 }
 
 impl SavedSettings {
@@ -80,6 +84,8 @@ impl SavedSettings {
             school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
+            custom_deadlines_enabled: false,
+            custom_deadlines_url: String::new(),
         }
     }
 
@@ -131,6 +137,10 @@ pub struct SaveSettingsRequest {
     pub summer_camp_deadlines_enabled: bool,
     #[serde(default = "default_true")]
     pub hackathon_deadlines_enabled: bool,
+    #[serde(default)]
+    pub custom_deadlines_enabled: bool,
+    #[serde(default)]
+    pub custom_deadlines_url: String,
 }
 
 impl SaveSettingsRequest {
@@ -221,6 +231,13 @@ pub struct CalendarRangeRequest {
     pub end_date: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomDeadlineCalendarRequest {
+    pub url: String,
+    pub start_date: String,
+    pub end_date: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeadlineItem {
     pub id: String,
@@ -230,6 +247,10 @@ pub struct DeadlineItem {
     pub primary_deadline: String,
     pub organizer: Option<String>,
     pub official_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

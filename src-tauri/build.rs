@@ -17,6 +17,7 @@ fn main() {
         "fetch_deadlines",
         "fetch_assignments",
         "fetch_deadline_calendar",
+        "fetch_custom_deadline_calendar",
         "fetch_assignment_calendar",
     ];
 

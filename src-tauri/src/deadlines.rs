@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -19,6 +20,7 @@ const SCHOOL_NOTICES_URL: &str = "http://101.201.29.29/api/contest-notices";
 const BACKUP_HOST: &str = "101.201.29.29";
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_ITEMS_PER_DAY: usize = 100;
+const MAX_CUSTOM_ITEMS: usize = 5_000;
 const MAX_CALENDAR_RANGE_DAYS: i64 = 370;
 const SOURCE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const USER_AGENT: &str = concat!("WhereToStudy/", env!("CARGO_PKG_VERSION"));
@@ -60,6 +62,33 @@ fn cache_source(endpoint: &str, bytes: &[u8]) {
 #[derive(Debug, Deserialize)]
 struct SourceEnvelope {
     items: Vec<SourceDeadline>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CustomSourceEnvelope {
+    version: u32,
+    source: String,
+    #[serde(default)]
+    homepage: Option<String>,
+    #[serde(default)]
+    updated_at: Option<String>,
+    items: Vec<CustomSourceDeadline>,
+    #[serde(flatten)]
+    extra: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CustomSourceDeadline {
+    id: String,
+    name: String,
+    event_type: String,
+    primary_deadline: Option<String>,
+    #[serde(default)]
+    organizer: Option<String>,
+    #[serde(default)]
+    official_url: Option<String>,
+    #[serde(flatten)]
+    extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,6 +157,72 @@ fn validate_endpoint(url: &Url, host: &str, allow_plain_http: bool) -> ServiceRe
     Ok(())
 }
 
+fn blocked_ipv4(address: Ipv4Addr) -> bool {
+    let [first, second, third, _] = address.octets();
+    first == 0
+        || first == 10
+        || first == 127
+        || (first == 100 && (64..=127).contains(&second))
+        || (first == 169 && second == 254)
+        || (first == 172 && (16..=31).contains(&second))
+        || (first == 192 && second == 0)
+        || (first == 192 && second == 168)
+        || (first == 192 && second == 0 && third == 2)
+        || (first == 198 && (second == 18 || second == 19))
+        || (first == 198 && second == 51 && third == 100)
+        || (first == 203 && second == 0 && third == 113)
+        || first >= 224
+}
+
+fn blocked_ipv6(address: Ipv6Addr) -> bool {
+    if let Some(mapped) = address.to_ipv4() {
+        return blocked_ipv4(mapped);
+    }
+    let segments = address.segments();
+    address.is_loopback()
+        || address.is_unspecified()
+        || address.is_unique_local()
+        || address.is_unicast_link_local()
+        || address.is_multicast()
+        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+}
+
+fn blocked_literal_address(host: &str) -> bool {
+    match host.parse::<IpAddr>() {
+        Ok(IpAddr::V4(address)) => blocked_ipv4(address),
+        Ok(IpAddr::V6(address)) => blocked_ipv6(address),
+        Err(_) => false,
+    }
+}
+
+pub fn validate_custom_feed_endpoint(endpoint: &str) -> ServiceResult<Url> {
+    let trimmed = endpoint.trim();
+    let url = Url::parse(trimmed)
+        .map_err(|error| ServiceError::with_status(format!("自定义日程地址无效：{error}"), 400))?;
+    let Some(host) = url.host_str() else {
+        return Err(ServiceError::with_status("自定义日程地址缺少主机名。", 400));
+    };
+    let normalized_host = host.trim_end_matches('.').to_ascii_lowercase();
+    let literal_host = normalized_host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(&normalized_host);
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+        || normalized_host == "localhost"
+        || normalized_host.ends_with(".localhost")
+        || blocked_literal_address(literal_host)
+    {
+        return Err(ServiceError::with_status(
+            "自定义日程只允许不含凭据、片段或本地地址的公开 HTTPS URL。",
+            400,
+        ));
+    }
+    Ok(url)
+}
+
 async fn read_limited(mut response: reqwest::Response) -> ServiceResult<Vec<u8>> {
     if response
         .content_length()
@@ -186,6 +281,36 @@ async fn fetch_source(
     Ok(bytes)
 }
 
+async fn fetch_custom_source(endpoint: &str) -> ServiceResult<Vec<u8>> {
+    let url = validate_custom_feed_endpoint(endpoint)?;
+    let cache_key = url.as_str().to_string();
+    if let Some(bytes) = cached_source(&cache_key) {
+        return Ok(bytes);
+    }
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|error| ServiceError::new(format!("无法创建自定义日程请求：{error}")))?;
+    let response = client
+        .get(url)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::USER_AGENT, USER_AGENT)
+        .send()
+        .await
+        .map_err(|error| ServiceError::new(format!("无法获取自定义日程：{error}")))?;
+    if response.status().is_redirection() {
+        return Err(ServiceError::new("自定义日程接口返回了不受信任的重定向。"));
+    }
+    let response = response
+        .error_for_status()
+        .map_err(|error| ServiceError::new(format!("自定义日程接口返回错误：{error}")))?;
+    let bytes = read_limited(response).await?;
+    cache_source(&cache_key, &bytes);
+    Ok(bytes)
+}
+
 fn parse_source_range(
     bytes: &[u8],
     start_date: NaiveDate,
@@ -236,7 +361,148 @@ fn parse_source_range(
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
             official_url,
+            source_name: None,
+            source_url: None,
         });
+        if items.len() >= max_items {
+            break;
+        }
+    }
+    items.sort_by(|left, right| {
+        (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
+    });
+    Ok(items)
+}
+
+fn parse_custom_source_range(
+    bytes: &[u8],
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+    feed_url: &str,
+) -> ServiceResult<Vec<DeadlineItem>> {
+    let envelope: CustomSourceEnvelope = serde_json::from_slice(bytes)
+        .map_err(|error| ServiceError::new(format!("自定义日程数据解析失败：{error}")))?;
+    if envelope.version != 1 {
+        return Err(ServiceError::with_status(
+            "自定义日程接口版本必须为 1。",
+            400,
+        ));
+    }
+    if !envelope.extra.is_empty() {
+        return Err(ServiceError::with_status(
+            "自定义日程不符合 v1 接口规范。",
+            400,
+        ));
+    }
+    let source_name = envelope.source.trim();
+    if source_name.is_empty() || source_name.chars().count() > 80 {
+        return Err(ServiceError::with_status("自定义日程来源名称无效。", 400));
+    }
+    if envelope.items.len() > MAX_CUSTOM_ITEMS {
+        return Err(ServiceError::with_status(
+            "自定义日程条目超过 5000 项。",
+            400,
+        ));
+    }
+    if envelope
+        .homepage
+        .as_deref()
+        .is_some_and(|value| trusted_https_url(Some(value.to_string())).is_none())
+    {
+        return Err(ServiceError::with_status(
+            "自定义日程来源主页必须使用 HTTPS。",
+            400,
+        ));
+    }
+    let source_url = trusted_https_url(envelope.homepage.clone())
+        .or_else(|| trusted_https_url(Some(feed_url.to_string())));
+    if envelope
+        .updated_at
+        .as_deref()
+        .is_some_and(|value| DateTime::parse_from_rfc3339(value).is_err())
+    {
+        return Err(ServiceError::with_status(
+            "自定义日程更新时间格式不正确。",
+            400,
+        ));
+    }
+
+    let max_items = MAX_ITEMS_PER_DAY.saturating_mul(
+        (end_date.signed_duration_since(start_date).num_days() + 1).max(1) as usize,
+    );
+    let mut items = Vec::new();
+    let mut accepted_per_day = HashMap::<NaiveDate, usize>::new();
+    for source in envelope.items {
+        if !source.extra.is_empty() {
+            continue;
+        }
+        if !matches!(
+            source.event_type.as_str(),
+            "competition" | "summer_camp" | "hackathon" | "custom"
+        ) {
+            continue;
+        }
+        let Some(deadline) = source.primary_deadline else {
+            continue;
+        };
+        let Ok(parsed_deadline) = DateTime::parse_from_rfc3339(&deadline) else {
+            continue;
+        };
+        let Some(deadline_date) = deadline
+            .get(..10)
+            .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
+        else {
+            continue;
+        };
+        if deadline_date < start_date || deadline_date > end_date {
+            continue;
+        }
+        if accepted_per_day
+            .get(&deadline_date)
+            .is_some_and(|count| *count >= MAX_ITEMS_PER_DAY)
+        {
+            continue;
+        }
+        let id = source.id.trim();
+        let name = source.name.trim();
+        if id.is_empty()
+            || id.chars().count() > 128
+            || name.is_empty()
+            || name.chars().count() > 200
+        {
+            continue;
+        }
+        let organizer = match source.organizer {
+            Some(value) => {
+                let normalized = value.trim();
+                if normalized.is_empty() || normalized.chars().count() > 200 {
+                    continue;
+                }
+                Some(normalized.to_string())
+            }
+            None => None,
+        };
+        let official_url = match source.official_url {
+            Some(value) => {
+                let Some(url) = trusted_https_url(Some(value)) else {
+                    continue;
+                };
+                Some(url)
+            }
+            None => None,
+        };
+        items.push(DeadlineItem {
+            id: format!("custom:{id}"),
+            name: name.to_string(),
+            event_type: source.event_type,
+            source_type: "custom".to_string(),
+            primary_deadline: parsed_deadline.to_rfc3339(),
+            organizer: organizer.or_else(|| Some(source_name.to_string())),
+            official_url,
+            source_name: Some(source_name.to_string()),
+            source_url: source_url.clone(),
+        });
+        *accepted_per_day.entry(deadline_date).or_default() += 1;
         if items.len() >= max_items {
             break;
         }
@@ -325,6 +591,8 @@ fn parse_school_notices_range(
                 primary_deadline: parsed_deadline.to_rfc3339(),
                 organizer: Some(format!("{source_name} · {label}")),
                 official_url: official_url.clone(),
+                source_name: None,
+                source_url: None,
             });
             if items.len() >= max_items {
                 break;
@@ -502,6 +770,31 @@ pub async fn fetch_deadline_calendar(
     })
 }
 
+pub async fn fetch_custom_deadline_calendar(
+    payload: &crate::models::CustomDeadlineCalendarRequest,
+) -> ServiceResult<DeadlineCalendarResponse> {
+    let start = parse_date(payload.start_date.trim())?;
+    let end = parse_date(payload.end_date.trim())?;
+    let day_count = end.signed_duration_since(start).num_days() + 1;
+    if !(1..=MAX_CALENDAR_RANGE_DAYS).contains(&day_count) {
+        return Err(ServiceError::with_status(
+            "自定义日程查询范围必须在 1 至 370 天内。",
+            400,
+        ));
+    }
+    let url = validate_custom_feed_endpoint(&payload.url)?;
+    let bytes = fetch_custom_source(url.as_str()).await?;
+    let items = parse_custom_source_range(&bytes, start, end, url.as_str())?;
+    Ok(DeadlineCalendarResponse {
+        start_date: start.to_string(),
+        end_date: end.to_string(),
+        fetched_at: crate::config::now_in_app_tz(),
+        source: url.to_string(),
+        used_backup: false,
+        items,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,6 +855,8 @@ mod tests {
                 ),
                 organizer: None,
                 official_url: None,
+                source_name: None,
+                source_url: None,
             })
             .collect();
         assert_eq!(merge_items([items.clone()]).len(), MAX_ITEMS_PER_DAY);
@@ -584,6 +879,153 @@ mod tests {
             true
         )
         .is_err());
+    }
+
+    #[test]
+    fn custom_endpoint_policy_requires_public_credential_free_https() {
+        assert!(validate_custom_feed_endpoint("https://calendar.example.com/feed.json").is_ok());
+        for rejected in [
+            "http://calendar.example.com/feed.json",
+            "https://localhost/feed.json",
+            "https://calendar.localhost/feed.json",
+            "https://127.0.0.1/feed.json",
+            "https://192.168.1.2/feed.json",
+            "https://[::1]/feed.json",
+            "https://user:password@example.com/feed.json",
+            "https://example.com/feed.json#fragment",
+        ] {
+            assert!(
+                validate_custom_feed_endpoint(rejected).is_err(),
+                "unexpectedly accepted {rejected}"
+            );
+        }
+    }
+
+    #[test]
+    fn custom_feed_fixture_uses_v1_contract_and_custom_source_identity() {
+        let fixture = include_bytes!("../../contracts/v1/fixtures/custom-deadline-feed.json");
+        let start = NaiveDate::from_ymd_opt(2026, 9, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2026, 10, 31).unwrap();
+        let parsed = parse_custom_source_range(
+            fixture,
+            start,
+            end,
+            "https://calendar.example.com/feed.json",
+        )
+        .unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].id, "custom:example-registration");
+        assert_eq!(parsed[0].event_type, "custom");
+        assert_eq!(parsed[0].source_type, "custom");
+        assert_eq!(parsed[0].organizer.as_deref(), Some("示例组织方"));
+        assert_eq!(parsed[0].source_name.as_deref(), Some("示例自定义日程"));
+        assert_eq!(
+            parsed[0].source_url.as_deref(),
+            Some("https://example.com/calendar")
+        );
+        assert_eq!(parsed[1].id, "custom:example-competition");
+    }
+
+    #[test]
+    fn custom_feed_rejects_unknown_contract_versions() {
+        let payload = br#"{"version":2,"source":"test","items":[]}"#;
+        let date = NaiveDate::from_ymd_opt(2026, 9, 1).unwrap();
+        assert!(parse_custom_source_range(
+            payload,
+            date,
+            date,
+            "https://calendar.example.com/feed.json",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn custom_feed_rejects_invalid_envelopes_and_skips_unsafe_items() {
+        let date = NaiveDate::from_ymd_opt(2026, 9, 18).unwrap();
+        for payload in [
+            br#"{"version":1,"source":"missing items"}"#.as_slice(),
+            br#"{"version":1,"source":"bad homepage","homepage":"http://example.com","items":[]}"#
+                .as_slice(),
+            br#"{"version":1,"source":"bad update","updated_at":"2026-08-24","items":[]}"#
+                .as_slice(),
+            br#"{"version":1,"source":"extra","items":[],"unknown":true}"#.as_slice(),
+        ] {
+            assert!(parse_custom_source_range(
+                payload,
+                date,
+                date,
+                "https://calendar.example.com/feed.json",
+            )
+            .is_err());
+        }
+
+        let oversized_organizer = "x".repeat(201);
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "source": "Example",
+            "items": [
+                {
+                    "id": "unsafe",
+                    "name": "Unsafe",
+                    "event_type": "custom",
+                    "primary_deadline": "2026-09-18T12:00:00+08:00",
+                    "official_url": "http://example.com"
+                },
+                {
+                    "id": "organizer",
+                    "name": "Organizer",
+                    "event_type": "custom",
+                    "primary_deadline": "2026-09-18T13:00:00+08:00",
+                    "organizer": oversized_organizer
+                },
+                {
+                    "id": "unknown-field",
+                    "name": "Unknown field",
+                    "event_type": "custom",
+                    "primary_deadline": "2026-09-18T14:00:00+08:00",
+                    "unknown": true
+                }
+            ]
+        }))
+        .unwrap();
+        let parsed = parse_custom_source_range(
+            &payload,
+            date,
+            date,
+            "https://calendar.example.com/feed.json",
+        )
+        .unwrap();
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn custom_feed_caps_each_calendar_day_at_one_hundred_items() {
+        let items = (0..105)
+            .map(|index| {
+                serde_json::json!({
+                    "id": format!("item-{index}"),
+                    "name": format!("Item {index}"),
+                    "event_type": "custom",
+                    "primary_deadline": "2026-09-18T23:59:00+08:00"
+                })
+            })
+            .collect::<Vec<_>>();
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "version": 1,
+            "source": "Daily limit fixture",
+            "items": items
+        }))
+        .unwrap();
+        let date = NaiveDate::from_ymd_opt(2026, 9, 18).unwrap();
+
+        let parsed = parse_custom_source_range(
+            &payload,
+            date,
+            date,
+            "https://calendar.example.com/feed.json",
+        )
+        .unwrap();
+        assert_eq!(parsed.len(), MAX_ITEMS_PER_DAY);
     }
 
     #[test]

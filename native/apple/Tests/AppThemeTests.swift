@@ -19,6 +19,17 @@ final class AppThemeTests: XCTestCase {
         XCTAssertNotEqual(AppThemePalette.dark.selectedDate, AppThemePalette.dark.primaryFill)
     }
 
+    func testCalendarSemanticColorsMatchTheCrossPlatformContract() {
+        XCTAssertEqual(AppThemePalette.light.selectedDate, color(0x25, 0x63, 0xEB))
+        XCTAssertEqual(AppThemePalette.dark.selectedDate, color(0x1D, 0x4E, 0xD8))
+        XCTAssertEqual(AppThemePalette.light.assignment, color(0x9A, 0x65, 0x00))
+        XCTAssertEqual(AppThemePalette.dark.assignment, color(0xFF, 0xC1, 0x4D))
+        XCTAssertEqual(AppThemePalette.light.schoolNotice, color(0x5B, 0x4B, 0xC4))
+        XCTAssertEqual(AppThemePalette.dark.schoolNotice, color(0xB7, 0xA8, 0xFF))
+        XCTAssertEqual(AppThemePalette.light.publicDeadline, color(0x00, 0x7C, 0x91))
+        XCTAssertEqual(AppThemePalette.dark.publicDeadline, color(0x68, 0xD5, 0xE5))
+    }
+
     func testBrandForegroundMaintainsContrastAgainstPageBackgrounds() {
         let lightBackground = AppThemeColor(red: 244, green: 247, blue: 244)
         let darkBackground = AppThemeColor(red: 24, green: 28, blue: 26)
@@ -53,6 +64,10 @@ final class AppThemeTests: XCTestCase {
             left: (left.red, left.green, left.blue),
             right: (right.red, right.green, right.blue)
         )
+    }
+
+    private func color(_ red: Int, _ green: Int, _ blue: Int) -> AppThemeColor {
+        AppThemeColor(red: red, green: green, blue: blue)
     }
 
     #if os(macOS)

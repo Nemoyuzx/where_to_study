@@ -50,7 +50,7 @@ export struct PrivacyPolicyView {
               .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.text())
             Text(this.model.resolvedLanguage() === AppLanguage.english ?
-              'Effective date: 2026-08-23' : '生效日期：2026-08-23')
+              'Effective date: 2026-08-24' : '生效日期：2026-08-24')
               .fontSize(14)
               .fontColor(AppTheme.secondaryText())
           }
@@ -65,11 +65,11 @@ export struct PrivacyPolicyView {
           this.privacySection('账户与教务请求 / Account and academic requests',
             '学号和密码保存在操作系统的受保护凭据存储中，仅在你请求课表、空教室或作业时按对应用途通过 HTTPS 使用。维护者无法读取凭据，设置接口也不会返回密码。\n\nCredentials stay in protected OS storage and are used over HTTPS only for requested schedules, classrooms, or assignments. The maintainer cannot read credentials, and settings APIs never return a password.')
           this.privacySection('本地数据 / Local data',
-            '课表、空教室、校区、学期和开关缓存在设备上；受支持系统的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Course widgets on supported systems read only a local snapshot. Clear local data removes credentials, caches, preferences, and app-managed reminders.')
+            '课表、空教室、校区、学期和开关缓存在设备上；收藏会把完整日程快照保存在本机，不上传或跨设备同步。受支持系统的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、收藏、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Favorites keep complete event snapshots on this device and are neither uploaded nor synchronized. Course widgets on supported systems read only a local snapshot. Clear local data removes credentials, caches, favorites, preferences, and app-managed reminders.')
           this.privacySection('节假日数据 / Holiday data',
             '应用可能通过 unpkg 获取固定版本 holiday-calendar 数据；Android 在已有权限时也可能读取系统节假日日历。请求仅含 CN 与年份。iOS 只依据权威休息日数据显示“休”。\n\nThe app may retrieve pinned holiday-calendar data through unpkg; Android may read the OS holiday calendar when permitted. Requests contain only CN and year. iOS marks rest days only from authoritative rest-day data.')
           this.privacySection('天气、黄历与公开活动 / Weather, almanac, and public events',
-            'UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松；校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。各类别有独立开关。固定 HTTP API 仅接收无凭据 GET，拒绝重定向且不含个人数据。所有显示数据仅供参考。\n\nUAPI provides district-level weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides public events. School notices are extracted by a server-side script from public pages on the university’s internal website. Each category has its own switch. Fixed HTTP APIs receive credential-free GET requests with no personal data and reject redirects. Displayed data is for reference only.')
+            'UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松；校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。用户还可选择公开 HTTPS JSON 自定义日程源；请求不附带个人数据，客户端拒绝含凭据、本机/私网字面量、重定向或超大响应的地址。各类别有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides public events. School notices are extracted by a server-side script from public pages on the university’s internal website. Users may also select a public HTTPS JSON custom feed. Requests contain no personal data, and credential-bearing, local/private literal, redirecting, or oversized endpoints are rejected. Each category has its own switch, and displayed data is for reference only.')
           this.privacySection('云课堂作业 / UCloud assignments',
             '密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\nThe password is submitted only to auth.bupt.edu.cn over HTTPS. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes.')
           this.privacySection('系统日历、通知与小组件 / Calendar, notifications, and widgets',

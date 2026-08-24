@@ -46,9 +46,9 @@ use tauri_plugin_notification::NotificationExt;
 use crate::models::{
     AlmanacRequest, AlmanacResponse, AssignmentCalendarResponse, AssignmentsRequest,
     AssignmentsResponse, CalendarRangeRequest, ClassroomsCacheResponse, ClassroomsRequest,
-    DeadlineCalendarResponse, DeadlinesRequest, DeadlinesResponse, HolidaysRequest,
-    HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest,
-    ScheduleResponse, WeatherRequest, WeatherResponse,
+    CustomDeadlineCalendarRequest, DeadlineCalendarResponse, DeadlinesRequest, DeadlinesResponse,
+    HolidaysRequest, HolidaysResponse, MetadataResponse, SaveSettingsRequest, SavedSettings,
+    ScheduleRequest, ScheduleResponse, WeatherRequest, WeatherResponse,
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
@@ -1140,6 +1140,15 @@ async fn fetch_deadline_calendar(
     payload: CalendarRangeRequest,
 ) -> Result<DeadlineCalendarResponse, String> {
     deadlines::fetch_deadline_calendar(&payload)
+        .await
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_custom_deadline_calendar(
+    payload: CustomDeadlineCalendarRequest,
+) -> Result<DeadlineCalendarResponse, String> {
+    deadlines::fetch_custom_deadline_calendar(&payload)
         .await
         .map_err(|error| error.message)
 }
@@ -2543,6 +2552,7 @@ pub fn run() {
             fetch_deadlines,
             fetch_assignments,
             fetch_deadline_calendar,
+            fetch_custom_deadline_calendar,
             fetch_assignment_calendar,
             set_interface_language
         ])

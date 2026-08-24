@@ -75,12 +75,24 @@ export class AppTheme {
     return $r('app.color.app_assignment');
   }
 
+  static assignmentSurface(): Resource {
+    return $r('app.color.app_assignment_surface');
+  }
+
   static schoolNotice(): Resource {
     return $r('app.color.app_school_notice');
   }
 
+  static schoolNoticeSurface(): Resource {
+    return $r('app.color.app_school_notice_surface');
+  }
+
   static publicDeadline(): Resource {
     return $r('app.color.app_public_deadline');
+  }
+
+  static publicDeadlineSurface(): Resource {
+    return $r('app.color.app_public_deadline_surface');
   }
 
   // 主色深档（对应 Android Palette.primaryDark，两模式同值）。

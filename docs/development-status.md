@@ -3,12 +3,12 @@
 ## 当前状态
 
 - 分支：`main`
-- 当前发布版本：[v0.2.4](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.4)
-- 应用版本：`0.2.4`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=65`；Android `versionCode=37`
+- 当前发布版本：[v0.2.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.5)
+- 应用版本：`0.2.5`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=66`；Android `versionCode=38`；HarmonyOS `versionCode=1002005`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：仅保留最新 SwiftUI Universal 应用 `/Applications/Where To Study.app`；未再检测到其他 Where To Study 安装副本
-- 发布边界：`v0.2.4` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 65 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.5` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 66 只通过 TestFlight 分发；GitHub Release 不上传任何 iOS、macOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -88,7 +88,21 @@
 - 月视图日期详情补齐云课堂原生 CAS 登录与实时作业同步、黄历宜忌与竞赛/夏令营/黑客松统一 DDL 卡片，设置页提供天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松六个独立开关与来源声明。
 - 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年双层 DDL 同心边框、只折叠课程的日周摘要、独立的今天/选中状态、范围缓存和中英文界面；日/周时间轴轴区与日期区均使用整点实线和节次虚线；构建及 91 项 ArkTS 单元测试通过。
 
-## 最终本地验证
+## 0.2.5 最终本地验证
+
+| 范围 | 结果 |
+| --- | --- |
+| React/Tauri UI | 97/97 Node 契约与业务测试、`npm run build` 通过；Playwright 在最小桌面窗口 `960×700` 检查中英文设置、月历、收藏管理、跨月日期和键盘操作，无文本溢出；同月选日不再重建 42 格月网格 |
+| Rust/Tauri | `cargo fmt --check`、严格 Clippy 与 125/125 自动测试通过；1 项依赖本机安全存储和北邮在线服务的真实作业同步测试按设计忽略 |
+| macOS SwiftUI | 本地 Xcode 严格 Swift 6 与警告即错误构建通过；178/178 XCTest 通过；键盘栏目/视图/翻页/Today/Esc 契约覆盖 |
+| iOS SwiftUI | 本地 Xcode 183/183 XCTest 通过；21 个 UI 定义中 3 个仅 iPad 条件跳过，其余 18 个唯一路径全部验证通过。键盘完成按钮在全量回归发现问题后改为稳定的账户卡内按钮，聚焦重跑 1/1 通过 |
+| Android | `0.2.5 (38)` 的 170/170 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Android 16 模拟器收藏、自定义预热、英文、设置与跨月动画 7/7 通过 |
+| HarmonyOS | `0.2.5 (1002005)` HAP 构建与 94/94 ArkTS 单元测试通过；自定义 v1 严格校验、single-flight、当前年预热、周期刷新、收藏来源快照、全天弹窗星标和分段设置控件均通过编译。当前 `hdc` 无真机目标 |
+| 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、2 MiB/5000 项/100 项每日/370 天限制、5 分钟刷新、完整本地收藏快照及中英双语隐私说明通过 |
+
+完整中英文变更见 [`release-v0.2.5.md`](release-v0.2.5.md)，自定义日程公开契约见 [`custom-schedule-api.md`](custom-schedule-api.md)。
+
+## 0.2.4 最终本地验证（历史）
 
 | 范围 | 结果 |
 | --- | --- |
@@ -118,6 +132,10 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 - macOS：0.2.4 最终源码 159/159 项逻辑测试通过
 - iOS：0.2.4 最终源码 166/166 项逻辑测试通过；17 项 UI smoke 中 15 项通过、2 项仅 iPad 条件跳过、0 项失败
 - 通知权限超时精确测试：20 轮、40/40 通过
+
+## 0.2.5 稳定版发布制品
+
+`v0.2.5` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI，以及固定 release key 签名的 Android `0.2.5 (38)` APK/AAB。iOS 与 macOS `0.2.5 (66)` 由本地 Xcode 上传 TestFlight，不进入 GitHub Release；脚本或 CI 生成的 `.sha256` 只供内部校验，同样不上传。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
 
 ## 0.2.4 稳定版发布制品
 

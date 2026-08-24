@@ -5,6 +5,68 @@ final class TeachingCalendarSessionState: ObservableObject {
     @Published var modeRawValue = "周"
     @Published var isMonthExpanded = true
     @Published var isMonthDetailRaised = false
+    @Published private(set) var dismissOverlayGeneration = 0
+
+    func applyKeyboardAction(
+        _ action: AppKeyboardAction,
+        now: Date = .now,
+        calendar: Calendar = .shanghai
+    ) {
+        switch action {
+        case .dayView: modeRawValue = CalendarMode.day.rawValue
+        case .weekView: modeRawValue = CalendarMode.week.rawValue
+        case .monthView: modeRawValue = CalendarMode.month.rawValue
+        case .yearView: modeRawValue = CalendarMode.year.rawValue
+        case .previousPeriod, .nextPeriod:
+            let unit: TeachingCalendarLogic.NavigationUnit = switch modeRawValue {
+            case CalendarMode.day.rawValue: .day
+            case CalendarMode.month.rawValue: .month
+            case CalendarMode.year.rawValue: .year
+            default: .week
+            }
+            let direction = action == .previousPeriod ? -1 : 1
+            if let moved = TeachingCalendarLogic.movedDate(
+                from: selectedDate,
+                unit: unit,
+                direction: direction,
+                calendar: calendar
+            ) {
+                selectedDate = moved
+            }
+        case .today:
+            selectedDate = now
+        case .dismissOverlay:
+            dismissOverlayGeneration &+= 1
+        }
+    }
+}
+
+enum AppKeyboardAction: String, Equatable, Sendable {
+    case dayView
+    case weekView
+    case monthView
+    case yearView
+    case previousPeriod
+    case nextPeriod
+    case today
+    case dismissOverlay
+}
+
+enum AppKeyboardCommandNotification {
+    static let name = Notification.Name("WhereToStudy.AppKeyboardCommand")
+    static let actionKey = "action"
+
+    static func post(_ action: AppKeyboardAction) {
+        NotificationCenter.default.post(
+            name: name,
+            object: nil,
+            userInfo: [actionKey: action.rawValue]
+        )
+    }
+
+    static func action(from notification: Notification) -> AppKeyboardAction? {
+        (notification.userInfo?[actionKey] as? String).flatMap(AppKeyboardAction.init(rawValue:))
+    }
 }
 
 private enum CalendarMode: String, CaseIterable, Identifiable {
@@ -22,6 +84,7 @@ private struct CalendarDailyDetailsLoadID: Hashable {
     let sampleMode: Bool
     let loadsAlmanac: Bool
     let loadsPublicDeadlines: Bool
+    let customSourceURL: String?
 }
 
 private struct CalendarAgendaSelection: Identifiable {
@@ -44,6 +107,21 @@ private struct CalendarAgendaDisplayItem: Identifiable {
     let title: String
     let categoryKey: String
     let kind: CalendarAgendaItemKind
+    let deadlineItem: PublicDeadlineItem?
+
+    init(
+        id: String,
+        title: String,
+        categoryKey: String,
+        kind: CalendarAgendaItemKind,
+        deadlineItem: PublicDeadlineItem? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.categoryKey = categoryKey
+        self.kind = kind
+        self.deadlineItem = deadlineItem
+    }
 }
 
 private struct CalendarMonthDeadlineEvent: Identifiable {
@@ -52,6 +130,36 @@ private struct CalendarMonthDeadlineEvent: Identifiable {
     let categoryKey: String
     let agendaKind: CalendarAgendaItemKind
     let tint: Color
+    let deadlineItem: PublicDeadlineItem?
+
+    init(
+        id: String,
+        title: String,
+        categoryKey: String,
+        agendaKind: CalendarAgendaItemKind,
+        tint: Color,
+        deadlineItem: PublicDeadlineItem? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.categoryKey = categoryKey
+        self.agendaKind = agendaKind
+        self.tint = tint
+        self.deadlineItem = deadlineItem
+    }
+}
+
+private struct CalendarMonthDaySnapshot: Identifiable {
+    let date: Date
+    let dateKey: String
+    let courses: [Course]
+    let holidays: [HolidayItem]
+    let assignments: [AssignmentDeadlineItem]
+    let schoolNotices: [PublicDeadlineItem]
+    let publicDeadlines: [PublicDeadlineItem]
+    let allDayEvents: [CalendarAllDayEvent]
+
+    var id: Date { date }
 }
 
 #if os(macOS)
@@ -69,6 +177,21 @@ private struct DesktopMonthEvent: Identifiable {
     let title: String
     let time: String?
     let kind: Kind
+    let deadlineItem: PublicDeadlineItem?
+
+    init(
+        id: String,
+        title: String,
+        time: String?,
+        kind: Kind,
+        deadlineItem: PublicDeadlineItem? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.time = time
+        self.kind = kind
+        self.deadlineItem = deadlineItem
+    }
 }
 #endif
 
@@ -258,6 +381,19 @@ enum TeachingCalendarLogic {
             amount = direction
         }
         return calendar.date(byAdding: component, value: amount, to: date)
+    }
+
+    static func monthPageDirection(
+        from currentDate: Date,
+        to destinationDate: Date,
+        calendar: Calendar = .shanghai
+    ) -> Int? {
+        let currentMonth = calendar.dateInterval(of: .month, for: currentDate)?.start
+            ?? currentDate
+        let destinationMonth = calendar.dateInterval(of: .month, for: destinationDate)?.start
+            ?? destinationDate
+        guard currentMonth != destinationMonth else { return nil }
+        return destinationMonth > currentMonth ? 1 : -1
     }
 
     static func datesInYear(
@@ -454,6 +590,8 @@ struct TeachingCalendarView: View {
     @State private var showingDatePicker = false
     @State private var presentedMonthAgenda: CalendarAgendaSelection?
     @State private var presentedTimelineAgenda: CalendarAgendaSelection?
+    @State private var monthPageDirection = 1
+    @State private var monthPagingGeneration = 0
 
     private let calendar = Calendar.shanghai
 
@@ -530,6 +668,12 @@ struct TeachingCalendarView: View {
             presentedTimelineAgenda = nil
             ensureVisibleHolidays()
         }
+        .onChange(of: session.dismissOverlayGeneration) { _ in
+            dismissYearPopover()
+            showingDatePicker = false
+            presentedMonthAgenda = nil
+            presentedTimelineAgenda = nil
+        }
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
         }
@@ -568,7 +712,6 @@ struct TeachingCalendarView: View {
             calendarContent
                 .id(mode)
                 .transition(.opacity.combined(with: .scale(scale: 0.995)))
-                .animation(Self.viewAnimation, value: mode)
             #endif
         }
         #if os(macOS)
@@ -659,7 +802,11 @@ struct TeachingCalendarView: View {
                 .frame(width: 310)
             }
             Button("今天") {
-                withAnimation(Self.viewAnimation) { selectedDate = .now }
+                if mode == .month {
+                    selectMonthDay(.now)
+                } else {
+                    withAnimation(Self.viewAnimation) { selectedDate = .now }
+                }
             }
             .frame(minWidth: 48)
             dateStepButton(systemName: "chevron.right", help: "下一时间段") { moveDate(1) }
@@ -728,6 +875,16 @@ struct TeachingCalendarView: View {
     private var weekView: some View {
         let days = weekDates()
         return VStack(alignment: .leading, spacing: 12) {
+            Label {
+                Text(weekContextText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("calendar.regular.teaching-week")
+            } icon: {
+                Image(systemName: "graduationcap")
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppTheme.secondaryText)
             allDayItems(days: days)
             CalendarTimelineView(
                 days: days.map(timelineDay),
@@ -745,6 +902,7 @@ struct TeachingCalendarView: View {
         #else
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         let days = monthGridDates(containing: first)
+        let daySnapshots = monthDaySnapshots(for: days)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return VStack(alignment: .leading, spacing: 12) {
             #if !os(macOS)
@@ -763,30 +921,34 @@ struct TeachingCalendarView: View {
                 .buttonStyle(.bordered)
             }
             #endif
-            LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(Self.weekdayLabels, id: \.self) { label in
-                    Text(model.localized(label))
-                        .font(.caption.bold())
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .frame(maxWidth: .infinity)
+            ZStack {
+                LazyVGrid(columns: columns, spacing: 4) {
+                    ForEach(Self.weekdayLabels, id: \.self) { label in
+                        Text(model.localized(label))
+                            .font(.caption.bold())
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .frame(maxWidth: .infinity)
+                    }
+                    ForEach(daySnapshots) { snapshot in
+                        monthDayButton(snapshot, month: first)
+                    }
                 }
-                ForEach(days, id: \.self) { day in
-                    monthDayButton(day, month: first)
-                }
+                .id(monthGridIdentity)
+                .transition(monthPageTransition)
             }
+            .animation(Self.pageAnimation, value: monthGridIdentity)
             selectedDaySummary(selectedDate)
             assignmentSummary
             Divider()
             if model.almanacEnabled {
                 almanacSummary
             }
-            if model.hasEnabledPublicDeadlines {
+            if model.hasCalendarDeadlinesToDisplay {
                 deadlineSummary
             }
         }
         .contentShape(Rectangle())
         .simultaneousGesture(periodSwipeGesture)
-        .animation(Self.monthExpansionAnimation, value: isMonthExpanded)
         #endif
     }
 
@@ -794,6 +956,7 @@ struct TeachingCalendarView: View {
     private var desktopMonthView: some View {
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
         let days = monthGridDates(containing: first)
+        let daySnapshots = monthDaySnapshots(for: days)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 0), count: 7)
 
         return GeometryReader { proxy in
@@ -804,23 +967,32 @@ struct TeachingCalendarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 0) {
-                        LazyVGrid(columns: columns, spacing: 0) {
-                            ForEach(Self.weekdayLabels, id: \.self) { label in
-                                Text(model.localized("周") + model.localized(label))
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(AppTheme.secondaryText)
-                                    .frame(maxWidth: .infinity, minHeight: weekdayHeight)
-                                    .overlay(alignment: .bottom) {
-                                        Rectangle()
-                                            .fill(AppTheme.border)
-                                            .frame(height: 0.5)
-                                    }
-                            }
+                        ZStack(alignment: .top) {
+                            LazyVGrid(columns: columns, spacing: 0) {
+                                ForEach(Self.weekdayLabels, id: \.self) { label in
+                                    Text(model.localized("周") + model.localized(label))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AppTheme.secondaryText)
+                                        .frame(maxWidth: .infinity, minHeight: weekdayHeight)
+                                        .overlay(alignment: .bottom) {
+                                            Rectangle()
+                                                .fill(AppTheme.border)
+                                                .frame(height: 0.5)
+                                        }
+                                }
 
-                            ForEach(days, id: \.self) { day in
-                                desktopMonthDay(day, month: first, cellHeight: cellHeight)
+                                ForEach(daySnapshots) { snapshot in
+                                    desktopMonthDay(
+                                        snapshot,
+                                        month: first,
+                                        cellHeight: cellHeight
+                                    )
+                                }
                             }
+                            .id(monthGridIdentity)
+                            .transition(monthPageTransition)
                         }
+                        .animation(Self.pageAnimation, value: monthGridIdentity)
                         .overlay {
                             Rectangle()
                                 .stroke(AppTheme.border, lineWidth: 0.5)
@@ -834,7 +1006,7 @@ struct TeachingCalendarView: View {
                     if model.almanacEnabled {
                         Surface { almanacSummary }
                     }
-                    if model.hasEnabledPublicDeadlines {
+                    if model.hasCalendarDeadlinesToDisplay {
                         Surface { deadlineSummary }
                     }
                 }
@@ -847,8 +1019,13 @@ struct TeachingCalendarView: View {
         .accessibilityIdentifier("calendar.desktop.month-grid")
     }
 
-    private func desktopMonthDay(_ day: Date, month: Date, cellHeight: CGFloat) -> some View {
-        let events = desktopMonthEvents(on: day)
+    private func desktopMonthDay(
+        _ snapshot: CalendarMonthDaySnapshot,
+        month: Date,
+        cellHeight: CGFloat
+    ) -> some View {
+        let day = snapshot.date
+        let events = desktopMonthEvents(snapshot)
         let maximumRows = cellHeight >= 100 ? 4 : (cellHeight >= 80 ? 3 : 2)
         let layout = TeachingCalendarLogic.monthEventLayout(
             totalCount: events.count,
@@ -857,7 +1034,7 @@ struct TeachingCalendarView: View {
         let isSelected = sameDay(day, selectedDate)
         let isToday = sameDay(day, .now)
         let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-            in: allDayEvents(on: day)
+            in: snapshot.allDayEvents
         )
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
         let weekNumber = calendar.component(.weekOfYear, from: day)
@@ -865,9 +1042,12 @@ struct TeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .center, spacing: 5) {
                 if calendar.component(.weekday, from: day) == 2 {
-                    Text("第 \(weekNumber) 周")
+                    Text(monthWeekContextText(civilWeek: weekNumber, date: day))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(AppTheme.secondaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
+                        .accessibilityIdentifier("calendar.desktop.month-week-context.\(snapshot.dateKey)")
                 }
                 Spacer(minLength: 4)
                 desktopMonthDayBadge(
@@ -885,7 +1065,7 @@ struct TeachingCalendarView: View {
 
             if layout.hiddenEventCount > 0 {
                 Button {
-                    selectedDate = day
+                    selectMonthDay(day)
                     if !events.isEmpty {
                         presentedMonthAgenda = CalendarAgendaSelection(
                             date: day,
@@ -904,7 +1084,7 @@ struct TeachingCalendarView: View {
                     model.localizedFormat("查看其余 %lld 项全天日程", layout.hiddenEventCount)
                 )
                 .accessibilityIdentifier(
-                    "calendar.regular.month-overflow.\(StrictContractDateParser.string(from: day))"
+                    "calendar.regular.month-overflow.\(snapshot.dateKey)"
                 )
             }
 
@@ -940,12 +1120,14 @@ struct TeachingCalendarView: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { selectedDate = day }
+        .onTapGesture { selectMonthDay(day) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
         .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction { selectedDate = day }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("calendar.regular.month-day-cell.\(snapshot.dateKey)")
+        .accessibilityAction { selectMonthDay(day) }
     }
 
     private func desktopMonthDayBadge(
@@ -1003,9 +1185,9 @@ struct TeachingCalendarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 
-    private func desktopMonthEvents(on day: Date) -> [DesktopMonthEvent] {
-        let dateKey = StrictContractDateParser.string(from: day)
-        let holidayEvents = holidayItems(on: day).map { item in
+    private func desktopMonthEvents(_ snapshot: CalendarMonthDaySnapshot) -> [DesktopMonthEvent] {
+        let dateKey = snapshot.dateKey
+        let holidayEvents = snapshot.holidays.map { item in
             DesktopMonthEvent(
                 id: "\(dateKey)|holiday|\(item.id)",
                 title: item.name,
@@ -1013,7 +1195,7 @@ struct TeachingCalendarView: View {
                 kind: item.type == "holiday" ? .holiday : .workday
             )
         }
-        let courseEvents = courses(on: day).map { course in
+        let courseEvents = snapshot.courses.map { course in
             DesktopMonthEvent(
                 id: "\(dateKey)|course|\(course.id)",
                 title: course.name,
@@ -1021,7 +1203,7 @@ struct TeachingCalendarView: View {
                 kind: .course
             )
         }
-        let assignmentEvents = assignmentItems(on: day).map { item in
+        let assignmentEvents = snapshot.assignments.map { item in
             DesktopMonthEvent(
                 id: "\(dateKey)|assignment|\(item.id)",
                 title: item.title,
@@ -1029,20 +1211,22 @@ struct TeachingCalendarView: View {
                 kind: .assignment
             )
         }
-        let schoolNoticeEvents = schoolNoticeItems(on: day).map { item in
+        let schoolNoticeEvents = snapshot.schoolNotices.map { item in
             DesktopMonthEvent(
                 id: "\(dateKey)|school|\(item.id)",
                 title: item.name,
                 time: deadlineTime(item.deadline),
-                kind: .schoolNotice
+                kind: .schoolNotice,
+                deadlineItem: item
             )
         }
-        let publicDeadlineEvents = otherPublicDeadlineItems(on: day).map { item in
+        let publicDeadlineEvents = snapshot.publicDeadlines.map { item in
             DesktopMonthEvent(
                 id: "\(dateKey)|public|\(item.id)",
                 title: item.name,
                 time: deadlineTime(item.deadline),
-                kind: .publicDeadline
+                kind: .publicDeadline,
+                deadlineItem: item
             )
         }
         return holidayEvents + assignmentEvents + schoolNoticeEvents
@@ -1078,12 +1262,16 @@ struct TeachingCalendarView: View {
     }
     #endif
 
-    private func monthDayButton(_ day: Date, month: Date) -> some View {
-        let dayCourses = courses(on: day)
-        let holidays = holidayItems(on: day)
-        let assignments = assignmentItems(on: day)
-        let schoolNotices = schoolNoticeItems(on: day)
-        let publicDeadlines = otherPublicDeadlineItems(on: day)
+    private func monthDayButton(
+        _ snapshot: CalendarMonthDaySnapshot,
+        month: Date
+    ) -> some View {
+        let day = snapshot.date
+        let dayCourses = snapshot.courses
+        let holidays = snapshot.holidays
+        let assignments = snapshot.assignments
+        let schoolNotices = snapshot.schoolNotices
+        let publicDeadlines = snapshot.publicDeadlines
         let deadlineEvents: [CalendarMonthDeadlineEvent] = assignments.map { item in
             CalendarMonthDeadlineEvent(
                 id: "assignment-\(item.id)",
@@ -1098,7 +1286,8 @@ struct TeachingCalendarView: View {
                 title: item.name,
                 categoryKey: "校内竞赛通知",
                 agendaKind: .schoolNotice,
-                tint: AppTheme.schoolNotice
+                tint: AppTheme.schoolNotice,
+                deadlineItem: item
             )
         } + publicDeadlines.map { item in
             CalendarMonthDeadlineEvent(
@@ -1106,13 +1295,14 @@ struct TeachingCalendarView: View {
                 title: item.name,
                 categoryKey: item.kind.title,
                 agendaKind: .publicDeadline,
-                tint: AppTheme.publicDeadline
+                tint: AppTheme.publicDeadline,
+                deadlineItem: item
             )
         }
         let isSelected = sameDay(day, selectedDate)
         let isToday = sameDay(day, .now)
         let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-            in: allDayEvents(on: day)
+            in: snapshot.allDayEvents
         )
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
         #if os(macOS)
@@ -1157,7 +1347,7 @@ struct TeachingCalendarView: View {
                         }
                         if deadlineEvents.count > 3 {
                             Button {
-                                selectedDate = day
+                                selectMonthDay(day)
                                 presentedMonthAgenda = CalendarAgendaSelection(
                                     date: day,
                                     events: deadlineEvents.map(calendarAgendaDisplayItem)
@@ -1230,12 +1420,14 @@ struct TeachingCalendarView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 5))
         .contentShape(Rectangle())
-        .onTapGesture { selectedDate = day }
+        .onTapGesture { selectMonthDay(day) }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
         .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction { selectedDate = day }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("calendar.regular.month-day-cell.\(snapshot.dateKey)")
+        .accessibilityAction { selectMonthDay(day) }
     }
 
     private var yearView: some View {
@@ -1764,12 +1956,18 @@ struct TeachingCalendarView: View {
                 .foregroundStyle(AppTheme.schoolNotice)
             ForEach(items) { item in
                 HStack(alignment: .top, spacing: 8) {
-                    Text(item.name)
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name)
+                            .font(.subheadline.weight(.semibold))
+                        Text(deadlineCategoryTitle(item))
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Text(deadlineTime(item.deadline))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(AppTheme.secondaryText)
+                    favoriteButton(item)
                 }
             }
         }
@@ -1785,12 +1983,18 @@ struct TeachingCalendarView: View {
                 .foregroundStyle(AppTheme.publicDeadline)
             ForEach(items) { item in
                 HStack(alignment: .top, spacing: 8) {
-                    Text(item.name)
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name)
+                            .font(.subheadline.weight(.semibold))
+                        Text(deadlineCategoryTitle(item))
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.secondaryText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Text(deadlineTime(item.deadline))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(AppTheme.secondaryText)
+                    favoriteButton(item)
                 }
             }
         }
@@ -1939,25 +2143,41 @@ struct TeachingCalendarView: View {
     @ViewBuilder
     private var deadlineSummary: some View {
         let date = StrictContractDateParser.string(from: selectedDate)
-        let snapshot = calendarDeadlines.publicByDate[date]
-        let items = (snapshot?.items ?? []).filter(deadlineIsEnabled)
+        let builtInSnapshot = calendarDeadlines.publicByDate[date]
+        let customSnapshot = calendarDeadlines.customByDate[date]
+        let items = model.visibleDeadlineItems(
+            liveItems: calendarDeadlines.publicItems(for: date),
+            on: date
+        )
+        let isLoading = calendarDeadlines.loadingPublicDates.contains(date)
+            || calendarDeadlines.loadingCustomDates.contains(date)
+        let error = calendarDeadlines.publicErrors[date] ?? calendarDeadlines.customErrors[date]
         VStack(alignment: .leading, spacing: 10) {
             Label("活动 DDL", systemImage: "flag.checkered")
                 .font(.headline)
-            if calendarDeadlines.loadingPublicDates.contains(date), snapshot == nil {
+            if isLoading, builtInSnapshot == nil, customSnapshot == nil, items.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("正在同步竞赛、夏令营与黑客松…")
                 }
                 .foregroundStyle(AppTheme.secondaryText)
-            } else if let error = calendarDeadlines.publicErrors[date], snapshot == nil {
+            } else if let error, builtInSnapshot == nil, customSnapshot == nil, items.isEmpty {
                 Button {
                     Task {
-                        await calendarDeadlines.loadPublic(
-                            date: date,
-                            sampleMode: model.isSampleMode,
-                            force: true
-                        )
+                        if model.hasEnabledBuiltInPublicDeadlines {
+                            await calendarDeadlines.loadPublic(
+                                date: date,
+                                sampleMode: model.isSampleMode,
+                                force: true
+                            )
+                        }
+                        if let sourceURL = model.customDeadlineSourceURL {
+                            await calendarDeadlines.loadCustom(
+                                dates: [date],
+                                sourceURL: sourceURL,
+                                force: true
+                            )
+                        }
                     }
                 } label: {
                     Label("\(error)，点击重试", systemImage: "exclamationmark.triangle")
@@ -1991,18 +2211,31 @@ struct TeachingCalendarView: View {
             }
             .font(.caption2)
             .foregroundStyle(AppTheme.secondaryText)
+            if let customItem = items.first(where: { $0.source == .custom }) {
+                if let homepage = customItem.sourceHomepage {
+                    Link(
+                        "自定义来源：\(customItem.sourceName ?? customItem.source.title)",
+                        destination: homepage
+                    )
+                } else {
+                    Text("自定义来源：\(customItem.sourceName ?? customItem.source.title)")
+                }
+            }
         }
     }
 
     @ViewBuilder
     private func publicDeadlineRow(_ item: PublicDeadlineItem) -> some View {
-        if let url = item.officialURL {
-            Link(destination: url) {
+        HStack(alignment: .center, spacing: 6) {
+            if let url = item.officialURL {
+                Link(destination: url) {
+                    publicDeadlineRowContent(item)
+                }
+                .buttonStyle(.plain)
+            } else {
                 publicDeadlineRowContent(item)
             }
-            .buttonStyle(.plain)
-        } else {
-            publicDeadlineRowContent(item)
+            favoriteButton(item)
         }
     }
 
@@ -2027,22 +2260,33 @@ struct TeachingCalendarView: View {
                 .foregroundStyle(AppTheme.secondaryText)
         }
         .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
     }
 
-    private func deadlineIsEnabled(_ item: PublicDeadlineItem) -> Bool {
-        CalendarDeadlinePresentation.isVisible(
-            item,
-            competitionEnabled: model.competitionDeadlinesEnabled,
-            schoolNoticeEnabled: model.schoolContestNoticesEnabled,
-            summerCampEnabled: model.summerCampDeadlinesEnabled,
-            hackathonEnabled: model.hackathonDeadlinesEnabled
-        )
+    private func favoriteButton(_ item: PublicDeadlineItem) -> some View {
+        let isFavorite = model.isFavorite(item)
+        return Button {
+            AppHaptics.selection()
+            model.setFavorite(item, isFavorite: !isFavorite)
+        } label: {
+            Image(systemName: isFavorite ? "star.fill" : "star")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isFavorite ? AppTheme.accent : AppTheme.secondaryText)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFavorite ? "取消收藏" : "收藏日程")
+        .accessibilityIdentifier("calendar.favorite.\(item.source.rawValue).\(item.id)")
     }
 
     private func deadlineCategoryTitle(_ item: PublicDeadlineItem) -> String {
-        model.localized(item.source == .schoolNotice ? item.source.title : item.kind.title)
+        if item.source == .custom, let sourceName = item.sourceName {
+            return "\(model.localized(item.kind.title)) · \(sourceName)"
+        }
+        return model.localized(item.source == .schoolNotice ? item.source.title : item.kind.title)
     }
 
     private func deadlineTime(_ value: String) -> String {
@@ -2092,7 +2336,8 @@ struct TeachingCalendarView: View {
             id: event.id,
             title: event.title,
             categoryKey: allDayEventCategoryKey(event.kind),
-            kind: kind
+            kind: kind,
+            deadlineItem: event.deadlineItem
         )
     }
 
@@ -2103,7 +2348,8 @@ struct TeachingCalendarView: View {
             id: event.id,
             title: event.title,
             categoryKey: event.categoryKey,
-            kind: event.agendaKind
+            kind: event.agendaKind,
+            deadlineItem: event.deadlineItem
         )
     }
 
@@ -2137,7 +2383,8 @@ struct TeachingCalendarView: View {
             id: event.id,
             title: event.title,
             categoryKey: categoryKey,
-            kind: kind
+            kind: kind,
+            deadlineItem: event.deadlineItem
         )
     }
     #endif
@@ -2202,6 +2449,9 @@ struct TeachingCalendarView: View {
                                         Text(model.localized(event.categoryKey))
                                             .font(.caption)
                                             .foregroundStyle(AppTheme.secondaryText)
+                                    }
+                                    if let deadlineItem = event.deadlineItem {
+                                        favoriteButton(deadlineItem)
                                     }
                                 }
                                 .padding(10)
@@ -2340,51 +2590,118 @@ struct TeachingCalendarView: View {
     }
 
     private func schoolNoticeItems(on date: Date) -> [PublicDeadlineItem] {
-        guard model.schoolContestNoticesEnabled else { return [] }
         let dateKey = StrictContractDateParser.string(from: date)
-        return (calendarDeadlines.publicByDate[dateKey]?.items ?? []).filter {
-            $0.source == .schoolNotice
-        }
+        return model.visibleDeadlineItems(
+            liveItems: calendarDeadlines.publicItems(for: dateKey),
+            on: dateKey
+        ).filter { $0.source == .schoolNotice }
     }
 
     private func otherPublicDeadlineItems(on date: Date) -> [PublicDeadlineItem] {
         let dateKey = StrictContractDateParser.string(from: date)
-        return (calendarDeadlines.publicByDate[dateKey]?.items ?? []).filter {
-            $0.source != .schoolNotice && deadlineIsEnabled($0)
-        }
+        return model.visibleDeadlineItems(
+            liveItems: calendarDeadlines.publicItems(for: dateKey),
+            on: dateKey
+        ).filter { $0.source != .schoolNotice }
     }
 
     private func allDayEvents(on date: Date) -> [CalendarAllDayEvent] {
         let dateKey = StrictContractDateParser.string(from: date)
-        let holidays = holidayItems(on: date).map { holiday in
+        return calendarAllDayEvents(
+            dateKey: dateKey,
+            holidays: holidayItems(on: date),
+            assignments: assignmentItems(on: date),
+            schoolNotices: schoolNoticeItems(on: date),
+            publicDeadlines: otherPublicDeadlineItems(on: date)
+        )
+    }
+
+    private func calendarAllDayEvents(
+        dateKey: String,
+        holidays: [HolidayItem],
+        assignments: [AssignmentDeadlineItem],
+        schoolNotices: [PublicDeadlineItem],
+        publicDeadlines: [PublicDeadlineItem]
+    ) -> [CalendarAllDayEvent] {
+        let holidayEvents = holidays.map { holiday in
             CalendarAllDayEvent(
                 id: "\(dateKey)-holiday-\(holiday.id)",
                 title: "\(model.localized(holiday.type == "holiday" ? "休" : "班")) \(holiday.name)",
                 kind: holiday.type == "holiday" ? .holiday : .workday
             )
         }
-        let assignments = assignmentItems(on: date).map { assignment in
+        let assignmentEvents = assignments.map { assignment in
             CalendarAllDayEvent(
                 id: "\(dateKey)-assignment-\(assignment.id)",
                 title: assignment.title,
                 kind: .assignment
             )
         }
-        let schoolNotices = schoolNoticeItems(on: date).map { notice in
+        let schoolNoticeEvents = schoolNotices.map { notice in
             CalendarAllDayEvent(
                 id: "\(dateKey)-school-\(notice.id)",
                 title: notice.name,
-                kind: .schoolNotice
+                kind: .schoolNotice,
+                deadlineItem: notice
             )
         }
-        let publicDeadlines = otherPublicDeadlineItems(on: date).map { item in
+        let publicDeadlineEvents = publicDeadlines.map { item in
             CalendarAllDayEvent(
                 id: "\(dateKey)-public-\(item.id)",
                 title: item.name,
-                kind: .publicDeadline
+                kind: .publicDeadline,
+                deadlineItem: item
             )
         }
-        return holidays + assignments + schoolNotices + publicDeadlines
+        return holidayEvents + assignmentEvents + schoolNoticeEvents + publicDeadlineEvents
+    }
+
+    private func monthDaySnapshots(for days: [Date]) -> [CalendarMonthDaySnapshot] {
+        let coursesByDate: [String: [Course]]
+        if let schedule = model.schedule,
+           let termStart = StrictContractDateParser.date(from: schedule.termStartDate) {
+            coursesByDate = ScheduleLogic.coursesByDate(
+                for: days,
+                termStart: termStart,
+                courses: schedule.courses,
+                calendar: calendar
+            )
+        } else {
+            coursesByDate = [:]
+        }
+        let years = Set(days.map { calendar.component(.year, from: $0) })
+        let holidaysByDate = Dictionary(
+            grouping: years.flatMap { model.holidayItems(for: $0) },
+            by: \.date
+        )
+
+        return days.map { day in
+            let dateKey = StrictContractDateParser.string(from: day)
+            let holidays = holidaysByDate[dateKey] ?? []
+            let assignments = calendarDeadlines.assignmentsByDate[dateKey] ?? []
+            let publicItems = model.visibleDeadlineItems(
+                liveItems: calendarDeadlines.publicItems(for: dateKey),
+                on: dateKey
+            )
+            let schoolNotices = publicItems.filter { $0.source == .schoolNotice }
+            let publicDeadlines = publicItems.filter { $0.source != .schoolNotice }
+            return CalendarMonthDaySnapshot(
+                date: day,
+                dateKey: dateKey,
+                courses: coursesByDate[dateKey] ?? [],
+                holidays: holidays,
+                assignments: assignments,
+                schoolNotices: schoolNotices,
+                publicDeadlines: publicDeadlines,
+                allDayEvents: calendarAllDayEvents(
+                    dateKey: dateKey,
+                    holidays: holidays,
+                    assignments: assignments,
+                    schoolNotices: schoolNotices,
+                    publicDeadlines: publicDeadlines
+                )
+            )
+        }
     }
 
     private func weekDates() -> [Date] {
@@ -2435,7 +2752,8 @@ struct TeachingCalendarView: View {
             almanacDate: mode == .month ? StrictContractDateParser.string(from: selectedDate) : nil,
             sampleMode: model.isSampleMode,
             loadsAlmanac: model.almanacEnabled,
-            loadsPublicDeadlines: model.hasEnabledPublicDeadlines
+            loadsPublicDeadlines: model.hasEnabledBuiltInPublicDeadlines,
+            customSourceURL: model.customDeadlineSourceURL?.absoluteString
         )
     }
 
@@ -2445,7 +2763,8 @@ struct TeachingCalendarView: View {
         async let events: Void = calendarDeadlines.loadCalendarEvents(
             dates: request.dates,
             sampleMode: request.sampleMode,
-            includesPublicDeadlines: request.loadsPublicDeadlines
+            includesPublicDeadlines: request.loadsPublicDeadlines,
+            customSourceURL: request.customSourceURL.flatMap(URL.init(string:))
         )
         async let almanac: Void = loadVisibleAlmanac(request)
         _ = await (events, almanac)
@@ -2464,7 +2783,35 @@ struct TeachingCalendarView: View {
             direction: direction,
             calendar: calendar
         ) {
-            withAnimation(Self.viewAnimation) { selectedDate = moved }
+            if mode == .month {
+                prepareMonthPageChange(to: moved, direction: direction)
+            } else {
+                withAnimation(Self.viewAnimation) { selectedDate = moved }
+            }
+        }
+    }
+
+    private func selectMonthDay(_ day: Date) {
+        guard !sameDay(day, selectedDate) else { return }
+        if let direction = TeachingCalendarLogic.monthPageDirection(
+            from: selectedDate,
+            to: day,
+            calendar: calendar
+        ) {
+            prepareMonthPageChange(to: day, direction: direction)
+        } else {
+            selectedDate = day
+        }
+    }
+
+    private func prepareMonthPageChange(to date: Date, direction: Int) {
+        monthPagingGeneration += 1
+        let generation = monthPagingGeneration
+        monthPageDirection = direction < 0 ? -1 : 1
+        Task { @MainActor in
+            await Task.yield()
+            guard mode == .month, monthPagingGeneration == generation else { return }
+            selectedDate = date
         }
     }
 
@@ -2508,7 +2855,11 @@ struct TeachingCalendarView: View {
         Binding(
             get: { selectedDate },
             set: { newDate in
-                withAnimation(Self.viewAnimation) { selectedDate = newDate }
+                if mode == .month {
+                    selectMonthDay(newDate)
+                } else {
+                    withAnimation(Self.viewAnimation) { selectedDate = newDate }
+                }
                 showingDatePicker = false
             }
         )
@@ -2517,6 +2868,52 @@ struct TeachingCalendarView: View {
     private func dismissYearPopover() {
         yearPopoverDate = nil
         yearPopoverLocation = nil
+    }
+
+    private var monthGridIdentity: String {
+        let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+        return "regular-month-\(month.timeIntervalSinceReferenceDate)"
+    }
+
+    private var monthPageTransition: AnyTransition {
+        if monthPageDirection >= 0 {
+            return .asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            )
+        }
+        return .asymmetric(
+            insertion: .move(edge: .leading).combined(with: .opacity),
+            removal: .move(edge: .trailing).combined(with: .opacity)
+        )
+    }
+
+    private var weekContextText: String {
+        let civilWeek = calendar.component(.weekOfYear, from: selectedDate)
+        return monthWeekContextText(civilWeek: civilWeek, date: selectedDate)
+    }
+
+    private func monthWeekContextText(civilWeek: Int, date: Date) -> String {
+        if let teachingWeek = teachingWeekNumber(on: date) {
+            return model.localizedFormat(
+                "公历第 %lld 周 · 教学第 %lld 周",
+                Int64(civilWeek),
+                Int64(teachingWeek)
+            )
+        }
+        return model.localizedFormat("公历第 %lld 周", Int64(civilWeek))
+    }
+
+    private func teachingWeekNumber(on date: Date) -> Int? {
+        guard let schedule = model.schedule,
+              let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
+        else { return nil }
+        return ScheduleLogic.activeTeachingWeekNumber(
+            on: date,
+            termStart: termStart,
+            courses: schedule.courses,
+            calendar: calendar
+        )
     }
 
     private func estimatedYearPopoverHeight(_ day: Date, availableHeight: CGFloat) -> CGFloat {
@@ -2573,6 +2970,7 @@ struct TeachingCalendarView: View {
     private static let holidayRed = AppTheme.danger
     private static let calendarCoordinateSpace = "teaching-calendar"
     private static let viewAnimation = Animation.easeInOut(duration: 0.24)
+    private static let pageAnimation = Animation.easeInOut(duration: 0.24)
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
     private var fullDateFormatter: DateFormatter {
         localizedDateFormatter(chineseFormat: "yyyy年M月d日 EEEE", englishFormat: "EEEE, MMMM d, yyyy")

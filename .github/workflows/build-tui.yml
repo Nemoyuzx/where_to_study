@@ -106,7 +106,7 @@ jobs:
           cargo test --manifest-path wts-tui/Cargo.toml --locked
           cargo build --manifest-path wts-tui/Cargo.toml --release --locked
           file wts-tui/target/release/where-to-study-tui
-          wts-tui/target/release/where-to-study-tui --version | grep -F '0.2.4'
+          wts-tui/target/release/where-to-study-tui --version | grep -F '0.2.5'
           [[ "$(uname -m)" == "${{ matrix.arch }}" ]]
 
       - name: Package Linux TUI

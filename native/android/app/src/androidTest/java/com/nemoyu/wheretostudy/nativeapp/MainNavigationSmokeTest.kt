@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -327,15 +328,29 @@ class MainNavigationSmokeTest {
         device.executeShellCommand("settings put global animator_duration_scale 1")
         try {
             ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
-                click(device, "navigation_calendar")
-                click(device, "calendar_mode_month")
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                    assertTrue(activity.findViewById<View>(R.id.calendar_mode_month).performClick())
+                }
+                instrumentation.waitForIdleSync()
                 scenario.onActivity { activity ->
                     val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
-                    assertTrue((grid.getChildAt(0) as ViewGroup).getChildAt(0).performClick())
+                    val today = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai"))
+                    val selectedDescription = "${today.get(Calendar.MONTH) + 1}月" +
+                        "${today.get(Calendar.DAY_OF_MONTH)}日"
+                    val selectedCell = (0 until grid.childCount).asSequence()
+                        .map { rowIndex -> grid.getChildAt(rowIndex) as ViewGroup }
+                        .flatMap { row ->
+                            (0 until row.childCount).asSequence().map(row::getChildAt)
+                        }
+                        .first { cell ->
+                            cell.contentDescription?.toString()?.contains(selectedDescription) == true
+                        }
+                    assertTrue(selectedCell.performClick())
                     val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
                     val selectedPage = surface.getChildAt(0)
                     assertEquals(
-                        "Selecting a date must leave the month page on the horizontal origin",
+                        "Selecting a date inside the current month must leave the page on the horizontal origin",
                         0f,
                         selectedPage.translationX,
                         0.01f,
@@ -345,21 +360,15 @@ class MainNavigationSmokeTest {
                 SystemClock.sleep(380L)
                 instrumentation.waitForIdleSync()
 
-                scenario.onActivity { activity ->
-                    val surface = activity.findViewById<View>(R.id.calendar_swipe_surface)
-                    assertTrue(
-                        surface.performAccessibilityAction(
-                            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,
-                            null,
-                        ),
-                    )
-                }
                 // The sample repositories complete well before the 300 ms pager.
                 // If a completion rebuilds the page, this two-page transition is
                 // cut down to one child and the incoming animation visibly jumps.
-                SystemClock.sleep(90L)
                 var incomingPageIdentity = 0
                 scenario.onActivity { activity ->
+                    val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                    val lastRow = grid.getChildAt(grid.childCount - 1) as ViewGroup
+                    val adjacentNextMonthCell = lastRow.getChildAt(lastRow.childCount - 1)
+                    assertTrue(adjacentNextMonthCell.performClick())
                     val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
                     assertEquals(
                         "First-load callbacks must not interrupt the month pager",
@@ -399,6 +408,19 @@ class MainNavigationSmokeTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
+        val preferences = AppPreferences(context)
+        val previousDeadlineSettings = listOf(
+            preferences.competitionDeadlinesEnabled,
+            preferences.schoolContestNoticesEnabled,
+            preferences.summerCampDeadlinesEnabled,
+            preferences.hackathonDeadlinesEnabled,
+        )
+        preferences.apply {
+            competitionDeadlinesEnabled = true
+            schoolContestNoticesEnabled = true
+            summerCampDeadlinesEnabled = true
+            hackathonDeadlinesEnabled = true
+        }
         val scheduleStore = ScheduleStore(context)
         val previousSchedule = runCatching(scheduleStore::load).getOrNull()
         scheduleStore.save(dayWeekAgendaTestSchedule())
@@ -409,7 +431,9 @@ class MainNavigationSmokeTest {
 
         try {
             ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
-                click(device, "navigation_calendar")
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                }
                 SystemClock.sleep(700L)
                 instrumentation.waitForIdleSync()
 
@@ -419,6 +443,12 @@ class MainNavigationSmokeTest {
                     val content = activity.findViewById<ViewGroup>(R.id.calendar_day_week_agenda_content)
                     assertEquals(View.VISIBLE, content.visibility)
                     assertTrue(activity.findViewById<View>(R.id.calendar_day_week_course_area).isShown)
+                    activity.findViewById<TextView?>(R.id.calendar_week_number)?.let { weekLabel ->
+                        assertTrue(
+                            "Week view must show the schedule's teaching week when available",
+                            weekLabel.text.contains("第1周"),
+                        )
+                    }
                     weekCourseSummary = courseSummaryPresentation(activity)
                     assertCourseSummaryMatchesIosMobileStyle(activity, checkNotNull(weekCourseSummary))
                     assertEquals(
@@ -578,6 +608,7 @@ class MainNavigationSmokeTest {
                         ).performClick(),
                     )
                 }
+                SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
                 instrumentation.waitForIdleSync()
                 scenario.onActivity { activity ->
                     assertEquals(
@@ -618,6 +649,193 @@ class MainNavigationSmokeTest {
             }
         } finally {
             if (previousSchedule == null) scheduleStore.clear() else scheduleStore.save(previousSchedule)
+            preferences.competitionDeadlinesEnabled = previousDeadlineSettings[0]
+            preferences.schoolContestNoticesEnabled = previousDeadlineSettings[1]
+            preferences.summerCampDeadlinesEnabled = previousDeadlineSettings[2]
+            preferences.hackathonDeadlinesEnabled = previousDeadlineSettings[3]
+        }
+    }
+
+    @Test
+    fun android025CourseSummaryAndSettingsControlsUseNativeAnimatedGeometry() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val scheduleStore = ScheduleStore(context)
+        val previousSchedule = runCatching(scheduleStore::load).getOrNull()
+        scheduleStore.save(dayWeekAgendaTestSchedule())
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                }
+                SystemClock.sleep(700L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val toggle = activity.findViewById<ViewGroup>(
+                        R.id.calendar_day_week_agenda_toggle,
+                    )
+                    val indicator = activity.findViewById<ImageView>(
+                        R.id.calendar_day_week_agenda_indicator,
+                    )
+                    assertEquals(
+                        activity.dp(TeachingCalendarLogic.compactAgendaHeaderHeightDp),
+                        toggle.height,
+                    )
+                    assertNotNull(indicator.drawable)
+                    assertEquals(180f, indicator.rotation, 0.5f)
+                    assertTrue(toggle.performClick())
+                }
+                SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        View.GONE,
+                        activity.findViewById<View>(R.id.calendar_day_week_agenda_content)
+                            .visibility,
+                    )
+                    assertEquals(
+                        0f,
+                        activity.findViewById<ImageView>(
+                            R.id.calendar_day_week_agenda_indicator,
+                        ).rotation,
+                        0.5f,
+                    )
+                    assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val settings = activity.findViewById<ScrollView>(R.id.page_settings)
+                    assertFalse(containsSpinner(settings))
+                    assertEquals(11, countSwitches(settings))
+                    listOf(
+                        R.id.settings_language_selector,
+                        R.id.settings_campus_selector,
+                        R.id.settings_widget_course_limit_selector,
+                        R.id.settings_widget_preview_size_selector,
+                    ).forEach { selectorID ->
+                        val selector = activity.findViewById<View>(selectorID)
+                        assertTrue(selector.width > 0 && selector.height > 0)
+                        assertTrue(selector is ViewGroup)
+                        assertFalse(selector is Switch)
+                    }
+                }
+            }
+        } finally {
+            if (previousSchedule == null) scheduleStore.clear() else scheduleStore.save(previousSchedule)
+        }
+    }
+
+    @Test
+    fun android025AdjacentMonthSelectionEntersFromTheCorrectDirection() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        device.executeShellCommand("settings put global animator_duration_scale 1")
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                    assertTrue(activity.findViewById<View>(R.id.calendar_mode_month).performClick())
+                }
+                instrumentation.waitForIdleSync()
+                var incomingIdentity = 0
+                scenario.onActivity { activity ->
+                    val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                    val firstCell = (grid.getChildAt(0) as ViewGroup).getChildAt(0)
+                    val firstDay = firstCell.findViewById<TextView>(R.id.calendar_month_day_label)
+                        .text.toString().toInt()
+                    val selectingPreviousMonth = firstDay > 14
+                    val adjacentCell = if (selectingPreviousMonth) {
+                        firstCell
+                    } else {
+                        val lastRow = grid.getChildAt(grid.childCount - 1) as ViewGroup
+                        lastRow.getChildAt(lastRow.childCount - 1)
+                    }
+                    assertTrue(adjacentCell.performClick())
+                    val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    assertEquals(2, surface.childCount)
+                    val incoming = surface.getChildAt(1)
+                    incomingIdentity = System.identityHashCode(incoming)
+                    assertTrue(
+                        if (selectingPreviousMonth) {
+                            incoming.translationX < 0f
+                        } else {
+                            incoming.translationX > 0f
+                        },
+                    )
+                    assertEquals(0f, incoming.translationY, 0.01f)
+                }
+                SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 160L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val surface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
+                    assertEquals(1, surface.childCount)
+                    assertEquals(incomingIdentity, System.identityHashCode(surface.getChildAt(0)))
+                    assertEquals(0f, surface.getChildAt(0).translationX, 0.01f)
+                }
+            }
+        } finally {
+            device.executeShellCommand("settings put global animator_duration_scale 0")
+        }
+    }
+
+    @Test
+    fun android025EnglishCompactControlsAreNotEllipsized() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val preferences = AppPreferences(context)
+        preferences.languageCode = AppLanguage.ENGLISH.code
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val selector = activity.findViewById<ViewGroup>(R.id.settings_language_selector)
+                    val row = selector.getChildAt(1) as ViewGroup
+                    repeat(row.childCount) { index ->
+                        assertTextIsNotEllipsized(row.getChildAt(index) as TextView)
+                    }
+                    assertTextIsNotEllipsized(
+                        activity.findViewById<Switch>(R.id.settings_custom_deadlines_switch),
+                    )
+                    assertTextIsNotEllipsized(
+                        activity.findViewById(R.id.settings_custom_deadlines_save),
+                    )
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    listOf(
+                        R.id.calendar_mode_day,
+                        R.id.calendar_mode_week,
+                        R.id.calendar_mode_month,
+                        R.id.calendar_mode_year,
+                    ).forEach { id ->
+                        assertTextIsNotEllipsized(activity.findViewById(id))
+                    }
+                    val toggle = activity.findViewById<ViewGroup>(
+                        R.id.calendar_day_week_agenda_toggle,
+                    )
+                    assertTextIsNotEllipsized(toggle.getChildAt(0) as TextView)
+                    assertTextIsNotEllipsized(toggle.getChildAt(1) as TextView)
+                }
+            }
+        } finally {
+            preferences.languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
         }
     }
 
@@ -708,7 +926,20 @@ class MainNavigationSmokeTest {
         clearCredentialRecord()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        AppPreferences(context).languageCode = AppLanguage.ENGLISH.code
+        val preferences = AppPreferences(context)
+        val previousDeadlineSettings = listOf(
+            preferences.competitionDeadlinesEnabled,
+            preferences.schoolContestNoticesEnabled,
+            preferences.summerCampDeadlinesEnabled,
+            preferences.hackathonDeadlinesEnabled,
+        )
+        preferences.apply {
+            languageCode = AppLanguage.ENGLISH.code
+            competitionDeadlinesEnabled = true
+            schoolContestNoticesEnabled = true
+            summerCampDeadlinesEnabled = true
+            hackathonDeadlinesEnabled = true
+        }
         val device = UiDevice.getInstance(instrumentation)
         val launchIntent = Intent(
             context,
@@ -747,10 +978,17 @@ class MainNavigationSmokeTest {
                     assertTrue(text.contains("Language"))
                     assertTrue(text.contains("Account"))
                     assertTrue(text.contains("protected by Android Keystore"))
-                    val spinner = activity.findViewById<android.widget.Spinner>(
+                    val languageSelector = activity.findViewById<ViewGroup>(
                         R.id.settings_language_selector,
                     )
-                    assertEquals("English", spinner.selectedItem.toString())
+                    val languageRow = languageSelector.getChildAt(1) as ViewGroup
+                    val selectedLanguage = (0 until languageRow.childCount)
+                        .map { index -> languageRow.getChildAt(index) as TextView }
+                        .single { it.isSelected }
+                    assertEquals("English", selectedLanguage.text.toString())
+                    (0 until languageRow.childCount).forEach { index ->
+                        assertTextIsNotEllipsized(languageRow.getChildAt(index) as TextView)
+                    }
                 }
                 scenario.onActivity { activity ->
                     assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
@@ -758,6 +996,14 @@ class MainNavigationSmokeTest {
                 SystemClock.sleep(700L)
                 instrumentation.waitForIdleSync()
                 scenario.onActivity { activity ->
+                    listOf(
+                        R.id.calendar_mode_day,
+                        R.id.calendar_mode_week,
+                        R.id.calendar_mode_month,
+                        R.id.calendar_mode_year,
+                    ).forEach { id ->
+                        assertTextIsNotEllipsized(activity.findViewById<TextView>(id))
+                    }
                     val allDay = activity.findViewById<ViewGroup>(R.id.calendar_all_day_strip)
                     assertTrue(
                         "English assignment labels must be read from the always-visible all-day strip",
@@ -774,7 +1020,11 @@ class MainNavigationSmokeTest {
                 device.pressBack()
             }
         } finally {
-            AppPreferences(context).languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
+            preferences.languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
+            preferences.competitionDeadlinesEnabled = previousDeadlineSettings[0]
+            preferences.schoolContestNoticesEnabled = previousDeadlineSettings[1]
+            preferences.summerCampDeadlinesEnabled = previousDeadlineSettings[2]
+            preferences.hackathonDeadlinesEnabled = previousDeadlineSettings[3]
         }
     }
 
@@ -1108,6 +1358,7 @@ class MainNavigationSmokeTest {
                     val monthView = activity.findViewById<View>(R.id.calendar_month_view)
                     val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
                     val dragHandle = activity.findViewById<View>(R.id.calendar_month_drag_handle)
+                    val body = activity.findViewById<View>(R.id.calendar_page_body)
                     val firstRowHeightDp = grid.getChildAt(0).height /
                         activity.resources.displayMetrics.density
                     assertTrue(
@@ -1119,6 +1370,11 @@ class MainNavigationSmokeTest {
                         dragHandle.bottom <= monthView.height - monthView.paddingBottom,
                     )
                     activity.findViewById<View?>(R.id.phone_navigation)?.let { phoneNavigation ->
+                        assertEquals(
+                            "Month view must reserve only the floating navigation height and gap",
+                            activity.dp(TeachingCalendarLogic.bottomNavigationContentInsetDp),
+                            body.paddingBottom,
+                        )
                         val handleLocation = IntArray(2).also(dragHandle::getLocationOnScreen)
                         val navigationLocation = IntArray(2).also(phoneNavigation::getLocationOnScreen)
                         assertTrue(
@@ -1206,7 +1462,12 @@ class MainNavigationSmokeTest {
                         )
                     }
                 }
-                swipeResource(device, "calendar_month_selected_details", horizontalDirection = 0)
+                swipeMountedActivityView(
+                    scenario,
+                    device,
+                    R.id.calendar_month_selected_details,
+                    reverseVertical = false,
+                )
                 scenario.onActivity { activity ->
                     val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
                     val visibleRows = (0 until grid.childCount).count { grid.getChildAt(it).height > 0 }
@@ -1453,6 +1714,26 @@ class MainNavigationSmokeTest {
                     R.id.settings_assignment_deadline_legend_dot,
                     Palette.assignment,
                 )
+                val settingsPage = activity.findViewById<ScrollView>(R.id.page_settings)
+                assertFalse(
+                    "Settings must not use dropdown Spinners for segmented multi-value choices",
+                    containsSpinner(settingsPage),
+                )
+                listOf(
+                    R.id.settings_language_selector,
+                    R.id.settings_campus_selector,
+                    R.id.settings_widget_course_limit_selector,
+                    R.id.settings_widget_preview_size_selector,
+                ).forEach { selectorID ->
+                    val selector = activity.findViewById<View>(selectorID)
+                    assertTrue("Multi-value settings must use sliding segmented controls", selector is ViewGroup)
+                    assertFalse("Multi-value selectors must not be Boolean switches", selector is Switch)
+                }
+                assertEquals(
+                    "Every Boolean setting must remain a native animated Switch",
+                    11,
+                    countSwitches(settingsPage),
+                )
 
                 val preferences = AppPreferences(activity)
                 listOf(
@@ -1574,11 +1855,11 @@ class MainNavigationSmokeTest {
     private data class CourseSummaryPresentation(
         val title: String,
         val count: String,
-        val indicator: String,
+        val indicatorRotation: Float,
+        val indicatorHasDrawable: Boolean,
         val toggleHeight: Int,
         val titleSizePx: Float,
         val countSizePx: Float,
-        val indicatorSizePx: Float,
         val areaPadding: List<Int>,
         val rows: List<CourseRowPresentation>,
     )
@@ -1588,7 +1869,8 @@ class MainNavigationSmokeTest {
         assertEquals("Course summary toggle must expose title, count, and indicator", 3, toggle.childCount)
         val title = toggle.getChildAt(0) as TextView
         val count = toggle.getChildAt(1) as TextView
-        val indicator = toggle.getChildAt(2) as TextView
+        val indicator = toggle.getChildAt(2) as ImageView
+        assertEquals(R.id.calendar_day_week_agenda_indicator, indicator.id)
         val area = activity.findViewById<ViewGroup>(R.id.calendar_day_week_course_area)
         val rows = List(area.childCount) { index ->
             val row = area.getChildAt(index) as ViewGroup
@@ -1610,11 +1892,11 @@ class MainNavigationSmokeTest {
         return CourseSummaryPresentation(
             title = title.text.toString(),
             count = count.text.toString(),
-            indicator = indicator.text.toString(),
+            indicatorRotation = indicator.rotation,
+            indicatorHasDrawable = indicator.drawable != null,
             toggleHeight = toggle.height,
             titleSizePx = title.textSize,
             countSizePx = count.textSize,
-            indicatorSizePx = indicator.textSize,
             areaPadding = listOf(area.paddingLeft, area.paddingTop, area.paddingRight, area.paddingBottom),
             rows = rows,
         )
@@ -1634,21 +1916,35 @@ class MainNavigationSmokeTest {
             activity.resources.displayMetrics,
         )
 
-        assertEquals(activity.dp(40), summary.toggleHeight)
-        assertEquals(sp(13f), summary.titleSizePx, 0.5f)
-        assertEquals(sp(11f), summary.countSizePx, 0.5f)
-        assertEquals(sp(12f), summary.indicatorSizePx, 0.5f)
+        assertEquals(activity.dp(TeachingCalendarLogic.compactAgendaHeaderHeightDp), summary.toggleHeight)
+        assertEquals(sp(12f), summary.titleSizePx, 0.5f)
+        assertEquals(sp(10f), summary.countSizePx, 0.5f)
         assertTrue(summary.title.isNotBlank())
         assertTrue(summary.count.isNotBlank())
-        assertTrue(summary.indicator == "⌃" || summary.indicator == "⌄")
+        assertTrue(summary.indicatorHasDrawable)
+        assertEquals(180f, summary.indicatorRotation, 0.5f)
         summary.rows.forEach { row ->
-            assertEquals(sp(13f), row.titleSizePx, 0.5f)
-            assertEquals(sp(11f), row.subtitleSizePx, 0.5f)
+            assertEquals(sp(12f), row.titleSizePx, 0.5f)
+            assertEquals(sp(10f), row.subtitleSizePx, 0.5f)
             assertEquals(Typeface.BOLD, row.titleTypefaceStyle)
             assertEquals(1, row.titleMaxLines)
             assertEquals(1, row.subtitleMaxLines)
-            assertEquals(activity.dp(4), row.paddingTop)
-            assertEquals(activity.dp(4), row.paddingBottom)
+            assertEquals(activity.dp(2), row.paddingTop)
+            assertEquals(activity.dp(2), row.paddingBottom)
+        }
+        assertEquals(0, summary.areaPadding[1])
+        assertEquals(activity.dp(3), summary.areaPadding[3])
+    }
+
+    private fun assertTextIsNotEllipsized(view: TextView) {
+        assertTrue("Text view must have measurable width: ${view.text}", view.width > 0)
+        val layout = checkNotNull(view.layout) { "Missing text layout for ${view.text}" }
+        repeat(layout.lineCount) { line ->
+            assertEquals(
+                "English label must not be ellipsized: ${view.text}",
+                0,
+                layout.getEllipsisCount(line),
+            )
         }
     }
 
@@ -1740,6 +2036,18 @@ class MainNavigationSmokeTest {
         if (root is Switch) return true
         if (root !is ViewGroup) return false
         return (0 until root.childCount).any { index -> containsSwitch(root.getChildAt(index)) }
+    }
+
+    private fun countSwitches(root: View): Int {
+        if (root is Switch) return 1
+        if (root !is ViewGroup) return 0
+        return (0 until root.childCount).sumOf { index -> countSwitches(root.getChildAt(index)) }
+    }
+
+    private fun containsSpinner(root: View): Boolean {
+        if (root is android.widget.Spinner) return true
+        if (root !is ViewGroup) return false
+        return (0 until root.childCount).any { index -> containsSpinner(root.getChildAt(index)) }
     }
 
     private fun gradientFillColor(view: View): Int? {
@@ -1896,25 +2204,39 @@ class MainNavigationSmokeTest {
 
             val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
             val firstCell = (grid.getChildAt(0) as ViewGroup).getChildAt(0)
-            assertTrue(firstCell.performClick())
+            val firstDay = firstCell.findViewById<TextView>(R.id.calendar_month_day_label)
+                .text.toString().toInt()
+            val selectingPreviousMonth = firstDay > 14
+            val adjacentCell = if (selectingPreviousMonth) {
+                firstCell
+            } else {
+                val lastRow = grid.getChildAt(grid.childCount - 1) as ViewGroup
+                lastRow.getChildAt(lastRow.childCount - 1)
+            }
+            assertTrue(adjacentCell.performClick())
             if (activity.findViewById<View?>(R.id.phone_navigation) != null) {
                 val pageSurface = activity.findViewById<ViewGroup>(R.id.calendar_swipe_surface)
-                assertEquals(
-                    "Phone date selection must not stack two readable month grids",
-                    1,
-                    pageSurface.childCount,
+                assertTrue(
+                    "Adjacent-month selection may retain only one outgoing page during its transition",
+                    pageSurface.childCount in 1..2,
                 )
-                val incomingPage = pageSurface.getChildAt(0)
+                val incomingPage = pageSurface.getChildAt(pageSurface.childCount - 1)
                 selectedPageIdentity = System.identityHashCode(incomingPage)
                 selectedMonthViewIdentity = System.identityHashCode(
                     incomingPage.findViewById<View>(R.id.calendar_month_view),
                 )
-                assertEquals(
-                    "Date selection must never borrow the horizontal month-pager transform",
-                    0f,
-                    incomingPage.translationX,
-                    0.01f,
-                )
+                if (pageSurface.childCount == 2) {
+                    assertTrue(
+                        "Adjacent-month selection must enter from the tapped month's direction",
+                        if (selectingPreviousMonth) {
+                            incomingPage.translationX < 0f
+                        } else {
+                            incomingPage.translationX > 0f
+                        },
+                    )
+                } else {
+                    assertEquals(0f, incomingPage.translationX, 0.01f)
+                }
                 assertEquals(0f, incomingPage.translationY, 0.01f)
                 assertEquals(1f, incomingPage.alpha, 0.01f)
             }
@@ -2209,6 +2531,31 @@ class MainNavigationSmokeTest {
             val endY = if (reverseVertical) lowerY else upperY
             device.swipe(bounds.centerX(), startY, bounds.centerX(), endY, 24)
         }
+        device.waitForIdle()
+    }
+
+    private fun swipeMountedActivityView(
+        scenario: ActivityScenario<MainActivity>,
+        device: UiDevice,
+        viewID: Int,
+        reverseVertical: Boolean,
+    ) {
+        val points = IntArray(4)
+        scenario.onActivity { activity ->
+            val view = activity.findViewById<View>(viewID)
+            assertEquals(View.VISIBLE, view.visibility)
+            assertTrue("Swipe target must have non-zero geometry", view.width > 0 && view.height > 0)
+            val location = IntArray(2).also(view::getLocationOnScreen)
+            val x = location[0] + view.width / 2
+            val inset = (view.height / 6).coerceIn(8, 32)
+            val upperY = location[1] + inset
+            val lowerY = location[1] + view.height - inset
+            points[0] = x
+            points[1] = if (reverseVertical) upperY else lowerY
+            points[2] = x
+            points[3] = if (reverseVertical) lowerY else upperY
+        }
+        device.swipe(points[0], points[1], points[2], points[3], 24)
         device.waitForIdle()
     }
 

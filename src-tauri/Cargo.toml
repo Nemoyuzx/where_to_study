@@ -1,6 +1,6 @@
 [package]
 name = "where_to_study"
-version = "0.2.4"
+version = "0.2.5"
 description = "BUPT empty classroom planner for desktop and mobile"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"

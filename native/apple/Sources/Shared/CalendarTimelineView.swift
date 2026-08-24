@@ -12,6 +12,19 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let kind: CalendarAllDayEventKind
+    let deadlineItem: PublicDeadlineItem?
+
+    init(
+        id: String,
+        title: String,
+        kind: CalendarAllDayEventKind,
+        deadlineItem: PublicDeadlineItem? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.kind = kind
+        self.deadlineItem = deadlineItem
+    }
 }
 
 enum CalendarDeadlinePresentation {
@@ -26,13 +39,16 @@ enum CalendarDeadlinePresentation {
         competitionEnabled: Bool,
         schoolNoticeEnabled: Bool,
         summerCampEnabled: Bool,
-        hackathonEnabled: Bool
+        hackathonEnabled: Bool,
+        customEnabled: Bool = false
     ) -> Bool {
         if item.source == .schoolNotice { return schoolNoticeEnabled }
+        if item.source == .custom { return customEnabled }
         switch item.kind {
         case .competition: return competitionEnabled
         case .summerCamp: return summerCampEnabled
         case .hackathon: return hackathonEnabled
+        case .custom: return customEnabled
         }
     }
 

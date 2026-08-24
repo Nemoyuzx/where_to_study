@@ -13,7 +13,8 @@ Silicon 兼容构建。
 - SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
 - 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 - 联动查询顶部提供默认折叠的今日/明日校区天气卡片；月视图日期详情按“课程日程 → 云课堂作业 DDL → 黄历宜忌 → 统一活动 DDL”排列，学科竞赛、校内竞赛通知、夏令营与黑客松均可独立关闭。
-- 作业 DDL 与校内竞赛通知同时进入日/周全天区、月格和年视图日期详情；超出紧凑区域时使用可点击的 `+N` 展开完整列表。
+- 作业 DDL、校内竞赛、公开活动和自定义日程同时进入日/周全天区、月格和年视图日期详情；超出紧凑区域时使用可点击的 `+N` 展开完整列表。
+- 活动日程可以收藏为完整的本地快照：即使关闭对应来源、接口暂时失败或上游删除条目，收藏仍会保留在原日期；设置中提供独立收藏管理页。还可填写符合[自定义日程接口规范](./docs/custom-schedule-api.md)的 HTTPS JSON 地址，将自有日程并入同一教学日历。
 - 图形客户端支持跟随系统、简体中文与 English；静态界面切换语言，第三方 API 返回的课程、天气、黄历、作业和竞赛内容保持原文。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
@@ -23,18 +24,18 @@ Silicon 兼容构建。
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.4 (65)` 正式签名 Universal 构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| Android | Kotlin + Android Views | `0.2.4 (37)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.5 (66)` 正式签名 Universal 构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| Android | Kotlin + Android Views | `0.2.5 (38)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.4 (65)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 91 项单元测试；发布签名与 AGC 上架尚待配置 |
+| iOS | SwiftUI 原生 | `0.2.5 (66)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.5 (1002005)` 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 94 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-[v0.2.4](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.4) 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版在全平台月视图和年视图中以最多两层同心边框同时表达不同类型的 DDL，外层和内层按“作业 > 校内竞赛 > 其它 DDL”取前两类；Android 将两层线宽分别收细为 `1.2dp` 与 `0.8dp`，今天与选中日期继续使用独立标识。Tauri 月视图的星期栏、日期、周数、事件行、字号、间距和选中态进一步对齐原生 macOS；自动生成的效果截图目录改为本地生成物，不再纳入版本控制。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.4 (65)` 已由本地 Xcode 上传 TestFlight。
+[v0.2.5](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.5) 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版加入最多 500 条完整本地日程收藏、自定义 HTTPS JSON 日程源与独立收藏管理页；内置 DDL、作业和自定义源按自然年独立预热，日期选择、同年翻页和视图切换不再触发网络请求。Android 的课程摘要、月视图底部间距、设置控件和动画进一步对齐 iOS；iOS 优化月视图动画性能；桌面端补齐全天日程列、教学周和键盘操作；HarmonyOS 同步手机与 PC 语义。完整中英文改动见 [0.2.5 发布说明](./docs/release-v0.2.5.md)。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.5 (66)` 已由本地 Xcode 上传 TestFlight。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
@@ -81,6 +82,8 @@ Android 原生客户端在用户已授权系统日历访问时，可从设备自
 
 学科竞赛、夏令营与黑客松 DDL 的主数据来自 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) 的[公开 JSON](https://nemoyuzx.github.io/contest-ddl/data/competitions.json)，应用下载后仅在本地按所选日期和已开启类别筛选。主源不可用时，支持的平台会尝试固定备用地址 `http://101.201.29.29/api/contest-events`。独立的[北邮校内竞赛通知 API](http://101.201.29.29/api/contest-notices)由服务器脚本从学校内部网站的公开通知页提取并整理截止节点，条目链接回云课堂 HTTPS 原文。两个明文地址都只允许向这个 IP 发送不含账号、密码、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。学科竞赛、校内竞赛通知、夏令营和黑客松各有独立开关，卡片底部会标明全部第三方来源。
 
+用户还可以启用[自定义日程接口](./docs/custom-schedule-api.md)。客户端只接受不含凭据、片段、回环地址或私网字面量的公开 HTTPS JSON 地址，拒绝重定向并限制响应大小、条目数与查询频率；API 返回的文字保持原文。收藏操作会把单条日程的完整快照保存在当前设备，不上传也不跨设备同步；来源关闭、失败或移除条目后仍会在教学日历中显示，取消收藏或“清除本地数据”才会删除。
+
 课程作业解析以[北邮云课堂官方作业页](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)的真实 `records` / `undoneList` 响应契约为准。启用日期详情中的作业卡时，客户端从系统安全存储临时读取已保存的教务账号和密码，仅通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再以内存中的一次性票据换取云课堂访问令牌并读取当前课程和作业；不会读取浏览器 Cookie/token，也不会把密码发送给 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn`。票据、Cookie 和令牌不写入磁盘；用于跨日期查询的全量作业结果最多复用 10 分钟，已显示的日期结果只保留在当前进程内，并在切换账号或清除本地数据时立即失效。
 
 ## 开发与运行
@@ -119,8 +122,8 @@ Linux 终端客户端可以直接从 Release 安装。以 x86_64 为例：
 
 ```bash
 mkdir -p ~/.local/bin
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.4/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.4/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.5/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.5/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
 install -m 0755 where-to-study-cli where-to-study-tui ~/.local/bin/
 ```
 

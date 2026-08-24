@@ -12,6 +12,84 @@ enum SettingsSurfaceID: String, Hashable {
     case localData
 }
 
+private struct FavoriteDeadlineManagementView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                if model.favoriteDeadlines.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "star")
+                            .font(.system(size: 30))
+                            .foregroundStyle(AppTheme.secondaryText)
+                        Text("暂无收藏日程")
+                            .font(.headline)
+                        Text("在教学日历的 DDL 详情右侧点击星标后，会在这里保存完整快照。")
+                            .font(.callout)
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 48)
+                } else {
+                    ForEach(model.favoriteDeadlines, id: \.favoriteID) { item in
+                        favoriteRow(item)
+                    }
+                }
+                Text("收藏仅保存在本机，不会上传或跨设备同步；清除本地数据会一并删除。")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(16)
+        }
+        .background(AppTheme.background)
+        .navigationTitle("收藏管理")
+        .accessibilityIdentifier("favorites.page")
+    }
+
+    private func favoriteRow(_ item: PublicDeadlineItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.kind.systemImage)
+                .foregroundStyle(item.source == .schoolNotice ? AppTheme.schoolNotice : AppTheme.publicDeadline)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.name)
+                    .font(.subheadline.weight(.semibold))
+                Text(
+                    [
+                        String(item.deadline.prefix(16)).replacingOccurrences(of: "T", with: " "),
+                        item.sourceName ?? item.source.title,
+                        item.organizer,
+                    ]
+                    .compactMap { $0 }
+                    .joined(separator: " · ")
+                )
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryText)
+            }
+            Spacer(minLength: 8)
+            Button {
+                AppHaptics.selection()
+                model.setFavorite(item, isFavorite: false)
+            } label: {
+                Image(systemName: "star.fill")
+                    .foregroundStyle(AppTheme.accent)
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("取消收藏")
+            .accessibilityIdentifier("favorites.remove.\(item.source.rawValue).\(item.id)")
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border, lineWidth: 1))
+    }
+}
+
 enum SettingsLayoutPolicy {
     static let leadingColumn: [SettingsSurfaceID] = [
         .account,
@@ -45,6 +123,7 @@ struct SettingsView: View {
         case password
         case termID
         case termStartDate
+        case customURL
     }
 
     private enum WidgetPreviewSize: String, CaseIterable, Identifiable {
@@ -86,13 +165,17 @@ struct SettingsView: View {
     }
 
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @State private var showingClearDataConfirmation = false
     @State private var showingPrivacyPolicy = false
     @State private var widgetPreviewSize: WidgetPreviewSize = .medium
+    @State private var customFeedValidationStatus = ""
+    @State private var isValidatingCustomFeed = false
     @FocusState private var focusedAccountField: AccountField?
 
     var body: some View {
-        GeometryReader { proxy in
+        NavigationStack {
+            GeometryReader { proxy in
             let columnCount = AdaptiveLayoutPolicy.contentColumnCount(width: proxy.size.width)
             #if os(macOS)
             ScrollView {
@@ -157,24 +240,13 @@ struct SettingsView: View {
             .scrollDismissesKeyboard(.interactively)
             #endif
             #endif
+            }
         }
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.settings")
         .sheet(isPresented: $showingPrivacyPolicy) {
             PrivacyPolicyView()
         }
-        #if os(iOS)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("完成") {
-                    AppHaptics.impact()
-                    dismissKeyboard()
-                }
-                .accessibilityIdentifier("action.dismiss-keyboard")
-            }
-        }
-        #endif
         .confirmationDialog(
             "清除本地数据？",
             isPresented: $showingClearDataConfirmation,
@@ -188,7 +260,7 @@ struct SettingsView: View {
                 AppHaptics.impact()
             }
         } message: {
-            Text("此操作会删除本机保存的账户密码、个人课表、空教室和节假日缓存，且无法撤销。")
+            Text("此操作会删除本机保存的账户密码、个人课表、空教室、节假日缓存、自定义日程设置与收藏，且无法撤销。")
         }
     }
 
@@ -277,8 +349,21 @@ struct SettingsView: View {
     private var accountSurface: some View {
         Surface {
             VStack(alignment: .leading, spacing: 14) {
-                Label("个人账户", systemImage: "person.crop.circle")
-                    .font(.headline)
+                HStack {
+                    Label("个人账户", systemImage: "person.crop.circle")
+                    Spacer()
+                    #if os(iOS)
+                    if focusedAccountField != nil {
+                        Button("完成") {
+                            AppHaptics.impact()
+                            dismissKeyboard()
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("action.dismiss-keyboard")
+                    }
+                    #endif
+                }
+                .font(.headline)
                 TextField("学号", text: $model.account)
                     .textFieldStyle(.roundedBorder)
                     .disabled(model.isSampleMode)
@@ -318,6 +403,7 @@ struct SettingsView: View {
                     Text("西土城").tag("01")
                     Text("沙河").tag("04")
                 }
+                .pickerStyle(.segmented)
                 .disabled(model.isSampleMode)
                 Button {
                     AppHaptics.impact()
@@ -508,6 +594,61 @@ struct SettingsView: View {
                     set: model.setHackathonDeadlinesEnabled,
                     markerColor: AppTheme.publicDeadline
                 )
+                Divider()
+                Toggle(
+                    "自定义日程源",
+                    isOn: Binding(
+                        get: { model.customDeadlinesEnabled },
+                        set: { enabled in
+                            AppHaptics.selection()
+                            model.setCustomDeadlinesEnabled(enabled)
+                        }
+                    )
+                )
+                .toggleStyle(.switch)
+                .tint(AppTheme.primary)
+                .disabled(model.isSampleMode)
+                .accessibilityIdentifier("settings.custom-deadlines-enabled")
+                TextField("自定义日程 HTTPS 地址", text: $model.customDeadlinesURL)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(model.isSampleMode)
+                    .focused($focusedAccountField, equals: .customURL)
+                    .onSubmit { validateAndSaveCustomFeed() }
+                    .accessibilityIdentifier("settings.custom-deadlines-url")
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    #endif
+                Button {
+                    validateAndSaveCustomFeed()
+                } label: {
+                    Label(
+                        isValidatingCustomFeed ? "正在校验…" : "保存并校验自定义源",
+                        systemImage: "checkmark.shield"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isSampleMode || isValidatingCustomFeed)
+                .accessibilityIdentifier("settings.custom-deadlines-save")
+                if !customFeedValidationStatus.isEmpty {
+                    Text(model.localized(customFeedValidationStatus))
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .accessibilityIdentifier("settings.custom-deadlines-status")
+                }
+                Text("自定义源只发送不带凭据的 HTTPS GET；普通条目随开关隐藏，收藏快照始终保留在本机。")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.secondaryText)
+                NavigationLink {
+                    FavoriteDeadlineManagementView()
+                } label: {
+                    Label("收藏管理", systemImage: "star")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("settings.favorite-management")
                 Text("天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。")
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
@@ -571,6 +712,35 @@ struct SettingsView: View {
                 .accessibilityHidden(true)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func validateAndSaveCustomFeed() {
+        AppHaptics.impact()
+        dismissKeyboard()
+        do {
+            guard let url = try model.saveCustomDeadlineSettings() else {
+                customFeedValidationStatus = "自定义日程设置已保存"
+                calendarDeadlines.clearCustomSource()
+                return
+            }
+            isValidatingCustomFeed = true
+            customFeedValidationStatus = "正在校验自定义日程源…"
+            Task { @MainActor in
+                defer { isValidatingCustomFeed = false }
+                do {
+                    let metadata = try await calendarDeadlines.validateCustomFeed(sourceURL: url)
+                    customFeedValidationStatus = model.localizedFormat(
+                        "自定义日程源校验成功：%@，%lld 项",
+                        metadata.sourceName,
+                        Int64(metadata.itemCount)
+                    )
+                } catch {
+                    customFeedValidationStatus = error.localizedDescription
+                }
+            }
+        } catch {
+            customFeedValidationStatus = error.localizedDescription
+        }
     }
 
     private var widgetSurface: some View {
@@ -677,7 +847,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("本地数据", systemImage: "externaldrive")
                     .font(.headline)
-                Text("清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。")
+                Text("清除已保存的教务账户与密码、个人课表、空教室、节假日缓存、自定义日程设置与收藏，并恢复本地设置。")
                     .font(.callout)
                     .foregroundStyle(AppTheme.secondaryText)
                 Button(role: .destructive) {

@@ -127,6 +127,8 @@ class SecureCredentialStore(context: Context) {
 
 class AppPreferences(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    @Volatile
+    private var favoriteDeadlineCache: List<PublicDeadlineItem>? = null
 
     var campusID: String
         get() = preferences.getString(CAMPUS_KEY, AppMetadata.campuses.first().id)
@@ -229,15 +231,67 @@ class AppPreferences(context: Context) {
             save(HACKATHON_DEADLINES_ENABLED_KEY, value)
         }
 
-    val hasEnabledPublicDeadlines: Boolean
+    var customDeadlinesEnabled: Boolean
+        get() = preferences.getBoolean(CUSTOM_DEADLINES_ENABLED_KEY, false)
+        set(value) {
+            save(CUSTOM_DEADLINES_ENABLED_KEY, value)
+        }
+
+    var customDeadlinesURL: String
+        get() = preferences.getString(CUSTOM_DEADLINES_URL_KEY, "").orEmpty()
+        set(value) {
+            save(CUSTOM_DEADLINES_URL_KEY, value.trim())
+        }
+
+    val enabledCustomDeadlineURL: String?
+        get() = customDeadlinesURL.takeIf { customDeadlinesEnabled && it.isNotBlank() }
+            ?.let { raw ->
+                runCatching { CustomDeadlineFeedURLValidator.validatedURI(raw).toString() }
+                    .getOrNull()
+            }
+
+    val favoriteDeadlines: List<PublicDeadlineItem>
+        get() = favoriteDeadlineCache ?: synchronized(this) {
+            favoriteDeadlineCache ?: PublicDeadlineItemJsonCodec.decode(
+                preferences.getString(FAVORITE_DEADLINES_KEY, null),
+            ).also { favoriteDeadlineCache = it }
+        }
+
+    fun isFavorite(item: PublicDeadlineItem): Boolean =
+        favoriteDeadlines.any { it.favoriteID == item.favoriteID }
+
+    @Synchronized
+    fun setFavorite(item: PublicDeadlineItem, favorite: Boolean) {
+        val updated = favoriteDeadlines
+            .filterNot { it.favoriteID == item.favoriteID }
+            .toMutableList()
+        if (favorite) updated.add(0, item)
+        val payload = PublicDeadlineItemJsonCodec.encode(updated.take(maximumFavoriteDeadlines))
+        if (!preferences.edit().putString(FAVORITE_DEADLINES_KEY, payload).commit()) {
+            throw IllegalStateException("无法保存收藏日程。")
+        }
+        favoriteDeadlineCache = updated.take(maximumFavoriteDeadlines)
+    }
+
+    fun favoriteDeadlineItems(date: String): List<PublicDeadlineItem> = favoriteDeadlines
+        .filter { it.deadline.startsWith(date) }
+        .sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+
+    val hasEnabledBuiltInPublicDeadlines: Boolean
         get() = competitionDeadlinesEnabled || schoolContestNoticesEnabled ||
-            summerCampDeadlinesEnabled ||
-            hackathonDeadlinesEnabled
+            summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
+
+    val hasEnabledPublicDeadlines: Boolean
+        get() = hasEnabledBuiltInPublicDeadlines || enabledCustomDeadlineURL != null
+
+    val hasCalendarDeadlinesToDisplay: Boolean
+        get() = hasEnabledPublicDeadlines || favoriteDeadlines.isNotEmpty()
 
     fun clear() {
         if (!preferences.edit().clear().commit()) {
             throw IllegalStateException("无法清除本地偏好。")
         }
+        favoriteDeadlineCache = emptyList()
     }
 
     private fun save(key: String, value: String) {
@@ -258,7 +312,7 @@ class AppPreferences(context: Context) {
         }
     }
 
-    private companion object {
+    companion object {
         const val PREFERENCES_NAME = "app_preferences_v1"
         const val CAMPUS_KEY = "campus_id"
         const val LANGUAGE_KEY = "language_code"
@@ -275,5 +329,9 @@ class AppPreferences(context: Context) {
         const val SCHOOL_CONTEST_NOTICES_ENABLED_KEY = "school_contest_notices_enabled"
         const val SUMMER_CAMP_DEADLINES_ENABLED_KEY = "summer_camp_deadlines_enabled"
         const val HACKATHON_DEADLINES_ENABLED_KEY = "hackathon_deadlines_enabled"
+        const val CUSTOM_DEADLINES_ENABLED_KEY = "custom_deadlines_enabled"
+        const val CUSTOM_DEADLINES_URL_KEY = "custom_deadlines_url"
+        const val FAVORITE_DEADLINES_KEY = "favorite_deadlines_v1"
+        const val maximumFavoriteDeadlines = 500
     }
 }

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "source": "示例自定义日程",
+  "homepage": "https://example.com/calendar",
+  "updated_at": "2026-08-24T08:00:00+08:00",
+  "items": [
+    {
+      "id": "example-registration",
+      "name": "示例活动报名截止",
+      "event_type": "custom",
+      "primary_deadline": "2026-09-18T23:59:00+08:00",
+      "organizer": "示例组织方",
+      "official_url": "https://example.com/calendar/example-registration"
+    },
+    {
+      "id": "example-competition",
+      "name": "示例学科竞赛",
+      "event_type": "competition",
+      "primary_deadline": "2026-10-08T18:00:00+08:00"
+    }
+  ]
+}

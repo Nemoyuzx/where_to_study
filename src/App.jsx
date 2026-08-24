@@ -17,6 +17,7 @@ import {
   CloudSnow,
   Clock3,
   ChevronDown,
+  ChevronLeft,
   ExternalLink,
   Home,
   HardDrive,
@@ -29,6 +30,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Star,
   Sun,
   TentTree,
   Trash2,
@@ -67,6 +69,8 @@ import {
   formatCourseDate,
   formatShortDate,
   formatTeachingWeek,
+  favoriteDeadlineKey,
+  favoriteDeadlinesForDate,
   expandedMonthGridMetrics,
   getCampusClassrooms,
   getWeekState,
@@ -80,6 +84,7 @@ import {
   msUntilNextShanghaiMidnight,
   normalizeClassroomsCache,
   normalizeError,
+  normalizeFavoriteDeadlines,
   nonHourlyCourseBoundaryMinutes,
   parseTimeMinutes,
   requestBody,
@@ -122,6 +127,7 @@ const EN_TEXT = Object.freeze({
   '周视图全天日程': 'Week-view all-day events',
   '月视图全天日程': 'Month-view all-day events',
   '关闭全天日程': 'Close all-day events',
+  '打开全天日程详情': 'Open all-day event details',
   '打开所选日期': 'Open selected date',
   '查看日': 'Day',
   '查看周': 'Week',
@@ -176,6 +182,27 @@ const EN_TEXT = Object.freeze({
   '其它 DDL': 'Other deadlines',
   '夏令营': 'Summer camps',
   '黑客松': 'Hackathons',
+  '自定义日程': 'Custom schedule',
+  '自定义日程 HTTPS 地址': 'Custom schedule HTTPS URL',
+  '自定义日程来源：': 'Custom schedule source: ',
+  '自定义日程不符合 v1 接口规范。': 'The custom schedule does not conform to the v1 feed contract.',
+  '自定义日程只允许不含凭据、片段或本地地址的公开 HTTPS URL。': 'Custom schedules require a public HTTPS URL without credentials, fragments, or local addresses.',
+  '自定义日程地址缺少主机名。': 'The custom schedule URL has no host.',
+  '自定义日程接口版本必须为 1。': 'The custom schedule feed version must be 1.',
+  '自定义日程接口返回了不受信任的重定向。': 'The custom schedule feed returned an untrusted redirect.',
+  '自定义日程更新时间格式不正确。': 'The custom schedule updated_at value is invalid.',
+  '自定义日程条目超过 5000 项。': 'The custom schedule contains more than 5,000 items.',
+  '自定义日程来源主页必须使用 HTTPS。': 'The custom schedule homepage must use HTTPS.',
+  '自定义日程来源名称无效。': 'The custom schedule source name is invalid.',
+  '自定义日程查询范围必须在 1 至 370 天内。': 'The custom schedule range must contain 1 to 370 days.',
+  'DDL 数据响应过大。': 'The deadline response exceeds the size limit.',
+  '从用户填写的 HTTPS JSON 接口获取日程；已收藏条目不受此开关影响。': 'Load events from a user-provided HTTPS JSON endpoint. Favorites are unaffected by this switch.',
+  '收藏': 'Favorite',
+  '取消收藏': 'Remove favorite',
+  '收藏管理': 'Favorite management',
+  '返回设置': 'Back to settings',
+  '暂无收藏日程': 'No favorite schedules',
+  '收藏会保存完整日程；来源关闭、请求失败或上游删除后仍会显示。': 'Favorites keep complete local snapshots and remain visible if a source is disabled, unavailable, or removes an item.',
   '校区天气': 'Campus weather',
   '今日与明日': 'Today and tomorrow',
   '正在更新天气…': 'Updating weather…',
@@ -226,10 +253,10 @@ const EN_TEXT = Object.freeze({
   '天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。': 'Weather, almanac, and deadline cards identify their third-party sources. Academic competitions and script-extracted school notices have separate switches.',
   '显示数据仅供参考，请以实际情况为准。': 'Displayed data is for reference only; rely on official information.',
   '本地数据': 'Local data',
-  '清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。': 'Remove saved academic credentials, schedules, classroom and holiday caches, and reset local preferences.',
+  '清除已保存的教务账户与密码、个人课表、空教室、节假日缓存、自定义日程设置与收藏，并恢复本地设置。': 'Remove saved academic credentials, schedules, classroom and holiday caches, custom schedule settings, favorites, and reset local preferences.',
   '清除本地数据': 'Clear local data',
   '清除全部本地数据？': 'Clear all local data?',
-  '将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。': 'This removes saved credentials, schedules, classroom caches, and settings. This cannot be undone.',
+  '将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏和其它设置。此操作无法撤销。': 'This removes saved credentials, schedules, classroom caches, custom schedule settings, favorites, and other settings. This cannot be undone.',
   '取消': 'Cancel',
   '确认清除': 'Clear now',
   '关于本应用': 'About',
@@ -266,9 +293,28 @@ const EN_TEXT = Object.freeze({
   '窗口已隐藏，应用仍在系统托盘运行。': 'The window is hidden; the app is still running in the system tray.',
 })
 
+const EN_TEXT_PREFIXES = Object.freeze({
+  '自定义日程地址无效：': 'Invalid custom schedule URL: ',
+  '无法创建自定义日程请求：': 'Unable to create the custom schedule request: ',
+  '无法获取自定义日程：': 'Unable to load the custom schedule: ',
+  '自定义日程接口返回错误：': 'The custom schedule endpoint returned an error: ',
+  '自定义日程数据解析失败：': 'Unable to parse the custom schedule: ',
+})
+
 function translator(language) {
   return (text, values = {}) => {
-    const template = language === 'en' ? (EN_TEXT[text] || text) : text
+    let template = text
+    if (language === 'en') {
+      template = EN_TEXT[text] || text
+      if (template === text) {
+        for (const [prefix, translated] of Object.entries(EN_TEXT_PREFIXES)) {
+          if (text.startsWith(prefix)) {
+            template = translated + text.slice(prefix.length)
+            break
+          }
+        }
+      }
+    }
     return Object.entries(values).reduce(
       (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
       template,
@@ -280,7 +326,18 @@ const BROWSER_PREVIEW_ENABLED = import.meta.env.DEV
 const PROJECT_URL = 'https://github.com/Nemoyuzx/where_to_study'
 const DEADLINE_PREFETCH_RETRY_MS = 30 * 1000
 const DEADLINE_SOURCE_REFRESH_MS = 5 * 60 * 1000 + 1000
+const FAVORITE_DEADLINES_STORAGE_KEY = 'where-to-study.favorite-deadlines.v1'
 const PRIVACY_POLICY_URL = 'https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md'
+
+function loadFavoriteDeadlines() {
+  try {
+    return normalizeFavoriteDeadlines(JSON.parse(window.localStorage.getItem(
+      FAVORITE_DEADLINES_STORAGE_KEY,
+    ) || '[]'))
+  } catch {
+    return []
+  }
+}
 const PRIVACY_SECTIONS = [
   {
     title: '账户与教务请求 / Account and academic requests',
@@ -288,7 +345,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '本地数据 / Local data',
-    body: '课表、空教室、校区、学期和功能开关缓存在设备上；受支持系统上的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Course widgets on supported systems read only a local schedule snapshot. “Clear local data” removes credentials, caches, preferences, and app-managed reminders.',
+    body: '课表、空教室、校区、学期和功能开关缓存在设备上；收藏会把完整日程快照保存在本机，不上传或跨设备同步。受支持系统上的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、收藏、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Favorites store complete event snapshots on this device and are neither uploaded nor synchronized. Course widgets on supported systems read only a local schedule snapshot. “Clear local data” removes credentials, caches, favorites, preferences, and app-managed reminders.',
   },
   {
     title: '节假日数据 / Holiday data',
@@ -296,7 +353,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '天气、黄历与公开活动 / Weather, almanac, and public events',
-    body: 'UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。各类别均有独立开关。固定 HTTP API 仅接收无凭据 GET，拒绝重定向且不含个人数据。所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, summer camps, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Each category has its own switch. Fixed HTTP APIs receive only credential-free GET requests with no personal data and reject redirects. Displayed data is for reference only.',
+    body: 'UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。用户还可选择公开 HTTPS JSON 自定义日程源；请求不附带个人数据，客户端拒绝含凭据、回环/私网字面量或重定向的地址并限制响应大小。各类别均有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, summer camps, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Users may also select a public HTTPS JSON custom feed. Requests contain no personal data; credential-bearing, loopback/private literal, redirecting, and oversized endpoints are rejected. Each category has its own switch, and displayed data is for reference only.',
   },
   {
     title: '云课堂作业 / UCloud assignments',
@@ -433,6 +490,8 @@ function browserPreviewCommand(name, payload = {}) {
       school_contest_notices_enabled: DEFAULT_SETTINGS.schoolContestNoticesEnabled,
       summer_camp_deadlines_enabled: DEFAULT_SETTINGS.summerCampDeadlinesEnabled,
       hackathon_deadlines_enabled: DEFAULT_SETTINGS.hackathonDeadlinesEnabled,
+      custom_deadlines_enabled: DEFAULT_SETTINGS.customDeadlinesEnabled,
+      custom_deadlines_url: DEFAULT_SETTINGS.customDeadlinesUrl,
     }
   }
   if (name === 'save_saved_settings') {
@@ -452,6 +511,8 @@ function browserPreviewCommand(name, payload = {}) {
       school_contest_notices_enabled: Boolean(payload.school_contest_notices_enabled),
       summer_camp_deadlines_enabled: Boolean(payload.summer_camp_deadlines_enabled),
       hackathon_deadlines_enabled: Boolean(payload.hackathon_deadlines_enabled),
+      custom_deadlines_enabled: Boolean(payload.custom_deadlines_enabled),
+      custom_deadlines_url: String(payload.custom_deadlines_url || '').trim(),
     }
   }
   if (
@@ -579,6 +640,26 @@ function browserPreviewCommand(name, payload = {}) {
         { id: 'preview-summer-camp-range', name: '高校夏令营', event_type: 'summer_camp', source_type: 'contest_ddl', primary_deadline: `${thirdDate}T18:00:00+08:00`, organizer: '示例高校', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
         { id: 'preview-hackathon-range', name: '校园黑客松', event_type: 'hackathon', source_type: 'contest_ddl', primary_deadline: `${fourthDate}T23:59:59+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
       ],
+    }
+  }
+  if (name === 'fetch_custom_deadline_calendar') {
+    return {
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      fetched_at: contractTimestamp(),
+      source: payload.url,
+      used_backup: false,
+      items: [{
+        id: 'custom:preview-custom-range',
+        name: '自定义日程示例',
+        event_type: 'custom',
+        source_type: 'custom',
+        primary_deadline: `${payload.start_date}T21:30:00+08:00`,
+        organizer: '示例自定义来源',
+        official_url: null,
+        source_name: '示例自定义来源',
+        source_url: payload.url,
+      }],
     }
   }
   if (name === 'fetch_assignments') {
@@ -763,6 +844,7 @@ const DEADLINE_TYPE_META = {
   competition: { label: '学科竞赛', Icon: Trophy },
   summer_camp: { label: '夏令营', Icon: TentTree },
   hackathon: { label: '黑客松', Icon: Code2 },
+  custom: { label: '自定义日程', Icon: CalendarPlus },
 }
 
 function deadlineClock(value, fallback = '时间待定') {
@@ -771,6 +853,7 @@ function deadlineClock(value, fallback = '时间待定') {
 }
 
 function deadlineItemEnabled(item, enabledTypes) {
+  if (item.source_type === 'custom') return Boolean(enabledTypes.custom)
   return item.source_type === 'school_notice'
     ? Boolean(enabledTypes.school_notice)
     : Boolean(enabledTypes[item.event_type])
@@ -867,17 +950,41 @@ function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) 
   )
 }
 
-function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onRetry, t }) {
-  const items = (response?.items || []).filter((item) => deadlineItemEnabled(item, enabledTypes))
+function ContestDeadlineCard({
+  date,
+  response,
+  loading,
+  error,
+  items: suppliedItems,
+  enabledTypes,
+  isFavorite,
+  onToggleFavorite,
+  onRetry,
+  t,
+}) {
+  const items = suppliedItems
+    || (response?.items || []).filter((item) => deadlineItemEnabled(item, enabledTypes))
+  const showsContestSource = items.some((item) => item.source_type === 'contest_ddl')
+    || Boolean(enabledTypes.competition || enabledTypes.summer_camp || enabledTypes.hackathon)
+  const showsSchoolSource = items.some((item) => item.source_type === 'school_notice')
+    || Boolean(enabledTypes.school_notice)
+  const customSources = [...new Map(items
+    .filter((item) => item.source_type === 'custom')
+    .map((item) => {
+      const name = item.source_name || t('自定义日程')
+      const rawURL = String(item.source_url || '')
+      const url = rawURL.startsWith('https://') && !rawURL.includes('@') ? rawURL : ''
+      return [`${name}\u001f${url}`, { name, url }]
+    })).values()]
   return (
     <section className="panel contest-deadline-card" aria-label={`${date} ${t('竞赛与活动截止')}`}>
       <div className="panel-title">
         <Trophy size={18} />
         <h2>{t('竞赛与活动 DDL')}</h2>
       </div>
-      {loading ? (
+      {loading && !items.length ? (
         <div className="deadline-state"><Loader2 className="spin" size={18} /> {t('正在更新实时 DDL…')}</div>
-      ) : error ? (
+      ) : error && !items.length ? (
         <button type="button" className="deadline-state deadline-retry" onClick={onRetry}>
           <AlertTriangle size={17} /> {t(error)} · {t('点击重试')}
         </button>
@@ -898,24 +1005,113 @@ function ContestDeadlineCard({ date, response, loading, error, enabledTypes, onR
                 <time>{deadlineClock(item.primary_deadline, t('时间待定'))}</time>
               </>
             )
-            return item.official_url ? (
-              <a key={item.id} href={item.official_url} target="_blank" rel="noreferrer">{body}</a>
-            ) : <article key={item.id}>{body}</article>
+            return (
+              <article key={favoriteDeadlineKey(item)} className="deadline-favorite-row">
+                {item.official_url ? (
+                  <a className="deadline-event-main" href={item.official_url} target="_blank" rel="noreferrer">{body}</a>
+                ) : <div className="deadline-event-main">{body}</div>}
+                <button
+                  type="button"
+                  className={`deadline-favorite-button ${isFavorite(item) ? 'active' : ''}`}
+                  aria-label={isFavorite(item) ? t('取消收藏') : t('收藏')}
+                  aria-pressed={isFavorite(item)}
+                  onClick={() => onToggleFavorite(item)}
+                >
+                  <Star size={18} fill={isFavorite(item) ? 'currentColor' : 'none'} />
+                </button>
+              </article>
+            )
           })}
         </div>
       ) : (
         <div className="deadline-empty">{t('当天没有已启用类型的报名或提交截止')}</div>
       )}
-      <p>
-        {t('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。')}{' '}
-        {t('第三方来源')}：
-        <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a>
-        {' · '}{t('备用：')}
-        <a href="http://101.201.29.29/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
-        {' · '}{t('校内：')}
-        <a href="http://101.201.29.29/api/contest-notices" target="_blank" rel="noreferrer">{t('竞赛通知 API')}</a>
-        {response?.used_backup ? t('（本次已使用备用源）') : ''}
-      </p>
+      {showsContestSource || showsSchoolSource ? (
+        <p>
+          {showsSchoolSource
+            ? `${t('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。')} `
+            : ''}
+          {t('第三方来源')}：
+          {showsContestSource ? (
+            <>
+              <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a>
+              {' · '}{t('备用：')}
+              <a href="http://101.201.29.29/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
+            </>
+          ) : null}
+          {showsContestSource && showsSchoolSource ? ' · ' : null}
+          {showsSchoolSource ? (
+            <>
+              {t('校内：')}
+              <a href="http://101.201.29.29/api/contest-notices" target="_blank" rel="noreferrer">{t('竞赛通知 API')}</a>
+            </>
+          ) : null}
+          {response?.used_backup && showsContestSource ? t('（本次已使用备用源）') : ''}
+        </p>
+      ) : null}
+      {customSources.map((source) => (
+        <p key={`${source.name}-${source.url}`}>
+          {t('自定义日程来源：')}
+          {source.url ? (
+            <a href={source.url} target="_blank" rel="noreferrer">{source.name}</a>
+          ) : source.name}
+        </p>
+      ))}
+    </section>
+  )
+}
+
+function FavoriteDeadlineManager({ items, onRemove, onClose, t }) {
+  return (
+    <section className="favorite-manager-page" aria-label={t('收藏管理')}>
+      <header>
+        <button type="button" onClick={onClose} aria-label={t('返回设置')}>
+          <ChevronLeft size={20} />
+        </button>
+        <div>
+          <span>Where To Study</span>
+          <h2>{t('收藏管理')}</h2>
+        </div>
+      </header>
+      {items.length ? (
+        <div className="favorite-manager-list">
+          {items.map((item) => {
+            const meta = item.source_type === 'school_notice'
+              ? { label: t('校内竞赛通知'), Icon: Trophy }
+              : DEADLINE_TYPE_META[item.event_type] || DEADLINE_TYPE_META.custom
+            const ItemIcon = meta.Icon
+            const details = (
+              <>
+                <ItemIcon size={18} />
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{datePart(item.primary_deadline)} {deadlineClock(item.primary_deadline)} · {t(meta.label)}</span>
+                  {item.organizer ? <small>{item.organizer}</small> : null}
+                </div>
+              </>
+            )
+            return (
+              <article key={favoriteDeadlineKey(item)}>
+                {item.official_url ? (
+                  <a href={item.official_url} target="_blank" rel="noreferrer">{details}</a>
+                ) : <div className="favorite-manager-item-main">{details}</div>}
+                <button
+                  type="button"
+                  className="deadline-favorite-button active"
+                  aria-label={t('取消收藏')}
+                  onClick={() => onRemove(item)}
+                ><Star size={19} fill="currentColor" /></button>
+              </article>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="favorite-manager-empty">
+          <Star size={36} />
+          <strong>{t('暂无收藏日程')}</strong>
+          <p>{t('收藏会保存完整日程；来源关闭、请求失败或上游删除后仍会显示。')}</p>
+        </div>
+      )}
     </section>
   )
 }
@@ -995,6 +1191,8 @@ function App() {
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
   const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false)
+  const [favoriteManagerOpen, setFavoriteManagerOpen] = useState(false)
+  const [favoriteDeadlines, setFavoriteDeadlines] = useState(loadFavoriteDeadlines)
   const [weather, setWeather] = useState(null)
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [weatherError, setWeatherError] = useState('')
@@ -1004,9 +1202,13 @@ function App() {
   const [deadlinesByDate, setDeadlinesByDate] = useState({})
   const [deadlinesLoadingDate, setDeadlinesLoadingDate] = useState('')
   const [deadlinesErrorByDate, setDeadlinesErrorByDate] = useState({})
+  const [customDeadlinesByDate, setCustomDeadlinesByDate] = useState({})
+  const [customDeadlinesLoadingDate, setCustomDeadlinesLoadingDate] = useState('')
+  const [customDeadlinesErrorByDate, setCustomDeadlinesErrorByDate] = useState({})
   const [assignmentsByDate, setAssignmentsByDate] = useState({})
   const [assignmentsLoadingDate, setAssignmentsLoadingDate] = useState('')
   const [assignmentsErrorByDate, setAssignmentsErrorByDate] = useState({})
+  const [calendarSupplementRevision, setCalendarSupplementRevision] = useState(0)
   const autoFetchedClassroomsDate = useRef('')
   const calendarPopoverRef = useRef(null)
   const calendarGestureRef = useRef(null)
@@ -1033,20 +1235,66 @@ function App() {
   const deadlinePreheatPromiseRef = useRef(null)
   const deadlinePreheatTimerRef = useRef(null)
   const deadlinePreheatEnabledRef = useRef(false)
+  const todayDate = shanghaiDateString(now)
+  const todayYear = todayDate.slice(0, 4)
+  const loading = loadingTasks[loadingTasks.length - 1] || ''
 
-  const calendarSupplementRange = useMemo(() => {
-    if (calendarView === 'day') return { startDate: calendarDate, endDate: calendarDate }
-    if (calendarView === 'week') {
-      const startDate = startOfWeekMonday(calendarDate)
-      return { startDate, endDate: addDays(startDate, 6) }
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        FAVORITE_DEADLINES_STORAGE_KEY,
+        JSON.stringify(normalizeFavoriteDeadlines(favoriteDeadlines)),
+      )
+    } catch {
+      // Public event favorites remain usable for this session if the WebView
+      // storage quota is unavailable; no source/network action is retried here.
     }
-    if (calendarView === 'month') {
-      const days = buildMonthDays(calendarDate)
-      return { startDate: days[0], endDate: days[days.length - 1] }
+  }, [favoriteDeadlines])
+
+  useEffect(() => {
+    const handleDesktopShortcut = (event) => {
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
+        const destination = { '1': 'planner', '2': 'calendar', '3': 'settings' }[event.key]
+        if (destination) {
+          event.preventDefault()
+          setActivePage(destination)
+          setFavoriteManagerOpen(false)
+          return
+        }
+      }
+      if (event.key === 'Escape') {
+        setCalendarPopover(null)
+        setCalendarAgendaDialog(null)
+        setFavoriteManagerOpen(false)
+        return
+      }
+      if (activePage !== 'calendar' || event.ctrlKey || event.metaKey) return
+      const view = { d: 'day', w: 'week', m: 'month', y: 'year' }[event.key.toLowerCase()]
+      if (view && !event.altKey) {
+        event.preventDefault()
+        chooseCalendarView(view)
+        return
+      }
+      if (event.key === 'PageUp' || (event.altKey && event.key === 'ArrowLeft')) {
+        event.preventDefault()
+        moveCalendar(-1)
+      } else if (event.key === 'PageDown' || (event.altKey && event.key === 'ArrowRight')) {
+        event.preventDefault()
+        moveCalendar(1)
+      } else if (event.key === 'Home' && !event.altKey) {
+        event.preventDefault()
+        startCalendarMotion(todayDate < calendarDate ? 'previous' : 'next')
+        setCalendarDate(todayDate)
+      }
     }
-    const year = dateFromString(calendarDate).getFullYear()
-    return { startDate: `${year}-01-01`, endDate: `${year}-12-31` }
-  }, [calendarDate, calendarView])
+    window.addEventListener('keydown', handleDesktopShortcut)
+    return () => window.removeEventListener('keydown', handleDesktopShortcut)
+  }, [activePage, calendarDate, calendarView, todayDate])
+
+  const calendarSupplementYear = dateFromString(calendarDate).getFullYear()
+  const calendarMonthKey = calendarDate.slice(0, 7)
 
   useEffect(() => {
     document.documentElement.lang = uiLanguage === 'en' ? 'en' : 'zh-Hans'
@@ -1107,10 +1355,6 @@ function App() {
       window.clearTimeout(wheelTimer)
     }
   }, [activePage, calendarView, calendarPopover])
-  const todayDate = shanghaiDateString(now)
-  const todayYear = todayDate.slice(0, 4)
-  const loading = loadingTasks[loadingTasks.length - 1] || ''
-
   useEffect(() => {
     const query = window.matchMedia('(max-width: 720px)')
     const updateLayout = () => setCompactCalendarLayout(query.matches)
@@ -1210,7 +1454,7 @@ function App() {
       window.cancelAnimationFrame(resizeFrame)
       clearDesktopMonthMetrics()
     }
-  }, [activePage, calendarDate, calendarMotion, calendarView, compactCalendarLayout])
+  }, [activePage, calendarMonthKey, calendarMotion, calendarView, compactCalendarLayout])
 
   useEffect(() => () => {
     window.clearTimeout(monthExpansionTimerRef.current)
@@ -1382,6 +1626,16 @@ function App() {
   }, [queryCampusId, settings.weatherEnabled, todayDate])
 
   useEffect(() => {
+    setCustomDeadlinesByDate({})
+    setCustomDeadlinesErrorByDate({})
+    setCustomDeadlinesLoadingDate('')
+    requestedCalendarSupplementRanges.current = new Set(
+      [...requestedCalendarSupplementRanges.current]
+        .filter((key) => !String(key).startsWith('custom-deadlines:')),
+    )
+  }, [settings.customDeadlinesEnabled, settings.customDeadlinesUrl])
+
+  useEffect(() => {
     if (activePage !== 'calendar' || calendarView !== 'month' || !settings.almanacEnabled) return undefined
     void loadAlmanac(calendarDate)
     return () => {
@@ -1408,26 +1662,51 @@ function App() {
     todayYear,
   ])
 
+  // Prime the full selected year once settings are available. Date selection,
+  // view changes, and month paging then read local state instead of launching
+  // network work from the transition path. Moving into another year starts one
+  // independent annual refresh without blocking the calendar animation.
   useEffect(() => {
-    if (activePage !== 'calendar' || !settingsLoaded) return
+    if (!settingsLoaded || !Number.isInteger(calendarSupplementYear)) return
     const anyDeadlineTypeEnabled = settings.competitionDeadlinesEnabled
       || settings.schoolContestNoticesEnabled
       || settings.summerCampDeadlinesEnabled
       || settings.hackathonDeadlinesEnabled
     void loadCalendarSupplements(
-      calendarSupplementRange.startDate,
-      calendarSupplementRange.endDate,
+      `${calendarSupplementYear}-01-01`,
+      `${calendarSupplementYear}-12-31`,
       anyDeadlineTypeEnabled,
     )
   }, [
-    activePage,
-    calendarSupplementRange.endDate,
-    calendarSupplementRange.startDate,
+    calendarSupplementRevision,
+    calendarSupplementYear,
     settingsLoaded,
     settings.competitionDeadlinesEnabled,
     settings.hackathonDeadlinesEnabled,
     settings.schoolContestNoticesEnabled,
     settings.summerCampDeadlinesEnabled,
+    settings.customDeadlinesEnabled,
+    settings.customDeadlinesUrl,
+  ])
+
+  useEffect(() => {
+    const customURL = String(settings.customDeadlinesUrl || '').trim()
+    if (!settingsLoaded || !settings.customDeadlinesEnabled || !customURL
+      || !Number.isInteger(calendarSupplementYear)) return undefined
+    const timer = window.setInterval(() => {
+      void loadCalendarSupplements(
+        `${calendarSupplementYear}-01-01`,
+        `${calendarSupplementYear}-12-31`,
+        false,
+        true,
+      )
+    }, DEADLINE_SOURCE_REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [
+    calendarSupplementYear,
+    settings.customDeadlinesEnabled,
+    settings.customDeadlinesUrl,
+    settingsLoaded,
   ])
 
   useEffect(() => {
@@ -1461,6 +1740,15 @@ function App() {
     return () => window.removeEventListener('pointerdown', closePopover)
   }, [calendarPopover])
 
+  useEffect(() => {
+    if (!favoriteManagerOpen) return undefined
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setFavoriteManagerOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [favoriteManagerOpen])
+
   const slotMeta = metadata.slots?.length ? metadata.slots : FALLBACK_SLOTS
   const courses = useMemo(() => (schedule ? schedule.courses : []), [schedule])
   const activeTermStartDate = schedule?.term_start_date || settings.termStartDate
@@ -1478,10 +1766,38 @@ function App() {
     school_notice: settings.schoolContestNoticesEnabled,
     summer_camp: settings.summerCampDeadlinesEnabled,
     hackathon: settings.hackathonDeadlinesEnabled,
+    custom: settings.customDeadlinesEnabled,
   }
-  const enabledDeadlineItemsFor = (dateString) => (
-    deadlinesByDate[dateString]?.items || []
-  ).filter((item) => deadlineItemEnabled(item, enabledDeadlineTypes))
+  const favoriteDeadlineKeys = useMemo(
+    () => new Set(favoriteDeadlines.map((item) => favoriteDeadlineKey(item))),
+    [favoriteDeadlines],
+  )
+  const isFavoriteDeadline = (item) => favoriteDeadlineKeys.has(favoriteDeadlineKey(item))
+  const toggleFavoriteDeadline = (item) => {
+    setFavoriteDeadlines((current) => {
+      const key = favoriteDeadlineKey(item)
+      const without = current.filter((favorite) => favoriteDeadlineKey(favorite) !== key)
+      return without.length === current.length
+        ? normalizeFavoriteDeadlines([...current, item])
+        : normalizeFavoriteDeadlines(without)
+    })
+  }
+  const enabledDeadlineItemsFor = (dateString) => {
+    const merged = new Map()
+    ;(deadlinesByDate[dateString]?.items || [])
+      .filter((item) => deadlineItemEnabled(item, enabledDeadlineTypes))
+      .forEach((item) => merged.set(favoriteDeadlineKey(item), item))
+    if (settings.customDeadlinesEnabled) {
+      ;(customDeadlinesByDate[dateString]?.items || [])
+        .forEach((item) => merged.set(favoriteDeadlineKey(item), item))
+    }
+    favoriteDeadlinesForDate(favoriteDeadlines, dateString)
+      .forEach((item) => merged.set(favoriteDeadlineKey(item), item))
+    return [...merged.values()].sort((left, right) => (
+      left.primary_deadline.localeCompare(right.primary_deadline)
+        || left.name.localeCompare(right.name)
+    ))
+  }
   const supplementalEntriesFor = (dateString) => [
     ...(assignmentsByDate[dateString]?.items || []).map((item) => ({
       key: `assignment-${item.id}-${item.deadline}`,
@@ -1499,6 +1815,8 @@ function App() {
         subtitle: item.organizer || '',
         time: deadlineClock(item.primary_deadline, t('时间待定')),
         url: item.official_url || '',
+        deadlineItem: item,
+        favorite: isFavoriteDeadline(item),
       })),
     ...enabledDeadlineItemsFor(dateString)
       .filter((item) => item.source_type !== 'school_notice')
@@ -1510,6 +1828,8 @@ function App() {
         subtitle: item.organizer || '',
         time: deadlineClock(item.primary_deadline, t('时间待定')),
         url: item.official_url || '',
+        deadlineItem: item,
+        favorite: isFavoriteDeadline(item),
       })),
   ]
   const allDayEntriesFor = (dateString) => [
@@ -1593,29 +1913,12 @@ function App() {
   const calendarHeaderTitle = calendarView === 'week'
     ? `${formatUiCalendarTitle(calendarDate, calendarView, uiLanguage)} · ${formatUiTeachingWeek(calendarWeekState.weekNumber, uiLanguage)}`
     : formatUiCalendarTitle(calendarDate, calendarView, uiLanguage)
-  const visibleAllDayItems = useMemo(
-    () => visibleCalendarDays.reduce(
-      (count, dateString) => count
-        + (calendarDayMap.get(dateString) || []).length
-        + (assignmentsByDate[dateString]?.items || []).length
-        + (deadlinesByDate[dateString]?.items || []).filter((item) => deadlineItemEnabled(item, {
-          competition: settings.competitionDeadlinesEnabled,
-          school_notice: settings.schoolContestNoticesEnabled,
-          summer_camp: settings.summerCampDeadlinesEnabled,
-          hackathon: settings.hackathonDeadlinesEnabled,
-        })).length,
-      0,
-    ),
-    [
-      assignmentsByDate,
-      calendarDayMap,
-      deadlinesByDate,
-      settings.competitionDeadlinesEnabled,
-      settings.schoolContestNoticesEnabled,
-      settings.summerCampDeadlinesEnabled,
-      settings.hackathonDeadlinesEnabled,
-      visibleCalendarDays,
-    ],
+  // Use the same merged entry path as the rendered all-day cells so a custom
+  // item or a locally persisted favorite can create the row even when every
+  // corresponding remote-source switch is off.
+  const visibleAllDayItems = visibleCalendarDays.reduce(
+    (count, dateString) => count + allDayEntriesFor(dateString).length,
+    0,
   )
   const calendarPopoverState = useMemo(() => (
     calendarPopover
@@ -1831,6 +2134,9 @@ function App() {
 
   function chooseCalendarDate(dateString) {
     if (Date.now() < suppressCalendarClickUntilRef.current) return
+    if (calendarView === 'month' && dateString.slice(0, 7) !== calendarDate.slice(0, 7)) {
+      startCalendarMotion(dateString > calendarDate ? 'next' : 'previous')
+    }
     setCalendarDate(dateString)
     setCalendarPopover(null)
   }
@@ -1849,7 +2155,8 @@ function App() {
     const source = calendarAnimatedSurfaceRef.current
     calendarOutgoingSurfaceRef.current?.remove()
     calendarOutgoingSurfaceRef.current = null
-    if (!host || !source || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!host || !source || !compactCalendarLayout
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     const outgoing = source.cloneNode(true)
     outgoing.classList.remove('calendar-motion-next', 'calendar-motion-previous')
@@ -2536,13 +2843,20 @@ function App() {
     }
   }
 
-  async function loadCalendarSupplements(startDate, endDate, includeDeadlines) {
+  async function loadCalendarSupplements(
+    startDate,
+    endDate,
+    includeDeadlines,
+    forceCustom = false,
+  ) {
     const rangeDates = datesInRange(startDate, endDate)
     if (!rangeDates.length) return
     const accountDataRevision = localDataClearRevision.current
     const accountScopeKey = savedCredentialState.current.account || settings.account.trim() || 'anonymous'
     const assignmentKey = `assignments:${accountScopeKey}:${startDate}:${endDate}`
     const deadlineKey = `deadlines:${startDate}:${endDate}`
+    const customURL = String(settings.customDeadlinesUrl || '').trim()
+    const customDeadlineKey = `custom-deadlines:${customURL}:${startDate}:${endDate}`
     const selectedDateInRange = calendarDate >= startDate && calendarDate <= endDate
     const tasks = []
 
@@ -2622,6 +2936,50 @@ function App() {
       })())
     }
 
+    if (forceCustom) requestedCalendarSupplementRanges.current.delete(customDeadlineKey)
+    if (settings.customDeadlinesEnabled && customURL
+      && !requestedCalendarSupplementRanges.current.has(customDeadlineKey)) {
+      requestedCalendarSupplementRanges.current.add(customDeadlineKey)
+      if (selectedDateInRange) setCustomDeadlinesLoadingDate(calendarDate)
+      tasks.push(command('fetch_custom_deadline_calendar', {
+        url: customURL,
+        start_date: startDate,
+        end_date: endDate,
+      }).then((data) => {
+        const itemsByDate = new Map()
+        ;(data?.items || []).forEach((item) => {
+          const date = datePart(item.primary_deadline)
+          if (!itemsByDate.has(date)) itemsByDate.set(date, [])
+          itemsByDate.get(date).push(item)
+        })
+        setCustomDeadlinesByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => {
+            next[date] = {
+              date,
+              source: data.source || customURL,
+              items: itemsByDate.get(date) || [],
+            }
+          })
+          return next
+        })
+        setCustomDeadlinesErrorByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => { next[date] = '' })
+          return next
+        })
+      }).catch((customError) => {
+        requestedCalendarSupplementRanges.current.delete(customDeadlineKey)
+        setCustomDeadlinesErrorByDate((current) => {
+          const next = { ...current }
+          rangeDates.forEach((date) => { next[date] = customError.message })
+          return next
+        })
+      }).finally(() => {
+        if (selectedDateInRange) setCustomDeadlinesLoadingDate('')
+      }))
+    }
+
     await Promise.allSettled(tasks)
   }
 
@@ -2653,6 +3011,16 @@ function App() {
       })
       setQueryCampusId(metadata.campuses?.[0]?.id || DEFAULT_SETTINGS.campusId)
       clearAccountScopedViewState()
+      try {
+        window.localStorage.removeItem(FAVORITE_DEADLINES_STORAGE_KEY)
+      } catch {
+        // The backend clear already succeeded; storage may be unavailable in
+        // hardened/private WebViews, so keep the in-memory reset authoritative.
+      }
+      setFavoriteDeadlines([])
+      setCustomDeadlinesByDate({})
+      setCustomDeadlinesErrorByDate({})
+      setCustomDeadlinesLoadingDate('')
       setMinSeats(0)
       setSettingsSaved(false)
       setClearConfirmationOpen(false)
@@ -2662,6 +3030,7 @@ function App() {
   function clearAccountScopedViewState() {
     assignmentsRevisionRef.current += 1
     requestedCalendarSupplementRanges.current.clear()
+    setCalendarSupplementRevision((current) => current + 1)
     setSchedule(null)
     setClassroomsCache(null)
     setAssignmentsByDate({})
@@ -2690,6 +3059,7 @@ function App() {
                 className={activePage === id ? 'active' : ''}
                 onClick={() => setActivePage(id)}
                 aria-label={t(label)}
+                aria-keyshortcuts={`Alt+${NAV_ITEMS.findIndex((item) => item.id === id) + 1}`}
                 title={t(label)}
               >
                 <Icon size={17} />
@@ -2718,6 +3088,7 @@ function App() {
                       type="button"
                       className={calendarView === view.id ? 'active' : ''}
                       onClick={() => chooseCalendarView(view.id)}
+                      aria-keyshortcuts={view.id[0].toUpperCase()}
                     >
                       {t(view.label)}
                     </button>
@@ -2969,7 +3340,7 @@ function App() {
             <section className="teaching-calendar-main">
               <div className="calendar-action-strip">
                 <div className="calendar-navigation-actions">
-                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label={t('上一段')}>‹</button>
+                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(-1)} aria-label={t('上一段')} aria-keyshortcuts="PageUp Alt+ArrowLeft">‹</button>
                   <input
                     type="date"
                     value={calendarDate}
@@ -2977,8 +3348,8 @@ function App() {
                     max="2030-12-31"
                     onChange={chooseCalendarDateFromInput}
                   />
-                  <button type="button" className="calendar-today-button" onClick={() => chooseCalendarDate(todayDate)}>{t('今天')}</button>
-                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label={t('下一段')}>›</button>
+                  <button type="button" className="calendar-today-button" onClick={() => chooseCalendarDate(todayDate)} aria-keyshortcuts="Home">{t('今天')}</button>
+                  <button type="button" className="calendar-icon-button" onClick={() => moveCalendar(1)} aria-label={t('下一段')} aria-keyshortcuts="PageDown Alt+ArrowRight">›</button>
                 </div>
                 <div className="calendar-data-actions">
                   <button type="button" onClick={loadSchedule} disabled={settingsSaving || !!loading}>
@@ -3045,20 +3416,43 @@ function App() {
                               key={`all-day-${dateString}`}
                               className="time-all-day-cell"
                               data-selected={dateString === calendarDate}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={formatUiCourseDate(dateString, uiLanguage)}
+                              onClick={() => chooseCalendarDate(dateString)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault()
+                                  chooseCalendarDate(dateString)
+                                }
+                              }}
                             >
                               {summary.visible.map((item) => (
-                                <span key={`${dateString}-${item.key}`} className={item.type} title={item.label}>
+                                <button
+                                  key={`${dateString}-${item.key}`}
+                                  type="button"
+                                  className={`time-all-day-item ${item.type}`}
+                                  title={item.label}
+                                  aria-label={`${item.label} · ${t('打开全天日程详情')}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })
+                                  }}
+                                >
                                   {item.type === 'holiday' || item.type === 'workday'
                                     ? item.label
                                     : `${supplementalEntryPrefix(item, t)} ${item.label}`}
-                                </span>
+                                </button>
                               ))}
                               {summary.hiddenCount ? (
                                 <button
                                   type="button"
                                   className="time-all-day-overflow"
                                   aria-label={uiLanguage === 'en' ? `${summary.hiddenCount} more all-day events on ${dateString}` : `${dateString} 还有 ${summary.hiddenCount} 项全天日程`}
-                                  onClick={() => setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })
+                                  }}
                                 >+{summary.hiddenCount}</button>
                               ) : null}
                             </div>
@@ -3102,7 +3496,23 @@ function App() {
                       const visibleEnd = CALENDAR_END_HOUR * 60
                       const visibleRange = visibleEnd - visibleStart
                       return (
-                        <div key={`lane-${dateString}`} className={`time-day-lane ${dateString === calendarDate ? 'selected' : ''}`}>
+                        <div
+                          key={`lane-${dateString}`}
+                          className={`time-day-lane ${dateString === calendarDate ? 'selected' : ''}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={formatUiCourseDate(dateString, uiLanguage)}
+                          onClick={(event) => {
+                            if (event.target instanceof Element && event.target.closest('.time-course-block')) return
+                            chooseCalendarDate(dateString)
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              chooseCalendarDate(dateString)
+                            }
+                          }}
+                        >
                           <div className="time-grid-lines" aria-hidden="true">
                             {calendarHours.map((hour) => {
                               const top = (((hour * 60) - visibleStart) / visibleRange) * 100
@@ -3153,7 +3563,7 @@ function App() {
                 {calendarView === 'month' ? (
                   <div
                     ref={calendarAnimatedSurfaceRef}
-                    key={`month-${calendarDate}`}
+                    key={`month-${calendarMonthKey}`}
                     className={`month-view ${compactCalendarLayout ? (monthExpanded ? 'expanded' : 'compact') : 'expanded desktop-month-view'} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
                     onPointerDown={compactCalendarLayout ? beginMonthPointerSwipe : undefined}
                     onPointerMove={compactCalendarLayout ? updateMonthPointerSwipe : undefined}
@@ -3226,9 +3636,12 @@ function App() {
                             <div className="month-cell-head">
                               {date.getDay() === 1 ? (
                                 <span className="month-week-number">
-                                  {uiLanguage === 'en'
+                                  <span>{uiLanguage === 'en'
                                     ? `Week ${calendarWeekOfYear(dateString)}`
-                                    : `第 ${calendarWeekOfYear(dateString)} 周`}
+                                    : `第 ${calendarWeekOfYear(dateString)} 周`}</span>
+                                  {dayState.weekNumber > 0 ? (
+                                    <small>{formatUiTeachingWeek(dayState.weekNumber, uiLanguage)}</small>
+                                  ) : null}
                                 </span>
                               ) : null}
                               <button
@@ -3338,19 +3751,40 @@ function App() {
                       {settings.competitionDeadlinesEnabled
                         || settings.schoolContestNoticesEnabled
                         || settings.summerCampDeadlinesEnabled
-                        || settings.hackathonDeadlinesEnabled ? (
+                        || settings.hackathonDeadlinesEnabled
+                        || settings.customDeadlinesEnabled
+                        || favoriteDeadlines.length ? (
                           <ContestDeadlineCard
                             date={calendarDate}
                             response={deadlinesByDate[calendarDate]}
-                            loading={deadlinesLoadingDate === calendarDate}
-                            error={deadlinesErrorByDate[calendarDate] || ''}
+                            items={enabledDeadlineItemsFor(calendarDate)}
+                            loading={deadlinesLoadingDate === calendarDate
+                              || customDeadlinesLoadingDate === calendarDate}
+                            error={deadlinesErrorByDate[calendarDate]
+                              || (settings.customDeadlinesEnabled
+                                ? customDeadlinesErrorByDate[calendarDate] : '')
+                              || ''}
                             enabledTypes={{
                               competition: settings.competitionDeadlinesEnabled,
                               school_notice: settings.schoolContestNoticesEnabled,
                               summer_camp: settings.summerCampDeadlinesEnabled,
                               hackathon: settings.hackathonDeadlinesEnabled,
+                              custom: settings.customDeadlinesEnabled,
                             }}
-                            onRetry={() => loadDeadlines(calendarDate, true)}
+                            isFavorite={isFavoriteDeadline}
+                            onToggleFavorite={toggleFavoriteDeadline}
+                            onRetry={() => {
+                              void loadDeadlines(calendarDate, true)
+                              void loadCalendarSupplements(
+                                calendarDate,
+                                calendarDate,
+                                settings.competitionDeadlinesEnabled
+                                  || settings.schoolContestNoticesEnabled
+                                  || settings.summerCampDeadlinesEnabled
+                                  || settings.hackathonDeadlinesEnabled,
+                                true,
+                              )
+                            }}
                             t={t}
                           />
                         ) : null}
@@ -3444,6 +3878,22 @@ function App() {
                               <small>{item.time || t('时间待定')}</small>
                             </>
                           )
+                          if (item.deadlineItem) {
+                            return (
+                              <article key={item.key} className={`${item.type} popover-favorite-row`}>
+                                {item.url ? (
+                                  <a className="popover-event-main" href={item.url} target="_blank" rel="noreferrer">{content}</a>
+                                ) : <div className="popover-event-main">{content}</div>}
+                                <button
+                                  type="button"
+                                  className={`deadline-favorite-button ${isFavoriteDeadline(item.deadlineItem) ? 'active' : ''}`}
+                                  aria-label={isFavoriteDeadline(item.deadlineItem) ? t('取消收藏') : t('收藏')}
+                                  aria-pressed={isFavoriteDeadline(item.deadlineItem)}
+                                  onClick={() => toggleFavoriteDeadline(item.deadlineItem)}
+                                ><Star size={16} fill={isFavoriteDeadline(item.deadlineItem) ? 'currentColor' : 'none'} /></button>
+                              </article>
+                            )
+                          }
                           return item.url ? (
                             <a key={item.key} href={item.url} target="_blank" rel="noreferrer" className={item.type}>{content}</a>
                           ) : <article key={item.key} className={item.type}>{content}</article>
@@ -3625,6 +4075,7 @@ function App() {
                 ['schoolContestNoticesEnabled', '校内竞赛通知', '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。', 'school-notice'],
                 ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。', 'public-deadline'],
                 ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。', 'public-deadline'],
+                ['customDeadlinesEnabled', '自定义日程', '从用户填写的 HTTPS JSON 接口获取日程；已收藏条目不受此开关影响。', 'public-deadline'],
               ].map(([field, title, description, colorKind]) => (
                 <div className="settings-switch-row" key={field}>
                   <div>
@@ -3644,6 +4095,24 @@ function App() {
                   ><span aria-hidden="true" /></button>
                 </div>
               ))}
+              <label className="custom-deadline-url-field">
+                {t('自定义日程 HTTPS 地址')}
+                <input
+                  type="url"
+                  inputMode="url"
+                  value={settings.customDeadlinesUrl}
+                  placeholder="https://example.com/calendar.json"
+                  onChange={(event) => updateSetting('customDeadlinesUrl', event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentSettings() }}
+                />
+              </label>
+              <button
+                type="button"
+                className="secondary settings-full-button favorite-manager-link"
+                onClick={() => setFavoriteManagerOpen(true)}
+              >
+                <Star size={17} /> {t('收藏管理')} ({favoriteDeadlines.length})
+              </button>
               <p className="settings-source-note">{t('天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。')}</p>
             </section>
 
@@ -3695,7 +4164,7 @@ function App() {
               <HardDrive size={18} />
               <h2>{t('本地数据')}</h2>
             </div>
-            <p className="settings-local-data-note">{t('清除已保存的教务账户与密码、个人课表、空教室和节假日缓存，并恢复本地设置。')}</p>
+            <p className="settings-local-data-note">{t('清除已保存的教务账户与密码、个人课表、空教室、节假日缓存、自定义日程设置与收藏，并恢复本地设置。')}</p>
             <button
               type="button"
               className="danger"
@@ -3708,7 +4177,7 @@ function App() {
             {clearConfirmationOpen ? (
               <div className="clear-data-confirmation" role="alertdialog" aria-labelledby="clear-data-title">
                 <strong id="clear-data-title">{t('清除全部本地数据？')}</strong>
-                <p>{t('将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。')}</p>
+                <p>{t('将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏和其它设置。此操作无法撤销。')}</p>
                 <div>
                   <button ref={clearCancelButtonRef} type="button" className="secondary" onClick={() => setClearConfirmationOpen(false)} disabled={settingsSaving || !!loading}>
                     {t('取消')}
@@ -3726,6 +4195,14 @@ function App() {
           ) : null}
         </section>
       </div>
+      {favoriteManagerOpen ? (
+        <FavoriteDeadlineManager
+          items={favoriteDeadlines}
+          onRemove={toggleFavoriteDeadline}
+          onClose={() => setFavoriteManagerOpen(false)}
+          t={t}
+        />
+      ) : null}
       {calendarAgendaDialog ? (
         <div
           className="calendar-agenda-backdrop"
@@ -3755,6 +4232,22 @@ function App() {
                     {item.time ? <time>{item.time}</time> : null}
                   </>
                 )
+                if (item.deadlineItem) {
+                  return (
+                    <article key={item.key} className={`${item.type} agenda-favorite-row`}>
+                      {item.url ? (
+                        <a className="agenda-event-main" href={item.url} target="_blank" rel="noreferrer">{content}</a>
+                      ) : <div className="agenda-event-main">{content}</div>}
+                      <button
+                        type="button"
+                        className={`deadline-favorite-button ${isFavoriteDeadline(item.deadlineItem) ? 'active' : ''}`}
+                        aria-label={isFavoriteDeadline(item.deadlineItem) ? t('取消收藏') : t('收藏')}
+                        aria-pressed={isFavoriteDeadline(item.deadlineItem)}
+                        onClick={() => toggleFavoriteDeadline(item.deadlineItem)}
+                      ><Star size={18} fill={isFavoriteDeadline(item.deadlineItem) ? 'currentColor' : 'none'} /></button>
+                    </article>
+                  )
+                }
                 return item.url ? (
                   <a key={item.key} href={item.url} target="_blank" rel="noreferrer" className={item.type}>{content}</a>
                 ) : <article key={item.key} className={item.type}>{content}</article>

@@ -174,6 +174,86 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(ScheduleLogic.weekNumber(on: target, termStart: start), 0)
     }
 
+    func testTeachingWeekIsOnlyReportedInsideTheKnownTermRange() throws {
+        let calendar = Calendar.shanghai
+        let start = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 2))
+        )
+        let course = Course(
+            id: "term-range",
+            name: "课程",
+            teacher: "教师",
+            room: "101",
+            weekText: "1-3",
+            weekNumbers: [1, 2, 3],
+            examWeekNumbers: [],
+            weekday: 1,
+            startSlot: 0,
+            endSlot: 1,
+            sectionText: "1-2节",
+            timeRange: "08:00-09:35"
+        )
+
+        XCTAssertEqual(
+            ScheduleLogic.activeTeachingWeekNumber(
+                on: calendar.date(byAdding: .day, value: 14, to: start)!,
+                termStart: start,
+                courses: [course]
+            ),
+            3
+        )
+        XCTAssertNil(
+            ScheduleLogic.activeTeachingWeekNumber(
+                on: calendar.date(byAdding: .day, value: -1, to: start)!,
+                termStart: start,
+                courses: [course]
+            )
+        )
+        XCTAssertNil(
+            ScheduleLogic.activeTeachingWeekNumber(
+                on: calendar.date(byAdding: .day, value: 21, to: start)!,
+                termStart: start,
+                courses: [course]
+            )
+        )
+    }
+
+    func testMonthCourseLookupMatchesPerDayScheduleResolution() throws {
+        let calendar = Calendar.shanghai
+        let start = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 2))
+        )
+        let dates = (0 ..< 14).compactMap {
+            calendar.date(byAdding: .day, value: $0, to: start)
+        }
+        let course = Course(
+            id: "lookup",
+            name: "课程",
+            teacher: "教师",
+            room: "101",
+            weekText: "1-2",
+            weekNumbers: [1, 2],
+            examWeekNumbers: [],
+            weekday: 1,
+            startSlot: 0,
+            endSlot: 1,
+            sectionText: "1-2节",
+            timeRange: "08:00-09:35"
+        )
+        let lookup = ScheduleLogic.coursesByDate(
+            for: dates,
+            termStart: start,
+            courses: [course]
+        )
+
+        for date in dates {
+            XCTAssertEqual(
+                lookup[StrictContractDateParser.string(from: date)],
+                ScheduleLogic.courses(on: date, termStart: start, courses: [course])
+            )
+        }
+    }
+
     func testSharedSJDFixturesProduceContractSchedule() throws {
         let expected = try JSONDecoder().decode(
             ScheduleSnapshot.self,
@@ -710,6 +790,16 @@ final class ScheduleLogicTests: XCTestCase {
             organizer: nil,
             officialURL: nil
         )
+        let custom = PublicDeadlineItem(
+            id: "custom",
+            name: "自定义原文",
+            kind: .competition,
+            source: .custom,
+            deadline: "2026-08-23T22:00:00+08:00",
+            organizer: nil,
+            officialURL: nil,
+            sourceName: "Custom Feed"
+        )
 
         XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
             contest,
@@ -745,6 +835,22 @@ final class ScheduleLogicTests: XCTestCase {
             schoolNoticeEnabled: true,
             summerCampEnabled: true,
             hackathonEnabled: true
+        ))
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            custom,
+            competitionEnabled: false,
+            schoolNoticeEnabled: false,
+            summerCampEnabled: false,
+            hackathonEnabled: false,
+            customEnabled: true
+        ))
+        XCTAssertFalse(CalendarDeadlinePresentation.isVisible(
+            custom,
+            competitionEnabled: true,
+            schoolNoticeEnabled: true,
+            summerCampEnabled: true,
+            hackathonEnabled: true,
+            customEnabled: false
         ))
     }
 
@@ -845,6 +951,26 @@ final class ScheduleLogicTests: XCTestCase {
             AppLocalization.string("关闭全天日程", language: .english),
             "Close all-day events"
         )
+        XCTAssertEqual(
+            AppLocalization.string("公历第 %lld 周", language: .english),
+            "Calendar week %lld"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("公历第 %lld 周 · 教学第 %lld 周", language: .english),
+            "Calendar week %lld · Teaching week %lld"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("自定义日程源", language: .english),
+            "Custom Schedule Feed"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("收藏管理", language: .english),
+            "Favorite Management"
+        )
+        XCTAssertEqual(
+            AppLocalization.string("取消收藏", language: .english),
+            "Remove favorite"
+        )
     }
 
     func testYearCourseDensityContinuesIncreasingPastFourCourses() {
@@ -870,6 +996,54 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertLessThan(compact.monthTitleFontSize, expanded.monthTitleFontSize)
         XCTAssertLessThanOrEqual(compact.selectionDiameter, compact.dayCellHeight)
         XCTAssertLessThanOrEqual(expanded.selectionDiameter, expanded.dayCellHeight)
+    }
+
+
+    @MainActor
+    func testMacKeyboardActionsSwitchViewsPageAndDismissOverlays() throws {
+        let calendar = Calendar.shanghai
+        let start = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-24"))
+        let today = try XCTUnwrap(StrictContractDateParser.date(from: "2026-09-01"))
+        let session = TeachingCalendarSessionState()
+        session.selectedDate = start
+        session.modeRawValue = "周"
+
+        session.applyKeyboardAction(.nextPeriod, calendar: calendar)
+        XCTAssertEqual(StrictContractDateParser.string(from: session.selectedDate), "2026-08-31")
+        session.applyKeyboardAction(.previousPeriod, calendar: calendar)
+        XCTAssertEqual(StrictContractDateParser.string(from: session.selectedDate), "2026-08-24")
+
+        for (action, mode) in [
+            (AppKeyboardAction.dayView, "日"),
+            (.weekView, "周"),
+            (.monthView, "月"),
+            (.yearView, "年"),
+        ] {
+            session.applyKeyboardAction(action, calendar: calendar)
+            XCTAssertEqual(session.modeRawValue, mode)
+        }
+        session.applyKeyboardAction(.today, now: today, calendar: calendar)
+        XCTAssertEqual(session.selectedDate, today)
+
+        let originalDismissGeneration = session.dismissOverlayGeneration
+        session.applyKeyboardAction(.dismissOverlay, calendar: calendar)
+        XCTAssertEqual(session.dismissOverlayGeneration, originalDismissGeneration + 1)
+        XCTAssertEqual(AppSection.planner.keyboardShortcutDigit, "1")
+        XCTAssertEqual(AppSection.calendar.keyboardShortcutDigit, "2")
+        XCTAssertEqual(AppSection.settings.keyboardShortcutDigit, "3")
+    }
+
+    func testMacKeyboardNotificationRejectsUnknownActions() {
+        let valid = Notification(
+            name: AppKeyboardCommandNotification.name,
+            userInfo: [AppKeyboardCommandNotification.actionKey: AppKeyboardAction.monthView.rawValue]
+        )
+        let invalid = Notification(
+            name: AppKeyboardCommandNotification.name,
+            userInfo: [AppKeyboardCommandNotification.actionKey: "invalid"]
+        )
+        XCTAssertEqual(AppKeyboardCommandNotification.action(from: valid), .monthView)
+        XCTAssertNil(AppKeyboardCommandNotification.action(from: invalid))
     }
     #endif
 
@@ -951,6 +1125,16 @@ final class ScheduleLogicTests: XCTestCase {
                 calendar: calendar
             ).contains("Week")
         )
+    }
+
+    func testOutOfMonthSelectionUsesTheDestinationMonthForAnimationDirection() throws {
+        let july = try XCTUnwrap(StrictContractDateParser.date(from: "2026-07-31"))
+        let august = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-01"))
+        let augustEnd = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-31"))
+
+        XCTAssertEqual(TeachingCalendarLogic.monthPageDirection(from: july, to: august), 1)
+        XCTAssertEqual(TeachingCalendarLogic.monthPageDirection(from: august, to: july), -1)
+        XCTAssertNil(TeachingCalendarLogic.monthPageDirection(from: august, to: augustEnd))
     }
 
     func testAppLanguagePreferenceRoundTripsThroughUserDefaults() {

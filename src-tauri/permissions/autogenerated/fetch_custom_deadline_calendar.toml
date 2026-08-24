@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-custom-deadline-calendar"
+description = "Enables the fetch_custom_deadline_calendar command without any pre-configured scope."
+commands.allow = ["fetch_custom_deadline_calendar"]
+
+[[permission]]
+identifier = "deny-fetch-custom-deadline-calendar"
+description = "Denies the fetch_custom_deadline_calendar command without any pre-configured scope."
+commands.deny = ["fetch_custom_deadline_calendar"]

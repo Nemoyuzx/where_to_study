@@ -380,12 +380,155 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Academic Calendar"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Academic Calendar"].tap()
         XCTAssertTrue(app.segmentedControls.buttons["Week"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls.buttons["Day"].exists)
+        XCTAssertTrue(app.segmentedControls.buttons["Month"].exists)
+        XCTAssertTrue(app.segmentedControls.buttons["Year"].exists)
+        let weekContext = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Calendar week")
+        ).firstMatch
+        XCTAssertTrue(weekContext.waitForExistence(timeout: 5))
+        XCTAssertTrue(weekContext.label.hasPrefix("Calendar week"))
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(weekContext.frame))
         XCTAssertTrue(app.staticTexts["Data Mining"].exists == false)
         XCTAssertTrue(app.staticTexts["数据挖掘"].waitForExistence(timeout: 5))
+
+        app.segmentedControls.buttons["Month"].tap()
+        let monthHeading = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[A-Za-z]+ [0-9]{4}$")
+        ).firstMatch
+        XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(monthHeading.frame))
+        XCTAssertTrue(app.staticTexts["calendar.mobile.month-weekday.一"].waitForExistence(timeout: 5))
+        let monthState = app.descendants(matching: .any)[
+            "calendar.mobile.month-state"
+        ].firstMatch
+        XCTAssertTrue(monthState.waitForExistence(timeout: 5))
+        XCTAssertTrue(["Collapse month", "Expand month"].contains(monthState.label))
+
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["settings.language"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Interface Language"].exists)
         XCTAssertTrue(app.buttons["English"].exists || app.staticTexts["English"].exists)
+        XCTAssertTrue(app.textFields["settings.custom-deadlines-url"].exists)
+        XCTAssertTrue(app.buttons["settings.custom-deadlines-save"].exists)
+    }
+
+    func testFavoriteDeadlineSurvivesNavigationAndCanBeRemovedFromManagement() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only favorite flow")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "教学日历", in: app)
+        let allDayButton = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS '全天' AND label CONTAINS '+'")
+        ).firstMatch
+        XCTAssertTrue(allDayButton.waitForExistence(timeout: 5))
+        allDayButton.tap()
+        let favorite = app.buttons["calendar.favorite.contest_ddl.sample-competition"]
+        XCTAssertTrue(favorite.waitForExistence(timeout: 5))
+        XCTAssertEqual(favorite.label, "收藏日程")
+        favorite.tap()
+        XCTAssertEqual(favorite.label, "取消收藏")
+        app.buttons["关闭全天日程"].tap()
+
+        app.tabBars.buttons["设置"].tap()
+        let management = app.buttons["settings.favorite-management"]
+        revealByScrolling(visibleElement: management, in: app)
+        management.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["favorites.page"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["全国大学生示例竞赛"].waitForExistence(timeout: 5))
+        let remove = app.buttons["favorites.remove.contest_ddl.sample-competition"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+        XCTAssertTrue(app.staticTexts["暂无收藏日程"].waitForExistence(timeout: 5))
+    }
+
+    func testCustomFeedSettingsRejectUnsafeURLWithoutNetworkRequest() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only custom feed form")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--ui-testing-live"]
+        app.launch()
+        defer { app.terminate() }
+
+        app.tabBars.buttons["设置"].tap()
+        let field = app.textFields["settings.custom-deadlines-url"]
+        revealByScrolling(visibleElement: field, in: app)
+        field.tap()
+        field.typeText("http://localhost/feed.json\n")
+        let status = app.staticTexts["settings.custom-deadlines-status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.label.contains("HTTPS"))
+    }
+
+    func testSelectingAnOutOfMonthDatePagesToAndSelectsItsMonth() throws {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "教学日历", in: app)
+        let monthMode = app.segmentedControls.buttons["月"]
+        XCTAssertTrue(monthMode.waitForExistence(timeout: 5))
+        monthMode.tap()
+
+        let destinationDate = firstDayOfNextShanghaiMonth()
+        let destinationKey = shanghaiDateString(destinationDate)
+        let compactDay = app.buttons[
+            "calendar.mobile.month-day-number.\(destinationKey)"
+        ].firstMatch
+        let regularDay = app.descendants(matching: .any)[
+            "calendar.regular.month-day-cell.\(destinationKey)"
+        ].firstMatch
+        let destination = compactDay.waitForExistence(timeout: 2) ? compactDay : regularDay
+        XCTAssertTrue(destination.waitForExistence(timeout: 5))
+        destination.tap()
+
+        let expectedHeading = shanghaiMonthHeading(destinationDate)
+        let heading = app.staticTexts[expectedHeading].firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        let selectedCell = app.descendants(matching: .any)[
+            compactDay.exists
+                ? "calendar.mobile.month-day-cell.\(destinationKey)"
+                : "calendar.regular.month-day-cell.\(destinationKey)"
+        ].firstMatch
+        XCTAssertTrue(selectedCell.waitForExistence(timeout: 5))
+        XCTAssertTrue(selectedCell.isSelected)
+    }
+
+    func testEnglishCalendarControlsFitExpandedIPadLayout() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad-only localization layout test")
+        continueAfterFailure = false
+        let app = configuredApplication(language: "en")
+        app.launchArguments = ["--review-demo"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate() }
+
+        navigateFromSidebar(to: "教学日历", in: app)
+        for title in ["Day", "Week", "Month", "Year"] {
+            let button = app.segmentedControls.buttons[title]
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(button.frame))
+        }
+        let weekContext = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Calendar week")
+        ).firstMatch
+        XCTAssertTrue(weekContext.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(weekContext.frame))
+
+        app.segmentedControls.buttons["Month"].tap()
+        let monthHeading = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES %@", "^[A-Za-z]+ [0-9]{4}$")
+        ).firstMatch
+        XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(monthHeading.frame))
+        XCTAssertTrue(app.buttons["Collapse month"].waitForExistence(timeout: 5))
     }
 
     func testCompactTabBarRestoresGeometryAfterLanguageRoundTrip() throws {
@@ -984,6 +1127,22 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         return shanghaiDateString(
             calendar.date(byAdding: .month, value: months, to: Date())!
         )
+    }
+
+    private func firstDayOfNextShanghaiMonth() -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let currentMonth = calendar.dateInterval(of: .month, for: Date())!.start
+        return calendar.date(byAdding: .month, value: 1, to: currentMonth)!
+    }
+
+    private func shanghaiMonthHeading(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_Hans_CN")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy年M月"
+        return formatter.string(from: date)
     }
 
     private func shanghaiDateString(_ date: Date) -> String {

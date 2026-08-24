@@ -54,12 +54,14 @@ export class AlmanacInfo {
 export enum PublicDeadlineKind {
   competition = 'competition',
   summerCamp = 'summer_camp',
-  hackathon = 'hackathon'
+  hackathon = 'hackathon',
+  custom = 'custom'
 }
 
 export enum PublicDeadlineSource {
   contestDDL = 'contest_ddl',
-  schoolNotice = 'school_notice'
+  schoolNotice = 'school_notice',
+  custom = 'custom'
 }
 
 export class PublicDeadlineKindInfo {
@@ -73,6 +75,9 @@ export class PublicDeadlineKindInfo {
     if (value === PublicDeadlineKind.hackathon) {
       return PublicDeadlineKind.hackathon;
     }
+    if (value === PublicDeadlineKind.custom) {
+      return PublicDeadlineKind.custom;
+    }
     return null;
   }
 
@@ -83,7 +88,25 @@ export class PublicDeadlineKindInfo {
     if (kind === PublicDeadlineKind.summerCamp) {
       return '夏令营';
     }
-    return '黑客松';
+    if (kind === PublicDeadlineKind.hackathon) {
+      return '黑客松';
+    }
+    return '自定义日程';
+  }
+}
+
+export class PublicDeadlineSourceInfo {
+  static fromWireValue(value: string): PublicDeadlineSource | null {
+    if (value === PublicDeadlineSource.contestDDL) {
+      return PublicDeadlineSource.contestDDL;
+    }
+    if (value === PublicDeadlineSource.schoolNotice) {
+      return PublicDeadlineSource.schoolNotice;
+    }
+    if (value === PublicDeadlineSource.custom) {
+      return PublicDeadlineSource.custom;
+    }
+    return null;
   }
 }
 
@@ -95,10 +118,13 @@ export class PublicDeadlineItem {
   readonly deadline: string;
   readonly organizer: string | null;
   readonly officialURL: string | null;
+  readonly sourceName: string | null;
+  readonly sourceHomepage: string | null;
 
   constructor(id: string, name: string, kind: PublicDeadlineKind,
     source: PublicDeadlineSource, deadline: string,
-    organizer: string | null, officialURL: string | null) {
+    organizer: string | null, officialURL: string | null,
+    sourceName: string | null = null, sourceHomepage: string | null = null) {
     this.id = id;
     this.name = name;
     this.kind = kind;
@@ -106,6 +132,8 @@ export class PublicDeadlineItem {
     this.deadline = deadline;
     this.organizer = organizer;
     this.officialURL = officialURL;
+    this.sourceName = sourceName;
+    this.sourceHomepage = sourceHomepage;
   }
 }
 
@@ -120,6 +148,97 @@ export class PublicDeadlineSnapshot {
     this.items = items;
     this.source = source;
     this.usedBackup = usedBackup;
+  }
+}
+
+export class FavoriteDeadlineCodec {
+  static readonly maximumFavorites: number = 500;
+
+  static key(item: PublicDeadlineItem): string {
+    const sourceIdentity: string = item.source === PublicDeadlineSource.custom ?
+      (item.sourceHomepage ?? item.sourceName ?? '') : '';
+    return item.source + '\u001f' + sourceIdentity + '\u001f' + item.id + '\u001f' + item.deadline;
+  }
+
+  static encode(items: PublicDeadlineItem[]): string {
+    const records: Record<string, Object | null>[] = [];
+    const seen: Set<string> = new Set<string>();
+    for (const item of items) {
+      const key: string = FavoriteDeadlineCodec.key(item);
+      if (seen.has(key) || records.length >= FavoriteDeadlineCodec.maximumFavorites) {
+        continue;
+      }
+      seen.add(key);
+      const record: Record<string, Object | null> = {};
+      record['id'] = item.id;
+      record['name'] = item.name;
+      record['event_type'] = item.kind;
+      record['source_type'] = item.source;
+      record['primary_deadline'] = item.deadline;
+      record['organizer'] = item.organizer;
+      record['official_url'] = item.officialURL;
+      record['source_name'] = item.sourceName;
+      record['source_homepage'] = item.sourceHomepage;
+      records.push(record);
+    }
+    return JSON.stringify(records);
+  }
+
+  static decode(payload: string | null): PublicDeadlineItem[] {
+    if (payload === null || payload.trim().length === 0) {
+      return [];
+    }
+    let rawItems: Object[];
+    try {
+      const parsed: Object = JSON.parse(payload) as Object;
+      rawItems = Array.isArray(parsed) ? parsed as Object[] : [];
+    } catch (e) {
+      return [];
+    }
+    const items: PublicDeadlineItem[] = [];
+    const seen: Set<string> = new Set<string>();
+    for (const raw of rawItems) {
+      const record: Record<string, Object> = JsonUtil.record(raw);
+      const id: string | null = CalendarResponseValues.optionalString(record, 'id');
+      const name: string | null = CalendarResponseValues.optionalString(record, 'name');
+      const kindValue: string | null = CalendarResponseValues.optionalString(record, 'event_type');
+      const sourceValue: string | null = CalendarResponseValues.optionalString(record, 'source_type');
+      const deadline: string | null = CalendarResponseValues.optionalString(record, 'primary_deadline');
+      const kind: PublicDeadlineKind | null = kindValue === null ? null :
+        PublicDeadlineKindInfo.fromWireValue(kindValue);
+      const source: PublicDeadlineSource | null = sourceValue === null ? null :
+        PublicDeadlineSourceInfo.fromWireValue(sourceValue);
+      if (id === null || id.length > 128 || name === null || name.length > 200 ||
+        kind === null || source === null || deadline === null || deadline.length < 10 ||
+        StrictDates.parseDateString(deadline.substring(0, 10)) === null) {
+        continue;
+      }
+      const rawURL: string | null = CalendarResponseValues.optionalString(record, 'official_url');
+      const officialURL: string | null = rawURL !== null && rawURL.startsWith('https://') &&
+        rawURL.indexOf('@') < 0 ? rawURL : null;
+      const sourceName: string | null = CalendarResponseValues.optionalString(record, 'source_name');
+      const rawSourceHomepage: string | null =
+        CalendarResponseValues.optionalString(record, 'source_homepage');
+      const sourceHomepage: string | null = rawSourceHomepage !== null &&
+        rawSourceHomepage.startsWith('https://') && rawSourceHomepage.indexOf('@') < 0 ?
+        rawSourceHomepage : null;
+      const item: PublicDeadlineItem = new PublicDeadlineItem(
+        id, name, kind, source, deadline,
+        CalendarResponseValues.optionalString(record, 'organizer'), officialURL,
+        sourceName !== null && sourceName.length <= 80 ? sourceName : null, sourceHomepage);
+      const key: string = FavoriteDeadlineCodec.key(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        items.push(item);
+      }
+      if (items.length >= FavoriteDeadlineCodec.maximumFavorites) {
+        break;
+      }
+    }
+    items.sort((left: PublicDeadlineItem, right: PublicDeadlineItem): number =>
+      left.deadline === right.deadline ? left.name.localeCompare(right.name) :
+        (left.deadline < right.deadline ? -1 : 1));
+    return items;
   }
 }
 
@@ -273,6 +392,100 @@ export class PublicDeadlineResponseParser {
       items.push(new PublicDeadlineItem(
         id, name, kind, PublicDeadlineSource.contestDDL, deadline,
         CalendarResponseValues.firstString(record, ['organizer', 'host']), officialURL));
+      indexed.set(date, items);
+    }
+    indexed.forEach((items: PublicDeadlineItem[], date: string): void => {
+      PublicDeadlineResponseParser.sortItems(items);
+      indexed.set(date, items);
+    });
+    return indexed;
+  }
+
+  static parseCustomIndex(payload: string, feedURL: string | null = null):
+    Map<string, PublicDeadlineItem[]> {
+    let root: Object;
+    try {
+      root = JSON.parse(payload) as Object;
+    } catch (e) {
+      throw new CalendarDailyInfoError('自定义日程数据格式不正确。');
+    }
+    const source: Record<string, Object> = JsonUtil.record(root);
+    const envelopeKeys: Set<string> = new Set<string>([
+      'version', 'source', 'homepage', 'updated_at', 'items'
+    ]);
+    if (Object.keys(source).some((key: string): boolean => !envelopeKeys.has(key)) ||
+      !Array.isArray(source['items'])) {
+      throw new CalendarDailyInfoError('自定义日程不符合 v1 接口规范。');
+    }
+    if (JsonUtil.number(source['version'], -1) !== 1) {
+      throw new CalendarDailyInfoError('自定义日程接口版本必须为 1。');
+    }
+    const sourceName: string | null = CalendarResponseValues.optionalString(source, 'source');
+    if (sourceName === null || sourceName.length > 80) {
+      throw new CalendarDailyInfoError('自定义日程来源名称无效。');
+    }
+    let sourceHomepage: string | null = null;
+    if (source['homepage'] !== undefined) {
+      const homepage: string | null = CalendarResponseValues.optionalString(source, 'homepage');
+      if (homepage === null || !CustomDeadlineURLPolicy.allows(homepage)) {
+        throw new CalendarDailyInfoError('自定义日程来源主页必须使用安全的 HTTPS URL。');
+      }
+      sourceHomepage = homepage;
+    } else if (feedURL !== null && CustomDeadlineURLPolicy.allows(feedURL)) {
+      sourceHomepage = feedURL;
+    }
+    if (source['updated_at'] !== undefined) {
+      const updatedAt: string | null = CalendarResponseValues.optionalString(source, 'updated_at');
+      if (updatedAt === null || !PublicDeadlineResponseParser.rfc3339.test(updatedAt)) {
+        throw new CalendarDailyInfoError('自定义日程更新时间格式不正确。');
+      }
+    }
+    const records: Object[] = JsonUtil.array(source['items']);
+    if (records.length > 5000) {
+      throw new CalendarDailyInfoError('自定义日程条目超过 5000 项。');
+    }
+    const indexed: Map<string, PublicDeadlineItem[]> = new Map<string, PublicDeadlineItem[]>();
+    const itemKeys: Set<string> = new Set<string>([
+      'id', 'name', 'event_type', 'primary_deadline', 'organizer', 'official_url'
+    ]);
+    for (const raw of records) {
+      const record: Record<string, Object> = JsonUtil.record(raw);
+      if (Object.keys(record).some((key: string): boolean => !itemKeys.has(key))) {
+        continue;
+      }
+      const kindValue: string | null = CalendarResponseValues.optionalString(record, 'event_type');
+      const kind: PublicDeadlineKind | null = kindValue === null ? null :
+        PublicDeadlineKindInfo.fromWireValue(kindValue);
+      const id: string | null = CalendarResponseValues.optionalString(record, 'id');
+      const name: string | null = CalendarResponseValues.optionalString(record, 'name');
+      const deadline: string | null = CalendarResponseValues.optionalString(record, 'primary_deadline');
+      if (kind === null || id === null || id.length > 128 || name === null || name.length > 200 ||
+        deadline === null || !PublicDeadlineResponseParser.rfc3339.test(deadline)) {
+        continue;
+      }
+      const date: string = deadline.substring(0, 10);
+      if (StrictDates.parseDateString(date) === null) {
+        continue;
+      }
+      const items: PublicDeadlineItem[] = indexed.get(date) ?? [];
+      if (items.length >= CalendarDailyInfoSources.maximumItemsPerDay) {
+        continue;
+      }
+      const rawURL: string | null = CalendarResponseValues.optionalString(record, 'official_url');
+      const officialURL: string | null = rawURL !== null &&
+        PublicDeadlineResponseParser.isTrustedOfficialURL(rawURL) ? rawURL : null;
+      if (rawURL !== null && officialURL === null) {
+        continue;
+      }
+      const customOrganizer: string | null = CalendarResponseValues.optionalString(record, 'organizer');
+      if (record['organizer'] !== undefined &&
+        (customOrganizer === null || customOrganizer.length > 200)) {
+        continue;
+      }
+      const organizer: string = customOrganizer ?? sourceName;
+      items.push(new PublicDeadlineItem(
+        'custom:' + id, name, kind, PublicDeadlineSource.custom, deadline, organizer, officialURL,
+        sourceName, sourceHomepage));
       indexed.set(date, items);
     }
     indexed.forEach((items: PublicDeadlineItem[], date: string): void => {
@@ -510,15 +723,22 @@ export interface CalendarDailyInfoFetching {
   fetchAlmanac(date: string): Promise<AlmanacInfo>;
   fetchDeadlines(date: string): Promise<PublicDeadlineSnapshot>;
   prewarmDeadlines(date: string, forceRemote?: boolean): Promise<PublicDeadlineSnapshot>;
+  fetchCustomDeadlines(url: string, date: string,
+    forceRemote?: boolean, refreshStaleCache?: boolean): Promise<PublicDeadlineSnapshot>;
 }
 
 export interface FixedPublicJsonFetching {
   fetch(url: string, scheme: string, host: string, maximumBytes: number): Promise<string>;
+  fetchCustom(url: string, maximumBytes: number): Promise<string>;
 }
 
 class DefaultPublicJsonTransport implements FixedPublicJsonFetching {
   fetch(url: string, scheme: string, host: string, maximumBytes: number): Promise<string> {
     return FixedPublicJsonTransport.fetch(url, scheme, host, maximumBytes);
+  }
+
+  fetchCustom(url: string, maximumBytes: number): Promise<string> {
+    return FixedPublicJsonTransport.fetchCustom(url, maximumBytes);
   }
 }
 
@@ -556,6 +776,10 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
   private static readonly deadlineCacheLifetimeMs: number = 5 * 60 * 1000;
   private deadlineIndexCache: DeadlineIndexCache | null = null;
   private deadlineIndexInFlight: Promise<DeadlineIndexBundle> | null = null;
+  private readonly customDeadlineCache: Map<string, DeadlineIndexCache> =
+    new Map<string, DeadlineIndexCache>();
+  private readonly customDeadlineInFlight: Map<string, Promise<DeadlineIndexBundle>> =
+    new Map<string, Promise<DeadlineIndexBundle>>();
   private readonly transport: FixedPublicJsonFetching;
   private readonly parseContestIndex: (payload: string) => Map<string, PublicDeadlineItem[]>;
   private readonly parseSchoolIndex: (payload: string) => Map<string, PublicDeadlineItem[]>;
@@ -610,6 +834,46 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     }
     const bundle: DeadlineIndexBundle = await this.deadlineIndexes(forceRemote, true);
     return this.snapshotFromBundle(date, bundle);
+  }
+
+  async fetchCustomDeadlines(url: string, date: string,
+    forceRemote: boolean = false, refreshStaleCache: boolean = false):
+    Promise<PublicDeadlineSnapshot> {
+    if (StrictDates.parseDateString(date) === null) {
+      throw new CalendarDailyInfoError('自定义日程日期格式不正确。');
+    }
+    if (!CustomDeadlineURLPolicy.allows(url)) {
+      throw new CalendarDailyInfoError('自定义日程只允许公开、无凭据的 HTTPS URL。');
+    }
+    const cached: DeadlineIndexCache | undefined = this.customDeadlineCache.get(url);
+    if (!forceRemote && cached !== undefined &&
+      (!refreshStaleCache ||
+        Date.now() - cached.fetchedAt < CalendarDailyInfoClient.deadlineCacheLifetimeMs)) {
+      const items: PublicDeadlineItem[] = cached.bundle.contestItemsByDate?.get(date) ?? [];
+      return new PublicDeadlineSnapshot(date, items, url, false);
+    }
+    let work: Promise<DeadlineIndexBundle> | undefined = this.customDeadlineInFlight.get(url);
+    if (work === undefined) {
+      work = (async (): Promise<DeadlineIndexBundle> => {
+        const payload: string = await this.transport.fetchCustom(
+          url, CalendarDailyInfoSources.deadlinePayloadLimit);
+        const index: Map<string, PublicDeadlineItem[]> =
+          PublicDeadlineResponseParser.parseCustomIndex(payload, url);
+        return new DeadlineIndexBundle(
+          index, url, false, null, new Map<string, PublicDeadlineItem[]>(), null);
+      })();
+      this.customDeadlineInFlight.set(url, work);
+    }
+    try {
+      const bundle: DeadlineIndexBundle = await work;
+      this.customDeadlineCache.set(url, new DeadlineIndexCache(Date.now(), bundle));
+      return new PublicDeadlineSnapshot(
+        date, bundle.contestItemsByDate?.get(date) ?? [], url, false);
+    } finally {
+      if (this.customDeadlineInFlight.get(url) === work) {
+        this.customDeadlineInFlight.delete(url);
+      }
+    }
   }
 
   private snapshotFromBundle(date: string, bundle: DeadlineIndexBundle): PublicDeadlineSnapshot {
@@ -704,11 +968,72 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
   }
 }
 
+export class CustomDeadlineURLPolicy {
+  static allows(url: string): boolean {
+    if (!url.startsWith('https://') || url.indexOf('#') >= 0) {
+      return false;
+    }
+    const rest: string = url.substring('https://'.length);
+    let authorityEnd: number = rest.length;
+    for (const separator of ['/', '?']) {
+      const index: number = rest.indexOf(separator);
+      if (index >= 0 && index < authorityEnd) {
+        authorityEnd = index;
+      }
+    }
+    const authority: string = rest.substring(0, authorityEnd);
+    if (authority.length === 0 || authority.indexOf('@') >= 0 || authority.startsWith('[')) {
+      return false;
+    }
+    const colon: number = authority.lastIndexOf(':');
+    const host: string = (colon < 0 ? authority : authority.substring(0, colon))
+      .replace(/\.$/, '').toLowerCase();
+    if (host.length === 0 || host === 'localhost' || host.endsWith('.localhost')) {
+      return false;
+    }
+    if (colon >= 0) {
+      const port: number = Number(authority.substring(colon + 1));
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        return false;
+      }
+    }
+    const parts: string[] = host.split('.');
+    if (parts.length === 4 && parts.every((part: string): boolean => /^\d+$/.test(part))) {
+      const octets: number[] = parts.map((part: string): number => Number(part));
+      if (octets.some((value: number): boolean => value < 0 || value > 255)) {
+        return false;
+      }
+      const first: number = octets[0];
+      const second: number = octets[1];
+      const third: number = octets[2];
+      return !(first === 0 || first === 10 || first === 127 || first >= 224 ||
+        (first === 100 && second >= 64 && second <= 127) ||
+        (first === 169 && second === 254) ||
+        (first === 172 && second >= 16 && second <= 31) ||
+        (first === 192 && (second === 0 || second === 168)) ||
+        (first === 198 && (second === 18 || second === 19 || (second === 51 && third === 100))) ||
+        (first === 203 && second === 0 && third === 113));
+    }
+    return host.indexOf('.') > 0 && host.indexOf(' ') < 0;
+  }
+}
+
 class FixedPublicJsonTransport {
   static async fetch(url: string, scheme: string, host: string, maximumBytes: number): Promise<string> {
     if (!FixedPublicJsonTransport.allows(url, scheme, host)) {
       throw new CalendarDailyInfoError('公开数据源地址不受信任。');
     }
+    return FixedPublicJsonTransport.request(url, maximumBytes);
+  }
+
+  static async fetchCustom(url: string, maximumBytes: number): Promise<string> {
+    if (!CustomDeadlineURLPolicy.allows(url)) {
+      throw new CalendarDailyInfoError('自定义日程只允许公开、无凭据的 HTTPS URL。');
+    }
+    return FixedPublicJsonTransport.request(url, maximumBytes);
+  }
+
+  private static async request(url: string, maximumBytes: number): Promise<string> {
     const client: http.HttpRequest = http.createHttp();
     try {
       const response: http.HttpResponse = await client.request(url, {

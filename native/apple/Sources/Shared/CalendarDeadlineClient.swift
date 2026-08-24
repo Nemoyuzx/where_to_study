@@ -1,15 +1,17 @@
 import Foundation
 
-enum PublicDeadlineKind: String, CaseIterable, Sendable {
+enum PublicDeadlineKind: String, CaseIterable, Codable, Sendable {
     case competition
     case summerCamp = "summer_camp"
     case hackathon
+    case custom
 
     var title: String {
         switch self {
         case .competition: "学科竞赛"
         case .summerCamp: "夏令营"
         case .hackathon: "黑客松"
+        case .custom: "自定义日程"
         }
     }
 
@@ -18,23 +20,26 @@ enum PublicDeadlineKind: String, CaseIterable, Sendable {
         case .competition: "trophy"
         case .summerCamp: "tent"
         case .hackathon: "chevron.left.forwardslash.chevron.right"
+        case .custom: "calendar.badge.plus"
         }
     }
 }
 
-enum PublicDeadlineSource: String, Sendable {
+enum PublicDeadlineSource: String, Codable, Sendable {
     case contestDDL = "contest_ddl"
     case schoolNotice = "school_notice"
+    case custom
 
     var title: String {
         switch self {
         case .contestDDL: "Contest DDL"
         case .schoolNotice: "校内竞赛通知"
+        case .custom: "自定义日程"
         }
     }
 }
 
-struct PublicDeadlineItem: Identifiable, Equatable, Sendable {
+struct PublicDeadlineItem: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let name: String
     let kind: PublicDeadlineKind
@@ -42,6 +47,34 @@ struct PublicDeadlineItem: Identifiable, Equatable, Sendable {
     let deadline: String
     let organizer: String?
     let officialURL: URL?
+    let sourceName: String?
+    let sourceHomepage: URL?
+
+    init(
+        id: String,
+        name: String,
+        kind: PublicDeadlineKind,
+        source: PublicDeadlineSource,
+        deadline: String,
+        organizer: String?,
+        officialURL: URL?,
+        sourceName: String? = nil,
+        sourceHomepage: URL? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.kind = kind
+        self.source = source
+        self.deadline = deadline
+        self.organizer = organizer
+        self.officialURL = officialURL
+        self.sourceName = sourceName
+        self.sourceHomepage = sourceHomepage
+    }
+
+    var favoriteID: String {
+        [source.rawValue, sourceName ?? "", id, deadline].joined(separator: "\u{001F}")
+    }
 }
 
 struct PublicDeadlineSnapshot: Equatable, Sendable {
@@ -1235,25 +1268,39 @@ final class CalendarDeadlineStore: ObservableObject {
     @Published private(set) var publicByDate = [String: PublicDeadlineSnapshot]()
     @Published private(set) var publicErrors = [String: String]()
     @Published private(set) var loadingPublicDates = Set<String>()
+    @Published private(set) var customByDate = [String: PublicDeadlineSnapshot]()
+    @Published private(set) var customErrors = [String: String]()
+    @Published private(set) var loadingCustomDates = Set<String>()
+    @Published private(set) var customSourceMetadata: CustomDeadlineFeedMetadata?
     @Published private(set) var assignmentsByDate = [String: [AssignmentDeadlineItem]]()
     @Published private(set) var assignmentUnavailableByDate = [String: String]()
     @Published private(set) var loadingAssignmentDates = Set<String>()
 
     private let client: any PublicDeadlineFetching
     private let assignmentClient: any AssignmentDeadlineFetching
+    private let customClientFactory: @Sendable (URL) throws -> any CustomDeadlineFeedFetching
+    private var customClient: (any CustomDeadlineFeedFetching)?
+    private var customSourceURL: URL?
+    private var customRevision: UInt64 = 0
     private var assignmentRevision: UInt64 = 0
     private var publicPrewarmFlight: (
         id: UInt64,
         task: Task<[String: PublicDeadlineSnapshot], Error>
     )?
     private var nextPublicPrewarmFlightID: UInt64 = 0
+    private var publicPrewarmAttempted = false
+    private var publicPrewarmError: String?
 
     init(
         client: any PublicDeadlineFetching = PublicDeadlineClient(),
-        assignmentClient: any AssignmentDeadlineFetching = UCloudAssignmentClient()
+        assignmentClient: any AssignmentDeadlineFetching = UCloudAssignmentClient(),
+        customClientFactory: @escaping @Sendable (URL) throws -> any CustomDeadlineFeedFetching = {
+            try CustomDeadlineFeedClient(sourceURL: $0)
+        }
     ) {
         self.client = client
         self.assignmentClient = assignmentClient
+        self.customClientFactory = customClientFactory
     }
 
     func prewarmPublicIfNeeded(
@@ -1261,6 +1308,7 @@ final class CalendarDeadlineStore: ObservableObject {
         sampleMode: Bool
     ) async {
         guard publicDeadlinesEnabled, !sampleMode else { return }
+        publicPrewarmAttempted = true
 
         let flight: (id: UInt64, task: Task<[String: PublicDeadlineSnapshot], Error>)
         if let publicPrewarmFlight {
@@ -1283,12 +1331,15 @@ final class CalendarDeadlineStore: ObservableObject {
                 updated[date] = snapshot
             }
             publicByDate = updated
+            publicPrewarmError = nil
             publicPrewarmFlight = nil
         } catch {
             if publicPrewarmFlight?.id == flight.id {
-                // Startup prewarming is deliberately silent. Leaving the
-                // completion flag unset lets the visible date load or a later
-                // settings off -> on transition retry the same shared client.
+                // Startup prewarming is deliberately silent in global UI.
+                // Visible calendar tasks reuse this error instead of starting
+                // network work during paging; scene activation or a settings
+                // off -> on transition owns the next refresh attempt.
+                publicPrewarmError = error.localizedDescription
                 publicPrewarmFlight = nil
             }
         }
@@ -1299,6 +1350,14 @@ final class CalendarDeadlineStore: ObservableObject {
     }
 
     func loadPublic(dates: [String], sampleMode: Bool, force: Bool = false) async {
+        if !sampleMode,
+           !force,
+           publicPrewarmAttempted,
+           publicByDate.isEmpty,
+           let publicPrewarmError {
+            dates.forEach { publicErrors[$0] = publicPrewarmError }
+            return
+        }
         let requestedDates = Array(Set(dates)).sorted().filter { date in
             (force || publicByDate[date] == nil) && !loadingPublicDates.contains(date)
         }
@@ -1388,15 +1447,137 @@ final class CalendarDeadlineStore: ObservableObject {
     func loadCalendarEvents(
         dates: [String],
         sampleMode: Bool,
-        includesPublicDeadlines: Bool
+        includesPublicDeadlines: Bool,
+        customSourceURL: URL? = nil
     ) async {
         let requestedDates = Array(Set(dates)).sorted()
         guard !requestedDates.isEmpty else { return }
         if includesPublicDeadlines {
             await loadPublic(dates: requestedDates, sampleMode: sampleMode)
         }
+        if let customSourceURL, !sampleMode {
+            await loadCustom(dates: requestedDates, sourceURL: customSourceURL)
+        } else if customSourceURL == nil {
+            clearCustomSource()
+        }
         guard !Task.isCancelled else { return }
         await loadAssignments(dates: requestedDates, sampleMode: sampleMode)
+    }
+
+    func publicItems(for date: String) -> [PublicDeadlineItem] {
+        PublicDeadlineClient.merge([
+            publicByDate[date]?.items ?? [],
+            customByDate[date]?.items ?? [],
+        ])
+    }
+
+    func validateCustomFeed(sourceURL: URL) async throws -> CustomDeadlineFeedMetadata {
+        try configureCustomSource(sourceURL)
+        guard let customClient else {
+            throw CalendarDeadlineError.service("自定义日程客户端未初始化。")
+        }
+        let revision = customRevision
+        let metadata = try await customClient.validateFeed()
+        guard revision == customRevision, self.customSourceURL == sourceURL else {
+            throw CancellationError()
+        }
+        customSourceMetadata = metadata
+        return metadata
+    }
+
+    func prewarmCustomIfNeeded(
+        sourceURL: URL,
+        dates: [String],
+        sampleMode: Bool
+    ) async {
+        guard !sampleMode, !dates.isEmpty else { return }
+        do {
+            try configureCustomSource(sourceURL)
+            guard let customClient else { return }
+            let revision = customRevision
+            let snapshots = try await customClient.prewarm(dates: dates)
+            guard revision == customRevision, self.customSourceURL == sourceURL else { return }
+            customByDate = snapshots
+            customSourceMetadata = try? await customClient.validateFeed()
+            customErrors.removeAll()
+        } catch {
+            guard self.customSourceURL == sourceURL else { return }
+            customErrors["source"] = error.localizedDescription
+        }
+    }
+
+    func loadCustom(
+        dates: [String],
+        sourceURL: URL,
+        force: Bool = false
+    ) async {
+        do {
+            try configureCustomSource(sourceURL)
+        } catch {
+            customErrors["source"] = error.localizedDescription
+            return
+        }
+        guard let customClient else { return }
+        if !force, let prewarmError = customErrors["source"], customByDate.isEmpty {
+            dates.forEach { customErrors[$0] = prewarmError }
+            return
+        }
+        let requestedDates = Array(Set(dates)).sorted().filter { date in
+            (force || customByDate[date] == nil) && !loadingCustomDates.contains(date)
+        }
+        guard !requestedDates.isEmpty else { return }
+        let revision = customRevision
+        loadingCustomDates.formUnion(requestedDates)
+        requestedDates.forEach { customErrors.removeValue(forKey: $0) }
+        defer {
+            if revision == customRevision {
+                loadingCustomDates.subtract(requestedDates)
+            }
+        }
+        do {
+            let rangeOwner = Task { try await customClient.fetch(dates: requestedDates) }
+            let snapshots = try await rangeOwner.value
+            guard revision == customRevision, self.customSourceURL == sourceURL else { return }
+            var updated = customByDate
+            for date in requestedDates {
+                updated[date] = snapshots[date] ?? PublicDeadlineSnapshot(
+                    date: date,
+                    items: [],
+                    source: sourceURL,
+                    usedBackup: false
+                )
+            }
+            customByDate = updated
+            if customSourceMetadata == nil {
+                customSourceMetadata = try? await customClient.validateFeed()
+            }
+        } catch {
+            guard revision == customRevision else { return }
+            requestedDates.forEach { customErrors[$0] = error.localizedDescription }
+        }
+    }
+
+    func clearCustomSource() {
+        guard customSourceURL != nil || !customByDate.isEmpty || !customErrors.isEmpty else { return }
+        customRevision &+= 1
+        customClient = nil
+        customSourceURL = nil
+        customByDate.removeAll()
+        customErrors.removeAll()
+        loadingCustomDates.removeAll()
+        customSourceMetadata = nil
+    }
+
+    private func configureCustomSource(_ sourceURL: URL) throws {
+        guard customSourceURL != sourceURL else { return }
+        let client = try customClientFactory(sourceURL)
+        customRevision &+= 1
+        customClient = client
+        customSourceURL = sourceURL
+        customByDate.removeAll()
+        customErrors.removeAll()
+        loadingCustomDates.removeAll()
+        customSourceMetadata = nil
     }
 
     func loadAssignments(date: String, sampleMode: Bool, force: Bool = false) async {

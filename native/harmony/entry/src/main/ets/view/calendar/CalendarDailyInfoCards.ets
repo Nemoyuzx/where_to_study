@@ -40,13 +40,30 @@ export struct CalendarDailyInfoCards {
   }
 
   private enabledDeadlineItems(): PublicDeadlineItem[] {
-    const snapshot: PublicDeadlineSnapshot | null = this.deadlineSnapshot();
-    if (snapshot === null) {
-      return [];
-    }
+    return this.model.deadlineItems(this.date());
+  }
+
+  private showsContestSource(): boolean {
+    return this.model.competitionDeadlinesEnabled || this.model.summerCampDeadlinesEnabled ||
+      this.model.hackathonDeadlinesEnabled || this.enabledDeadlineItems().some(
+        (item: PublicDeadlineItem): boolean => item.source === PublicDeadlineSource.contestDDL);
+  }
+
+  private showsSchoolSource(): boolean {
+    return this.model.schoolContestNoticesEnabled || this.enabledDeadlineItems().some(
+      (item: PublicDeadlineItem): boolean => item.source === PublicDeadlineSource.schoolNotice);
+  }
+
+  private customSources(): PublicDeadlineItem[] {
     const result: PublicDeadlineItem[] = [];
-    for (const item of snapshot.items) {
-      if (this.model.deadlineItemEnabled(item)) {
+    const seen: Set<string> = new Set<string>();
+    for (const item of this.enabledDeadlineItems()) {
+      if (item.source !== PublicDeadlineSource.custom) {
+        continue;
+      }
+      const key: string = (item.sourceName ?? '') + '\u001f' + (item.sourceHomepage ?? '');
+      if (!seen.has(key)) {
+        seen.add(key);
         result.push(item);
       }
     }
@@ -260,21 +277,20 @@ export struct CalendarDailyInfoCards {
   publicDeadlineCard() {
     Column({ space: 8 }) {
       this.cardTitle('DDL · 竞赛 / 夏令营 / 黑客松')
-      if (this.deadlineSnapshot() !== null) {
-        if (this.enabledDeadlineItems().length === 0) {
-          Text(this.model.text('当天暂无已启用类别的 DDL'))
-            .fontSize(13)
-            .fontColor(AppTheme.secondaryText())
-        } else {
-          ForEach(this.enabledDeadlineItems(), (item: PublicDeadlineItem) => {
-            this.publicDeadlineRow(item)
-          }, (item: PublicDeadlineItem) => 'public-deadline.' + item.id)
-        }
-        if ((this.deadlineSnapshot() as PublicDeadlineSnapshot).usedBackup) {
+      if (this.enabledDeadlineItems().length > 0) {
+        ForEach(this.enabledDeadlineItems(), (item: PublicDeadlineItem) => {
+          this.publicDeadlineRow(item)
+        }, (item: PublicDeadlineItem) => 'public-deadline.' + this.model.favoriteDeadlineKey(item))
+        if (this.deadlineSnapshot() !== null &&
+          (this.deadlineSnapshot() as PublicDeadlineSnapshot).usedBackup) {
           Text(this.model.text('本次使用备用 API'))
             .fontSize(11)
             .fontColor(AppTheme.secondaryText())
         }
+      } else if (this.deadlineSnapshot() !== null) {
+          Text(this.model.text('当天暂无已启用类别的 DDL'))
+            .fontSize(13)
+            .fontColor(AppTheme.secondaryText())
       } else if (this.model.loadingPublicDeadlineDates.has(this.date())) {
         Text(this.model.text('正在获取当天 DDL…'))
           .fontSize(13)
@@ -293,32 +309,54 @@ export struct CalendarDailyInfoCards {
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       }
-      Row({ space: 10 }) {
-        Text(this.model.text('第三方来源：Contest DDL'))
-          .fontSize(11)
-          .fontColor(AppTheme.primary())
-          .onClick(() => {
-            this.open(CalendarDailyInfoSources.deadlinePrimaryPage);
-          })
-        Text(this.model.text('备用 API'))
-          .fontSize(11)
-          .fontColor(AppTheme.secondaryText())
-          .onClick(() => {
-            this.open(CalendarDailyInfoSources.deadlineBackup);
-          })
-        Text(this.model.text('校内竞赛通知'))
-          .fontSize(11)
-          .fontColor(AppTheme.secondaryText())
-          .onClick(() => {
-            this.open(CalendarDailyInfoSources.schoolContestNotices);
-          })
-      }
-      .width('100%')
-      Text(this.model.text('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。'))
-        .fontSize(11)
-        .fontColor(AppTheme.secondaryText())
-        .lineHeight(16)
+      if (this.showsContestSource() || this.showsSchoolSource()) {
+        Row({ space: 10 }) {
+          if (this.showsContestSource()) {
+            Text(this.model.text('第三方来源：Contest DDL'))
+              .fontSize(11)
+              .fontColor(AppTheme.primary())
+              .onClick(() => {
+                this.open(CalendarDailyInfoSources.deadlinePrimaryPage);
+              })
+            Text(this.model.text('备用 API'))
+              .fontSize(11)
+              .fontColor(AppTheme.secondaryText())
+              .onClick(() => {
+                this.open(CalendarDailyInfoSources.deadlineBackup);
+              })
+          }
+          if (this.showsSchoolSource()) {
+            Text(this.model.text('校内竞赛通知'))
+              .fontSize(11)
+              .fontColor(AppTheme.secondaryText())
+              .onClick(() => {
+                this.open(CalendarDailyInfoSources.schoolContestNotices);
+              })
+          }
+        }
         .width('100%')
+      }
+      if (this.showsSchoolSource()) {
+        Text(this.model.text('校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。'))
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+          .lineHeight(16)
+          .width('100%')
+      }
+      ForEach(this.customSources(), (item: PublicDeadlineItem) => {
+        Text(this.model.text('自定义日程来源：') +
+          (item.sourceName ?? this.model.text('自定义日程')))
+          .fontSize(11)
+          .fontColor(item.sourceHomepage !== null ? AppTheme.primary() : AppTheme.secondaryText())
+          .maxLines(2)
+          .width('100%')
+          .onClick(() => {
+            if (item.sourceHomepage !== null) {
+              this.open(item.sourceHomepage as string);
+            }
+          })
+      }, (item: PublicDeadlineItem) => 'custom-source.' +
+        (item.sourceName ?? '') + '.' + (item.sourceHomepage ?? ''))
     }
     .padding(14)
     .width('100%')
@@ -352,14 +390,31 @@ export struct CalendarDailyInfoCards {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
+      .onClick(() => {
+        if (item.officialURL !== null) {
+          this.open(item.officialURL as string);
+        }
+      })
+      Button() {
+        SymbolGlyph(this.model.isFavoriteDeadline(item) ?
+          $r('sys.symbol.star_fill') : $r('sys.symbol.star'))
+          .fontSize(18)
+          .fontColor([this.model.isFavoriteDeadline(item) ? AppTheme.assignment() :
+            AppTheme.secondaryText()])
+      }
+      .type(ButtonType.Normal)
+      .width(34)
+      .height(34)
+      .backgroundColor(Color.Transparent)
+      .accessibilityText(this.model.text(this.model.isFavoriteDeadline(item) ? '取消收藏' : '收藏'))
+      .onClick(() => {
+        this.model.toggleFavoriteDeadline(item).catch(() => {
+          this.model.statusMessage = '无法保存收藏';
+        });
+      })
     }
     .width('100%')
     .alignItems(VerticalAlign.Top)
-    .onClick(() => {
-      if (item.officialURL !== null) {
-        this.open(item.officialURL as string);
-      }
-    })
   }
 
   private deadlineSubtitle(item: PublicDeadlineItem): string {

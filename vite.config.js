@@ -11,6 +11,9 @@ export default defineConfig({
     {
       // Preview/dev browser builds have no Tauri CSP header, so inject the
       // production-aligned policy (minus Tauri IPC schemes) only while serving.
+      // frame-ancestors is intentionally omitted because browsers ignore that
+      // directive in a meta policy; the packaged app still enforces it through
+      // Tauri's response-level CSP.
       name: 'dev-preview-csp',
       apply: 'serve',
       transformIndexHtml(html) {
@@ -18,7 +21,7 @@ export default defineConfig({
           '<head>',
           [
             '<head>',
-            '    <meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\' \'unsafe-inline\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; connect-src \'self\' ws: http://localhost:* http://127.0.0.1:*; object-src \'none\'; base-uri \'self\'; frame-ancestors \'none\'" />',
+            '    <meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\' \'unsafe-inline\'; worker-src \'self\' blob:; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; connect-src \'self\' ws: http://localhost:* http://127.0.0.1:*; object-src \'none\'; base-uri \'self\'" />',
           ].join('\n'),
         )
       },

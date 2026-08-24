@@ -16,11 +16,10 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -131,35 +130,18 @@ class SettingsPage(
         val languages = AppLanguage.entries
         val current = languages.indexOfFirst { it.code == preferences.languageCode }
             .coerceAtLeast(0)
-        addView(Spinner(activity).apply {
-            id = R.id.settings_language_selector
-            adapter = ArrayAdapter(
-                activity,
-                android.R.layout.simple_spinner_item,
-                languages.map { AppLocale.displayName(activity, it) },
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            setSelection(current, false)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
-            setPadding(activity.dp(12), 0, activity.dp(12), 0)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(UiMetrics.controlHeightDp),
-            )
-            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: android.widget.AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long,
-                ) {
-                    val selectedLanguage = languages[position]
-                    if (selectedLanguage.code != preferences.languageCode) {
-                        activity.performControlHaptic(view)
-                        activity.updateAppLanguage(selectedLanguage)
-                    }
-                }
-
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        addView(segmentedControl(
+            labels = languages.map { AppLocale.displayName(activity, it) },
+            initialIndex = current,
+            viewID = R.id.settings_language_selector,
+        ) { position, source ->
+            val selectedLanguage = languages[position]
+            if (selectedLanguage.code != preferences.languageCode) {
+                activity.performControlHaptic(source)
+                source.postDelayed(
+                    { activity.updateAppLanguage(selectedLanguage) },
+                    SEGMENT_SELECTION_COMMIT_DELAY_MILLIS,
+                )
             }
         })
         addView(TextView(activity).apply {
@@ -217,50 +199,16 @@ class SettingsPage(
             setPadding(0, 0, 0, activity.dp(if (isCompact) 5 else 7))
         })
         val campusLabels = AppMetadata.campuses.map { activity.uiText(it.name) }
-        val campusAdapter = object : ArrayAdapter<String>(
-            activity,
-            android.R.layout.simple_spinner_item,
-            campusLabels,
-        ) {
-            init {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
-                super.getView(position, convertView, parent).also(::styleSpinnerText)
-
-            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View =
-                super.getDropDownView(position, convertView, parent).also { view ->
-                    styleSpinnerText(view)
-                    view.setBackgroundColor(Palette.surface)
-                }
-
-            private fun styleSpinnerText(view: View) {
-                (view as? TextView)?.apply {
-                    setTextColor(Palette.text)
-                    setPadding(activity.dp(12), 0, activity.dp(12), 0)
-                }
-            }
-        }
-        val campus = object : Spinner(activity) {
-            override fun performClick(): Boolean {
-                activity.performControlHaptic(this)
-                return super.performClick()
-            }
-        }.apply {
-            adapter = campusAdapter
-            setSelection(AppMetadata.campuses.indexOfFirst { it.id == preferences.campusID }.coerceAtLeast(0))
-            background = roundedBackground(
-                activity,
-                Palette.surface,
-                Palette.border,
-                radius = 6,
-            )
-            setPadding(activity.dp(12), 0, activity.dp(12), 0)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(UiMetrics.controlHeightDp),
-            )
+        var selectedCampusIndex = AppMetadata.campuses
+            .indexOfFirst { it.id == preferences.campusID }
+            .coerceAtLeast(0)
+        val campus = segmentedControl(
+            labels = campusLabels,
+            initialIndex = selectedCampusIndex,
+            viewID = R.id.settings_campus_selector,
+        ) { position, source ->
+            activity.performControlHaptic(source)
+            selectedCampusIndex = position
         }
         addView(campus)
         addView(spacer(activity, if (isCompact) 12 else 18))
@@ -280,7 +228,7 @@ class SettingsPage(
                 val persist: () -> Credentials = {
                     credentials.also {
                         credentialStore.save(credentials)
-                        preferences.campusID = AppMetadata.campuses[campus.selectedItemPosition].id
+                        preferences.campusID = AppMetadata.campuses[selectedCampusIndex].id
                     }
                 }
                 if (accountChanged) {
@@ -596,37 +544,17 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(8), 0, activity.dp(5))
         })
-        val labels = (1..6).map { activity.uiText("$it 门") }
-        addView(Spinner(activity).apply {
-            adapter = ArrayAdapter(
-                activity,
-                android.R.layout.simple_spinner_item,
-                labels,
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            setSelection(preferences.widgetCourseLimit - 1)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
-            setPadding(activity.dp(12), 0, activity.dp(12), 0)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(UiMetrics.controlHeightDp),
-            )
-            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: android.widget.AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long,
-                ) {
-                    val limit = position + 1
-                    if (limit != preferences.widgetCourseLimit) {
-                        activity.performControlHaptic(view)
-                        preferences.widgetCourseLimit = limit
-                        TodayCourseWidgetProvider.refresh(activity)
-                        updatePreview()
-                    }
-                }
-
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        addView(segmentedControl(
+            labels = (1..6).map(Int::toString),
+            initialIndex = preferences.widgetCourseLimit - 1,
+            viewID = R.id.settings_widget_course_limit_selector,
+        ) { position, source ->
+            val limit = position + 1
+            if (limit != preferences.widgetCourseLimit) {
+                activity.performControlHaptic(source)
+                preferences.widgetCourseLimit = limit
+                TodayCourseWidgetProvider.refresh(activity)
+                updatePreview()
             }
         })
 
@@ -644,36 +572,19 @@ class SettingsPage(
         })
         val previewLabels = listOf("紧凑", "标准", "展开").map(activity::uiText)
         val previewCapacities = listOf(1, 3, 6)
-        addView(Spinner(activity).apply {
-            adapter = ArrayAdapter(
-                activity,
-                android.R.layout.simple_spinner_item,
-                previewLabels,
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-            setSelection(1)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
-            setPadding(activity.dp(12), 0, activity.dp(12), 0)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(UiMetrics.controlHeightDp),
-            ).apply { topMargin = activity.dp(7) }
-            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: android.widget.AdapterView<*>?,
-                    view: View?,
-                    position: Int,
-                    id: Long,
-                ) {
-                    val capacity = previewCapacities[position]
-                    if (capacity != previewCapacity) {
-                        activity.performControlHaptic(view)
-                        previewCapacity = capacity
-                        updatePreview()
-                    }
-                }
-
-                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+        addView(segmentedControl(
+            labels = previewLabels,
+            initialIndex = 1,
+            viewID = R.id.settings_widget_preview_size_selector,
+        ) { position, source ->
+            val capacity = previewCapacities[position]
+            if (capacity != previewCapacity) {
+                activity.performControlHaptic(source)
+                previewCapacity = capacity
+                updatePreview()
             }
+        }.apply {
+            (layoutParams as LinearLayout.LayoutParams).topMargin = activity.dp(7)
         })
         updatePreview()
         addView(preview)
@@ -745,8 +656,98 @@ class SettingsPage(
             preferences.hackathonDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
+        addView(View(activity).apply { setBackgroundColor(Palette.border) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
+                topMargin = activity.dp(10)
+                bottomMargin = activity.dp(8)
+            })
+        val customEnabled = Switch(activity).apply {
+            id = R.id.settings_custom_deadlines_switch
+            text = "自定义日程源"
+            textSize = 15f
+            setTextColor(Palette.text)
+            isChecked = preferences.customDeadlinesEnabled
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
+            setPadding(0, 0, 0, 0)
+            setOnCheckedChangeListener { button, _ -> activity.performControlHaptic(button) }
+        }
+        addView(customEnabled)
+        val customURL = field("自定义日程 HTTPS JSON 地址", preferences.customDeadlinesURL, false).apply {
+            id = R.id.settings_custom_deadlines_url
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        addView(customURL)
         addView(TextView(activity).apply {
-            text = "天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。"
+            text = "只发送无凭据 GET；拒绝重定向、本机及私有/保留 IP，响应上限 2 MiB。"
+            textSize = 11f
+            setTextColor(Palette.muted)
+            setPadding(0, activity.dp(5), 0, activity.dp(7))
+        })
+        lateinit var saveCustomButton: TextView
+        saveCustomButton = settingsActionButton("校验并保存自定义日程", primary = false) {
+            val normalized = customURL.text.toString().trim()
+            if (normalized.isEmpty()) {
+                if (customEnabled.isChecked) {
+                    Toast.makeText(
+                        activity,
+                        activity.uiText("请先填写自定义日程 HTTPS 地址。"),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                } else {
+                    preferences.customDeadlinesEnabled = false
+                    preferences.customDeadlinesURL = ""
+                    activity.reloadDeadlineSettings()
+                    showSavedToast()
+                }
+                return@settingsActionButton
+            }
+            val validated = runCatching {
+                CustomDeadlineFeedURLValidator.validatedURI(normalized).toString()
+            }.getOrElse { error ->
+                Toast.makeText(
+                    activity,
+                    activity.uiText(error.message ?: "自定义日程地址格式不正确。"),
+                    Toast.LENGTH_LONG,
+                ).show()
+                return@settingsActionButton
+            }
+            saveCustomButton.isEnabled = false
+            saveCustomButton.text = activity.uiText("正在校验自定义日程…")
+            activity.validateCustomDeadlineFeed(validated) { result ->
+                if (saveCustomButton.isAttachedToWindow) {
+                    saveCustomButton.isEnabled = true
+                    saveCustomButton.text = activity.uiText("校验并保存自定义日程")
+                }
+                result.onSuccess { metadata ->
+                    preferences.customDeadlinesURL = validated
+                    preferences.customDeadlinesEnabled = customEnabled.isChecked
+                    customURL.setText(validated)
+                    activity.reloadDeadlineSettings()
+                    Toast.makeText(
+                        activity,
+                        activity.uiText(
+                            "自定义日程已保存：${metadata.sourceName}，${metadata.itemCount} 项",
+                        ),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }.onFailure { error ->
+                    Toast.makeText(
+                        activity,
+                        activity.uiText(error.message ?: "自定义日程校验失败。"),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }.apply { id = R.id.settings_custom_deadlines_save }
+        addView(saveCustomButton)
+        addView(spacer(activity, compactGap))
+        addView(settingsLinkButton(
+            "收藏管理（${preferences.favoriteDeadlines.size}）",
+        ) { activity.openFavoriteManagement() }.apply {
+            id = R.id.settings_favorite_deadlines_button
+        })
+        addView(TextView(activity).apply {
+            text = "天气、黄历和 DDL 来自第三方公开服务；已收藏日程会保存完整快照，来源关闭、失败或删除后仍会显示，直到取消收藏。"
             textSize = 12f
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(6), 0, 0)
@@ -777,6 +778,144 @@ class SettingsPage(
         setOnCheckedChangeListener { button, enabled ->
             activity.performControlHaptic(button)
             save(enabled)
+        }
+    }
+
+    /**
+     * Native counterpart of the segmented Pickers used by the Apple clients.
+     * The selected thumb slides between real, fully clickable regions; this is
+     * reserved for multi-value choices, while Boolean preferences remain
+     * platform Switches with their built-in thumb animation.
+     */
+    private fun segmentedControl(
+        labels: List<String>,
+        initialIndex: Int,
+        viewID: Int,
+        onSelected: (Int, View) -> Unit,
+    ): FrameLayout {
+        require(labels.isNotEmpty())
+        var selectedIndex = initialIndex.coerceIn(labels.indices)
+        val control = FrameLayout(activity).apply {
+            id = viewID
+            background = roundedBackground(
+                activity,
+                Palette.surfaceVariant,
+                Palette.border,
+                radius = 9,
+            )
+            clipChildren = false
+            clipToPadding = false
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                activity.dp(UiMetrics.controlHeightDp),
+            )
+        }
+        val thumbInset = activity.dp(3)
+        val thumb = View(activity).apply {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            background = roundedBackground(
+                activity,
+                Palette.primaryFill,
+                radius = 7,
+            )
+        }
+        control.addView(
+            thumb,
+            FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                setMargins(thumbInset, thumbInset, thumbInset, thumbInset)
+            },
+        )
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(thumbInset, 0, thumbInset, 0)
+        }
+        labels.forEachIndexed { index, label ->
+            row.addView(
+                TextView(activity).apply {
+                    text = label
+                    textSize = if (labels.size >= 5) 12f else 13f
+                    gravity = Gravity.CENTER
+                    includeFontPadding = false
+                    maxLines = 2
+                    setTextColor(if (index == selectedIndex) Palette.onPrimary else Palette.text)
+                    setTypeface(
+                        typeface,
+                        if (index == selectedIndex) Typeface.BOLD else Typeface.NORMAL,
+                    )
+                    isSelected = index == selectedIndex
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = label
+                    setOnClickListener { source ->
+                        if (index == selectedIndex) return@setOnClickListener
+                        selectedIndex = index
+                        repeat(row.childCount) { tabIndex ->
+                            val tab = row.getChildAt(tabIndex) as TextView
+                            val selected = tabIndex == selectedIndex
+                            tab.isSelected = selected
+                            tab.setTextColor(
+                                if (selected) Palette.onPrimary else Palette.text,
+                            )
+                            tab.setTypeface(
+                                tab.typeface,
+                                if (selected) Typeface.BOLD else Typeface.NORMAL,
+                            )
+                            tab.animate().cancel()
+                            tab.alpha = if (selected) 0.72f else 1f
+                            tab.animate()
+                                .alpha(1f)
+                                .setDuration(SEGMENT_ANIMATION_DURATION_MILLIS)
+                                .start()
+                        }
+                        moveSegmentThumb(
+                            control,
+                            thumb,
+                            selectedIndex,
+                            labels.size,
+                            animate = true,
+                        )
+                        onSelected(index, source)
+                    }
+                },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f),
+            )
+        }
+        control.addView(
+            row,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        control.post {
+            moveSegmentThumb(control, thumb, selectedIndex, labels.size, animate = false)
+        }
+        return control
+    }
+
+    private fun moveSegmentThumb(
+        control: FrameLayout,
+        thumb: View,
+        selectedIndex: Int,
+        itemCount: Int,
+        animate: Boolean,
+    ) {
+        if (control.width <= 0 || itemCount <= 0) return
+        val inset = activity.dp(3)
+        val segmentWidth = ((control.width - inset * 2) / itemCount).coerceAtLeast(1)
+        thumb.layoutParams = (thumb.layoutParams as FrameLayout.LayoutParams).apply {
+            width = segmentWidth
+        }
+        // The thumb's layout margin already contributes the leading inset.
+        val targetX = (selectedIndex * segmentWidth).toFloat()
+        thumb.animate().cancel()
+        if (animate) {
+            thumb.animate()
+                .translationX(targetX)
+                .setDuration(SEGMENT_ANIMATION_DURATION_MILLIS)
+                .start()
+        } else {
+            thumb.translationX = targetX
         }
     }
 
@@ -912,7 +1051,7 @@ class SettingsPage(
                 activity.performControlHaptic(it)
                 AlertDialog.Builder(activity)
                     .setTitle("清除全部本地数据？")
-                    .setMessage("将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。")
+                    .setMessage("将删除保存的账号、密码、个人课表、空教室缓存、自定义日程地址、收藏和设置。此操作无法撤销。")
                     .setNegativeButton("取消") { _, _ -> activity.performControlHaptic() }
                     .setPositiveButton("确认清除") { _, _ ->
                         activity.performControlHaptic()
@@ -1150,14 +1289,14 @@ class SettingsPage(
             ("学号和密码保存在操作系统的受保护凭据存储中，仅在你请求课表、空教室或作业时按对应用途通过 HTTPS 使用。维护者无法读取凭据，设置接口也不会返回密码。\n\n" +
                 "Credentials stay in protected OS storage and are used over HTTPS only for requested schedules, classrooms, or assignments. The maintainer cannot read credentials, and settings APIs never return a password."),
         "本地数据 / Local data" to
-            ("课表、空教室、校区、学期和开关缓存在设备上；受支持系统的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、偏好和应用管理的提醒。\n\n" +
-                "Schedules, classroom results, campus, term, and preferences are cached locally. Course widgets on supported systems read only a local snapshot. Clear local data removes credentials, caches, preferences, and app-managed reminders."),
+            ("课表、空教室、校区、学期、开关、自定义日程地址和最多 500 条收藏快照保存在设备上；课程小组件只读取本地课表。“清除本地数据”会一并移除这些内容。\n\n" +
+                "Schedules, classroom results, campus, term, switches, the custom feed URL, and up to 500 favorite snapshots stay locally. Course widgets read only the local schedule. Clear local data removes all of these items."),
         "节假日数据 / Holiday data" to
             ("应用可能通过 unpkg 获取固定版本 holiday-calendar 数据；Android 在已有权限时也可能读取系统节假日日历。请求仅含 CN 与年份。iOS 只依据权威休息日数据显示“休”。\n\n" +
                 "The app may retrieve pinned holiday-calendar data through unpkg; Android may read the OS holiday calendar when permitted. Requests contain only CN and year. iOS marks rest days only from authoritative rest-day data."),
         "天气、黄历与公开活动 / Weather, almanac, and public events" to
-            ("UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松；校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。各类别有独立开关。固定 HTTP API 仅接收无凭据 GET，拒绝重定向且不含个人数据。所有显示数据仅供参考。\n\n" +
-                "UAPI provides district-level weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides public events. School notices are extracted by a server-side script from public pages on the university’s internal website. Each category has its own switch. Fixed HTTP APIs receive credential-free GET requests with no personal data and reject redirects. Displayed data is for reference only."),
+            ("UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 与校内通知提供公开活动。自定义日程只向用户填写的 HTTPS 地址发送无凭据 GET，拒绝重定向、本机和私有/保留 IP 字面量，响应上限 2 MiB。所有显示数据仅供参考。\n\n" +
+                "UAPI provides district-level weather and base almanac data without GPS; Timeless may add advice. Contest DDL and campus notices provide public events. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."),
         "云课堂作业 / UCloud assignments" to
             ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\n" +
                 "The password is submitted only to auth.bupt.edu.cn over HTTPS. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."),
@@ -1178,6 +1317,8 @@ class SettingsPage(
     private companion object {
         const val PROJECT_URL = "https://github.com/Nemoyuzx/where_to_study"
         const val PRIVACY_URL = "https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
+        const val SEGMENT_ANIMATION_DURATION_MILLIS = 220L
+        const val SEGMENT_SELECTION_COMMIT_DELAY_MILLIS = 160L
     }
 
     private val isCompact: Boolean

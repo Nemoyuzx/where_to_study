@@ -19,7 +19,7 @@ struct PrivacyPolicyView: View {
                             .font(.largeTitle.bold())
                             .foregroundStyle(AppTheme.text)
                             .accessibilityIdentifier("screen.privacy-policy")
-                        Text("生效日期 / Effective date: 2026-08-23")
+                        Text("生效日期 / Effective date: 2026-08-24")
                             .font(.callout)
                             .foregroundStyle(AppTheme.secondaryText)
                     }
@@ -33,7 +33,7 @@ struct PrivacyPolicyView: View {
                     )
                     privacySection(
                         title: "本地数据 / Local data",
-                        body: "课表、空教室、校区、学期和功能开关缓存在设备上；受支持系统上的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Course widgets on supported systems read only a local schedule snapshot. “Clear local data” removes credentials, caches, preferences, and app-managed reminders."
+                        body: "课表、空教室、校区、学期和功能开关缓存在设备上；收藏会把完整日程快照保存在本机，不上传或跨设备同步。受支持系统上的课程小组件只读取本地课表快照。“清除本地数据”会移除凭据、缓存、收藏、偏好和应用管理的提醒。\n\nSchedules, classroom results, campus, term, and preferences are cached locally. Favorites keep complete event snapshots on this device and are neither uploaded nor synchronized. Course widgets on supported systems read only a local schedule snapshot. “Clear local data” removes credentials, caches, favorites, preferences, and app-managed reminders."
                     )
                     privacySection(
                         title: "节假日数据 / Holiday data",
@@ -41,7 +41,7 @@ struct PrivacyPolicyView: View {
                     )
                     privacySection(
                         title: "天气、黄历与公开活动 / Weather, almanac, and public events",
-                        body: "UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。各类别均有独立开关。固定 HTTP API 仅接收无凭据 GET，拒绝重定向且不含个人数据。所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, summer camps, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Each category has its own switch. Fixed HTTP APIs receive only credential-free GET requests with no personal data and reject redirects. Displayed data is for reference only."
+                        body: "UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。用户还可选择公开 HTTPS JSON 自定义日程源；请求不附带个人数据，客户端拒绝含凭据、本机/私网字面量、重定向或超大响应的地址。各类别均有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, summer camps, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Users may also select a public HTTPS JSON custom feed. Requests contain no personal data, and credential-bearing, local/private literal, redirecting, or oversized endpoints are rejected. Each category has its own switch, and displayed data is for reference only."
                     )
                     privacySection(
                         title: "云课堂作业 / UCloud assignments",

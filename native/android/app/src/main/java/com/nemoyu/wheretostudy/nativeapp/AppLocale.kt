@@ -47,7 +47,7 @@ object AppLocale {
 
     fun displayName(context: Context, language: AppLanguage): String = when (language) {
         AppLanguage.SYSTEM -> UiText.resolve(context, "跟随系统")
-        AppLanguage.SIMPLIFIED_CHINESE -> "简体中文"
+        AppLanguage.SIMPLIFIED_CHINESE -> UiText.resolve(context, "简体中文")
         AppLanguage.ENGLISH -> "English"
     }
 
@@ -226,9 +226,32 @@ object UiText {
         "日期详情与生活信息" to "Date Details & Daily Information",
         "黄历与宜忌" to "Almanac and Advice",
         "学科竞赛 DDL" to "Competition DDL",
+        "学科竞赛" to "Competition",
         "校内竞赛通知" to "Campus Contest Notices",
         "夏令营 DDL" to "Summer Camp DDL",
+        "夏令营" to "Summer Camp",
         "黑客松 DDL" to "Hackathon DDL",
+        "黑客松" to "Hackathon",
+        "自定义日程" to "Custom Schedule",
+        "自定义日程源" to "Custom Schedule Feed",
+        "自定义日程 HTTPS JSON 地址" to "Custom schedule HTTPS JSON URL",
+        "校验并保存自定义日程" to "Validate & Save Custom Feed",
+        "正在校验自定义日程…" to "Validating custom feed…",
+        "请先填写自定义日程 HTTPS 地址。" to "Enter a custom schedule HTTPS URL first.",
+        "自定义日程地址格式不正确。" to "The custom schedule URL is invalid.",
+        "自定义日程校验失败。" to "Unable to validate the custom schedule feed.",
+        "收藏管理" to "Favorite Management",
+        "暂无收藏日程" to "No favorite schedules",
+        "返回设置" to "Back to Settings",
+        "收藏日程" to "Favorite Schedule",
+        "取消收藏" to "Remove Favorite",
+        "打开原文" to "Open Original",
+        "收藏快照在来源关闭、失效或删除后仍会保留" to
+            "Favorite snapshots remain after a source is disabled, unavailable, or removed",
+        "只发送无凭据 GET；拒绝重定向、本机及私有/保留 IP，响应上限 2 MiB。" to
+            "Uses credential-free GET only; redirects, localhost, and private/reserved IPs are rejected; responses are limited to 2 MiB.",
+        "天气、黄历和 DDL 来自第三方公开服务；已收藏日程会保存完整快照，来源关闭、失败或删除后仍会显示，直到取消收藏。" to
+            "Weather, almanac, and DDL data comes from public third-party services. Favorite schedules retain complete snapshots and remain visible until removed, even if a source is disabled, unavailable, or deleted.",
         "本地数据" to "Local Data",
         "清除本地数据" to "Clear Local Data",
         "关于本应用" to "About",
@@ -256,6 +279,7 @@ object UiText {
         "应用设置" to "App Settings",
         "语言" to "Language",
         "跟随系统" to "System",
+        "简体中文" to "Chinese",
         "更改语言后将立即重新加载界面。" to "The interface reloads immediately after changing the language.",
         "显示数据仅供参考，请以实际情况为准。" to "Displayed data is for reference only; rely on official information.",
         "设置已保存" to "Settings saved",
@@ -266,6 +290,8 @@ object UiText {
         "本地数据已清除" to "Local data cleared",
         "清除全部本地数据？" to "Clear all local data?",
         "将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。" to "This removes the saved account, password, personal schedule, classroom cache, and settings. This cannot be undone.",
+        "将删除保存的账号、密码、个人课表、空教室缓存、自定义日程地址、收藏和设置。此操作无法撤销。" to
+            "This removes the saved account, password, personal schedule, classroom cache, custom feed URL, favorites, and settings. This cannot be undone.",
         "确认清除" to "Clear",
         "系统日历导入失败。" to "System calendar import failed.",
         "密码已安全保存，留空保持不变" to "Password saved securely; leave blank to keep it",
@@ -287,14 +313,32 @@ object UiText {
         exactEnglish[source]?.let { return it }
         Regex("^(\\d+) 门课$").matchEntire(source)?.let { return "${it.groupValues[1]} courses" }
         Regex("^(\\d+) 门$").matchEntire(source)?.let { return "${it.groupValues[1]} courses" }
+        Regex("^收藏管理（(\\d+)）$").matchEntire(source)?.let {
+            return "Favorite Management (${it.groupValues[1]})"
+        }
+        Regex("^自定义日程已保存：(.+)，(\\d+) 项$").matchEntire(source)?.let {
+            return "Custom feed saved: ${it.groupValues[1]}, ${it.groupValues[2]} items"
+        }
+        Regex("^自定义来源：(.+)$").matchEntire(source)?.let {
+            return "Custom source: ${it.groupValues[1]}"
+        }
         Regex("^第 (.+) 节$").matchEntire(source)?.let { return "Period ${it.groupValues[1]}" }
         Regex("^第(.+)节$").matchEntire(source)?.let { return "Period ${it.groupValues[1]}" }
         Regex("^第 (.+)-(.+) 节$").matchEntire(source)?.let {
             return "Periods ${it.groupValues[1]}–${it.groupValues[2]}"
         }
         Regex("^(\\d+)\\n周$").matchEntire(source)?.let { return "W${it.groupValues[1]}" }
+        Regex("^教学\\n第(\\d+)周$").matchEntire(source)?.let {
+            return "Teaching\\nWeek ${it.groupValues[1]}"
+        }
+        Regex("^第(\\d+)教学周$").matchEntire(source)?.let {
+            return "Teaching Week ${it.groupValues[1]}"
+        }
         Regex("^(.+) 第(\\d+)周$").matchEntire(source)?.let {
             return "${resolve(context, it.groupValues[1])} · Week ${it.groupValues[2]}"
+        }
+        Regex("^(.+) 第(\\d+)教学周$").matchEntire(source)?.let {
+            return "${resolve(context, it.groupValues[1])} · Teaching Week ${it.groupValues[2]}"
         }
         Regex("^查看全部 (\\d+) 门课程$").matchEntire(source)?.let {
             return "View all ${it.groupValues[1]} courses"
@@ -381,11 +425,11 @@ object UiText {
         source.startsWith("密码仅通过 HTTPS 提交") ->
             "The password is sent only to auth.bupt.edu.cn over HTTPS. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. Browser cookies are not read, and tickets, cookies, tokens, and assignments are not written to disk; results may be reused in memory for up to 10 minutes."
         source.startsWith("课表、空教室、校区") ->
-            "Schedules, classroom data, campus, semester settings, and feature switches remain on the device. Supported course widgets read only the local schedule snapshot. Clearing local data removes credentials, caches, preferences, and app-managed reminders."
+            "Schedules, classroom data, campus, semester settings, switches, the custom feed URL, and up to 500 favorite snapshots remain on the device. Course widgets read only the local schedule. Clearing local data removes all of these items."
         source.startsWith("应用可能通过 unpkg") ->
             "The app may fetch a fixed holiday-calendar dataset from unpkg. Android may also read a system holiday calendar when permission already exists. Requests contain only CN and the year. iOS marks days off only from authoritative rest-day data."
         source.startsWith("UAPI 按校区行政区") ->
-            "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Contest DDL provides public events, while school notices are extracted by a server-side script from public pages on the university intranet. Each category has its own switch. Fixed APIs receive credential-free requests, reject redirects, and receive no personal data. Displayed data is for reference only."
+            "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Contest DDL and campus notices provide public events. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."
         source.startsWith("日历写入和本地课程通知") ->
             "Calendar writes and local course notifications require your action and permission. The app manages only events marked Where To Study. Course widgets are provided only on supported systems, and their data is not uploaded."
         source.startsWith("项目不运营应用后端") ->

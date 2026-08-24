@@ -61,13 +61,13 @@ test('desktop month and year cells render two distinct deadline border layers', 
   for (const selector of ['month-cell', 'mini-month-grid button']) {
     const selectorPattern = `\\.${selector}`
     assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-assignment\\s*\\{[^}]*var\\(--busy-border\\)`, 's'))
-    assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-inner-school-notice\\s*\\{[^}]*var\\(--gold-outline\\)`, 's'))
+    assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-inner-school-notice\\s*\\{[^}]*var\\(--school-notice-outline\\)`, 's'))
     assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-inner-public-deadline\\s*\\{[^}]*var\\(--other-deadline-outline\\)`, 's'))
   }
   const darkTokens = indexCss.slice(indexCss.indexOf('@media (prefers-color-scheme: dark)'))
-  assert.match(darkTokens, /--busy-border:\s*#75483b;/)
-  assert.match(darkTokens, /--gold-outline:\s*#c9a342;/)
-  assert.match(darkTokens, /--other-deadline-outline:\s*#af9ae9;/)
+  assert.match(darkTokens, /--busy-border:\s*#FFC14D;/)
+  assert.match(darkTokens, /--school-notice-outline:\s*#B7A8FF;/)
+  assert.match(darkTokens, /--other-deadline-outline:\s*#68D5E5;/)
 })
 
 test('desktop month geometry and typography mirror the native macOS grid', () => {
@@ -143,7 +143,7 @@ test('desktop settings expose matching deadline color dots and switch controls',
   assert.match(appSource, /summerCampDeadlinesEnabled[\s\S]*'public-deadline'/)
   assert.match(appSource, /hackathonDeadlinesEnabled[\s\S]*'public-deadline'/)
   assert.match(appCss, /\.settings-color-dot\.assignment\s*\{[^}]*var\(--busy-border\)/s)
-  assert.match(appCss, /\.settings-color-dot\.school-notice\s*\{[^}]*var\(--gold-outline\)/s)
+  assert.match(appCss, /\.settings-color-dot\.school-notice\s*\{[^}]*var\(--school-notice-outline\)/s)
   assert.match(appCss, /\.settings-color-dot\.public-deadline\s*\{[^}]*var\(--other-deadline-outline\)/s)
   assert.doesNotMatch(appSource, /type="checkbox"/)
   assert.match(

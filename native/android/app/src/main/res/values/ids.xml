@@ -25,6 +25,19 @@
     <item name="settings_about_section" type="id" />
     <item name="settings_language_section" type="id" />
     <item name="settings_language_selector" type="id" />
+    <item name="settings_campus_selector" type="id" />
+    <item name="settings_widget_course_limit_selector" type="id" />
+    <item name="settings_widget_preview_size_selector" type="id" />
+    <item name="settings_custom_deadlines_switch" type="id" />
+    <item name="settings_custom_deadlines_url" type="id" />
+    <item name="settings_custom_deadlines_save" type="id" />
+    <item name="settings_favorite_deadlines_button" type="id" />
+    <item name="favorite_deadlines_page" type="id" />
+    <item name="favorite_deadlines_back" type="id" />
+    <item name="favorite_deadlines_list" type="id" />
+    <item name="favorite_deadlines_empty" type="id" />
+    <item name="favorite_deadline_item_key" type="id" />
+    <item name="calendar_deadline_favorite" type="id" />
     <item name="settings_assignment_deadline_legend_row" type="id" />
     <item name="settings_assignment_deadline_legend_dot" type="id" />
     <item name="settings_competition_deadlines_switch" type="id" />
@@ -57,6 +70,7 @@
     <item name="calendar_all_day_strip" type="id" />
     <item name="calendar_day_week_agenda" type="id" />
     <item name="calendar_day_week_agenda_toggle" type="id" />
+    <item name="calendar_day_week_agenda_indicator" type="id" />
     <item name="calendar_day_week_agenda_content" type="id" />
     <item name="calendar_day_week_course_area" type="id" />
     <item name="calendar_timeline_scroll" type="id" />

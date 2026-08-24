@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Nemoyuzx/where_to_study/contracts/v1/custom-deadline-feed.schema.json",
+  "title": "Where To Study custom schedule feed v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "source", "items"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "$ref": "#/$defs/item"
+      }
+    }
+  },
+  "$defs": {
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "event_type", "primary_deadline"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "event_type": {
+          "enum": ["competition", "summer_camp", "hackathon", "custom"]
+        },
+        "primary_deadline": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "organizer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "official_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        }
+      }
+    }
+  }
+}

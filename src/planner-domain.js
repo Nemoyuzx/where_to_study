@@ -43,6 +43,8 @@ export const DEFAULT_SETTINGS = {
   schoolContestNoticesEnabled: true,
   summerCampDeadlinesEnabled: true,
   hackathonDeadlinesEnabled: true,
+  customDeadlinesEnabled: false,
+  customDeadlinesUrl: '',
 }
 
 export const CAMPUS_BUILDINGS = Object.freeze({
@@ -463,6 +465,12 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
     hackathonDeadlinesEnabled: Boolean(
       data.hackathon_deadlines_enabled ?? fallback.hackathonDeadlinesEnabled ?? true,
     ),
+    customDeadlinesEnabled: Boolean(
+      data.custom_deadlines_enabled ?? fallback.customDeadlinesEnabled ?? false,
+    ),
+    customDeadlinesUrl: String(
+      data.custom_deadlines_url ?? fallback.customDeadlinesUrl ?? '',
+    ).trim(),
   }
 }
 
@@ -495,7 +503,70 @@ export function settingsToPayload(settings) {
     school_contest_notices_enabled: Boolean(settings.schoolContestNoticesEnabled),
     summer_camp_deadlines_enabled: Boolean(settings.summerCampDeadlinesEnabled),
     hackathon_deadlines_enabled: Boolean(settings.hackathonDeadlinesEnabled),
+    custom_deadlines_enabled: Boolean(settings.customDeadlinesEnabled),
+    custom_deadlines_url: String(settings.customDeadlinesUrl || '').trim(),
   }
+}
+
+const FAVORITE_DEADLINE_TYPES = new Set(['competition', 'summer_camp', 'hackathon', 'custom'])
+const FAVORITE_DEADLINE_SOURCES = new Set(['contest_ddl', 'school_notice', 'custom'])
+
+export function favoriteDeadlineKey(item = {}) {
+  const sourceIdentity = item.source_type === 'custom'
+    ? (item.source_url || item.source_name || '')
+    : ''
+  return [item.source_type, sourceIdentity, item.id, item.primary_deadline]
+    .map((value) => String(value || ''))
+    .join('\u001f')
+}
+
+export function normalizeFavoriteDeadlines(value, maximum = 500) {
+  const source = Array.isArray(value) ? value : []
+  const seen = new Set()
+  const result = []
+  source.forEach((item) => {
+    if (!item || typeof item !== 'object' || result.length >= maximum) return
+    const normalized = {
+      id: String(item.id || '').trim(),
+      name: String(item.name || '').trim(),
+      event_type: String(item.event_type || '').trim(),
+      source_type: String(item.source_type || '').trim(),
+      primary_deadline: String(item.primary_deadline || '').trim(),
+      organizer: String(item.organizer || '').trim() || null,
+      official_url: String(item.official_url || '').trim() || null,
+      source_name: String(item.source_name || '').trim() || null,
+      source_url: String(item.source_url || '').trim() || null,
+    }
+    if (!normalized.id || normalized.id.length > 128
+      || !normalized.name || normalized.name.length > 200
+      || !FAVORITE_DEADLINE_TYPES.has(normalized.event_type)
+      || !FAVORITE_DEADLINE_SOURCES.has(normalized.source_type)
+      || !/^\d{4}-\d{2}-\d{2}T/.test(normalized.primary_deadline)) return
+    if (normalized.official_url
+      && (!normalized.official_url.startsWith('https://') || normalized.official_url.includes('@'))) {
+      normalized.official_url = null
+    }
+    if (normalized.source_name && normalized.source_name.length > 80) {
+      normalized.source_name = null
+    }
+    if (normalized.source_url
+      && (!normalized.source_url.startsWith('https://') || normalized.source_url.includes('@'))) {
+      normalized.source_url = null
+    }
+    const key = favoriteDeadlineKey(normalized)
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push(normalized)
+    }
+  })
+  return result.sort((left, right) => (
+    left.primary_deadline.localeCompare(right.primary_deadline)
+      || left.name.localeCompare(right.name)
+  ))
+}
+
+export function favoriteDeadlinesForDate(items, dateString) {
+  return normalizeFavoriteDeadlines(items).filter((item) => item.primary_deadline.startsWith(dateString))
 }
 
 export function requestBody(settings, extras = {}) {
@@ -567,7 +638,17 @@ export function getWeekState(courses, termStartDate, targetDate) {
   }
   const target = dateFromString(targetDate)
   const days = dateOrdinal(targetDate) - dateOrdinal(termStartDate)
-  const weekNumber = Math.max(0, Math.floor(days / 7) + 1)
+  const calculatedWeek = Math.max(0, Math.floor(days / 7) + 1)
+  const maximumTeachingWeek = courses.reduce((maximum, course) => {
+    const weeks = Array.isArray(course.week_numbers) ? course.week_numbers : []
+    return Math.max(
+      maximum,
+      ...weeks.filter((week) => Number.isInteger(week) && week > 0),
+    )
+  }, 0)
+  const weekNumber = calculatedWeek >= 1 && calculatedWeek <= maximumTeachingWeek
+    ? calculatedWeek
+    : 0
   const weekday = target.getDay() === 0 ? 7 : target.getDay()
   const dayCourses = courses
     .filter((course) => course.weekday === weekday

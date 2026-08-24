@@ -36,7 +36,8 @@ data class AlmanacInfo(
 enum class PublicDeadlineKind(val wireValue: String, val title: String) {
     COMPETITION("competition", "学科竞赛"),
     SUMMER_CAMP("summer_camp", "夏令营"),
-    HACKATHON("hackathon", "黑客松");
+    HACKATHON("hackathon", "黑客松"),
+    CUSTOM("custom", "自定义日程");
 
     companion object {
         fun fromWireValue(value: String): PublicDeadlineKind? =
@@ -47,6 +48,12 @@ enum class PublicDeadlineKind(val wireValue: String, val title: String) {
 enum class PublicDeadlineSource(val wireValue: String, val title: String) {
     CONTEST_DDL("contest_ddl", "Contest DDL"),
     SCHOOL_NOTICE("school_notice", "校内竞赛通知"),
+    CUSTOM("custom", "自定义日程");
+
+    companion object {
+        fun fromWireValue(value: String): PublicDeadlineSource? =
+            entries.firstOrNull { it.wireValue == value }
+    }
 }
 
 data class PublicDeadlineItem(
@@ -57,7 +64,13 @@ data class PublicDeadlineItem(
     val deadline: String,
     val organizer: String?,
     val officialURL: String?,
-)
+    val sourceName: String? = null,
+    val sourceHomepage: String? = null,
+) {
+    val favoriteID: String
+        get() = listOf(source.wireValue, sourceName.orEmpty(), id, deadline)
+            .joinToString("\u001f")
+}
 
 data class PublicDeadlineSnapshot(
     val date: String,
@@ -264,13 +277,7 @@ internal object PublicDeadlineResponseParser {
         val unique = linkedMapOf<String, PublicDeadlineItem>()
         groups.forEach { group ->
             group.forEach { item ->
-                val key = listOf(
-                    item.source.wireValue,
-                    item.kind.wireValue,
-                    item.name.trim().lowercase(),
-                    item.deadline,
-                ).joinToString("\u001f")
-                unique.putIfAbsent(key, item)
+                unique.putIfAbsent(item.favoriteID, item)
             }
         }
         return unique.values
@@ -368,6 +375,9 @@ class CalendarDailyInfoClient internal constructor(
         PublicDeadlineResponseParser::parseIndex,
     private val parseSchoolIndex: (String) -> Map<String, List<PublicDeadlineItem>> =
         PublicDeadlineResponseParser::parseSchoolNoticesIndex,
+    private val fetchCustomJson: (URI, Int) -> String = CustomDeadlineFeedTransport::fetch,
+    private val parseCustomFeed: (String, String) -> ParsedCustomDeadlineFeed =
+        CustomDeadlineFeedParser::parse,
 ) {
     private data class DeadlineFeed(
         val contestItemsByDate: Map<String, List<PublicDeadlineItem>>?,
@@ -379,8 +389,16 @@ class CalendarDailyInfoClient internal constructor(
         val fetchedAtMillis: Long,
     )
 
+    private data class CustomFeedCacheEntry(
+        val sourceURL: String,
+        val feed: ParsedCustomDeadlineFeed,
+        val fetchedAtMillis: Long,
+    )
+
     @Volatile
     private var cachedDeadlineFeed: DeadlineFeed? = null
+    @Volatile
+    private var cachedCustomFeed: CustomFeedCacheEntry? = null
 
     fun fetchAlmanac(date: String): AlmanacInfo {
         val target = requireContractDate(date, "黄历")
@@ -411,10 +429,17 @@ class CalendarDailyInfoClient internal constructor(
     fun fetchDeadlines(
         date: String,
         forceRemote: Boolean = false,
+        includeBuiltIn: Boolean = true,
+        customSourceURL: String? = null,
     ): PublicDeadlineSnapshot {
         requireContractDate(date, "DDL")
-        val feed = deadlineFeed(forceRemote, refreshStaleCache = false)
-        return snapshotFromFeed(date, feed)
+        return combinedDeadlineSnapshot(
+            date = date,
+            forceRemote = forceRemote,
+            refreshStaleBuiltInCache = false,
+            includeBuiltIn = includeBuiltIn,
+            customSourceURL = customSourceURL,
+        )
     }
 
     /**
@@ -426,10 +451,129 @@ class CalendarDailyInfoClient internal constructor(
     fun prewarmDeadlines(
         date: String,
         forceRemote: Boolean = false,
+        includeBuiltIn: Boolean = true,
+        customSourceURL: String? = null,
     ): PublicDeadlineSnapshot {
         requireContractDate(date, "DDL")
-        val feed = deadlineFeed(forceRemote, refreshStaleCache = true)
-        return snapshotFromFeed(date, feed)
+        return combinedDeadlineSnapshot(
+            date = date,
+            forceRemote = forceRemote,
+            refreshStaleBuiltInCache = true,
+            includeBuiltIn = includeBuiltIn,
+            customSourceURL = customSourceURL,
+        )
+    }
+
+    fun validateCustomFeed(sourceURL: String): CustomDeadlineFeedMetadata =
+        customDeadlineFeed(
+            sourceURL,
+            forceRemote = false,
+            refreshStaleCache = true,
+        ).metadata
+
+    fun fetchCustomDeadlines(
+        dates: List<String>,
+        sourceURL: String,
+        forceRemote: Boolean = false,
+    ): Map<String, PublicDeadlineSnapshot> {
+        val normalizedDates = dates.distinct().sorted()
+        if (normalizedDates.size > CustomDeadlineFeedParser.maximumCalendarRangeDays ||
+            normalizedDates.any { date ->
+                runCatching { requireContractDate(date, "自定义日程") }.isFailure
+            }
+        ) {
+            throw DailyInfoClientException("自定义日程查询范围不正确或超过 370 天。")
+        }
+        val feed = customDeadlineFeed(
+            sourceURL,
+            forceRemote,
+            refreshStaleCache = true,
+        )
+        return normalizedDates.associateWith { date ->
+            PublicDeadlineSnapshot(
+                date = date,
+                items = feed.itemsByDate[date].orEmpty(),
+                source = feed.sourceURL,
+                usedBackup = false,
+            )
+        }
+    }
+
+    private fun combinedDeadlineSnapshot(
+        date: String,
+        forceRemote: Boolean,
+        refreshStaleBuiltInCache: Boolean,
+        includeBuiltIn: Boolean,
+        customSourceURL: String?,
+    ): PublicDeadlineSnapshot {
+        val normalizedCustomURL = customSourceURL?.trim()?.takeIf(String::isNotEmpty)
+        val builtInResult: Result<PublicDeadlineSnapshot?> = if (includeBuiltIn) {
+            runCatching {
+                snapshotFromFeed(
+                    date,
+                    deadlineFeed(forceRemote, refreshStaleBuiltInCache),
+                )
+            }
+        } else {
+            Result.success(null)
+        }
+        val customResult: Result<ParsedCustomDeadlineFeed?> = if (normalizedCustomURL != null) {
+            runCatching {
+                customDeadlineFeed(
+                    normalizedCustomURL,
+                    forceRemote,
+                    refreshStaleCache = refreshStaleBuiltInCache,
+                )
+            }
+        } else {
+            Result.success(null)
+        }
+        if (includeBuiltIn && builtInResult.isFailure &&
+            normalizedCustomURL != null && customResult.isFailure
+        ) {
+            throw DailyInfoClientException(
+                "内置 DDL 不可用（${builtInResult.exceptionOrNull()?.message}）；" +
+                    "自定义日程也不可用（${customResult.exceptionOrNull()?.message}）。",
+                customResult.exceptionOrNull(),
+            )
+        }
+        if (includeBuiltIn && builtInResult.isFailure && normalizedCustomURL == null) {
+            throw builtInResult.exceptionOrNull() ?: DailyInfoClientException("DDL 获取失败。")
+        }
+        if (!includeBuiltIn && normalizedCustomURL != null && customResult.isFailure) {
+            throw customResult.exceptionOrNull() ?: DailyInfoClientException("自定义日程获取失败。")
+        }
+        val builtIn = builtInResult.getOrNull()
+        val custom = customResult.getOrNull()
+        return PublicDeadlineSnapshot(
+            date = date,
+            items = PublicDeadlineResponseParser.merge(
+                builtIn?.items.orEmpty(),
+                custom?.itemsByDate?.get(date).orEmpty(),
+            ),
+            source = builtIn?.source ?: custom?.sourceURL.orEmpty(),
+            usedBackup = builtIn?.usedBackup == true,
+        )
+    }
+
+    @Synchronized
+    private fun customDeadlineFeed(
+        sourceURL: String,
+        forceRemote: Boolean,
+        refreshStaleCache: Boolean,
+    ): ParsedCustomDeadlineFeed {
+        val uri = CustomDeadlineFeedURLValidator.validatedURI(sourceURL)
+        val normalizedURL = uri.toString()
+        val nowMillis = elapsedRealtimeMillis()
+        cachedCustomFeed?.takeIf { entry ->
+            !forceRemote && entry.sourceURL == normalizedURL &&
+                (!refreshStaleCache ||
+                    nowMillis - entry.fetchedAtMillis in 0 until CUSTOM_FEED_CACHE_MILLIS)
+        }?.let { return it.feed }
+        val payload = fetchCustomJson(uri, CalendarDailyInfoSources.deadlinePayloadLimit)
+        val feed = parseCustomFeed(payload, normalizedURL)
+        cachedCustomFeed = CustomFeedCacheEntry(normalizedURL, feed, nowMillis)
+        return feed
     }
 
     private fun snapshotFromFeed(
@@ -535,6 +679,7 @@ class CalendarDailyInfoClient internal constructor(
 
     private companion object {
         const val DEADLINE_FEED_CACHE_MILLIS = 5 * 60 * 1_000L
+        const val CUSTOM_FEED_CACHE_MILLIS = 5 * 60 * 1_000L
     }
 }
 
@@ -592,6 +737,7 @@ private object FixedPublicJsonTransport {
 internal class CalendarDailyInfoRepository(
     private val client: CalendarDailyInfoClient = CalendarDailyInfoClient(),
     private val assignmentClient: UCloudAssignmentClient? = null,
+    private val preferences: AppPreferences? = null,
     private val usesSampleData: Boolean = DailyCourseNotificationRuntimeMode.isUiTesting,
 ) {
     private val worker = Executors.newFixedThreadPool(2)
@@ -613,7 +759,22 @@ internal class CalendarDailyInfoRepository(
     fun almanac(date: String): AlmanacInfo? = almanacByDate[date]
     fun almanacError(date: String): String? = almanacErrors[date]
     fun isLoadingAlmanac(date: String): Boolean = date in loadingAlmanac
-    fun deadlines(date: String): PublicDeadlineSnapshot? = deadlinesByDate[date]
+    fun deadlines(date: String): PublicDeadlineSnapshot? {
+        val live = deadlinesByDate[date]
+        val favorites = preferences?.favoriteDeadlineItems(date).orEmpty()
+        if (live == null && favorites.isEmpty()) return null
+        val unique = linkedMapOf<String, PublicDeadlineItem>()
+        live?.items.orEmpty().forEach { unique[it.favoriteID] = it }
+        favorites.forEach { unique[it.favoriteID] = it }
+        return PublicDeadlineSnapshot(
+            date = date,
+            items = unique.values.sortedWith(
+                compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name),
+            ),
+            source = live?.source.orEmpty(),
+            usedBackup = live?.usedBackup == true,
+        )
+    }
     fun deadlineError(date: String): String? = deadlineErrors[date]
     fun isLoadingDeadlines(date: String): Boolean = date in loadingDeadlines
     fun assignments(date: String): List<AssignmentDeadlineItem>? = assignmentsByDate[date]
@@ -660,7 +821,12 @@ internal class CalendarDailyInfoRepository(
                     if (usesSampleData) {
                         sampleDeadlines(date)
                     } else {
-                        client.fetchDeadlines(date, forceRemote = force)
+                        client.fetchDeadlines(
+                            date = date,
+                            forceRemote = force,
+                            includeBuiltIn = preferences?.hasEnabledBuiltInPublicDeadlines != false,
+                            customSourceURL = preferences?.enabledCustomDeadlineURL,
+                        )
                     }
                 }.onSuccess { deadlinesByDate[date] = it }
                     .onFailure { deadlineErrors[date] = it.message ?: "DDL 获取失败。" }
@@ -687,7 +853,25 @@ internal class CalendarDailyInfoRepository(
                     if (usesSampleData) {
                         sampleDeadlines(date)
                     } else {
-                        client.prewarmDeadlines(date, forceRemote = force)
+                        val includeBuiltIn = preferences?.hasEnabledBuiltInPublicDeadlines != false
+                        val customSourceURL = preferences?.enabledCustomDeadlineURL
+                        val selectedSnapshot = client.prewarmDeadlines(
+                            date = date,
+                            forceRemote = force,
+                            includeBuiltIn = includeBuiltIn,
+                            customSourceURL = customSourceURL,
+                        )
+                        deadlinesByDate[date] = selectedSnapshot
+                        calendarYearDateKeys(date).forEach { yearDate ->
+                            if (yearDate != date && !closed.get()) {
+                                deadlinesByDate[yearDate] = client.fetchDeadlines(
+                                    date = yearDate,
+                                    includeBuiltIn = includeBuiltIn,
+                                    customSourceURL = customSourceURL,
+                                )
+                            }
+                        }
+                        selectedSnapshot
                     }
                 }.onSuccess {
                     deadlinesByDate[date] = it
@@ -846,7 +1030,61 @@ internal class CalendarDailyInfoRepository(
     }
 
     private fun deadlineSnapshotForMarkerDate(date: String): PublicDeadlineSnapshot =
-        if (usesSampleData) sampleDeadlines(date) else client.fetchDeadlines(date)
+        if (usesSampleData) {
+            sampleDeadlines(date)
+        } else {
+            client.fetchDeadlines(
+                date = date,
+                includeBuiltIn = preferences?.hasEnabledBuiltInPublicDeadlines != false,
+                customSourceURL = preferences?.enabledCustomDeadlineURL,
+            )
+        }
+
+    private fun calendarYearDateKeys(date: String): List<String> {
+        val selected = requireContractDate(date, "DDL")
+        val year = selected.get(Calendar.YEAR)
+        val cursor = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
+            set(year, Calendar.JANUARY, 1, 12, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+            timeZone = cursor.timeZone
+        }
+        return buildList {
+            while (cursor.get(Calendar.YEAR) == year) {
+                add(formatter.format(cursor.time))
+                cursor.add(Calendar.DAY_OF_MONTH, 1)
+            }
+        }
+    }
+
+    fun validateCustomFeed(
+        sourceURL: String,
+        onComplete: (Result<CustomDeadlineFeedMetadata>) -> Unit,
+    ) {
+        if (closed.get()) return
+        try {
+            worker.execute {
+                val result = runCatching { client.validateCustomFeed(sourceURL) }
+                if (!closed.get()) mainHandler.post {
+                    if (!closed.get()) onComplete(result)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            mainHandler.post {
+                if (!closed.get()) {
+                    onComplete(Result.failure(DailyInfoClientException("自定义日程校验已中断。")))
+                }
+            }
+        }
+    }
+
+    fun reloadDeadlineSettings(onComplete: () -> Unit = {}) {
+        deadlinesByDate.clear()
+        deadlineErrors.clear()
+        loadingDeadlines.clear()
+        prewarmDeadlines(force = true, onComplete = onComplete)
+    }
 
     fun clearAssignments() {
         assignmentRevision.incrementAndGet()
