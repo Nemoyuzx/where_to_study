@@ -83,8 +83,8 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Distribution、Mac Installer Distribution 证书与 macOS 发布描述文件；iOS 主应用和 Widget 使用 Xcode 自动签名完成正式归档。证书私钥和团队标识不写入仓库。
-- macOS 与 iOS `0.2.4 (65)` 已完成本地 Xcode 严格编译、逻辑/UI 回归、正式签名归档和上传；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
-- 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。`0.2.4` 的 iOS 与 macOS 均使用 Build 65。
+- macOS 与 iOS `0.2.5 (66)` 已完成本地 Xcode 严格编译、逻辑/UI 回归、正式签名归档和上传；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
+- 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。`0.2.5` 的 iOS 与 macOS 均使用 Build 66。
 - 13 英寸 iPad 横屏四张 0.2.2 效果图已由专项 Xcode UI 测试生成并写入 `screenshot-manifest.md`；Build 25 素材只保留作历史校验。正式提交仍需按 `screenshot-plan.md` 补齐产品页所需的 iPhone 与 macOS 最新截图。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
 

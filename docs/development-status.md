@@ -96,6 +96,7 @@
 | Rust/Tauri | `cargo fmt --check`、严格 Clippy 与 125/125 自动测试通过；1 项依赖本机安全存储和北邮在线服务的真实作业同步测试按设计忽略 |
 | macOS SwiftUI | 本地 Xcode 严格 Swift 6 与警告即错误构建通过；178/178 XCTest 通过；键盘栏目/视图/翻页/Today/Esc 契约覆盖 |
 | iOS SwiftUI | 本地 Xcode 183/183 XCTest 通过；21 个 UI 定义中 3 个仅 iPad 条件跳过，其余 18 个唯一路径全部验证通过。键盘完成按钮在全量回归发现问题后改为稳定的账户卡内按钮，聚焦重跑 1/1 通过 |
+| TestFlight | iOS 与 macOS `0.2.5 (66)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未再打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.5 (38)` 的 170/170 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Android 16 模拟器收藏、自定义预热、英文、设置与跨月动画 7/7 通过 |
 | HarmonyOS | `0.2.5 (1002005)` HAP 构建与 94/94 ArkTS 单元测试通过；自定义 v1 严格校验、single-flight、当前年预热、周期刷新、收藏来源快照、全天弹窗星标和分段设置控件均通过编译。当前 `hdc` 无真机目标 |
 | 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、2 MiB/5000 项/100 项每日/370 天限制、5 分钟刷新、完整本地收藏快照及中英双语隐私说明通过 |
