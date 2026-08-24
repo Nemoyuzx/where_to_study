@@ -15,6 +15,12 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
 }
 
 enum CalendarDeadlinePresentation {
+    private static let deadlinePriority: [CalendarAllDayEventKind] = [
+        .assignment,
+        .schoolNotice,
+        .publicDeadline,
+    ]
+
     static func isVisible(
         _ item: PublicDeadlineItem,
         competitionEnabled: Bool,
@@ -33,10 +39,17 @@ enum CalendarDeadlinePresentation {
     static func preferredDeadlineKind(
         in events: [CalendarAllDayEvent]
     ) -> CalendarAllDayEventKind? {
-        if events.contains(where: { $0.kind == .assignment }) { return .assignment }
-        if events.contains(where: { $0.kind == .schoolNotice }) { return .schoolNotice }
-        if events.contains(where: { $0.kind == .publicDeadline }) { return .publicDeadline }
-        return nil
+        topTwoDeadlineKinds(in: events).first
+    }
+
+    static func topTwoDeadlineKinds(
+        in events: [CalendarAllDayEvent]
+    ) -> [CalendarAllDayEventKind] {
+        Array(
+            deadlinePriority
+                .filter { kind in events.contains(where: { $0.kind == kind }) }
+                .prefix(2)
+        )
     }
 
     static func showsSecondaryTodayIndicator(

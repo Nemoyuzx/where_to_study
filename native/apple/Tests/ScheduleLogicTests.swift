@@ -767,17 +767,33 @@ final class ScheduleLogicTests: XCTestCase {
         )
 
         XCTAssertNil(CalendarDeadlinePresentation.preferredDeadlineKind(in: [holiday]))
+        XCTAssertEqual(CalendarDeadlinePresentation.topTwoDeadlineKinds(in: [holiday]), [])
         XCTAssertEqual(
             CalendarDeadlinePresentation.preferredDeadlineKind(in: [holiday, publicDDL]),
             .publicDeadline
+        )
+        XCTAssertEqual(
+            CalendarDeadlinePresentation.topTwoDeadlineKinds(in: [holiday, publicDDL]),
+            [.publicDeadline]
         )
         XCTAssertEqual(
             CalendarDeadlinePresentation.preferredDeadlineKind(in: [publicDDL, school]),
             .schoolNotice
         )
         XCTAssertEqual(
+            CalendarDeadlinePresentation.topTwoDeadlineKinds(in: [publicDDL, school]),
+            [.schoolNotice, .publicDeadline]
+        )
+        XCTAssertEqual(
             CalendarDeadlinePresentation.preferredDeadlineKind(in: [school, assignment, publicDDL]),
             .assignment
+        )
+        XCTAssertEqual(
+            CalendarDeadlinePresentation.topTwoDeadlineKinds(
+                in: [publicDDL, assignment, school, assignment, publicDDL]
+            ),
+            [.assignment, .schoolNotice],
+            "Three categories must render only the two highest-priority distinct borders"
         )
         XCTAssertTrue(CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
             isToday: true,

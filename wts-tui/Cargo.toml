@@ -1,6 +1,6 @@
 [package]
 name = "where-to-study-tui"
-version = "0.2.3"
+version = "0.2.4"
 description = "Where To Study 可视化终端客户端（TUI）"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"

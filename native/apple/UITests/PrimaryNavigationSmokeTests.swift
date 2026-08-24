@@ -270,7 +270,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             }
             XCTAssertTrue(yearDay.waitForExistence(timeout: 3))
             XCTAssertTrue(yearDay.isHittable)
-            XCTAssertEqual(yearDay.value as? String, "assignment")
+            XCTAssertEqual(yearDay.value as? String, "assignment,schoolNotice")
             yearDay.tap()
 
             XCTAssertTrue(app.staticTexts["课程作业 DDL"].waitForExistence(timeout: 5))
@@ -322,7 +322,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             "calendar.mobile.month-day-cell.\(currentShanghaiDateString())"
         ].firstMatch
         XCTAssertTrue(markedMonthDay.waitForExistence(timeout: 5))
-        XCTAssertEqual(markedMonthDay.value as? String, "assignment")
+        XCTAssertEqual(markedMonthDay.value as? String, "assignment,schoolNotice")
         let monthOverflow = app.buttons.matching(
             NSPredicate(format: "label CONTAINS '查看其余'")
         ).firstMatch
@@ -356,7 +356,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(yearDay.waitForExistence(timeout: 5))
-        XCTAssertEqual(yearDay.value as? String, "assignment")
+        XCTAssertEqual(yearDay.value as? String, "assignment,schoolNotice")
         XCTAssertTrue(yearDay.label.contains("今天"))
         yearDay.tap()
 

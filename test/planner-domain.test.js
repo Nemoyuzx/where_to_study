@@ -6,11 +6,14 @@ import {
   dateFromString,
   deadlinePreheatPlan,
   calendarMonthExpansion,
+  calendarDeadlineBorderKinds,
   calendarDeadlineBorderPriority,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
+  calendarWeekOfYear,
   calendarSwipeDirection,
   DEFAULT_SETTINGS,
+  desktopMonthGridMetrics,
   expandedMonthGridMetrics,
   FALLBACK_SLOTS,
   fallbackHolidayItems,
@@ -103,6 +106,35 @@ test('expanded month cells reserve the last row for a hidden-entry count', () =>
   })
 })
 
+test('desktop month layout follows native macOS remaining-height metrics', () => {
+  assert.deepEqual(desktopMonthGridMetrics(900), {
+    weekdayHeight: 30,
+    cellHeight: 145,
+    height: 900,
+    maximumEventRows: 4,
+  })
+  assert.deepEqual(desktopMonthGridMetrics(600), {
+    weekdayHeight: 30,
+    cellHeight: 95,
+    height: 600,
+    maximumEventRows: 3,
+  })
+  assert.deepEqual(desktopMonthGridMetrics(400), {
+    weekdayHeight: 30,
+    cellHeight: 70,
+    height: 520,
+    maximumEventRows: 2,
+  })
+})
+
+test('desktop Monday week labels match the native Gregorian calendar', () => {
+  assert.equal(calendarWeekOfYear('2026-01-01'), 1)
+  assert.equal(calendarWeekOfYear('2026-08-24'), 35)
+  assert.equal(calendarWeekOfYear('2026-12-27'), 52)
+  assert.equal(calendarWeekOfYear('2026-12-28'), 1)
+  assert.equal(calendarWeekOfYear('invalid'), 0)
+})
+
 test('year deadline borders use assignment then school then public priority', () => {
   const publicDeadline = { type: 'public-deadline' }
   const schoolNotice = { type: 'school-notice' }
@@ -118,6 +150,28 @@ test('year deadline borders use assignment then school then public priority', ()
     calendarDeadlineBorderPriority([schoolNotice, publicDeadline, assignment]),
     'assignment',
   )
+})
+
+test('calendar deadline borders keep the two highest distinct deadline kinds', () => {
+  const publicDeadline = { type: 'public-deadline' }
+  const schoolNotice = { type: 'school-notice' }
+  const assignment = { type: 'assignment' }
+
+  assert.deepEqual(calendarDeadlineBorderKinds([]), [])
+  assert.deepEqual(calendarDeadlineBorderKinds([publicDeadline]), ['public-deadline'])
+  assert.deepEqual(
+    calendarDeadlineBorderKinds([publicDeadline, publicDeadline, schoolNotice]),
+    ['school-notice', 'public-deadline'],
+  )
+  assert.deepEqual(
+    calendarDeadlineBorderKinds([publicDeadline, assignment, schoolNotice]),
+    ['assignment', 'school-notice'],
+  )
+  assert.deepEqual(
+    calendarDeadlineBorderKinds([publicDeadline, assignment, schoolNotice], 3),
+    ['assignment', 'school-notice', 'public-deadline'],
+  )
+  assert.deepEqual(calendarDeadlineBorderKinds([assignment], 0), [])
 })
 
 test('expanded month grid caps web rows at the native mobile height', () => {

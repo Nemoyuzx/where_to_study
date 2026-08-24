@@ -5183,7 +5183,7 @@ dependencies = [
 
 [[package]]
 name = "where_to_study"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "android-native-keyring-store",
  "chrono",

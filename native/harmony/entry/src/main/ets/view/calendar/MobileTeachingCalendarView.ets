@@ -1196,59 +1196,56 @@ export struct MobileTeachingCalendarView {
 
   @Builder
   monthDayButton(day: DateParts, rowIndex: number, renderDate: DateParts, interactive: boolean) {
-    Column({ space: 0 }) {
-      Row({ space: 3 }) {
-        Text(day.day.toString())
-          .fontSize(15)
-          .fontWeight(day.equals(renderDate) ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.monthForeground(day, renderDate))
-        if (this.showsTodayDeadlineDot(day)) {
-          Column()
-            .width(5)
-            .height(5)
-            .borderRadius(2.5)
-            .backgroundColor(AppTheme.nowIndicator())
+    Stack({ alignContent: Alignment.Center }) {
+      Column({ space: 0 }) {
+        Row({ space: 3 }) {
+          Text(day.day.toString())
+            .fontSize(15)
+            .fontWeight(day.equals(renderDate) ? FontWeight.Bold : FontWeight.Medium)
+            .fontColor(this.monthForeground(day, renderDate))
+          if (TeachingCalendarLogic.showsTodayMarker(day.equals(StrictDates.todayParts()))) {
+            Column()
+              .width(5)
+              .height(5)
+              .borderRadius(2.5)
+              .backgroundColor(AppTheme.nowIndicator())
+          }
+        }
+        .width('100%')
+        .height(24)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+        if (this.monthExpansionProgress() > 0.01) {
+          this.expandedMonthEvents(day, renderDate, interactive)
+        }
+        if (this.monthExpansionProgress() < 0.99) {
+          Text(this.compactMonthMarker(day))
+            .fontSize(9.5)
+            .fontColor(this.monthForeground(day, renderDate))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Center)
+            .width('100%')
+            .height(TeachingCalendarLogic.interpolateMonthMetric(12, 0,
+              this.monthExpansionProgress()))
+            .opacity(1 - this.monthExpansionProgress())
         }
       }
+      .padding({
+        left: TeachingCalendarLogic.interpolateMonthMetric(4, 3, this.monthExpansionProgress()),
+        right: TeachingCalendarLogic.interpolateMonthMetric(4, 3, this.monthExpansionProgress()),
+        top: 5,
+        bottom: TeachingCalendarLogic.interpolateMonthMetric(5, 2, this.monthExpansionProgress())
+      })
       .width('100%')
-      .height(24)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      if (this.monthExpansionProgress() > 0.01) {
-        this.expandedMonthEvents(day, renderDate, interactive)
-      }
-      if (this.monthExpansionProgress() < 0.99) {
-        Text(this.compactMonthMarker(day))
-          .fontSize(9.5)
-          .fontColor(this.monthForeground(day, renderDate))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .height(TeachingCalendarLogic.interpolateMonthMetric(12, 0,
-            this.monthExpansionProgress()))
-          .opacity(1 - this.monthExpansionProgress())
-      }
+      .height('100%')
+      .justifyContent(this.monthExpansionProgress() > 0.01 ? FlexAlign.Start : FlexAlign.Center)
+      this.deadlineBorderLayers(day, 10, 7, 6)
     }
-    .padding({
-      left: TeachingCalendarLogic.interpolateMonthMetric(4, 3, this.monthExpansionProgress()),
-      right: TeachingCalendarLogic.interpolateMonthMetric(4, 3, this.monthExpansionProgress()),
-      top: 5,
-      bottom: TeachingCalendarLogic.interpolateMonthMetric(5, 2, this.monthExpansionProgress())
-    })
     .layoutWeight(1)
     .height(this.monthRowHeight(rowIndex, renderDate))
-    .justifyContent(this.monthExpansionProgress() > 0.01 ? FlexAlign.Start : FlexAlign.Center)
     .backgroundColor(this.monthBackground(day, renderDate))
     .borderRadius(10)
-    .border({
-      width: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ||
-        day.equals(StrictDates.todayParts()) ? 2 : 0,
-      color: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ?
-        this.yearDeadlineBorderColor(this.yearDeadlinePriority(day)) :
-        (day.equals(StrictDates.todayParts()) ?
-          AppTheme.nowIndicator() : Color.Transparent)
-    })
     .clip(true)
     .onClick(() => {
       if (!interactive) {
@@ -1538,48 +1535,46 @@ export struct MobileTeachingCalendarView {
   @Builder
   yearDayButton(day: DateParts, month: number, interactive: boolean) {
     if (day.month === month) {
-      Row({ space: 2 }) {
-        Text(day.day.toString())
-          .fontSize(8)
-          .fontColor(day.equals(this.selectedDate()) ?
-            AppTheme.onPrimary() : AppTheme.text())
-        if (this.showsTodayDeadlineDot(day)) {
-          Column()
-            .width(4)
-            .height(4)
-            .borderRadius(2)
-            .backgroundColor(AppTheme.nowIndicator())
+      Stack({ alignContent: Alignment.Center }) {
+        Row({ space: 2 }) {
+          Text(day.day.toString())
+            .fontSize(8)
+            .fontColor(day.equals(this.selectedDate()) ?
+              AppTheme.onPrimary() : AppTheme.text())
+          if (TeachingCalendarLogic.showsTodayMarker(day.equals(StrictDates.todayParts()))) {
+            Column()
+              .width(4)
+              .height(4)
+              .borderRadius(2)
+              .backgroundColor(AppTheme.nowIndicator())
+          }
         }
-      }
         .width('100%')
-        .height(26)
+        .height('100%')
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
-        .borderRadius(4)
-        .backgroundColor(day.equals(this.selectedDate()) ?
-          AppTheme.selectedDate() : CalendarColors.primaryWithAlpha(
-            TeachingCalendarLogic.yearCourseOpacity(this.markerCount(day)), this.isDarkMode))
-        .border({
-          width: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ||
-            day.equals(StrictDates.todayParts()) ? 2 : 0,
-          color: this.yearDeadlinePriority(day) !== CalendarYearDeadlinePriority.none ?
-            this.yearDeadlineBorderColor(this.yearDeadlinePriority(day)) :
-            (day.equals(StrictDates.todayParts()) ?
-              AppTheme.nowIndicator() : Color.Transparent)
-        })
-        .onClick((event: ClickEvent) => {
-          if (!interactive) {
-            return;
-          }
-          this.performCalendarHaptic();
-          this.setSelectedDate(day);
-          this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(day));
-          this.presentedDayAnchorX = Number(event.target.area.globalPosition.x) - this.rootGlobalX +
-            Number(event.target.area.width) / 2;
-          this.presentedDayAnchorY = Number(event.target.area.globalPosition.y) - this.rootGlobalY +
-            Number(event.target.area.height) / 2;
-          this.presentedDay = day;
-        })
+        this.deadlineBorderLayers(day, 4, 2, 4)
+      }
+      .width('100%')
+      .height(26)
+      .borderRadius(4)
+      .backgroundColor(day.equals(this.selectedDate()) ?
+        AppTheme.selectedDate() : CalendarColors.primaryWithAlpha(
+          TeachingCalendarLogic.yearCourseOpacity(this.markerCount(day)), this.isDarkMode))
+      .clip(true)
+      .onClick((event: ClickEvent) => {
+        if (!interactive) {
+          return;
+        }
+        this.performCalendarHaptic();
+        this.setSelectedDate(day);
+        this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(day));
+        this.presentedDayAnchorX = Number(event.target.area.globalPosition.x) - this.rootGlobalX +
+          Number(event.target.area.width) / 2;
+        this.presentedDayAnchorY = Number(event.target.area.globalPosition.y) - this.rootGlobalY +
+          Number(event.target.area.height) / 2;
+        this.presentedDay = day;
+      })
     } else {
       Column()
         .width('100%')
@@ -1587,7 +1582,7 @@ export struct MobileTeachingCalendarView {
     }
   }
 
-  private yearDeadlinePriority(day: DateParts): CalendarYearDeadlinePriority {
+  private yearDeadlinePriorities(day: DateParts): CalendarYearDeadlinePriority[] {
     const date: string = StrictDates.formatDateParts(day);
     const assignmentCount: number = (this.model.assignmentDeadlinesByDate.get(date) ?? []).length;
     let schoolCount: number = 0;
@@ -1605,13 +1600,30 @@ export struct MobileTeachingCalendarView {
         }
       }
     }
-    return TeachingCalendarLogic.yearDeadlinePriority(
+    return TeachingCalendarLogic.yearDeadlineBorderLayers(
       assignmentCount, schoolCount, otherCount);
   }
 
-  private showsTodayDeadlineDot(day: DateParts): boolean {
-    return TeachingCalendarLogic.showsTodayDeadlineDot(
-      day.equals(StrictDates.todayParts()), this.yearDeadlinePriority(day));
+  @Builder
+  deadlineBorderLayers(day: DateParts, outerRadius: number, innerRadius: number,
+    innerInset: number) {
+    ForEach(this.yearDeadlinePriorities(day),
+      (priority: CalendarYearDeadlinePriority, index: number) => {
+      Column()
+        .width(index === 0 ? '100%' : this.deadlineInnerSize(innerInset))
+        .height(index === 0 ? '100%' : this.deadlineInnerSize(innerInset))
+        .border({
+          width: index === 0 ? 1.5 : 1,
+          color: this.yearDeadlineBorderColor(priority)
+        })
+        .borderRadius(index === 0 ? outerRadius : innerRadius)
+        .hitTestBehavior(HitTestMode.None)
+      }, (priority: CalendarYearDeadlinePriority, index: number) =>
+        priority + '.' + index.toString())
+  }
+
+  private deadlineInnerSize(innerInset: number): string {
+    return 'calc(100% - ' + innerInset.toString() + 'vp)';
   }
 
   private yearDeadlineBorderColor(priority: CalendarYearDeadlinePriority): ResourceColor {

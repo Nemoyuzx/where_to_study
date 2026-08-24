@@ -20,7 +20,7 @@ data class YearCalendarDay(
     val date: Calendar,
     val courseCount: Int,
     val holidays: List<HolidayItem>,
-    val supplementaryKind: YearCalendarSupplementaryKind? = null,
+    val supplementaryKinds: List<YearCalendarSupplementaryKind> = emptyList(),
 )
 
 enum class YearCalendarSupplementaryKind {
@@ -31,6 +31,14 @@ enum class YearCalendarSupplementaryKind {
 
 object YearCalendarLogic {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
+
+    fun supplementaryOuterBorderWidthDp(): Float = 1.2f
+
+    fun supplementaryInnerBorderWidthDp(): Float = 0.8f
+
+    fun supplementaryInnerBorderInsetDp(): Float = 2.6f
+
+    fun todayBorderWidthDp(): Float = 1.2f
 
     fun columns(screenWidthDp: Int): Int = when {
         screenWidthDp >= 1100 -> 4
@@ -49,16 +57,41 @@ object YearCalendarLogic {
         return candidate.takeIf { it in 1..first.getActualMaximum(Calendar.DAY_OF_MONTH) }
     }
 
+    /**
+     * Keeps the calendar border order independent from network response order.
+     * All kinds remain available to the cell content; only [borderKinds] limits
+     * how many concentric accents are rendered.
+     */
+    fun supplementaryKinds(
+        assignmentCount: Int,
+        schoolNoticeCount: Int,
+        publicDeadlineCount: Int,
+    ): List<YearCalendarSupplementaryKind> = buildList {
+        if (assignmentCount > 0) add(YearCalendarSupplementaryKind.ASSIGNMENT)
+        if (schoolNoticeCount > 0) add(YearCalendarSupplementaryKind.SCHOOL_NOTICE)
+        if (publicDeadlineCount > 0) add(YearCalendarSupplementaryKind.PUBLIC_DEADLINE)
+    }
+
+    fun borderKinds(
+        kinds: Collection<YearCalendarSupplementaryKind>,
+    ): List<YearCalendarSupplementaryKind> {
+        val present = kinds.toSet()
+        return listOf(
+            YearCalendarSupplementaryKind.ASSIGNMENT,
+            YearCalendarSupplementaryKind.SCHOOL_NOTICE,
+            YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
+        ).filter(present::contains).take(2)
+    }
+
     fun supplementaryKind(
         assignmentCount: Int,
         schoolNoticeCount: Int,
         publicDeadlineCount: Int,
-    ): YearCalendarSupplementaryKind? = when {
-        assignmentCount > 0 -> YearCalendarSupplementaryKind.ASSIGNMENT
-        schoolNoticeCount > 0 -> YearCalendarSupplementaryKind.SCHOOL_NOTICE
-        publicDeadlineCount > 0 -> YearCalendarSupplementaryKind.PUBLIC_DEADLINE
-        else -> null
-    }
+    ): YearCalendarSupplementaryKind? = supplementaryKinds(
+        assignmentCount,
+        schoolNoticeCount,
+        publicDeadlineCount,
+    ).firstOrNull()
 }
 
 @SuppressLint("ViewConstructor")
@@ -268,6 +301,7 @@ class YearCalendarView(
     private fun drawDay(canvas: Canvas, rect: RectF, day: YearCalendarDay) {
         val selected = selectedDate?.let { sameDay(it, day.date) } == true
         val today = sameDay(day.date, Calendar.getInstance(shanghai))
+        val borderKinds = YearCalendarLogic.borderKinds(day.supplementaryKinds)
         fillPaint.color = when {
             selected -> Palette.selectedDate
             day.courseCount <= 0 -> Palette.background
@@ -279,24 +313,37 @@ class YearCalendarView(
         }
         canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), fillPaint)
 
-        borderPaint.color = when (day.supplementaryKind) {
-            YearCalendarSupplementaryKind.ASSIGNMENT -> Palette.assignment
-            YearCalendarSupplementaryKind.SCHOOL_NOTICE -> Palette.schoolNotice
-            YearCalendarSupplementaryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
-            null -> if (today) Palette.nowIndicator else Palette.border
+        if (borderKinds.isNotEmpty()) {
+            borderPaint.color = supplementaryColor(borderKinds[0])
+            borderPaint.strokeWidth = resources.displayMetrics.density *
+                YearCalendarLogic.supplementaryOuterBorderWidthDp()
+            canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), borderPaint)
+            borderKinds.getOrNull(1)?.let { innerKind ->
+                val inset = resources.displayMetrics.density *
+                    YearCalendarLogic.supplementaryInnerBorderInsetDp()
+                val innerRect = RectF(rect).apply { inset(inset, inset) }
+                borderPaint.color = supplementaryColor(innerKind)
+                borderPaint.strokeWidth = resources.displayMetrics.density *
+                    YearCalendarLogic.supplementaryInnerBorderWidthDp()
+                canvas.drawRoundRect(innerRect, dp(3).toFloat(), dp(3).toFloat(), borderPaint)
+            }
+        } else {
+            borderPaint.color = if (today) Palette.nowIndicator else Palette.border
+            borderPaint.strokeWidth = resources.displayMetrics.density * if (today) {
+                YearCalendarLogic.todayBorderWidthDp()
+            } else {
+                0.32f
+            }
+            canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), borderPaint)
         }
-        borderPaint.strokeWidth = resources.displayMetrics.density * when {
-            day.supplementaryKind != null -> 1.8f
-            today -> 1.5f
-            else -> 0.32f
-        }
-        canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), borderPaint)
-        if (today && day.supplementaryKind != null) {
-            val inset = resources.displayMetrics.density * 2.5f
-            val todayRect = RectF(rect).apply { inset(inset, inset) }
-            borderPaint.color = Palette.nowIndicator
-            borderPaint.strokeWidth = resources.displayMetrics.density
-            canvas.drawRoundRect(todayRect, dp(3).toFloat(), dp(3).toFloat(), borderPaint)
+        if (today && borderKinds.isNotEmpty()) {
+            fillPaint.color = Palette.nowIndicator
+            canvas.drawCircle(
+                rect.right - resources.displayMetrics.density * 3.4f,
+                rect.top + resources.displayMetrics.density * 3.4f,
+                resources.displayMetrics.density * 1.35f,
+                fillPaint,
+            )
         }
 
         textPaint.textAlign = Paint.Align.CENTER
@@ -375,6 +422,12 @@ class YearCalendarView(
         (Color.green(background) + (Color.green(foreground) - Color.green(background)) * amount).toInt(),
         (Color.blue(background) + (Color.blue(foreground) - Color.blue(background)) * amount).toInt(),
     )
+
+    private fun supplementaryColor(kind: YearCalendarSupplementaryKind): Int = when (kind) {
+        YearCalendarSupplementaryKind.ASSIGNMENT -> Palette.assignment
+        YearCalendarSupplementaryKind.SCHOOL_NOTICE -> Palette.schoolNotice
+        YearCalendarSupplementaryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
+    }
 
     private fun dp(value: Int): Int = context.dp(value)
 

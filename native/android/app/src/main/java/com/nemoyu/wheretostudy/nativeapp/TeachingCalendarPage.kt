@@ -12,7 +12,9 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
 import android.net.Uri
 import android.text.TextUtils
@@ -414,10 +416,16 @@ object TeachingCalendarLogic {
         supplementaryKind: YearCalendarSupplementaryKind?,
         today: Boolean,
     ): Float = when {
-        supplementaryKind != null -> 1.8f
-        today -> 2f
+        supplementaryKind != null -> YearCalendarLogic.supplementaryOuterBorderWidthDp()
+        today -> YearCalendarLogic.todayBorderWidthDp()
         else -> 0f
     }
+
+    fun monthCellInnerBorderWidthDp(): Float =
+        YearCalendarLogic.supplementaryInnerBorderWidthDp()
+
+    fun monthCellInnerBorderInsetDp(): Float =
+        YearCalendarLogic.supplementaryInnerBorderInsetDp()
 
     fun monthEntryTextColor(selected: Boolean, textColor: Int, onPrimaryColor: Int): Int =
         if (selected) onPrimaryColor else textColor
@@ -2248,7 +2256,7 @@ internal class TeachingCalendarPage(
             day.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR)
         val selected = sameDay(day, selectedDate)
         val today = sameDay(day, Calendar.getInstance(shanghai))
-        val supplementaryKind = YearCalendarLogic.supplementaryKind(
+        val supplementaryKinds = YearCalendarLogic.supplementaryKinds(
             assignmentCount = assignments.size,
             schoolNoticeCount = schoolNotices.size,
             publicDeadlineCount = publicDeadlines.size,
@@ -2258,7 +2266,7 @@ internal class TeachingCalendarPage(
             today = today,
             courseCount = courses.size,
             muted = !inMonth,
-            supplementaryKind = supplementaryKind,
+            supplementaryKinds = supplementaryKinds,
         )
         cell.contentDescription = buildList {
             add(displayMonthDay(day))
@@ -2275,7 +2283,7 @@ internal class TeachingCalendarPage(
             }
         }.joinToString(if (AppLocale.isEnglish(activity)) ", " else "，")
         cell.findViewById<TextView>(R.id.calendar_month_day_label).apply {
-            val showsTodayBadge = today && supplementaryKind != null
+            val showsTodayBadge = today && supplementaryKinds.isNotEmpty()
             setTypeface(typeface, if (selected || today) Typeface.BOLD else Typeface.NORMAL)
             setTextColor(when {
                 showsTodayBadge -> Palette.onPrimary
@@ -3662,7 +3670,7 @@ internal class TeachingCalendarPage(
         date = day.clone() as Calendar,
         courseCount = coursesOn(day).size,
         holidays = holidaysOn(day),
-        supplementaryKind = YearCalendarLogic.supplementaryKind(
+        supplementaryKinds = YearCalendarLogic.supplementaryKinds(
             assignmentCount = assignmentsOn(day).size,
             schoolNoticeCount = schoolNoticesOn(day).size,
             publicDeadlineCount = publicDeadlinesOn(day).size,
@@ -3684,8 +3692,8 @@ internal class TeachingCalendarPage(
         today: Boolean,
         courseCount: Int,
         muted: Boolean,
-        supplementaryKind: YearCalendarSupplementaryKind? = null,
-    ): GradientDrawable {
+        supplementaryKinds: List<YearCalendarSupplementaryKind> = emptyList(),
+    ): Drawable {
         val fill = when {
             selected -> Palette.selectedDate
             muted -> Color.TRANSPARENT
@@ -3696,8 +3704,10 @@ internal class TeachingCalendarPage(
                 TeachingCalendarLogic.yearCourseOpacity(courseCount),
             )
         }
+        val borderKinds = YearCalendarLogic.borderKinds(supplementaryKinds)
+        val outerKind = borderKinds.firstOrNull()
         val borderColor = TeachingCalendarLogic.monthCellBorderColor(
-            supplementaryKind = supplementaryKind,
+            supplementaryKind = outerKind,
             today = today,
             assignmentColor = Palette.assignment,
             schoolNoticeColor = Palette.schoolNotice,
@@ -3705,16 +3715,38 @@ internal class TeachingCalendarPage(
             todayColor = Palette.nowIndicator,
         )
         val borderWidthDp = TeachingCalendarLogic.monthCellBorderWidthDp(
-            supplementaryKind,
+            outerKind,
             today,
         )
-        return roundedBackground(
+        val outer = roundedBackground(
             activity,
             fill,
             borderColor,
             radius = 9,
             borderWidthDp = borderWidthDp,
         )
+        val innerKind = borderKinds.getOrNull(1) ?: return outer
+        val inner = roundedBackground(
+            activity,
+            Color.TRANSPARENT,
+            TeachingCalendarLogic.monthCellBorderColor(
+                supplementaryKind = innerKind,
+                today = false,
+                assignmentColor = Palette.assignment,
+                schoolNoticeColor = Palette.schoolNotice,
+                publicDeadlineColor = Palette.publicDeadline,
+                todayColor = Palette.nowIndicator,
+            ),
+            radius = 7,
+            borderWidthDp = TeachingCalendarLogic.monthCellInnerBorderWidthDp(),
+        )
+        val inset = (
+            TeachingCalendarLogic.monthCellInnerBorderInsetDp() *
+                activity.resources.displayMetrics.density
+            ).roundToInt()
+        return LayerDrawable(arrayOf(outer, inner)).apply {
+            setLayerInset(1, inset, inset, inset, inset)
+        }
     }
 
     private fun timelineDay(date: Calendar): TimelineDay = TimelineDay(

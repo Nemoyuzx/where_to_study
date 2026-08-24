@@ -9,7 +9,7 @@ npm --prefix "$ROOT_DIR" run licenses:check
 ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ANDROID_DIR/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.3}"
+RELEASE_LABEL="${1:-v0.2.4}"
 APK_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"
 AAB_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android.aab"
 EXPECTED_CERTIFICATE_FILE="$ANDROID_DIR/release-certificate.sha256"
@@ -134,6 +134,11 @@ if [[ -z "$AAPT" ]]; then
   echo "Android aapt was not found." >&2
   exit 1
 fi
+AAPT2="$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name aapt2 | sort -V | tail -n 1)"
+if [[ -z "$AAPT2" ]]; then
+  echo "Android aapt2 was not found." >&2
+  exit 1
+fi
 PACKAGE_BADGING="$("$AAPT" dump badging "$SIGNED_APK" | head -n 1)"
 ACTUAL_BUILD="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<<"$PACKAGE_BADGING")"
 ACTUAL_VERSION="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$PACKAGE_BADGING")"
@@ -200,8 +205,49 @@ if ! unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text 'https:/
   echo "Native Android package is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
-if unzip -p "$SIGNED_APK" AndroidManifest.xml | stream_contains_fixed_text 'networkSecurityConfig'; then
-  echo "Native Android package still declares a custom network security configuration." >&2
+APK_MANIFEST_TREE="$("$AAPT2" dump xmltree "$SIGNED_APK" --file AndroidManifest.xml)"
+if ! stream_contains_fixed_text 'networkSecurityConfig' <<<"$APK_MANIFEST_TREE"; then
+  echo "Native Android package is missing its restricted network security configuration." >&2
+  exit 1
+fi
+
+APK_RESOURCES="$("$AAPT2" dump resources "$SIGNED_APK")"
+NETWORK_SECURITY_RESOURCE="$(
+  sed -n '/xml\/network_security_config$/ {
+    n
+    s/.*(file) \([^[:space:]]*\) type=XML.*/\1/p
+    q
+  }' <<<"$APK_RESOURCES"
+)"
+if [[ -z "$NETWORK_SECURITY_RESOURCE" ]]; then
+  echo "Native Android package network security resource could not be resolved." >&2
+  exit 1
+fi
+NETWORK_SECURITY_TREE="$(
+  "$AAPT2" dump xmltree "$SIGNED_APK" --file "$NETWORK_SECURITY_RESOURCE"
+)"
+for required_policy in \
+  'E: base-config' \
+  'A: cleartextTrafficPermitted=false' \
+  'A: src="system"' \
+  'E: domain-config' \
+  'A: cleartextTrafficPermitted=true' \
+  'A: includeSubdomains=false' \
+  "T: '101.201.29.29'"; do
+  if ! stream_contains_fixed_text "$required_policy" <<<"$NETWORK_SECURITY_TREE"; then
+    echo "Native Android package network security policy is missing: $required_policy" >&2
+    exit 1
+  fi
+done
+NETWORK_BASE_COUNT="$(awk '$1 == "E:" && $2 == "base-config" { count++ } END { print count + 0 }' <<<"$NETWORK_SECURITY_TREE")"
+NETWORK_DOMAIN_CONFIG_COUNT="$(awk '$1 == "E:" && $2 == "domain-config" { count++ } END { print count + 0 }' <<<"$NETWORK_SECURITY_TREE")"
+NETWORK_DOMAIN_COUNT="$(awk '$1 == "E:" && $2 == "domain" { count++ } END { print count + 0 }' <<<"$NETWORK_SECURITY_TREE")"
+NETWORK_TRUST_SOURCE_COUNT="$(awk '$1 == "A:" && $2 == "src=\"system\"" { count++ } END { print count + 0 }' <<<"$NETWORK_SECURITY_TREE")"
+if [[ "$NETWORK_BASE_COUNT" != 1 \
+  || "$NETWORK_DOMAIN_CONFIG_COUNT" != 1 \
+  || "$NETWORK_DOMAIN_COUNT" != 1 \
+  || "$NETWORK_TRUST_SOURCE_COUNT" != 1 ]]; then
+  echo "Native Android package network security policy is broader than the single approved contest API exception." >&2
   exit 1
 fi
 if ! unzip -p "$SIGNED_APK" assets/LICENSE | cmp -s - "$ROOT_DIR/LICENSE"; then

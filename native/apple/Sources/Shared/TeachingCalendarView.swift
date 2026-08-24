@@ -856,7 +856,7 @@ struct TeachingCalendarView: View {
         )
         let isSelected = sameDay(day, selectedDate)
         let isToday = sameDay(day, .now)
-        let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+        let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
             in: allDayEvents(on: day)
         )
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
@@ -927,10 +927,15 @@ struct TeachingCalendarView: View {
             ZStack {
                 Rectangle()
                     .stroke(AppTheme.border, lineWidth: 0.5)
-                if let deadlineKind {
+                if let outerKind = deadlineKinds.first {
                     Rectangle()
-                        .stroke(allDayEventTint(deadlineKind), lineWidth: 2)
+                        .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
                         .padding(1)
+                }
+                if deadlineKinds.count > 1 {
+                    Rectangle()
+                        .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
+                        .padding(4)
                 }
             }
         }
@@ -938,7 +943,7 @@ struct TeachingCalendarView: View {
         .onTapGesture { selectedDate = day }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
-        .accessibilityValue(deadlineKind?.rawValue ?? "")
+        .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { selectedDate = day }
     }
@@ -1106,7 +1111,7 @@ struct TeachingCalendarView: View {
         }
         let isSelected = sameDay(day, selectedDate)
         let isToday = sameDay(day, .now)
-        let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+        let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
             in: allDayEvents(on: day)
         )
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
@@ -1202,16 +1207,24 @@ struct TeachingCalendarView: View {
         .background(monthCellColor(selected: isSelected, inMonth: inMonth, courseCount: dayCourses.count))
         .overlay {
             ZStack {
-                RoundedRectangle(cornerRadius: 5)
-                    .stroke(
-                        deadlineKind.map { allDayEventTint($0) }
-                            ?? (isToday ? Self.nowRed : AppTheme.border),
-                        lineWidth: deadlineKind != nil || isToday ? 2 : 1
-                    )
-                if deadlineKind != nil, isToday {
-                    RoundedRectangle(cornerRadius: 3)
-                        .stroke(Self.nowRed, lineWidth: 1)
-                        .padding(2)
+                if let outerKind = deadlineKinds.first {
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
+                } else {
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(AppTheme.border, lineWidth: 1)
+                }
+                if deadlineKinds.count > 1 {
+                    RoundedRectangle(cornerRadius: 2)
+                        .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
+                        .padding(3)
+                }
+                if isToday {
+                    Circle()
+                        .fill(Self.nowRed)
+                        .frame(width: 6, height: 6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(4)
                 }
             }
         }
@@ -1220,7 +1233,7 @@ struct TeachingCalendarView: View {
         .onTapGesture { selectedDate = day }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
-        .accessibilityValue(deadlineKind?.rawValue ?? "")
+        .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { selectedDate = day }
     }
@@ -1325,7 +1338,7 @@ struct TeachingCalendarView: View {
             let dayCourses = courses(on: day)
             let holidays = holidayItems(on: day)
             let isToday = sameDay(day, .now)
-            let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+            let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
                 in: allDayEvents(on: day)
             )
             let isSelected = sameDay(selectedDate, day)
@@ -1379,11 +1392,15 @@ struct TeachingCalendarView: View {
             }
             .overlay {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 3)
-                        .stroke(
-                            deadlineKind.map { allDayEventTint($0) } ?? Color.clear,
-                            lineWidth: deadlineKind == nil ? 0 : 2
-                        )
+                    if let outerKind = deadlineKinds.first {
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
+                    }
+                    if deadlineKinds.count > 1 {
+                        RoundedRectangle(cornerRadius: 1)
+                            .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
+                            .padding(2.5)
+                    }
                     if isSelected, isToday {
                         Circle()
                             .stroke(Self.nowRed, lineWidth: 1)
@@ -1397,7 +1414,7 @@ struct TeachingCalendarView: View {
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(dayAccessibilityLabel(day))
-            .accessibilityValue(deadlineKind?.rawValue ?? "")
+            .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
             .accessibilityAddTraits(.isButton)
 
             cell
@@ -1465,7 +1482,7 @@ struct TeachingCalendarView: View {
             let dayCourses = courses(on: day)
             let holidays = holidayItems(on: day)
             let isToday = sameDay(day, .now)
-            let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+            let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
                 in: allDayEvents(on: day)
             )
             let isSelected = sameDay(selectedDate, day)
@@ -1482,19 +1499,28 @@ struct TeachingCalendarView: View {
             .background(yearCellColor(selected: isSelected, courseCount: dayCourses.count))
             .overlay {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 3)
-                        .stroke(
-                            deadlineKind.map { allDayEventTint($0) }
-                                ?? (isToday ? Self.nowRed : AppTheme.border),
-                            lineWidth: deadlineKind != nil || isToday ? 2 : 1
-                        )
-                    if CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
-                        isToday: isToday,
-                        deadlineKind: deadlineKind
-                    ) {
+                    if let outerKind = deadlineKinds.first {
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
+                    } else {
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(AppTheme.border, lineWidth: 1)
+                    }
+                    if deadlineKinds.count > 1 {
                         RoundedRectangle(cornerRadius: 1)
-                            .stroke(Self.nowRed, lineWidth: 1)
-                            .padding(2)
+                            .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
+                            .padding(2.5)
+                    }
+                    if isToday {
+                        Circle()
+                            .fill(Self.nowRed)
+                            .frame(width: 5, height: 5)
+                            .frame(
+                                maxWidth: .infinity,
+                                maxHeight: .infinity,
+                                alignment: .topTrailing
+                            )
+                            .padding(2.5)
                     }
                 }
             }
@@ -1502,7 +1528,7 @@ struct TeachingCalendarView: View {
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(dayAccessibilityLabel(day))
-            .accessibilityValue(deadlineKind?.rawValue ?? "")
+            .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
             .accessibilityAddTraits(.isButton)
             #if os(macOS)
             cell

@@ -399,16 +399,19 @@ test('desktop school notices preheat after settings load instead of starting on 
 
 test('native calendars render public deadlines, centered agendas, and shared month-year priority', () => {
   assert.match(appleCalendarSource, /case publicDeadline/)
-  assert.match(appleCalendarSource, /CalendarDeadlinePresentation\.preferredDeadlineKind/)
-  assert.match(appleCalendarSource, /showsSecondaryTodayIndicator/)
+  assert.match(appleCalendarSource, /CalendarDeadlinePresentation\.topTwoDeadlineKinds/)
+  assert.match(appleTimelineSource, /showsSecondaryTodayIndicator/)
   assert.match(appleCalendarSource, /calendar\.regular\.month-agenda-dialog/)
   assert.match(appleMobileCalendarSource, /calendar\.mobile\.week-agenda-dialog/)
-  assert.match(appleMobileCalendarSource, /if deadlineKind != nil, today \{/)
+  assert.match(appleMobileCalendarSource, /if deadlineKinds\.count > 1/)
+  assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)[\s\S]*AppTheme\.danger/)
 
   assert.match(androidCalendarSource, /PUBLIC_DEADLINE/)
   assert.match(androidCalendarSource, /showCenteredAgendaDialog/)
   assert.match(androidCalendarSource, /monthCellBorderColor/)
-  assert.match(androidCalendarSource, /val showsTodayBadge = today && supplementaryKind != null/)
+  assert.match(androidCalendarSource, /val showsTodayBadge = today && supplementaryKinds\.isNotEmpty\(\)/)
+  assert.match(androidCalendarSource, /LayerDrawable\(arrayOf\(outer, inner\)\)/)
+  assert.match(androidCalendarSource, /monthCellInnerBorderWidthDp\(\): Float/)
   assert.match(androidCalendarSource, /activeYearCalendar\?\.updateDays/)
   assert.match(androidCalendarDailyInfoSource, /fun loadCalendarMarkers\(/)
   assert.match(
@@ -419,12 +422,15 @@ test('native calendars render public deadlines, centered agendas, and shared mon
     androidCalendarDailyInfoSource,
     /if \(deadlineDates\.isNotEmpty\(\)\) \{[\s\S]*?worker\.execute/,
   )
-  assert.match(androidYearCalendarSource, /today && day\.supplementaryKind != null/)
+  assert.match(androidYearCalendarSource, /fun borderKinds\(/)
+  assert.match(androidYearCalendarSource, /borderKinds\.getOrNull\(1\)/)
+  assert.match(androidYearCalendarSource, /today && borderKinds\.isNotEmpty\(\)/)
+  assert.match(androidYearCalendarSource, /canvas\.drawCircle\(/)
 
   assert.match(harmonyCalendarLogicSource, /CalendarYearDeadlinePriority/)
-  assert.match(harmonyCalendarLogicSource, /showsTodayDeadlineDot/)
+  assert.match(harmonyCalendarLogicSource, /yearDeadlineBorderLayers/)
   assert.match(harmonyMobileCalendarSource, /presentAllDayDialog/)
-  assert.match(harmonyMobileCalendarSource, /yearDeadlinePriority\(day\)/)
+  assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day/)
   assert.match(harmonyExpandedCalendarSource, /monthAllDayDialogOverlay/)
   assert.match(harmonyExpandedCalendarSource, /yearDeadlineBorderColor/)
   assert.match(harmonyAppModelSource, /assignmentMarkerLoadingDates/)
@@ -453,8 +459,11 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
       appleMobileTimelineSource.indexOf('grid(width: width, dayWidth: dayWidth)'),
     'mobile Apple selected column must be painted before solid and dashed timeline lines',
   )
-  assert.match(appleCalendarSource, /deadlineKind != nil, isToday/)
-  assert.match(appleMobileCalendarSource, /deadlineKind != nil, today/)
+  assert.match(appleCalendarSource, /topTwoDeadlineKinds/)
+  assert.match(appleCalendarSource, /if deadlineKinds\.count > 1/)
+  assert.match(appleMobileCalendarSource, /if deadlineKinds\.count > 1/)
+  assert.match(appleCalendarSource, /if isToday \{[\s\S]*Circle\(\)/)
+  assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)/)
 
   assert.match(appleSettingsSource, /deadlineLegend\("课程作业 DDL", color: AppTheme\.assignment\)/)
   assert.match(appleSettingsSource, /markerColor: AppTheme\.schoolNotice/)
@@ -581,10 +590,13 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
     harmonyExpandedCalendarSource,
     /backgroundColor\(day\.equals\(this\.selectedDate\(\)\) \?\s*AppTheme\.selectedDate\(\)/,
   )
-  assert.match(
-    harmonyMobileCalendarSource,
-    /yearDeadlinePriority\(day\) !== CalendarYearDeadlinePriority\.none \|\|\s*day\.equals\(StrictDates\.todayParts\(\)\) \? 2 : 0/,
-  )
+  assert.match(harmonyCalendarLogicSource, /static yearDeadlineBorderLayers/)
+  assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 10, 7, 6\)/)
+  assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 4, 2, 4\)/)
+  assert.match(harmonyExpandedCalendarSource, /deadlineBorderLayers\(day/)
+  assert.match(harmonyMobileCalendarSource, /width: index === 0 \? 1\.5 : 1/)
+  assert.match(harmonyExpandedCalendarSource, /width: index === 0 \? 1\.5 : 1/)
+  assert.match(harmonyCalendarLogicSource, /static showsTodayMarker\(isToday: boolean\)/)
 
   const selectedLayer = harmonyTimelineSource.indexOf("'selected-column.'")
   const hourLayer = harmonyTimelineSource.indexOf('// 小时线', selectedLayer)

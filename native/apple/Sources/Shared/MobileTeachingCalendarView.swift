@@ -870,7 +870,7 @@ struct MobileTeachingCalendarView: View {
         let dayCourses = courses(on: day)
         let holiday = holidayItems(on: day).first
         let events = monthEvents(on: day)
-        let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+        let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
             in: allDayEvents(on: day)
         )
         let eventLayout = TeachingCalendarLogic.monthEventLayout(
@@ -975,23 +975,28 @@ struct MobileTeachingCalendarView: View {
         }
         .overlay {
             ZStack {
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(
-                        deadlineKind.map { allDayEventTint($0) }
-                            ?? (today ? AppTheme.danger : Color.clear),
-                        lineWidth: deadlineKind != nil || today ? 2 : 0
-                    )
-                if deadlineKind != nil, today {
-                    RoundedRectangle(cornerRadius: 7)
-                        .stroke(AppTheme.danger, lineWidth: 1)
-                        .padding(2)
+                if let outerKind = deadlineKinds.first {
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(allDayEventTint(outerKind), lineWidth: 1.75)
+                }
+                if deadlineKinds.count > 1 {
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1.25)
+                        .padding(3)
+                }
+                if today {
+                    Circle()
+                        .fill(AppTheme.danger)
+                        .frame(width: 5, height: 5)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(3)
                 }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(dayAccessibilityLabel(day))
-        .accessibilityValue(deadlineKind?.rawValue ?? "")
+        .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
         .accessibilityIdentifier(
             "calendar.mobile.month-day-cell.\(StrictContractDateParser.string(from: day))"
         )
@@ -1132,7 +1137,7 @@ struct MobileTeachingCalendarView: View {
             let count = courses(on: day).count
             let today = sameDay(day, .now)
             let selected = sameDay(day, selectedDate)
-            let deadlineKind = CalendarDeadlinePresentation.preferredDeadlineKind(
+            let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
                 in: allDayEvents(on: day)
             )
             Button {
@@ -1153,18 +1158,27 @@ struct MobileTeachingCalendarView: View {
                     )
                     .overlay {
                         ZStack {
-                            RoundedRectangle(cornerRadius: 4)
-                                .stroke(
-                                    deadlineKind.map { allDayEventTint($0) }
-                                        ?? (today ? AppTheme.danger : AppTheme.border),
-                                    lineWidth: deadlineKind != nil || today ? 2 : 0.5
-                                )
-                            if CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
-                                isToday: today,
-                                deadlineKind: deadlineKind
-                            ) {
+                            if let outerKind = deadlineKinds.first {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
+                            } else {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(AppTheme.border, lineWidth: 0.5)
+                            }
+                            if deadlineKinds.count > 1 {
                                 RoundedRectangle(cornerRadius: 2)
-                                    .stroke(AppTheme.danger, lineWidth: 1)
+                                    .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
+                                    .padding(2)
+                            }
+                            if today {
+                                Circle()
+                                    .fill(AppTheme.danger)
+                                    .frame(width: 4, height: 4)
+                                    .frame(
+                                        maxWidth: .infinity,
+                                        maxHeight: .infinity,
+                                        alignment: .topTrailing
+                                    )
                                     .padding(2)
                             }
                         }
@@ -1176,7 +1190,7 @@ struct MobileTeachingCalendarView: View {
             .accessibilityIdentifier(
                 "calendar.mobile.year-day.\(StrictContractDateParser.string(from: day))"
             )
-            .accessibilityValue(deadlineKind?.rawValue ?? "")
+            .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
         } else {
             Color.clear.frame(height: 24)
         }

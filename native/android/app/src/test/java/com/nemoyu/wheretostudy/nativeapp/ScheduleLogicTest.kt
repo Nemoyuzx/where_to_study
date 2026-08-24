@@ -551,6 +551,32 @@ class ScheduleLogicTest {
             YearCalendarLogic.supplementaryKind(0, 0, 3),
         )
         assertEquals(null, YearCalendarLogic.supplementaryKind(0, 0, 0))
+        assertEquals(
+            listOf(
+                YearCalendarSupplementaryKind.ASSIGNMENT,
+                YearCalendarSupplementaryKind.SCHOOL_NOTICE,
+                YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
+            ),
+            YearCalendarLogic.supplementaryKinds(1, 4, 8),
+        )
+        assertEquals(
+            listOf(
+                YearCalendarSupplementaryKind.ASSIGNMENT,
+                YearCalendarSupplementaryKind.SCHOOL_NOTICE,
+            ),
+            YearCalendarLogic.borderKinds(
+                listOf(
+                    YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
+                    YearCalendarSupplementaryKind.SCHOOL_NOTICE,
+                    YearCalendarSupplementaryKind.ASSIGNMENT,
+                    YearCalendarSupplementaryKind.ASSIGNMENT,
+                ),
+            ),
+        )
+        assertEquals(1.2f, YearCalendarLogic.supplementaryOuterBorderWidthDp(), 0f)
+        assertEquals(0.8f, YearCalendarLogic.supplementaryInnerBorderWidthDp(), 0f)
+        assertEquals(2.6f, YearCalendarLogic.supplementaryInnerBorderInsetDp(), 0f)
+        assertEquals(1.2f, YearCalendarLogic.todayBorderWidthDp(), 0f)
     }
 
     @Test
@@ -677,6 +703,21 @@ class ScheduleLogicTest {
         assertEquals(0, TeachingCalendarLogic.monthHorizontalPaddingDp(true))
         assertEquals(16, TeachingCalendarLogic.monthHorizontalPaddingDp(false))
         assertEquals(0f, TeachingCalendarLogic.monthDetailsBorderWidthDp(), 0f)
+        assertEquals(
+            1.2f,
+            TeachingCalendarLogic.monthCellBorderWidthDp(
+                YearCalendarSupplementaryKind.ASSIGNMENT,
+                today = false,
+            ),
+            0f,
+        )
+        assertEquals(
+            1.2f,
+            TeachingCalendarLogic.monthCellBorderWidthDp(null, today = true),
+            0f,
+        )
+        assertEquals(0.8f, TeachingCalendarLogic.monthCellInnerBorderWidthDp(), 0f)
+        assertEquals(2.6f, TeachingCalendarLogic.monthCellInnerBorderInsetDp(), 0f)
         assertEquals(
             ThemePalettes.light.onPrimary,
             TeachingCalendarLogic.monthEntryTextColor(

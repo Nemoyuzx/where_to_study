@@ -23,18 +23,18 @@ Silicon 兼容构建。
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.3 (64)` 正式签名 Universal 构建通过 TestFlight 分发；不作为 GitHub Release 附件 |
-| Android | Kotlin + Android Views | `0.2.3 (36)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.4 (65)` 正式签名 Universal 构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| Android | Kotlin + Android Views | `0.2.4 (37)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.3 (64)` 正式签名构建通过 TestFlight 分发；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 88 项单元测试；发布签名与 AGC 上架尚待配置 |
+| iOS | SwiftUI 原生 | `0.2.4 (65)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | 原生功能与手机、折叠屏、平板及 PC 布局已移植并通过 91 项单元测试；发布签名与 AGC 上架尚待配置 |
 
 ## 下载
 
-稳定版 [v0.2.3](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.3) 提供 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版把作业 DDL 与校内竞赛通知扩展到日/周全天区、月格和年视图日期详情，加入 `+N` 完整列表；可见日期范围使用独立快照与短时缓存，移动原生端再以 single-flight 合并并发请求，不再让网络结果截断分页动画。iOS、Android 与 HarmonyOS 手机端的日/周课程摘要只折叠课程，全天区保持可见；全平台使用高对比蓝色选中日期和 DDL 分类色图例，桌面/平板日周时间轴统一为整点实线与节次虚线；图形客户端支持跟随系统、简体中文与 English。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.3 (64)` 仅通过 TestFlight 分发。
+[v0.2.4](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.4) 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI，以及固定维护者密钥签名的 Android APK/AAB。本版在全平台月视图和年视图中以最多两层同心边框同时表达不同类型的 DDL，外层和内层按“作业 > 校内竞赛 > 其它 DDL”取前两类；Android 将两层线宽分别收细为 `1.2dp` 与 `0.8dp`，今天与选中日期继续使用独立标识。Tauri 月视图的星期栏、日期、周数、事件行、字号、间距和选中态进一步对齐原生 macOS；自动生成的效果截图目录改为本地生成物，不再纳入版本控制。构建流程会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256`，也不附带任何 iOS 或 macOS 制品。正式签名的 iOS 与 macOS `0.2.4 (65)` 已由本地 Xcode 上传 TestFlight。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
@@ -119,8 +119,8 @@ Linux 终端客户端可以直接从 Release 安装。以 x86_64 为例：
 
 ```bash
 mkdir -p ~/.local/bin
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.3/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.3/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.4/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.4/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
 install -m 0755 where-to-study-cli where-to-study-tui ~/.local/bin/
 ```
 

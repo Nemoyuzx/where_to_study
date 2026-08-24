@@ -34,8 +34,8 @@ export enum CalendarMode {
   year = '年'
 }
 
-// 年视图只用边框表达 DDL 类型，课程数量仍由格子底色表达。多个来源落在
-// 同一天时必须保持 assignment > school notice > other 的稳定优先级。
+// 月/年视图用至多两层同心边框表达 DDL 类型，课程数量仍由格子底色表达。
+// 多个来源落在同一天时保持 assignment > school notice > other 的稳定优先级。
 export enum CalendarYearDeadlinePriority {
   none = 'none',
   other = 'other',
@@ -171,16 +171,25 @@ export class TeachingCalendarLogic {
 
   static yearDeadlinePriority(assignmentCount: number, schoolNoticeCount: number,
     otherDeadlineCount: number): CalendarYearDeadlinePriority {
+    const priorities: CalendarYearDeadlinePriority[] =
+      TeachingCalendarLogic.yearDeadlineBorderLayers(
+        assignmentCount, schoolNoticeCount, otherDeadlineCount);
+    return priorities.length > 0 ? priorities[0] : CalendarYearDeadlinePriority.none;
+  }
+
+  static yearDeadlineBorderLayers(assignmentCount: number, schoolNoticeCount: number,
+    otherDeadlineCount: number): CalendarYearDeadlinePriority[] {
+    const result: CalendarYearDeadlinePriority[] = [];
     if (assignmentCount > 0) {
-      return CalendarYearDeadlinePriority.assignment;
+      result.push(CalendarYearDeadlinePriority.assignment);
     }
-    if (schoolNoticeCount > 0) {
-      return CalendarYearDeadlinePriority.schoolNotice;
+    if (schoolNoticeCount > 0 && result.length < 2) {
+      result.push(CalendarYearDeadlinePriority.schoolNotice);
     }
-    if (otherDeadlineCount > 0) {
-      return CalendarYearDeadlinePriority.other;
+    if (otherDeadlineCount > 0 && result.length < 2) {
+      result.push(CalendarYearDeadlinePriority.other);
     }
-    return CalendarYearDeadlinePriority.none;
+    return result;
   }
 
   static allDayDialogTitle(mode: CalendarMode, english: boolean): string {
@@ -196,9 +205,8 @@ export class TeachingCalendarLogic {
     return mode + '视图 · 全天';
   }
 
-  static showsTodayDeadlineDot(isToday: boolean,
-    priority: CalendarYearDeadlinePriority): boolean {
-    return isToday && priority !== CalendarYearDeadlinePriority.none;
+  static showsTodayMarker(isToday: boolean): boolean {
+    return isToday;
   }
 
   static timelineCourseSummaryDate(mode: CalendarMode, selectedDate: DateParts): DateParts {

@@ -41,11 +41,13 @@ import {
   buildCalendarDayMap,
   buildMiniMonthDays,
   buildMonthDays,
+  calendarDeadlineBorderKinds,
   calendarDeadlineBorderPriority,
   buildingsForCampus,
   calendarMonthExpansion,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
+  calendarWeekOfYear,
   calendarSwipeDirection,
   CALENDAR_END_HOUR,
   CALENDAR_START_HOUR,
@@ -57,6 +59,7 @@ import {
   dateFromString,
   deadlinePreheatPlan,
   DEFAULT_SETTINGS,
+  desktopMonthGridMetrics,
   displayBuildingName,
   FALLBACK_SLOTS,
   fallbackHolidayItems,
@@ -962,6 +965,7 @@ function App() {
   const [calendarView, setCalendarView] = useState('week')
   const [calendarMotion, setCalendarMotion] = useState('')
   const [monthExpanded, setMonthExpanded] = useState(true)
+  const [desktopMonthEventRows, setDesktopMonthEventRows] = useState(4)
   const [calendarAgendaDialog, setCalendarAgendaDialog] = useState(null)
   const [compactCalendarLayout, setCompactCalendarLayout] = useState(
     () => window.matchMedia('(max-width: 720px)').matches,
@@ -1164,6 +1168,47 @@ function App() {
       window.removeEventListener('resize', handleResize)
       window.cancelAnimationFrame(resizeFrame)
       clearAvailableHeight()
+    }
+  }, [activePage, calendarDate, calendarMotion, calendarView, compactCalendarLayout])
+
+  useLayoutEffect(() => {
+    if (activePage !== 'calendar' || calendarView !== 'month' || compactCalendarLayout) {
+      return undefined
+    }
+    const clearDesktopMonthMetrics = () => {
+      const surface = calendarAnimatedSurfaceRef.current
+      surface?.style.removeProperty('--desktop-month-grid-height')
+      surface?.style.removeProperty('--desktop-month-row-height')
+    }
+    const updateDesktopMonthMetrics = () => {
+      const page = pageContentRef.current
+      const surface = calendarAnimatedSurfaceRef.current
+      if (!page || !surface) return
+      const pageBounds = page.getBoundingClientRect()
+      const surfaceBounds = surface.getBoundingClientRect()
+      const pageBottomPadding = Number.parseFloat(getComputedStyle(page).paddingBottom) || 0
+      const availableHeight = Math.max(
+        0,
+        Math.floor(pageBounds.bottom - pageBottomPadding - surfaceBounds.top - 16),
+      )
+      const metrics = desktopMonthGridMetrics(availableHeight)
+      surface.style.setProperty('--desktop-month-grid-height', `${metrics.height}px`)
+      surface.style.setProperty('--desktop-month-row-height', `${metrics.cellHeight}px`)
+      setDesktopMonthEventRows((current) => (
+        current === metrics.maximumEventRows ? current : metrics.maximumEventRows
+      ))
+    }
+    updateDesktopMonthMetrics()
+    let resizeFrame = 0
+    const handleResize = () => {
+      window.cancelAnimationFrame(resizeFrame)
+      resizeFrame = window.requestAnimationFrame(updateDesktopMonthMetrics)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.cancelAnimationFrame(resizeFrame)
+      clearDesktopMonthMetrics()
     }
   }, [activePage, calendarDate, calendarMotion, calendarView, compactCalendarLayout])
 
@@ -3121,19 +3166,28 @@ function App() {
                       aria-label={t('月历')}
                       aria-expanded={compactCalendarLayout ? monthExpanded : undefined}
                     >
-                      {uiWeekdayLabels.map((label) => <span key={label} className="month-weekday">{label}</span>)}
+                      {uiWeekdayLabels.map((label) => (
+                        <span key={label} className="month-weekday">
+                          <span className="month-weekday-mobile">{label}</span>
+                          <span className="month-weekday-desktop">
+                            {uiLanguage === 'en' ? label : `周${label}`}
+                          </span>
+                        </span>
+                      ))}
                       {visibleCalendarDays.map((dateString) => {
                         const date = dateFromString(dateString)
                         const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()
                         const dayState = getWeekState(courses, activeTermStartDate, dateString)
                         const calendarItems = calendarItemsFor(dateString)
                         const supplementalEntries = supplementalEntriesFor(dateString)
+                        const [, deadlineBorderSecondary] = calendarDeadlineBorderKinds(supplementalEntries)
                         const deadlineBorderPriority = calendarDeadlineBorderPriority(supplementalEntries)
                         const compactMarkers = Math.min(calendarItems.length + dayState.dayCourses.length + supplementalEntries.length, 3)
                         const monthAgendaEntries = [
                           ...calendarItems.map((item) => ({
                             key: `${dateString}-${item.type}-${item.name}`,
                             label: `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`,
+                            desktopLabel: item.name,
                             type: item.type,
                           })),
                           ...dayState.dayCourses.map((course) => {
@@ -3142,6 +3196,7 @@ function App() {
                               key: `${dateString}-${course.id}`,
                               label: course.name,
                               compactLabel: `${course.is_exam ? `${t('试')} ` : ''}${course.name}`,
+                              desktopLabel: course.name,
                               type: 'course',
                               subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
                               time: `${bounds.start}-${bounds.end}`,
@@ -3151,28 +3206,41 @@ function App() {
                             ...item,
                             key: `${dateString}-${item.key}`,
                             compactLabel: `${supplementalEntryPrefix(item, t)} ${item.label}`,
+                            desktopLabel: item.label,
                           })),
                         ]
                         const monthEntries = monthAgendaEntries.map((item) => ({
                           ...item,
                           label: item.compactLabel || item.label,
                         }))
-                        const monthEntrySummary = summarizeMonthEntries(monthEntries)
+                        const monthEntrySummary = summarizeMonthEntries(
+                          monthEntries,
+                          compactCalendarLayout ? 2 : desktopMonthEventRows,
+                        )
                         return (
                           <div
                             key={dateString}
-                            className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length || supplementalEntries.length ? 'has-calendar-item' : ''} ${supplementalEntries.length ? 'has-supplement' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
+                            className={`month-cell ${currentMonth ? '' : 'muted-day'} ${calendarItems.length || supplementalEntries.length ? 'has-calendar-item' : ''} ${supplementalEntries.length ? 'has-supplement' : ''} ${hasCalendarItemType(calendarItems, 'holiday') ? 'has-holiday' : ''} ${hasCalendarItemType(calendarItems, 'workday') ? 'has-workday' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${deadlineBorderSecondary ? `deadline-border-inner-${deadlineBorderSecondary}` : ''} ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
                             onClick={() => chooseCalendarDate(dateString)}
                           >
-                            <button
-                              type="button"
-                              className="month-cell-date-button"
-                              aria-label={formatUiCourseDate(dateString, uiLanguage)}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                chooseCalendarDate(dateString)
-                              }}
-                            >{date.getDate()}</button>
+                            <div className="month-cell-head">
+                              {date.getDay() === 1 ? (
+                                <span className="month-week-number">
+                                  {uiLanguage === 'en'
+                                    ? `Week ${calendarWeekOfYear(dateString)}`
+                                    : `第 ${calendarWeekOfYear(dateString)} 周`}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="month-cell-date-button"
+                                aria-label={formatUiCourseDate(dateString, uiLanguage)}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  chooseCalendarDate(dateString)
+                                }}
+                              >{date.getDate()}</button>
+                            </div>
                             <div className="month-compact-markers" aria-hidden="true">
                               {Array.from({ length: compactMarkers }, (_, index) => <i key={index} />)}
                             </div>
@@ -3183,7 +3251,26 @@ function App() {
                                   className={`month-entry ${entry.type}`}
                                   title={entry.label}
                                 >
-                                  {entry.label}
+                                  {entry.type !== 'course' ? (
+                                    <span className={`month-entry-icon ${entry.type}`} aria-hidden="true">
+                                      {entry.type === 'holiday'
+                                        ? '★'
+                                        : entry.type === 'workday'
+                                          ? '◆'
+                                          : entry.type === 'assignment'
+                                            ? '▤'
+                                            : entry.type === 'school-notice' ? '◆' : '⚑'}
+                                    </span>
+                                  ) : null}
+                                  <span className="month-entry-title">
+                                    <span className="month-entry-title-mobile">{entry.label}</span>
+                                    <span className="month-entry-title-desktop">
+                                      {entry.desktopLabel || entry.label}
+                                    </span>
+                                  </span>
+                                  {entry.time ? (
+                                    <time>{String(entry.time).split('-')[0]}</time>
+                                  ) : null}
                                 </small>
                               ))}
                               {monthEntrySummary.hiddenCount ? (
@@ -3201,7 +3288,12 @@ function App() {
                                       entries: monthAgendaEntries,
                                     })
                                   }}
-                                >+{monthEntrySummary.hiddenCount}</button>
+                                >
+                                  <span className="month-overflow-mobile">+{monthEntrySummary.hiddenCount}</span>
+                                  <span className="month-overflow-desktop">
+                                    +{monthEntrySummary.hiddenCount}{uiLanguage === 'en' ? '' : ' 项'}
+                                  </span>
+                                </button>
                               ) : null}
                             </div>
                           </div>
@@ -3292,12 +3384,13 @@ function App() {
                             const hasAssignment = supplementalEntries.some((item) => item.type === 'assignment')
                             const hasSchoolNotice = supplementalEntries.some((item) => item.type === 'school-notice')
                             const hasPublicDeadline = supplementalEntries.some((item) => item.type === 'public-deadline')
+                            const [, deadlineBorderSecondary] = calendarDeadlineBorderKinds(supplementalEntries)
                             const deadlineBorderPriority = calendarDeadlineBorderPriority(supplementalEntries)
                             return (
                               <button
                                 key={dateString}
                                 type="button"
-                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${hasPublicDeadline ? 'has-public-deadline' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${currentMonth && dateString === calendarDate ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
+                                className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${hasPublicDeadline ? 'has-public-deadline' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${deadlineBorderSecondary ? `deadline-border-inner-${deadlineBorderSecondary}` : ''} ${currentMonth && dateString === calendarDate ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
                                 style={courseCount ? { '--course-load-opacity': courseOpacity } : null}
                                 title={[
                                   ...calendarItems.map((item) => `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`),

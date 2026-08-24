@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.MotionEvent
@@ -1741,8 +1742,14 @@ class MainNavigationSmokeTest {
         return (0 until root.childCount).any { index -> containsSwitch(root.getChildAt(index)) }
     }
 
-    private fun gradientFillColor(view: View): Int? =
-        (view.background as? GradientDrawable)?.color?.defaultColor
+    private fun gradientFillColor(view: View): Int? {
+        val gradient = when (val background = view.background) {
+            is GradientDrawable -> background
+            is LayerDrawable -> background.getDrawable(0) as? GradientDrawable
+            else -> null
+        }
+        return gradient?.color?.defaultColor
+    }
 
     private fun assertLegendDot(activity: MainActivity, dotID: Int, expectedColor: Int) {
         val dot = activity.findViewById<View>(dotID)
@@ -2012,35 +2019,58 @@ class MainNavigationSmokeTest {
         )
         var assignmentColor: Int? = null
         var schoolNoticeColor: Int? = null
+        var concentricDeadlineBorderFound = false
         val colorDeadline = System.currentTimeMillis() + UI_TIMEOUT_MILLIS
         while (System.currentTimeMillis() < colorDeadline &&
-            (assignmentColor == null || schoolNoticeColor == null)
+            (assignmentColor == null || schoolNoticeColor == null ||
+                !concentricDeadlineBorderFound)
         ) {
             scenario.onActivity { activity ->
                 val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
                 repeat(grid.childCount) { rowIndex ->
                     val row = grid.getChildAt(rowIndex) as ViewGroup
                     repeat(row.childCount) { cellIndex ->
-                        val entries = row.getChildAt(cellIndex)
+                        val cell = row.getChildAt(cellIndex)
+                        val entries = cell
                             .findViewById<ViewGroup>(R.id.calendar_month_expanded_entries)
+                        var hasAssignment = false
+                        var hasSchoolNotice = false
                         repeat(entries.childCount) entryLoop@ { entryIndex ->
                             val entry = entries.getChildAt(entryIndex) as? TextView
                                 ?: return@entryLoop
                             when {
-                                entry.text.startsWith("作 ") -> assignmentColor = entry.currentTextColor
-                                entry.text.startsWith("校 ") -> schoolNoticeColor = entry.currentTextColor
+                                entry.text.startsWith("作 ") -> {
+                                    assignmentColor = entry.currentTextColor
+                                    hasAssignment = true
+                                }
+                                entry.text.startsWith("校 ") -> {
+                                    schoolNoticeColor = entry.currentTextColor
+                                    hasSchoolNotice = true
+                                }
                             }
+                        }
+                        if (hasAssignment && hasSchoolNotice) {
+                            val layers = cell.background as? LayerDrawable
+                            concentricDeadlineBorderFound = layers?.numberOfLayers == 2
                         }
                     }
                 }
             }
-            if (assignmentColor == null || schoolNoticeColor == null) SystemClock.sleep(100L)
+            if (assignmentColor == null || schoolNoticeColor == null ||
+                !concentricDeadlineBorderFound
+            ) {
+                SystemClock.sleep(100L)
+            }
         }
         assertNotNull("Month grid must render assignment DDL entries", assignmentColor)
         assertNotNull("Month grid must render school notice entries", schoolNoticeColor)
         assertTrue(
             "Assignment and school-notice entries need distinguishable colors",
             assignmentColor != schoolNoticeColor,
+        )
+        assertTrue(
+            "A date with multiple DDL kinds must retain all entries and use two drawable borders",
+            concentricDeadlineBorderFound,
         )
     }
 

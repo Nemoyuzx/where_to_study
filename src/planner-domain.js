@@ -278,11 +278,51 @@ export function summarizeMonthEntries(entries, maxRows = 2) {
   }
 }
 
+export function calendarWeekOfYear(dateString) {
+  const date = dateFromString(dateString)
+  if (Number.isNaN(date.getTime())) return 0
+  const year = date.getFullYear()
+  const weekOneStart = (weekYear) => {
+    const januaryFirst = new Date(weekYear, 0, 1)
+    return dateOrdinal(`${weekYear}-01-01`) - ((januaryFirst.getDay() + 6) % 7)
+  }
+  const ordinal = dateOrdinal(dateString)
+  const nextWeekOneStart = weekOneStart(year + 1)
+  const activeWeekOneStart = ordinal >= nextWeekOneStart
+    ? nextWeekOneStart
+    : weekOneStart(year)
+  return Math.floor((ordinal - activeWeekOneStart) / 7) + 1
+}
+
+export function desktopMonthGridMetrics(availableHeight) {
+  const weekdayHeight = 30
+  const normalizedHeight = Math.max(0, Math.floor(Number(availableHeight) || 0))
+  const cellHeight = Math.max(Math.floor((normalizedHeight - weekdayHeight) / 6), 70)
+  return {
+    weekdayHeight,
+    cellHeight,
+    height: Math.max(normalizedHeight, 520),
+    maximumEventRows: cellHeight >= 100 ? 4 : cellHeight >= 80 ? 3 : 2,
+  }
+}
+
+const CALENDAR_DEADLINE_BORDER_PRIORITY = [
+  'assignment',
+  'school-notice',
+  'public-deadline',
+]
+
+export function calendarDeadlineBorderKinds(entries, limit = 2) {
+  const visibleLimit = Math.max(0, Math.trunc(Number(limit) || 0))
+  if (!visibleLimit) return []
+  const presentKinds = new Set(entries.map((entry) => entry.type))
+  return CALENDAR_DEADLINE_BORDER_PRIORITY
+    .filter((kind) => presentKinds.has(kind))
+    .slice(0, visibleLimit)
+}
+
 export function calendarDeadlineBorderPriority(entries) {
-  if (entries.some((entry) => entry.type === 'assignment')) return 'assignment'
-  if (entries.some((entry) => entry.type === 'school-notice')) return 'school-notice'
-  if (entries.some((entry) => entry.type === 'public-deadline')) return 'public-deadline'
-  return ''
+  return calendarDeadlineBorderKinds(entries, 1)[0] || ''
 }
 
 export function expandedMonthGridMetrics(

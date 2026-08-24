@@ -98,12 +98,19 @@ export default function teachingCalendarLogicTest() {
         .assertEqual(CalendarYearDeadlinePriority.other);
       expect(TeachingCalendarLogic.yearDeadlinePriority(0, 0, 0))
         .assertEqual(CalendarYearDeadlinePriority.none);
-      expect(TeachingCalendarLogic.showsTodayDeadlineDot(
-        true, CalendarYearDeadlinePriority.assignment)).assertTrue();
-      expect(TeachingCalendarLogic.showsTodayDeadlineDot(
-        true, CalendarYearDeadlinePriority.none)).assertFalse();
-      expect(TeachingCalendarLogic.showsTodayDeadlineDot(
-        false, CalendarYearDeadlinePriority.schoolNotice)).assertFalse();
+      const allKinds: CalendarYearDeadlinePriority[] =
+        TeachingCalendarLogic.yearDeadlineBorderLayers(1, 1, 1);
+      expect(allKinds.length).assertEqual(2);
+      expect(allKinds[0]).assertEqual(CalendarYearDeadlinePriority.assignment);
+      expect(allKinds[1]).assertEqual(CalendarYearDeadlinePriority.schoolNotice);
+      const schoolAndOther: CalendarYearDeadlinePriority[] =
+        TeachingCalendarLogic.yearDeadlineBorderLayers(0, 1, 1);
+      expect(schoolAndOther.length).assertEqual(2);
+      expect(schoolAndOther[0]).assertEqual(CalendarYearDeadlinePriority.schoolNotice);
+      expect(schoolAndOther[1]).assertEqual(CalendarYearDeadlinePriority.other);
+      expect(TeachingCalendarLogic.yearDeadlineBorderLayers(0, 0, 0).length).assertEqual(0);
+      expect(TeachingCalendarLogic.showsTodayMarker(true)).assertTrue();
+      expect(TeachingCalendarLogic.showsTodayMarker(false)).assertFalse();
     });
 
     it('month_and_week_all_day_dialogs_keep_distinct_bilingual_titles', 0, () => {

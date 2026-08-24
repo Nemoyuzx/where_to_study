@@ -36,7 +36,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the stable 0.2.3 release version", () => {
+test("all tracked client projects use the stable 0.2.4 release version", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -59,24 +59,49 @@ test("all tracked client projects use the stable 0.2.3 release version", () => {
   const coreManifest = readFileSync(path.join(root, "where-to-study-core", "Cargo.toml"), "utf8");
   const cliManifest = readFileSync(path.join(root, "wts-cli", "Cargo.toml"), "utf8");
   const tuiManifest = readFileSync(path.join(root, "wts-tui", "Cargo.toml"), "utf8");
+  const cliWorkflow = readFileSync(
+    path.join(root, ".github", "workflows", "build-cli.yml"),
+    "utf8",
+  );
+  const tuiWorkflow = readFileSync(
+    path.join(root, ".github", "workflows", "build-tui.yml"),
+    "utf8",
+  );
+  const androidPackageScript = readFileSync(
+    path.join(root, "scripts", "native-android-package.sh"),
+    "utf8",
+  );
+  const iosPackageScript = readFileSync(
+    path.join(root, "scripts", "native-ios-package.sh"),
+    "utf8",
+  );
+  const macosPackageScript = readFileSync(
+    path.join(root, "scripts", "native-macos-package.sh"),
+    "utf8",
+  );
 
-  assert.equal(packageMetadata.version, "0.2.3");
-  assert.equal(tauriMetadata.version, "0.2.3");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 2003);
-  assert.match(cargoManifest, /^version = "0\.2\.3"$/m);
-  assert.match(coreManifest, /^version = "0\.2\.3"$/m);
-  assert.match(cliManifest, /^version = "0\.2\.3"$/m);
-  assert.match(tuiManifest, /^version = "0\.2\.3"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.2\.3"/);
-  assert.match(nativeAndroid, /versionCode = 36/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.3"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "64"/);
-  assert.match(nativeHarmony, /"versionName": "0\.2\.3"/);
-  assert.match(nativeHarmony, /"versionCode": 1002003/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.3/);
+  assert.equal(packageMetadata.version, "0.2.4");
+  assert.equal(tauriMetadata.version, "0.2.4");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 2004);
+  assert.match(cargoManifest, /^version = "0\.2\.4"$/m);
+  assert.match(coreManifest, /^version = "0\.2\.4"$/m);
+  assert.match(cliManifest, /^version = "0\.2\.4"$/m);
+  assert.match(tuiManifest, /^version = "0\.2\.4"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.2\.4"/);
+  assert.match(nativeAndroid, /versionCode = 37/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.4"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "65"/);
+  assert.match(nativeHarmony, /"versionName": "0\.2\.4"/);
+  assert.match(nativeHarmony, /"versionCode": 1002004/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.4/);
   assert.match(tauriApple, /CFBundleVersion: "43"/);
-  assert.match(tauriAppleInfo, /<string>0\.2\.3<\/string>/);
+  assert.match(tauriAppleInfo, /<string>0\.2\.4<\/string>/);
   assert.match(tauriAppleInfo, /<string>43<\/string>/);
+  assert.match(cliWorkflow, /grep -F '0\.2\.4'/);
+  assert.match(tuiWorkflow, /grep -F '0\.2\.4'/);
+  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.4\}"/);
+  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.4\}"/);
+  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.4\}"/);
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {
@@ -105,6 +130,27 @@ test("Android adaptive icons keep the canonical logo inside the launcher safe zo
     assert.match(adaptiveIcon, /@drawable\/ic_launcher_foreground_safe/);
     assert.match(adaptiveIcon, /@color\/ic_launcher_background/);
   }
+});
+
+test("Android release validates the packaged narrow contest API cleartext exception", () => {
+  const packagingScript = readFileSync(
+    path.join(root, "scripts", "native-android-package.sh"),
+    "utf8",
+  );
+
+  assert.match(packagingScript, /AAPT2=.*-name aapt2/);
+  assert.match(packagingScript, /dump xmltree "\$SIGNED_APK" --file AndroidManifest\.xml/);
+  assert.match(packagingScript, /xml\\\/network_security_config\$/);
+  assert.match(packagingScript, /A: cleartextTrafficPermitted=false/);
+  assert.match(packagingScript, /A: cleartextTrafficPermitted=true/);
+  assert.match(packagingScript, /A: includeSubdomains=false/);
+  assert.match(packagingScript, /A: src="system"/);
+  assert.match(packagingScript, /101\.201\.29\.29/);
+  assert.match(packagingScript, /NETWORK_DOMAIN_COUNT/);
+  assert.doesNotMatch(
+    packagingScript,
+    /unzip -p "\$SIGNED_APK" AndroidManifest\.xml.*networkSecurityConfig/,
+  );
 });
 
 test("native Apple targets keep the App Store Connect bundle identifiers", () => {

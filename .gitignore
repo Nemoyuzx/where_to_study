@@ -8,6 +8,7 @@ release-artifacts/
 .github/modernize/
 .playwright-cli/
 output/
+/docs/screenshots/
 
 # Local environment files. Keep documented examples available to contributors.
 .env
