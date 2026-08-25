@@ -31,33 +31,25 @@
 ./scripts/native-apple-app-store.sh preflight all
 
 export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
-export APPLE_BUILD_NUMBER=61
+export APPLE_BUILD_NUMBER=72
 
-# 本机需安装 Apple Distribution、Mac Installer Distribution 证书，以及以下
-# 四个默认名称的 App Store 描述文件。名称不同时可用对应环境变量覆盖：
-export APPLE_IOS_PROFILE_SPECIFIER="Where To Study iOS App Store"
-export APPLE_IOS_WIDGET_PROFILE_SPECIFIER="Where To Study iOS Widget App Store"
+# 本机已验证路径：iOS 使用 Xcode 管理的描述文件，必须启用 Automatic。
+# 不要把名称以 "iOS Team Store Provisioning Profile" 开头的 Xcode-managed
+# profile 作为 Manual profile 传入，否则归档会在签名阶段被拒绝。
+APPLE_IOS_SIGNING_STYLE=Automatic \
+  ./scripts/native-apple-app-store.sh upload ios
+
+# iOS 成功后再单独上传 macOS。macOS 使用已安装的手动 App Store profile，
+# 脚本会按 Team ID 自动选择 Mac Installer Distribution 证书。
 export APPLE_MACOS_PROFILE_SPECIFIER="Where To Study macOS App Store"
 export APPLE_WIDGET_PROFILE_SPECIFIER="Where To Study Widget App Store"
-
-# 默认使用 Manual。若本机由 Xcode 管理描述文件，可仅对相应平台启用：
-# export APPLE_IOS_SIGNING_STYLE=Automatic
-# export APPLE_MACOS_SIGNING_STYLE=Automatic
-
-# 通常会按 Team ID 自动查找；钥匙串中有多个匹配身份时可显式覆盖：
-export APPLE_INSTALLER_SIGNING_CERTIFICATE="证书名称或 SHA-1"
-
-# CI 建议另外配置以下三个变量：
-export APPLE_AUTH_KEY_PATH=/secure/path/AuthKey_XXXXXXXXXX.p8
-export APPLE_AUTH_KEY_ID=XXXXXXXXXX
-export APPLE_AUTH_KEY_ISSUER_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
-./scripts/native-apple-app-store.sh archive all
-./scripts/native-apple-app-store.sh export all
-./scripts/native-apple-app-store.sh upload all
+APPLE_MACOS_SIGNING_STYLE=Manual \
+  ./scripts/native-apple-app-store.sh upload macos
 ```
 
-`upload` 会重新创建并校验归档后上传。构建上传不会代替 App Store 元数据与法律声明；仍需在 App Store Connect 完成截图、描述、年龄分级、隐私问卷、价格与地区、构建选择和提交审核。
+`upload` 每次都会重新创建、签名、校验归档并直接上传，不会复用先前 `archive` 或 `export` 的产物；因此正式发布应按上面的 iOS → macOS 顺序各运行一次，不要预先再跑 `archive → export`。每个平台收到 `Upload succeeded` 与 `EXPORT SUCCEEDED` 后即停止，不再为确认 processing 而打开 App Store Connect。构建上传不会代替 App Store 元数据与法律声明；正式提交审核时仍需完成截图、描述、年龄分级、隐私问卷、价格与地区和构建选择。
+
+钥匙串中有多个匹配的 Installer 身份时，可在 macOS 命令前设置 `APPLE_INSTALLER_SIGNING_CERTIFICATE`。CI 不使用本机 Xcode 登录态，需另外配置 `APPLE_AUTH_KEY_PATH`、`APPLE_AUTH_KEY_ID` 与 `APPLE_AUTH_KEY_ISSUER_ID`。
 
 GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_apple` 后上传。先创建受保护环境 `app-store-production`，再配置以下 secrets：
 
@@ -82,9 +74,9 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
-- 本机已安装有效的 Apple Development、Apple Distribution 与 Mac Installer Distribution 证书；iOS/macOS 主应用和 Widget 使用 Xcode 自动管理描述文件完成正式归档。证书私钥和团队标识不写入仓库。
-- macOS 与 iOS `0.2.6 (71)` 已完成本地 Xcode 严格编译、逻辑/UI 回归、正式签名归档和上传；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
-- 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。`0.2.6` 的 iOS 与 macOS 均使用 Build 70。
+- 本机已安装有效的 Apple Development、Apple Distribution 与 Mac Installer Distribution 证书；iOS 主应用和 Widget 使用 Xcode 自动管理描述文件，macOS 主应用和 Widget 使用手动 App Store 描述文件。证书私钥和团队标识不写入仓库。
+- macOS 与 iOS `0.2.6 (72)` 已完成本地 Xcode 严格编译、逻辑/UI 回归、正式签名归档和上传；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
+- 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。下一次上传前先将 `CURRENT_PROJECT_VERSION` 与版本断言同时递增到 73。
 - 13 英寸 iPad 横屏四张 0.2.2 效果图已由专项 Xcode UI 测试生成并写入 `screenshot-manifest.md`；Build 25 素材只保留作历史校验。正式提交仍需按 `screenshot-plan.md` 补齐产品页所需的 iPhone 与 macOS 最新截图。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
 
@@ -95,7 +87,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 核实北邮服务对账号、密码、课程和教室请求的实际保留行为，再决定 App Privacy 是否可以回答“不收集数据”。
 - 填写真实版权主体、App Review 联系人姓名/电话/邮箱，并确认支持 URL 提供用户可用的联系方式。
 - 完成年龄分级、欧盟 DSA 身份、价格、税务类别、销售地区和中国大陆 ICP 状态；没有有效 ICP 时不要勾选中国大陆销售地区。
-- iOS 与 macOS build 71 在 TestFlight 客户端可见后，分别在真机和实际 Mac 上验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
+- iOS 与 macOS build 72 在 TestFlight 客户端可见后，分别在真机和实际 Mac 上验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
 - 使用对应平台的最新构建重新生成并上传商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择最新构建提交审核。
 
 ## Apple 官方核对入口
