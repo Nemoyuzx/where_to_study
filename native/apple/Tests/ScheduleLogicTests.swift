@@ -1024,6 +1024,63 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testCalendarDayAccessibilityLabelPreservesExistingWording() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.dayAccessibilityLabel(
+                todayText: "今天",
+                formattedDate: "2026年8月25日 星期二",
+                holidayNames: ["示例假期"],
+                courseDescriptions: ["08:00-09:35高等数学", "10:00-11:35大学英语"]
+            ),
+            "今天，2026年8月25日 星期二，示例假期，08:00-09:35高等数学，10:00-11:35大学英语"
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.dayAccessibilityLabel(
+                formattedDate: "Tuesday, August 25, 2026",
+                holidayNames: [],
+                courseDescriptions: []
+            ),
+            "Tuesday, August 25, 2026，无课"
+        )
+    }
+
+    func testCalendarMonthGridPositionUsesMondayFirstColumns() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthGridPosition(dayNumber: 1, firstWeekday: 2),
+            TeachingCalendarLogic.MonthGridPosition(row: 0, column: 0)
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthGridPosition(dayNumber: 1, firstWeekday: 1),
+            TeachingCalendarLogic.MonthGridPosition(row: 0, column: 6)
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.monthGridPosition(dayNumber: 31, firstWeekday: 7),
+            TeachingCalendarLogic.MonthGridPosition(row: 5, column: 0)
+        )
+    }
+
+    func testCalendarBoundedCacheRetainsRecentMonthAndYearEntries() {
+        let cache = CalendarBoundedCache<String, Int>(capacity: 2)
+        var buildCount = 0
+        func value(_ key: String) -> Int {
+            cache.value(for: key) {
+                buildCount += 1
+                return buildCount
+            }
+        }
+
+        XCTAssertEqual(value("month"), 1)
+        XCTAssertEqual(value("year"), 2)
+        XCTAssertEqual(value("month"), 1, "A cache hit must refresh LRU recency")
+        XCTAssertEqual(value("next-month"), 3)
+        XCTAssertEqual(value("year"), 4, "The least recently used entry must be evicted")
+        XCTAssertEqual(cache.count, 2)
+
+        cache.removeAll()
+        XCTAssertEqual(cache.count, 0)
+        XCTAssertEqual(value("month"), 5)
+    }
+
     func testCalendarBackgroundPrewarmUsesTheSameVisibleRangesAsEveryView() throws {
         let date = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-24"))
         XCTAssertEqual(TeachingCalendarLogic.visibleDates(containing: date, modeRawValue: "日").count, 1)
@@ -1835,6 +1892,87 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(
             ScheduleLogic.busySlots(on: start, termStart: start, courses: [course]),
             Set([2, 3, 4])
+        )
+    }
+}
+
+final class MobileCalendarPerformanceLogicTests: XCTestCase {
+    #if os(iOS)
+    func testFormatterCacheReusesExactRequestedLocaleWithoutChangingText() throws {
+        let cache = MobileCalendarDateFormatterCache()
+        let locale = Locale(identifier: "fr_FR")
+        let format = "EEEE, MMMM d, yyyy"
+        let date = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 8, day: 25, hour: 12)
+        ))
+        let baseline = DateFormatter()
+        baseline.calendar = .shanghai
+        baseline.locale = locale
+        baseline.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        baseline.dateFormat = format
+
+        let first = cache.formatter(format: format, locale: locale)
+        let second = cache.formatter(format: format, locale: locale)
+
+        XCTAssertTrue(first === second)
+        XCTAssertEqual(first.string(from: date), baseline.string(from: date))
+        XCTAssertTrue(first.string(from: date).contains("mardi"))
+    }
+    #endif
+
+    func testBoundedSnapshotCacheRetainsRecentMonthAndYearKeys() {
+        let cache = CalendarBoundedCache<String, Int>(capacity: 2)
+        var builds = 0
+        func value(_ key: String) -> Int {
+            cache.value(for: key) {
+                builds += 1
+                return builds
+            }
+        }
+
+        XCTAssertEqual(value("month-2026-08"), 1)
+        XCTAssertEqual(value("year-2026"), 2)
+        XCTAssertEqual(value("month-2026-08"), 1)
+        XCTAssertEqual(builds, 2)
+        XCTAssertEqual(cache.keys, ["year-2026", "month-2026-08"])
+
+        XCTAssertEqual(value("month-2026-09"), 3)
+        XCTAssertEqual(cache.keys, ["month-2026-08", "month-2026-09"])
+        XCTAssertEqual(value("year-2026"), 4)
+        XCTAssertEqual(builds, 4, "The least-recently-used year snapshot should rebuild after eviction")
+        XCTAssertEqual(cache.keys, ["month-2026-09", "year-2026"])
+    }
+
+    func testBoundedSnapshotCacheInvalidationDropsEveryProjection() {
+        let cache = CalendarBoundedCache<String, String>(capacity: 4)
+        XCTAssertEqual(cache.value(for: "month") { "month-value" }, "month-value")
+        XCTAssertEqual(cache.value(for: "year") { "year-value" }, "year-value")
+
+        cache.removeAll()
+
+        XCTAssertTrue(cache.isEmpty)
+        XCTAssertTrue(cache.keys.isEmpty)
+        XCTAssertEqual(cache.value(for: "month") { "rebuilt" }, "rebuilt")
+    }
+
+    func testSnapshotAccessibilityProjectionPreservesExistingPunctuationAndOrder() {
+        XCTAssertEqual(
+            TeachingCalendarLogic.dayAccessibilityLabel(
+                todayText: "今天",
+                formattedDate: "2026年8月25日 星期二",
+                holidayNames: ["示例节日"],
+                courseDescriptions: ["08:00-08:45数据结构", "09:50-10:35计算机网络"]
+            ),
+            "今天，2026年8月25日 星期二，示例节日，08:00-08:45数据结构，09:50-10:35计算机网络"
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.dayAccessibilityLabel(
+                todayText: "",
+                formattedDate: "Tuesday, August 25, 2026",
+                holidayNames: [],
+                courseDescriptions: []
+            ),
+            "Tuesday, August 25, 2026，无课"
         )
     }
 }

@@ -1,3 +1,6 @@
+import Combine
+import Foundation
+
 #if os(iOS)
 import SwiftUI
 import UIKit
@@ -48,34 +51,47 @@ private struct MobileMonthEvent: Identifiable {
 private struct MobileMonthDaySnapshot: Identifiable {
     let date: Date
     let dateKey: String
+    let dayNumberText: String
+    let accessibilityLabel: String
     let courses: [Course]
     let holiday: HolidayItem?
     let events: [MobileMonthEvent]
     let allDayEvents: [CalendarAllDayEvent]
+    let deadlineKinds: [CalendarAllDayEventKind]
 
     var id: Date { date }
 }
 
 private final class MobileCalendarSnapshotCache: ObservableObject {
-    private var key: String?
-    private var snapshots = [MobileMonthDaySnapshot]()
+    private var storage = CalendarBoundedCache<String, [MobileMonthDaySnapshot]>(capacity: 4)
 
     func values(
         for key: String,
         build: () -> [MobileMonthDaySnapshot]
     ) -> [MobileMonthDaySnapshot] {
-        if self.key == key { return snapshots }
-        let values = build()
-        self.key = key
-        snapshots = values
-        return values
+        storage.value(for: key, build: build)
     }
 
     func invalidate() {
-        guard key != nil else { return }
+        guard !storage.isEmpty else { return }
         objectWillChange.send()
-        key = nil
-        snapshots = []
+        storage.removeAll()
+    }
+}
+
+final class MobileCalendarDateFormatterCache: ObservableObject {
+    private var storage = CalendarBoundedCache<String, DateFormatter>(capacity: 8)
+
+    func formatter(format: String, locale: Locale) -> DateFormatter {
+        let key = "\(locale.identifier)|\(format)"
+        return storage.value(for: key) {
+            let formatter = DateFormatter()
+            formatter.calendar = .shanghai
+            formatter.locale = locale
+            formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+            formatter.dateFormat = format
+            return formatter
+        }
     }
 }
 
@@ -213,6 +229,7 @@ struct MobileTeachingCalendarView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @ObservedObject var session: TeachingCalendarSessionState
     @StateObject private var snapshotCache = MobileCalendarSnapshotCache()
+    @StateObject private var dateFormatterCache = MobileCalendarDateFormatterCache()
     @State private var presentedDetail: MobileCalendarDetailSelection?
     @State private var presentedWeekAgenda: MobileWeekAgendaSelection?
     @State private var isHorizontalPaging = false
@@ -291,15 +308,30 @@ struct MobileTeachingCalendarView: View {
         .onChange(of: verticalSizeClass) { _ in
             normalizeMonthPositionForLayout()
         }
-        .onReceive(model.objectWillChange) { _ in
-            snapshotCache.invalidate()
-        }
-        .onReceive(calendarDeadlines.objectWillChange) { _ in
+        .onReceive(calendarSnapshotContentChanges) { _ in
             snapshotCache.invalidate()
         }
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
         }
+    }
+
+    private var calendarSnapshotContentChanges: AnyPublisher<Void, Never> {
+        Publishers.MergeMany([
+            model.$schedule.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$holidaysByYear.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$favoriteDeadlines.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$appLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$competitionDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$schoolContestNoticesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$summerCampDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$hackathonDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$customDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            calendarDeadlines.$publicByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            calendarDeadlines.$customByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            calendarDeadlines.$assignmentsByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+        ])
+        .eraseToAnyPublisher()
     }
 
     private var compactHeader: some View {
@@ -771,6 +803,10 @@ struct MobileTeachingCalendarView: View {
             let dayTopInset = TeachingCalendarLogic.monthDayTopInset(
                 collapsedCellHeight: gridLayout.collapsedCellHeight
             )
+            let maximumEventRows = TeachingCalendarLogic.monthEventRowCapacity(
+                cellHeight: cellHeight,
+                dayTopInset: dayTopInset
+            )
             let summaryHeight = max(usableHeight - 18 - 8 - visibleGridHeight - 28 - 16, 0)
 
             let calendarContent = VStack(spacing: 0) {
@@ -784,7 +820,8 @@ struct MobileTeachingCalendarView: View {
                             month: first,
                             expansionProgress: expansionProgress,
                             dayCellHeight: cellHeight,
-                            dayTopInset: dayTopInset
+                            dayTopInset: dayTopInset,
+                            maximumEventRows: maximumEventRows
                         )
                         .frame(width: gridWidth, height: fullGridHeight, alignment: .top)
                         .offset(y: gridOffset)
@@ -890,7 +927,8 @@ struct MobileTeachingCalendarView: View {
         month: Date,
         expansionProgress: CGFloat,
         dayCellHeight: CGFloat,
-        dayTopInset: CGFloat
+        dayTopInset: CGFloat,
+        maximumEventRows: Int
     ) -> some View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return LazyVGrid(columns: columns, spacing: 4) {
@@ -900,7 +938,8 @@ struct MobileTeachingCalendarView: View {
                     month: month,
                     expansionProgress: expansionProgress,
                     cellHeight: dayCellHeight,
-                    dayTopInset: dayTopInset
+                    dayTopInset: dayTopInset,
+                    maximumEventRows: maximumEventRows
                 )
             }
         }
@@ -940,7 +979,8 @@ struct MobileTeachingCalendarView: View {
         month: Date,
         expansionProgress: CGFloat,
         cellHeight: CGFloat,
-        dayTopInset: CGFloat
+        dayTopInset: CGFloat,
+        maximumEventRows: Int
     ) -> some View {
         let day = snapshot.date
         let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
@@ -949,22 +989,17 @@ struct MobileTeachingCalendarView: View {
         let dayCourses = snapshot.courses
         let holiday = snapshot.holiday
         let events = snapshot.events
-        let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-            in: snapshot.allDayEvents
-        )
+        let deadlineKinds = snapshot.deadlineKinds
         let eventLayout = TeachingCalendarLogic.monthEventLayout(
             totalCount: events.count,
-            maximumRows: TeachingCalendarLogic.monthEventRowCapacity(
-                cellHeight: cellHeight,
-                dayTopInset: dayTopInset
-            )
+            maximumRows: maximumEventRows
         )
 
         return VStack(spacing: 3) {
             Button {
                 requestMonthDaySelection(day)
             } label: {
-                Text("\(calendar.component(.day, from: day))")
+                Text(snapshot.dayNumberText)
                     .font(.subheadline.weight(selected ? .bold : .medium))
                     .frame(height: 20)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -1071,7 +1106,7 @@ struct MobileTeachingCalendarView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(dayAccessibilityLabel(day))
+        .accessibilityLabel(snapshot.accessibilityLabel)
         .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier(
@@ -1106,6 +1141,9 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func monthDaySnapshots(for days: [Date]) -> [MobileMonthDaySnapshot] {
+        let accessibilityDateFormatter = fullDateFormatter
+        let todayKey = StrictContractDateParser.string(from: .now)
+        let localizedToday = model.localized("今天")
         let coursesByDate: [String: [Course]]
         if let schedule = model.schedule,
            let termStart = StrictContractDateParser.date(from: schedule.termStartDate) {
@@ -1139,9 +1177,23 @@ struct MobileTeachingCalendarView: View {
             )
             let schoolNotices = publicItems.filter { $0.source == .schoolNotice }
             let publicDeadlines = publicItems.filter { $0.source != .schoolNotice }
+            let allDayEvents = calendarAllDayEvents(
+                dateKey: dateKey,
+                holidays: holidays,
+                assignments: assignments,
+                schoolNotices: schoolNotices,
+                publicDeadlines: publicDeadlines
+            )
             return MobileMonthDaySnapshot(
                 date: day,
                 dateKey: dateKey,
+                dayNumberText: String(calendar.component(.day, from: day)),
+                accessibilityLabel: TeachingCalendarLogic.dayAccessibilityLabel(
+                    todayText: dateKey == todayKey ? localizedToday : "",
+                    formattedDate: accessibilityDateFormatter.string(from: day),
+                    holidayNames: holidays.map(\.name),
+                    courseDescriptions: courses.map { "\($0.timeRange)\($0.name)" }
+                ),
                 courses: courses,
                 holiday: holidays.first,
                 events: monthEvents(
@@ -1152,12 +1204,9 @@ struct MobileTeachingCalendarView: View {
                     publicDeadlines: publicDeadlines,
                     courses: courses
                 ),
-                allDayEvents: calendarAllDayEvents(
-                    dateKey: dateKey,
-                    holidays: holidays,
-                    assignments: assignments,
-                    schoolNotices: schoolNotices,
-                    publicDeadlines: publicDeadlines
+                allDayEvents: allDayEvents,
+                deadlineKinds: CalendarDeadlinePresentation.topTwoDeadlineKinds(
+                    in: allDayEvents
                 )
             )
         }
@@ -1168,7 +1217,10 @@ struct MobileTeachingCalendarView: View {
         scope: String
     ) -> [MobileMonthDaySnapshot] {
         let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
-        let key = "\(scope)|\(firstDate)|\(days.count)"
+        let todayKey = StrictContractDateParser.string(from: .now)
+        let key = "\(scope)|\(firstDate)|\(days.count)|" +
+            "\(model.appLanguage.resolvedResourceName)|\(model.appLanguage.locale.identifier)|" +
+            todayKey
         return snapshotCache.values(for: key) {
             monthDaySnapshots(for: days)
         }
@@ -1266,20 +1318,21 @@ struct MobileTeachingCalendarView: View {
         snapshotsByDate: [String: MobileMonthDaySnapshot]
     ) -> some View {
         let days = monthGridDates(containing: month)
+        let monthTitle = monthFormatter.string(from: month)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 1), count: 7)
         return VStack(alignment: .leading, spacing: 6) {
             Button {
                 jumpToMonth(month)
             } label: {
                 HStack {
-                    Text(monthFormatter.string(from: month))
+                    Text(monthTitle)
                         .font(.headline)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("查看\(monthFormatter.string(from: month))")
+            .accessibilityLabel("查看\(monthTitle)")
             .accessibilityIdentifier(
                 "calendar.mobile.year-month.\(Self.yearMonthKeyFormatter.string(from: month))"
             )
@@ -1311,15 +1364,13 @@ struct MobileTeachingCalendarView: View {
             let count = snapshot?.courses.count ?? 0
             let today = sameDay(day, .now)
             let selected = sameDay(day, selectedDate)
-            let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-                in: snapshot?.allDayEvents ?? []
-            )
+            let deadlineKinds = snapshot?.deadlineKinds ?? []
             Button {
                 AppHaptics.selection()
                 selectedDate = day
                 presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
             } label: {
-                Text("\(calendar.component(.day, from: day))")
+                Text(snapshot?.dayNumberText ?? String(calendar.component(.day, from: day)))
                     .font(.system(size: 8, weight: .medium))
                     .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
                     .frame(maxWidth: .infinity, minHeight: 24)
@@ -1360,7 +1411,7 @@ struct MobileTeachingCalendarView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(dayAccessibilityLabel(day))
+            .accessibilityLabel(snapshot?.accessibilityLabel ?? dayAccessibilityLabel(day))
             .accessibilityIdentifier(
                 "calendar.mobile.year-day.\(StrictContractDateParser.string(from: day))"
             )
@@ -2585,12 +2636,12 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func dayAccessibilityLabel(_ day: Date) -> String {
-        let today = sameDay(day, .now) ? model.localized("今天") : ""
-        let holidays = holidayItems(on: day).map(\.name).joined(separator: "，")
-        let dayCourses = courses(on: day).map { "\($0.timeRange)\($0.name)" }.joined(separator: "，")
-        return [today, fullDateFormatter.string(from: day), holidays, dayCourses.isEmpty ? "无课" : dayCourses]
-            .filter { !$0.isEmpty }
-            .joined(separator: "，")
+        TeachingCalendarLogic.dayAccessibilityLabel(
+            todayText: sameDay(day, .now) ? model.localized("今天") : "",
+            formattedDate: fullDateFormatter.string(from: day),
+            holidayNames: holidayItems(on: day).map(\.name),
+            courseDescriptions: courses(on: day).map { "\($0.timeRange)\($0.name)" }
+        )
     }
 
     private func sameDay(_ lhs: Date, _ rhs: Date) -> Bool {
@@ -2603,34 +2654,32 @@ struct MobileTeachingCalendarView: View {
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
     private static let detailsContentAnimation = Animation.easeOut(duration: 0.16)
     private static let yearMonthKeyFormatter = formatter("yyyy-MM")
+    private var usesEnglishFormatting: Bool {
+        model.appLanguage.resolvedResourceName == "en"
+    }
     private var fullDateFormatter: DateFormatter {
-        localizedFormatter(chineseFormat: "yyyy年M月d日 EEEE", englishFormat: "EEEE, MMMM d, yyyy")
+        dateFormatterCache.formatter(
+            format: usesEnglishFormatting ? "EEEE, MMMM d, yyyy" : "yyyy年M月d日 EEEE",
+            locale: model.appLanguage.locale
+        )
     }
 
     private var monthFormatter: DateFormatter {
-        localizedFormatter(chineseFormat: "M月", englishFormat: "MMM")
+        dateFormatterCache.formatter(
+            format: usesEnglishFormatting ? "MMM" : "M月",
+            locale: model.appLanguage.locale
+        )
     }
 
     private var monthDayCompactFormatter: DateFormatter {
-        localizedFormatter(chineseFormat: "M月d日", englishFormat: "MMM d")
+        dateFormatterCache.formatter(
+            format: usesEnglishFormatting ? "MMM d" : "M月d日",
+            locale: model.appLanguage.locale
+        )
     }
 
     private var weekdayFormatter: DateFormatter {
-        localizedFormatter(chineseFormat: "E", englishFormat: "E")
-    }
-
-    private func localizedFormatter(
-        chineseFormat: String,
-        englishFormat: String
-    ) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = model.appLanguage.locale
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        formatter.dateFormat = model.appLanguage.resolvedResourceName == "en"
-            ? englishFormat
-            : chineseFormat
-        return formatter
+        dateFormatterCache.formatter(format: "E", locale: model.appLanguage.locale)
     }
 
     private static func formatter(_ format: String) -> DateFormatter {

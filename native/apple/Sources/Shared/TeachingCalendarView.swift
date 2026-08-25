@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 enum TeachingCalendarNavigationMotion {
@@ -285,36 +286,74 @@ private struct CalendarMonthDeadlineEvent: Identifiable {
 private struct CalendarMonthDaySnapshot: Identifiable {
     let date: Date
     let dateKey: String
+    let dayNumber: Int
+    let weekday: Int
+    let month: Int
+    let accessibilityLabel: String
     let courses: [Course]
     let holidays: [HolidayItem]
     let assignments: [AssignmentDeadlineItem]
     let schoolNotices: [PublicDeadlineItem]
     let publicDeadlines: [PublicDeadlineItem]
     let allDayEvents: [CalendarAllDayEvent]
+    let deadlineKinds: [CalendarAllDayEventKind]
+    let deadlineAccessibilityValue: String
 
     var id: Date { date }
 }
 
-private final class CalendarMonthSnapshotCache: ObservableObject {
-    private var key: String?
-    private var snapshots = [CalendarMonthDaySnapshot]()
+private struct CalendarDaySnapshotCollection {
+    let days: [CalendarMonthDaySnapshot]
+    let byDate: [String: CalendarMonthDaySnapshot]
+    let byMonth: [Int: [CalendarMonthDaySnapshot]]
 
-    func values(
-        for key: String,
-        build: () -> [CalendarMonthDaySnapshot]
-    ) -> [CalendarMonthDaySnapshot] {
-        if self.key == key { return snapshots }
+    init(days: [CalendarMonthDaySnapshot]) {
+        self.days = days
+        byDate = Dictionary(uniqueKeysWithValues: days.map { ($0.dateKey, $0) })
+        byMonth = Dictionary(grouping: days, by: \CalendarMonthDaySnapshot.month)
+    }
+}
+
+final class CalendarBoundedCache<Key: Hashable, Value>: ObservableObject {
+    private let capacity: Int
+    private var valuesByKey = [Key: Value]()
+    private var accessOrder = [Key]()
+
+    init(capacity: Int) {
+        self.capacity = max(capacity, 1)
+    }
+
+    var count: Int { valuesByKey.count }
+    var isEmpty: Bool { valuesByKey.isEmpty }
+    var keys: [Key] { accessOrder }
+
+    func value(for key: Key, build: () -> Value) -> Value {
+        if let cached = valuesByKey[key] {
+            markRecentlyUsed(key)
+            return cached
+        }
         let values = build()
-        self.key = key
-        snapshots = values
+        if valuesByKey.count >= capacity, let leastRecentlyUsed = accessOrder.first {
+            valuesByKey.removeValue(forKey: leastRecentlyUsed)
+            accessOrder.removeFirst()
+        }
+        valuesByKey[key] = values
+        accessOrder.append(key)
         return values
     }
 
-    func invalidate() {
-        guard key != nil else { return }
+    func removeAll() {
+        guard !valuesByKey.isEmpty else { return }
         objectWillChange.send()
-        key = nil
-        snapshots = []
+        valuesByKey.removeAll(keepingCapacity: true)
+        accessOrder.removeAll(keepingCapacity: true)
+    }
+
+    private func markRecentlyUsed(_ key: Key) {
+        if let index = accessOrder.firstIndex(of: key) {
+            accessOrder.remove(at: index)
+        }
+        accessOrder.append(key)
     }
 }
 
@@ -394,6 +433,17 @@ enum TeachingCalendarLogic {
         }
     }
 
+    struct MonthGridPosition: Equatable {
+        let row: Int
+        let column: Int
+    }
+
+    static func monthGridPosition(dayNumber: Int, firstWeekday: Int) -> MonthGridPosition {
+        let leadingDays = (firstWeekday + 5) % 7
+        let index = leadingDays + max(dayNumber - 1, 0)
+        return MonthGridPosition(row: index / 7, column: index % 7)
+    }
+
     #if os(macOS)
     struct DesktopYearLayout: Equatable {
         let rowSpacing: CGFloat
@@ -435,6 +485,23 @@ enum TeachingCalendarLogic {
         guard courseCount > 0 else { return 0 }
         let count = Double(courseCount)
         return 0.12 + 0.72 * count / (count + 3)
+    }
+
+    static func dayAccessibilityLabel(
+        todayText: String? = nil,
+        formattedDate: String,
+        holidayNames: [String],
+        courseDescriptions: [String]
+    ) -> String {
+        let courses = courseDescriptions.joined(separator: "，")
+        return [
+            todayText ?? "",
+            formattedDate,
+            holidayNames.joined(separator: "，"),
+            courses.isEmpty ? "无课" : courses,
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: "，")
     }
 
     #if os(macOS)
@@ -814,7 +881,10 @@ struct TeachingCalendarView: View {
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @ObservedObject var session: TeachingCalendarSessionState
-    @StateObject private var monthSnapshotCache = CalendarMonthSnapshotCache()
+    @StateObject private var monthSnapshotCache = CalendarBoundedCache<
+        String,
+        CalendarDaySnapshotCollection
+    >(capacity: 4)
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
     @State private var showingDatePicker = false
@@ -955,15 +1025,30 @@ struct TeachingCalendarView: View {
             showingDatePicker = false
             presentedTimelineAgenda = nil
         }
-        .onReceive(model.objectWillChange) { _ in
-            monthSnapshotCache.invalidate()
-        }
-        .onReceive(calendarDeadlines.objectWillChange) { _ in
-            monthSnapshotCache.invalidate()
+        .onReceive(calendarSnapshotContentChanges) { _ in
+            monthSnapshotCache.removeAll()
         }
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
         }
+    }
+
+    private var calendarSnapshotContentChanges: AnyPublisher<Void, Never> {
+        Publishers.MergeMany([
+            model.$schedule.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$holidaysByYear.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$favoriteDeadlines.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$appLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$competitionDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$schoolContestNoticesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$summerCampDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$hackathonDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$customDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            calendarDeadlines.$publicByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            calendarDeadlines.$customByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            calendarDeadlines.$assignmentsByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+        ])
+        .eraseToAnyPublisher()
     }
 
     private var calendarPanelContent: some View {
@@ -1259,8 +1344,9 @@ struct TeachingCalendarView: View {
         return desktopMonthView
         #else
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+        let monthNumber = calendar.component(.month, from: first)
         let days = monthGridDates(containing: first)
-        let daySnapshots = cachedDaySnapshots(for: days, scope: "month")
+        let daySnapshots = cachedDaySnapshots(for: days, scope: "month").days
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return VStack(alignment: .leading, spacing: 12) {
             #if !os(macOS)
@@ -1288,7 +1374,7 @@ struct TeachingCalendarView: View {
                             .frame(maxWidth: .infinity)
                     }
                     ForEach(daySnapshots) { snapshot in
-                        monthDayButton(snapshot, month: first)
+                        monthDayButton(snapshot, monthNumber: monthNumber)
                     }
                 }
                 .id(monthGridIdentity)
@@ -1313,8 +1399,9 @@ struct TeachingCalendarView: View {
     #if os(macOS)
     private var desktopMonthView: some View {
         let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
+        let monthNumber = calendar.component(.month, from: first)
         let days = monthGridDates(containing: first)
-        let daySnapshots = cachedDaySnapshots(for: days, scope: "month")
+        let daySnapshots = cachedDaySnapshots(for: days, scope: "month").days
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 0), count: 7)
 
         return GeometryReader { proxy in
@@ -1342,7 +1429,7 @@ struct TeachingCalendarView: View {
                                 ForEach(daySnapshots) { snapshot in
                                     desktopMonthDay(
                                         snapshot,
-                                        month: first,
+                                        monthNumber: monthNumber,
                                         cellHeight: cellHeight
                                     )
                                 }
@@ -1379,7 +1466,7 @@ struct TeachingCalendarView: View {
 
     private func desktopMonthDay(
         _ snapshot: CalendarMonthDaySnapshot,
-        month: Date,
+        monthNumber: Int,
         cellHeight: CGFloat
     ) -> some View {
         let day = snapshot.date
@@ -1391,14 +1478,12 @@ struct TeachingCalendarView: View {
         )
         let isSelected = sameDay(day, selectedDate)
         let isToday = sameDay(day, .now)
-        let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-            in: snapshot.allDayEvents
-        )
-        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
+        let deadlineKinds = snapshot.deadlineKinds
+        let inMonth = snapshot.month == monthNumber
 
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .center, spacing: 5) {
-                if calendar.component(.weekday, from: day) == 2 {
+                if snapshot.weekday == 2 {
                     Text(monthWeekContextText(date: day))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(AppTheme.secondaryText)
@@ -1408,7 +1493,7 @@ struct TeachingCalendarView: View {
                 }
                 Spacer(minLength: 4)
                 desktopMonthDayBadge(
-                    day: day,
+                    dayNumber: snapshot.dayNumber,
                     isSelected: isSelected,
                     isToday: isToday,
                     inMonth: inMonth
@@ -1473,8 +1558,8 @@ struct TeachingCalendarView: View {
         .contentShape(Rectangle())
         .onTapGesture { selectMonthDay(day) }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(dayAccessibilityLabel(day))
-        .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
+        .accessibilityLabel(dayAccessibilityLabel(snapshot, isToday: isToday))
+        .accessibilityValue(snapshot.deadlineAccessibilityValue)
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("calendar.regular.month-day-cell.\(snapshot.dateKey)")
@@ -1482,12 +1567,12 @@ struct TeachingCalendarView: View {
     }
 
     private func desktopMonthDayBadge(
-        day: Date,
+        dayNumber: Int,
         isSelected: Bool,
         isToday: Bool,
         inMonth: Bool
     ) -> some View {
-        Text("\(calendar.component(.day, from: day))")
+        Text("\(dayNumber)")
             .font(.system(size: 12, weight: isSelected || isToday ? .semibold : .medium))
             .monospacedDigit()
             .foregroundStyle(
@@ -1619,7 +1704,7 @@ struct TeachingCalendarView: View {
 
     private func monthDayButton(
         _ snapshot: CalendarMonthDaySnapshot,
-        month: Date
+        monthNumber: Int
     ) -> some View {
         let day = snapshot.date
         let dayCourses = snapshot.courses
@@ -1656,10 +1741,8 @@ struct TeachingCalendarView: View {
         }
         let isSelected = sameDay(day, selectedDate)
         let isToday = sameDay(day, .now)
-        let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-            in: snapshot.allDayEvents
-        )
-        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
+        let deadlineKinds = snapshot.deadlineKinds
+        let inMonth = snapshot.month == monthNumber
         #if os(macOS)
         let showsDetails = true
         #else
@@ -1679,7 +1762,7 @@ struct TeachingCalendarView: View {
             )
         }
         return VStack(alignment: .leading, spacing: 4) {
-            Text(isToday ? "今天 \(calendar.component(.day, from: day))" : "\(calendar.component(.day, from: day))")
+            Text(isToday ? "今天 \(snapshot.dayNumber)" : "\(snapshot.dayNumber)")
                 .font(.caption.bold())
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -1773,8 +1856,8 @@ struct TeachingCalendarView: View {
         .contentShape(Rectangle())
         .onTapGesture { selectMonthDay(day) }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(dayAccessibilityLabel(day))
-        .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
+        .accessibilityLabel(dayAccessibilityLabel(snapshot, isToday: isToday))
+        .accessibilityValue(snapshot.deadlineAccessibilityValue)
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("calendar.regular.month-day-cell.\(snapshot.dateKey)")
@@ -1786,22 +1869,25 @@ struct TeachingCalendarView: View {
             containing: selectedDate,
             calendar: calendar
         )
-        let snapshotsByDate = Dictionary(
-            uniqueKeysWithValues: cachedDaySnapshots(for: yearDays, scope: "year")
-                .map { ($0.dateKey, $0) }
-        )
+        let snapshots = cachedDaySnapshots(for: yearDays, scope: "year")
         #if os(macOS)
-        return desktopYearView(snapshotsByDate: snapshotsByDate)
+        return desktopYearView(snapshotsByMonth: snapshots.byMonth)
         #else
+        let snapshotsByDate = snapshots.byDate
         let year = calendar.component(.year, from: selectedDate)
         let months = (1 ... 12).compactMap {
             calendar.date(from: DateComponents(year: year, month: $0, day: 1))
         }
+        let monthTitleFormatter = monthFormatter
         let columns = [GridItem(.adaptive(minimum: 190, maximum: 280), spacing: 14)]
         return VStack(alignment: .leading, spacing: 12) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
                 ForEach(months, id: \.self) { month in
-                    miniMonth(month, snapshotsByDate: snapshotsByDate)
+                    miniMonth(
+                        month,
+                        title: monthTitleFormatter.string(from: month),
+                        snapshotsByDate: snapshotsByDate
+                    )
                 }
             }
         }
@@ -1810,12 +1896,15 @@ struct TeachingCalendarView: View {
 
     #if os(macOS)
     private func desktopYearView(
-        snapshotsByDate: [String: CalendarMonthDaySnapshot]
+        snapshotsByMonth: [Int: [CalendarMonthDaySnapshot]]
     ) -> some View {
         let year = calendar.component(.year, from: selectedDate)
         let months = (1 ... 12).compactMap {
             calendar.date(from: DateComponents(year: year, month: $0, day: 1))
         }
+        let monthTitleFormatter = monthFormatter
+        let todayKey = StrictContractDateParser.string(from: .now)
+        let selectedKey = StrictContractDateParser.string(from: selectedDate)
 
         return GeometryReader { proxy in
             let layout = TeachingCalendarLogic.desktopYearLayout(availableHeight: proxy.size.height)
@@ -1826,10 +1915,13 @@ struct TeachingCalendarView: View {
 
             LazyVGrid(columns: columns, alignment: .leading, spacing: layout.rowSpacing) {
                 ForEach(months, id: \.self) { month in
+                    let monthNumber = calendar.component(.month, from: month)
                     desktopMiniMonth(
-                        month,
+                        title: monthTitleFormatter.string(from: month),
                         layout: layout,
-                        snapshotsByDate: snapshotsByDate
+                        snapshots: snapshotsByMonth[monthNumber] ?? [],
+                        todayKey: todayKey,
+                        selectedKey: selectedKey
                     )
                 }
             }
@@ -1844,42 +1936,65 @@ struct TeachingCalendarView: View {
     }
 
     private func desktopMiniMonth(
-        _ month: Date,
+        title: String,
         layout: TeachingCalendarLogic.DesktopYearLayout,
-        snapshotsByDate: [String: CalendarMonthDaySnapshot]
+        snapshots: [CalendarMonthDaySnapshot],
+        todayKey: String,
+        selectedKey: String
     ) -> some View {
-        let days = monthGridDates(containing: month)
-        let columns = Array(
-            repeating: GridItem(.flexible(minimum: 0), spacing: layout.gridSpacing),
-            count: 7
-        )
-
         return VStack(alignment: .leading, spacing: layout.monthContentSpacing) {
-            Text(monthFormatter.string(from: month))
+            Text(title)
                 .font(.system(size: layout.monthTitleFontSize, weight: .semibold))
                 .foregroundStyle(AppTheme.primary)
                 .frame(height: layout.monthTitleHeight, alignment: .leading)
 
-            LazyVGrid(columns: columns, spacing: layout.gridSpacing) {
-                ForEach(Self.weekdayLabels, id: \.self) { label in
-                    Text(model.localized(label))
-                        .font(.system(size: layout.weekdayFontSize, weight: .semibold))
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: layout.weekdayHeight,
-                            maxHeight: layout.weekdayHeight
-                        )
+            VStack(spacing: layout.gridSpacing) {
+                HStack(spacing: layout.gridSpacing) {
+                    ForEach(Self.weekdayLabels, id: \.self) { label in
+                        Text(model.localized(label))
+                            .font(.system(size: layout.weekdayFontSize, weight: .semibold))
+                            .foregroundStyle(AppTheme.secondaryText)
+                            .frame(
+                                maxWidth: .infinity,
+                                minHeight: layout.weekdayHeight,
+                                maxHeight: layout.weekdayHeight
+                            )
+                    }
                 }
 
-                ForEach(days, id: \.self) { day in
-                    desktopYearDay(
-                        day,
-                        month: month,
-                        layout: layout,
-                        snapshot: snapshotsByDate[StrictContractDateParser.string(from: day)]
+                GeometryReader { proxy in
+                    let cellWidth = max(
+                        (proxy.size.width - layout.gridSpacing * 6) / 7,
+                        0
+                    )
+                    let firstWeekday = snapshots.first?.weekday ?? 2
+
+                    ZStack(alignment: .topLeading) {
+                        ForEach(snapshots) { snapshot in
+                            let position = TeachingCalendarLogic.monthGridPosition(
+                                dayNumber: snapshot.dayNumber,
+                                firstWeekday: firstWeekday
+                            )
+                            desktopYearDay(
+                                snapshot,
+                                layout: layout,
+                                isToday: snapshot.dateKey == todayKey,
+                                isSelected: snapshot.dateKey == selectedKey
+                            )
+                                .frame(width: cellWidth, height: layout.dayCellHeight)
+                                .offset(
+                                    x: CGFloat(position.column) * (cellWidth + layout.gridSpacing),
+                                    y: CGFloat(position.row) * (layout.dayCellHeight + layout.gridSpacing)
+                                )
+                        }
+                    }
+                    .frame(
+                        width: proxy.size.width,
+                        height: layout.dayCellHeight * 6 + layout.gridSpacing * 5,
+                        alignment: .topLeading
                     )
                 }
+                .frame(height: layout.dayCellHeight * 6 + layout.gridSpacing * 5)
             }
         }
         .frame(
@@ -1890,142 +2005,136 @@ struct TeachingCalendarView: View {
         )
     }
 
-    @ViewBuilder
     private func desktopYearDay(
-        _ day: Date,
-        month: Date,
+        _ snapshot: CalendarMonthDaySnapshot,
         layout: TeachingCalendarLogic.DesktopYearLayout,
-        snapshot: CalendarMonthDaySnapshot?
+        isToday: Bool,
+        isSelected: Bool
     ) -> some View {
-        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
-        if inMonth {
-            let dayCourses = snapshot?.courses ?? []
-            let holidays = snapshot?.holidays ?? []
-            let isToday = sameDay(day, .now)
-            let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-                in: snapshot?.allDayEvents ?? []
+        let day = snapshot.date
+        let dayCourses = snapshot.courses
+        let holidays = snapshot.holidays
+        let deadlineKinds = snapshot.deadlineKinds
+        let baseColor = dayCourses.isEmpty
+            ? Color.clear
+            : AppTheme.primary.opacity(
+                TeachingCalendarLogic.yearCourseOpacity(courseCount: dayCourses.count)
             )
-            let isSelected = sameDay(selectedDate, day)
-            let baseColor = dayCourses.isEmpty
-                ? Color.clear
-                : AppTheme.primary.opacity(
-                    TeachingCalendarLogic.yearCourseOpacity(courseCount: dayCourses.count)
-                )
 
-            let cell = VStack(spacing: 0) {
-                Text("\(calendar.component(.day, from: day))")
-                    .monospacedDigit()
-                if let item = holidays.first {
-                    Text(model.localized(item.type == "holiday" ? "休" : "班"))
-                        .font(.system(size: layout.holidayFontSize, weight: .semibold))
-                        .foregroundStyle(
-                            isSelected || isToday ? AppTheme.onPrimary : Self.holidayColor(item)
+        let cell = VStack(spacing: 0) {
+            Text("\(snapshot.dayNumber)")
+                .monospacedDigit()
+            if let item = holidays.first {
+                Text(model.localized(item.type == "holiday" ? "休" : "班"))
+                    .font(.system(size: layout.holidayFontSize, weight: .semibold))
+                    .foregroundStyle(
+                        isSelected || isToday ? AppTheme.onPrimary : Self.holidayColor(item)
+                    )
+            }
+        }
+        .font(.system(size: layout.dayFontSize, weight: .medium))
+        .foregroundStyle(
+            isSelected || isToday
+                ? AppTheme.onPrimary
+                : (dayCourses.isEmpty ? AppTheme.text : AppTheme.onPrimary)
+        )
+        .frame(
+            maxWidth: .infinity,
+            minHeight: layout.dayCellHeight,
+            maxHeight: layout.dayCellHeight
+        )
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 3).fill(baseColor)
+                if isSelected {
+                    Circle()
+                        .fill(AppTheme.selectedDate)
+                        .frame(
+                            width: layout.selectionDiameter,
+                            height: layout.selectionDiameter
+                        )
+                } else if isToday {
+                    Circle()
+                        .fill(Self.nowRed)
+                        .frame(
+                            width: layout.selectionDiameter,
+                            height: layout.selectionDiameter
                         )
                 }
             }
-            .font(.system(size: layout.dayFontSize, weight: .medium))
-            .foregroundStyle(
-                isSelected || isToday
-                    ? AppTheme.onPrimary
-                    : (dayCourses.isEmpty ? AppTheme.text : AppTheme.onPrimary)
-            )
-            .frame(
-                maxWidth: .infinity,
-                minHeight: layout.dayCellHeight,
-                maxHeight: layout.dayCellHeight
-            )
-            .background {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 3).fill(baseColor)
-                    if isSelected {
-                        Circle()
-                            .fill(AppTheme.selectedDate)
-                            .frame(
-                                width: layout.selectionDiameter,
-                                height: layout.selectionDiameter
-                            )
-                    } else if isToday {
-                        Circle()
-                            .fill(Self.nowRed)
-                            .frame(
-                                width: layout.selectionDiameter,
-                                height: layout.selectionDiameter
-                            )
-                    }
+        }
+        .overlay {
+            ZStack {
+                if let outerKind = deadlineKinds.first {
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
+                }
+                if deadlineKinds.count > 1 {
+                    RoundedRectangle(cornerRadius: 1)
+                        .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
+                        .padding(2.5)
+                }
+                if isSelected, isToday {
+                    Circle()
+                        .stroke(Self.nowRed, lineWidth: 1)
+                        .frame(
+                            width: layout.selectionDiameter - 3,
+                            height: layout.selectionDiameter - 3
+                        )
                 }
             }
-            .overlay {
-                ZStack {
-                    if let outerKind = deadlineKinds.first {
-                        RoundedRectangle(cornerRadius: 3)
-                            .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
-                    }
-                    if deadlineKinds.count > 1 {
-                        RoundedRectangle(cornerRadius: 1)
-                            .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
-                            .padding(2.5)
-                    }
-                    if isSelected, isToday {
-                        Circle()
-                            .stroke(Self.nowRed, lineWidth: 1)
-                            .frame(
-                                width: layout.selectionDiameter - 3,
-                                height: layout.selectionDiameter - 3
-                            )
-                    }
-                }
-            }
-            .contentShape(Rectangle())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(dayAccessibilityLabel(day))
-            .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
-            .accessibilityAddTraits(.isButton)
+        }
+        .contentShape(Rectangle())
 
-            cell
-                .accessibilityAction {
-                    selectedDate = day
-                    yearPopoverDate = day
-                    yearPopoverLocation = nil
-                }
-                .accessibilityAction(named: Text("查看月份")) {
-                    changeMode(to: .month, selecting: day)
-                }
-                .gesture(
-                    SpatialTapGesture(
-                        count: 2,
+        return cell
+            .gesture(
+                SpatialTapGesture(
+                    count: 2,
+                    coordinateSpace: .named(Self.calendarCoordinateSpace)
+                )
+                .exclusively(
+                    before: SpatialTapGesture(
+                        count: 1,
                         coordinateSpace: .named(Self.calendarCoordinateSpace)
                     )
-                    .exclusively(
-                        before: SpatialTapGesture(
-                            count: 1,
-                            coordinateSpace: .named(Self.calendarCoordinateSpace)
-                        )
-                    )
-                    .onEnded { value in
-                        switch value {
-                        case .first:
-                            changeMode(to: .month, selecting: day)
-                        case let .second(tap):
-                            selectedDate = day
-                            yearPopoverDate = day
-                            yearPopoverLocation = tap.location
-                        }
-                    }
                 )
-        } else {
-            Color.clear.frame(height: layout.dayCellHeight)
-        }
+                .onEnded { value in
+                    switch value {
+                    case .first:
+                        changeMode(to: .month, selecting: day)
+                    case let .second(tap):
+                        selectedDate = day
+                        yearPopoverDate = day
+                        yearPopoverLocation = tap.location
+                    }
+                }
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(dayAccessibilityLabel(snapshot, isToday: isToday))
+            .accessibilityValue(snapshot.deadlineAccessibilityValue)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("calendar.desktop.year-day.\(snapshot.dateKey)")
+            .accessibilityAction {
+                selectedDate = day
+                yearPopoverDate = day
+                yearPopoverLocation = nil
+            }
+            .accessibilityAction(named: Text("查看月份")) {
+                changeMode(to: .month, selecting: day)
+            }
     }
     #endif
 
     private func miniMonth(
         _ month: Date,
+        title: String,
         snapshotsByDate: [String: CalendarMonthDaySnapshot]
     ) -> some View {
         let days = monthGridDates(containing: month)
+        let monthNumber = calendar.component(.month, from: month)
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 2), count: 7)
         return VStack(alignment: .leading, spacing: 6) {
-            Text(monthFormatter.string(from: month)).font(.headline)
+            Text(title).font(.headline)
             LazyVGrid(columns: columns, spacing: 2) {
             ForEach(Self.weekdayLabels, id: \.self) { label in
                     Text(model.localized(label))
@@ -2036,7 +2145,7 @@ struct TeachingCalendarView: View {
                 ForEach(days, id: \.self) { day in
                     yearDayButton(
                         day,
-                        month: month,
+                        monthNumber: monthNumber,
                         snapshot: snapshotsByDate[StrictContractDateParser.string(from: day)]
                     )
                 }
@@ -2047,20 +2156,17 @@ struct TeachingCalendarView: View {
     @ViewBuilder
     private func yearDayButton(
         _ day: Date,
-        month: Date,
+        monthNumber: Int,
         snapshot: CalendarMonthDaySnapshot?
     ) -> some View {
-        let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
-        if inMonth {
-            let dayCourses = snapshot?.courses ?? []
-            let holidays = snapshot?.holidays ?? []
+        if let snapshot, snapshot.month == monthNumber {
+            let dayCourses = snapshot.courses
+            let holidays = snapshot.holidays
             let isToday = sameDay(day, .now)
-            let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
-                in: snapshot?.allDayEvents ?? []
-            )
+            let deadlineKinds = snapshot.deadlineKinds
             let isSelected = sameDay(selectedDate, day)
             let cell = VStack(spacing: 0) {
-                Text("\(calendar.component(.day, from: day))")
+                Text("\(snapshot.dayNumber)")
                 if let item = holidays.first {
                     Text(model.localized(item.type == "holiday" ? "休" : "班"))
                         .foregroundStyle(isSelected ? AppTheme.onPrimary : Self.holidayColor(item))
@@ -2100,8 +2206,8 @@ struct TeachingCalendarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 3))
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(dayAccessibilityLabel(day))
-            .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
+            .accessibilityLabel(dayAccessibilityLabel(snapshot, isToday: isToday))
+            .accessibilityValue(snapshot.deadlineAccessibilityValue)
             .accessibilityAddTraits(.isButton)
             #if os(macOS)
             cell
@@ -3021,6 +3127,7 @@ struct TeachingCalendarView: View {
     }
 
     private func monthDaySnapshots(for days: [Date]) -> [CalendarMonthDaySnapshot] {
+        let accessibilityDateFormatter = fullDateFormatter
         let coursesByDate: [String: [Course]]
         if let schedule = model.schedule,
            let termStart = StrictContractDateParser.date(from: schedule.termStartDate) {
@@ -3053,21 +3160,38 @@ struct TeachingCalendarView: View {
             )
             let schoolNotices = publicItems.filter { $0.source == .schoolNotice }
             let publicDeadlines = publicItems.filter { $0.source != .schoolNotice }
+            let courses = coursesByDate[dateKey] ?? []
+            let allDayEvents = calendarAllDayEvents(
+                dateKey: dateKey,
+                holidays: holidays,
+                assignments: assignments,
+                schoolNotices: schoolNotices,
+                publicDeadlines: publicDeadlines
+            )
+            let deadlineKinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
+                in: allDayEvents
+            )
             return CalendarMonthDaySnapshot(
                 date: day,
                 dateKey: dateKey,
-                courses: coursesByDate[dateKey] ?? [],
+                dayNumber: calendar.component(.day, from: day),
+                weekday: calendar.component(.weekday, from: day),
+                month: calendar.component(.month, from: day),
+                accessibilityLabel: TeachingCalendarLogic.dayAccessibilityLabel(
+                    formattedDate: accessibilityDateFormatter.string(from: day),
+                    holidayNames: holidays.map(\.name),
+                    courseDescriptions: courses.map { "\($0.timeRange)\($0.name)" }
+                ),
+                courses: courses,
                 holidays: holidays,
                 assignments: assignments,
                 schoolNotices: schoolNotices,
                 publicDeadlines: publicDeadlines,
-                allDayEvents: calendarAllDayEvents(
-                    dateKey: dateKey,
-                    holidays: holidays,
-                    assignments: assignments,
-                    schoolNotices: schoolNotices,
-                    publicDeadlines: publicDeadlines
-                )
+                allDayEvents: allDayEvents,
+                deadlineKinds: deadlineKinds,
+                deadlineAccessibilityValue: deadlineKinds
+                    .map(\.rawValue)
+                    .joined(separator: ",")
             )
         }
     }
@@ -3075,11 +3199,11 @@ struct TeachingCalendarView: View {
     private func cachedDaySnapshots(
         for days: [Date],
         scope: String
-    ) -> [CalendarMonthDaySnapshot] {
+    ) -> CalendarDaySnapshotCollection {
         let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
         let key = "\(scope)|\(firstDate)|\(days.count)"
-        return monthSnapshotCache.values(for: key) {
-            monthDaySnapshots(for: days)
+        return monthSnapshotCache.value(for: key) {
+            CalendarDaySnapshotCollection(days: monthDaySnapshots(for: days))
         }
     }
 
@@ -3353,13 +3477,12 @@ struct TeachingCalendarView: View {
         return AppTheme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount))
     }
 
-    private func dayAccessibilityLabel(_ day: Date) -> String {
-        let today = sameDay(day, .now) ? model.localized("今天") : ""
-        let holidays = holidayItems(on: day).map(\.name).joined(separator: "，")
-        let dayCourses = courses(on: day).map { "\($0.timeRange)\($0.name)" }.joined(separator: "，")
-        return [today, fullDateFormatter.string(from: day), holidays, dayCourses.isEmpty ? "无课" : dayCourses]
-            .filter { !$0.isEmpty }
-            .joined(separator: "，")
+    private func dayAccessibilityLabel(
+        _ snapshot: CalendarMonthDaySnapshot,
+        isToday: Bool
+    ) -> String {
+        guard isToday else { return snapshot.accessibilityLabel }
+        return "\(model.localized("今天"))，\(snapshot.accessibilityLabel)"
     }
 
     private func sameDay(_ left: Date, _ right: Date) -> Bool {
