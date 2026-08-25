@@ -93,6 +93,6 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历�
 
 > 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
 > 的 assembleHap/assembleApp 编译；0.2.6 (1002010) Release 签名 APP/HAP 已通过 SHA-256
-> 摘要与华为签名链校验，112 个契约单元测试全部通过。DevEco“上传产品”向导已检查，
-> 当前 AGC 账户的已注册应用列表为空，无法提交内测；需账号持有人先在 AppGallery
-> Connect 创建匹配 Bundle ID 的应用记录。GitHub Release 提供本次签名构建。
+> 摘要与华为签名链校验，113 个契约单元测试全部通过。DevEco“上传产品”已将
+> 0.2.6 (1002010) 上传 AppGallery Connect，云测试通过并绑定至 0.2.6 发布草稿。
+> GitHub Release 同步提供签名构建；测试邀请码为 `A0IsJpKIcn3`。

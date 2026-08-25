@@ -23,7 +23,7 @@
 
 - Android：`0.2.6 (42)`，固定维护者证书签名的 Universal APK/AAB。
 - iOS 与原生 macOS：`0.2.6 (72)`，由本机 Xcode 分平台归档并上传 TestFlight；iOS 使用 Xcode 自动管理签名，macOS 使用手动 App Store profile 与 Installer Distribution 证书。两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`，按约定未继续检查 App Store Connect processing。
-- HarmonyOS：`0.2.6 (1002010)`，Release 签名 HAP/App 构建、签名摘要验证与 113 项单元测试通过；DevEco 上传向导显示当前 AGC 账户没有已注册应用，因此继续由 GitHub Release 提供已验证签名资产。
+- HarmonyOS：`0.2.6 (1002010)`，Release 签名 HAP/App 构建、签名摘要验证与 113 项单元测试通过；DevEco 已上传 AppGallery Connect、云测试通过并绑定至 `0.2.6` 发布草稿。GitHub 同时保留已验证签名资产；测试邀请码为 `A0IsJpKIcn3`。
 - GitHub Release 的原生 macOS Universal DMG 已刷新为 `0.2.6 (72)`，HarmonyOS APP/HAP 刷新为 `0.2.6 (1002010)`；Windows、Linux、CLI/TUI 和 Android 资产因产品源码未变化而保持不变。DMG 包含 `arm64 + x86_64`、标准 Applications 快捷方式并通过签名和镜像校验；该预览包未使用 Developer ID 公证。`v0.2.6` 标签不强制移动，刷新资产来自标签后的 `main` 修复。
 
 ### 验证
@@ -58,7 +58,7 @@
 
 - Android: `0.2.6 (42)`, pinned-maintainer-certificate Universal APK/AAB.
 - Native iOS and macOS: `0.2.6 (72)`, archived and uploaded separately with local Xcode. iOS used Xcode-managed automatic signing; macOS used manual App Store profiles plus the Installer Distribution identity. Both uploads returned `Upload succeeded` and `EXPORT SUCCEEDED`; App Store Connect processing was intentionally not inspected afterward.
-- HarmonyOS: `0.2.6 (1002010)`, Release-signed HAP/App builds, signature-digest verification, and 113 unit tests passed. AGC still has no registered app for internal distribution, so the verified assets remain on GitHub Release.
+- HarmonyOS: `0.2.6 (1002010)`, Release-signed HAP/App builds, signature-digest verification, and 113 unit tests passed. DevEco uploaded the build to AppGallery Connect, its cloud test passed, and the package is bound to the `0.2.6` release draft. The HarmonyOS test invitation code is `A0IsJpKIcn3`.
 - The GitHub Release native macOS universal DMG was refreshed to `0.2.6 (72)` and HarmonyOS APP/HAP to `0.2.6 (1002010)`. Windows, Linux, CLI/TUI, and Android assets remain unchanged because their product sources did not change. The v0.2.6 tag was not force-moved; refreshed assets come from post-tag `main` fixes.
 
 ### Validation
