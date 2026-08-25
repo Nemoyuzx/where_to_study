@@ -98,7 +98,7 @@
 | iOS SwiftUI | 210 项 XCTest、iPhone 两项核心 UI、示例模式导航和 iPad Pro 13 英寸横屏回归通过；收藏管理为顶层页，公历周/教学周与宽屏双栏均有截图证据 |
 | TestFlight | iOS 与 macOS `0.2.6 (72)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；iOS 使用 Automatic、macOS 使用 Manual；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.6 (42)` 的 186/186 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Phone/Fold UI smoke 与平板/折叠屏视觉检查通过 |
-| HarmonyOS | `0.2.6 (1002010)` Release 签名 HAP/App 构建、签名摘要验证与 113/113 ArkTS 单元测试通过；DevEco 已上传 AGC、云测试通过并绑定至 0.2.6 发布草稿；GitHub 同步提供签名 APP/HAP；[测试邀请链接](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063)，邀请码为 `A0IsJpKIcn3` |
+| HarmonyOS | `0.2.6 (1002010)` Release 签名 HAP/App 构建、签名摘要验证与 113/113 ArkTS 单元测试通过；DevEco 已上传 AGC、云测试通过并绑定至 0.2.6 发布草稿；GitHub 同步提供签名 APP/HAP；[测试邀请链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3` |
 | macOS DMG | 原生 Universal DMG 的 `0.2.6 (72)`、`arm64 + x86_64`、主应用/Widget 临时签名、Applications 快捷方式、覆盖安装文件名与 `hdiutil verify` 均通过；该 GitHub 预览包未做 Developer ID 公证 |
 | 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、完整本地收藏快照及中英双语隐私说明通过；v1 `exam_week_numbers` 仅作兼容且新数据始终为空 |
 

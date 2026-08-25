@@ -56,12 +56,12 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.2.6 (72)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.6 (1002010)` 已通过 113 项单元测试、DevEco 云测试与 AGC 合法性检查；GitHub Release 提供签名 APP/HAP；[加入 HarmonyOS 测试](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063)，邀请码：`A0IsJpKIcn3` |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.6 (1002010)` 已通过 113 项单元测试、DevEco 云测试与 AGC 合法性检查；GitHub Release 提供签名 APP/HAP；[加入 HarmonyOS 测试（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码：`A0IsJpKIcn3` |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
 > Apple 平台公测链接（版本可能不是最新，最新需要等待审核通过）：https://testflight.apple.com/join/yuzpAtDJ
 >
-> HarmonyOS 测试：`0.2.6 (1002010)` 已上传 AppGallery Connect；[打开测试邀请页面](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063)，邀请码为 `A0IsJpKIcn3`。
+> HarmonyOS 测试：`0.2.6 (1002010)` 已上传 AppGallery Connect；[打开测试邀请页面（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。
 
 ## 下载
 
