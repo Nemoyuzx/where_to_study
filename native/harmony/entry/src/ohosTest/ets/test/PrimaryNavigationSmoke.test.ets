@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll } from '@ohos/hypium';
 import { Driver, ON, MatchPattern, Component, Point } from '@ohos.UiTest';
 import AbilityDelegatorRegistry from '@ohos.app.ability.abilityDelegatorRegistry';
 
-const BUNDLE_NAME: string = 'com.nemoyu.wheretostudy.native.harmony';
+const BUNDLE_NAME: string = 'com.nemoyu.wheretostudy';
 
 async function launchApp(reviewDemo: boolean): Promise<void> {
   const delegator = AbilityDelegatorRegistry.getAbilityDelegator();

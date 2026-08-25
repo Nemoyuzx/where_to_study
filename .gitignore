@@ -49,3 +49,4 @@ native/android/**/build/
 native/android/local.properties
 native/android/.idea/
 native/android/keystore/
+native/harmony/build-profile.json5

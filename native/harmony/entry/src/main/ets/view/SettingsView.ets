@@ -88,6 +88,7 @@ export struct SettingsView {
       Column({ space: 16 }) {
         this.settingsTitle()
         this.referenceNotice()
+        this.reviewDemoSurface()
         if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
@@ -172,6 +173,39 @@ export struct SettingsView {
         .fontColor(AppTheme.text())
     }
     .padding(12)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  reviewDemoSurface() {
+    Column({ space: 8 }) {
+      if (this.model.isSampleMode()) {
+        Text(this.model.text('内置示例模式已开启，不会连接教务服务或读写真实用户数据。'))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.primary())
+          .lineHeight(18)
+          .width('100%')
+        if (this.model.canExitSampleMode()) {
+          this.linkButton('返回真实数据', (): void => {
+            this.model.exitReviewDemo();
+          })
+        }
+      } else {
+        Text(this.model.text('无需教务账号即可浏览内置虚构课表、空教室和教学日历。'))
+          .fontSize(13)
+          .fontColor(AppTheme.secondaryText())
+          .lineHeight(18)
+          .width('100%')
+        this.linkButton('浏览内置示例数据', (): void => {
+          this.model.enterReviewDemo();
+        }, this.model.canEnterReviewDemo())
+      }
+    }
+    .padding(16)
     .width('100%')
     .borderRadius(8)
     .backgroundColor(AppTheme.surface())
@@ -1021,7 +1055,7 @@ export struct SettingsView {
   }
 
   @Builder
-  linkButton(label: string, action: () => void) {
+  linkButton(label: string, action: () => void, enabled: boolean = true) {
     Button(this.model.text(label))
       .type(ButtonType.Normal)
       .stateEffect(true)
@@ -1033,6 +1067,8 @@ export struct SettingsView {
       .backgroundColor(AppTheme.surface())
       .width('100%')
       .height(36)
+      .enabled(enabled)
+      .opacity(enabled ? 1 : 0.62)
       .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
       .onClick(() => {
         action();
