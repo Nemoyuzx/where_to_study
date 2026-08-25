@@ -79,12 +79,17 @@ enum AdaptiveLayoutPolicy {
     }
 }
 
+@MainActor
+private final class CalendarDataServices: ObservableObject {
+    let dailyInfo = DailyInfoStore()
+    let deadlines = CalendarDeadlineStore()
+}
+
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
-    @StateObject private var dailyInfo = DailyInfoStore()
-    @StateObject private var calendarDeadlines = CalendarDeadlineStore()
+    @StateObject private var calendarServices = CalendarDataServices()
     #if os(macOS)
     @State private var macSidebarVisibility: NavigationSplitViewVisibility = .all
     #endif
@@ -92,6 +97,9 @@ struct RootView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isRegularSidebarExpanded = true
     #endif
+
+    private var dailyInfo: DailyInfoStore { calendarServices.dailyInfo }
+    private var calendarDeadlines: CalendarDeadlineStore { calendarServices.deadlines }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -476,7 +484,10 @@ struct RootView: View {
         case .planner: PlannerView()
         case .calendar:
             #if os(iOS)
-            AdaptiveTeachingCalendarView(session: teachingCalendarSession)
+            AdaptiveTeachingCalendarView(
+                session: teachingCalendarSession,
+                calendarDeadlines: calendarDeadlines
+            )
             #else
             TeachingCalendarView(session: teachingCalendarSession)
             #endif
@@ -494,12 +505,16 @@ private extension AdaptiveHorizontalClass {
 
 private struct AdaptiveTeachingCalendarView: View {
     @ObservedObject var session: TeachingCalendarSessionState
+    let calendarDeadlines: CalendarDeadlineStore
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @ViewBuilder
     var body: some View {
         if UIDevice.current.userInterfaceIdiom == .phone {
-            MobileTeachingCalendarView(session: session)
+            MobileTeachingCalendarView(
+                calendarDeadlines: calendarDeadlines,
+                session: session
+            )
         } else {
             GeometryReader { proxy in
                 switch AdaptiveLayoutPolicy.calendarPresentation(
@@ -507,7 +522,10 @@ private struct AdaptiveTeachingCalendarView: View {
                     horizontalClass: AdaptiveHorizontalClass(horizontalSizeClass: horizontalSizeClass)
                 ) {
                 case .compact:
-                    MobileTeachingCalendarView(session: session)
+                    MobileTeachingCalendarView(
+                        calendarDeadlines: calendarDeadlines,
+                        session: session
+                    )
                 case .expanded:
                     TeachingCalendarView(session: session)
                 }

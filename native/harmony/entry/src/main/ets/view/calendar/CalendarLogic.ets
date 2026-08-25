@@ -263,6 +263,26 @@ export class TeachingCalendarLogic {
     return Math.min(Math.max(Math.floor(viewportHeight * 0.52), 240), 420);
   }
 
+  static expandedYearDetailPanelHeight(viewportHeight: number): number {
+    const availableHeight: number = Math.max(Math.floor(viewportHeight) - 32, 0);
+    const desiredHeight: number =
+      TeachingCalendarLogic.expandedYearDetailScrollHeight(viewportHeight) + 108;
+    return Math.min(desiredHeight, availableHeight);
+  }
+
+  static expandedYearDetailPosition(anchorX: number, anchorY: number,
+    viewportWidth: number, viewportHeight: number, panelWidth: number,
+    panelHeight: number, margin: number = 16, gap: number = 10): CalendarPopoverPosition {
+    const maximumX: number = Math.max(viewportWidth - panelWidth - margin, margin);
+    const x: number = Math.min(Math.max(anchorX - panelWidth / 2, margin), maximumX);
+    const below: number = anchorY + gap;
+    const above: number = anchorY - panelHeight - gap;
+    const preferredY: number = below + panelHeight <= viewportHeight - margin ? below : above;
+    const maximumY: number = Math.max(viewportHeight - panelHeight - margin, margin);
+    const y: number = Math.min(Math.max(preferredY, margin), maximumY);
+    return new CalendarPopoverPosition(x, y);
+  }
+
   static periodTitle(date: DateParts, mode: CalendarMode, english: boolean = false): string {
     if (english) {
       if (mode === CalendarMode.day) {
@@ -468,6 +488,16 @@ export class CalendarPageTransitionOffsets {
   constructor(incomingStartX: number, outgoingEndX: number) {
     this.incomingStartX = incomingStartX;
     this.outgoingEndX = outgoingEndX;
+  }
+}
+
+export class CalendarPopoverPosition {
+  readonly x: number;
+  readonly y: number;
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
   }
 }
 

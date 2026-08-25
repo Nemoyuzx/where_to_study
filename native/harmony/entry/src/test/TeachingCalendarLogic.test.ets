@@ -3,7 +3,8 @@ import { describe, it, expect } from '@ohos/hypium';
 import { DateParts, StrictDates } from '../main/ets/common/StrictDates';
 import { Course } from '../main/ets/common/Models';
 import {
-  CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets, CalendarTimelineLogic,
+  CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets, CalendarPopoverPosition,
+  CalendarTimelineLogic,
   CalendarYearDeadlinePriority, TeachingCalendarLogic
 } from '../main/ets/view/calendar/CalendarLogic';
 import { AppSection, AppSectionInfo } from '../main/ets/common/AppSection';
@@ -215,6 +216,32 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.expandedYearDetailScrollHeight(300)).assertEqual(240);
       expect(TeachingCalendarLogic.expandedYearDetailScrollHeight(700)).assertEqual(364);
       expect(TeachingCalendarLogic.expandedYearDetailScrollHeight(1200)).assertEqual(420);
+      expect(TeachingCalendarLogic.expandedYearDetailPanelHeight(300)).assertEqual(268);
+      expect(TeachingCalendarLogic.expandedYearDetailPanelHeight(700)).assertEqual(472);
+      expect(TeachingCalendarLogic.expandedYearDetailPanelHeight(1200)).assertEqual(528);
+    });
+
+    it('expanded_year_detail_stays_near_its_anchor_and_clamps_to_viewport', 0, () => {
+      const below: CalendarPopoverPosition = TeachingCalendarLogic.expandedYearDetailPosition(
+        220, 120, 1200, 800, 320, 472);
+      expect(below.x).assertEqual(60);
+      expect(below.y).assertEqual(130);
+
+      const right: CalendarPopoverPosition = TeachingCalendarLogic.expandedYearDetailPosition(
+        1180, 120, 1200, 800, 320, 472);
+      expect(right.x).assertEqual(864);
+      expect(right.y).assertEqual(130);
+
+      const above: CalendarPopoverPosition = TeachingCalendarLogic.expandedYearDetailPosition(
+        620, 760, 1200, 800, 320, 472);
+      expect(above.x).assertEqual(460);
+      expect(above.y).assertEqual(278);
+
+      const clamped: CalendarPopoverPosition = TeachingCalendarLogic.expandedYearDetailPosition(
+        4, 150, 760, 300, 320, 268);
+      expect(clamped.x).assertEqual(16);
+      expect(clamped.y).assertEqual(16);
+      expect(clamped.y + 268).assertEqual(284);
     });
 
     it('calendar_viewport_preloader_is_independent_and_single_flight_by_viewport', 0, () => {

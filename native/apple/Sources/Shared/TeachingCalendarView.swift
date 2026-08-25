@@ -444,6 +444,35 @@ enum TeachingCalendarLogic {
         return MonthGridPosition(row: index / 7, column: index % 7)
     }
 
+    struct YearPopoverPlacement: Equatable {
+        let origin: CGPoint
+        let appearsBelowAnchor: Bool
+    }
+
+    static func yearPopoverPlacement(
+        anchor: CGPoint,
+        panelSize: CGSize,
+        containerSize: CGSize,
+        margin: CGFloat = 16,
+        gap: CGFloat = 12
+    ) -> YearPopoverPlacement {
+        let maximumX = max(margin, containerSize.width - panelSize.width - margin)
+        let originX = min(max(margin, anchor.x - panelSize.width / 2), maximumX)
+        let maximumY = max(margin, containerSize.height - panelSize.height - margin)
+        let belowY = anchor.y + gap
+        if belowY <= maximumY {
+            return YearPopoverPlacement(
+                origin: CGPoint(x: originX, y: belowY),
+                appearsBelowAnchor: true
+            )
+        }
+        let aboveY = min(maximumY, max(margin, anchor.y - panelSize.height - gap))
+        return YearPopoverPlacement(
+            origin: CGPoint(x: originX, y: aboveY),
+            appearsBelowAnchor: false
+        )
+    }
+
     #if os(macOS)
     struct DesktopYearLayout: Equatable {
         let rowSpacing: CGFloat
@@ -812,6 +841,15 @@ enum TeachingCalendarLogic {
         return .detailRaised
     }
 
+    static func requiresMonthPositionUpdate(
+        current: MonthPosition,
+        target: MonthPosition,
+        verticalTranslation: CGFloat,
+        tolerance: CGFloat = 0.5
+    ) -> Bool {
+        current != target || abs(verticalTranslation) > tolerance
+    }
+
     static func expandedMonthCellHeight(availableHeight: CGFloat) -> CGFloat {
         let weekdayHeight: CGFloat = 18
         let weekdayBottomSpacing: CGFloat = 8
@@ -950,72 +988,6 @@ struct TeachingCalendarView: View {
         .background(AppTheme.background)
         .accessibilityIdentifier("screen.calendar")
         .coordinateSpace(name: Self.calendarCoordinateSpace)
-        #if os(macOS)
-        .popover(isPresented: yearPopoverPresentation, arrowEdge: .top) {
-            if let day = yearPopoverDate {
-                ScrollViewReader { proxy in
-                    VStack(spacing: 0) {
-                        HStack(spacing: 8) {
-                            Text("日期详情")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppTheme.secondaryText)
-                            Spacer(minLength: 8)
-                            Text(
-                                yearPopoverScrollTarget == Self.yearPopoverBottomID
-                                    ? "底部"
-                                    : "顶部"
-                            )
-                            .font(.caption2)
-                            .foregroundStyle(AppTheme.secondaryText)
-                            .accessibilityIdentifier("calendar.desktop.year-popover-position")
-                            Button {
-                                yearPopoverScrollTarget = Self.yearPopoverTopID
-                            } label: {
-                                Image(systemName: "arrow.up.to.line")
-                            }
-                            .buttonStyle(.bordered)
-                            .help("滚动到顶部")
-                            .accessibilityIdentifier("calendar.desktop.year-popover-top")
-                            Button {
-                                yearPopoverScrollTarget = Self.yearPopoverBottomID
-                            } label: {
-                                Image(systemName: "arrow.down.to.line")
-                            }
-                            .buttonStyle(.bordered)
-                            .help("滚动到底部")
-                            .accessibilityIdentifier("calendar.desktop.year-popover-bottom")
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        Divider()
-                        ScrollView(.vertical) {
-                            VStack(spacing: 0) {
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id(Self.yearPopoverTopID)
-                                selectedDayPopover(day)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(16)
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id(Self.yearPopoverBottomID)
-                            }
-                        }
-                        .scrollIndicators(.visible)
-                        .accessibilityLabel("年视图日期详情滚动区")
-                        .accessibilityIdentifier("calendar.desktop.year-popover-scroll")
-                    }
-                    .onChange(of: yearPopoverScrollTarget) { target in
-                        withAnimation(.easeOut(duration: 0.16)) {
-                            proxy.scrollTo(target, anchor: target == Self.yearPopoverBottomID ? .bottom : .top)
-                        }
-                    }
-                }
-                .frame(width: 320, height: 360)
-                .background(AppTheme.surface)
-            }
-        }
-        #endif
         .onChange(of: mode) { _ in
             dismissYearPopover()
             presentedTimelineAgenda = nil
@@ -2005,6 +1977,7 @@ struct TeachingCalendarView: View {
         )
     }
 
+    @ViewBuilder
     private func desktopYearDay(
         _ snapshot: CalendarMonthDaySnapshot,
         layout: TeachingCalendarLogic.DesktopYearLayout,
@@ -2086,7 +2059,7 @@ struct TeachingCalendarView: View {
         }
         .contentShape(Rectangle())
 
-        return cell
+        let interactiveCell = cell
             .gesture(
                 SpatialTapGesture(
                     count: 2,
@@ -2122,6 +2095,19 @@ struct TeachingCalendarView: View {
             .accessibilityAction(named: Text("查看月份")) {
                 changeMode(to: .month, selecting: day)
             }
+
+        if isSelected {
+            interactiveCell
+                .popover(
+                    isPresented: yearPopoverBinding(for: day),
+                    attachmentAnchor: .rect(.bounds),
+                    arrowEdge: nil
+                ) {
+                    desktopYearPopoverPanel(day, width: 320, height: 360)
+                }
+        } else {
+            interactiveCell
+        }
     }
     #endif
 
@@ -2268,14 +2254,11 @@ struct TeachingCalendarView: View {
                 let panelHeight = estimatedYearPopoverHeight(day, availableHeight: proxy.size.height)
                 let fallback = CGPoint(x: proxy.size.width / 2, y: min(220, proxy.size.height / 2))
                 let location = yearPopoverLocation ?? fallback
-                let originX = min(
-                    max(16, location.x - panelWidth / 2),
-                    max(16, proxy.size.width - panelWidth - 16)
+                let placement = TeachingCalendarLogic.yearPopoverPlacement(
+                    anchor: location,
+                    panelSize: CGSize(width: panelWidth, height: panelHeight),
+                    containerSize: proxy.size
                 )
-                let belowY = location.y + 12
-                let originY = belowY + panelHeight <= proxy.size.height - 16
-                    ? belowY
-                    : max(16, location.y - panelHeight - 12)
 
                 ZStack(alignment: .topLeading) {
                     Color.black.opacity(0.001)
@@ -2303,16 +2286,106 @@ struct TeachingCalendarView: View {
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
-                    .offset(x: originX, y: originY)
                     .contentShape(Rectangle())
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("年视图日期详情")
                     .accessibilityIdentifier("calendar.desktop.year-popover")
+                    .offset(x: placement.origin.x, y: placement.origin.y)
                 }
             }
             .zIndex(20)
         }
     }
+
+    #if os(macOS)
+    private func desktopYearPopoverPanel(
+        _ day: Date,
+        width: CGFloat,
+        height: CGFloat
+    ) -> some View {
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Text("日期详情")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.secondaryText)
+                    Spacer(minLength: 8)
+                    Text(
+                        yearPopoverScrollTarget == Self.yearPopoverBottomID
+                            ? "底部"
+                            : "顶部"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .accessibilityIdentifier("calendar.desktop.year-popover-position")
+                    Button {
+                        yearPopoverScrollTarget = Self.yearPopoverTopID
+                    } label: {
+                        Image(systemName: "arrow.up.to.line")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("滚动到顶部")
+                    .accessibilityIdentifier("calendar.desktop.year-popover-top")
+                    Button {
+                        yearPopoverScrollTarget = Self.yearPopoverBottomID
+                    } label: {
+                        Image(systemName: "arrow.down.to.line")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("滚动到底部")
+                    .accessibilityIdentifier("calendar.desktop.year-popover-bottom")
+                    Button {
+                        dismissYearPopover()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("关闭日期详情")
+                    .accessibilityIdentifier("calendar.desktop.year-popover-close")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                Divider()
+                ScrollView(.vertical) {
+                    VStack(spacing: 0) {
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.yearPopoverTopID)
+                        selectedDayPopover(day)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.yearPopoverBottomID)
+                    }
+                }
+                .scrollIndicators(.visible)
+                .accessibilityLabel("年视图日期详情滚动区")
+                .accessibilityIdentifier("calendar.desktop.year-popover-scroll")
+            }
+            .onChange(of: yearPopoverScrollTarget) { target in
+                withAnimation(.easeOut(duration: 0.16)) {
+                    proxy.scrollTo(
+                        target,
+                        anchor: target == Self.yearPopoverBottomID ? .bottom : .top
+                    )
+                }
+            }
+        }
+        .frame(width: width, height: height)
+        .background(AppTheme.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppTheme.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("年视图日期详情")
+        .accessibilityIdentifier("calendar.desktop.year-popover")
+    }
+    #endif
 
     private func selectedDayPopover(_ day: Date) -> some View {
         let dayCourses = courses(on: day)
@@ -3380,14 +3453,23 @@ struct TeachingCalendarView: View {
         yearPopoverScrollTarget = Self.yearPopoverTopID
     }
 
-    private var yearPopoverPresentation: Binding<Bool> {
+    #if os(macOS)
+    private func yearPopoverBinding(for day: Date) -> Binding<Bool> {
         Binding(
-            get: { yearPopoverDate != nil },
+            get: {
+                guard let popoverDay = yearPopoverDate else { return false }
+                return sameDay(popoverDay, day)
+            },
             set: { isPresented in
-                if !isPresented { dismissYearPopover() }
+                if !isPresented,
+                   let popoverDay = yearPopoverDate,
+                   sameDay(popoverDay, day) {
+                    dismissYearPopover()
+                }
             }
         )
     }
+    #endif
 
     private var monthGridIdentity: String {
         let month = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate

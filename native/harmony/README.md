@@ -32,7 +32,7 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap + 112 个契约单元测试
+./scripts/native-harmony-build.sh      # assembleHap + 113 个契约单元测试
 ./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（13 个断言，对应 iOS UITests）
 ```
 

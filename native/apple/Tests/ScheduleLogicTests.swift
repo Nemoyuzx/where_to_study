@@ -1059,6 +1059,45 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testYearPopoverPlacementTracksAnchorAndFlipsAtWindowEdges() {
+        let container = CGSize(width: 1_200, height: 800)
+        let panel = CGSize(width: 320, height: 360)
+
+        XCTAssertEqual(
+            TeachingCalendarLogic.yearPopoverPlacement(
+                anchor: CGPoint(x: 300, y: 200),
+                panelSize: panel,
+                containerSize: container
+            ),
+            TeachingCalendarLogic.YearPopoverPlacement(
+                origin: CGPoint(x: 140, y: 212),
+                appearsBelowAnchor: true
+            )
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.yearPopoverPlacement(
+                anchor: CGPoint(x: 1_180, y: 780),
+                panelSize: panel,
+                containerSize: container
+            ),
+            TeachingCalendarLogic.YearPopoverPlacement(
+                origin: CGPoint(x: 864, y: 408),
+                appearsBelowAnchor: false
+            )
+        )
+        XCTAssertEqual(
+            TeachingCalendarLogic.yearPopoverPlacement(
+                anchor: CGPoint(x: 5, y: 5),
+                panelSize: panel,
+                containerSize: container
+            ),
+            TeachingCalendarLogic.YearPopoverPlacement(
+                origin: CGPoint(x: 16, y: 17),
+                appearsBelowAnchor: true
+            )
+        )
+    }
+
     func testCalendarBoundedCacheRetainsRecentMonthAndYearEntries() {
         let cache = CalendarBoundedCache<String, Int>(capacity: 2)
         var buildCount = 0
@@ -1753,6 +1792,32 @@ final class ScheduleLogicTests: XCTestCase {
                 allowsIntermediatePosition: false
             ),
             .collapsed
+        )
+    }
+
+    func testMonthPositionNormalizationSynchronizesStoredDetentWithoutRedundantSettling() {
+        XCTAssertTrue(
+            TeachingCalendarLogic.requiresMonthPositionUpdate(
+                current: .collapsed,
+                target: .detailRaised,
+                verticalTranslation: 0
+            ),
+            "Landscape normalization must update the stored detent before returning to portrait"
+        )
+        XCTAssertFalse(
+            TeachingCalendarLogic.requiresMonthPositionUpdate(
+                current: .detailRaised,
+                target: .detailRaised,
+                verticalTranslation: 0
+            )
+        )
+        XCTAssertTrue(
+            TeachingCalendarLogic.requiresMonthPositionUpdate(
+                current: .detailRaised,
+                target: .detailRaised,
+                verticalTranslation: 1
+            ),
+            "An active drag still needs to animate back to its settled position"
         )
     }
 

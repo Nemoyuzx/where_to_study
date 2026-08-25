@@ -9,7 +9,7 @@ import { AppTheme } from '../../common/AppTheme';
 import { DeviceState } from '../../common/DeviceState';
 import { PageTitle } from '../SharedComponents';
 import {
-  CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarTimelineDay,
+  CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarPopoverPosition, CalendarTimelineDay,
   CalendarTimelineLogic, CalendarYearDeadlinePriority, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
@@ -42,6 +42,12 @@ export struct ExpandedTeachingCalendarView {
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local contentWidth: number = 900;
   @Local contentHeight: number = 700;
+  @Local rootWidth: number = 900;
+  @Local rootHeight: number = 700;
+  @Local rootGlobalX: number = 0;
+  @Local rootGlobalY: number = 0;
+  @Local presentedDayAnchorX: number = 450;
+  @Local presentedDayAnchorY: number = 240;
   @Local isDarkMode: boolean = false;
   @Local calendarContentOpacity: number = 1;
   @Local calendarContentAnimating: boolean = false;
@@ -358,6 +364,12 @@ export struct ExpandedTeachingCalendarView {
     .focusable(this.isPc)
     .focusOnTouch(this.isPc)
     .onKeyEvent((event: KeyEvent): boolean => this.handleDesktopKey(event))
+    .onAreaChange((oldArea: Area, newArea: Area) => {
+      this.rootWidth = Number(newArea.width);
+      this.rootHeight = Number(newArea.height);
+      this.rootGlobalX = Number(newArea.globalPosition.x);
+      this.rootGlobalY = Number(newArea.globalPosition.y);
+    })
   }
 
   @Builder
@@ -626,6 +638,8 @@ export struct ExpandedTeachingCalendarView {
     this.setSelectedDate(day);
     if (fromDialog) {
       this.allDayDialogDay = null;
+      this.presentedDayAnchorX = this.rootWidth / 2;
+      this.presentedDayAnchorY = this.rootHeight / 2;
       this.presentedDay = day;
       return;
     }
@@ -927,8 +941,12 @@ export struct ExpandedTeachingCalendarView {
         AppTheme.selectedDate() : CalendarColors.primaryWithAlpha(
           TeachingCalendarLogic.yearCourseOpacity(this.markerCount(day)), this.isDarkMode))
       .clip(true)
-      .onClick(() => {
+      .onClick((event: ClickEvent) => {
         this.setSelectedDate(day);
+        this.presentedDayAnchorX = Number(event.target.area.globalPosition.x) - this.rootGlobalX +
+          Number(event.target.area.width) / 2;
+        this.presentedDayAnchorY = Number(event.target.area.globalPosition.y) - this.rootGlobalY +
+          Number(event.target.area.height) / 2;
         this.presentedDay = day;
       })
     } else {
@@ -1127,10 +1145,10 @@ export struct ExpandedTeachingCalendarView {
           }
           .width('100%')
         }
-        .height(TeachingCalendarLogic.expandedYearDetailScrollHeight(this.contentHeight))
         .scrollable(ScrollDirection.Vertical)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.None)
+        .layoutWeight(1)
         .width('100%')
         Row({ space: 8 }) {
           ForEach(CalendarModeInfo.all.slice(0, 3), (item: CalendarMode) => {
@@ -1154,15 +1172,24 @@ export struct ExpandedTeachingCalendarView {
       }
       .padding(16)
       .width(320)
-      .constraintSize({ maxHeight: Math.max(this.contentHeight - 40, 320) })
+      .height(this.yearDetailPanelHeight())
       .borderRadius(10)
       .backgroundColor(AppTheme.surface())
-      .position({ x: '50%', y: '30%' })
-      .translate({ x: '-50%' })
+      .position({ x: this.yearDetailPosition().x, y: this.yearDetailPosition().y })
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
     .height('100%')
+  }
+
+  private yearDetailPanelHeight(): number {
+    return TeachingCalendarLogic.expandedYearDetailPanelHeight(this.rootHeight);
+  }
+
+  private yearDetailPosition(): CalendarPopoverPosition {
+    return TeachingCalendarLogic.expandedYearDetailPosition(
+      this.presentedDayAnchorX, this.presentedDayAnchorY,
+      this.rootWidth, this.rootHeight, 320, this.yearDetailPanelHeight());
   }
 
   @Builder
