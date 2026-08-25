@@ -41,7 +41,7 @@
 测试源码在 `entry/src/test`（契约用例覆盖日期/节次/公历周与教学周/表单编码/URL 策略/
 课表解析/空教室解析/节假日解析/天气与黄历解析、云课堂作业契约、公开 DDL、折叠策略、日历纯逻辑/通知规划与协调）与
 `entry/src/ohosTest`（DevEco 内运行的 UI 冒烟套件，对应
-native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历断言）。
+native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示例模式与日历断言）。
 
 ## 签名与发布
 
@@ -51,8 +51,9 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历�
   Project Structure → Signing Configs 自动生成签名材料（.p12/.cer/.p7b），或在
   `build-profile.json5` 的 `signingConfigs` 中手动填写 material（storeFile、
   storePassword、keyAlias、keyPassword、certpath、profile、signAlg）。
-  签名材料与密码**绝不能提交仓库**（与全仓库的凭据不变量一致），发布时通过
-  DevEco 配置或 CI 密钥传入。
+  本仓库只提供 `build-profile.example.json5` 无秘密模板；复制为已忽略的
+  `build-profile.json5` 后再由 DevEco 或 CI Secret 写入本机签名配置。签名材料与密码
+  **绝不能提交仓库**（与全仓库的凭据不变量一致）。
 - **上架**：在 AppGallery Connect 创建应用、上传签名的 HAP/AAB、填写隐私声明
   （本应用隐私文案与 `PRIVACY.md` 一致）与截图。发布前复核
   `native/apple/AppStore/submission-checklist.md` 中与商店审核对应的通用条目。
@@ -82,9 +83,9 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历�
   400x640（EntryAbility 另调用 setWindowLimits）；宽屏教学日历
   ExpandedTeachingCalendarView（对应 iOS TeachingCalendarView）提供桌面式
   日期导航、课表操作按钮、常展开月网格与年视图跳转面板。
-- 已验证：Mate X7 折叠屏展开态（侧栏+宽布局）、MateBook Pro 2in1
+- 已验证：Pura 90 手机端账号/密码输入与系统输入法、Mate X7 折叠屏展开态（侧栏+宽布局）、MateBook Pro 2in1
   （侧栏导航、双列空教室、宽屏日/周/月/年日历）、600x900 悬浮窄窗
-  （标签栏+紧凑单列布局回退）、手机端 13 项冒烟断言全部通过。
+  （标签栏+紧凑单列布局回退）、手机端输入焦点和原有 13 项界面断言均已覆盖。
 
 ## 不变量
 
@@ -92,7 +93,7 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历�
 默认不常驻高频轮询；保持空教室、教学日历、设置三个一级页面的颜色、术语与状态语义一致。
 
 > 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
-> 的 assembleHap/assembleApp 编译；0.2.6 (1002010) Release 签名 APP/HAP 已通过 SHA-256
+> 的 assembleHap/assembleApp 编译；0.2.6 (1002011) Release 签名 APP/HAP 已通过 SHA-256
 > 摘要与华为签名链校验，113 个契约单元测试全部通过。DevEco“上传产品”已将
-> 0.2.6 (1002010) 上传 AppGallery Connect，云测试通过并绑定至 0.2.6 发布草稿。
+> 0.2.6 (1002011) 输入法热修复上传 AppGallery Connect，云测试通过并更新 0.2.6 测试版本。
 > GitHub Release 同步提供签名构建；[打开 HarmonyOS 测试邀请（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。

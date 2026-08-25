@@ -1,6 +1,6 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window } from '@kit.ArkUI';
+import { KeyboardAvoidMode, window } from '@kit.ArkUI';
 import { AppContext } from '../store/AppContext';
 import { AppLaunchConfiguration } from '../model/LaunchSupport';
 import { DeviceState } from '../common/DeviceState';
@@ -27,6 +27,8 @@ export default class EntryAbility extends UIAbility {
     // 2in1/PC 适配：限制窗口最小尺寸，避免布局被缩到无法使用。
     try {
       const mainWindow: window.Window = windowStage.getMainWindowSync();
+      // 输入法弹出时缩小内容视口，使设置页 Scroll 与固定底栏都保持可达。
+      mainWindow.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
       mainWindow.setWindowLimits({
         maxWidth: 0,
         maxHeight: 0,

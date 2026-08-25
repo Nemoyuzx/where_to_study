@@ -56,16 +56,16 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.2.6 (72)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.6 (1002010)` 已通过 113 项单元测试、DevEco 云测试与 AGC 合法性检查；GitHub Release 提供签名 APP/HAP；[加入 HarmonyOS 测试（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码：`A0IsJpKIcn3` |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.6 (1002011)` 修复设置页账号输入焦点与系统输入法弹出；已通过 113 项单元测试、手机/宽屏 UI 回归与 DevEco 云测试，GitHub Release 提供签名 APP/HAP；[加入 HarmonyOS 测试（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码：`A0IsJpKIcn3` |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
 > Apple 平台公测链接（版本可能不是最新，最新需要等待审核通过）：https://testflight.apple.com/join/yuzpAtDJ
 >
-> HarmonyOS 测试：`0.2.6 (1002010)` 已上传 AppGallery Connect；[打开测试邀请页面（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。
+> HarmonyOS 测试：`0.2.6 (1002011)` 输入法热修复已由 DevEco 上传 AppGallery Connect，且云测试通过；[打开测试邀请页面（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。
 
 ## 下载
 
-[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB、HarmonyOS 签名 APP/HAP，以及原生 macOS Universal DMG。发布后的 build 72 刷新修复了 macOS/HarmonyOS 年视图日期弹卡锚点，并减少 iPhone 月/年视图切换、折叠与详情更新时的主线程重绘；HarmonyOS 宽屏弹卡同步使用点击位置。完整中英文改动见 [0.2.6 发布说明](./docs/release-v0.2.6.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.6 (72)` 已由本地 Xcode 分平台上传 TestFlight；GitHub DMG 刷新为 `0.2.6 (72)` 未公证开源预览包，HarmonyOS `0.2.6 (1002010)` 已由 DevEco 上传 AGC、通过云测试并绑定至发布草稿。
+[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB、HarmonyOS 签名 APP/HAP，以及原生 macOS Universal DMG。发布后的 build 72 刷新修复了 macOS/HarmonyOS 年视图日期弹卡锚点，并减少 iPhone 月/年视图切换、折叠与详情更新时的主线程重绘；HarmonyOS `0.2.6 (1002011)` 进一步修复账号/密码框无法获得焦点和系统输入法不弹出。完整中英文改动见 [0.2.6 发布说明](./docs/release-v0.2.6.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.6 (72)` 已由本地 Xcode 分平台上传 TestFlight；GitHub DMG 保持 `0.2.6 (72)` 未公证开源预览包。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 

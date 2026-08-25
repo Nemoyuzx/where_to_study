@@ -18,6 +18,17 @@ async function launchApp(reviewDemo: boolean): Promise<void> {
   await driver.delayMs(4000);
 }
 
+async function launchLiveInputTest(): Promise<void> {
+  const delegator = AbilityDelegatorRegistry.getAbilityDelegator();
+  await delegator.startAbility({
+    bundleName: BUNDLE_NAME,
+    abilityName: 'EntryAbility',
+    parameters: { 'uiTestingLive': true }
+  });
+  const driver: Driver = Driver.create();
+  await driver.delayMs(4000);
+}
+
 async function findText(driver: Driver, text: string, timeoutMs: number = 5000): Promise<Component | null> {
   const deadline: number = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -114,6 +125,46 @@ export default function primaryNavigationSmokeTest() {
       await driver.delayMs(1200);
       const plannerTitleAgain: Component | null = await findText(driver, '联动查询');
       expect(plannerTitleAgain !== null).assertTrue();
+    });
+
+    it('settings_account_and_password_accept_touch_input', 0, async () => {
+      await launchLiveInputTest();
+      const driver: Driver = Driver.create();
+      const settingsTab: Component | null = await findText(driver, '设置');
+      expect(settingsTab !== null).assertTrue();
+      await settingsTab?.click();
+      await driver.delayMs(1200);
+
+      const accountInput: Component = await driver.findComponent(ON.id('settings_account_input'));
+      expect(await accountInput.isEnabled()).assertTrue();
+      await accountInput.click();
+      await driver.delayMs(400);
+      expect(await accountInput.isFocused()).assertTrue();
+      await accountInput.inputText('2026000000');
+      expect(await accountInput.getText()).assertEqual('2026000000');
+      await accountInput.clearText();
+
+      const passwordInput: Component = await driver.findComponent(ON.id('settings_password_input'));
+      expect(await passwordInput.isEnabled()).assertTrue();
+      await passwordInput.click();
+      await driver.delayMs(400);
+      expect(await passwordInput.isFocused()).assertTrue();
+      await passwordInput.inputText('fixture-password');
+      await passwordInput.clearText();
+    });
+
+    it('review_demo_keeps_credential_fields_disabled', 0, async () => {
+      await launchApp(true);
+      const driver: Driver = Driver.create();
+      const settingsTab: Component | null = await findText(driver, '设置');
+      expect(settingsTab !== null).assertTrue();
+      await settingsTab?.click();
+      await driver.delayMs(1200);
+
+      const accountInput: Component = await driver.findComponent(ON.id('settings_account_input'));
+      const passwordInput: Component = await driver.findComponent(ON.id('settings_password_input'));
+      expect(await accountInput.isEnabled()).assertFalse();
+      expect(await passwordInput.isEnabled()).assertFalse();
     });
 
     it('review_demo_shows_local_data_without_account', 0, async () => {

@@ -2,7 +2,8 @@
 # Where To Study 鸿蒙 UI 冒烟测试（hdc + uitest）。
 # 对应 iOS 端 native/apple/UITests/PrimaryNavigationSmokeTests 的关键断言：
 # 1) 三个一级页面可导航；2) review-demo 示例模式展示本地数据；
-# 3) 教学日历日/周/月/年四视图切换；4) 宽屏（折叠屏展开/2in1/PC）侧栏导航。
+# 3) 设置页账号/密码触摸聚焦与输入；4) 教学日历日/周/月/年四视图切换；
+# 5) 宽屏（折叠屏展开/2in1/PC）侧栏导航。
 # 用法：./scripts/native-harmony-ui-smoke.sh [deviceSerial] [wide|phone]
 #   - 不传布局参数时按设备实际布局自动选择手机段/宽屏段（BUG-034 修复）；
 #   - 显式传 "wide" 强制宽屏段、"phone" 强制手机段。
@@ -19,7 +20,7 @@ if [[ -z "${TARGET}" ]]; then
   echo "未发现已连接的设备/模拟器。请先在 DevEco Device Manager 中启动模拟器。" >&2
   exit 1
 fi
-BUNDLE="com.nemoyu.wheretostudy.native.harmony"
+BUNDLE="com.nemoyu.wheretostudy"
 HELPER="${ROOT_DIR}/scripts/harmony-ui-helper.py"
 LAYOUT_DEV="/data/local/tmp/wts_smoke_layout.json"
 LAYOUT_HOST="/tmp/wts_smoke_layout.json"
@@ -43,6 +44,16 @@ dump_layout() {
 find_text() {
   # find_text <text> [ymin] [ymax] -> "x1 y1 x2 y2"
   python3 "${HELPER}" "${LAYOUT_HOST}" find "$1" "${2:--1}" "${3:-1000000000}" 2>/dev/null || true
+}
+
+find_id() {
+  # find_id <id> -> "x1 y1 x2 y2"
+  python3 "${HELPER}" "${LAYOUT_HOST}" find-id "$1" 2>/dev/null || true
+}
+
+attr_by_id() {
+  # attr_by_id <id> <attribute>
+  python3 "${HELPER}" "${LAYOUT_HOST}" attr-id "$1" "$2" 2>/dev/null || true
 }
 
 assert_text() {
@@ -91,6 +102,36 @@ tap_text() {
   fi
   "${HDC}" -t "${TARGET}" shell uitest uiInput click "$x" "$y" >/dev/null 2>&1
   sleep 1
+}
+
+tap_id() {
+  # tap_id <id>
+  local bounds x y x1 y1 x2 y2
+  bounds="$(find_id "$1")"
+  if [[ -z "$bounds" ]]; then
+    echo "  ✗ 点击失败：未找到 ID $1" >&2
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  read -r x1 y1 x2 y2 <<<"$bounds"
+  x=$(( (x1 + x2) / 2 ))
+  y=$(( (y1 + y2) / 2 ))
+  "${HDC}" -t "${TARGET}" shell uitest uiInput click "$x" "$y" >/dev/null 2>&1
+  sleep 1
+}
+
+assert_id_attr() {
+  # assert_id_attr <描述> <id> <attribute> <expected>
+  local actual
+  dump_layout || true
+  actual="$(attr_by_id "$2" "$3")"
+  if [[ "$actual" == "$4" ]]; then
+    PASS=$((PASS + 1))
+    echo "  ✓ $1"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ $1（$2.$3：期望 $4，实际 ${actual:-<空>}）" >&2
+  fi
 }
 
 launch_app() {
@@ -146,7 +187,19 @@ swipe_up
 dump_layout || true
 assert_text "本地安全存储说明" "账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。"
 
-echo "[3] 教学日历日/周/月/年四视图切换"
+echo "[3] 设置页账号与密码可触摸聚焦并输入"
+launch_app uiTestingLive
+dump_layout || true
+tap_text "设置" 2600 2800
+dump_layout || true
+tap_id "settings_account_input"
+assert_id_attr "学号输入框获得焦点" "settings_account_input" "focused" "true"
+"${HDC}" -t "${TARGET}" shell uitest uiInput text 2026000000 >/dev/null 2>&1
+assert_id_attr "学号输入框可输入" "settings_account_input" "text" "2026000000"
+tap_id "settings_password_input"
+assert_id_attr "密码输入框获得焦点" "settings_password_input" "focused" "true"
+
+echo "[4] 教学日历日/周/月/年四视图切换"
 launch_app reviewDemo
 dump_layout || true
 tap_text "教学日历" 2600 2800
@@ -161,12 +214,12 @@ assert_text "月视图模式按钮" "月" 380 620
 assert_text "月视图星期表头" "一" 480 700
 tap_text "年" 380 620
 dump_layout || true
-assert_text "年视图说明" "颜色越深表示当天课程越多"
+assert_text "年视图说明" "颜色越深表示当天日程越多"
 assert_text "年视图一月" "1月"
 fi
 
 if [[ "${MODE}" == "wide" ]]; then
-echo "[4] 宽屏（折叠屏展开/2in1/PC）侧栏导航"
+echo "[5] 宽屏（折叠屏展开/2in1/PC）侧栏导航"
 launch_app reviewDemo
 dump_layout || true
 assert_text "侧栏标题 BUPT" "BUPT"

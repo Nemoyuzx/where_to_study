@@ -281,11 +281,11 @@ export struct SettingsView {
 
       this.field('教务账号', this.model.account, InputType.Normal, (value: string): void => {
         this.model.account = value;
-      })
+      }, true, 'settings_account_input')
       Blank().height(7)
       this.field('密码', this.model.password, InputType.Password, (value: string): void => {
         this.model.password = value;
-      })
+      }, true, 'settings_password_input')
       if (this.model.canPreserveSavedPassword()) {
         Text(this.model.text('密码已安全保存，留空保持不变'))
           .fontSize(12)
@@ -380,8 +380,10 @@ export struct SettingsView {
 
   @Builder
   field(placeholder: string, value: string, inputType: InputType,
-    onChangeValue: (value: string) => void, enabled: boolean = true) {
+    onChangeValue: (value: string) => void, enabled: boolean = true,
+    accessibilityID: string = '') {
     TextInput({ placeholder: this.model.text(placeholder), text: value })
+      .id(accessibilityID)
       .type(inputType)
       .fontSize(15)
       .fontColor(AppTheme.text())
@@ -395,6 +397,9 @@ export struct SettingsView {
       .showPasswordIcon(false)
       .enabled(!this.model.isSampleMode() && enabled)
       .opacity(this.model.isSampleMode() || !enabled ? 0.62 : 1)
+      .focusable(true)
+      .focusOnTouch(true)
+      .enableKeyboardOnFocus(true)
       .onChange((text: string) => {
         onChangeValue(text);
       })

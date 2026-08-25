@@ -5,7 +5,7 @@
 - 分支：`main`
 - 当前发布版本：[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6)
 - 应用版本：`0.2.6`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=72`；Android `versionCode=42`；HarmonyOS `versionCode=1002010`；Tauri Android `versionCode=2009`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=72`；Android `versionCode=42`；HarmonyOS `versionCode=1002011`；Tauri Android `versionCode=2009`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布验证后的 `/Applications`、iOS 模拟器与 Android 模拟器均未保留 Where To Study 安装副本；Xcode 构建副本已清理
 - 发布边界：`v0.2.6` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 72 已分平台上传 TestFlight；GitHub Release 同步提供未公证的原生 macOS build 72 Universal DMG，但不上传 iOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
@@ -87,6 +87,7 @@
 - 联动查询页补齐两校区天气与默认折叠卡片，折叠时保留摘要，展开后显示今日和明日详情。
 - 月视图日期详情补齐云课堂原生 CAS 登录与实时作业同步、黄历宜忌与竞赛/夏令营/黑客松统一 DDL 卡片，设置页提供天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松六个独立开关与来源声明。
 - 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年双层 DDL 同心边框、只折叠课程的日周摘要、独立的今天/选中状态、范围缓存和中英文界面；日/周时间轴轴区与日期区均使用整点实线和节次虚线；构建及 113 项 ArkTS 单元测试通过。
+- 设置页输入控件不再受手机全屏根容器的焦点属性阻断；账号与密码框显式启用触摸聚焦和系统输入法，键盘弹出时使用 RESIZE 避让，Pura 90 实测及设备侧自动化均通过。
 
 ## 0.2.6 最终本地验证
 
@@ -98,7 +99,7 @@
 | iOS SwiftUI | 210 项 XCTest、iPhone 两项核心 UI、示例模式导航和 iPad Pro 13 英寸横屏回归通过；收藏管理为顶层页，公历周/教学周与宽屏双栏均有截图证据 |
 | TestFlight | iOS 与 macOS `0.2.6 (72)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；iOS 使用 Automatic、macOS 使用 Manual；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.6 (42)` 的 186/186 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Phone/Fold UI smoke 与平板/折叠屏视觉检查通过 |
-| HarmonyOS | `0.2.6 (1002010)` Release 签名 HAP/App 构建、签名摘要验证与 113/113 ArkTS 单元测试通过；DevEco 已上传 AGC、云测试通过并绑定至 0.2.6 发布草稿；GitHub 同步提供签名 APP/HAP；[测试邀请链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3` |
+| HarmonyOS | `0.2.6 (1002011)` Release 签名 HAP/App 构建、签名摘要验证、113/113 ArkTS 单元测试、Pura 90 手机 16/16 UI 冒烟与 MateBook Pro 宽屏 5/5 导航回归通过；DevEco 已更新上传 AGC 且云测试通过，GitHub 同步提供签名 APP/HAP；[测试邀请链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3` |
 | macOS DMG | 原生 Universal DMG 的 `0.2.6 (72)`、`arm64 + x86_64`、主应用/Widget 临时签名、Applications 快捷方式、覆盖安装文件名与 `hdiutil verify` 均通过；该 GitHub 预览包未做 Developer ID 公证 |
 | 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、完整本地收藏快照及中英双语隐私说明通过；v1 `exam_week_numbers` 仅作兼容且新数据始终为空 |
 
@@ -152,7 +153,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.6 稳定版发布制品
 
-`v0.2.6` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.6 (42)` APK/AAB、HarmonyOS `0.2.6 (1002010)` 签名 APP/HAP，以及刷新后的原生 macOS `0.2.6 (72)` Universal DMG 预览包。iOS 与正式签名 macOS build 72 由本地 Xcode 分平台上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证，内部应用文件名与 TestFlight 安装一致。`v0.2.6` 标签不强制移动，刷新的 Apple/HarmonyOS 资产来自标签后的 `main` 修复。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
+`v0.2.6` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.6 (42)` APK/AAB、HarmonyOS `0.2.6 (1002011)` 签名 APP/HAP，以及刷新后的原生 macOS `0.2.6 (72)` Universal DMG 预览包。iOS 与正式签名 macOS build 72 由本地 Xcode 分平台上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证，内部应用文件名与 TestFlight 安装一致。`v0.2.6` 标签不强制移动，刷新的 Apple/HarmonyOS 资产来自标签后的 `main` 修复。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
 
 ## 0.2.5 稳定版发布制品
 

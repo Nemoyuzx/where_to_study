@@ -99,9 +99,6 @@ export struct RootView {
     .width('100%')
     .height('100%')
     .backgroundColor(AppTheme.background())
-    .focusable(AdaptiveLayoutPolicy.useSidebar(this.containerWidth))
-    .focusOnTouch(AdaptiveLayoutPolicy.useSidebar(this.containerWidth))
-    .onKeyEvent((event: KeyEvent): boolean => this.handleDesktopSectionKey(event))
     .onAreaChange((oldArea: Area, newArea: Area) => {
       this.containerWidth = Number(newArea.width);
     })
@@ -152,6 +149,10 @@ export struct RootView {
     }
     .width('100%')
     .height('100%')
+    // 仅宽屏侧栏布局承接桌面快捷键；手机根节点保持普通容器，避免屏蔽输入控件焦点。
+    .focusable(true)
+    .defaultFocus(true)
+    .onKeyEvent((event: KeyEvent): boolean => this.handleDesktopSectionKey(event))
   }
 
   @Builder
