@@ -24,6 +24,27 @@ Silicon 兼容构建。
 
 bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
+## 反馈与交流群
+
+遇到问题、发现 bug 或有功能建议时，可以提交 [GitHub Issue](https://github.com/Nemoyuzx/where_to_study/issues)，也可以扫码加入交流群。
+
+<table>
+  <tr>
+    <th align="center">QQ 交流群</th>
+    <th align="center">微信交流群</th>
+  </tr>
+  <tr>
+    <td align="center">群号：<code>873443704</code></td>
+    <td align="center">Where To Study 问题与 bug 反馈</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="./docs/assets/feedback-qq-group.jpg" alt="Where To Study QQ 交流群二维码" width="280"></td>
+    <td align="center"><img src="./docs/assets/feedback-wechat-group.jpg" alt="Where To Study 微信交流群二维码" width="280"></td>
+  </tr>
+</table>
+
+> 微信群二维码可能会过期；失效后请优先通过 QQ 群或 GitHub Issue 反馈，并以仓库后续更新的二维码为准。
+
 ## 平台状态
 
 | 平台 | 客户端技术 | 发布状态 |
