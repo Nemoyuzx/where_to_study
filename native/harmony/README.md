@@ -95,4 +95,4 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航/示例模式/日历�
 > 的 assembleHap/assembleApp 编译；0.2.6 (1002010) Release 签名 APP/HAP 已通过 SHA-256
 > 摘要与华为签名链校验，113 个契约单元测试全部通过。DevEco“上传产品”已将
 > 0.2.6 (1002010) 上传 AppGallery Connect，云测试通过并绑定至 0.2.6 发布草稿。
-> GitHub Release 同步提供签名构建；测试邀请码为 `A0IsJpKIcn3`。
+> GitHub Release 同步提供签名构建；[打开 HarmonyOS 测试邀请](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063)，邀请码为 `A0IsJpKIcn3`。
