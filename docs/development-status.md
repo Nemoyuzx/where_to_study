@@ -8,7 +8,7 @@
 - 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=70`；Android `versionCode=42`；HarmonyOS `versionCode=1002009`；Tauri Android `versionCode=2009`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布验证后的 `/Applications`、iOS 模拟器与 Android 模拟器均未保留 Where To Study 安装副本；Xcode 构建副本已清理
-- 发布边界：`v0.2.6` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 71 已上传 TestFlight；GitHub Release 保留未公证的原生 macOS build 70 Universal DMG，但不上传 iOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.6` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 71 已上传 TestFlight；GitHub Release 同步提供未公证的原生 macOS build 71 Universal DMG，但不上传 iOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -99,7 +99,7 @@
 | TestFlight | iOS 与 macOS `0.2.6 (71)` 正式签名归档均通过并收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.6 (42)` 的 186/186 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、版本/证书/ZIP/许可证/网络策略校验通过；Phone/Fold UI smoke 与平板/折叠屏视觉检查通过 |
 | HarmonyOS | `0.2.6 (1002009)` 签名 HAP/App 构建与 112/112 ArkTS 单元测试通过；DevEco 上传向导因当前 AGC 账户无已注册应用而禁用提交，改由 GitHub Release 提供已验证签名 APP/HAP |
-| macOS DMG | 原生 Universal DMG 的 `0.2.6 (70)`、`arm64 + x86_64`、主应用/Widget 临时签名、Applications 快捷方式与 `hdiutil verify` 均通过；该 GitHub 预览包未做 Developer ID 公证 |
+| macOS DMG | 原生 Universal DMG 的 `0.2.6 (71)`、`arm64 + x86_64`、主应用/Widget 临时签名、Applications 快捷方式、覆盖安装文件名与 `hdiutil verify` 均通过；该 GitHub 预览包未做 Developer ID 公证 |
 | 法律与安全 | `npm run licenses:check`、自定义 HTTPS 源安全边界、完整本地收藏快照及中英双语隐私说明通过；v1 `exam_week_numbers` 仅作兼容且新数据始终为空 |
 
 完整中英文变更见 [`release-v0.2.6.md`](release-v0.2.6.md)，自定义日程公开契约见 [`custom-schedule-api.md`](custom-schedule-api.md)。
@@ -152,7 +152,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.6 稳定版发布制品
 
-`v0.2.6` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.6 (42)` APK/AAB、HarmonyOS `0.2.6 (1002009)` 签名 APP/HAP，以及恢复提供的原生 macOS `0.2.6 (70)` Universal DMG 预览包。iOS 与正式签名 macOS build 71 由本地 Xcode 上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证，TestFlight 仍是推荐的 macOS 分发渠道。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
+`v0.2.6` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.6 (42)` APK/AAB、HarmonyOS `0.2.6 (1002009)` 签名 APP/HAP，以及刷新后的原生 macOS `0.2.6 (71)` Universal DMG 预览包。iOS 与正式签名 macOS build 71 由本地 Xcode 上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证，内部应用文件名与 TestFlight 安装一致。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
 
 ## 0.2.5 稳定版发布制品
 

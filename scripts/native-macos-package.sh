@@ -57,7 +57,7 @@ xcodebuild \
   build
 
 SOURCE_APP="$DERIVED_DATA/Build/Products/Release/WhereToStudyMac.app"
-PACKAGE_APP="$TEMP_DIR/Where To Study.app"
+PACKAGE_APP="$TEMP_DIR/WhereToStudyMac.app"
 if [[ ! -d "$SOURCE_APP" ]]; then
   echo "Native macOS app bundle was not found: $SOURCE_APP" >&2
   exit 1
@@ -156,7 +156,7 @@ mkdir -p "$OUTPUT_DIR"
 ditto -c -k --sequesterRsrc --keepParent "$PACKAGE_APP" "$ARCHIVE"
 DMG_ROOT="$TEMP_DIR/dmg-root"
 mkdir -p "$DMG_ROOT"
-ditto "$PACKAGE_APP" "$DMG_ROOT/Where To Study.app"
+ditto "$PACKAGE_APP" "$DMG_ROOT/WhereToStudyMac.app"
 ln -s /Applications "$DMG_ROOT/Applications"
 hdiutil create \
   -volname "Where To Study" \

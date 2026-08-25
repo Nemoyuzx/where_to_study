@@ -191,6 +191,11 @@ test("native macOS release restores a verified universal DMG", () => {
   );
 
   assert.match(packagingScript, /native-macos-universal\.dmg/);
+  assert.match(packagingScript, /PACKAGE_APP="\$TEMP_DIR\/WhereToStudyMac\.app"/);
+  assert.match(
+    packagingScript,
+    /ditto "\$PACKAGE_APP" "\$DMG_ROOT\/WhereToStudyMac\.app"/,
+  );
   assert.match(packagingScript, /ln -s \/Applications/);
   assert.match(packagingScript, /hdiutil create/);
   assert.match(packagingScript, /-format UDZO/);

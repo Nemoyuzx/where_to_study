@@ -28,7 +28,7 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.6 (71)` 正式签名 Universal 构建已上传 TestFlight；GitHub Release 保留 `0.2.6 (70)` 原生 Universal DMG 预览包 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.6 (71)` 正式签名 Universal 构建已上传 TestFlight；GitHub Release 同步提供 `0.2.6 (71)` 原生 Universal DMG 预览包 |
 | Android | Kotlin + Android Views | `0.2.6 (42)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
@@ -42,7 +42,7 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 ## 下载
 
-[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB、HarmonyOS 签名 APP/HAP，以及恢复提供的原生 macOS Universal DMG。本版统一 ISO 公历周与教学周、移除考试周推断，修复 Android 平板/折叠屏导航与日历分页、macOS 年视图弹卡滚动、收藏管理层级和桌面月格 DDL 去重；宽屏空教室结果使用双栏。Apple build 71 进一步使用有界多键快照、预计算日期投影并只渲染全年 365/366 个真实日期。完整中英文改动见 [0.2.6 发布说明](./docs/release-v0.2.6.md)。构建流程仍会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.6 (71)` 已由本地 Xcode 上传 TestFlight；GitHub DMG 仍为 `0.2.6 (70)` 未公证开源预览包，优先推荐 TestFlight 版本。DevEco 上传向导确认当前 AGC 账户的已注册应用列表为空，因此 HarmonyOS 内测上传需账号持有人先在 AppGallery Connect 创建应用记录。
+[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB、HarmonyOS 签名 APP/HAP，以及恢复提供的原生 macOS Universal DMG。本版统一 ISO 公历周与教学周、移除考试周推断，修复 Android 平板/折叠屏导航与日历分页、macOS 年视图弹卡滚动、收藏管理层级和桌面月格 DDL 去重；宽屏空教室结果使用双栏。Apple build 71 进一步使用有界多键快照、预计算日期投影并只渲染全年 365/366 个真实日期。完整中英文改动见 [0.2.6 发布说明](./docs/release-v0.2.6.md)。构建流程仍会生成校验文件供发布前本地与 CI 验证，但 GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.6 (71)` 已由本地 Xcode 上传 TestFlight；GitHub DMG 也已刷新为 `0.2.6 (71)` 未公证开源预览包，应用文件名与 TestFlight 安装保持一致以便覆盖升级。DevEco 上传向导确认当前 AGC 账户的已注册应用列表为空，因此 HarmonyOS 内测上传需账号持有人先在 AppGallery Connect 创建应用记录。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
