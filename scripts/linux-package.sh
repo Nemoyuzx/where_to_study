@@ -100,7 +100,8 @@ validate_extracted_bundle() {
     echo "Linux bundle contains the retired contest API host." >&2
     exit 1
   fi
-  executable="$(find "$extracted_root" -type f -name 'where-to-study' -print -quit)"
+  executable="$(find "$extracted_root" -type f \
+    \( -name 'where_to_study' -o -name 'where-to-study' \) -print -quit)"
   if [[ -z "$executable" ]]; then
     echo "Linux bundle is missing the Where To Study executable." >&2
     exit 1

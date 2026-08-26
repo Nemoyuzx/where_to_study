@@ -321,6 +321,7 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
   assert.match(packagingScript, /APPIMAGETOOL_PATH/);
   assert.match(packagingScript, /APPIMAGE_TOOL_SHA256/);
   assert.match(packagingScript, /harden-linux-appimage\.sh/);
+  assert.match(packagingScript, /-name 'where_to_study'/);
   assert.match(hardeningScript, /libwayland-\*\.so\*/);
   assert.match(hardeningScript, /GIO_MODULE_DIR/);
   assert.match(hardeningScript, /GIO_USE_VFS=local/);
