@@ -16,6 +16,7 @@ on:
       - "LICENSE"
       - "THIRD_PARTY_LICENSES.html"
       - "THIRD_PARTY_NOTICES.md"
+      - "scripts/verify-github-attestation.sh"
       - "vite.config.js"
       - ".github/workflows/build-windows.yml"
   pull_request:
@@ -28,6 +29,7 @@ on:
       - "LICENSE"
       - "THIRD_PARTY_LICENSES.html"
       - "THIRD_PARTY_NOTICES.md"
+      - "scripts/verify-github-attestation.sh"
       - "vite.config.js"
       - ".github/workflows/build-windows.yml"
 
@@ -174,3 +176,44 @@ jobs:
             release-artifacts/*.exe
             release-artifacts/*.exe.sha256
           if-no-files-found: error
+
+  attest-windows:
+    name: Attest Windows release installer
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout verification script
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download Windows release artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: where-to-study-windows
+          path: release-artifacts
+
+      - name: Attest Windows release installer
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: release-artifacts/*.exe
+
+      - name: Verify Windows release attestation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -d '' installers < <(find release-artifacts -maxdepth 1 -type f -name '*.exe' -print0)
+          if (( ${#installers[@]} != 1 )); then
+            echo "Expected exactly one Windows installer, found ${#installers[@]}." >&2
+            exit 1
+          fi
+          ./scripts/verify-github-attestation.sh \
+            "$GITHUB_REPOSITORY" \
+            .github/workflows/build-windows.yml \
+            "${installers[@]}"

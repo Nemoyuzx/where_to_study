@@ -13,6 +13,7 @@ on:
       - "src-tauri/src/**"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "scripts/verify-github-attestation.sh"
       - ".github/workflows/build-tui.yml"
   pull_request:
     paths:
@@ -21,6 +22,7 @@ on:
       - "src-tauri/src/**"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
+      - "scripts/verify-github-attestation.sh"
       - ".github/workflows/build-tui.yml"
 
 permissions:
@@ -126,3 +128,44 @@ jobs:
             release-artifacts/where-to-study-tui-linux-${{ matrix.arch }}.tar.gz
             release-artifacts/where-to-study-tui-linux-${{ matrix.arch }}.tar.gz.sha256
           if-no-files-found: error
+
+  attest-linux:
+    name: Attest Linux TUI archives
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout verification script
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download Linux TUI release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: where-to-study-tui-linux-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Attest Linux TUI archives
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: release-artifacts/*.tar.gz
+
+      - name: Verify Linux TUI attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -d '' archives < <(find release-artifacts -maxdepth 1 -type f -name '*.tar.gz' -print0)
+          if (( ${#archives[@]} != 2 )); then
+            echo "Expected two Linux TUI archives, found ${#archives[@]}." >&2
+            exit 1
+          fi
+          ./scripts/verify-github-attestation.sh \
+            "$GITHUB_REPOSITORY" \
+            .github/workflows/build-tui.yml \
+            "${archives[@]}"

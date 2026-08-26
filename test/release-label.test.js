@@ -400,3 +400,61 @@ test("Linux CLI and TUI workflows package x86_64 and native arm64 archives", () 
     assert.match(workflow, new RegExp(`${binary}-linux-\\$\\{\\{ matrix\\.arch \\}\\}\\.tar\\.gz`));
   }
 });
+
+test("Windows and Linux tag artifacts receive pinned keyless provenance attestations", () => {
+  const expectedAttestAction =
+    "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2";
+  const cases = [
+    {
+      workflowName: "build-windows.yml",
+      expectedSubject: "subject-path: release-artifacts/*.exe",
+      expectedCount: "Expected exactly one Windows installer",
+    },
+    {
+      workflowName: "build-linux.yml",
+      expectedSubject: "release-artifacts/*.AppImage",
+      expectedCount: "Expected four Linux GUI packages",
+    },
+    {
+      workflowName: "build-cli.yml",
+      expectedSubject: "subject-path: release-artifacts/*.tar.gz",
+      expectedCount: "Expected two Linux CLI archives",
+    },
+    {
+      workflowName: "build-tui.yml",
+      expectedSubject: "subject-path: release-artifacts/*.tar.gz",
+      expectedCount: "Expected two Linux TUI archives",
+    },
+  ];
+
+  for (const { workflowName, expectedSubject, expectedCount } of cases) {
+    const workflow = readFileSync(
+      path.join(root, ".github", "workflows", workflowName),
+      "utf8",
+    );
+
+    assert.match(workflow, /if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+    assert.match(
+      workflow,
+      /permissions:\n      contents: read\n      id-token: write\n      attestations: write/,
+    );
+    assert.ok(workflow.includes(expectedAttestAction));
+    assert.ok(workflow.includes(expectedSubject));
+    assert.ok(workflow.includes(expectedCount));
+    assert.ok(workflow.includes("scripts/verify-github-attestation.sh"));
+    assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  }
+});
+
+test("attestation verification pins repository, workflow, tag ref, and runner class", () => {
+  const verifier = readFileSync(
+    path.join(root, "scripts", "verify-github-attestation.sh"),
+    "utf8",
+  );
+
+  assert.match(verifier, /--repo "\$repository"/);
+  assert.match(verifier, /--signer-workflow "\$repository\/\$signer_workflow"/);
+  assert.match(verifier, /--source-ref "\$GITHUB_REF"/);
+  assert.match(verifier, /--deny-self-hosted-runners/);
+  assert.match(verifier, /for attempt in 1 2 3 4 5/);
+});

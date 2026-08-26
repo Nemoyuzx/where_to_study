@@ -22,6 +22,9 @@ Silicon 兼容构建。
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
 
+Windows 与 Linux 发布制品的签名边界、GitHub/Sigstore 来源证明及下载后验证命令见
+[Windows / Linux 签名与构建来源验证](./docs/code-signing.md)。
+
 bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 ## 反馈与交流群
@@ -51,8 +54,8 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 | --- | --- | --- |
 | macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.7 (73)` 正式签名 Universal 构建已上传 TestFlight；GitHub Release 同步提供 `0.2.7 (73)` 原生 Universal DMG 预览包 |
 | Android | Kotlin + Android Views | `0.2.7 (43)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
-| Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
-| Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
+| Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS；新 `v*` 构建生成 GitHub/Sigstore 来源证明，公众 Authenticode 仍需外部身份配置 |
+| Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian、AppImage、CLI、TUI；新 `v*` 构建生成 GitHub/Sigstore 来源证明 |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.2.7 (73)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
@@ -210,11 +213,15 @@ APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX APPLE_BUILD_NUMBER=31 \
 仓库内提供以下构建和安全工作流：
 
 - `.github/workflows/build-windows.yml`：在 `windows-latest` 上构建 Windows 桌面安装包。
+- `.github/workflows/build-linux.yml`：在 Ubuntu x86_64/arm64 runner 上构建、安装验证 Linux Debian/AppImage，并为标签制品生成来源证明。
+- `.github/workflows/build-cli.yml` 与 `.github/workflows/build-tui.yml`：构建两个架构的 Linux 终端制品，并为标签制品生成来源证明。
 - `.github/workflows/build-macos.yml`：在 `macos-15` 上构建并压缩 macOS Apple Silicon 应用。
 - `.github/workflows/build-native.yml`：在主分支及手动触发时运行 Rust/Apple 测试，在主分支运行 Android Debug 门禁；版本标签额外生成 SwiftUI macOS Universal、无签名 iOS archive，以及签名 Android APK/AAB。
 - `.github/workflows/security.yml`：扫描提交历史中的敏感信息，并审计完整 npm 与 Rust 锁文件依赖。
 
 正式原生 Android 标签构建使用以下 secrets：`ANDROID_RELEASE_KEYSTORE_BASE64`、`ANDROID_RELEASE_STORE_PASSWORD`、`ANDROID_RELEASE_KEY_ALIAS`、`ANDROID_RELEASE_KEY_PASSWORD`。标签工作流生成的未签名 iOS archive 与 macOS 构建仅作为受限的 Actions artifact 用于内部验证，不上传到公开 GitHub Release；App Store 构建使用本地、Xcode Cloud 或受保护 CI 环境中的 Apple 分发凭据，不把证书或私钥提交到仓库。
+
+Windows/Linux 标签构建使用 GitHub OIDC 短期身份生成来源证明，不保存 Sigstore 私钥。Windows 的 Authenticode“已验证发布者”必须另行完成公众信任身份验证；不要用自签名证书或把新购证书假定为可导出的 PFX。完整配置边界见 [docs/code-signing.md](./docs/code-signing.md)。
 
 如果不在界面输入学号和教务密码，也可以在启动前配置环境变量：
 
