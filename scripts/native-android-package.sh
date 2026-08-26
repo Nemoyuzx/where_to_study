@@ -9,7 +9,9 @@ npm --prefix "$ROOT_DIR" run licenses:check
 ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ANDROID_DIR/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.6}"
+RELEASE_LABEL="${1:-v0.2.7}"
+printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
+CONTEST_API_HOST="where-to-study.cn"
 APK_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"
 AAB_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android.aab"
 EXPECTED_CERTIFICATE_FILE="$ANDROID_DIR/release-certificate.sha256"
@@ -205,6 +207,22 @@ if ! unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text 'https:/
   echo "Native Android package is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
+if unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
+  echo "Native Android package contains the retired contest API host." >&2
+  exit 1
+fi
+if ! unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text "$CONTEST_API_HOST"; then
+  echo "Native Android package is missing the HTTPS contest API host." >&2
+  exit 1
+fi
+if unzip -p "$SIGNED_AAB" 'base/dex/classes*.dex' | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
+  echo "Native Android bundle contains the retired contest API host." >&2
+  exit 1
+fi
+if ! unzip -p "$SIGNED_AAB" 'base/dex/classes*.dex' | stream_contains_fixed_text "$CONTEST_API_HOST"; then
+  echo "Native Android bundle is missing the HTTPS contest API host." >&2
+  exit 1
+fi
 APK_MANIFEST_TREE="$("$AAPT2" dump xmltree "$SIGNED_APK" --file AndroidManifest.xml)"
 if ! stream_contains_fixed_text 'networkSecurityConfig' <<<"$APK_MANIFEST_TREE"; then
   echo "Native Android package is missing its restricted network security configuration." >&2
@@ -229,11 +247,7 @@ NETWORK_SECURITY_TREE="$(
 for required_policy in \
   'E: base-config' \
   'A: cleartextTrafficPermitted=false' \
-  'A: src="system"' \
-  'E: domain-config' \
-  'A: cleartextTrafficPermitted=true' \
-  'A: includeSubdomains=false' \
-  "T: '101.201.29.29'"; do
+  'A: src="system"'; do
   if ! stream_contains_fixed_text "$required_policy" <<<"$NETWORK_SECURITY_TREE"; then
     echo "Native Android package network security policy is missing: $required_policy" >&2
     exit 1
@@ -244,10 +258,10 @@ NETWORK_DOMAIN_CONFIG_COUNT="$(awk '$1 == "E:" && $2 == "domain-config" { count+
 NETWORK_DOMAIN_COUNT="$(awk '$1 == "E:" && $2 == "domain" { count++ } END { print count + 0 }' <<<"$NETWORK_SECURITY_TREE")"
 NETWORK_TRUST_SOURCE_COUNT="$(awk '$1 == "A:" && $2 == "src=\"system\"" { count++ } END { print count + 0 }' <<<"$NETWORK_SECURITY_TREE")"
 if [[ "$NETWORK_BASE_COUNT" != 1 \
-  || "$NETWORK_DOMAIN_CONFIG_COUNT" != 1 \
-  || "$NETWORK_DOMAIN_COUNT" != 1 \
+  || "$NETWORK_DOMAIN_CONFIG_COUNT" != 0 \
+  || "$NETWORK_DOMAIN_COUNT" != 0 \
   || "$NETWORK_TRUST_SOURCE_COUNT" != 1 ]]; then
-  echo "Native Android package network security policy is broader than the single approved contest API exception." >&2
+  echo "Native Android package network security policy must remain HTTPS-only without domain exceptions." >&2
   exit 1
 fi
 if ! unzip -p "$SIGNED_APK" assets/LICENSE | cmp -s - "$ROOT_DIR/LICENSE"; then

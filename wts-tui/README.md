@@ -55,7 +55,7 @@ cargo build --release
 
 ```bash
 curl -L -o where-to-study-tui.tar.gz \
-  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.6/where-to-study-tui-linux-x86_64.tar.gz
+  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.7/where-to-study-tui-linux-x86_64.tar.gz
 tar -xzf where-to-study-tui.tar.gz
 install -m 0755 where-to-study-tui ~/.local/bin/where-to-study-tui
 ```

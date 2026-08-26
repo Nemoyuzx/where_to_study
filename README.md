@@ -49,23 +49,23 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.6 (72)` 正式签名 Universal 构建已上传 TestFlight；GitHub Release 同步提供 `0.2.6 (72)` 原生 Universal DMG 预览包 |
-| Android | Kotlin + Android Views | `0.2.6 (42)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.7 (73)` 正式签名 Universal 构建已上传 TestFlight；GitHub Release 同步提供 `0.2.7 (73)` 原生 Universal DMG 预览包 |
+| Android | Kotlin + Android Views | `0.2.7 (43)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS 安装包 |
 | Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian 包、AppImage、CLI、TUI |
 | CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.6 (72)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.6 (1002011)` 修复设置页账号输入焦点与系统输入法弹出；已通过 113 项单元测试、手机/宽屏 UI 回归与 DevEco 云测试，GitHub Release 提供签名 APP/HAP；[加入 HarmonyOS 测试（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码：`A0IsJpKIcn3` |
+| iOS | SwiftUI 原生 | `0.2.7 (73)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.7 (1002012)` 已切换竞赛 API 到固定 HTTPS 域名；113 项单元测试、签名 APP/HAP 和 DevEco 云测试通过，GitHub Release 提供签名 APP/HAP；[加入 HarmonyOS 测试（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码：`A0IsJpKIcn3` |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
 > Apple 平台公测链接（版本可能不是最新，最新需要等待审核通过）：https://testflight.apple.com/join/yuzpAtDJ
 >
-> HarmonyOS 测试：`0.2.6 (1002011)` 输入法热修复已由 DevEco 上传 AppGallery Connect，且云测试通过；[打开测试邀请页面（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。
+> HarmonyOS 测试：`0.2.7 (1002012)` 已由 DevEco 上传 AppGallery Connect，且云测试通过；[打开测试邀请页面（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。
 
 ## 下载
 
-[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB、HarmonyOS 签名 APP/HAP，以及原生 macOS Universal DMG。发布后的 build 72 刷新修复了 macOS/HarmonyOS 年视图日期弹卡锚点，并减少 iPhone 月/年视图切换、折叠与详情更新时的主线程重绘；HarmonyOS `0.2.6 (1002011)` 进一步修复账号/密码框无法获得焦点和系统输入法不弹出。完整中英文改动见 [0.2.6 发布说明](./docs/release-v0.2.6.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.6 (72)` 已由本地 Xcode 分平台上传 TestFlight；GitHub DMG 保持 `0.2.6 (72)` 未公证开源预览包。
+[v0.2.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.7) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB、HarmonyOS 签名 APP/HAP，以及原生 macOS Universal DMG。本版本将全部图形客户端的竞赛备用源与校内通知迁移到 `https://where-to-study.cn`，并移除 Android 明文网络例外和 Apple ATS 例外。完整中英文改动见 [0.2.7 发布说明](./docs/release-v0.2.7.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.7 (73)` 已由本地 Xcode 分平台上传 TestFlight；GitHub DMG 为 `0.2.7 (73)` 未公证开源预览包。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
@@ -110,7 +110,7 @@ Android 原生客户端在用户已授权系统日历访问时，可从设备自
 
 校区天气和基础黄历信息来自 [UAPI 天气接口](https://uapis.cn/docs/api-reference/get-misc-weather)与[农历接口](https://uapis.cn/docs/api-reference/get-misc-lunartime)，黄历中的“宜/忌”由 [Timeless API](https://api.timelessq.com/docs/api-15277838)补充。西土城按海淀区行政区划代码查询，沙河按昌平区查询；黄历请求只提交所选日期或由其换算的时间戳和上海时区，不会附带教务凭据、课表或空教室数据。Windows、Linux、iOS、macOS、Android 与 HarmonyOS 图形客户端的天气区域统一为默认折叠卡片，折叠时保留校区与当前天气摘要，展开后显示今日、明日详情和数据来源；设置中可以完全关闭天气或黄历卡片。
 
-学科竞赛、夏令营与黑客松 DDL 的主数据来自 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) 的[公开 JSON](https://nemoyuzx.github.io/contest-ddl/data/competitions.json)，应用下载后仅在本地按所选日期和已开启类别筛选。主源不可用时，支持的平台会尝试固定备用地址 `http://101.201.29.29/api/contest-events`。独立的[北邮校内竞赛通知 API](http://101.201.29.29/api/contest-notices)由服务器脚本从学校内部网站的公开通知页提取并整理截止节点，条目链接回云课堂 HTTPS 原文。两个明文地址都只允许向这个 IP 发送不含账号、密码、Cookie、token、课表、教室或作业数据的 GET，并拒绝重定向。学科竞赛、校内竞赛通知、夏令营和黑客松各有独立开关，卡片底部会标明全部第三方来源。
+学科竞赛、夏令营与黑客松 DDL 的主数据来自 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) 的[公开 JSON](https://nemoyuzx.github.io/contest-ddl/data/competitions.json)，应用下载后仅在本地按所选日期和已开启类别筛选。主源不可用时，支持的平台会尝试固定 HTTPS 备用地址 [`https://where-to-study.cn/api/contest-events`](https://where-to-study.cn/api/contest-events)。独立的[北邮校内竞赛通知 API](https://where-to-study.cn/api/contest-notices)由服务器脚本从学校内部网站的公开通知页提取并整理截止节点，条目链接回云课堂 HTTPS 原文。两条固定接口都只发送不含账号、密码、Cookie、token、课表、教室或作业数据的 HTTPS GET，并拒绝重定向。学科竞赛、校内竞赛通知、夏令营和黑客松各有独立开关，卡片底部会标明全部第三方来源。
 
 用户还可以启用[自定义日程接口](./docs/custom-schedule-api.md)。客户端只接受不含凭据、片段、回环地址或私网字面量的公开 HTTPS JSON 地址，拒绝重定向并限制响应大小、条目数与查询频率；API 返回的文字保持原文。收藏操作会把单条日程的完整快照保存在当前设备，不上传也不跨设备同步；来源关闭、失败或移除条目后仍会在教学日历中显示，取消收藏或“清除本地数据”才会删除。
 
@@ -152,8 +152,8 @@ Linux 终端客户端可以直接从 Release 安装。以 x86_64 为例：
 
 ```bash
 mkdir -p ~/.local/bin
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.6/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.6/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.7/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.7/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
 install -m 0755 where-to-study-cli where-to-study-tui ~/.local/bin/
 ```
 

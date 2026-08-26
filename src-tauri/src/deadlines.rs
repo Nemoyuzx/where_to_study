@@ -15,9 +15,9 @@ use crate::models::{
 
 const PRIMARY_URL: &str = "https://nemoyuzx.github.io/contest-ddl/data/competitions.json";
 const PRIMARY_HOST: &str = "nemoyuzx.github.io";
-const BACKUP_URL: &str = "http://101.201.29.29/api/contest-events";
-const SCHOOL_NOTICES_URL: &str = "http://101.201.29.29/api/contest-notices";
-const BACKUP_HOST: &str = "101.201.29.29";
+const BACKUP_URL: &str = "https://where-to-study.cn/api/contest-events";
+const SCHOOL_NOTICES_URL: &str = "https://where-to-study.cn/api/contest-notices";
+const BACKUP_HOST: &str = "where-to-study.cn";
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_ITEMS_PER_DAY: usize = 100;
 const MAX_CUSTOM_ITEMS: usize = 5_000;
@@ -258,8 +258,8 @@ async fn fetch_source(
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(15))
-        // Both endpoints are fixed. Refusing redirects prevents the plaintext
-        // backup from becoming an open redirect to another host.
+        // Both endpoints are fixed. Refusing redirects prevents either source
+        // from becoming an open redirect to another host.
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| ServiceError::new(format!("无法创建 DDL 请求：{error}")))?;
@@ -677,7 +677,7 @@ async fn fetch_contest_deadlines_range(
         )),
         Err(primary_error) => {
             let bytes =
-                fetch_source(BACKUP_URL, BACKUP_HOST, true)
+                fetch_source(BACKUP_URL, BACKUP_HOST, false)
                     .await
                     .map_err(|backup_error| {
                         ServiceError::new(format!(
@@ -697,7 +697,7 @@ async fn fetch_contest_deadlines_range(
 pub async fn fetch_deadlines(payload: &DeadlinesRequest) -> ServiceResult<DeadlinesResponse> {
     let date = parse_date(payload.date.trim())?;
     let contest = fetch_contest_deadlines(date).await;
-    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, true)
+    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false)
         .await
         .and_then(|bytes| parse_school_notices(&bytes, date));
     let (contest_items, source, used_backup) = match (contest, school) {
@@ -738,7 +738,7 @@ pub async fn fetch_deadline_calendar(
     }
 
     let contest = fetch_contest_deadlines_range(start, end).await;
-    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, true)
+    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false)
         .await
         .and_then(|bytes| parse_school_notices_range(&bytes, start, end));
     let (contest_items, source, used_backup) = match (contest, school) {
@@ -869,14 +869,14 @@ mod tests {
     #[test]
     fn endpoint_policy_only_allows_the_pinned_primary_and_backup_hosts() {
         assert!(validate_endpoint(&Url::parse(PRIMARY_URL).unwrap(), PRIMARY_HOST, false).is_ok());
-        assert!(validate_endpoint(&Url::parse(BACKUP_URL).unwrap(), BACKUP_HOST, true).is_ok());
+        assert!(validate_endpoint(&Url::parse(BACKUP_URL).unwrap(), BACKUP_HOST, false).is_ok());
         assert!(
-            validate_endpoint(&Url::parse(SCHOOL_NOTICES_URL).unwrap(), BACKUP_HOST, true).is_ok()
+            validate_endpoint(&Url::parse(SCHOOL_NOTICES_URL).unwrap(), BACKUP_HOST, false).is_ok()
         );
         assert!(validate_endpoint(
             &Url::parse("http://example.com/data").unwrap(),
             BACKUP_HOST,
-            true
+            false
         )
         .is_err());
     }

@@ -236,8 +236,8 @@ enum CalendarDeadlineSources {
         string: "https://nemoyuzx.github.io/contest-ddl/data/competitions.json"
     )!
     static let primaryPage = URL(string: "https://nemoyuzx.github.io/contest-ddl/")!
-    static let backup = URL(string: "http://101.201.29.29/api/contest-events")!
-    static let schoolNotices = URL(string: "http://101.201.29.29/api/contest-notices")!
+    static let backup = URL(string: "https://where-to-study.cn/api/contest-events")!
+    static let schoolNotices = URL(string: "https://where-to-study.cn/api/contest-notices")!
     static let assignments = URL(
         string: "https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3"
     )!
@@ -300,8 +300,8 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
             do {
                 let data = try await Self.fetchData(
                     from: CalendarDeadlineSources.backup,
-                    allowedScheme: "http",
-                    allowedHost: "101.201.29.29"
+                    allowedScheme: "https",
+                    allowedHost: "where-to-study.cn"
                 )
                 contest = LoadedPublicDeadlineFeed.ContestFeed(
                     itemsByDate: try Self.parseAll(data: data),
@@ -321,8 +321,8 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         do {
             let data = try await Self.fetchData(
                 from: CalendarDeadlineSources.schoolNotices,
-                allowedScheme: "http",
-                allowedHost: "101.201.29.29"
+                allowedScheme: "https",
+                allowedHost: "where-to-study.cn"
             )
             schoolItemsByDate = try Self.parseAllSchoolNotices(data: data)
         } catch {

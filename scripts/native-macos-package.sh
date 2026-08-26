@@ -10,7 +10,10 @@ APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-macOS"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.6}"
+RELEASE_LABEL="${1:-v0.2.7}"
+printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
+CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
 ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-macos-universal.zip"
 DMG="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-macos-universal.dmg"
 validate_release_label "$RELEASE_LABEL"
@@ -108,6 +111,16 @@ if ! path_contains_fixed_text 'https://jwglweixin.bupt.edu.cn' "$PACKAGE_APP"; t
   echo "Native macOS package is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
+if path_contains_fixed_text "$LEGACY_CONTEST_HOST" "$PACKAGE_APP"; then
+  echo "Native macOS package contains the retired contest API host." >&2
+  exit 1
+fi
+for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL"; do
+  if ! path_contains_fixed_text "$endpoint" "$PACKAGE_BINARY"; then
+    echo "Native macOS executable is missing the HTTPS contest endpoint: $endpoint" >&2
+    exit 1
+  fi
+done
 if [[ ! -f "$PACKAGE_APP/Contents/Resources/PrivacyInfo.xcprivacy" ]]; then
   echo "Native macOS package is missing PrivacyInfo.xcprivacy." >&2
   exit 1

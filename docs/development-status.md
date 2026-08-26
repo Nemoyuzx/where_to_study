@@ -1,14 +1,14 @@
-# 稳定版发布检查点（2026-08-25）
+# 稳定版发布检查点（2026-08-26）
 
 ## 当前状态
 
 - 分支：`main`
-- 当前发布版本：[v0.2.6](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.6)
-- 应用版本：`0.2.6`
-- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=72`；Android `versionCode=42`；HarmonyOS `versionCode=1002011`；Tauri Android `versionCode=2009`
+- 当前发布版本：[v0.2.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.7)
+- 应用版本：`0.2.7`
+- 当前开发构建号：Apple `CURRENT_PROJECT_VERSION=73`；Android `versionCode=43`；HarmonyOS `versionCode=1002012`；Tauri Android `versionCode=2010`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
-- 本地安装：发布验证后的 `/Applications`、iOS 模拟器与 Android 模拟器均未保留 Where To Study 安装副本；Xcode 构建副本已清理
-- 发布边界：`v0.2.6` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 72 已分平台上传 TestFlight；GitHub Release 同步提供未公证的原生 macOS build 72 Universal DMG，但不上传 iOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
+- 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
+- 发布边界：`v0.2.7` 使用稳定版本号；Apple Developer 标识符、App Group、分发证书和双平台 App Store Connect 记录已配置，iOS 与 macOS build 73 已分平台上传 TestFlight；HarmonyOS 1002012 已由 DevEco 上传并通过云测试；GitHub Release 提供未公证的原生 macOS build 73 Universal DMG，但不上传 iOS 或 `.sha256` 文件；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -89,6 +89,21 @@
 - 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年双层 DDL 同心边框、只折叠课程的日周摘要、独立的今天/选中状态、范围缓存和中英文界面；日/周时间轴轴区与日期区均使用整点实线和节次虚线；构建及 113 项 ArkTS 单元测试通过。
 - 设置页输入控件不再受手机全屏根容器的焦点属性阻断；账号与密码框显式启用触摸聚焦和系统输入法，键盘弹出时使用 RESIZE 避让，Pura 90 实测及设备侧自动化均通过。
 
+## 0.2.7 最终本地验证
+
+| 范围 | 结果 |
+| --- | --- |
+| 域名/API | `contest-events` 与 `contest-notices` 的 `https://where-to-study.cn` 固定接口均直接返 `200 application/json`、无重定向，实际 JSON 契约与现有解析器兼容 |
+| React/Tauri UI | 116/116 Node 契约、主题、全平台版本和 HTTPS 域名门禁通过；Vite 生产构建与许可证新鲜度检查通过 |
+| Rust | Tauri 146 项自动测试通过，1 项需真实账号和在线服务的测试按设计忽略；共享 Core 55/55、CLI 14/14、TUI 14/14 通过 |
+| macOS SwiftUI | 212/212 XCTest、严格 Swift 6/警告即错误构建、正式签名归档、Universal DMG 双架构、Widget/隐私/许可证/新域名与镜像验证通过 |
+| iOS SwiftUI | 219/219 单元测试通过；23 项 UI 回归中 19 通过、4 项仅 iPad 条件跳过、0 失败；正式归档与新域名/ATS 检查通过；本地 App Store export 的主应用与 Widget 均为 Apple Distribution 签名且不含 `get-task-allow` |
+| TestFlight | iOS 与 macOS `0.2.7 (73)` 均收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
+| Android | `0.2.7 (43)` 的 186/186 Release JVM 测试、`lintRelease`、固定维护者证书签名 APK/AAB、证书指纹、ZIP 对齐、许可证、版本、旧主机缺席与 HTTPS-only 网络策略校验通过 |
+| HarmonyOS | `0.2.7 (1002012)` 的 113/113 ArkTS 单元测试、assembleHap/assembleApp、独立 HAP 签名、APP ZIP 结构和旧主机缺席检查通过；DevEco `Upload Product` 已上传 AGC，云测试结果为“通过” |
+
+完整中英文发布说明见 [`release-v0.2.7.md`](release-v0.2.7.md)。
+
 ## 0.2.6 最终本地验证
 
 | 范围 | 结果 |
@@ -131,7 +146,7 @@
 | macOS SwiftUI | 本机 Xcode 严格 Swift 6 并发和警告即错误构建通过；159/159 全量 XCTest、Universal Release 归档及 `0.2.4 (65)` 正式签名上传通过 |
 | iOS SwiftUI | 本机 Xcode 严格 Swift 6 并发；166/166 逻辑测试、17 项 UI（15 通过、2 项仅 iPad 条件跳过）及 `0.2.4 (65)` 正式签名上传通过 |
 | Android Debug | 162/162 JVM 测试、Lint、Debug APK 与 AndroidTest APK 构建通过 |
-| Android Release | `0.2.4 (37)` 的 162/162 Release JVM 测试、`lintRelease`、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、许可证与包内版本校验通过；发布脚本用 `aapt2` 解析编译后 Manifest 与网络策略，确认默认禁用明文且只为 `101.201.29.29` 单域放行 |
+| Android Release | `0.2.4 (37)` 的 162/162 Release JVM 测试、`lintRelease`、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、许可证与包内版本校验通过；该历史版本的竞赛备用源例外已在后续版本迁移到 `https://where-to-study.cn` 并移除 |
 | Android UI | Medium Phone API 36.1 为 11/11；WhereToStudy Fold 与 Pixel Tablet 各 11 项通过、1 项仅手机导航几何按设计跳过；覆盖日周课程/全天一致性、持久选中日期、DDL 色点、实线/虚线、月动画、月/年边框和折叠侧栏居中 |
 | 浏览器视觉检查 | 桌面与手机宽度的 English 设置、周/月独立居中日程弹窗、全部公开 DDL，以及月/年格“作业 > 校内 > 其它”三档实际计算边框通过；开发服务器唯一控制台消息是浏览器忽略 meta 中 `frame-ancestors` 的已知 CSP 提示 |
 | HarmonyOS | HAP 构建、91/91 ArkTS 单元测试、ohosTest HAP 编译和宽屏日/周/月/年静态契约通过；当前无连接设备，未执行 ohosTest 设备运行 |
@@ -150,6 +165,10 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 - macOS：0.2.4 最终源码 159/159 项逻辑测试通过
 - iOS：0.2.4 最终源码 166/166 项逻辑测试通过；17 项 UI smoke 中 15 项通过、2 项仅 iPad 条件跳过、0 项失败
 - 通知权限超时精确测试：20 轮、40/40 通过
+
+## 0.2.7 稳定版发布制品
+
+`v0.2.7` 的 GitHub Release 附件范围为 Windows x64 NSIS、Linux arm64/x86_64 Debian/AppImage/CLI/TUI、固定 release key 签名的 Android `0.2.7 (43)` APK/AAB、HarmonyOS `0.2.7 (1002012)` APP/HAP，以及原生 macOS `0.2.7 (73)` Universal DMG 预览包。iOS 与正式签名 macOS build 73 由本地 Xcode 分平台上传 TestFlight；不上传 iOS 或 `.sha256` 文件。DMG 未做 Developer ID 公证。按发布约定，Apple 以上传成功为完成标准，不再打开 App Store Connect 检查后续处理状态。
 
 ## 0.2.6 稳定版发布制品
 

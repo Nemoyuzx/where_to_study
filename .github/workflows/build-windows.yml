@@ -133,6 +133,28 @@ jobs:
                 throw "Installed Windows app is missing the exact $legalFile file."
               }
             }
+            $appExecutable = Get-ChildItem $installDirectory -Recurse -File -Filter "*.exe" |
+              Where-Object { $_.Name -notmatch "(?i)uninstall" } |
+              Sort-Object Length -Descending |
+              Select-Object -First 1
+            if (-not $appExecutable) {
+              throw "Installed Windows app is missing its main executable."
+            }
+            $binaryText = [System.Text.Encoding]::Latin1.GetString(
+              [System.IO.File]::ReadAllBytes($appExecutable.FullName)
+            )
+            $legacyContestHost = "{0}.{1}.{2}.{3}" -f 101, 201, 29, 29
+            if ($binaryText.Contains($legacyContestHost)) {
+              throw "Installed Windows executable contains the retired contest API host."
+            }
+            foreach ($endpoint in @(
+              "https://where-to-study.cn/api/contest-events",
+              "https://where-to-study.cn/api/contest-notices"
+            )) {
+              if (-not $binaryText.Contains($endpoint)) {
+                throw "Installed Windows executable is missing the HTTPS contest endpoint: $endpoint"
+              }
+            }
           } finally {
             $uninstaller = Get-ChildItem $installDirectory -Recurse -File -Filter "*uninstall*.exe" |
               Select-Object -First 1

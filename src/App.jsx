@@ -1087,14 +1087,14 @@ function ContestDeadlineCard({
             <>
               <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a>
               {' · '}{t('备用：')}
-              <a href="http://101.201.29.29/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
+              <a href="https://where-to-study.cn/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
             </>
           ) : null}
           {showsContestSource && showsSchoolSource ? ' · ' : null}
           {showsSchoolSource ? (
             <>
               {t('校内：')}
-              <a href="http://101.201.29.29/api/contest-notices" target="_blank" rel="noreferrer">{t('竞赛通知 API')}</a>
+              <a href="https://where-to-study.cn/api/contest-notices" target="_blank" rel="noreferrer">{t('竞赛通知 API')}</a>
             </>
           ) : null}
           {response?.used_backup && showsContestSource ? t('（本次已使用备用源）') : ''}

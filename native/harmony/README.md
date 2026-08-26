@@ -32,8 +32,8 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap + 113 个契约单元测试
-./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（13 个断言，对应 iOS UITests）
+./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 113 个契约单元测试
+./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 16 项、宽屏 5 项）
 ```
 
 手动命令（hvigorw 在 DevEco 安装目录下）：`hvigorw assembleHap` 与
@@ -54,7 +54,7 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
   本仓库只提供 `build-profile.example.json5` 无秘密模板；复制为已忽略的
   `build-profile.json5` 后再由 DevEco 或 CI Secret 写入本机签名配置。签名材料与密码
   **绝不能提交仓库**（与全仓库的凭据不变量一致）。
-- **上架**：在 AppGallery Connect 创建应用、上传签名的 HAP/AAB、填写隐私声明
+- **上架**：在 AppGallery Connect 创建应用、上传签名的 APP/HAP、填写隐私声明
   （本应用隐私文案与 `PRIVACY.md` 一致）与截图。发布前复核
   `native/apple/AppStore/submission-checklist.md` 中与商店审核对应的通用条目。
 
@@ -93,7 +93,7 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 默认不常驻高频轮询；保持空教室、教学日历、设置三个一级页面的颜色、术语与状态语义一致。
 
 > 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
-> 的 assembleHap/assembleApp 编译；0.2.6 (1002011) Release 签名 APP/HAP 已通过 SHA-256
-> 摘要与华为签名链校验，113 个契约单元测试全部通过。DevEco“上传产品”已将
-> 0.2.6 (1002011) 输入法热修复上传 AppGallery Connect，云测试通过并更新 0.2.6 测试版本。
+> 的 assembleHap/assembleApp 编译；0.2.7 (1002012) Release APP/HAP 已通过 SHA-256、
+> 独立 HAP 签名、APP ZIP 结构与新 HTTPS 域名校验，113 个契约单元测试全部通过。DevEco“上传产品”已将
+> 0.2.7 (1002012) 上传 AppGallery Connect 用于测试和发布，云测试结果为“通过”。
 > GitHub Release 同步提供签名构建；[打开 HarmonyOS 测试邀请（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。

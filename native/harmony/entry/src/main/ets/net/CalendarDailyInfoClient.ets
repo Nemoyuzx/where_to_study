@@ -265,8 +265,8 @@ export class CalendarDailyInfoSources {
   static readonly deadlinePrimary: string =
     'https://nemoyuzx.github.io/contest-ddl/data/competitions.json';
   static readonly deadlinePrimaryPage: string = 'https://nemoyuzx.github.io/contest-ddl/';
-  static readonly deadlineBackup: string = 'http://101.201.29.29/api/contest-events';
-  static readonly schoolContestNotices: string = 'http://101.201.29.29/api/contest-notices';
+  static readonly deadlineBackup: string = 'https://where-to-study.cn/api/contest-events';
+  static readonly schoolContestNotices: string = 'https://where-to-study.cn/api/contest-notices';
   static readonly assignments: string =
     'https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3';
   static readonly smallPayloadLimit: number = 128 * 1024;
@@ -936,7 +936,7 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     } catch (primaryError) {
       try {
         const payload: string = await this.transport.fetch(
-          CalendarDailyInfoSources.deadlineBackup, 'http', '101.201.29.29',
+          CalendarDailyInfoSources.deadlineBackup, 'https', 'where-to-study.cn',
           CalendarDailyInfoSources.deadlinePayloadLimit);
         contestItemsByDate = this.parseContestIndex(payload);
         contestSource = CalendarDailyInfoSources.deadlineBackup;
@@ -952,7 +952,7 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     let schoolError: string | null = null;
     try {
       const payload: string = await this.transport.fetch(
-        CalendarDailyInfoSources.schoolContestNotices, 'http', '101.201.29.29',
+        CalendarDailyInfoSources.schoolContestNotices, 'https', 'where-to-study.cn',
         CalendarDailyInfoSources.deadlinePayloadLimit);
       schoolItemsByDate = this.parseSchoolIndex(payload);
     } catch (error) {

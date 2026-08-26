@@ -101,7 +101,7 @@ jobs:
           cargo test --manifest-path wts-cli/Cargo.toml --locked
           cargo build --manifest-path wts-cli/Cargo.toml --release --locked
           file wts-cli/target/release/where-to-study-cli
-          wts-cli/target/release/where-to-study-cli --version | grep -F '0.2.6'
+          wts-cli/target/release/where-to-study-cli --version | grep -F '0.2.7'
           [[ "$(uname -m)" == "${{ matrix.arch }}" ]]
 
       - name: Package Linux CLI

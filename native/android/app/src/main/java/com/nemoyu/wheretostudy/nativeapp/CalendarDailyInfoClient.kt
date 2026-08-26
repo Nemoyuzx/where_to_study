@@ -93,8 +93,8 @@ internal object CalendarDailyInfoSources {
     const val deadlinePrimary =
         "https://nemoyuzx.github.io/contest-ddl/data/competitions.json"
     const val deadlinePrimaryPage = "https://nemoyuzx.github.io/contest-ddl/"
-    const val deadlineBackup = "http://101.201.29.29/api/contest-events"
-    const val schoolContestNotices = "http://101.201.29.29/api/contest-notices"
+    const val deadlineBackup = "https://where-to-study.cn/api/contest-events"
+    const val schoolContestNotices = "https://where-to-study.cn/api/contest-notices"
     const val assignments =
         "https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3"
     const val smallPayloadLimit = 128 * 1024
@@ -636,8 +636,8 @@ class CalendarDailyInfoClient internal constructor(
             try {
                 val payload = fetchPublicJson(
                     URI.create(CalendarDailyInfoSources.deadlineBackup),
-                    "http",
-                    "101.201.29.29",
+                    "https",
+                    "where-to-study.cn",
                     CalendarDailyInfoSources.deadlinePayloadLimit,
                 )
                 Triple(parseContestIndex(payload), CalendarDailyInfoSources.deadlineBackup, true)
@@ -652,8 +652,8 @@ class CalendarDailyInfoClient internal constructor(
         val schoolResult = runCatching {
             val payload = fetchPublicJson(
                 URI.create(CalendarDailyInfoSources.schoolContestNotices),
-                "http",
-                "101.201.29.29",
+                "https",
+                "where-to-study.cn",
                 CalendarDailyInfoSources.deadlinePayloadLimit,
             )
             parseSchoolIndex(payload)

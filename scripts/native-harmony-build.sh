@@ -2,12 +2,18 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/package-validation.sh
+source "$ROOT_DIR/scripts/package-validation.sh"
 HARMONY_DIR="$ROOT_DIR/native/harmony"
 DEVECO_HOME="${DEVECO_HOME:-/Applications/DevEco-Studio.app}"
 DEVECO_SDK_HOME="${DEVECO_SDK_HOME:-$DEVECO_HOME/Contents/sdk}"
 HVIGOR="${HVIGORW:-$DEVECO_HOME/Contents/tools/hvigor/bin/hvigorw}"
 OHPM="${OHPM:-$DEVECO_HOME/Contents/tools/ohpm/bin/ohpm}"
 TEST_RESULT="$HARMONY_DIR/entry/.test/default/intermediates/test/coverage_data/test_result.txt"
+SIGNED_HAP="$HARMONY_DIR/entry/build/default/outputs/default/entry-default-signed.hap"
+SIGNED_APP="$HARMONY_DIR/build/outputs/default/harmony-default-signed.app"
+printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
+CONTEST_API_HOST="where-to-study.cn"
 
 for executable in "$HVIGOR" "$OHPM"; do
   if [[ ! -x "$executable" ]]; then
@@ -49,6 +55,7 @@ cd "$HARMONY_DIR"
 "$OHPM" install
 "$HVIGOR" assembleHap
 "$HVIGOR" test --mode module -p module=entry -p buildMode=test
+"$HVIGOR" assembleApp
 
 if [[ ! -f "$TEST_RESULT" ]] || ! grep -Eq 'Tests run: [0-9]+, Failure: 0, Error: 0' "$TEST_RESULT"; then
   echo "HarmonyOS unit-test report is missing or contains failures: $TEST_RESULT" >&2
@@ -56,3 +63,29 @@ if [[ ! -f "$TEST_RESULT" ]] || ! grep -Eq 'Tests run: [0-9]+, Failure: 0, Error
 fi
 
 grep 'Tests run:' "$TEST_RESULT"
+
+if [[ ! -f "$SIGNED_HAP" ]]; then
+  echo "HarmonyOS signed HAP is missing: $SIGNED_HAP" >&2
+  exit 1
+fi
+if unzip -p "$SIGNED_HAP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
+  echo "HarmonyOS HAP contains the retired contest API host." >&2
+  exit 1
+fi
+if ! unzip -p "$SIGNED_HAP" | stream_contains_fixed_text "$CONTEST_API_HOST"; then
+  echo "HarmonyOS HAP is missing the HTTPS contest API host." >&2
+  exit 1
+fi
+if [[ ! -f "$SIGNED_APP" ]]; then
+  echo "HarmonyOS signed APP is missing: $SIGNED_APP" >&2
+  exit 1
+fi
+unzip -t "$SIGNED_APP" >/dev/null
+if unzip -p "$SIGNED_APP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
+  echo "HarmonyOS APP contains the retired contest API host." >&2
+  exit 1
+fi
+if ! unzip -p "$SIGNED_APP" | stream_contains_fixed_text "$CONTEST_API_HOST"; then
+  echo "HarmonyOS APP is missing the HTTPS contest API host." >&2
+  exit 1
+fi

@@ -34,6 +34,9 @@ configured_value() {
 
 VERSION="${APPLE_MARKETING_VERSION:-$(configured_value MARKETING_VERSION)}"
 BUILD_NUMBER="${APPLE_BUILD_NUMBER:-$(configured_value CURRENT_PROJECT_VERSION)}"
+printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
+CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
 
 usage() {
   cat <<'EOF'
@@ -234,16 +237,18 @@ app_path() {
 }
 
 validate_archive() {
-  local platform="$1" archive app info resources entitlements signature_details actual_identifier actual_version actual_build signing_style
+  local platform="$1" archive app executable info resources entitlements signature_details actual_identifier actual_version actual_build signing_style
   archive="$(archive_path "$platform")"
   app="$(app_path "$platform")"
   if [[ "$platform" == "macos" ]]; then
     info="$app/Contents/Info.plist"
     resources="$app/Contents/Resources"
+    executable="$app/Contents/MacOS/WhereToStudyMac"
     signing_style="$MACOS_SIGNING_STYLE"
   else
     info="$app/Info.plist"
     resources="$app"
+    executable="$app/WhereToStudyiOS"
     signing_style="$IOS_SIGNING_STYLE"
   fi
 
@@ -287,6 +292,20 @@ validate_archive() {
       exit 1
     fi
   done
+  if path_contains_fixed_text "$LEGACY_CONTEST_HOST" "$app"; then
+    echo "App Store archive contains the retired contest API host: $app" >&2
+    exit 1
+  fi
+  for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL"; do
+    if ! path_contains_fixed_text "$endpoint" "$executable"; then
+      echo "App Store archive executable is missing the HTTPS contest endpoint: $endpoint" >&2
+      exit 1
+    fi
+  done
+  if plutil -extract NSAppTransportSecurity raw "$info" >/dev/null 2>&1; then
+    echo "App Store archive unexpectedly contains an App Transport Security exception." >&2
+    exit 1
+  fi
 
   entitlements="$(mktemp "${TMPDIR:-/tmp}/where-to-study-entitlements.plist.XXXXXX")"
   codesign -d --entitlements :- "$app" > "$entitlements" 2>/dev/null
@@ -450,6 +469,43 @@ write_export_options() {
   plutil -insert stripSwiftSymbols -bool YES "$file"
 }
 
+validate_exported_ios_package() {
+  local package_path="$1" temporary_dir app widget signed_bundle entitlements signature_details
+  temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/where-to-study-ios-export.XXXXXX")"
+  ditto -x -k "$package_path" "$temporary_dir"
+  app="$(find "$temporary_dir/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
+  if [[ -z "$app" ]]; then
+    echo "Exported iOS package does not contain an application bundle." >&2
+    /usr/bin/find "$temporary_dir" -depth -delete
+    return 1
+  fi
+  widget="$app/PlugIns/WhereToStudyiOSWidget.appex"
+  if [[ ! -d "$widget" ]]; then
+    echo "Exported iOS package is missing its WidgetKit extension." >&2
+    /usr/bin/find "$temporary_dir" -depth -delete
+    return 1
+  fi
+  codesign --verify --deep --strict --verbose=2 "$app"
+  for signed_bundle in "$app" "$widget"; do
+    signature_details="$(codesign -dvv "$signed_bundle" 2>&1)"
+    if [[ "$signature_details" == *"Signature=adhoc"* \
+      || "$signature_details" != *"Authority=Apple Distribution:"* ]]; then
+      echo "Exported iOS bundle is not Apple Distribution signed: $signed_bundle" >&2
+      /usr/bin/find "$temporary_dir" -depth -delete
+      return 1
+    fi
+    entitlements="$temporary_dir/$(basename "$signed_bundle").entitlements.plist"
+    codesign -d --entitlements :- "$signed_bundle" > "$entitlements" 2>/dev/null
+    if [[ "$(plist_value "$entitlements" get-task-allow)" == "true" ]]; then
+      echo "Exported iOS bundle unexpectedly includes get-task-allow: $signed_bundle" >&2
+      /usr/bin/find "$temporary_dir" -depth -delete
+      return 1
+    fi
+  done
+  /usr/bin/find "$temporary_dir" -depth -delete
+  echo "Validated Apple Distribution iOS export without get-task-allow: $package_path"
+}
+
 export_or_upload_platform() {
   local platform="$1" destination="$2" archive export_options export_dir extension package_name package_path
   archive="$(archive_path "$platform")"
@@ -494,6 +550,9 @@ export_or_upload_platform() {
     mv "$package_path" "$export_dir/$package_name"
     package_path="$export_dir/$package_name"
   fi
+  if [[ "$platform" == "ios" ]]; then
+    validate_exported_ios_package "$package_path"
+  fi
   (
     cd "$export_dir"
     shasum -a 256 "$package_name" > "$package_name.sha256"
@@ -521,6 +580,11 @@ for current_platform in "${PLATFORMS[@]}"; do
   archive_platform "$current_platform"
   case "$ACTION" in
     export) export_or_upload_platform "$current_platform" export ;;
-    upload) export_or_upload_platform "$current_platform" upload ;;
+    upload)
+      if [[ "$current_platform" == "ios" && "$IOS_SIGNING_STYLE" == "Automatic" ]]; then
+        export_or_upload_platform "$current_platform" export
+      fi
+      export_or_upload_platform "$current_platform" upload
+      ;;
   esac
 done

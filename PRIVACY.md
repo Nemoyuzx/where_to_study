@@ -26,17 +26,17 @@ The app may retrieve Chinese statutory holiday and transfer-workday data from th
 
 ## 天气、黄历与公开活动 / Weather, almanac, and public events
 
-天气功能通过 UAPI 按所选校区对应的海淀或昌平行政区获取今日、明日天气，不读取 GPS 或精确位置。黄历功能通过 UAPI 获取基础农历信息，并可能通过 Timeless API 补充“宜/忌”。Contest DDL 的 GitHub Pages 主源提供学科竞赛、夏令营和黑客松数据，主源不可用时可能访问固定的 HTTP 备用接口。校内竞赛通知由服务器脚本从学校内部网站的公开通知页提取整理，再由固定的校内通知 API 提供。天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松均有独立开关。
+天气功能通过 UAPI 按所选校区对应的海淀或昌平行政区获取今日、明日天气，不读取 GPS 或精确位置。黄历功能通过 UAPI 获取基础农历信息，并可能通过 Timeless API 补充“宜/忌”。Contest DDL 的 GitHub Pages 主源提供学科竞赛、夏令营和黑客松数据，主源不可用时可能访问 `where-to-study.cn` 上的固定 HTTPS 备用接口。校内竞赛通知由服务器脚本从学校内部网站的公开通知页提取整理，再由同域名下的固定 HTTPS API 提供。天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松均有独立开关。
 
-Weather uses UAPI to request today and tomorrow for the Haidian or Changping administrative district associated with the selected campus; it does not read GPS or precise location. Almanac data comes from UAPI, with optional `宜`/`忌` advice from the Timeless API. Contest DDL's GitHub Pages source provides competition, summer-camp, and hackathon data, with a fixed HTTP backup when the primary source is unavailable. School competition notices are extracted and organized by a server-side script from public notice pages on the university's internal website, then exposed through the fixed school-notice API. Weather, almanac, competitions, school notices, summer camps, and hackathons each have a separate switch.
+Weather uses UAPI to request today and tomorrow for the Haidian or Changping administrative district associated with the selected campus; it does not read GPS or precise location. Almanac data comes from UAPI, with optional `宜`/`忌` advice from the Timeless API. Contest DDL's GitHub Pages source provides competition, summer-camp, and hackathon data, with a fixed HTTPS backup on `where-to-study.cn` when the primary source is unavailable. School competition notices are extracted and organized by a server-side script from public notice pages on the university's internal website, then exposed through a fixed HTTPS API on the same domain. Weather, almanac, competitions, school notices, summer camps, and hackathons each have a separate switch.
 
 你可以选择填写公开的 HTTPS JSON 地址作为自定义日程来源。应用不会向该地址附带教务凭据、Cookie、token、课表、教室或作业数据；地址不得含用户信息、片段、回环地址或私网 IP 字面量，客户端拒绝重定向并限制响应大小与请求频率。该服务器仍可能按照自己的政策处理 IP 地址、请求时间等普通网络元数据。接口格式与约束见[自定义日程接口规范](docs/custom-schedule-api.md)。
 
 You may optionally provide a public HTTPS JSON URL as a custom schedule source. The app sends no academic credentials, cookies, tokens, schedules, classrooms, or assignments to that URL. URLs containing user information, fragments, loopback hosts, or private literal IP addresses are rejected; redirects, oversized responses, and excessive requests are also rejected. The server may still process ordinary network metadata such as IP address and request time under its own policy. See the [custom schedule feed specification](docs/custom-schedule-api.md) for the format and constraints.
 
-对 `http://101.201.29.29/api/contest-events` 和 `http://101.201.29.29/api/contest-notices` 的明文请求仅为发往固定主机、不接受重定向且限制响应大小的无凭据 `GET`；请求不包含 Cookie、token、课表、教室、作业或其他个人数据。卡片中的所有天气、民俗和截止日期信息均仅供参考，请以实际官方信息为准。
+对 `https://where-to-study.cn/api/contest-events` 和 `https://where-to-study.cn/api/contest-notices` 的请求仅为发往固定 HTTPS 主机、不接受重定向且限制响应大小的无凭据 `GET`；请求不包含 Cookie、token、课表、教室、作业或其他个人数据。卡片中的所有天气、民俗和截止日期信息均仅供参考，请以实际官方信息为准。
 
-Plaintext requests to `http://101.201.29.29/api/contest-events` and `http://101.201.29.29/api/contest-notices` are credential-free `GET` requests to the fixed host, reject redirects, and enforce response-size limits. They contain no cookies, tokens, schedules, classrooms, assignments, or other personal data. All weather, folklore, and deadline information shown in cards is for reference only; rely on actual official information.
+Requests to `https://where-to-study.cn/api/contest-events` and `https://where-to-study.cn/api/contest-notices` are credential-free `GET` requests to the fixed HTTPS host, reject redirects, and enforce response-size limits. They contain no cookies, tokens, schedules, classrooms, assignments, or other personal data. All weather, folklore, and deadline information shown in cards is for reference only; rely on actual official information.
 
 ## 云课堂作业 / UCloud assignments
 

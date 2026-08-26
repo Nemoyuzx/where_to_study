@@ -10,7 +10,10 @@ APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-iOS"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.6}"
+RELEASE_LABEL="${1:-v0.2.7}"
+printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
+CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
 ARCHIVE_PATH="$DERIVED_DATA/WhereToStudyiOS.xcarchive"
 PACKAGE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-ios-unsigned.xcarchive.zip"
 validate_release_label "$RELEASE_LABEL"
@@ -122,6 +125,16 @@ if ! path_contains_fixed_text 'https://jwglweixin.bupt.edu.cn' "$ARCHIVE_PATH"; 
   echo "Native iOS archive is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
+if path_contains_fixed_text "$LEGACY_CONTEST_HOST" "$ARCHIVE_PATH"; then
+  echo "Native iOS archive contains the retired contest API host." >&2
+  exit 1
+fi
+for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL"; do
+  if ! path_contains_fixed_text "$endpoint" "$APP/WhereToStudyiOS"; then
+    echo "Native iOS executable is missing the HTTPS contest endpoint: $endpoint" >&2
+    exit 1
+  fi
+done
 
 mkdir -p "$OUTPUT_DIR"
 ditto -c -k --sequesterRsrc --keepParent "$ARCHIVE_PATH" "$PACKAGE"

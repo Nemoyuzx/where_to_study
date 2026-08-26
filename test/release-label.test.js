@@ -36,7 +36,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the stable 0.2.6 release version", () => {
+test("all tracked client projects use the stable 0.2.7 release version", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -80,28 +80,28 @@ test("all tracked client projects use the stable 0.2.6 release version", () => {
     "utf8",
   );
 
-  assert.equal(packageMetadata.version, "0.2.6");
-  assert.equal(tauriMetadata.version, "0.2.6");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 2009);
-  assert.match(cargoManifest, /^version = "0\.2\.6"$/m);
-  assert.match(coreManifest, /^version = "0\.2\.6"$/m);
-  assert.match(cliManifest, /^version = "0\.2\.6"$/m);
-  assert.match(tuiManifest, /^version = "0\.2\.6"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.2\.6"/);
-  assert.match(nativeAndroid, /versionCode = 42/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.6"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "72"/);
-  assert.match(nativeHarmony, /"versionName": "0\.2\.6"/);
-  assert.match(nativeHarmony, /"versionCode": 1002011/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.6/);
-  assert.match(tauriApple, /CFBundleVersion: "45"/);
-  assert.match(tauriAppleInfo, /<string>0\.2\.6<\/string>/);
-  assert.match(tauriAppleInfo, /<string>45<\/string>/);
-  assert.match(cliWorkflow, /grep -F '0\.2\.6'/);
-  assert.match(tuiWorkflow, /grep -F '0\.2\.6'/);
-  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.6\}"/);
-  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.6\}"/);
-  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.6\}"/);
+  assert.equal(packageMetadata.version, "0.2.7");
+  assert.equal(tauriMetadata.version, "0.2.7");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 2010);
+  assert.match(cargoManifest, /^version = "0\.2\.7"$/m);
+  assert.match(coreManifest, /^version = "0\.2\.7"$/m);
+  assert.match(cliManifest, /^version = "0\.2\.7"$/m);
+  assert.match(tuiManifest, /^version = "0\.2\.7"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.2\.7"/);
+  assert.match(nativeAndroid, /versionCode = 43/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.7"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "73"/);
+  assert.match(nativeHarmony, /"versionName": "0\.2\.7"/);
+  assert.match(nativeHarmony, /"versionCode": 1002012/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.7/);
+  assert.match(tauriApple, /CFBundleVersion: "46"/);
+  assert.match(tauriAppleInfo, /<string>0\.2\.7<\/string>/);
+  assert.match(tauriAppleInfo, /<string>46<\/string>/);
+  assert.match(cliWorkflow, /grep -F '0\.2\.7'/);
+  assert.match(tuiWorkflow, /grep -F '0\.2\.7'/);
+  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.7\}"/);
+  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.7\}"/);
+  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.7\}"/);
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {
@@ -132,7 +132,7 @@ test("Android adaptive icons keep the canonical logo inside the launcher safe zo
   }
 });
 
-test("Android release validates the packaged narrow contest API cleartext exception", () => {
+test("Android release validates an HTTPS-only packaged network policy", () => {
   const packagingScript = readFileSync(
     path.join(root, "scripts", "native-android-package.sh"),
     "utf8",
@@ -142,15 +142,53 @@ test("Android release validates the packaged narrow contest API cleartext except
   assert.match(packagingScript, /dump xmltree "\$SIGNED_APK" --file AndroidManifest\.xml/);
   assert.match(packagingScript, /xml\\\/network_security_config\$/);
   assert.match(packagingScript, /A: cleartextTrafficPermitted=false/);
-  assert.match(packagingScript, /A: cleartextTrafficPermitted=true/);
-  assert.match(packagingScript, /A: includeSubdomains=false/);
   assert.match(packagingScript, /A: src="system"/);
-  assert.match(packagingScript, /101\.201\.29\.29/);
+  assert.match(packagingScript, /NETWORK_DOMAIN_CONFIG_COUNT.*!= 0/s);
   assert.match(packagingScript, /NETWORK_DOMAIN_COUNT/);
+  assert.doesNotMatch(packagingScript, /cleartextTrafficPermitted=true/);
   assert.doesNotMatch(
     packagingScript,
     /unzip -p "\$SIGNED_APK" AndroidManifest\.xml.*networkSecurityConfig/,
   );
+});
+
+test("all graphical clients pin contest APIs to the HTTPS product domain", () => {
+  const sourceFiles = [
+    path.join(root, "src-tauri", "src", "deadlines.rs"),
+    path.join(root, "native", "apple", "Sources", "Shared", "CalendarDeadlineClient.swift"),
+    path.join(
+      root,
+      "native",
+      "android",
+      "app",
+      "src",
+      "main",
+      "java",
+      "com",
+      "nemoyu",
+      "wheretostudy",
+      "nativeapp",
+      "CalendarDailyInfoClient.kt",
+    ),
+    path.join(
+      root,
+      "native",
+      "harmony",
+      "entry",
+      "src",
+      "main",
+      "ets",
+      "net",
+      "CalendarDailyInfoClient.ets",
+    ),
+  ];
+
+  for (const filename of sourceFiles) {
+    const source = readFileSync(filename, "utf8");
+    assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-events/);
+    assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-notices/);
+    assert.doesNotMatch(source, /101\.201\.29\.29|http:\/\/where-to-study\.cn/);
+  }
 });
 
 test("native Apple targets keep the App Store Connect bundle identifiers", () => {
@@ -177,6 +215,13 @@ test("native Apple targets keep the App Store Connect bundle identifiers", () =>
   assert.match(
     iosPackageScript,
     /EXPECTED_BUNDLE_IDENTIFIER="com\.nemoyu\.wheretostudy\.native\.macos"/,
+  );
+  assert.match(appStoreScript, /validate_exported_ios_package/);
+  assert.match(appStoreScript, /Authority=Apple Distribution:/);
+  assert.match(appStoreScript, /get-task-allow/);
+  assert.match(
+    appStoreScript,
+    /IOS_SIGNING_STYLE" == "Automatic"[\s\S]*export_or_upload_platform "\$current_platform" export/,
   );
 });
 
@@ -279,6 +324,23 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
   assert.match(hardeningScript, /libwayland-\*\.so\*/);
   assert.match(hardeningScript, /GIO_MODULE_DIR/);
   assert.match(hardeningScript, /GIO_USE_VFS=local/);
+});
+
+test("Windows and Linux release packages verify the HTTPS contest endpoints", () => {
+  const linuxPackaging = readFileSync(
+    path.join(root, "scripts", "linux-package.sh"),
+    "utf8",
+  );
+  const windowsWorkflow = readFileSync(
+    path.join(root, ".github", "workflows", "build-windows.yml"),
+    "utf8",
+  );
+
+  for (const source of [linuxPackaging, windowsWorkflow]) {
+    assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-events/);
+    assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-notices/);
+    assert.match(source, /retired contest API host/);
+  }
 });
 
 test(

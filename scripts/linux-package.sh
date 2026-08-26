@@ -11,6 +11,9 @@ OUTPUT_DIR="${LINUX_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 BUNDLE_DIR="${LINUX_BUNDLE_DIR:-$ROOT_DIR/src-tauri/target/release/bundle}"
 APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 RELEASE_LABEL="${1:-v$APP_VERSION}"
+printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
+CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
 validate_release_label "$RELEASE_LABEL"
 
 MACHINE_ARCHITECTURE="${LINUX_ARCHITECTURE:-$(uname -m)}"
@@ -79,7 +82,7 @@ require_exact_legal_files() {
 }
 
 validate_extracted_bundle() {
-  local extracted_root="$1"
+  local extracted_root="$1" executable endpoint
 
   if path_contains_fixed_text "$ROOT_DIR" "$extracted_root"; then
     echo "Linux bundle contains a local source path." >&2
@@ -93,6 +96,21 @@ validate_extracted_bundle() {
     echo "Linux bundle is missing the expected HTTPS teaching-system endpoint." >&2
     exit 1
   fi
+  if path_contains_fixed_text "$LEGACY_CONTEST_HOST" "$extracted_root"; then
+    echo "Linux bundle contains the retired contest API host." >&2
+    exit 1
+  fi
+  executable="$(find "$extracted_root" -type f -name 'where-to-study' -print -quit)"
+  if [[ -z "$executable" ]]; then
+    echo "Linux bundle is missing the Where To Study executable." >&2
+    exit 1
+  fi
+  for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL"; do
+    if ! path_contains_fixed_text "$endpoint" "$executable"; then
+      echo "Linux executable is missing the HTTPS contest endpoint: $endpoint" >&2
+      exit 1
+    fi
+  done
   require_exact_legal_files "$extracted_root"
 }
 
