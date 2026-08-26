@@ -392,7 +392,7 @@ test("Linux CLI and TUI workflows package x86_64 and native arm64 archives", () 
     const workflow = readFileSync(
       path.join(root, ".github", "workflows", workflowName),
       "utf8",
-    );
+    ).replaceAll("\r\n", "\n");
     assert.match(workflow, /runner: ubuntu-22\.04/);
     assert.match(workflow, /runner: ubuntu-22\.04-arm/);
     assert.match(workflow, /arch: x86_64/);
@@ -431,7 +431,7 @@ test("Windows and Linux tag artifacts receive pinned keyless provenance attestat
     const workflow = readFileSync(
       path.join(root, ".github", "workflows", workflowName),
       "utf8",
-    );
+    ).replaceAll("\r\n", "\n");
 
     assert.match(workflow, /if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
     assert.match(
