@@ -9,6 +9,18 @@ use crate::output;
 
 const TERM_VALIDITY_WEEKS: i64 = 26;
 
+pub struct EventsOptions {
+    pub search: Option<String>,
+    pub event_type: Option<String>,
+    pub category: Option<String>,
+    pub source: String,
+    pub include_ended: bool,
+    pub favorites_only: bool,
+    pub favorite: Option<String>,
+    pub unfavorite: Option<String>,
+    pub json: bool,
+}
+
 /// Parse a yyyy-MM-dd date, defaulting to today (Shanghai timezone).
 fn parse_date(value: Option<&str>) -> ServiceResult<NaiveDate> {
     match value {
@@ -201,6 +213,185 @@ pub async fn holidays(year: Option<i32>, json: bool) -> ServiceResult<()> {
         return Ok(());
     }
     output::print_holidays(&response)
+}
+
+pub async fn shuttle(json: bool) -> ServiceResult<()> {
+    let response = where_to_study_lib::public_queries::fetch_shuttle_bus().await?;
+    let today = where_to_study_lib::public_queries::shuttle_today(&response);
+    if json {
+        let payload = serde_json::json!({
+            "schema_version": response.schema_version,
+            "generated_at": response.generated_at,
+            "service_status": response.status,
+            "source": response.source,
+            "stats": response.stats,
+            "today": today,
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload)
+                .map_err(|error| ServiceError::new(format!("无法序列化输出：{error}")))?
+        );
+        return Ok(());
+    }
+    output::print_shuttle(&response, &today)
+}
+
+fn event_matches_identifier(
+    item: &where_to_study_lib::models::ImportantEventItem,
+    identifier: &str,
+) -> bool {
+    item.id == identifier || where_to_study_lib::public_queries::favorite_key(item) == identifier
+}
+
+pub async fn events(options: EventsOptions) -> ServiceResult<()> {
+    use where_to_study_lib::public_queries::{ImportantEventFilter, ImportantEventSourceFilter};
+
+    let mut favorites = where_to_study_lib::public_queries::load_favorite_events()?;
+    let mut action = None;
+    if let Some(identifier) = options.unfavorite.as_deref() {
+        let Some(index) = favorites
+            .iter()
+            .position(|item| event_matches_identifier(item, identifier))
+        else {
+            return Err(ServiceError::new(format!(
+                "未找到收藏：{identifier}。请使用 events --favorites-only 查看 favorite_key。"
+            )));
+        };
+        favorites.remove(index);
+        where_to_study_lib::public_queries::save_favorite_events(&favorites)?;
+        action = Some(format!("已取消收藏 {identifier}"));
+    }
+
+    let remote = where_to_study_lib::public_queries::fetch_important_events().await;
+    let (live, fetched_at, source, used_backup, remote_error) = match remote {
+        Ok(response) => (
+            response.items,
+            Some(response.fetched_at),
+            Some(response.source),
+            response.used_backup,
+            None,
+        ),
+        Err(error) if !favorites.is_empty() => (
+            Vec::new(),
+            None,
+            Some("本地收藏快照".to_string()),
+            false,
+            Some(error.message),
+        ),
+        Err(error) => return Err(error),
+    };
+    let combined =
+        where_to_study_lib::public_queries::merge_live_and_favorite_events(&live, &favorites);
+
+    if let Some(identifier) = options.favorite.as_deref() {
+        let matches: Vec<_> = combined
+            .iter()
+            .filter(|item| event_matches_identifier(item, identifier))
+            .collect();
+        let item = match matches.as_slice() {
+            [] => {
+                return Err(ServiceError::new(format!(
+                    "查询结果中未找到 {identifier}。请先运行 events 获取 favorite_key。"
+                )))
+            }
+            [item] => *item,
+            _ => {
+                return Err(ServiceError::new(format!(
+                    "ID {identifier} 不唯一，请使用输出中的 favorite_key。"
+                )))
+            }
+        };
+        if favorites.iter().any(|favorite| {
+            where_to_study_lib::public_queries::favorite_key(favorite)
+                == where_to_study_lib::public_queries::favorite_key(item)
+        }) {
+            action = Some(format!(
+                "已经收藏 {}",
+                where_to_study_lib::public_queries::favorite_key(item)
+            ));
+        } else {
+            favorites.push(item.clone());
+            where_to_study_lib::public_queries::save_favorite_events(&favorites)?;
+            action = Some(format!(
+                "已收藏 {}",
+                where_to_study_lib::public_queries::favorite_key(item)
+            ));
+        }
+    }
+
+    let source_filter = match options.source.as_str() {
+        "public" => ImportantEventSourceFilter::Public,
+        "school" => ImportantEventSourceFilter::School,
+        _ => ImportantEventSourceFilter::All,
+    };
+    let filter = ImportantEventFilter {
+        query: options.search.unwrap_or_default(),
+        event_type: options.event_type,
+        category: options.category,
+        source: source_filter,
+        include_ended: options.include_ended,
+        favorites_only: options.favorites_only,
+    };
+    let combined =
+        where_to_study_lib::public_queries::merge_live_and_favorite_events(&live, &favorites);
+    let items = where_to_study_lib::public_queries::filter_important_events(
+        &combined,
+        &favorites,
+        &filter,
+        chrono::Utc::now(),
+    );
+
+    if options.json {
+        let favorite_keys: std::collections::HashSet<String> = favorites
+            .iter()
+            .map(where_to_study_lib::public_queries::favorite_key)
+            .collect();
+        let items: Vec<_> = items
+            .iter()
+            .map(|item| {
+                serde_json::json!({
+                    "favorite": favorite_keys.contains(&where_to_study_lib::public_queries::favorite_key(item)),
+                    "favorite_key": where_to_study_lib::public_queries::favorite_key(item),
+                    "event": item,
+                })
+            })
+            .collect();
+        let payload = serde_json::json!({
+            "fetched_at": fetched_at,
+            "source": source,
+            "used_backup": used_backup,
+            "remote_error": remote_error,
+            "action": action,
+            "filters": {
+                "search": filter.query,
+                "event_type": filter.event_type,
+                "category": filter.category,
+                "source": options.source,
+                "include_ended": filter.include_ended,
+                "favorites_only": filter.favorites_only,
+            },
+            "items": items,
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload)
+                .map_err(|error| ServiceError::new(format!("无法序列化输出：{error}")))?
+        );
+        return Ok(());
+    }
+    if let Some(action) = action {
+        println!("{action}");
+    }
+    if let Some(error) = remote_error.as_deref() {
+        eprintln!("提示：远程数据不可用，正在显示本地收藏快照：{error}");
+    }
+    output::print_important_events(
+        &items,
+        &favorites,
+        source.as_deref().unwrap_or("未知来源"),
+        fetched_at.as_deref(),
+    )
 }
 
 fn week_schedule_json(

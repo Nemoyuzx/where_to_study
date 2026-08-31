@@ -1,7 +1,6 @@
 # Where To Study 命令行客户端 (`where-to-study-cli`)
 
-纯命令行版本的北邮课表与空教室查询工具，与桌面版共享同一套 Rust 核心逻辑和
-数据源（移动教务 HTTPS 接口）。
+纯命令行版本的北邮课表、空教室与校园信息查询工具，与桌面版共享 Rust 核心逻辑。
 
 ## 功能
 
@@ -11,6 +10,9 @@
 - `week`：显示本周课程
 - `classrooms`：按校区、教学楼、节次筛选查询当天空教室（实时接口不支持其他日期）
 - `holidays`：显示中国法定节假日与调休（支持离线兜底数据）
+- `shuttle`：显示当天班车状态和当前生效时刻表
+- `events`：查询、搜索、分类筛选公开活动和校内竞赛通知，默认按 DDL 升序并隐藏
+  已截止事件；支持共享本地收藏（不包含作业和自定义日程）
 - 所有查询命令支持 `--json` 输出，方便脚本消费
 
 ## 构建
@@ -31,7 +33,7 @@ CLI 不依赖正在运行的 Secret Service、GNOME Keyring 或 macOS Keychain�
 ```bash
 mkdir -p ~/.local/bin
 curl -L -o where-to-study-cli.tar.gz \
-  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.7/where-to-study-cli-linux-x86_64.tar.gz
+  https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.8/where-to-study-cli-linux-x86_64.tar.gz
 tar -xzf where-to-study-cli.tar.gz
 install -m 0755 where-to-study-cli ~/.local/bin/where-to-study-cli
 where-to-study-cli --version
@@ -83,6 +85,20 @@ where-to-study-cli classrooms --campus 04 --slots 3-5,7 --json
 # 查看 2026 年节假日
 where-to-study-cli holidays --year 2026
 
+# 查看今天当前生效的班车时刻表
+where-to-study-cli shuttle
+
+# 搜索人工智能会议，按 DDL 升序输出 JSON
+where-to-study-cli events --search 人工智能 --type conference --json
+
+# 查看 API 返回的真实分类，并按类别筛选
+where-to-study-cli events --category 人工智能
+
+# 收藏/取消收藏（使用查询结果中稳定的 favorite_key）
+where-to-study-cli events --favorite contest_ddl:conference-example
+where-to-study-cli events --unfavorite contest_ddl:conference-example
+where-to-study-cli events --favorites-only --include-ended
+
 # 清除本地保存的凭据
 where-to-study-cli logout
 ```
@@ -107,6 +123,11 @@ where-to-study-cli logout
   解析、校验和账号缓存作用域
 - CLI 凭据独立存放在用户配置目录，不依赖图形桌面密码库
 - 节假日离线兜底与桌面版相同（2026 年内置数据）
+- 班车和重要事件使用固定 HTTPS 接口、禁用重定向并限制响应大小；CLI 不接受用户
+  指定的替代 URL。公开活动主源不可用时才使用 `where-to-study.cn` 备用接口。
+- 重要事件收藏保存完整本地快照，因此远程项目下线后仍可查看。收藏文件由 CLI/TUI
+  共享：`${XDG_CONFIG_HOME:-~/.config}/where-to-study/favorite-events.json`（macOS
+  位于 `~/Library/Application Support/where-to-study/`）。
 - 输出支持人类可读表格与 `--json` 两种格式
 
 ## 测试

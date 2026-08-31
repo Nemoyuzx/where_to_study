@@ -21,7 +21,7 @@
     │   ├── model/                    # AppModel 应用状态机
     │   ├── store/                    # 凭据/课表/空教室/节假日存储
     │   ├── net/                      # 移动教务、节假日、天气、黄历与公开 DDL 客户端
-    │   └── view/                     # RootView 与三个一级页面
+    │   └── view/                     # RootView、三个一级页面及班车/重要事件查询页
     ├── entry/src/test/               # 本地单元测试（hypium，复用 contracts/v1 fixtures）
     └── entry/src/ohosTest/           # 设备侧测试
 
@@ -91,6 +91,8 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 
 与仓库其他平台一致：账号密码只进系统安全存储；缓存不含凭据；不嵌入 WebView；
 默认不常驻高频轮询；保持空教室、教学日历、设置三个一级页面的颜色、术语与状态语义一致。
+
+教学日历和设置均可打开覆盖式“班车与重要事件查询”页面。班车只显示当天 active 且通过严格校验的时刻表；重要事件与教学日历共享同一个客户端、请求合并和五分钟缓存，支持真实 categories/元数据搜索、过期切换、DDL 升序与本地收藏，明确排除作业和自定义源。
 
 > 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
 > 的 assembleHap/assembleApp 编译；0.2.7 (1002012) Release APP/HAP 已通过 SHA-256、

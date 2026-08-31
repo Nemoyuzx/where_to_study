@@ -21,6 +21,10 @@ export default function appLocalizationTest() {
         .assertEqual('ICPC Asia Regional 2026');
       expect(AppLocalization.text('教学日历', AppLanguage.simplifiedChinese, 'en-US'))
         .assertEqual('教学日历');
+      expect(AppLocalization.text('班车数据格式不正确。', AppLanguage.english, 'en-US'))
+        .assertEqual('The shuttle data format is invalid.');
+      expect(AppLocalization.text('班车服务返回 HTTP 503。', AppLanguage.english, 'en-US'))
+        .assertEqual('The shuttle service returned HTTP 503.');
     });
 
     it('dynamic_static_labels_use_english_patterns', 0, () => {

@@ -16,7 +16,7 @@ use crate::models::{SaveSettingsRequest, SavedSettings};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 8;
+const SETTINGS_SCHEMA_VERSION: u32 = 9;
 
 fn default_true() -> bool {
     true
@@ -49,6 +49,8 @@ struct SettingsFile {
     #[serde(default = "default_true")]
     competition_deadlines_enabled: bool,
     #[serde(default = "default_true")]
+    conference_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
     school_contest_notices_enabled: bool,
     #[serde(default = "default_true")]
     summer_camp_deadlines_enabled: bool,
@@ -73,6 +75,7 @@ struct PersistedSettings<'a> {
     weather_enabled: bool,
     almanac_enabled: bool,
     competition_deadlines_enabled: bool,
+    conference_deadlines_enabled: bool,
     school_contest_notices_enabled: bool,
     summer_camp_deadlines_enabled: bool,
     hackathon_deadlines_enabled: bool,
@@ -215,6 +218,7 @@ where
         weather_enabled: file.weather_enabled,
         almanac_enabled: file.almanac_enabled,
         competition_deadlines_enabled: file.competition_deadlines_enabled,
+        conference_deadlines_enabled: file.conference_deadlines_enabled,
         school_contest_notices_enabled: file.school_contest_notices_enabled,
         summer_camp_deadlines_enabled: file.summer_camp_deadlines_enabled,
         hackathon_deadlines_enabled: file.hackathon_deadlines_enabled,
@@ -328,6 +332,7 @@ where
         weather_enabled: request.weather_enabled,
         almanac_enabled: request.almanac_enabled,
         competition_deadlines_enabled: request.competition_deadlines_enabled,
+        conference_deadlines_enabled: request.conference_deadlines_enabled,
         school_contest_notices_enabled: request.school_contest_notices_enabled,
         summer_camp_deadlines_enabled: request.summer_camp_deadlines_enabled,
         hackathon_deadlines_enabled: request.hackathon_deadlines_enabled,
@@ -463,6 +468,7 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         weather_enabled: settings.weather_enabled,
         almanac_enabled: settings.almanac_enabled,
         competition_deadlines_enabled: settings.competition_deadlines_enabled,
+        conference_deadlines_enabled: settings.conference_deadlines_enabled,
         school_contest_notices_enabled: settings.school_contest_notices_enabled,
         summer_camp_deadlines_enabled: settings.summer_camp_deadlines_enabled,
         hackathon_deadlines_enabled: settings.hackathon_deadlines_enabled,
@@ -623,6 +629,7 @@ mod tests {
             weather_enabled: true,
             almanac_enabled: true,
             competition_deadlines_enabled: true,
+            conference_deadlines_enabled: true,
             school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
@@ -645,6 +652,7 @@ mod tests {
             weather_enabled: true,
             almanac_enabled: true,
             competition_deadlines_enabled: true,
+            conference_deadlines_enabled: true,
             school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
@@ -669,6 +677,7 @@ mod tests {
         assert_eq!(value["weather_enabled"], true);
         assert_eq!(value["almanac_enabled"], true);
         assert_eq!(value["competition_deadlines_enabled"], true);
+        assert_eq!(value["conference_deadlines_enabled"], true);
         assert_eq!(value["school_contest_notices_enabled"], true);
         assert_eq!(value["summer_camp_deadlines_enabled"], true);
         assert_eq!(value["hackathon_deadlines_enabled"], true);

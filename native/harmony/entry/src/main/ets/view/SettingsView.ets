@@ -19,6 +19,8 @@ export struct SettingsView {
   @Param favoriteManagerOnly: boolean = false;
   @Event onFavoriteManagerVisibilityChanged: (visible: boolean) => void = () => {
   };
+  @Event onQueryVisibilityChanged: (visible: boolean) => void = () => {
+  };
   @Local contentWidth: number = 350;
   @Local showingPrivacyPolicy: boolean = false;
   @Local customDeadlineURLDraft: string = '';
@@ -708,6 +710,10 @@ export struct SettingsView {
         (value: boolean): void => {
           this.model.setCompetitionDeadlinesEnabled(value);
         }, AppTheme.publicDeadline(), true)
+      this.featureToggle('学术会议 DDL', this.model.conferenceDeadlinesEnabled,
+        (value: boolean): void => {
+          this.model.setConferenceDeadlinesEnabled(value);
+        }, AppTheme.publicDeadline(), true)
       this.featureToggle('校内竞赛通知', this.model.schoolContestNoticesEnabled,
         (value: boolean): void => {
           this.model.setSchoolContestNoticesEnabled(value);
@@ -747,6 +753,9 @@ export struct SettingsView {
         }, AppTheme.publicDeadline(), true)
       this.linkButton('收藏管理', (): void => {
         this.setFavoriteManagerVisible(true);
+      })
+      this.linkButton('打开查询', (): void => {
+        this.onQueryVisibilityChanged(true);
       })
 
       Text(this.model.text('天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。'))

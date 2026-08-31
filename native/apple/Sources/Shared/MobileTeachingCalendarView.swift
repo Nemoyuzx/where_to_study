@@ -123,6 +123,7 @@ private final class MobileCalendarSnapshotCache: ObservableObject {
             model.$appLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$competitionDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$schoolContestNoticesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$conferenceDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$summerCampDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$hackathonDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$customDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -299,6 +300,7 @@ struct MobileTeachingCalendarView: View {
     @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
     @State private var monthPagingState = MobileMonthPagingState()
     @State private var areTimelineCoursesExpanded = true
+    @State private var showingInformationQueries = false
 
     private let calendar = Calendar.shanghai
 
@@ -347,6 +349,9 @@ struct MobileTeachingCalendarView: View {
         .sheet(item: $presentedDetail) { selection in
             detailSheet(selection)
                 .presentationDetents([.medium, .large])
+        }
+        .fullScreenCover(isPresented: $showingInformationQueries) {
+            InformationQueriesPresentation()
         }
         .overlay {
             if let selection = presentedWeekAgenda {
@@ -448,6 +453,13 @@ struct MobileTeachingCalendarView: View {
 
     private var actionMenu: some View {
         Menu {
+            Button {
+                showingInformationQueries = true
+            } label: {
+                Label("信息查询", systemImage: "magnifyingglass")
+            }
+            .accessibilityIdentifier("calendar.open-information-queries")
+
             Button {
                 model.refreshSchedule()
             } label: {
@@ -1681,6 +1693,7 @@ struct MobileTeachingCalendarView: View {
         .padding(.vertical, 12)
         .background(AppTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("calendar.mobile.deadlines")
     }
 
@@ -2254,15 +2267,22 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func moveDate(_ direction: Int) {
-        if let date = TeachingCalendarLogic.movedDate(
-            from: selectedDate,
-            unit: navigationUnit,
-            direction: direction,
-            calendar: calendar
-        ) {
+        let date = mode == .month
+            ? session.monthNavigationDestination(direction: direction, calendar: calendar)
+            : TeachingCalendarLogic.movedDate(
+                from: selectedDate,
+                unit: navigationUnit,
+                direction: direction,
+                calendar: calendar
+            )
+        if let date {
             AppHaptics.selection()
             if mode == .month {
-                prepareMonthPageChange(to: date, direction: direction)
+                prepareMonthPageChange(
+                    to: date,
+                    direction: direction,
+                    preservesMonthNavigationAnchor: true
+                )
             } else {
                 session.prepareTransition(direction: direction)
                 withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
@@ -2295,7 +2315,11 @@ struct MobileTeachingCalendarView: View {
         }
     }
 
-    private func prepareMonthPageChange(to date: Date, direction: Int) {
+    private func prepareMonthPageChange(
+        to date: Date,
+        direction: Int,
+        preservesMonthNavigationAnchor: Bool = false
+    ) {
         var pagingState = monthPagingState
         let generation = pagingState.prepare(direction: direction)
         monthPagingState = pagingState
@@ -2308,7 +2332,11 @@ struct MobileTeachingCalendarView: View {
         Task { @MainActor in
             await Task.yield()
             guard mode == .month, monthPagingState.accepts(generation) else { return }
-            selectedDate = date
+            if preservesMonthNavigationAnchor {
+                session.commitMonthNavigation(to: date)
+            } else {
+                selectedDate = date
+            }
         }
     }
 

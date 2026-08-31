@@ -44,6 +44,8 @@ class MonthEvent {
 export struct MobileTeachingCalendarView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
+  @Event onQueryRequested: () => void = () => {
+  };
   @Local presentedDay: DateParts | null = null;
   @Local allDayDialogDay: DateParts | null = null;
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
@@ -115,6 +117,7 @@ export struct MobileTeachingCalendarView {
   }
 
   @Monitor('model.almanacEnabled', 'model.competitionDeadlinesEnabled',
+    'model.conferenceDeadlinesEnabled',
     'model.schoolContestNoticesEnabled', 'model.summerCampDeadlinesEnabled',
     'model.hackathonDeadlinesEnabled', 'model.customDeadlinesEnabled',
     'model.customDeadlinesURL', 'model.favoriteDeadlines')
@@ -1943,6 +1946,26 @@ export struct MobileTeachingCalendarView {
           this.showingActions = false;
         })
       Column({ space: 6 }) {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.clock'))
+            .fontSize(16)
+            .fontColor([AppTheme.text()])
+          Text(this.model.text('班车与重要事件查询'))
+            .fontSize(14)
+            .fontColor(AppTheme.text())
+        }
+        .width('100%')
+        .height(40)
+        .padding({ left: 12, right: 12 })
+        .alignItems(VerticalAlign.Center)
+        .backgroundColor(AppTheme.background())
+        .borderRadius(8)
+        .id('calendar.open_query')
+        .onClick(() => {
+          this.showingActions = false;
+          this.onQueryRequested();
+        })
+
         Row({ space: 8 }) {
           SymbolGlyph($r('sys.symbol.arrow_clockwise'))
             .fontSize(16)

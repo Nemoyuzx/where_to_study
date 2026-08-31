@@ -9,6 +9,7 @@ import { AppTheme } from '../common/AppTheme';
 import { PlannerView } from './PlannerView';
 import { CalendarSectionView } from './CalendarSectionView';
 import { SettingsView } from './SettingsView';
+import { QueryView } from './QueryView';
 
 // 布局策略统一在 common/DeviceState.ets 中（含折叠屏半折叠降级规则），
 // 这里保留导出以兼容旧引用。
@@ -22,6 +23,7 @@ export struct RootView {
   // 初始值按屏幕宽度预估，避免宽屏启动首帧闪 Tabs（BUG-022 修复）。
   @Local containerWidth: number = DeviceState.screenWidthVp();
   @Local settingsFavoriteManagerVisible: boolean = false;
+  @Local queryVisible: boolean = false;
   private deadlineRefreshTimer: number = -1;
 
   private sidebarWidth(): number {
@@ -95,6 +97,16 @@ export struct RootView {
           .height('100%')
           .zIndex(100)
       }
+      if (this.queryVisible) {
+        QueryView({
+          onClose: (): void => {
+            this.setQueryVisible(false);
+          }
+        })
+          .width('100%')
+          .height('100%')
+          .zIndex(110)
+      }
     }
     .width('100%')
     .height('100%')
@@ -135,11 +147,19 @@ export struct RootView {
         if (this.currentSection === AppSection.planner) {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
-          CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
+          CalendarSectionView({
+            containerWidth: this.containerWidth - this.sidebarWidth(),
+            onQueryVisibilityChanged: (visible: boolean): void => {
+              this.setQueryVisible(visible);
+            }
+          })
         } else {
           SettingsView({
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
               this.settingsFavoriteManagerVisible = visible;
+            },
+            onQueryVisibilityChanged: (visible: boolean): void => {
+              this.setQueryVisible(visible);
             }
           })
         }
@@ -209,11 +229,19 @@ export struct RootView {
         if (this.currentSection === AppSection.planner) {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
-          CalendarSectionView({ containerWidth: this.containerWidth })
+          CalendarSectionView({
+            containerWidth: this.containerWidth,
+            onQueryVisibilityChanged: (visible: boolean): void => {
+              this.setQueryVisible(visible);
+            }
+          })
         } else {
           SettingsView({
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
               this.settingsFavoriteManagerVisible = visible;
+            },
+            onQueryVisibilityChanged: (visible: boolean): void => {
+              this.setQueryVisible(visible);
             }
           })
         }
@@ -282,6 +310,12 @@ export struct RootView {
       this.settingsFavoriteManagerVisible = false;
     }
     this.model.selectedSection = section;
+  }
+
+  private setQueryVisible(visible: boolean): void {
+    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, (): void => {
+      this.queryVisible = visible;
+    });
   }
 
   private sectionIndexOf(section: AppSection): number {

@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.2.7"
-    CURRENT_PROJECT_VERSION: "73"
+    MARKETING_VERSION: "0.2.8"
+    CURRENT_PROJECT_VERSION: "74"
     CODE_SIGN_STYLE: Automatic
 targets:
   WhereToStudyMac:

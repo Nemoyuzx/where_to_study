@@ -12,6 +12,9 @@ final class CalendarDeadlineClientTests: XCTestCase {
           "items":[
             {"id":"c1","name":"数据库竞赛","event_type":"competition","primary_deadline":"2026-08-22T18:00:00+08:00","organizer":"组委会","official_url":"https://example.com/c1"},
             {"id":"h1","name":"校园黑客松","event_type":"hackathon","primary_deadline":"2026-08-22T23:59:59+08:00"},
+            {"id":"m1","name":"学术会议","event_type":"conference","primary_deadline":"2026-08-22T20:00:00+08:00","categories":["人工智能","计算机视觉"],"tags":["CCF A","学术会议"],"level":"CCF A","location":"Beijing","description":"会议简介","eligibility":"researchers","notes":"投稿前复核官网","status":"submission_open","region":"global","mode":"offline","archived":false,"source":{"name":"CCFDDL Open Deadlines","url":"https://ccfddl.com/conference/allconf.yml","source_type":"trusted_community","authority":4}},
+            {"id":"j1","name":"期刊专题","event_type":"journal_special_issue","primary_deadline":"2026-08-22T21:00:00+08:00"},
+            {"id":"p1","name":"预推免","event_type":"pre_admission","primary_deadline":"2026-08-22T22:00:00+08:00"},
             {"id":"s1","name":"夏令营","event_type":"summer_camp","primary_deadline":"2026-08-23T23:59:59+08:00"},
             {"id":"x1","name":"未知类型","event_type":"other","primary_deadline":"2026-08-22T12:00:00+08:00"}
           ]
@@ -22,8 +25,43 @@ final class CalendarDeadlineClientTests: XCTestCase {
             data: data,
             requestedDate: "2026-08-22"
         )
-        XCTAssertEqual(parsed.map(\.id), ["c1", "h1"])
+        XCTAssertEqual(parsed.map(\.id), ["c1", "m1", "j1", "p1", "h1"])
         XCTAssertEqual(parsed.first?.officialURL?.scheme, "https")
+        XCTAssertEqual(Set(parsed.map(\.kind)), Set([
+            .competition, .conference, .journalSpecialIssue, .preAdmission, .hackathon,
+        ]))
+        let conference = try XCTUnwrap(parsed.first { $0.id == "m1" })
+        XCTAssertEqual(conference.categories, ["人工智能", "计算机视觉"])
+        XCTAssertEqual(conference.tags, ["CCF A", "学术会议"])
+        XCTAssertEqual(conference.level, "CCF A")
+        XCTAssertEqual(conference.location, "Beijing")
+        XCTAssertEqual(conference.description, "会议简介")
+        XCTAssertEqual(conference.eligibility, "researchers")
+        XCTAssertEqual(conference.notes, "投稿前复核官网")
+        XCTAssertEqual(conference.metadataSource?.name, "CCFDDL Open Deadlines")
+        XCTAssertEqual(conference.metadataSource?.authority, 4)
+        XCTAssertEqual(conference.status, "submission_open")
+        XCTAssertEqual(conference.region, "global")
+        XCTAssertEqual(conference.mode, "offline")
+        XCTAssertFalse(conference.archived)
+    }
+
+    func testLegacyFavoriteSnapshotDecodesWithEmptyMetadataDefaults() throws {
+        let data = Data(#"""
+        {
+          "id":"legacy",
+          "name":"旧收藏",
+          "kind":"competition",
+          "source":"contest_ddl",
+          "deadline":"2026-09-01T12:00:00+08:00"
+        }
+        """#.utf8)
+        let item = try JSONDecoder().decode(PublicDeadlineItem.self, from: data)
+        XCTAssertEqual(item.id, "legacy")
+        XCTAssertEqual(item.categories, [])
+        XCTAssertEqual(item.tags, [])
+        XCTAssertFalse(item.archived)
+        XCTAssertNil(item.metadataSource)
     }
 
     func testPublicDDLParserDropsPlainHTTPOfficialLink() throws {
@@ -124,6 +162,20 @@ final class CalendarDeadlineClientTests: XCTestCase {
             store.publicByDate["2026-09-12"]?.items.map(\.id),
             ["school:september"]
         )
+    }
+
+    func testManualPublicRefreshBypassesFreshFullFeedCache() async throws {
+        let recorder = PublicFullFeedRecorder(feed: loadedPublicDeadlineFeed())
+        let client = PublicDeadlineClient(feedLoader: { try await recorder.load() })
+
+        _ = try await client.prewarm()
+        _ = try await client.prewarm()
+        let prewarmCount = await recorder.invocationCount
+        XCTAssertEqual(prewarmCount, 1)
+
+        _ = try await client.refresh()
+        let refreshCount = await recorder.invocationCount
+        XCTAssertEqual(refreshCount, 2)
     }
 
     @MainActor

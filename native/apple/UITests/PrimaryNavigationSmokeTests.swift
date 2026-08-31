@@ -20,6 +20,40 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         assertScreen("screen.planner", in: app)
     }
 
+    func testInformationQueriesAreAccessibleFromCalendarAndSettings() {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "教学日历", in: app)
+        let actions = app.buttons["课表操作"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 5))
+        actions.tap()
+        let calendarEntry = app.buttons["calendar.open-information-queries"]
+        XCTAssertTrue(calendarEntry.waitForExistence(timeout: 5))
+        calendarEntry.tap()
+        assertScreen("screen.information-queries", in: app)
+        XCTAssertTrue(app.segmentedControls.buttons["班车查询"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["queries.shuttle.status"]
+            .waitForExistence(timeout: 5))
+        app.buttons["完成"].tap()
+
+        navigate(to: "设置", in: app)
+        let settingsEntry = app.descendants(matching: .any)["settings.open-information-queries"]
+        revealByScrolling(visibleElement: settingsEntry, in: app)
+        settingsEntry.tap()
+        assertScreen("screen.information-queries", in: app)
+        let events = app.segmentedControls.buttons["重要事件"]
+        XCTAssertTrue(events.waitForExistence(timeout: 5))
+        events.tap()
+        let showEnded = app.switches["queries.events.show-ended"]
+        XCTAssertTrue(showEnded.waitForExistence(timeout: 5))
+        XCTAssertEqual(showEnded.value as? String, "0")
+        XCTAssertTrue(app.staticTexts["示例学术会议"].waitForExistence(timeout: 5))
+    }
+
     func testReviewDemoShowsLocalDataWithoutAccount() {
         continueAfterFailure = false
         let app = configuredApplication()

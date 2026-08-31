@@ -22,7 +22,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         .split(area);
 
     let title = Paragraph::new(format!(
-        "{}年{}月 ·  ←→ 切换月份 · 空格 回到今天",
+        "{}年{}月 · ←→ 切换月份 · 空格 回到今天 · i 班车/重要事件查询",
         year,
         month_index + 1
     ))
@@ -34,6 +34,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let first_day = NaiveDate::from_ymd_opt(year, month.month(), 1).unwrap();
     let offset = first_day.weekday().num_days_from_monday() as i64;
     let today = today_in_app_tz();
+    let important_events = app.all_query_events();
 
     let mut header = vec![];
     for label in WEEKDAY_HEADERS {
@@ -52,12 +53,32 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         let is_today = date == today;
         let holiday = app.holiday_on(date);
         let courses = app.courses_on(date);
+        let date_key = date.format("%Y-%m-%d").to_string();
+        let (conference_count, other_event_count) = important_events
+            .iter()
+            .filter(|item| item.primary_deadline.get(..10) == Some(date_key.as_str()))
+            .fold((0_usize, 0_usize), |(conference, other), item| {
+                if matches!(
+                    item.event_type.as_str(),
+                    "conference" | "journal_special_issue"
+                ) {
+                    (conference + 1, other)
+                } else {
+                    (conference, other + 1)
+                }
+            });
         let mut content = day.to_string();
         if let Some((kind, _)) = &holiday {
             content = format!("{}{}", kind, content);
         }
         if !courses.is_empty() {
             content = format!("{content}·{}", courses.len());
+        }
+        if conference_count > 0 {
+            content = format!("{content}·会{conference_count}");
+        }
+        if other_event_count > 0 {
+            content = format!("{content}·事{other_event_count}");
         }
         let style = if is_today {
             Style::default()
@@ -68,7 +89,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
             theme.danger_text()
         } else if holiday.as_ref().is_some_and(|(kind, _)| *kind == "班") {
             theme.gold_text()
-        } else if !courses.is_empty() {
+        } else if conference_count > 0 || other_event_count > 0 || !courses.is_empty() {
             theme.primary_text()
         } else {
             theme.muted_text()
@@ -87,7 +108,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let table = Table::new(rows, widths).block(
         Block::default()
             .borders(Borders::ALL)
-            .title("月历（休=红 班=金 数字=课程数）"),
+            .title("月历（休=红 班=金 数字=课程数 会=会议 事=重要事件）"),
     );
 
     frame.render_widget(table, header_chunks[1]);
@@ -101,4 +122,72 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     };
     let first_next = NaiveDate::from_ymd_opt(next_year, next_month, 1).unwrap();
     (first_next - Duration::days(1)).day()
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    use where_to_study_lib::models::{ImportantEventItem, ImportantEventsResponse};
+
+    use super::*;
+
+    fn event(id: &str, event_type: &str) -> ImportantEventItem {
+        ImportantEventItem {
+            id: id.to_string(),
+            name: id.to_string(),
+            event_type: event_type.to_string(),
+            source_type: "contest_ddl".to_string(),
+            primary_deadline: "2026-08-31T23:59:59+08:00".to_string(),
+            deadline_label: Some("截止".to_string()),
+            organizer: None,
+            official_url: None,
+            source_name: None,
+            source_url: None,
+            categories: Vec::new(),
+            tags: Vec::new(),
+            level: None,
+            location: None,
+            status: None,
+            description: None,
+            eligibility: None,
+            notes: None,
+            region: None,
+            mode: None,
+            published_at: None,
+            stale: false,
+            archived: false,
+        }
+    }
+
+    #[test]
+    fn month_calendar_marks_conferences_and_other_important_events() {
+        let mut app = App::new(false);
+        app.calendar_month = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
+        app.important_events = Some(ImportantEventsResponse {
+            fetched_at: "2026-08-31T00:00:00+08:00".to_string(),
+            source: "fixture".to_string(),
+            used_backup: false,
+            items: vec![
+                event("conference", "conference"),
+                event("contest", "competition"),
+            ],
+        });
+        let backend = TestBackend::new(140, 18);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| draw(frame, frame.area(), &app, &crate::theme::LIGHT))
+            .unwrap();
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>()
+            .replace(' ', "");
+        assert!(rendered.contains("会1"));
+        assert!(rendered.contains("事1"));
+        assert!(rendered.contains("会=会议"));
+    }
 }

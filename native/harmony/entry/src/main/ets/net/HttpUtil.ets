@@ -31,6 +31,7 @@ export class HttpRequestSpec {
   connectTimeoutMs: number = 20000;
   readTimeoutMs: number = 30000;
   maxBytes: number = 2 * 1024 * 1024;
+  maxRedirects: number = 5;
 
   constructor() {
   }
@@ -41,7 +42,8 @@ export class HttpUtil {
 
   static async perform(url: string, spec: HttpRequestSpec, allowedHost: string): Promise<HttpResult> {
     let currentUrl: string = url;
-    for (let redirect = 0; redirect <= HttpUtil.maximumRedirects; redirect++) {
+    const maximumRedirects: number = Math.max(0, Math.min(spec.maxRedirects, HttpUtil.maximumRedirects));
+    for (let redirect = 0; redirect <= maximumRedirects; redirect++) {
       if (!UrlPolicy.allows(currentUrl, allowedHost)) {
         throw new Error('请求地址不符合安全策略。');
       }
@@ -59,6 +61,9 @@ export class HttpUtil {
         });
         const code: number = typeof response.responseCode === 'number' ? response.responseCode as number : 0;
         if (code >= 300 && code < 400) {
+          if (redirect >= maximumRedirects) {
+            throw new Error('请求重定向次数过多。');
+          }
           const location: string | null = HttpUtil.headerValue(response.header, 'Location');
           if (location === null) {
             throw new Error('请求被重定向但没有目标地址。');

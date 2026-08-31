@@ -1895,18 +1895,28 @@ internal class TeachingCalendarPage(
                 PopupMenu(activity, anchor).apply {
                     menu.add(
                         0,
-                        R.id.calendar_import_menu_item,
+                        R.id.calendar_information_query_menu_item,
                         0,
+                        activity.uiText("班车与重要事件查询"),
+                    )
+                    menu.add(
+                        0,
+                        R.id.calendar_import_menu_item,
+                        1,
                         activity.uiText("导入手机日历"),
                     )
                     menu.add(
                         0,
                         R.id.calendar_import_favorites_menu_item,
-                        1,
+                        2,
                         activity.uiText("导入已收藏日程"),
                     )
                     setOnMenuItemClickListener { item ->
                         when (item.itemId) {
+                            R.id.calendar_information_query_menu_item -> {
+                                activity.openInformationQuery()
+                                true
+                            }
                             R.id.calendar_import_menu_item -> {
                                 confirmImport()
                                 true
@@ -3580,8 +3590,12 @@ internal class TeachingCalendarPage(
         }
         return when (item.kind) {
             PublicDeadlineKind.COMPETITION -> preferences.competitionDeadlinesEnabled
+            PublicDeadlineKind.CONFERENCE -> preferences.conferenceDeadlinesEnabled
+            PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE ->
+                preferences.conferenceDeadlinesEnabled
             PublicDeadlineKind.SUMMER_CAMP -> preferences.summerCampDeadlinesEnabled
             PublicDeadlineKind.HACKATHON -> preferences.hackathonDeadlinesEnabled
+            PublicDeadlineKind.PRE_ADMISSION -> preferences.summerCampDeadlinesEnabled
             PublicDeadlineKind.CUSTOM -> preferences.customDeadlinesEnabled
         }
     }
@@ -4141,15 +4155,21 @@ internal class TeachingCalendarPage(
 
     private fun deadlineKindTitle(kind: PublicDeadlineKind): String = when (kind) {
         PublicDeadlineKind.COMPETITION -> "学科竞赛 DDL"
+        PublicDeadlineKind.CONFERENCE -> "学术会议 DDL"
+        PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE -> "期刊专题 DDL"
         PublicDeadlineKind.SUMMER_CAMP -> "夏令营 DDL"
         PublicDeadlineKind.HACKATHON -> "黑客松 DDL"
+        PublicDeadlineKind.PRE_ADMISSION -> "预推免 DDL"
         PublicDeadlineKind.CUSTOM -> "自定义日程"
     }
 
     private fun publicDeadlineLabel(kind: PublicDeadlineKind): String = activity.uiText(when (kind) {
         PublicDeadlineKind.COMPETITION -> "赛"
+        PublicDeadlineKind.CONFERENCE -> "会"
+        PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE -> "刊"
         PublicDeadlineKind.SUMMER_CAMP -> "营"
         PublicDeadlineKind.HACKATHON -> "黑"
+        PublicDeadlineKind.PRE_ADMISSION -> "推"
         PublicDeadlineKind.CUSTOM -> "自"
     })
 

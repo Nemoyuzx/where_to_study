@@ -1,6 +1,7 @@
 use chrono::{Datelike, Duration, NaiveDate};
 use where_to_study_lib::error::ServiceResult;
 use where_to_study_lib::models::{ClassroomsResponse, Course, HolidaysResponse, ScheduleResponse};
+use where_to_study_lib::public_queries::{TodayShuttlePresentation, TodayShuttleRoute};
 
 const WEEKDAY_LABELS: [&str; 7] = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
@@ -189,5 +190,101 @@ pub fn print_holidays(response: &HolidaysResponse) -> ServiceResult<()> {
     for item in &workdays {
         println!("  {} {}", item.date, item.name);
     }
+    Ok(())
+}
+
+fn print_shuttle_route(route: &TodayShuttleRoute) {
+    println!("  {} → {} · {}", route.from, route.to, route.period_label);
+    if route.departures.is_empty() {
+        println!("    今日无发车安排");
+        return;
+    }
+    for departure in &route.departures {
+        let marker = if departure.next {
+            "下一班"
+        } else if departure.departed {
+            "已发车"
+        } else {
+            "待发车"
+        };
+        println!(
+            "    {}  {}×{}  {marker}",
+            departure.time, departure.vehicle, departure.count
+        );
+    }
+}
+
+pub fn print_shuttle(
+    response: &where_to_study_lib::models::ShuttleBusResponse,
+    today: &TodayShuttlePresentation,
+) -> ServiceResult<()> {
+    println!("{} · {}", today.date, today.status);
+    if let Some(next) = &today.next_departure {
+        println!("{next}");
+    }
+    if today.stale {
+        println!("提示：服务当前返回缓存数据，请以学校通知为准。");
+    }
+    if let Some(title) = &today.notice_title {
+        println!("生效通知：{title}");
+    }
+    for route in &today.routes {
+        print_shuttle_route(route);
+    }
+    if !today.stops.is_empty() {
+        println!("发车地点：");
+        for stop in &today.stops {
+            println!("  {}：{}", stop.campus, stop.location);
+        }
+    }
+    println!(
+        "第三方来源：{} · 生成于 {}\n{}",
+        response.source.name, response.generated_at, response.source.page_url
+    );
+    Ok(())
+}
+
+pub fn print_important_events(
+    items: &[where_to_study_lib::models::ImportantEventItem],
+    favorites: &[where_to_study_lib::models::ImportantEventItem],
+    source: &str,
+    fetched_at: Option<&str>,
+) -> ServiceResult<()> {
+    let favorite_keys: std::collections::HashSet<String> = favorites
+        .iter()
+        .map(where_to_study_lib::public_queries::favorite_key)
+        .collect();
+    println!(
+        "重要事件 {} 项 · 默认按 DDL 升序{}",
+        items.len(),
+        fetched_at
+            .map(|value| format!(" · 数据时间 {value}"))
+            .unwrap_or_default()
+    );
+    for item in items {
+        let key = where_to_study_lib::public_queries::favorite_key(item);
+        let favorite = if favorite_keys.contains(&key) {
+            "★"
+        } else {
+            "☆"
+        };
+        let source_label = if item.source_type == "school_notice" {
+            "校内"
+        } else {
+            "公开"
+        };
+        println!(
+            "{favorite} {}  [{} · {}] {}",
+            item.primary_deadline, source_label, item.event_type, item.name
+        );
+        if !item.categories.is_empty() {
+            println!("    分类：{}", item.categories.join(" / "));
+        }
+        println!("    favorite_key: {key}");
+    }
+    if items.is_empty() {
+        println!("没有符合条件的事件。");
+    }
+    println!("第三方来源：{source}\n显示数据仅供参考，请以实际情况为准。");
     Ok(())
 }

@@ -1,6 +1,6 @@
 # 隐私声明 / Privacy Policy
 
-生效日期 / Effective date: 2026-08-24
+生效日期 / Effective date: 2026-08-31
 
 Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。
 
@@ -26,17 +26,21 @@ The app may retrieve Chinese statutory holiday and transfer-workday data from th
 
 ## 天气、黄历与公开活动 / Weather, almanac, and public events
 
-天气功能通过 UAPI 按所选校区对应的海淀或昌平行政区获取今日、明日天气，不读取 GPS 或精确位置。黄历功能通过 UAPI 获取基础农历信息，并可能通过 Timeless API 补充“宜/忌”。Contest DDL 的 GitHub Pages 主源提供学科竞赛、夏令营和黑客松数据，主源不可用时可能访问 `where-to-study.cn` 上的固定 HTTPS 备用接口。校内竞赛通知由服务器脚本从学校内部网站的公开通知页提取整理，再由同域名下的固定 HTTPS API 提供。天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松均有独立开关。
+天气功能通过 UAPI 按所选校区对应的海淀或昌平行政区获取今日、明日天气，不读取 GPS 或精确位置。黄历功能通过 UAPI 获取基础农历信息，并可能通过 Timeless API 补充“宜/忌”。Contest DDL 的 GitHub Pages 主源提供学科竞赛、学术会议、期刊专题、夏令营、预推免和黑客松数据，主源不可用时可能访问 `where-to-study.cn` 上的固定 HTTPS 备用接口。校内竞赛通知由服务器脚本从学校内部网站的公开通知页提取整理，再由同域名下的固定 HTTPS API 提供。教学日历中的学科竞赛、学术会议、校内通知、夏令营和黑客松分别由对应开关控制；独立的“重要事件”查询页始终允许用户主动搜索这些公开数据，不包含课程作业或自定义日程。
 
-Weather uses UAPI to request today and tomorrow for the Haidian or Changping administrative district associated with the selected campus; it does not read GPS or precise location. Almanac data comes from UAPI, with optional `宜`/`忌` advice from the Timeless API. Contest DDL's GitHub Pages source provides competition, summer-camp, and hackathon data, with a fixed HTTPS backup on `where-to-study.cn` when the primary source is unavailable. School competition notices are extracted and organized by a server-side script from public notice pages on the university's internal website, then exposed through a fixed HTTPS API on the same domain. Weather, almanac, competitions, school notices, summer camps, and hackathons each have a separate switch.
+Weather uses UAPI to request today and tomorrow for the Haidian or Changping administrative district associated with the selected campus; it does not read GPS or precise location. Almanac data comes from UAPI, with optional `宜`/`忌` advice from the Timeless API. Contest DDL's GitHub Pages source provides competitions, academic conferences, journal special issues, summer camps, pre-admission events, and hackathons, with a fixed HTTPS backup on `where-to-study.cn` when the primary source is unavailable. School competition notices are extracted and organized by a server-side script from public notice pages on the university's internal website, then exposed through a fixed HTTPS API on the same domain. Calendar display switches separately control competitions, conferences, school notices, summer camps, and hackathons. The user-opened Important Events query remains searchable independently and contains neither assignments nor custom-feed items.
+
+班车查询通过固定接口 `https://where-to-study.cn/api/shuttle-bus` 获取北京邮电大学后勤部公开通知及官方时刻表的结构化结果。客户端只发送无凭据 HTTPS `GET`，不上传学号、密码、课表、校区选择、GPS 或其他个人数据；服务端可能按其政策处理 IP 地址、请求时间等普通网络元数据。自动识别结果仅供参考，节假日、停运和临时调整以后勤部原文为准。
+
+Shuttle queries retrieve structured public Logistics Department notices and official timetables from the fixed `https://where-to-study.cn/api/shuttle-bus` endpoint. The client sends only a credential-free HTTPS `GET`; no student ID, password, schedule, campus selection, GPS, or other personal data is uploaded. The server may process ordinary network metadata such as IP address and request time under its own policy. Automatically structured results are for reference only; rely on the original Logistics Department notice for holidays, suspensions, and temporary changes.
 
 你可以选择填写公开的 HTTPS JSON 地址作为自定义日程来源。应用不会向该地址附带教务凭据、Cookie、token、课表、教室或作业数据；地址不得含用户信息、片段、回环地址或私网 IP 字面量，客户端拒绝重定向并限制响应大小与请求频率。该服务器仍可能按照自己的政策处理 IP 地址、请求时间等普通网络元数据。接口格式与约束见[自定义日程接口规范](docs/custom-schedule-api.md)。
 
 You may optionally provide a public HTTPS JSON URL as a custom schedule source. The app sends no academic credentials, cookies, tokens, schedules, classrooms, or assignments to that URL. URLs containing user information, fragments, loopback hosts, or private literal IP addresses are rejected; redirects, oversized responses, and excessive requests are also rejected. The server may still process ordinary network metadata such as IP address and request time under its own policy. See the [custom schedule feed specification](docs/custom-schedule-api.md) for the format and constraints.
 
-对 `https://where-to-study.cn/api/contest-events` 和 `https://where-to-study.cn/api/contest-notices` 的请求仅为发往固定 HTTPS 主机、不接受重定向且限制响应大小的无凭据 `GET`；请求不包含 Cookie、token、课表、教室、作业或其他个人数据。卡片中的所有天气、民俗和截止日期信息均仅供参考，请以实际官方信息为准。
+对 `https://where-to-study.cn/api/contest-events`、`https://where-to-study.cn/api/contest-notices` 和 `https://where-to-study.cn/api/shuttle-bus` 的请求仅为发往固定 HTTPS 主机、不接受重定向且限制响应大小的无凭据 `GET`；请求不包含 Cookie、token、课表、教室、作业或其他个人数据。卡片中的所有天气、民俗、班车和截止日期信息均仅供参考，请以实际官方信息为准。
 
-Requests to `https://where-to-study.cn/api/contest-events` and `https://where-to-study.cn/api/contest-notices` are credential-free `GET` requests to the fixed HTTPS host, reject redirects, and enforce response-size limits. They contain no cookies, tokens, schedules, classrooms, assignments, or other personal data. All weather, folklore, and deadline information shown in cards is for reference only; rely on actual official information.
+Requests to `https://where-to-study.cn/api/contest-events`, `https://where-to-study.cn/api/contest-notices`, and `https://where-to-study.cn/api/shuttle-bus` are credential-free `GET` requests to the fixed HTTPS host, reject redirects, and enforce response-size limits. They contain no cookies, tokens, schedules, classrooms, assignments, or other personal data. All weather, folklore, shuttle, and deadline information shown in the app is for reference only; rely on actual official information.
 
 ## 云课堂作业 / UCloud assignments
 
@@ -52,9 +56,9 @@ The app writes to the system calendar or schedules local course-summary notifica
 
 ## 不收集的数据与第三方元数据 / Data not collected and third-party metadata
 
-本项目不运营应用后端，不包含广告、分析或行为跟踪 SDK，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、固定活动 API 和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。
+本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。
 
-The project operates no application backend and includes no advertising, analytics, or behavioral-tracking SDK. It does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, fixed event APIs, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies.
+The project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies.
 
 ## 保留与删除 / Retention and deletion
 

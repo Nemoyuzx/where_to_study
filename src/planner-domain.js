@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS = {
   weatherEnabled: true,
   almanacEnabled: true,
   competitionDeadlinesEnabled: true,
+  conferenceDeadlinesEnabled: true,
   schoolContestNoticesEnabled: true,
   summerCampDeadlinesEnabled: true,
   hackathonDeadlinesEnabled: true,
@@ -201,6 +202,7 @@ export function dateFromString(dateString) {
 export function deadlinePreheatPlan(settings, dateString) {
   const enabled = Boolean(
     settings?.competitionDeadlinesEnabled
+    || settings?.conferenceDeadlinesEnabled
     || settings?.schoolContestNoticesEnabled
     || settings?.summerCampDeadlinesEnabled
     || settings?.hackathonDeadlinesEnabled,
@@ -488,6 +490,9 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
     competitionDeadlinesEnabled: Boolean(
       data.competition_deadlines_enabled ?? fallback.competitionDeadlinesEnabled ?? true,
     ),
+    conferenceDeadlinesEnabled: Boolean(
+      data.conference_deadlines_enabled ?? fallback.conferenceDeadlinesEnabled ?? true,
+    ),
     schoolContestNoticesEnabled: Boolean(
       data.school_contest_notices_enabled ?? fallback.schoolContestNoticesEnabled ?? true,
     ),
@@ -609,6 +614,7 @@ export function settingsToPayload(settings) {
     weather_enabled: Boolean(settings.weatherEnabled),
     almanac_enabled: Boolean(settings.almanacEnabled),
     competition_deadlines_enabled: Boolean(settings.competitionDeadlinesEnabled),
+    conference_deadlines_enabled: Boolean(settings.conferenceDeadlinesEnabled),
     school_contest_notices_enabled: Boolean(settings.schoolContestNoticesEnabled),
     summer_camp_deadlines_enabled: Boolean(settings.summerCampDeadlinesEnabled),
     hackathon_deadlines_enabled: Boolean(settings.hackathonDeadlinesEnabled),
@@ -617,7 +623,15 @@ export function settingsToPayload(settings) {
   }
 }
 
-const FAVORITE_DEADLINE_TYPES = new Set(['competition', 'summer_camp', 'hackathon', 'custom'])
+const FAVORITE_DEADLINE_TYPES = new Set([
+  'competition',
+  'conference',
+  'journal_special_issue',
+  'hackathon',
+  'summer_camp',
+  'pre_admission',
+  'custom',
+])
 const FAVORITE_DEADLINE_SOURCES = new Set(['contest_ddl', 'school_notice', 'custom'])
 
 export function favoriteDeadlineKey(item = {}) {
@@ -627,6 +641,19 @@ export function favoriteDeadlineKey(item = {}) {
   return [item.source_type, sourceIdentity, item.id, item.primary_deadline]
     .map((value) => String(value || ''))
     .join('\u001f')
+}
+
+function normalizedFavoriteText(value, maximumLength) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text && text.length <= maximumLength ? text : null
+}
+
+function normalizedFavoriteLabels(value, maximumItems = 32, maximumLength = 80) {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.flatMap((entry) => {
+    const text = normalizedFavoriteText(entry, maximumLength)
+    return text ? [text] : []
+  }))].slice(0, maximumItems)
 }
 
 export function normalizeFavoriteDeadlines(value, maximum = 500) {
@@ -641,10 +668,24 @@ export function normalizeFavoriteDeadlines(value, maximum = 500) {
       event_type: String(item.event_type || '').trim(),
       source_type: String(item.source_type || '').trim(),
       primary_deadline: String(item.primary_deadline || '').trim(),
-      organizer: String(item.organizer || '').trim() || null,
-      official_url: String(item.official_url || '').trim() || null,
-      source_name: String(item.source_name || '').trim() || null,
-      source_url: String(item.source_url || '').trim() || null,
+      organizer: normalizedFavoriteText(item.organizer, 200),
+      official_url: normalizedFavoriteText(item.official_url, 2_048),
+      source_name: normalizedFavoriteText(item.source_name, 120),
+      source_url: normalizedFavoriteText(item.source_url, 2_048),
+      deadline_label: normalizedFavoriteText(item.deadline_label, 80),
+      categories: normalizedFavoriteLabels(item.categories),
+      tags: normalizedFavoriteLabels(item.tags),
+      level: normalizedFavoriteText(item.level, 120),
+      location: normalizedFavoriteText(item.location, 200),
+      status: normalizedFavoriteText(item.status, 64),
+      description: normalizedFavoriteText(item.description, 2_000),
+      eligibility: normalizedFavoriteText(item.eligibility, 500),
+      notes: normalizedFavoriteText(item.notes, 4_000),
+      region: normalizedFavoriteText(item.region, 80),
+      mode: normalizedFavoriteText(item.mode, 80),
+      published_at: normalizedFavoriteText(item.published_at, 64),
+      stale: Boolean(item.stale),
+      archived: Boolean(item.archived),
     }
     if (!normalized.id || normalized.id.length > 128
       || !normalized.name || normalized.name.length > 200
@@ -654,9 +695,6 @@ export function normalizeFavoriteDeadlines(value, maximum = 500) {
     if (normalized.official_url
       && (!normalized.official_url.startsWith('https://') || normalized.official_url.includes('@'))) {
       normalized.official_url = null
-    }
-    if (normalized.source_name && normalized.source_name.length > 80) {
-      normalized.source_name = null
     }
     if (normalized.source_url
       && (!normalized.source_url.startsWith('https://') || normalized.source_url.includes('@'))) {

@@ -56,6 +56,34 @@ export default function calendarDailyInfoClientTest() {
       expect(parsed[1].officialURL).assertNull();
     });
 
+    it('public_deadline_parser_and_favorites_preserve_query_metadata', 0, () => {
+      const parsed: PublicDeadlineItem[] = PublicDeadlineResponseParser.parse('{' +
+        '"items":[{"id":"conf","name":"AI Conference","event_type":"conference",' +
+        '"primary_deadline":"2026-09-22T18:00:00+08:00",' +
+        '"categories":["人工智能","交叉/综合/新兴"],"tags":["CCF A","学术会议"],' +
+        '"level":"CCF A","location":"Phoenix","description":"AI research",' +
+        '"eligibility":"Researchers","notes":"Check official website","archived":false,' +
+        '"source":{"name":"CCFDDL","url":"https://ccfddl.com/",' +
+        '"source_type":"trusted_community","authority":4}}]}', '2026-09-22');
+      expect(parsed.length).assertEqual(1);
+      expect(parsed[0].categories[0]).assertEqual('人工智能');
+      expect(parsed[0].tags[0]).assertEqual('CCF A');
+      expect(parsed[0].level).assertEqual('CCF A');
+      expect(parsed[0].location).assertEqual('Phoenix');
+      expect(parsed[0].description).assertEqual('AI research');
+      expect(parsed[0].eligibility).assertEqual('Researchers');
+      expect(parsed[0].notes).assertEqual('Check official website');
+      expect(parsed[0].sourceName).assertEqual('CCFDDL');
+      expect(parsed[0].sourceHomepage).assertEqual('https://ccfddl.com/');
+      expect(parsed[0].upstreamSourceType).assertEqual('trusted_community');
+      expect(parsed[0].sourceAuthority).assertEqual(4);
+      const restored: PublicDeadlineItem[] = FavoriteDeadlineCodec.decode(
+        FavoriteDeadlineCodec.encode(parsed));
+      expect(restored[0].categories[1]).assertEqual('交叉/综合/新兴');
+      expect(restored[0].location).assertEqual('Phoenix');
+      expect(restored[0].sourceAuthority).assertEqual(4);
+    });
+
     it('school_notice_parser_expands_deadlines_on_selected_day', 0, () => {
       const parsed: PublicDeadlineItem[] = PublicDeadlineResponseParser.parseSchoolNotices('{' +
         '"items":[{"id":"bupt-ucloud-1","name":"校内创新竞赛",' +
@@ -171,8 +199,16 @@ export default function calendarDailyInfoClientTest() {
       expect(results[1].items[0].id).assertEqual('second');
       expect(transport.primaryCalls).assertEqual(1);
       expect(transport.schoolCalls).assertEqual(1);
+      await client.fetchImportantEvents();
+      expect(transport.primaryCalls).assertEqual(1);
+      expect(transport.schoolCalls).assertEqual(1);
       expect(contestParses).assertEqual(1);
       expect(schoolParses).assertEqual(1);
+
+      const catalog: PublicDeadlineItem[] = await client.fetchImportantEvents();
+      expect(catalog.length).assertEqual(2);
+      expect(transport.primaryCalls).assertEqual(1);
+      expect(transport.schoolCalls).assertEqual(1);
 
       await client.fetchDeadlines('2026-08-24');
       expect(transport.primaryCalls).assertEqual(1);

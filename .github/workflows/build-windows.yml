@@ -151,10 +151,11 @@ jobs:
             }
             foreach ($endpoint in @(
               "https://where-to-study.cn/api/contest-events",
-              "https://where-to-study.cn/api/contest-notices"
+              "https://where-to-study.cn/api/contest-notices",
+              "https://where-to-study.cn/api/shuttle-bus"
             )) {
               if (-not $binaryText.Contains($endpoint)) {
-                throw "Installed Windows executable is missing the HTTPS contest endpoint: $endpoint"
+                throw "Installed Windows executable is missing a required HTTPS public-data endpoint: $endpoint"
               }
             }
           } finally {

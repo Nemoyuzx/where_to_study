@@ -72,6 +72,12 @@ object UiText {
         "空教室" to "Empty Classrooms",
         "教学日历" to "Teaching Calendar",
         "设置" to "Settings",
+        "查询" to "Query",
+        "校区班车与重要事件" to "Campus Shuttles and Important Events",
+        "班车与重要事件查询" to "Shuttles & Important Events",
+        "班车查询" to "Shuttle Search",
+        "重要事件" to "Important Events",
+        "返回" to "Back",
         "联动查询" to "Linked Search",
         "查询条件" to "Search Filters",
         "查询概览" to "Query Summary",
@@ -229,11 +235,42 @@ object UiText {
         "黄历与宜忌" to "Almanac and Advice",
         "学科竞赛 DDL" to "Competition DDL",
         "学科竞赛" to "Competition",
+        "学术会议 DDL" to "Conference DDL",
+        "学术会议" to "Conference",
+        "期刊专题 DDL" to "Journal Special Issue DDL",
+        "期刊专题" to "Journal Special Issue",
         "校内竞赛通知" to "Campus Contest Notices",
         "夏令营 DDL" to "Summer Camp DDL",
         "夏令营" to "Summer Camp",
         "黑客松 DDL" to "Hackathon DDL",
         "黑客松" to "Hackathon",
+        "预推免 DDL" to "Pre-admission DDL",
+        "预推免" to "Pre-admission",
+        "今日班车状态" to "Today's Shuttle Status",
+        "候车地点" to "Pickup Locations",
+        "乘车提示" to "Rider Notes",
+        "未找到当前生效的班车时刻表" to "No currently effective shuttle timetable found",
+        "今日暂无已安排班车" to "No shuttle service scheduled today",
+        "今日班车已结束" to "Today's shuttle service has ended",
+        "当前显示上一次有效缓存，服务正在恢复。" to "Showing the last valid cache while the service recovers.",
+        "当前没有可安全展示的生效时刻表，请查看学校原通知。" to "No verified active timetable is available; check the official notice.",
+        "今日该方向无班车" to "No shuttle in this direction today",
+        "正在获取今日班车与当前时刻表…" to "Loading today's shuttle status and active timetable…",
+        "搜索名称、主办方或分类" to "Search name, organizer, or category",
+        "全部" to "All",
+        "校内通知" to "Campus Notices",
+        "显示已结束" to "Show ended",
+        "分类" to "Category",
+        "全部分类" to "All Categories",
+        "适用对象" to "Eligibility",
+        "备注" to "Notes",
+        "已归档" to "Archived",
+        "加载更多" to "Load More",
+        "暂无符合条件的重要事件" to "No important events match these filters",
+        "正在同步公开活动与校内竞赛通知…" to "Syncing public events and campus contest notices…",
+        "点击重试" to "Tap to retry",
+        "第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业" to "Third-party sources: Contest DDL and the public campus-notice API; assignments are excluded",
+        "第三方来源：北京邮电大学后勤部公开通知；时刻表由脚本解析，仅供参考" to "Third-party source: public BUPT Logistics notices; timetables are script-parsed and for reference only",
         "自定义日程" to "Custom Schedule",
         "自定义日程源" to "Custom Schedule Feed",
         "自定义日程 HTTPS JSON 地址" to "Custom schedule HTTPS JSON URL",
@@ -317,6 +354,18 @@ object UiText {
         Regex("^(\\d+) 门$").matchEntire(source)?.let { return "${it.groupValues[1]} courses" }
         Regex("^收藏管理（(\\d+)）$").matchEntire(source)?.let {
             return "Favorite Management (${it.groupValues[1]})"
+        }
+        Regex("^(\\d+) 条结果 · 按 DDL 时间升序$").matchEntire(source)?.let {
+            return "${it.groupValues[1]} results · sorted by deadline"
+        }
+        Regex("^今日安排 (\\d+) 个发车时刻 · (\\d+) 辆车$").matchEntire(source)?.let {
+            return "Today: ${it.groupValues[1]} departure times · ${it.groupValues[2]} vehicles"
+        }
+        Regex("^下一班 (\\d{2}:\\d{2}) · (.+) → (.+)$").matchEntire(source)?.let {
+            return "Next ${it.groupValues[1]} · ${it.groupValues[2]} → ${it.groupValues[3]}"
+        }
+        Regex("^数据更新时间：(.+)$").matchEntire(source)?.let {
+            return "Updated: ${it.groupValues[1]}"
         }
         Regex("^自定义日程已保存：(.+)，(\\d+) 项$").matchEntire(source)?.let {
             return "Custom feed saved: ${it.groupValues[1]}, ${it.groupValues[2]} items"
@@ -413,7 +462,10 @@ object UiText {
         if (source.startsWith("暂无")) return "No data available"
         if (source.endsWith("失败") || source.endsWith("失败。") ||
             source.contains("无法") || source.contains("不可用") ||
-            source.contains("格式不正确")
+            source.contains("格式不正确") || source.contains("不受支持") ||
+            source.contains("不受信任") || source.contains("数量异常") ||
+            source.contains("缺少来源") || source.contains("状态无效") ||
+            source.contains("响应过大") || source.contains("返回错误")
         ) {
             return englishStatusFallback(source)
         }
@@ -421,6 +473,8 @@ object UiText {
     }
 
     private fun englishStatusFallback(source: String): String = when {
+        source.contains("班车") -> "Unable to load shuttle information"
+        source.contains("重要事件") -> "Unable to load important events"
         source.contains("天气") -> "Unable to load weather"
         source.contains("黄历") || source.contains("宜忌") -> "Unable to load almanac data"
         source.contains("DDL") || source.contains("竞赛") -> "Unable to load deadline data"

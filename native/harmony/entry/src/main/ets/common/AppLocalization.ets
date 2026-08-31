@@ -89,6 +89,10 @@ export class AppLocalization {
     '降水': 'Precipitation',
     '教学日历': 'Calendar',
     '设置': 'Settings',
+    '查询': 'Query',
+    '班车查询': 'Shuttle Bus',
+    '重要事件': 'Important Events',
+    '班车与重要事件查询': 'Shuttle & Important Events',
     '今天': 'Today',
     '明日': 'Tomorrow',
     '日': 'Day',
@@ -149,6 +153,7 @@ export class AppLocalization {
     '宜': 'Good',
     '忌': 'Avoid',
     'DDL · 竞赛 / 夏令营 / 黑客松': 'Deadlines · Contests / Camps / Hackathons',
+    'DDL · 公开活动与校内通知': 'Deadlines · Public Events & Campus Notices',
     '当天暂无已启用类别的 DDL': 'No enabled deadlines for this day',
     '本次使用备用 API': 'Using the backup API',
     '正在获取当天 DDL…': 'Loading deadlines…',
@@ -160,8 +165,11 @@ export class AppLocalization {
     '校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。':
       'Campus contest notices are extracted by a script from public notices on an internal school website and are for reference only.',
     '学科竞赛': 'Competition',
+    '学术会议': 'Conference',
+    '期刊专题': 'Journal Special Issue',
     '夏令营': 'Summer Camp',
     '黑客松': 'Hackathon',
+    '预推免': 'Pre-admission',
     '自定义日程': 'Custom Schedule',
     '自定义日程来源：': 'Custom schedule source: ',
     '自定义日程不符合 v1 接口规范。':
@@ -215,12 +223,14 @@ export class AppLocalization {
     '校区天气': 'Campus Weather',
     '黄历与宜忌': 'Almanac & Advice',
     '学科竞赛 DDL': 'Competition Deadlines',
+    '学术会议 DDL': 'Conference Deadlines',
     '夏令营 DDL': 'Summer Camp Deadlines',
     '黑客松 DDL': 'Hackathon Deadlines',
     '自定义日程 HTTPS 地址': 'Custom Schedule HTTPS URL',
     '保存自定义日程地址': 'Save Custom Schedule URL',
     '显示自定义日程': 'Show Custom Schedule',
     '收藏管理': 'Favorite Management',
+    '打开查询': 'Open Query',
     '返回设置': 'Back to Settings',
     '暂无收藏日程': 'No Favorite Schedules',
     '在日程详情右侧点击星标后，即使关闭来源或上游删除条目，收藏仍会保存在本机。':
@@ -265,6 +275,54 @@ export class AppLocalization {
     '标准': 'Standard',
     '展开': 'Expanded',
     '正在同步云课堂作业…': 'Syncing UCloud assignments…',
+    '今日校区班车': 'Today\'s Campus Shuttle',
+    '当前执行': 'In Service',
+    '尚未开始': 'Not Started',
+    ' 起': ' onward',
+    '历史时段': 'Historical Schedule',
+    '时段待确认': 'Schedule Pending',
+    '数据最新': 'Up to Date',
+    '缓存数据': 'Cached Data',
+    '最新通知尚未完成结构化识别，以下为上一份可安全展示的时刻表，仅供对照。':
+      'The latest notice is not yet safely structured. The previous verified timetable is shown for reference only.',
+    '法定节假日班车安排以学校通知为准，请提前五分钟候车。':
+      'Holiday service follows official notices. Please arrive five minutes early.',
+    '发车地点：': 'Departure: ',
+    '今日暂无计划班车': 'No Scheduled Shuttle Today',
+    '下一班': 'Next',
+    '计划班次': 'Scheduled Service',
+    '搜索名称、主办方、类型或日期': 'Search name, organizer, type, or date',
+    '搜索名称、主办方、分类、地点或来源':
+      'Search name, organizer, category, location, or source',
+    '全部': 'All',
+    '全部分类': 'All Categories',
+    '校内竞赛': 'Campus Contest',
+    '显示已结束或归档事件': 'Show Ended or Archived Events',
+    '没有符合条件的重要事件': 'No matching important events',
+    '请调整搜索关键词或分类筛选。': 'Try another keyword or category.',
+    '正在读取最新班车信息': 'Loading the latest shuttle information',
+    '正在读取重要事件': 'Loading important events',
+    '请稍候…': 'Please wait…',
+    '数据暂时无法读取。': 'Data is temporarily unavailable.',
+    '重新加载': 'Reload',
+    '今日暂无生效的班车时刻表': 'No Effective Shuttle Timetable Today',
+    '不会使用未来或历史时刻表代替今日安排，请以后勤部最新通知为准。':
+      'Future or historical timetables are never substituted for today. Check the latest official notice.',
+    '今日无生效时刻表': 'No Effective Timetable Today',
+    '班车信息暂时无法读取。': 'Shuttle information is temporarily unavailable.',
+    '重要事件暂时无法读取。': 'Important events are temporarily unavailable.',
+    '班车数据格式不正确。': 'The shuttle data format is invalid.',
+    '班车数据中没有有效通知。': 'The shuttle feed contains no valid notices.',
+    '无法连接服务器，请检查网络后重试。':
+      'Unable to connect to the server. Check your network and try again.',
+    '请求地址不符合安全策略。': 'The request URL does not satisfy the security policy.',
+    '响应过大。': 'The response is too large.',
+    'DDL 数据格式不正确。': 'The deadline data format is invalid.',
+    '校内竞赛通知格式不正确。': 'The campus contest notice data format is invalid.',
+    '第三方来源：北京邮电大学后勤部公开通知；由 Where To Study 服务端每小时整理，结果仅供参考。':
+      'Third-party source: public BUPT Logistics notices, processed hourly by Where To Study for reference only.',
+    '第三方来源：Contest DDL 公开活动与校内竞赛通知；校内通知由脚本从学校内部网站公开通知页提取整理。':
+      'Third-party sources: Contest DDL and campus contest notices. Campus notices are script-extracted from public pages on an internal school website.',
     '课程作业获取失败。': 'Unable to load course assignments.',
     '正在展示内置示例课表，未连接北邮服务':
       'Showing the built-in demo schedule; no BUPT service connection',
@@ -335,6 +393,13 @@ export class AppLocalization {
     if (source.startsWith('自定义日程获取失败：')) {
       return 'Unable to load the custom schedule: ' +
         source.substring('自定义日程获取失败：'.length);
+    }
+    if (source.startsWith('班车服务返回 HTTP ')) {
+      return 'The shuttle service returned HTTP ' +
+        source.substring('班车服务返回 HTTP '.length).replace('。', '.');
+    }
+    if (source.startsWith('公开活动 DDL 不可用')) {
+      return 'Public event deadlines are temporarily unavailable.';
     }
     if (source.startsWith('已安排未来 ') && source.endsWith(' 个有课日的课程摘要')) {
       return 'Course summaries scheduled for ' + source.substring('已安排未来 '.length,

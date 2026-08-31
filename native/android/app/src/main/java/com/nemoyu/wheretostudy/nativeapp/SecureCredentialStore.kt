@@ -213,6 +213,12 @@ class AppPreferences(context: Context) {
             save(COMPETITION_DEADLINES_ENABLED_KEY, value)
         }
 
+    var conferenceDeadlinesEnabled: Boolean
+        get() = preferences.getBoolean(CONFERENCE_DEADLINES_ENABLED_KEY, true)
+        set(value) {
+            save(CONFERENCE_DEADLINES_ENABLED_KEY, value)
+        }
+
     var schoolContestNoticesEnabled: Boolean
         get() = preferences.getBoolean(SCHOOL_CONTEST_NOTICES_ENABLED_KEY, true)
         set(value) {
@@ -278,7 +284,8 @@ class AppPreferences(context: Context) {
         .sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
 
     val hasEnabledBuiltInPublicDeadlines: Boolean
-        get() = competitionDeadlinesEnabled || schoolContestNoticesEnabled ||
+        get() = competitionDeadlinesEnabled || conferenceDeadlinesEnabled ||
+            schoolContestNoticesEnabled ||
             summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
 
     val hasEnabledPublicDeadlines: Boolean
@@ -326,6 +333,7 @@ class AppPreferences(context: Context) {
         const val WEATHER_ENABLED_KEY = "weather_enabled"
         const val ALMANAC_ENABLED_KEY = "almanac_enabled"
         const val COMPETITION_DEADLINES_ENABLED_KEY = "competition_deadlines_enabled"
+        const val CONFERENCE_DEADLINES_ENABLED_KEY = "conference_deadlines_enabled"
         const val SCHOOL_CONTEST_NOTICES_ENABLED_KEY = "school_contest_notices_enabled"
         const val SUMMER_CAMP_DEADLINES_ENABLED_KEY = "summer_camp_deadlines_enabled"
         const val HACKATHON_DEADLINES_ENABLED_KEY = "hackathon_deadlines_enabled"

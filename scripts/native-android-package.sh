@@ -9,9 +9,12 @@ npm --prefix "$ROOT_DIR" run licenses:check
 ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ANDROID_DIR/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.7}"
+RELEASE_LABEL="${1:-v0.2.8}"
 printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
 CONTEST_API_HOST="where-to-study.cn"
+CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
+SHUTTLE_BUS_URL="https://where-to-study.cn/api/shuttle-bus"
 APK_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android-universal.apk"
 AAB_ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-native-android.aab"
 EXPECTED_CERTIFICATE_FILE="$ANDROID_DIR/release-certificate.sha256"
@@ -215,6 +218,12 @@ if ! unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text "$CONTES
   echo "Native Android package is missing the HTTPS contest API host." >&2
   exit 1
 fi
+for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
+  if ! unzip -p "$SIGNED_APK" 'classes*.dex' | stream_contains_fixed_text "$endpoint"; then
+    echo "Native Android package is missing a required HTTPS public-data endpoint: $endpoint" >&2
+    exit 1
+  fi
+done
 if unzip -p "$SIGNED_AAB" 'base/dex/classes*.dex' | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
   echo "Native Android bundle contains the retired contest API host." >&2
   exit 1
@@ -223,6 +232,12 @@ if ! unzip -p "$SIGNED_AAB" 'base/dex/classes*.dex' | stream_contains_fixed_text
   echo "Native Android bundle is missing the HTTPS contest API host." >&2
   exit 1
 fi
+for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
+  if ! unzip -p "$SIGNED_AAB" 'base/dex/classes*.dex' | stream_contains_fixed_text "$endpoint"; then
+    echo "Native Android bundle is missing a required HTTPS public-data endpoint: $endpoint" >&2
+    exit 1
+  fi
+done
 APK_MANIFEST_TREE="$("$AAPT2" dump xmltree "$SIGNED_APK" --file AndroidManifest.xml)"
 if ! stream_contains_fixed_text 'networkSecurityConfig' <<<"$APK_MANIFEST_TREE"; then
   echo "Native Android package is missing its restricted network security configuration." >&2

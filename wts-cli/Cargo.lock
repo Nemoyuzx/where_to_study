@@ -1646,7 +1646,7 @@ dependencies = [
 
 [[package]]
 name = "where-to-study-cli"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "chrono",
  "clap",
@@ -1659,7 +1659,7 @@ dependencies = [
 
 [[package]]
 name = "where-to-study-core"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "chrono",
  "chrono-tz",

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-shuttle-bus"
+description = "Enables the fetch_shuttle_bus command without any pre-configured scope."
+commands.allow = ["fetch_shuttle_bus"]
+
+[[permission]]
+identifier = "deny-fetch-shuttle-bus"
+description = "Denies the fetch_shuttle_bus command without any pre-configured scope."
+commands.deny = ["fetch_shuttle_bus"]

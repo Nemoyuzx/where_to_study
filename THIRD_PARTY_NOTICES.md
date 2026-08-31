@@ -17,7 +17,8 @@ information returned by UAPI.
 
 ## Contest DDL public event data
 
-Where To Study reads public competition, summer-camp, and hackathon deadline data from
+Where To Study reads public competition, academic-conference, journal-special-issue, summer-camp,
+pre-admission, and hackathon deadline data from
 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) and may use its fixed backup API when the
 primary endpoint is unavailable. These are external data services; no service source code or complete
 event dataset is redistributed with the application. Every corresponding card identifies the external
@@ -27,6 +28,16 @@ The same card also reads public BUPT competition notices and their extracted dea
 fixed [`contest-notices` API](https://where-to-study.cn/api/contest-notices). Each item links back to the
 corresponding HTTPS notice page on `ucloud.bupt.edu.cn`. The API is an external read-only data service;
 its source code and complete dataset are not redistributed with the application.
+
+## BUPT campus shuttle notices
+
+Where To Study reads structured campus-shuttle information from the fixed
+[`shuttle-bus` API](https://where-to-study.cn/api/shuttle-bus). The service derives its notices,
+departure locations, and official timetable images from public pages published by the
+[BUPT Logistics Department](https://hq.bupt.edu.cn/tzgg.htm). Table recognition is automated and
+strictly validated before a structured schedule is exposed; the application does not redistribute a
+complete archive and always links back to the official notice. Shuttle times are for reference only,
+especially on statutory holidays or after temporary operating changes.
 
 ## Beijing University of Posts and Telecommunications UCloud
 

@@ -31,7 +31,7 @@
 ./scripts/native-apple-app-store.sh preflight all
 
 export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
-export APPLE_BUILD_NUMBER=73
+export APPLE_BUILD_NUMBER=74
 
 # 本机已验证路径：iOS 使用 Xcode 管理的描述文件，必须启用 Automatic。
 # 不要把名称以 "iOS Team Store Provisioning Profile" 开头的 Xcode-managed
@@ -70,13 +70,14 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 每次上传使用递增的整数构建号；稳定版本号使用 `X.Y.Z`，不添加 `alpha.1234` 一类后缀。
 - 每个完成版本必须同步 GitHub Release，并将同一份已验证源码的 iOS 与 macOS 构建上传 TestFlight；发布记录写明实际构建号和处理状态。
 
-## 当前本机状态（2026-08-26）
+## 当前本机状态（2026-08-31）
 
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Development、Apple Distribution 与 Mac Installer Distribution 证书；iOS 主应用和 Widget 使用 Xcode 自动管理描述文件，macOS 主应用和 Widget 使用手动 App Store 描述文件。证书私钥和团队标识不写入仓库。
-- macOS 与 iOS `0.2.7 (73)` 已完成本地 Xcode 严格编译、逻辑/UI 回归、正式签名归档和上传；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
-- 后续 TestFlight 发布以 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。下一次上传前先将 `CURRENT_PROJECT_VERSION` 与版本断言同时递增到 74。
+- 上一版 macOS 与 iOS `0.2.7 (73)` 已完成本地 Xcode 正式签名归档和上传；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
+- 当前预发布候选为 iOS/macOS `0.2.8 (74)`；源码与版本断言已递增，必须从最终发布提交重新完成严格测试、归档和分平台上传后，才能记录为已上传。
+- TestFlight 发布以本地 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。
 - 13 英寸 iPad 横屏四张 0.2.2 效果图已由专项 Xcode UI 测试生成并写入 `screenshot-manifest.md`；Build 25 素材只保留作历史校验。正式提交仍需按 `screenshot-plan.md` 补齐产品页所需的 iPhone 与 macOS 最新截图。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
 
@@ -87,7 +88,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 核实北邮服务对账号、密码、课程和教室请求的实际保留行为，再决定 App Privacy 是否可以回答“不收集数据”。
 - 填写真实版权主体、App Review 联系人姓名/电话/邮箱，并确认支持 URL 提供用户可用的联系方式。
 - 完成年龄分级、欧盟 DSA 身份、价格、税务类别、销售地区和中国大陆 ICP 状态；没有有效 ICP 时不要勾选中国大陆销售地区。
-- iOS 与 macOS build 73 在 TestFlight 客户端可见后，分别在真机和实际 Mac 上验证登录、课表、空教室、日历导入、通知、深浅色和前后台切换。
+- iOS 与 macOS build 74 上传成功后，分别在真机和实际 Mac 上验证登录、课表、空教室、综合查询、日历导入、通知、深浅色和前后台切换。
 - 使用对应平台的最新构建重新生成并上传商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择最新构建提交审核。
 
 ## Apple 官方核对入口

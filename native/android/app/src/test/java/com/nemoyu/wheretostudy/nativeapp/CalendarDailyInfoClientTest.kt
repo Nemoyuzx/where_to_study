@@ -67,6 +67,50 @@ class CalendarDailyInfoClientTest {
     }
 
     @Test
+    fun publicDeadlineParserAndFavoriteCodecPreserveCompleteQueryMetadata() {
+        val parsed = PublicDeadlineResponseParser.parse(
+            """{
+              "items":[{
+                "id":"conf","name":"AI Conference","event_type":"conference",
+                "primary_deadline":"2026-09-22T18:00:00+08:00",
+                "categories":["人工智能","交叉/综合/新兴"],
+                "tags":["CCF A","学术会议"],"level":"CCF A","location":"Phoenix",
+                "description":"AI research","eligibility":"Researchers",
+                "notes":"Check official website","status":"submission_open",
+                "region":"global","mode":"hybrid","archived":true,
+                "source":{"name":"CCFDDL","url":"https://ccfddl.com/",
+                  "source_type":"trusted_community","authority":4}
+              }]
+            }""",
+            "2026-09-22",
+        ).single()
+
+        assertEquals(listOf("人工智能", "交叉/综合/新兴"), parsed.categories)
+        assertEquals(listOf("CCF A", "学术会议"), parsed.tags)
+        assertEquals("CCF A", parsed.level)
+        assertEquals("Phoenix", parsed.location)
+        assertEquals("AI research", parsed.description)
+        assertEquals("Researchers", parsed.eligibility)
+        assertEquals("Check official website", parsed.notes)
+        assertEquals(
+            PublicDeadlineMetadataSource(
+                "CCFDDL", "https://ccfddl.com/", "trusted_community", 4,
+            ),
+            parsed.metadataSource,
+        )
+        assertEquals("submission_open", parsed.status)
+        assertEquals("global", parsed.region)
+        assertEquals("hybrid", parsed.mode)
+        assertTrue(parsed.archived)
+        assertEquals(
+            parsed,
+            PublicDeadlineItemJsonCodec.decode(
+                PublicDeadlineItemJsonCodec.encode(listOf(parsed)),
+            ).single(),
+        )
+    }
+
+    @Test
     fun schoolNoticeParserExpandsDeadlinesOnSelectedDay() {
         val parsed = PublicDeadlineResponseParser.parseSchoolNotices(
             """{
@@ -88,6 +132,7 @@ class CalendarDailyInfoClientTest {
         assertEquals(PublicDeadlineKind.COMPETITION, parsed.first().kind)
         assertEquals("北京邮电大学教学云平台 · 材料提交", parsed.first().organizer)
         assertEquals("ucloud.bupt.edu.cn", java.net.URI.create(parsed.first().officialURL).host)
+        assertEquals(listOf("校内竞赛通知"), parsed.first().categories)
     }
 
     @Test
@@ -133,6 +178,13 @@ class CalendarDailyInfoClientTest {
         assertEquals(1, schoolCalls.get())
         assertEquals(1, primaryParses.get())
         assertEquals(1, schoolParses.get())
+
+        assertEquals(
+            listOf("first", "second"),
+            client.fetchImportantEvents(refreshStaleCache = false).map { it.id },
+        )
+        assertEquals(1, primaryCalls.get())
+        assertEquals(1, schoolCalls.get())
 
         client.prewarmDeadlines("2026-08-23")
         assertEquals(2, primaryCalls.get())

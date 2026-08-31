@@ -2,15 +2,21 @@ import Foundation
 
 enum PublicDeadlineKind: String, CaseIterable, Codable, Sendable {
     case competition
+    case conference
+    case journalSpecialIssue = "journal_special_issue"
     case summerCamp = "summer_camp"
     case hackathon
+    case preAdmission = "pre_admission"
     case custom
 
     var title: String {
         switch self {
         case .competition: "学科竞赛"
+        case .conference: "学术会议"
+        case .journalSpecialIssue: "期刊专题"
         case .summerCamp: "夏令营"
         case .hackathon: "黑客松"
+        case .preAdmission: "预推免"
         case .custom: "自定义日程"
         }
     }
@@ -18,8 +24,11 @@ enum PublicDeadlineKind: String, CaseIterable, Codable, Sendable {
     var systemImage: String {
         switch self {
         case .competition: "trophy"
+        case .conference: "person.3"
+        case .journalSpecialIssue: "doc.text.magnifyingglass"
         case .summerCamp: "tent"
         case .hackathon: "chevron.left.forwardslash.chevron.right"
+        case .preAdmission: "graduationcap"
         case .custom: "calendar.badge.plus"
         }
     }
@@ -39,6 +48,13 @@ enum PublicDeadlineSource: String, Codable, Sendable {
     }
 }
 
+struct PublicDeadlineMetadataSource: Codable, Equatable, Sendable {
+    let name: String
+    let url: URL?
+    let sourceType: String?
+    let authority: Int?
+}
+
 struct PublicDeadlineItem: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let name: String
@@ -49,6 +65,18 @@ struct PublicDeadlineItem: Identifiable, Codable, Equatable, Sendable {
     let officialURL: URL?
     let sourceName: String?
     let sourceHomepage: URL?
+    let categories: [String]
+    let tags: [String]
+    let level: String?
+    let location: String?
+    let description: String?
+    let eligibility: String?
+    let notes: String?
+    let metadataSource: PublicDeadlineMetadataSource?
+    let status: String?
+    let region: String?
+    let mode: String?
+    let archived: Bool
 
     init(
         id: String,
@@ -59,7 +87,19 @@ struct PublicDeadlineItem: Identifiable, Codable, Equatable, Sendable {
         organizer: String?,
         officialURL: URL?,
         sourceName: String? = nil,
-        sourceHomepage: URL? = nil
+        sourceHomepage: URL? = nil,
+        categories: [String] = [],
+        tags: [String] = [],
+        level: String? = nil,
+        location: String? = nil,
+        description: String? = nil,
+        eligibility: String? = nil,
+        notes: String? = nil,
+        metadataSource: PublicDeadlineMetadataSource? = nil,
+        status: String? = nil,
+        region: String? = nil,
+        mode: String? = nil,
+        archived: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -70,10 +110,56 @@ struct PublicDeadlineItem: Identifiable, Codable, Equatable, Sendable {
         self.officialURL = officialURL
         self.sourceName = sourceName
         self.sourceHomepage = sourceHomepage
+        self.categories = categories
+        self.tags = tags
+        self.level = level
+        self.location = location
+        self.description = description
+        self.eligibility = eligibility
+        self.notes = notes
+        self.metadataSource = metadataSource
+        self.status = status
+        self.region = region
+        self.mode = mode
+        self.archived = archived
     }
 
     var favoriteID: String {
         [source.rawValue, sourceName ?? "", id, deadline].joined(separator: "\u{001F}")
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, kind, source, deadline, organizer, officialURL, sourceName, sourceHomepage
+        case categories, tags, level, location, description, eligibility, notes, metadataSource
+        case status, region, mode, archived
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        kind = try container.decode(PublicDeadlineKind.self, forKey: .kind)
+        source = try container.decode(PublicDeadlineSource.self, forKey: .source)
+        deadline = try container.decode(String.self, forKey: .deadline)
+        organizer = try container.decodeIfPresent(String.self, forKey: .organizer)
+        officialURL = try container.decodeIfPresent(URL.self, forKey: .officialURL)
+        sourceName = try container.decodeIfPresent(String.self, forKey: .sourceName)
+        sourceHomepage = try container.decodeIfPresent(URL.self, forKey: .sourceHomepage)
+        categories = try container.decodeIfPresent([String].self, forKey: .categories) ?? []
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        level = try container.decodeIfPresent(String.self, forKey: .level)
+        location = try container.decodeIfPresent(String.self, forKey: .location)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        eligibility = try container.decodeIfPresent(String.self, forKey: .eligibility)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        metadataSource = try container.decodeIfPresent(
+            PublicDeadlineMetadataSource.self,
+            forKey: .metadataSource
+        )
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        region = try container.decodeIfPresent(String.self, forKey: .region)
+        mode = try container.decodeIfPresent(String.self, forKey: .mode)
+        archived = try container.decodeIfPresent(Bool.self, forKey: .archived) ?? false
     }
 }
 
@@ -96,6 +182,7 @@ protocol PublicDeadlineFetching: Sendable {
     func fetch(date: String) async throws -> PublicDeadlineSnapshot
     func fetch(dates: [String]) async throws -> [String: PublicDeadlineSnapshot]
     func prewarm() async throws -> [String: PublicDeadlineSnapshot]
+    func refresh() async throws -> [String: PublicDeadlineSnapshot]
 }
 
 extension PublicDeadlineFetching {
@@ -108,6 +195,10 @@ extension PublicDeadlineFetching {
     }
 
     func prewarm() async throws -> [String: PublicDeadlineSnapshot] { [:] }
+
+    func refresh() async throws -> [String: PublicDeadlineSnapshot] {
+        try await prewarm()
+    }
 }
 
 protocol AssignmentDeadlineFetching: Sendable {
@@ -194,10 +285,13 @@ actor PublicDeadlineFullFeedCache {
         self.loader = loader
     }
 
-    func load(refreshStaleCache: Bool) async throws -> LoadedPublicDeadlineFeed {
+    func load(
+        refreshStaleCache: Bool,
+        forceReload: Bool = false
+    ) async throws -> LoadedPublicDeadlineFeed {
         if let cache {
             let isFresh = Date().timeIntervalSince(cache.fetchedAt) < Self.lifetime
-            if !refreshStaleCache || isFresh {
+            if !forceReload, (!refreshStaleCache || isFresh) {
                 return cache.feed
             }
         }
@@ -279,6 +373,11 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
 
     func prewarm() async throws -> [String: PublicDeadlineSnapshot] {
         let feed = try await fullFeedCache.load(refreshStaleCache: true)
+        return feed.snapshots()
+    }
+
+    func refresh() async throws -> [String: PublicDeadlineSnapshot] {
+        let feed = try await fullFeedCache.load(refreshStaleCache: true, forceReload: true)
         return feed.snapshots()
     }
 
@@ -396,7 +495,19 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
                 source: .contestDDL,
                 deadline: deadline,
                 organizer: string(record, keys: ["organizer", "host"]),
-                officialURL: officialURL
+                officialURL: officialURL,
+                categories: stringArray(record, key: "categories"),
+                tags: stringArray(record, key: "tags"),
+                level: string(record, keys: ["level"]),
+                location: string(record, keys: ["location"]),
+                description: string(record, keys: ["description"]),
+                eligibility: string(record, keys: ["eligibility"]),
+                notes: string(record, keys: ["notes"]),
+                metadataSource: metadataSource(record["source"]),
+                status: string(record, keys: ["status"]),
+                region: string(record, keys: ["region"]),
+                mode: string(record, keys: ["mode"]),
+                archived: boolean(record["archived"]) ?? false
             ))
         }
         return itemsByDate.mapValues { items in
@@ -473,7 +584,17 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
                     source: .schoolNotice,
                     deadline: deadline,
                     organizer: "\(source) · \(label)",
-                    officialURL: officialURL
+                    officialURL: officialURL,
+                    categories: ["校内竞赛通知"],
+                    tags: [label],
+                    description: string(record, keys: ["title"]),
+                    metadataSource: PublicDeadlineMetadataSource(
+                        name: source,
+                        url: officialURL,
+                        sourceType: "school_public_notice",
+                        authority: nil
+                    ),
+                    status: "published"
                 ))
             }
         }
@@ -584,6 +705,57 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
             if let normalized = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
                !normalized.isEmpty {
                 return normalized
+            }
+        }
+        return nil
+    }
+
+    private static func stringArray(_ object: [String: Any], key: String) -> [String] {
+        guard let values = object[key] as? [Any] else { return [] }
+        var seen = Set<String>()
+        return Array(values.compactMap { value -> String? in
+            guard let string = value as? String else { return nil }
+            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty,
+                  normalized.count <= 120,
+                  seen.insert(normalized).inserted
+            else { return nil }
+            return normalized
+        }.prefix(32))
+    }
+
+    private static func metadataSource(_ value: Any?) -> PublicDeadlineMetadataSource? {
+        if let name = value as? String {
+            let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { return nil }
+            return PublicDeadlineMetadataSource(
+                name: normalized,
+                url: nil,
+                sourceType: nil,
+                authority: nil
+            )
+        }
+        guard let object = value as? [String: Any],
+              let name = string(object, keys: ["name"])
+        else { return nil }
+        let url = string(object, keys: ["url"]).flatMap(trustedOfficialURL)
+        let authority = (object["authority"] as? NSNumber)?.intValue
+        return PublicDeadlineMetadataSource(
+            name: name,
+            url: url,
+            sourceType: string(object, keys: ["source_type", "sourceType"]),
+            authority: authority
+        )
+    }
+
+    private static func boolean(_ value: Any?) -> Bool? {
+        if let value = value as? Bool { return value }
+        if let value = value as? NSNumber { return value.boolValue }
+        if let value = value as? String {
+            switch value.lowercased() {
+            case "true", "1": return true
+            case "false", "0": return false
+            default: return nil
             }
         }
         return nil
@@ -1275,6 +1447,8 @@ final class CalendarDeadlineStore: ObservableObject {
     @Published private(set) var assignmentsByDate = [String: [AssignmentDeadlineItem]]()
     @Published private(set) var assignmentUnavailableByDate = [String: String]()
     @Published private(set) var loadingAssignmentDates = Set<String>()
+    @Published private(set) var isLoadingPublicFeed = false
+    @Published private(set) var publicFeedError = ""
 
     private let client: any PublicDeadlineFetching
     private let assignmentClient: any AssignmentDeadlineFetching
@@ -1305,7 +1479,8 @@ final class CalendarDeadlineStore: ObservableObject {
 
     func prewarmPublicIfNeeded(
         publicDeadlinesEnabled: Bool,
-        sampleMode: Bool
+        sampleMode: Bool,
+        force: Bool = false
     ) async {
         guard publicDeadlinesEnabled, !sampleMode else { return }
         publicPrewarmAttempted = true
@@ -1314,11 +1489,17 @@ final class CalendarDeadlineStore: ObservableObject {
         if let publicPrewarmFlight {
             flight = publicPrewarmFlight
         } else {
+            isLoadingPublicFeed = true
+            publicFeedError = ""
             nextPublicPrewarmFlightID &+= 1
             let client = client
+            let force = force
             flight = (
                 id: nextPublicPrewarmFlightID,
-                task: Task { try await client.prewarm() }
+                task: Task {
+                    if force { return try await client.refresh() }
+                    return try await client.prewarm()
+                }
             )
             publicPrewarmFlight = flight
         }
@@ -1326,13 +1507,19 @@ final class CalendarDeadlineStore: ObservableObject {
         do {
             let snapshots = try await flight.task.value
             guard publicPrewarmFlight?.id == flight.id else { return }
-            var updated = publicByDate
-            for (date, snapshot) in snapshots {
-                updated[date] = snapshot
+            if force {
+                publicByDate = snapshots
+            } else {
+                var updated = publicByDate
+                for (date, snapshot) in snapshots {
+                    updated[date] = snapshot
+                }
+                publicByDate = updated
             }
-            publicByDate = updated
             publicPrewarmError = nil
+            publicFeedError = ""
             publicPrewarmFlight = nil
+            isLoadingPublicFeed = false
         } catch {
             if publicPrewarmFlight?.id == flight.id {
                 // Startup prewarming is deliberately silent in global UI.
@@ -1340,9 +1527,27 @@ final class CalendarDeadlineStore: ObservableObject {
                 // network work during paging; scene activation or a settings
                 // off -> on transition owns the next refresh attempt.
                 publicPrewarmError = error.localizedDescription
+                publicFeedError = error.localizedDescription
                 publicPrewarmFlight = nil
+                isLoadingPublicFeed = false
             }
         }
+    }
+
+    func loadPublicQuery(sampleMode: Bool, force: Bool = false) async {
+        if sampleMode {
+            let calendar = Calendar.shanghai
+            let dates = (0 ..< 7).compactMap { offset in
+                calendar.date(byAdding: .day, value: offset, to: .now)
+            }.map { StrictContractDateParser.string(from: $0) }
+            await loadPublic(dates: dates, sampleMode: true)
+            return
+        }
+        await prewarmPublicIfNeeded(
+            publicDeadlinesEnabled: true,
+            sampleMode: false,
+            force: force
+        )
     }
 
     func loadPublic(date: String, sampleMode: Bool, force: Bool = false) async {
@@ -1407,6 +1612,15 @@ final class CalendarDeadlineStore: ObservableObject {
                             source: .contestDDL,
                             deadline: "\(date)T21:00:00+08:00",
                             organizer: "示例社区",
+                            officialURL: nil
+                        ),
+                        PublicDeadlineItem(
+                            id: "sample-conference",
+                            name: "示例学术会议",
+                            kind: .conference,
+                            source: .contestDDL,
+                            deadline: "\(date)T22:00:00+08:00",
+                            organizer: "示例学术组织",
                             officialURL: nil
                         )
                     ],

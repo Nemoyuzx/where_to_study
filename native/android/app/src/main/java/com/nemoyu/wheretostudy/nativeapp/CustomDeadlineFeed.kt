@@ -218,6 +218,27 @@ internal object PublicDeadlineItemJsonCodec {
                 item.officialURL?.let { put("official_url", it) }
                 item.sourceName?.let { put("source_name", it) }
                 item.sourceHomepage?.let { put("source_homepage", it) }
+                if (item.categories.isNotEmpty()) {
+                    put("categories", JSONArray(item.categories))
+                }
+                if (item.tags.isNotEmpty()) put("tags", JSONArray(item.tags))
+                item.level?.let { put("level", it) }
+                item.location?.let { put("location", it) }
+                item.description?.let { put("description", it) }
+                item.eligibility?.let { put("eligibility", it) }
+                item.notes?.let { put("notes", it) }
+                item.metadataSource?.let { metadata ->
+                    put("metadata_source", JSONObject().apply {
+                        put("name", metadata.name)
+                        metadata.url?.let { put("url", it) }
+                        metadata.sourceType?.let { put("source_type", it) }
+                        metadata.authority?.let { put("authority", it) }
+                    })
+                }
+                item.status?.let { put("status", it) }
+                item.region?.let { put("region", it) }
+                item.mode?.let { put("mode", it) }
+                if (item.archived) put("archived", true)
             })
         }
     }.toString()
@@ -241,15 +262,32 @@ internal object PublicDeadlineItemJsonCodec {
                     ?: continue
                 val organizer = record.optString("organizer").trim()
                     .takeIf { it.isNotEmpty() && it.length <= 200 }
-                val officialURL = safeStoredURL(record, "official_url")
+                val officialURL = safeStoredOfficialURL(record, "official_url")
                     ?: if (record.has("official_url")) continue else null
                 val sourceName = record.optString("source_name").trim()
                     .takeIf { it.isNotEmpty() && it.length <= 80 }
                 val sourceHomepage = safeStoredURL(record, "source_homepage")
                     ?: if (record.has("source_homepage")) continue else null
+                val categories = record.optJSONArray("categories")?.let { values ->
+                    storedStringArray(values)
+                }.orEmpty()
+                val tags = record.optJSONArray("tags")?.let(::storedStringArray).orEmpty()
+                val level = storedString(record, "level", 120)
+                val location = storedString(record, "location", 240)
+                val description = storedString(record, "description", 4_000)
+                val eligibility = storedString(record, "eligibility", 500)
+                val notes = storedString(record, "notes", 4_000)
+                val metadataSource = storedMetadataSource(record.optJSONObject("metadata_source"))
+                    ?: if (record.has("metadata_source")) continue else null
+                val status = storedString(record, "status", 80)
+                val region = storedString(record, "region", 80)
+                val mode = storedString(record, "mode", 80)
+                val archived = record.opt("archived") as? Boolean ?: false
                 val item = PublicDeadlineItem(
                     id, name, kind, source, deadline, organizer, officialURL,
-                    sourceName, sourceHomepage,
+                    sourceName, sourceHomepage, categories, tags, level, location,
+                    description, eligibility, notes, metadataSource, status, region,
+                    mode, archived,
                 )
                 if (seen.add(item.favoriteID)) add(item)
             }
@@ -260,6 +298,42 @@ internal object PublicDeadlineItemJsonCodec {
         source.optString(key).trim().takeIf(String::isNotEmpty)?.let { raw ->
             runCatching { CustomDeadlineFeedURLValidator.validatedURI(raw).toString() }.getOrNull()
         }
+
+    private fun safeStoredOfficialURL(source: JSONObject, key: String): String? =
+        source.optString(key).trim().takeIf(String::isNotEmpty)?.let { raw ->
+            runCatching {
+                val uri = URI.create(raw)
+                raw.takeIf {
+                    uri.scheme.equals("https", ignoreCase = true) &&
+                        !uri.host.isNullOrBlank() && uri.userInfo == null
+                }
+            }.getOrNull()
+        }
+
+    private fun storedStringArray(values: JSONArray): List<String> = buildList {
+        for (index in 0 until minOf(values.length(), 40)) {
+            val value = values.opt(index) as? String ?: continue
+            val normalized = value.trim()
+            if (normalized.isNotEmpty() && normalized.length <= 120 && normalized !in this) {
+                add(normalized)
+            }
+        }
+    }
+
+    private fun storedString(source: JSONObject, key: String, maximum: Int): String? =
+        (source.opt(key) as? String)?.trim()
+            ?.takeIf { it.isNotEmpty() && it.length <= maximum }
+
+    private fun storedMetadataSource(source: JSONObject?): PublicDeadlineMetadataSource? {
+        source ?: return null
+        val name = storedString(source, "name", 120) ?: return null
+        val url = safeStoredOfficialURL(source, "url")
+            ?: if (source.has("url")) return null else null
+        val sourceType = storedString(source, "source_type", 80)
+        val authority = (source.opt("authority") as? Number)?.toInt()
+            ?.takeIf { it in 0..100 }
+        return PublicDeadlineMetadataSource(name, url, sourceType, authority)
+    }
 }
 
 internal object CustomDeadlineFeedTransport {

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-important-events"
+description = "Enables the fetch_important_events command without any pre-configured scope."
+commands.allow = ["fetch_important_events"]
+
+[[permission]]
+identifier = "deny-fetch-important-events"
+description = "Denies the fetch_important_events command without any pre-configured scope."
+commands.deny = ["fetch_important_events"]

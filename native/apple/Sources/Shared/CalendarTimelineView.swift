@@ -44,6 +44,7 @@ enum CalendarDeadlinePresentation {
         _ item: PublicDeadlineItem,
         competitionEnabled: Bool,
         schoolNoticeEnabled: Bool,
+        conferenceEnabled: Bool = true,
         summerCampEnabled: Bool,
         hackathonEnabled: Bool,
         customEnabled: Bool = false
@@ -52,8 +53,10 @@ enum CalendarDeadlinePresentation {
         if item.source == .custom { return customEnabled }
         switch item.kind {
         case .competition: return competitionEnabled
+        case .conference, .journalSpecialIssue: return conferenceEnabled
         case .summerCamp: return summerCampEnabled
         case .hackathon: return hackathonEnabled
+        case .preAdmission: return summerCampEnabled
         case .custom: return customEnabled
         }
     }

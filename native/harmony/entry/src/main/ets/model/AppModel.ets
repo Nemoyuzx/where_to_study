@@ -190,6 +190,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
   @Trace weatherEnabled: boolean = true;
   @Trace almanacEnabled: boolean = true;
   @Trace competitionDeadlinesEnabled: boolean = true;
+  @Trace conferenceDeadlinesEnabled: boolean = true;
   @Trace schoolContestNoticesEnabled: boolean = true;
   @Trace summerCampDeadlinesEnabled: boolean = true;
   @Trace hackathonDeadlinesEnabled: boolean = true;
@@ -214,6 +215,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
     new Map<string, PublicDeadlineSnapshot>();
   @Trace publicDeadlineErrors: Map<string, string> = new Map<string, string>();
   @Trace loadingPublicDeadlineDates: Set<string> = new Set<string>();
+  @Trace importantEventsCatalog: PublicDeadlineItem[] = [];
+  @Trace importantEventsError: string = '';
+  @Trace isLoadingImportantEvents: boolean = false;
   @Trace assignmentDeadlinesByDate: Map<string, AssignmentDeadlineItem[]> =
     new Map<string, AssignmentDeadlineItem[]>();
   @Trace assignmentUnavailableByDate: Map<string, string> = new Map<string, string>();
@@ -268,6 +272,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private assignmentMarkerLoadingDates: Set<string> = new Set<string>();
   private deadlineMarkerLoadingDates: Set<string> = new Set<string>();
   private publicDeadlinePrewarmInFlight: Promise<void> | null = null;
+  private importantEventsLoaded: boolean = false;
+  private importantEventsRevision: number = 0;
   private publicDeadlinePreferencesLoaded: boolean = false;
   // 每日课程摘要对账门控（BUG-050 修复）：当日已对账且无变化时不再全量重排提醒。
   private dailyCourseNotificationReconciledDay: string = '';
@@ -341,6 +347,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
     this.competitionDeadlinesEnabled = await this.preferences.getBool(
       'competitionDeadlinesEnabled', true);
+    this.conferenceDeadlinesEnabled = await this.preferences.getBool(
+      'conferenceDeadlinesEnabled', true);
     this.schoolContestNoticesEnabled = await this.preferences.getBool(
       'schoolContestNoticesEnabled', true);
     this.summerCampDeadlinesEnabled = await this.preferences.getBool(
@@ -695,6 +703,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
       this.competitionDeadlinesEnabled = await this.preferences.getBool(
         'competitionDeadlinesEnabled', true);
+      this.conferenceDeadlinesEnabled = await this.preferences.getBool(
+        'conferenceDeadlinesEnabled', true);
       this.schoolContestNoticesEnabled = await this.preferences.getBool(
         'schoolContestNoticesEnabled', true);
       this.summerCampDeadlinesEnabled = await this.preferences.getBool(
@@ -904,6 +914,14 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
   }
 
+  async setConferenceDeadlinesEnabled(value: boolean): Promise<void> {
+    this.conferenceDeadlinesEnabled = value;
+    await this.preferences.setBool('conferenceDeadlinesEnabled', value);
+    if (value) {
+      this.prewarmPublicDeadlines();
+    }
+  }
+
   async setSchoolContestNoticesEnabled(value: boolean): Promise<void> {
     this.schoolContestNoticesEnabled = value;
     await this.preferences.setBool('schoolContestNoticesEnabled', value);
@@ -1060,12 +1078,45 @@ export class AppModel implements CalendarViewportPreloadTarget {
     });
   }
 
+  // 查询页和教学日历共用 calendarDailyInfoClient，因此冷启动预热、日历翻页与
+  // 查询页不会各自维护一份网络缓存；页面重复进入时也不会重复发起请求。
+  loadImportantEvents(forceRemote: boolean = false): void {
+    if (this.isLoadingImportantEvents || (!forceRemote && this.importantEventsLoaded)) {
+      return;
+    }
+    this.importantEventsRevision++;
+    const revision: number = this.importantEventsRevision;
+    this.isLoadingImportantEvents = true;
+    this.importantEventsError = '';
+    this.calendarDailyInfoClient.fetchImportantEvents(forceRemote)
+      .then((items: PublicDeadlineItem[]): void => {
+        if (revision !== this.importantEventsRevision) {
+          return;
+        }
+        this.importantEventsCatalog = items;
+        this.importantEventsLoaded = true;
+      })
+      .catch((error: Error): void => {
+        if (revision !== this.importantEventsRevision) {
+          return;
+        }
+        this.importantEventsError = error.message.length > 0 ?
+          error.message : '重要事件暂时无法读取。';
+      })
+      .finally((): void => {
+        if (revision === this.importantEventsRevision) {
+          this.isLoadingImportantEvents = false;
+        }
+      });
+  }
+
   hasEnabledPublicDeadlines(): boolean {
     return this.hasEnabledRemoteDeadlines() || this.favoriteDeadlines.length > 0;
   }
 
   private hasEnabledBuiltInDeadlines(): boolean {
-    return this.competitionDeadlinesEnabled || this.schoolContestNoticesEnabled ||
+    return this.competitionDeadlinesEnabled || this.conferenceDeadlinesEnabled ||
+      this.schoolContestNoticesEnabled ||
       this.summerCampDeadlinesEnabled ||
       this.hackathonDeadlinesEnabled;
   }
@@ -1089,10 +1140,17 @@ export class AppModel implements CalendarViewportPreloadTarget {
     if (kind === PublicDeadlineKind.competition) {
       return this.competitionDeadlinesEnabled;
     }
-    if (kind === PublicDeadlineKind.summerCamp) {
+    if (kind === PublicDeadlineKind.conference ||
+      kind === PublicDeadlineKind.journalSpecialIssue) {
+      return this.conferenceDeadlinesEnabled;
+    }
+    if (kind === PublicDeadlineKind.summerCamp || kind === PublicDeadlineKind.preAdmission) {
       return this.summerCampDeadlinesEnabled;
     }
-    return this.hackathonDeadlinesEnabled;
+    if (kind === PublicDeadlineKind.hackathon) {
+      return this.hackathonDeadlinesEnabled;
+    }
+    return this.competitionDeadlinesEnabled;
   }
 
   // ---------- 每日课程摘要 ----------
@@ -1265,6 +1323,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     await this.preferences.remove('weatherEnabled');
     await this.preferences.remove('almanacEnabled');
     await this.preferences.remove('competitionDeadlinesEnabled');
+    await this.preferences.remove('conferenceDeadlinesEnabled');
     await this.preferences.remove('schoolContestNoticesEnabled');
     await this.preferences.remove('summerCampDeadlinesEnabled');
     await this.preferences.remove('hackathonDeadlinesEnabled');
@@ -1278,6 +1337,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.weatherEnabled = true;
     this.almanacEnabled = true;
     this.competitionDeadlinesEnabled = true;
+    this.conferenceDeadlinesEnabled = true;
     this.schoolContestNoticesEnabled = true;
     this.summerCampDeadlinesEnabled = true;
     this.hackathonDeadlinesEnabled = true;

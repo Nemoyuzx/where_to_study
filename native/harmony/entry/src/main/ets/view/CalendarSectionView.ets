@@ -13,6 +13,8 @@ import { CalendarViewportPreloadController } from './calendar/CalendarViewportPr
 export struct CalendarSectionView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param containerWidth: number = 390;
+  @Event onQueryVisibilityChanged: (visible: boolean) => void = () => {
+  };
   @Local session: TeachingCalendarSession = new TeachingCalendarSession();
   private viewportPreloader: CalendarViewportPreloadController =
     new CalendarViewportPreloadController();
@@ -26,7 +28,8 @@ export struct CalendarSectionView {
     this.prewarmViewport();
   }
 
-  @Monitor('model.competitionDeadlinesEnabled', 'model.schoolContestNoticesEnabled',
+  @Monitor('model.competitionDeadlinesEnabled', 'model.conferenceDeadlinesEnabled',
+    'model.schoolContestNoticesEnabled',
     'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled',
     'model.customDeadlinesEnabled', 'model.customDeadlinesURL', 'model.favoriteDeadlines',
     'model.almanacEnabled')
@@ -41,9 +44,19 @@ export struct CalendarSectionView {
 
   build() {
     if (AdaptiveLayoutPolicy.useExpandedCalendar(this.containerWidth)) {
-      ExpandedTeachingCalendarView({ session: this.session })
+      ExpandedTeachingCalendarView({
+        session: this.session,
+        onQueryRequested: (): void => {
+          this.onQueryVisibilityChanged(true);
+        }
+      })
     } else {
-      MobileTeachingCalendarView({ session: this.session })
+      MobileTeachingCalendarView({
+        session: this.session,
+        onQueryRequested: (): void => {
+          this.onQueryVisibilityChanged(true);
+        }
+      })
     }
   }
 }

@@ -1,0 +1,158 @@
+import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import test from 'node:test'
+
+const text = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
+
+const app = text('../src/App.jsx')
+const queryHub = text('../src/QueryHub.jsx')
+const queryDomain = text('../src/query-domain.js')
+const tauriDeadlines = text('../src-tauri/src/deadlines.rs')
+const tauriShuttle = text('../src-tauri/src/shuttle.rs')
+const tauriCapability = text('../src-tauri/capabilities/default.json')
+
+const appleQuery = text('../native/apple/Sources/Shared/InformationQueriesView.swift')
+const appleDeadlineClient = text('../native/apple/Sources/Shared/CalendarDeadlineClient.swift')
+const appleShuttle = text('../native/apple/Sources/Shared/ShuttleBusClient.swift')
+const appleSettings = text('../native/apple/Sources/Shared/SettingsView.swift')
+const appleDesktopCalendar = text('../native/apple/Sources/Shared/TeachingCalendarView.swift')
+const appleMobileCalendar = text('../native/apple/Sources/Shared/MobileTeachingCalendarView.swift')
+
+const androidQuery = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/InformationQueryPage.kt')
+const androidDeadlineClient = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/CalendarDailyInfoClient.kt')
+const androidShuttle = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/ShuttleBusClient.kt')
+const androidSettings = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/SettingsPage.kt')
+const androidCalendar = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/TeachingCalendarPage.kt')
+
+const harmonyQuery = text('../native/harmony/entry/src/main/ets/view/QueryView.ets')
+const harmonyLogic = text('../native/harmony/entry/src/main/ets/common/QueryLogic.ets')
+const harmonyModel = text('../native/harmony/entry/src/main/ets/model/AppModel.ets')
+const harmonyDeadlineClient = text('../native/harmony/entry/src/main/ets/net/CalendarDailyInfoClient.ets')
+const harmonyShuttle = text('../native/harmony/entry/src/main/ets/net/ShuttleBusClient.ets')
+const harmonySettings = text('../native/harmony/entry/src/main/ets/view/SettingsView.ets')
+const harmonyCalendar = text('../native/harmony/entry/src/main/ets/view/CalendarSectionView.ets')
+
+const corePublicQueries = text('../where-to-study-core/src/public_queries.rs')
+const cliMain = text('../wts-cli/src/main.rs')
+const cliCommands = text('../wts-cli/src/commands.rs')
+const tuiMain = text('../wts-tui/src/main.rs')
+const tuiQuery = text('../wts-tui/src/ui/query.rs')
+const tuiCalendar = text('../wts-tui/src/ui/calendar.rs')
+
+test('every graphical platform exposes the two-segment query from calendar and settings', () => {
+  assert.match(app, /openQueryHub\('calendar'\)/)
+  assert.match(app, /openQueryHub\('settings'\)/)
+  assert.match(queryHub, /role="tab"[\s\S]*'班车查询'/)
+  assert.match(queryHub, /role="tab"[\s\S]*'重要事件'/)
+
+  assert.match(appleSettings, /InformationQueriesView\(\)/)
+  assert.match(appleDesktopCalendar, /InformationQueriesPresentation\(\)/)
+  assert.match(appleMobileCalendar, /InformationQueriesPresentation\(\)/)
+  assert.match(appleQuery, /Picker\("查询类型"/)
+
+  assert.match(androidSettings, /openInformationQuery\(\)/)
+  assert.match(androidCalendar, /openInformationQuery\(\)/)
+  assert.match(androidCalendar, /fun build\(\): View = phoneBuild\(\)/)
+  assert.match(androidCalendar, /addView\(calendarImportButton\(compact = true\)\)/)
+  assert.match(androidCalendar, /calendar_information_query_menu_item[\s\S]*openInformationQuery\(\)/)
+  assert.match(androidQuery, /SHUTTLE\("班车查询"\)/)
+  assert.match(androidQuery, /IMPORTANT_EVENTS\("重要事件"\)/)
+
+  assert.match(harmonySettings, /onQueryVisibilityChanged\(true\)/)
+  assert.match(harmonyCalendar, /onQueryVisibilityChanged\(true\)/)
+  assert.match(harmonyQuery, /ForEach\(QueryPageContract\.tabs/)
+  assert.match(harmonyQuery, /QueryPageContract\.tabTitle\(tab\)/)
+  assert.match(harmonyLogic, /'班车查询'/)
+  assert.match(harmonyLogic, /'重要事件'/)
+})
+
+test('fixed shuttle clients reject redirects and show only an active timetable', () => {
+  assert.match(tauriShuttle, /SHUTTLE_URL: &str = "https:\/\/where-to-study\.cn\/api\/shuttle-bus"/)
+  assert.match(tauriShuttle, /redirect\(reqwest::redirect::Policy::none\(\)\)/)
+  assert.match(queryDomain, /shuttlePeriodState\(period, today\) === 'active'/)
+  assert.doesNotMatch(queryDomain, /periodState\(period, today\) === 'upcoming'\)\?\.key/)
+
+  assert.match(appleShuttle, /ShuttleBusRedirectDelegate\(\)/)
+  assert.match(appleShuttle, /completionHandler\(nil\)/)
+  assert.match(appleShuttle, /static func activeSchedules/)
+  assert.match(appleShuttle, /\$0\.period\.contains\(dateString\)/)
+
+  assert.match(androidShuttle, /FixedPublicJsonTransport::fetch/)
+  assert.match(androidShuttle, /未找到当前生效的班车时刻表/)
+  assert.doesNotMatch(androidShuttle, /upcoming.*routes/s)
+
+  assert.match(harmonyShuttle, /periodState\(period, date\) === ShuttleBusPeriodState\.active/)
+  assert.match(harmonyShuttle, /state !== ShuttleBusPeriodState\.active/)
+  assert.match(harmonyShuttle, /spec\.maxRedirects = 0/)
+  assert.match(harmonyQuery, /今日暂无生效的班车时刻表/)
+})
+
+test('important-event queries retain metadata, hide ended items, and never include assignments', () => {
+  for (const source of [queryDomain, appleQuery, androidQuery, harmonyLogic]) {
+    assert.match(source, /categor/i)
+    assert.match(source, /archived|show.*ended|showsEnded/i)
+  }
+  for (const source of [appleDeadlineClient, androidDeadlineClient, harmonyDeadlineClient]) {
+    assert.match(source, /categories/)
+    assert.match(source, /tags/)
+    assert.match(source, /level/)
+    assert.match(source, /location/)
+    assert.match(source, /description/)
+  }
+  assert.match(tauriDeadlines, /parse_important_public_events/)
+  assert.match(tauriDeadlines, /categories: normalized_labels/)
+  assert.match(queryHub, /command\('fetch_important_events'\)/)
+  assert.doesNotMatch(queryHub, /fetch_assignments|fetch_assignment_calendar/)
+  assert.doesNotMatch(appleQuery, /assignmentsByDate|fetchAssignments/)
+  assert.doesNotMatch(androidQuery, /assignmentClient|loadAssignments/)
+  assert.doesNotMatch(harmonyQuery, /assignmentDeadlines|loadAssignments/)
+})
+
+test('event-query network loading is independent from segment animation and shared where available', () => {
+  assert.match(queryHub, /void loadShuttle\(\)[\s\S]*void loadImportantEvents\(\)/)
+  assert.doesNotMatch(queryHub, /useEffect\([^)]*tab/)
+  assert.match(appleQuery, /async let shuttleLoad/)
+  assert.match(appleQuery, /async let eventLoad/)
+  assert.doesNotMatch(appleQuery, /\.task\(id: selectedMode\)/)
+  assert.match(androidQuery, /dailyInfoRepository\.loadImportantEvents\(\)/)
+  assert.match(harmonyModel, /calendarDailyInfoClient\.fetchImportantEvents/)
+  assert.doesNotMatch(harmonyQuery, /new CalendarDailyInfoClient/)
+})
+
+test('Tauri exposes pinned query commands through generated permissions', () => {
+  const capability = JSON.parse(tauriCapability)
+  for (const command of ['fetch_important_events', 'fetch_shuttle_bus']) {
+    assert.ok(capability.permissions.includes(`allow-${command.replaceAll('_', '-')}`))
+    assert.equal(
+      existsSync(new URL(`../src-tauri/permissions/autogenerated/${command}.toml`, import.meta.url)),
+      true,
+    )
+  }
+})
+
+test('CLI and TUI reuse the secure Core query and favorite contract', () => {
+  assert.match(corePublicQueries, /SHUTTLE_URL: &str = "https:\/\/where-to-study\.cn\/api\/shuttle-bus"/)
+  assert.match(corePublicQueries, /redirect\(reqwest::redirect::Policy::none\(\)\)/)
+  assert.match(corePublicQueries, /fn active_shuttle_notice/)
+  assert.match(corePublicQueries, /filter_important_events/)
+  assert.match(corePublicQueries, /save_favorite_events/)
+  assert.match(corePublicQueries, /source_type != "assignment"/)
+
+  assert.match(cliMain, /Shuttle \{/)
+  assert.match(cliMain, /Events \{/)
+  assert.match(cliCommands, /public_queries::fetch_shuttle_bus/)
+  assert.match(cliCommands, /public_queries::fetch_important_events/)
+
+  assert.match(tuiMain, /KeyCode::Char\('i'\) if matches!\(app\.selected_tab_index, 3 \| 4\)/)
+  assert.match(tuiQuery, /QuerySection::Shuttle/)
+  assert.match(tuiQuery, /QuerySection::Events/)
+  assert.match(tuiQuery, /app\.query_category/)
+  assert.match(tuiQuery, /app\.query_include_ended/)
+})
+
+test('TUI teaching calendar renders conferences from the shared important-event cache', () => {
+  assert.match(tuiMain, /refresh_events\(&mut app, &tx, false\)/)
+  assert.match(tuiCalendar, /app\.all_query_events\(\)/)
+  assert.match(tuiCalendar, /"conference" \| "journal_special_issue"/)
+  assert.match(tuiCalendar, /会=会议/)
+})

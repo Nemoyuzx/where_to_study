@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{
     CalendarRangeRequest, DeadlineCalendarResponse, DeadlineItem, DeadlinesRequest,
-    DeadlinesResponse,
+    DeadlinesResponse, ImportantEventItem, ImportantEventsResponse,
 };
 
 const PRIMARY_URL: &str = "https://nemoyuzx.github.io/contest-ddl/data/competitions.json";
@@ -101,6 +101,50 @@ struct SourceDeadline {
     organizer: Option<String>,
     #[serde(default)]
     official_url: Option<String>,
+    #[serde(default)]
+    categories: Vec<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    level: Option<String>,
+    #[serde(default)]
+    location: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    eligibility: Option<String>,
+    #[serde(default)]
+    notes: Option<String>,
+    #[serde(default)]
+    region: Option<String>,
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
+    registration_deadline: Option<String>,
+    #[serde(default)]
+    abstract_deadline: Option<String>,
+    #[serde(default)]
+    submission_deadline: Option<String>,
+    #[serde(default)]
+    competition_start: Option<String>,
+    #[serde(default)]
+    competition_end: Option<String>,
+    #[serde(default)]
+    source: Option<SourceEvidence>,
+    #[serde(default)]
+    stale: bool,
+    #[serde(default)]
+    archived: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct SourceEvidence {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,6 +170,8 @@ struct SchoolNotice {
     source: Option<String>,
     #[serde(default)]
     source_url: Option<String>,
+    #[serde(default)]
+    published_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -325,7 +371,12 @@ fn parse_source_range(
     for source in envelope.items {
         if !matches!(
             source.event_type.as_str(),
-            "competition" | "summer_camp" | "hackathon"
+            "competition"
+                | "conference"
+                | "journal_special_issue"
+                | "hackathon"
+                | "summer_camp"
+                | "pre_admission"
         ) {
             continue;
         }
@@ -630,6 +681,207 @@ fn trusted_https_url(value: Option<String>) -> Option<String> {
     })
 }
 
+fn normalized_optional_text(value: Option<String>, maximum: usize) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty() && trimmed.chars().count() <= maximum).then(|| trimmed.to_string())
+    })
+}
+
+fn normalized_labels(values: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    values
+        .into_iter()
+        .filter_map(|value| {
+            let trimmed = value.trim();
+            if trimmed.is_empty() || trimmed.chars().count() > 80 {
+                return None;
+            }
+            let normalized = trimmed.to_string();
+            seen.insert(normalized.clone()).then_some(normalized)
+        })
+        .take(32)
+        .collect()
+}
+
+fn public_deadline_label(source: &SourceDeadline) -> Option<String> {
+    let deadline = source.primary_deadline.as_deref()?;
+    [
+        (source.registration_deadline.as_deref(), "报名截止"),
+        (source.abstract_deadline.as_deref(), "摘要截止"),
+        (source.submission_deadline.as_deref(), "提交截止"),
+        (source.competition_start.as_deref(), "活动开始"),
+        (source.competition_end.as_deref(), "活动结束"),
+    ]
+    .into_iter()
+    .find_map(|(candidate, label)| (candidate == Some(deadline)).then(|| label.to_string()))
+}
+
+fn parse_important_public_events(bytes: &[u8]) -> ServiceResult<Vec<ImportantEventItem>> {
+    let envelope: SourceEnvelope = serde_json::from_slice(bytes)
+        .map_err(|error| ServiceError::new(format!("重要事件数据解析失败：{error}")))?;
+    if envelope.items.len() > MAX_CUSTOM_ITEMS {
+        return Err(ServiceError::new("重要事件条目超过安全上限。"));
+    }
+    let mut items = Vec::new();
+    for source in envelope.items {
+        if !matches!(
+            source.event_type.as_str(),
+            "competition"
+                | "conference"
+                | "journal_special_issue"
+                | "hackathon"
+                | "summer_camp"
+                | "pre_admission"
+        ) {
+            continue;
+        }
+        let id = source.id.trim();
+        let name = source.name.trim();
+        if id.is_empty()
+            || id.chars().count() > 128
+            || name.is_empty()
+            || name.chars().count() > 240
+        {
+            continue;
+        }
+        let Some(deadline) = source.primary_deadline.as_deref() else {
+            continue;
+        };
+        let Ok(parsed_deadline) = DateTime::parse_from_rfc3339(deadline) else {
+            continue;
+        };
+        let deadline_label = public_deadline_label(&source);
+        let source_name = source
+            .source
+            .as_ref()
+            .and_then(|evidence| normalized_optional_text(evidence.name.clone(), 120));
+        let source_url = source
+            .source
+            .as_ref()
+            .and_then(|evidence| trusted_https_url(evidence.url.clone()));
+        items.push(ImportantEventItem {
+            id: id.to_string(),
+            name: name.to_string(),
+            event_type: source.event_type,
+            source_type: "contest_ddl".to_string(),
+            primary_deadline: parsed_deadline.to_rfc3339(),
+            deadline_label,
+            organizer: normalized_optional_text(source.organizer, 200),
+            official_url: trusted_https_url(source.official_url),
+            source_name,
+            source_url,
+            categories: normalized_labels(source.categories),
+            tags: normalized_labels(source.tags),
+            level: normalized_optional_text(source.level, 120),
+            location: normalized_optional_text(source.location, 200),
+            status: normalized_optional_text(source.status, 64),
+            description: normalized_optional_text(source.description, 2_000),
+            eligibility: normalized_optional_text(source.eligibility, 500),
+            notes: normalized_optional_text(source.notes, 4_000),
+            region: normalized_optional_text(source.region, 80),
+            mode: normalized_optional_text(source.mode, 80),
+            published_at: None,
+            stale: source.stale,
+            archived: source.archived,
+        });
+    }
+    items.sort_by(|left, right| {
+        (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
+    });
+    Ok(items)
+}
+
+fn parse_important_school_notices(bytes: &[u8]) -> ServiceResult<Vec<ImportantEventItem>> {
+    let envelope: SchoolNoticeEnvelope = serde_json::from_slice(bytes)
+        .map_err(|error| ServiceError::new(format!("校内重要事件解析失败：{error}")))?;
+    if envelope.items.len() > MAX_CUSTOM_ITEMS {
+        return Err(ServiceError::new("校内重要事件条目超过安全上限。"));
+    }
+    let mut items = Vec::new();
+    for notice in envelope.items {
+        let id = notice.id.trim().to_string();
+        let name = notice
+            .name
+            .as_deref()
+            .or(notice.title.as_deref())
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && value.chars().count() <= 240)
+            .map(str::to_string);
+        let Some(name) = name else { continue };
+        if id.is_empty() || id.chars().count() > 128 {
+            continue;
+        }
+        let source_name = notice
+            .source
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty() && value.chars().count() <= 120)
+            .unwrap_or("北京邮电大学教学云平台")
+            .to_string();
+        let official_url = trusted_https_url(notice.source_url.clone());
+        let published_at = notice.published_at.and_then(|value| {
+            NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d")
+                .ok()
+                .map(|_| value.trim().to_string())
+        });
+        let deadlines = if notice.deadlines.is_empty() {
+            notice
+                .primary_deadline
+                .map(|date| {
+                    vec![SchoolNoticeDeadline {
+                        date,
+                        label: notice.primary_deadline_label,
+                    }]
+                })
+                .unwrap_or_default()
+        } else {
+            notice.deadlines
+        };
+        for (index, entry) in deadlines.into_iter().enumerate() {
+            let Ok(parsed_deadline) = DateTime::parse_from_rfc3339(entry.date.trim()) else {
+                continue;
+            };
+            let deadline_label =
+                normalized_optional_text(entry.label, 80).or_else(|| Some("截止时间".to_string()));
+            let status = if parsed_deadline.timestamp() >= chrono::Utc::now().timestamp() {
+                "upcoming"
+            } else {
+                "ended"
+            };
+            items.push(ImportantEventItem {
+                id: format!("school:{id}:{index}"),
+                name: name.clone(),
+                event_type: "competition".to_string(),
+                source_type: "school_notice".to_string(),
+                primary_deadline: parsed_deadline.to_rfc3339(),
+                deadline_label,
+                organizer: Some(source_name.clone()),
+                official_url: official_url.clone(),
+                source_name: Some(source_name.clone()),
+                source_url: official_url.clone(),
+                categories: vec!["校内竞赛通知".to_string()],
+                tags: Vec::new(),
+                level: None,
+                location: None,
+                status: Some(status.to_string()),
+                description: None,
+                eligibility: None,
+                notes: None,
+                region: None,
+                mode: None,
+                published_at: published_at.clone(),
+                stale: false,
+                archived: false,
+            });
+        }
+    }
+    items.sort_by(|left, right| {
+        (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
+    });
+    Ok(items)
+}
+
 fn merge_items(groups: impl IntoIterator<Item = Vec<DeadlineItem>>) -> Vec<DeadlineItem> {
     merge_items_with_limit(groups, MAX_ITEMS_PER_DAY)
 }
@@ -669,29 +921,88 @@ async fn fetch_contest_deadlines_range(
     start_date: NaiveDate,
     end_date: NaiveDate,
 ) -> ServiceResult<(Vec<DeadlineItem>, String, bool)> {
-    match fetch_source(PRIMARY_URL, PRIMARY_HOST, false).await {
-        Ok(bytes) => Ok((
-            parse_source_range(&bytes, start_date, end_date)?,
-            PRIMARY_URL.to_string(),
-            false,
-        )),
+    let primary = fetch_source(PRIMARY_URL, PRIMARY_HOST, false)
+        .await
+        .and_then(|bytes| parse_source_range(&bytes, start_date, end_date));
+    match primary {
+        Ok(items) => Ok((items, PRIMARY_URL.to_string(), false)),
         Err(primary_error) => {
-            let bytes =
-                fetch_source(BACKUP_URL, BACKUP_HOST, false)
-                    .await
-                    .map_err(|backup_error| {
-                        ServiceError::new(format!(
-                            "主 DDL 数据源不可用（{}）；备用数据源也不可用（{}）。",
-                            primary_error.message, backup_error.message
-                        ))
-                    })?;
-            Ok((
-                parse_source_range(&bytes, start_date, end_date)?,
-                BACKUP_URL.to_string(),
-                true,
-            ))
+            let items = fetch_source(BACKUP_URL, BACKUP_HOST, false)
+                .await
+                .and_then(|bytes| parse_source_range(&bytes, start_date, end_date))
+                .map_err(|backup_error| {
+                    ServiceError::new(format!(
+                        "主 DDL 数据源不可用（{}）；备用数据源也不可用（{}）。",
+                        primary_error.message, backup_error.message
+                    ))
+                })?;
+            Ok((items, BACKUP_URL.to_string(), true))
         }
     }
+}
+
+async fn fetch_public_important_events() -> ServiceResult<(Vec<ImportantEventItem>, String, bool)> {
+    let primary = fetch_source(PRIMARY_URL, PRIMARY_HOST, false)
+        .await
+        .and_then(|bytes| parse_important_public_events(&bytes));
+    match primary {
+        Ok(items) => Ok((items, PRIMARY_URL.to_string(), false)),
+        Err(primary_error) => {
+            let items = fetch_source(BACKUP_URL, BACKUP_HOST, false)
+                .await
+                .and_then(|bytes| parse_important_public_events(&bytes))
+                .map_err(|backup_error| {
+                    ServiceError::new(format!(
+                        "主重要事件数据源不可用（{}）；备用数据源也不可用（{}）。",
+                        primary_error.message, backup_error.message
+                    ))
+                })?;
+            Ok((items, BACKUP_URL.to_string(), true))
+        }
+    }
+}
+
+pub async fn fetch_important_events() -> ServiceResult<ImportantEventsResponse> {
+    let public = fetch_public_important_events().await;
+    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false)
+        .await
+        .and_then(|bytes| parse_important_school_notices(&bytes));
+    let (mut items, source, used_backup) = match (public, school) {
+        (Ok((mut public_items, source, used_backup)), Ok(school_items)) => {
+            public_items.extend(school_items);
+            (
+                public_items,
+                format!("{source} + {SCHOOL_NOTICES_URL}"),
+                used_backup,
+            )
+        }
+        (Ok((public_items, source, used_backup)), Err(_)) => (public_items, source, used_backup),
+        (Err(_), Ok(school_items)) => (school_items, SCHOOL_NOTICES_URL.to_string(), false),
+        (Err(public_error), Err(school_error)) => {
+            return Err(ServiceError::new(format!(
+                "公开重要事件不可用（{}）；校内竞赛通知也不可用（{}）。",
+                public_error.message, school_error.message
+            )));
+        }
+    };
+    let mut seen = HashSet::new();
+    items.retain(|item| {
+        seen.insert((
+            item.source_type.clone(),
+            item.id.clone(),
+            item.primary_deadline.clone(),
+        ))
+    });
+    items.sort_by(|left, right| {
+        (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
+    });
+    items.truncate(MAX_CUSTOM_ITEMS);
+    Ok(ImportantEventsResponse {
+        fetched_at: crate::config::now_in_app_tz(),
+        source,
+        used_backup,
+        items,
+    })
 }
 
 pub async fn fetch_deadlines(payload: &DeadlinesRequest) -> ServiceResult<DeadlinesResponse> {
@@ -805,16 +1116,18 @@ mod tests {
           "items":[
             {"id":"c1","name":"数据库竞赛","event_type":"competition","primary_deadline":"2026-08-22T18:00:00+08:00","organizer":"组委会","official_url":"https://example.com/c1"},
             {"id":"h1","name":"校园黑客松","event_type":"hackathon","primary_deadline":"2026-08-22T23:59:59+08:00"},
+            {"id":"m1","name":"学术会议","event_type":"conference","primary_deadline":"2026-08-22T20:00:00+08:00"},
             {"id":"s1","name":"夏令营","event_type":"summer_camp","primary_deadline":"2026-08-23T23:59:59+08:00"},
             {"id":"x1","name":"未知类型","event_type":"other","primary_deadline":"2026-08-22T12:00:00+08:00"}
           ]
         }"#;
         let date = NaiveDate::from_ymd_opt(2026, 8, 22).unwrap();
         let parsed = parse_source(data.as_bytes(), date).unwrap();
-        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed.len(), 3);
         assert_eq!(parsed[0].event_type, "competition");
         assert_eq!(parsed[0].source_type, "contest_ddl");
-        assert_eq!(parsed[1].event_type, "hackathon");
+        assert_eq!(parsed[1].event_type, "conference");
+        assert_eq!(parsed[2].event_type, "hackathon");
     }
 
     #[test]
@@ -838,6 +1151,69 @@ mod tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].id, "d1");
         assert_eq!(parsed[1].id, "d2");
+    }
+
+    #[test]
+    fn important_event_parser_keeps_search_metadata_and_every_public_type() {
+        let data = r#"{"items":[
+          {"id":"conf-1","name":"Example Conference","event_type":"conference","categories":["人工智能"],"tags":["CCF A"],"level":"CCF A","location":"Beijing","description":"Paper deadline","eligibility":"Open to students","notes":"See CFP","region":"China","mode":"hybrid","primary_deadline":"2026-09-01T23:59:59+08:00","submission_deadline":"2026-09-01T23:59:59+08:00","official_url":"https://conference.example/cfp","source":{"name":"CCFDDL","url":"https://ccfddl.com/source"}},
+          {"id":"journal-1","name":"Special Issue","event_type":"journal_special_issue","categories":["软件工程"],"primary_deadline":"2026-10-01T23:59:59+08:00"},
+          {"id":"pre-1","name":"预推免","event_type":"pre_admission","categories":["预推免"],"primary_deadline":"2026-09-15T12:00:00+08:00"},
+          {"id":"bad","name":"Unknown","event_type":"other","primary_deadline":"2026-09-01T12:00:00+08:00"}
+        ]}"#;
+        let parsed = parse_important_public_events(data.as_bytes()).unwrap();
+        assert_eq!(parsed.len(), 3);
+        let conference = parsed
+            .iter()
+            .find(|item| item.event_type == "conference")
+            .unwrap();
+        assert_eq!(conference.deadline_label.as_deref(), Some("提交截止"));
+        assert_eq!(conference.categories, ["人工智能"]);
+        assert_eq!(conference.tags, ["CCF A"]);
+        assert_eq!(conference.eligibility.as_deref(), Some("Open to students"));
+        assert_eq!(conference.notes.as_deref(), Some("See CFP"));
+        assert_eq!(conference.region.as_deref(), Some("China"));
+        assert_eq!(conference.mode.as_deref(), Some("hybrid"));
+        assert_eq!(conference.source_name.as_deref(), Some("CCFDDL"));
+        assert_eq!(
+            conference.source_url.as_deref(),
+            Some("https://ccfddl.com/source")
+        );
+    }
+
+    #[test]
+    fn important_school_parser_expands_deadlines_without_assignments() {
+        let data = r#"{"items":[{
+          "id":"notice-1","name":"校内创新竞赛","published_at":"2026-08-20",
+          "deadlines":[{"date":"2026-09-01T10:00:00+08:00","label":"材料提交"},{"date":"2026-09-03T23:59:59+08:00","label":"报名截止"}],
+          "source":"北京邮电大学教学云平台","source_url":"https://ucloud.bupt.edu.cn/#/consulting?id=1"
+        }]}"#;
+        let parsed = parse_important_school_notices(data.as_bytes()).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert!(parsed
+            .iter()
+            .all(|item| item.source_type == "school_notice"));
+        assert!(parsed.iter().all(|item| item.event_type == "competition"));
+        assert_eq!(parsed[0].deadline_label.as_deref(), Some("材料提交"));
+        assert_eq!(parsed[0].categories, ["校内竞赛通知"]);
+    }
+
+    #[test]
+    #[ignore = "requires the live public Contest DDL and school-notice services"]
+    fn live_important_event_query_contains_conferences_and_school_notices() {
+        let response = tauri::async_runtime::block_on(fetch_important_events()).unwrap();
+        assert!(response
+            .items
+            .iter()
+            .any(|item| item.event_type == "conference"));
+        assert!(response
+            .items
+            .iter()
+            .any(|item| item.source_type == "school_notice"));
+        assert!(response
+            .items
+            .iter()
+            .all(|item| item.event_type != "assignment"));
     }
 
     #[test]

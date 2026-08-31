@@ -32,6 +32,22 @@
     <item name="settings_custom_deadlines_url" type="id" />
     <item name="settings_custom_deadlines_save" type="id" />
     <item name="settings_favorite_deadlines_button" type="id" />
+    <item name="settings_information_query_button" type="id" />
+    <item name="information_query_page" type="id" />
+    <item name="information_query_back" type="id" />
+    <item name="information_query_mode_switch" type="id" />
+    <item name="information_query_shuttle_tab" type="id" />
+    <item name="information_query_events_tab" type="id" />
+    <item name="information_query_content" type="id" />
+    <item name="information_query_shuttle_status" type="id" />
+    <item name="information_query_shuttle_routes" type="id" />
+    <item name="information_query_search" type="id" />
+    <item name="information_query_category_row" type="id" />
+    <item name="information_query_metadata_category_row" type="id" />
+    <item name="information_query_show_ended" type="id" />
+    <item name="information_query_result_count" type="id" />
+    <item name="information_query_events_list" type="id" />
+    <item name="information_query_event_favorite" type="id" />
     <item name="favorite_deadlines_page" type="id" />
     <item name="favorite_deadlines_back" type="id" />
     <item name="favorite_deadlines_list" type="id" />
@@ -42,6 +58,8 @@
     <item name="settings_assignment_deadline_legend_dot" type="id" />
     <item name="settings_competition_deadlines_switch" type="id" />
     <item name="settings_competition_deadlines_dot" type="id" />
+    <item name="settings_conference_deadlines_switch" type="id" />
+    <item name="settings_conference_deadlines_dot" type="id" />
     <item name="settings_school_contest_notices_switch" type="id" />
     <item name="settings_school_contest_notices_dot" type="id" />
     <item name="settings_summer_camp_deadlines_switch" type="id" />
@@ -64,6 +82,7 @@
     <item name="calendar_overflow_button" type="id" />
     <item name="calendar_import_menu_item" type="id" />
     <item name="calendar_import_favorites_menu_item" type="id" />
+    <item name="calendar_information_query_menu_item" type="id" />
     <item name="calendar_almanac_advice_row" type="id" />
     <item name="calendar_almanac_advice_label" type="id" />
     <item name="calendar_almanac_advice_text" type="id" />

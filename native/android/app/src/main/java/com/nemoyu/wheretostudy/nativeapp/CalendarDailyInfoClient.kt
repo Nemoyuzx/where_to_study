@@ -35,8 +35,11 @@ data class AlmanacInfo(
 
 enum class PublicDeadlineKind(val wireValue: String, val title: String) {
     COMPETITION("competition", "学科竞赛"),
+    CONFERENCE("conference", "学术会议"),
+    JOURNAL_SPECIAL_ISSUE("journal_special_issue", "期刊专题"),
     SUMMER_CAMP("summer_camp", "夏令营"),
     HACKATHON("hackathon", "黑客松"),
+    PRE_ADMISSION("pre_admission", "预推免"),
     CUSTOM("custom", "自定义日程");
 
     companion object {
@@ -66,11 +69,30 @@ data class PublicDeadlineItem(
     val officialURL: String?,
     val sourceName: String? = null,
     val sourceHomepage: String? = null,
+    val categories: List<String> = emptyList(),
+    val tags: List<String> = emptyList(),
+    val level: String? = null,
+    val location: String? = null,
+    val description: String? = null,
+    val eligibility: String? = null,
+    val notes: String? = null,
+    val metadataSource: PublicDeadlineMetadataSource? = null,
+    val status: String? = null,
+    val region: String? = null,
+    val mode: String? = null,
+    val archived: Boolean = false,
 ) {
     val favoriteID: String
         get() = listOf(source.wireValue, sourceName.orEmpty(), id, deadline)
             .joinToString("\u001f")
 }
+
+data class PublicDeadlineMetadataSource(
+    val name: String,
+    val url: String?,
+    val sourceType: String?,
+    val authority: Int?,
+)
 
 data class PublicDeadlineSnapshot(
     val date: String,
@@ -95,10 +117,12 @@ internal object CalendarDailyInfoSources {
     const val deadlinePrimaryPage = "https://nemoyuzx.github.io/contest-ddl/"
     const val deadlineBackup = "https://where-to-study.cn/api/contest-events"
     const val schoolContestNotices = "https://where-to-study.cn/api/contest-notices"
+    const val shuttleBus = "https://where-to-study.cn/api/shuttle-bus"
     const val assignments =
         "https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3"
     const val smallPayloadLimit = 128 * 1024
     const val deadlinePayloadLimit = 2 * 1024 * 1024
+    const val shuttlePayloadLimit = 8 * 1024 * 1024
 }
 
 internal object AlmanacResponseParser {
@@ -209,6 +233,18 @@ internal object PublicDeadlineResponseParser {
                 deadline = deadline,
                 organizer = firstString(record, "organizer", "host"),
                 officialURL = officialURL,
+                categories = stringArray(record, "categories"),
+                tags = stringArray(record, "tags"),
+                level = boundedString(record, "level", 120),
+                location = boundedString(record, "location", 240),
+                description = boundedString(record, "description", 4_000),
+                eligibility = boundedString(record, "eligibility", 500),
+                notes = boundedString(record, "notes", 4_000),
+                metadataSource = metadataSource(record.opt("source")),
+                status = boundedString(record, "status", 80),
+                region = boundedString(record, "region", 80),
+                mode = boundedString(record, "mode", 80),
+                archived = record.opt("archived") as? Boolean ?: false,
             )
         }
         return indexed.mapValues { (_, items) ->
@@ -265,6 +301,9 @@ internal object PublicDeadlineResponseParser {
                     deadline = deadline,
                     organizer = "$sourceName · $label",
                     officialURL = officialURL,
+                    sourceName = sourceName,
+                    sourceHomepage = officialURL,
+                    categories = listOf("校内竞赛通知"),
                 )
             }
         }
@@ -283,6 +322,16 @@ internal object PublicDeadlineResponseParser {
         return unique.values
             .sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
             .take(100)
+    }
+
+    fun mergeAll(vararg groups: List<PublicDeadlineItem>): List<PublicDeadlineItem> {
+        val unique = linkedMapOf<String, PublicDeadlineItem>()
+        groups.forEach { group ->
+            group.forEach { item -> unique.putIfAbsent(item.favoriteID, item) }
+        }
+        return unique.values
+            .sortedWith(compareBy(PublicDeadlineItem::deadline, PublicDeadlineItem::name))
+            .take(5_000)
     }
 
     private fun extractRecords(root: Any): JSONArray {
@@ -305,6 +354,40 @@ internal object PublicDeadlineResponseParser {
         uri.scheme.equals("https", ignoreCase = true) &&
             !uri.host.isNullOrBlank() && uri.userInfo == null
     }.getOrDefault(false)
+
+    private fun stringArray(source: JSONObject, key: String, maximum: Int = 40): List<String> {
+        val values = source.optJSONArray(key) ?: return emptyList()
+        return buildList {
+            for (index in 0 until minOf(values.length(), maximum)) {
+                val value = values.optString(index).trim()
+                if (value.isNotEmpty() && value.length <= 120 && value !in this) add(value)
+            }
+        }
+    }
+
+    private fun boundedString(source: JSONObject, key: String, maximum: Int): String? =
+        (source.opt(key) as? String)?.trim()
+            ?.takeIf { it.isNotEmpty() && it.length <= maximum }
+
+    private fun metadataSource(value: Any?): PublicDeadlineMetadataSource? {
+        if (value is String) {
+            return value.trim().takeIf { it.isNotEmpty() && it.length <= 120 }
+                ?.let { PublicDeadlineMetadataSource(it, null, null, null) }
+        }
+        val source = value as? JSONObject ?: return null
+        val name = boundedString(source, "name", 120) ?: return null
+        val rawURL = boundedString(source, "url", 500)
+            ?: boundedString(source, "homepage", 500)
+        val authority = (source.opt("authority") as? Number)?.toInt()
+            ?.takeIf { it in 0..100 }
+        return PublicDeadlineMetadataSource(
+            name = name,
+            url = rawURL?.takeIf(::isTrustedOfficialURL),
+            sourceType = boundedString(source, "source_type", 80)
+                ?: boundedString(source, "sourceType", 80),
+            authority = authority,
+        )
+    }
 }
 
 internal object AssignmentDeadlineResponseParser {
@@ -499,6 +582,26 @@ class CalendarDailyInfoClient internal constructor(
         }
     }
 
+    /**
+     * Returns the complete built-in public-event and campus-notice feed. The
+     * result deliberately excludes UCloud assignments and custom feeds. It
+     * shares [deadlineFeed] with the teaching calendar, so opening or filtering
+     * the query page never starts a second network request.
+     */
+    fun fetchImportantEvents(
+        forceRemote: Boolean = false,
+        refreshStaleCache: Boolean = true,
+    ): List<PublicDeadlineItem> {
+        val feed = deadlineFeed(forceRemote, refreshStaleCache)
+        if (feed.contestItemsByDate == null && feed.schoolItemsByDate == null) {
+            throw DailyInfoClientException("重要事件数据暂时不可用。")
+        }
+        return PublicDeadlineResponseParser.mergeAll(
+            feed.contestItemsByDate?.values?.flatten().orEmpty(),
+            feed.schoolItemsByDate?.values?.flatten().orEmpty(),
+        )
+    }
+
     private fun combinedDeadlineSnapshot(
         date: String,
         forceRemote: Boolean,
@@ -683,7 +786,7 @@ class CalendarDailyInfoClient internal constructor(
     }
 }
 
-private object FixedPublicJsonTransport {
+internal object FixedPublicJsonTransport {
     fun fetch(uri: URI, scheme: String, host: String, maximumBytes: Int): String {
         val defaultPort = if (scheme == "https") 443 else 80
         val effectivePort = if (uri.port == -1) defaultPort else uri.port
@@ -734,6 +837,8 @@ private object FixedPublicJsonTransport {
     }
 }
 
+internal const val IMPORTANT_EVENTS_CHANGE_KEY = "__important_events__"
+
 internal class CalendarDailyInfoRepository(
     private val client: CalendarDailyInfoClient = CalendarDailyInfoClient(),
     private val assignmentClient: UCloudAssignmentClient? = null,
@@ -749,6 +854,13 @@ internal class CalendarDailyInfoRepository(
     private val deadlineErrors = ConcurrentHashMap<String, String>()
     private val loadingDeadlines = ConcurrentHashMap.newKeySet<String>()
     private val prewarmingDeadlines = AtomicBoolean(false)
+    @Volatile
+    private var importantEventItems: List<PublicDeadlineItem>? = null
+    @Volatile
+    private var importantEventFailure: String? = null
+    @Volatile
+    private var importantEventsFetchedAtMillis: Long = Long.MIN_VALUE
+    private val loadingImportantEventItems = AtomicBoolean(false)
     private val assignmentsByDate = ConcurrentHashMap<String, List<AssignmentDeadlineItem>>()
     private val assignmentErrors = ConcurrentHashMap<String, String>()
     private val loadingAssignments = ConcurrentHashMap.newKeySet<String>()
@@ -777,6 +889,9 @@ internal class CalendarDailyInfoRepository(
     }
     fun deadlineError(date: String): String? = deadlineErrors[date]
     fun isLoadingDeadlines(date: String): Boolean = date in loadingDeadlines
+    fun importantEvents(): List<PublicDeadlineItem>? = importantEventItems
+    fun importantEventsError(): String? = importantEventFailure
+    fun isLoadingImportantEvents(): Boolean = loadingImportantEventItems.get()
     fun assignments(date: String): List<AssignmentDeadlineItem>? = assignmentsByDate[date]
     fun assignmentError(date: String): String? = assignmentErrors[date]
     fun isLoadingAssignments(date: String): Boolean = date in loadingAssignments
@@ -884,6 +999,39 @@ internal class CalendarDailyInfoRepository(
             }
         } catch (_: RejectedExecutionException) {
             prewarmingDeadlines.set(false)
+        }
+    }
+
+    fun loadImportantEvents(force: Boolean = false, onComplete: () -> Unit = {}) {
+        val nowMillis = System.nanoTime() / 1_000_000L
+        val hasFreshItems = importantEventItems != null &&
+            nowMillis - importantEventsFetchedAtMillis in 0 until IMPORTANT_EVENT_CACHE_MILLIS
+        if (closed.get() || (!force && hasFreshItems) ||
+            !loadingImportantEventItems.compareAndSet(false, true)
+        ) {
+            return
+        }
+        importantEventFailure = null
+        try {
+            worker.execute {
+                runCatching {
+                    if (usesSampleData) {
+                        sampleImportantEvents()
+                    } else {
+                        client.fetchImportantEvents(forceRemote = force)
+                    }
+                }.onSuccess {
+                    importantEventItems = it
+                    importantEventsFetchedAtMillis = System.nanoTime() / 1_000_000L
+                }
+                    .onFailure {
+                        importantEventFailure = it.message ?: "重要事件获取失败。"
+                    }
+                loadingImportantEventItems.set(false)
+                postCompletion(IMPORTANT_EVENTS_CHANGE_KEY, onComplete)
+            }
+        } catch (_: RejectedExecutionException) {
+            loadingImportantEventItems.set(false)
         }
     }
 
@@ -1169,6 +1317,25 @@ internal class CalendarDailyInfoRepository(
         false,
     )
 
+    private fun sampleImportantEvents(): List<PublicDeadlineItem> {
+        val sampleDate = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
+            add(Calendar.DAY_OF_MONTH, 1)
+        }
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+            timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+        }.format(sampleDate.time)
+        return sampleDeadlines(date).items + PublicDeadlineItem(
+            id = "sample-conference",
+            name = "示例学术会议",
+            kind = PublicDeadlineKind.CONFERENCE,
+            source = PublicDeadlineSource.CONTEST_DDL,
+            deadline = "${date}T22:00:00+08:00",
+            organizer = "示例学会",
+            officialURL = null,
+            categories = listOf("计算机"),
+        )
+    }
+
     private fun sampleAssignments(date: String) = listOf(AssignmentDeadlineItem(
         "sample-assignment",
         "示例课程作业",
@@ -1176,6 +1343,10 @@ internal class CalendarDailyInfoRepository(
         "$date 23:59:00",
         "未提交",
     ))
+
+    private companion object {
+        const val IMPORTANT_EVENT_CACHE_MILLIS = 5 * 60 * 1_000L
+    }
 }
 
 private fun requireContractDate(value: String, label: String): Calendar {

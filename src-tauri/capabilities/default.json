@@ -21,6 +21,8 @@
     "allow-fetch-weather",
     "allow-fetch-almanac",
     "allow-fetch-deadlines",
+    "allow-fetch-important-events",
+    "allow-fetch-shuttle-bus",
     "allow-fetch-assignments",
     "allow-fetch-deadline-calendar",
     "allow-fetch-custom-deadline-calendar",

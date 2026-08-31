@@ -243,6 +243,39 @@ export default function primaryNavigationSmokeTest() {
       expect(januaryLabel !== null).assertTrue();
     });
 
+    it('query_page_is_reachable_from_calendar_and_settings', 0, async () => {
+      await launchApp(true);
+      const driver: Driver = Driver.create();
+      const calendarTab: Component | null = await findText(driver, '教学日历');
+      expect(calendarTab !== null).assertTrue();
+      await calendarTab?.click();
+      await driver.delayMs(700);
+      const more: Component | null = await findText(driver, '⋯');
+      expect(more !== null).assertTrue();
+      await more?.click();
+      await driver.delayMs(300);
+      const calendarQuery: Component = await driver.findComponent(ON.id('calendar.open_query'));
+      await calendarQuery.click();
+      await driver.delayMs(500);
+      expect(await driver.findComponent(ON.id('query.tab.shuttle')) !== null).assertTrue();
+      const eventsTab: Component = await driver.findComponent(ON.id('query.tab.events'));
+      expect(eventsTab !== null).assertTrue();
+      await eventsTab.click();
+      await driver.delayMs(300);
+      expect(await driver.findComponent(ON.id('query.events.show_ended')) !== null).assertTrue();
+      await (await driver.findComponent(ON.id('query.back'))).click();
+
+      const settingsTab: Component | null = await findText(driver, '设置');
+      expect(settingsTab !== null).assertTrue();
+      await settingsTab?.click();
+      await driver.delayMs(600);
+      const settingsQuery: Component | null = await findTextByScrollingDown(driver, '打开查询', 10);
+      expect(settingsQuery !== null).assertTrue();
+      await settingsQuery?.click();
+      await driver.delayMs(500);
+      expect(await driver.findComponent(ON.id('query.tab.events')) !== null).assertTrue();
+    });
+
     it('language_setting_updates_static_ui_without_relaunch', 0, async () => {
       await launchApp(false);
       const driver: Driver = Driver.create();

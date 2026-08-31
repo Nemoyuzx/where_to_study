@@ -890,6 +890,33 @@ final class LocalDataClearTests: XCTestCase {
     }
 
     @MainActor
+    func testConferenceDeadlineSettingDefaultsOnAndPersistsIndependently() throws {
+        let suiteName = "ConferenceDeadlinePersistence.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let first = AppModel(
+            scheduleStore: InMemoryScheduleStore(schedule: nil),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+        XCTAssertTrue(first.conferenceDeadlinesEnabled)
+        first.setConferenceDeadlinesEnabled(false)
+        XCTAssertTrue(first.competitionDeadlinesEnabled)
+
+        let relaunched = AppModel(
+            scheduleStore: InMemoryScheduleStore(schedule: nil),
+            classroomStore: InMemoryClassroomStore(cache: nil),
+            holidayStore: InMemoryHolidayStore(snapshot: nil),
+            dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+            defaults: defaults
+        )
+        XCTAssertFalse(relaunched.conferenceDeadlinesEnabled)
+        XCTAssertTrue(relaunched.competitionDeadlinesEnabled)
+    }
+
+    @MainActor
     func testFavoriteSnapshotStorageIsCappedAtFiveHundred() throws {
         let suiteName = "FavoriteDeadlineCap.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

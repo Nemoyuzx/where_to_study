@@ -55,6 +55,8 @@ pub struct SavedSettings {
     #[serde(default = "default_true")]
     pub competition_deadlines_enabled: bool,
     #[serde(default = "default_true")]
+    pub conference_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
     pub school_contest_notices_enabled: bool,
     #[serde(default = "default_true")]
     pub summer_camp_deadlines_enabled: bool,
@@ -81,6 +83,7 @@ impl SavedSettings {
             weather_enabled: true,
             almanac_enabled: true,
             competition_deadlines_enabled: true,
+            conference_deadlines_enabled: true,
             school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
@@ -125,6 +128,8 @@ pub struct SaveSettingsRequest {
     pub almanac_enabled: bool,
     #[serde(default = "default_true")]
     pub competition_deadlines_enabled: bool,
+    #[serde(default = "default_true")]
+    pub conference_deadlines_enabled: bool,
     #[serde(default = "default_true")]
     pub school_contest_notices_enabled: bool,
     #[serde(default = "default_true")]
@@ -172,6 +177,7 @@ mod term_default_tests {
             weather_enabled: true,
             almanac_enabled: true,
             competition_deadlines_enabled: true,
+            conference_deadlines_enabled: true,
             school_contest_notices_enabled: true,
             summer_camp_deadlines_enabled: true,
             hackathon_deadlines_enabled: true,
@@ -294,6 +300,124 @@ pub struct DeadlineCalendarResponse {
     pub source: String,
     pub used_backup: bool,
     pub items: Vec<DeadlineItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportantEventItem {
+    pub id: String,
+    pub name: String,
+    pub event_type: String,
+    pub source_type: String,
+    pub primary_deadline: String,
+    pub deadline_label: Option<String>,
+    pub organizer: Option<String>,
+    pub official_url: Option<String>,
+    pub source_name: Option<String>,
+    pub source_url: Option<String>,
+    #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub level: Option<String>,
+    pub location: Option<String>,
+    pub status: Option<String>,
+    pub description: Option<String>,
+    pub eligibility: Option<String>,
+    pub notes: Option<String>,
+    pub region: Option<String>,
+    pub mode: Option<String>,
+    pub published_at: Option<String>,
+    #[serde(default)]
+    pub stale: bool,
+    #[serde(default)]
+    pub archived: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportantEventsResponse {
+    pub fetched_at: String,
+    pub source: String,
+    pub used_backup: bool,
+    pub items: Vec<ImportantEventItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShuttleBusSource {
+    pub name: String,
+    pub page_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShuttleBusStats {
+    pub notices: usize,
+    pub images: usize,
+    pub parsed_schedules: usize,
+    pub needs_review: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShuttleBusStop {
+    pub campus: String,
+    pub location: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShuttleBusPeriod {
+    pub label: String,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShuttleBusService {
+    pub vehicle: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShuttleBusRow {
+    pub departure_time: String,
+    #[serde(default)]
+    pub services: std::collections::HashMap<String, Option<ShuttleBusService>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShuttleBusSchedule {
+    pub period: ShuttleBusPeriod,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub parse_status: String,
+    pub parse_confidence: f64,
+    pub parse_engine: String,
+    #[serde(default)]
+    pub rows: Vec<ShuttleBusRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShuttleBusNotice {
+    pub id: String,
+    pub title: String,
+    pub published_at: String,
+    pub source_url: String,
+    pub parse_status: String,
+    #[serde(default)]
+    pub stops: Vec<ShuttleBusStop>,
+    #[serde(default)]
+    pub notes: Vec<String>,
+    #[serde(default)]
+    pub schedules: Vec<ShuttleBusSchedule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShuttleBusResponse {
+    pub schema_version: String,
+    pub generated_at: String,
+    pub status: String,
+    pub source: ShuttleBusSource,
+    pub stats: ShuttleBusStats,
+    pub last_parsed_notice_id: Option<String>,
+    #[serde(default)]
+    pub items: Vec<ShuttleBusNotice>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

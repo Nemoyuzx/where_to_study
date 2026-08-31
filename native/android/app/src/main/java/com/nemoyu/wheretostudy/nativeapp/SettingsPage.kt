@@ -620,6 +620,12 @@ class SettingsPage(
     private fun informationSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "日期详情与生活信息"))
+        addView(settingsLinkButton("班车与重要事件查询") {
+            activity.openInformationQuery()
+        }.apply {
+            id = R.id.settings_information_query_button
+        })
+        addView(spacer(activity, compactGap))
         addView(featureSwitch("校区天气", preferences.weatherEnabled) {
             preferences.weatherEnabled = it
         })
@@ -645,6 +651,16 @@ class SettingsPage(
             color = Palette.publicDeadline,
         ) {
             preferences.competitionDeadlinesEnabled = it
+            if (it) activity.prewarmPublicDeadlinesIfEnabled()
+        })
+        addView(featureSwitchLegendRow(
+            label = "学术会议 DDL",
+            checked = preferences.conferenceDeadlinesEnabled,
+            switchID = R.id.settings_conference_deadlines_switch,
+            dotID = R.id.settings_conference_deadlines_dot,
+            color = Palette.publicDeadline,
+        ) {
+            preferences.conferenceDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
         addView(featureSwitchLegendRow(
@@ -1231,7 +1247,7 @@ class SettingsPage(
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
-                text = "生效日期 / Effective date: 2026-08-24"
+                text = "生效日期 / Effective date: 2026-08-31"
                 textSize = 13f
                 setTextColor(Palette.muted)
                 setPadding(0, activity.dp(4), 0, activity.dp(14))

@@ -328,6 +328,7 @@ test('saved settings never hydrate a password into web state', () => {
     default_min_seats: 30,
     daily_course_notifications_enabled: true,
     competition_deadlines_enabled: false,
+    conference_deadlines_enabled: false,
     school_contest_notices_enabled: true,
   })
 
@@ -335,9 +336,11 @@ test('saved settings never hydrate a password into web state', () => {
   assert.equal(state.hasSavedPassword, true)
   assert.equal(state.dailyCourseNotificationsEnabled, true)
   assert.equal(state.competitionDeadlinesEnabled, false)
+  assert.equal(state.conferenceDeadlinesEnabled, false)
   assert.equal(state.schoolContestNoticesEnabled, true)
   assert.equal(settingsToPayload(state).daily_course_notifications_enabled, true)
   assert.equal(settingsToPayload(state).competition_deadlines_enabled, false)
+  assert.equal(settingsToPayload(state).conference_deadlines_enabled, false)
   assert.equal(settingsToPayload(state).school_contest_notices_enabled, true)
   assert.equal(accountHasSavedPassword(' student ', { account: 'student', hasSavedPassword: true }), true)
 })
@@ -380,6 +383,20 @@ test('favorite deadlines keep complete normalized snapshots and survive source s
     official_url: 'https://example.com/events/1',
     source_name: 'Example Calendar',
     source_url: 'https://example.com/calendar.json',
+    deadline_label: 'Registration deadline',
+    categories: ['Artificial Intelligence'],
+    tags: ['Student'],
+    level: 'National',
+    location: 'Beijing',
+    status: 'upcoming',
+    description: 'Build a useful prototype.',
+    eligibility: 'University students',
+    notes: 'Bring a laptop.',
+    region: 'China',
+    mode: 'onsite',
+    published_at: '2026-08-01T12:00:00+08:00',
+    stale: false,
+    archived: false,
   }
   const normalized = normalizeFavoriteDeadlines([
     favorite,
@@ -426,6 +443,7 @@ test('custom favorites from different feeds keep independent source identities',
 test('deadline startup preheat follows every shared-feed switch and covers the whole year', () => {
   const disabled = {
     competitionDeadlinesEnabled: false,
+    conferenceDeadlinesEnabled: false,
     schoolContestNoticesEnabled: false,
     summerCampDeadlinesEnabled: false,
     hackathonDeadlinesEnabled: false,
@@ -439,6 +457,26 @@ test('deadline startup preheat follows every shared-feed switch and covers the w
     })
   }
   assert.equal(deadlinePreheatPlan(DEFAULT_SETTINGS, '2026-02-30'), null)
+})
+
+test('conference and journal favorites use the existing local snapshot contract', () => {
+  const items = normalizeFavoriteDeadlines([
+    {
+      id: 'conference-1', name: 'Conference', event_type: 'conference',
+      source_type: 'contest_ddl', primary_deadline: '2026-09-01T20:00:00+08:00',
+    },
+    {
+      id: 'journal-1', name: 'Special issue', event_type: 'journal_special_issue',
+      source_type: 'contest_ddl', primary_deadline: '2026-09-02T20:00:00+08:00',
+    },
+    {
+      id: 'pre-1', name: 'Pre-admission', event_type: 'pre_admission',
+      source_type: 'contest_ddl', primary_deadline: '2026-09-03T20:00:00+08:00',
+    },
+  ])
+  assert.deepEqual(items.map((item) => item.event_type), [
+    'conference', 'journal_special_issue', 'pre_admission',
+  ])
 })
 
 test('minimum seat settings remain finite non-negative integers', () => {

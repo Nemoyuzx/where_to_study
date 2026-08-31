@@ -659,6 +659,8 @@ test('desktop calendar supplement commands are exposed by the Tauri capability m
     'fetch_deadline_calendar',
     'fetch_assignment_calendar',
     'fetch_custom_deadline_calendar',
+    'fetch_important_events',
+    'fetch_shuttle_bus',
   ]
 
   for (const command of commands) {

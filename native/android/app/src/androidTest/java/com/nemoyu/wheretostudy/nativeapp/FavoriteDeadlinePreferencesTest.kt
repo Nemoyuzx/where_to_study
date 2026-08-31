@@ -15,6 +15,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class FavoriteDeadlinePreferencesTest {
     @Test
+    fun conferenceCalendarVisibilitySettingPersistsIndependently() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = AppPreferences(context)
+        val previous = preferences.conferenceDeadlinesEnabled
+        try {
+            preferences.conferenceDeadlinesEnabled = false
+            assertFalse(AppPreferences(context).conferenceDeadlinesEnabled)
+            preferences.conferenceDeadlinesEnabled = true
+            assertTrue(AppPreferences(context).conferenceDeadlinesEnabled)
+        } finally {
+            AppPreferences(context).conferenceDeadlinesEnabled = previous
+        }
+    }
+
+    @Test
     fun customSettingsAndCompleteFavoriteSnapshotPersistAndRemoveLocally() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = AppPreferences(context)
@@ -29,9 +44,23 @@ class FavoriteDeadlinePreferencesTest {
             source = PublicDeadlineSource.CUSTOM,
             deadline = "2026-09-18T23:59:00+08:00",
             organizer = "测试组织方",
-            officialURL = "https://example.com/item",
+            officialURL = "https://example.com/item#deadline",
             sourceName = "测试来源",
             sourceHomepage = "https://example.com",
+            categories = listOf("人工智能"),
+            tags = listOf("CCF A"),
+            level = "国家级",
+            location = "北京",
+            description = "完整说明",
+            eligibility = "本科生",
+            notes = "以官网为准",
+            metadataSource = PublicDeadlineMetadataSource(
+                "上游来源", "https://example.com/source#metadata", "official", 5,
+            ),
+            status = "upcoming",
+            region = "china",
+            mode = "hybrid",
+            archived = true,
         )
         try {
             preferences.customDeadlinesURL = "https://example.com/feed.json"

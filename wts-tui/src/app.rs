@@ -3,8 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use chrono::{Datelike, NaiveDate};
 use where_to_study_lib::config::today_in_app_tz;
 use where_to_study_lib::models::{
-    ClassroomStatus, ClassroomsCacheResponse, Course, HolidaysResponse, ScheduleResponse,
+    ClassroomStatus, ClassroomsCacheResponse, Course, HolidaysResponse, ImportantEventItem,
+    ImportantEventsResponse, ScheduleResponse, ShuttleBusResponse,
 };
+use where_to_study_lib::public_queries::{ImportantEventFilter, ImportantEventSourceFilter};
 use zeroize::Zeroizing;
 
 const TERM_VALIDITY_WEEKS: i64 = 26;
@@ -15,6 +17,12 @@ pub enum Tab {
     Planner,
     Calendar,
     Settings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuerySection {
+    Shuttle,
+    Events,
 }
 
 pub struct App {
@@ -42,9 +50,25 @@ pub struct App {
     pub settings_editing: bool,
     pub credentials_saved: bool,
     pub saved_account: String,
+    pub query_open: bool,
+    pub query_section: QuerySection,
+    pub shuttle: Option<ShuttleBusResponse>,
+    pub important_events: Option<ImportantEventsResponse>,
+    pub favorite_events: Vec<ImportantEventItem>,
+    pub query_search: String,
+    pub query_search_editing: bool,
+    pub query_event_type: Option<String>,
+    pub query_category: Option<String>,
+    pub query_source: ImportantEventSourceFilter,
+    pub query_include_ended: bool,
+    pub query_favorites_only: bool,
+    pub query_event_cursor: usize,
+    pub query_scroll: usize,
     request_sequence: u64,
     pending_schedule: Option<u64>,
     pending_classrooms: Option<u64>,
+    pending_shuttle: Option<u64>,
+    pending_events: Option<u64>,
 }
 
 impl App {
@@ -76,9 +100,25 @@ impl App {
             settings_editing: false,
             credentials_saved: false,
             saved_account: String::new(),
+            query_open: false,
+            query_section: QuerySection::Shuttle,
+            shuttle: None,
+            important_events: None,
+            favorite_events: Vec::new(),
+            query_search: String::new(),
+            query_search_editing: false,
+            query_event_type: None,
+            query_category: None,
+            query_source: ImportantEventSourceFilter::All,
+            query_include_ended: false,
+            query_favorites_only: false,
+            query_event_cursor: 0,
+            query_scroll: 0,
             request_sequence: 0,
             pending_schedule: None,
             pending_classrooms: None,
+            pending_shuttle: None,
+            pending_events: None,
         }
     }
 
@@ -271,9 +311,43 @@ impl App {
         true
     }
 
+    pub fn start_shuttle_request(&mut self) -> u64 {
+        let request_id = self.next_request_id();
+        self.pending_shuttle = Some(request_id);
+        self.sync_loading();
+        request_id
+    }
+
+    pub fn start_events_request(&mut self) -> u64 {
+        let request_id = self.next_request_id();
+        self.pending_events = Some(request_id);
+        self.sync_loading();
+        request_id
+    }
+
+    pub fn finish_shuttle_request(&mut self, request_id: u64) -> bool {
+        if self.pending_shuttle != Some(request_id) {
+            return false;
+        }
+        self.pending_shuttle = None;
+        self.sync_loading();
+        true
+    }
+
+    pub fn finish_events_request(&mut self, request_id: u64) -> bool {
+        if self.pending_events != Some(request_id) {
+            return false;
+        }
+        self.pending_events = None;
+        self.sync_loading();
+        true
+    }
+
     pub fn invalidate_data_requests(&mut self) {
         self.pending_schedule = None;
         self.pending_classrooms = None;
+        self.pending_shuttle = None;
+        self.pending_events = None;
         self.sync_loading();
     }
 
@@ -283,7 +357,118 @@ impl App {
     }
 
     fn sync_loading(&mut self) {
-        self.loading = self.pending_schedule.is_some() || self.pending_classrooms.is_some();
+        self.loading = self.pending_schedule.is_some()
+            || self.pending_classrooms.is_some()
+            || self.pending_shuttle.is_some()
+            || self.pending_events.is_some();
+    }
+
+    pub fn all_query_events(&self) -> Vec<ImportantEventItem> {
+        where_to_study_lib::public_queries::merge_live_and_favorite_events(
+            self.important_events
+                .as_ref()
+                .map(|response| response.items.as_slice())
+                .unwrap_or_default(),
+            &self.favorite_events,
+        )
+    }
+
+    pub fn event_types(&self) -> Vec<String> {
+        where_to_study_lib::public_queries::available_event_types(&self.all_query_events())
+    }
+
+    pub fn event_categories(&self) -> Vec<String> {
+        where_to_study_lib::public_queries::available_event_categories(&self.all_query_events())
+    }
+
+    pub fn visible_query_events(&self) -> Vec<ImportantEventItem> {
+        where_to_study_lib::public_queries::filter_important_events(
+            &self.all_query_events(),
+            &self.favorite_events,
+            &ImportantEventFilter {
+                query: self.query_search.clone(),
+                event_type: self.query_event_type.clone(),
+                category: self.query_category.clone(),
+                source: self.query_source,
+                include_ended: self.query_include_ended,
+                favorites_only: self.query_favorites_only,
+            },
+            chrono::Utc::now(),
+        )
+    }
+
+    pub fn selected_query_event(&self) -> Option<ImportantEventItem> {
+        self.visible_query_events()
+            .get(self.query_event_cursor)
+            .cloned()
+    }
+
+    pub fn clamp_query_cursor(&mut self) {
+        let length = self.visible_query_events().len();
+        self.query_event_cursor = self.query_event_cursor.min(length.saturating_sub(1));
+        self.query_scroll = self.query_scroll.min(self.query_event_cursor);
+    }
+
+    pub fn move_query_cursor(&mut self, delta: isize) {
+        let maximum = self.visible_query_events().len().saturating_sub(1) as isize;
+        self.query_event_cursor =
+            (self.query_event_cursor as isize + delta).clamp(0, maximum) as usize;
+        if self.query_event_cursor < self.query_scroll {
+            self.query_scroll = self.query_event_cursor;
+        } else if self.query_event_cursor >= self.query_scroll.saturating_add(12) {
+            self.query_scroll = self.query_event_cursor.saturating_sub(11);
+        }
+    }
+
+    pub fn cycle_query_event_type(&mut self) {
+        let options = self.event_types();
+        self.query_event_type = cycle_optional(&options, self.query_event_type.as_deref());
+        self.query_event_cursor = 0;
+        self.query_scroll = 0;
+    }
+
+    pub fn cycle_query_category(&mut self) {
+        let options = self.event_categories();
+        self.query_category = cycle_optional(&options, self.query_category.as_deref());
+        self.query_event_cursor = 0;
+        self.query_scroll = 0;
+    }
+
+    pub fn cycle_query_source(&mut self) {
+        self.query_source = match self.query_source {
+            ImportantEventSourceFilter::All => ImportantEventSourceFilter::Public,
+            ImportantEventSourceFilter::Public => ImportantEventSourceFilter::School,
+            ImportantEventSourceFilter::School => ImportantEventSourceFilter::All,
+        };
+        self.query_event_cursor = 0;
+        self.query_scroll = 0;
+    }
+
+    pub fn is_favorite(&self, item: &ImportantEventItem) -> bool {
+        let key = where_to_study_lib::public_queries::favorite_key(item);
+        self.favorite_events
+            .iter()
+            .any(|favorite| where_to_study_lib::public_queries::favorite_key(favorite) == key)
+    }
+
+    pub fn toggle_selected_event_favorite(
+        &mut self,
+    ) -> where_to_study_lib::error::ServiceResult<bool> {
+        let item = self.selected_query_event().ok_or_else(|| {
+            where_to_study_lib::error::ServiceError::new("当前没有可收藏的事件。")
+        })?;
+        where_to_study_lib::public_queries::toggle_favorite_event(&mut self.favorite_events, &item)
+    }
+}
+
+fn cycle_optional(options: &[String], current: Option<&str>) -> Option<String> {
+    if options.is_empty() {
+        return None;
+    }
+    match current.and_then(|current| options.iter().position(|value| value == current)) {
+        None => Some(options[0].clone()),
+        Some(index) if index + 1 < options.len() => Some(options[index + 1].clone()),
+        Some(_) => None,
     }
 }
 
@@ -454,5 +639,65 @@ mod tests {
         app.set_error("网络错误".to_string());
         assert_eq!(app.error_message.as_deref(), Some("网络错误"));
         assert!(app.status_message.is_none());
+    }
+
+    fn sample_event(id: &str, deadline: &str, category: &str) -> ImportantEventItem {
+        ImportantEventItem {
+            id: id.to_string(),
+            name: format!("事件 {id}"),
+            event_type: "conference".to_string(),
+            source_type: "contest_ddl".to_string(),
+            primary_deadline: deadline.to_string(),
+            deadline_label: Some("提交截止".to_string()),
+            organizer: Some("组织方".to_string()),
+            official_url: None,
+            source_name: Some("Contest DDL".to_string()),
+            source_url: None,
+            categories: vec![category.to_string()],
+            tags: Vec::new(),
+            level: None,
+            location: None,
+            status: None,
+            description: None,
+            eligibility: None,
+            notes: None,
+            region: None,
+            mode: None,
+            published_at: None,
+            stale: false,
+            archived: false,
+        }
+    }
+
+    #[test]
+    fn query_filters_derive_real_categories_and_default_to_upcoming() {
+        let mut app = App::new(false);
+        app.important_events = Some(ImportantEventsResponse {
+            fetched_at: "2026-08-31T00:00:00+08:00".to_string(),
+            source: "fixture".to_string(),
+            used_backup: false,
+            items: vec![
+                sample_event("future", "2099-09-01T12:00:00+08:00", "人工智能"),
+                sample_event("past", "2020-01-01T12:00:00+08:00", "系统"),
+            ],
+        });
+        assert_eq!(app.event_categories(), ["人工智能", "系统"]);
+        assert_eq!(app.visible_query_events().len(), 1);
+        app.query_include_ended = true;
+        assert_eq!(app.visible_query_events().len(), 2);
+        app.query_category = Some("系统".to_string());
+        assert_eq!(app.visible_query_events()[0].id, "past");
+    }
+
+    #[test]
+    fn query_request_ids_keep_network_results_independent_from_view_switching() {
+        let mut app = App::new(false);
+        let shuttle = app.start_shuttle_request();
+        let events = app.start_events_request();
+        app.query_section = QuerySection::Events;
+        assert!(app.finish_shuttle_request(shuttle));
+        assert!(app.loading);
+        assert!(app.finish_events_request(events));
+        assert!(!app.loading);
     }
 }

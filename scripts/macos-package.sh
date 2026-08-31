@@ -10,6 +10,10 @@ OUTPUT_DIR="${MACOS_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
 APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 RELEASE_LABEL="${1:-v$APP_VERSION}"
 ARCHIVE="$OUTPUT_DIR/Where-To-Study-$RELEASE_LABEL-macos-arm64.zip"
+LEGACY_CONTEST_HOST="$(printf '%s.%s.%s.%s' 101 201 29 29)"
+CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
+SHUTTLE_BUS_URL="https://where-to-study.cn/api/shuttle-bus"
 validate_release_label "$RELEASE_LABEL"
 
 if [[ "$RELEASE_LABEL" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)([-+].*)?$ ]] &&
@@ -36,6 +40,10 @@ if ! path_contains_fixed_text 'https://jwglweixin.bupt.edu.cn' "$APP_PATH"; then
   echo "macOS app bundle is missing the expected HTTPS teaching-system endpoint." >&2
   exit 1
 fi
+if path_contains_fixed_text "$LEGACY_CONTEST_HOST" "$APP_PATH"; then
+  echo "macOS app bundle contains the retired contest API host." >&2
+  exit 1
+fi
 if ! cmp -s "$ROOT_DIR/LICENSE" "$APP_PATH/Contents/Resources/LICENSE"; then
   echo "macOS app bundle is missing the exact project license." >&2
   exit 1
@@ -59,6 +67,12 @@ if [[ ! -f "$APP_BINARY" ]] || [[ " $(lipo -archs "$APP_BINARY") " != *" arm64 "
   echo "macOS app bundle is missing its arm64 executable." >&2
   exit 1
 fi
+for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
+  if ! path_contains_fixed_text "$endpoint" "$APP_BINARY"; then
+    echo "macOS executable is missing a required HTTPS public-data endpoint: $endpoint" >&2
+    exit 1
+  fi
+done
 
 mkdir -p "$OUTPUT_DIR"
 codesign --force --deep --sign - --timestamp=none "$APP_PATH"

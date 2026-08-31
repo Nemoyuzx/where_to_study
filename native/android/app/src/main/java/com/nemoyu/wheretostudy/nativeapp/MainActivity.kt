@@ -62,6 +62,7 @@ class MainActivity : Activity() {
     private val preferences by lazy { AppPreferences(this) }
     private val plannerQueryState by lazy { PlannerQueryState(preferences.campusID) }
     private lateinit var teachingCalendarSessionState: TeachingCalendarSessionState
+    private lateinit var informationQuerySessionState: InformationQuerySessionState
     private val scheduleRepository by lazy {
         ScheduleRepository(this, credentialStore, preferences)
     }
@@ -69,6 +70,7 @@ class MainActivity : Activity() {
         ClassroomRepository(this, credentialStore)
     }
     private val weatherRepository by lazy { WeatherRepository() }
+    private val shuttleBusRepository by lazy { ShuttleBusRepository() }
     private val calendarDailyInfoRepository by lazy {
         CalendarDailyInfoRepository(
             assignmentClient = UCloudAssignmentClient(credentialStore),
@@ -100,6 +102,8 @@ class MainActivity : Activity() {
     private var navigationRailToggle: TextView? = null
     private var foldingFeatureSpacer: View? = null
     private var favoriteDeadlinesOverlay: View? = null
+    private var informationQueryOverlay: View? = null
+    private var informationQueryOpen = false
     private var navigationRailAnimator: ValueAnimator? = null
     internal var controlHapticEventCount = 0
         private set
@@ -174,6 +178,12 @@ class MainActivity : Activity() {
                 ?.getBoolean(TEACHING_CALENDAR_DAY_WEEK_AGENDA_EXPANDED_KEY, true)
                 ?: true,
         )
+        informationQueryOpen = savedInstanceState
+            ?.getBoolean(INFORMATION_QUERY_OPEN_KEY, false)
+            ?: false
+        informationQuerySessionState = InformationQuerySessionState(
+            savedInstanceState?.getString(INFORMATION_QUERY_MODE_KEY),
+        )
 
         adaptiveRoot = FrameLayout(this).apply {
             id = R.id.adaptive_root
@@ -193,6 +203,8 @@ class MainActivity : Activity() {
         }
         configureSystemBarIcons()
         prewarmPublicDeadlinesIfEnabled()
+        calendarDailyInfoRepository.loadImportantEvents()
+        shuttleBusRepository.load()
         updateAdaptiveLayout(force = true)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
         DailyCourseSummaryScheduler.reconcile(this)
@@ -208,6 +220,8 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         prewarmPublicDeadlinesIfEnabled()
+        calendarDailyInfoRepository.loadImportantEvents()
+        shuttleBusRepository.load()
         val settingChanged = DailyCourseSummaryScheduler.synchronizePermissionState(this)
         DailyCourseSummaryScheduler.reconcile(this)
         if (settingChanged && ::content.isInitialized &&
@@ -366,6 +380,7 @@ class MainActivity : Activity() {
         navigationRailToggle = null
         foldingFeatureSpacer = null
         favoriteDeadlinesOverlay = null
+        informationQueryOverlay = null
         adaptiveRoot.removeAllViews()
         val layout = if (spec.usesBottomNavigation) {
             phoneLayout()
@@ -381,6 +396,7 @@ class MainActivity : Activity() {
         )
         navigate(selectedDestination)
         if (settingsRoute == SettingsRoute.FAVORITES) showFavoriteManagementOverlay()
+        if (informationQueryOpen) showInformationQueryOverlay()
     }
 
     private fun resolveAdaptiveLayout(
@@ -685,6 +701,18 @@ class MainActivity : Activity() {
         favoriteDeadlinesOverlay = null
     }
 
+    internal fun openInformationQuery(mode: InformationQueryMode? = null) {
+        mode?.let { informationQuerySessionState.selectedMode = it }
+        informationQueryOpen = true
+        showInformationQueryOverlay()
+    }
+
+    fun closeInformationQuery() {
+        informationQueryOpen = false
+        informationQueryOverlay?.let(adaptiveRoot::removeView)
+        informationQueryOverlay = null
+    }
+
     private fun updatePhoneNavigationVisibility() {
         if (currentLayoutSpec?.usesBottomNavigation != true) return
         adaptiveRoot.findViewById<View?>(R.id.phone_navigation)?.visibility = View.VISIBLE
@@ -710,6 +738,29 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun showInformationQueryOverlay() {
+        if (!::adaptiveRoot.isInitialized) return
+        informationQueryOverlay?.let(adaptiveRoot::removeView)
+        val overlay = InformationQueryPage(
+            activity = this,
+            shuttleRepository = shuttleBusRepository,
+            dailyInfoRepository = calendarDailyInfoRepository,
+            preferences = preferences,
+            availableWidthDp = currentWindowWidthDp(),
+            sessionState = informationQuerySessionState,
+        ).build().apply {
+            elevation = dp(26).toFloat()
+        }
+        informationQueryOverlay = overlay
+        adaptiveRoot.addView(
+            overlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+    }
+
     @SuppressLint("GestureBackNavigation")
     @Deprecated("Legacy fallback below API 33; predictive back is registered in onCreate")
     override fun onBackPressed() {
@@ -717,6 +768,10 @@ class MainActivity : Activity() {
     }
 
     private fun handleAppBack(): Boolean {
+        if (informationQueryOpen) {
+            closeInformationQuery()
+            return true
+        }
         if (selectedDestination != Destination.SETTINGS ||
             settingsRoute != SettingsRoute.FAVORITES
         ) return false
@@ -919,6 +974,11 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString(SELECTED_DESTINATION_KEY, selectedDestination.name)
         outState.putString(SETTINGS_ROUTE_KEY, settingsRoute.name)
+        outState.putBoolean(INFORMATION_QUERY_OPEN_KEY, informationQueryOpen)
+        outState.putString(
+            INFORMATION_QUERY_MODE_KEY,
+            informationQuerySessionState.selectedMode.name,
+        )
         outState.putBoolean(NAVIGATION_RAIL_COLLAPSED_KEY, navigationRailCollapsed)
         outState.putBoolean(
             CALENDAR_PERMISSION_PENDING_KEY,
@@ -1060,6 +1120,7 @@ class MainActivity : Activity() {
         scheduleRepository.close()
         classroomRepository.close()
         weatherRepository.close()
+        shuttleBusRepository.close()
         calendarDailyInfoRepository.close()
         if (holidayRepositoryDelegate.isInitialized()) {
             holidayRepository.close()
@@ -1205,6 +1266,8 @@ class MainActivity : Activity() {
         const val NAVIGATION_RAIL_COLLAPSED_KEY = "navigation_rail_collapsed"
         const val SELECTED_DESTINATION_KEY = "selected_destination"
         const val SETTINGS_ROUTE_KEY = "settings_route"
+        const val INFORMATION_QUERY_OPEN_KEY = "information_query_open"
+        const val INFORMATION_QUERY_MODE_KEY = "information_query_mode"
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"
         const val CALENDAR_IMPORT_TOKEN_KEY = "calendar_import_token"

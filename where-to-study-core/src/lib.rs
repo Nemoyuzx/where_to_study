@@ -11,6 +11,7 @@ pub mod error;
 pub mod holidays;
 #[path = "../../src-tauri/src/models.rs"]
 pub mod models;
+pub mod public_queries;
 #[path = "../../src-tauri/src/schedule.rs"]
 pub mod schedule;
 #[path = "../../src-tauri/src/scoped_cache.rs"]

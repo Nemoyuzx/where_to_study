@@ -14,6 +14,8 @@ import todayCourseWidgetDataTest from './TodayCourseWidgetData.test';
 import dailyInfoClientTest from './DailyInfoClient.test';
 import calendarDailyInfoClientTest from './CalendarDailyInfoClient.test';
 import appLocalizationTest from './AppLocalization.test';
+import shuttleBusClientTest from './ShuttleBusClient.test';
+import queryLogicTest from './QueryLogic.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -31,4 +33,6 @@ export default function testsuite() {
   dailyInfoClientTest();
   calendarDailyInfoClientTest();
   appLocalizationTest();
+  shuttleBusClientTest();
+  queryLogicTest();
 }

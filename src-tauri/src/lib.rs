@@ -16,6 +16,7 @@ pub mod schedule;
 mod schedule_store;
 pub mod scoped_cache;
 mod settings_store;
+pub mod shuttle;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -47,8 +48,9 @@ use crate::models::{
     AlmanacRequest, AlmanacResponse, AssignmentCalendarResponse, AssignmentsRequest,
     AssignmentsResponse, CalendarRangeRequest, ClassroomsCacheResponse, ClassroomsRequest,
     CustomDeadlineCalendarRequest, DeadlineCalendarResponse, DeadlineItem, DeadlinesRequest,
-    DeadlinesResponse, HolidaysRequest, HolidaysResponse, MetadataResponse, SaveSettingsRequest,
-    SavedSettings, ScheduleRequest, ScheduleResponse, WeatherRequest, WeatherResponse,
+    DeadlinesResponse, HolidaysRequest, HolidaysResponse, ImportantEventsResponse,
+    MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest, ScheduleResponse,
+    ShuttleBusResponse, WeatherRequest, WeatherResponse,
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
@@ -1120,6 +1122,20 @@ async fn fetch_almanac(payload: AlmanacRequest) -> Result<AlmanacResponse, Strin
 #[tauri::command]
 async fn fetch_deadlines(payload: DeadlinesRequest) -> Result<DeadlinesResponse, String> {
     deadlines::fetch_deadlines(&payload)
+        .await
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_important_events() -> Result<ImportantEventsResponse, String> {
+    deadlines::fetch_important_events()
+        .await
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+async fn fetch_shuttle_bus() -> Result<ShuttleBusResponse, String> {
+    shuttle::fetch_shuttle_bus()
         .await
         .map_err(|error| error.message)
 }
@@ -2672,6 +2688,8 @@ pub fn run() {
             fetch_weather,
             fetch_almanac,
             fetch_deadlines,
+            fetch_important_events,
+            fetch_shuttle_bus,
             fetch_assignments,
             fetch_deadline_calendar,
             fetch_custom_deadline_calendar,

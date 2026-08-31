@@ -1,5 +1,6 @@
 // 教学日历日期详情的公开数据客户端：黄历（UAPI + Timeless）、
-// 学科竞赛/夏令营/黑客松 DDL（Contest DDL 主源 + 固定 IP 备用源 + 校内竞赛通知），
+// 学科竞赛/会议/期刊专题/夏令营/黑客松/预推免 DDL
+//（Contest DDL 主源 + where-to-study.cn 备用源 + 校内竞赛通知），
 // 以及北邮云课堂真实响应契约的作业解析器。
 //
 // 公开数据请求不携带账号、密码或 Cookie；所有地址均固定校验、禁止重定向，
@@ -53,8 +54,11 @@ export class AlmanacInfo {
 
 export enum PublicDeadlineKind {
   competition = 'competition',
+  conference = 'conference',
+  journalSpecialIssue = 'journal_special_issue',
   summerCamp = 'summer_camp',
   hackathon = 'hackathon',
+  preAdmission = 'pre_admission',
   custom = 'custom'
 }
 
@@ -69,11 +73,20 @@ export class PublicDeadlineKindInfo {
     if (value === PublicDeadlineKind.competition) {
       return PublicDeadlineKind.competition;
     }
+    if (value === PublicDeadlineKind.conference) {
+      return PublicDeadlineKind.conference;
+    }
+    if (value === PublicDeadlineKind.journalSpecialIssue) {
+      return PublicDeadlineKind.journalSpecialIssue;
+    }
     if (value === PublicDeadlineKind.summerCamp) {
       return PublicDeadlineKind.summerCamp;
     }
     if (value === PublicDeadlineKind.hackathon) {
       return PublicDeadlineKind.hackathon;
+    }
+    if (value === PublicDeadlineKind.preAdmission) {
+      return PublicDeadlineKind.preAdmission;
     }
     if (value === PublicDeadlineKind.custom) {
       return PublicDeadlineKind.custom;
@@ -85,11 +98,20 @@ export class PublicDeadlineKindInfo {
     if (kind === PublicDeadlineKind.competition) {
       return '学科竞赛';
     }
+    if (kind === PublicDeadlineKind.conference) {
+      return '学术会议';
+    }
+    if (kind === PublicDeadlineKind.journalSpecialIssue) {
+      return '期刊专题';
+    }
     if (kind === PublicDeadlineKind.summerCamp) {
       return '夏令营';
     }
     if (kind === PublicDeadlineKind.hackathon) {
       return '黑客松';
+    }
+    if (kind === PublicDeadlineKind.preAdmission) {
+      return '预推免';
     }
     return '自定义日程';
   }
@@ -120,11 +142,26 @@ export class PublicDeadlineItem {
   readonly officialURL: string | null;
   readonly sourceName: string | null;
   readonly sourceHomepage: string | null;
+  readonly categories: string[];
+  readonly tags: string[];
+  readonly level: string | null;
+  readonly location: string | null;
+  readonly description: string | null;
+  readonly eligibility: string | null;
+  readonly notes: string | null;
+  readonly archived: boolean;
+  readonly upstreamSourceType: string | null;
+  readonly sourceAuthority: number | null;
 
   constructor(id: string, name: string, kind: PublicDeadlineKind,
     source: PublicDeadlineSource, deadline: string,
     organizer: string | null, officialURL: string | null,
-    sourceName: string | null = null, sourceHomepage: string | null = null) {
+    sourceName: string | null = null, sourceHomepage: string | null = null,
+    categories: string[] = [], tags: string[] = [], level: string | null = null,
+    location: string | null = null, description: string | null = null,
+    eligibility: string | null = null, notes: string | null = null,
+    archived: boolean = false, upstreamSourceType: string | null = null,
+    sourceAuthority: number | null = null) {
     this.id = id;
     this.name = name;
     this.kind = kind;
@@ -134,6 +171,44 @@ export class PublicDeadlineItem {
     this.officialURL = officialURL;
     this.sourceName = sourceName;
     this.sourceHomepage = sourceHomepage;
+    this.categories = categories;
+    this.tags = tags;
+    this.level = level;
+    this.location = location;
+    this.description = description;
+    this.eligibility = eligibility;
+    this.notes = notes;
+    this.archived = archived;
+    this.upstreamSourceType = upstreamSourceType;
+    this.sourceAuthority = sourceAuthority;
+  }
+}
+
+class PublicDeadlineMetadataValues {
+  static stringArray(value: Object | undefined | null, maximumItems: number = 40): string[] {
+    const result: string[] = [];
+    const seen: Set<string> = new Set<string>();
+    for (const raw of JsonUtil.array(value)) {
+      if (typeof raw !== 'string') {
+        continue;
+      }
+      const normalized: string = (raw as string).trim();
+      if (normalized.length === 0 || normalized.length > 120 || seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      result.push(normalized);
+      if (result.length >= maximumItems) {
+        break;
+      }
+    }
+    return result;
+  }
+
+  static boundedString(source: Record<string, Object>, key: string,
+    maximumLength: number = 4000): string | null {
+    const value: string | null = CalendarResponseValues.optionalString(source, key);
+    return value !== null && value.length <= maximumLength ? value : null;
   }
 }
 
@@ -179,6 +254,16 @@ export class FavoriteDeadlineCodec {
       record['official_url'] = item.officialURL;
       record['source_name'] = item.sourceName;
       record['source_homepage'] = item.sourceHomepage;
+      record['categories'] = item.categories;
+      record['tags'] = item.tags;
+      record['level'] = item.level;
+      record['location'] = item.location;
+      record['description'] = item.description;
+      record['eligibility'] = item.eligibility;
+      record['notes'] = item.notes;
+      record['archived'] = item.archived;
+      record['upstream_source_type'] = item.upstreamSourceType;
+      record['source_authority'] = item.sourceAuthority;
       records.push(record);
     }
     return JSON.stringify(records);
@@ -222,10 +307,22 @@ export class FavoriteDeadlineCodec {
       const sourceHomepage: string | null = rawSourceHomepage !== null &&
         rawSourceHomepage.startsWith('https://') && rawSourceHomepage.indexOf('@') < 0 ?
         rawSourceHomepage : null;
+      const authorityValue: number = CalendarResponseValues.optionalNumber(
+        record['source_authority'], -1);
       const item: PublicDeadlineItem = new PublicDeadlineItem(
         id, name, kind, source, deadline,
         CalendarResponseValues.optionalString(record, 'organizer'), officialURL,
-        sourceName !== null && sourceName.length <= 80 ? sourceName : null, sourceHomepage);
+        sourceName !== null && sourceName.length <= 80 ? sourceName : null, sourceHomepage,
+        PublicDeadlineMetadataValues.stringArray(record['categories']),
+        PublicDeadlineMetadataValues.stringArray(record['tags']),
+        PublicDeadlineMetadataValues.boundedString(record, 'level', 120),
+        PublicDeadlineMetadataValues.boundedString(record, 'location', 240),
+        PublicDeadlineMetadataValues.boundedString(record, 'description'),
+        PublicDeadlineMetadataValues.boundedString(record, 'eligibility', 500),
+        PublicDeadlineMetadataValues.boundedString(record, 'notes'),
+        JsonUtil.bool(record['archived'], false),
+        PublicDeadlineMetadataValues.boundedString(record, 'upstream_source_type', 80),
+        authorityValue >= 0 && authorityValue <= 100 ? authorityValue : null);
       const key: string = FavoriteDeadlineCodec.key(item);
       if (!seen.has(key)) {
         seen.add(key);
@@ -389,9 +486,28 @@ export class PublicDeadlineResponseParser {
         record, ['official_url', 'officialUrl', 'url']);
       const officialURL: string | null = rawURL !== null &&
         PublicDeadlineResponseParser.isTrustedOfficialURL(rawURL) ? rawURL : null;
+      const sourceRecord: Record<string, Object> = JsonUtil.record(record['source']);
+      const rawSourceHomepage: string | null = CalendarResponseValues.firstString(
+        sourceRecord, ['url', 'homepage']);
+      const sourceHomepage: string | null = rawSourceHomepage !== null &&
+        PublicDeadlineResponseParser.isTrustedOfficialURL(rawSourceHomepage) ?
+        rawSourceHomepage : null;
+      const sourceAuthorityValue: number = CalendarResponseValues.optionalNumber(
+        sourceRecord['authority'], -1);
       items.push(new PublicDeadlineItem(
         id, name, kind, PublicDeadlineSource.contestDDL, deadline,
-        CalendarResponseValues.firstString(record, ['organizer', 'host']), officialURL));
+        CalendarResponseValues.firstString(record, ['organizer', 'host']), officialURL,
+        PublicDeadlineMetadataValues.boundedString(sourceRecord, 'name', 120), sourceHomepage,
+        PublicDeadlineMetadataValues.stringArray(record['categories']),
+        PublicDeadlineMetadataValues.stringArray(record['tags']),
+        PublicDeadlineMetadataValues.boundedString(record, 'level', 120),
+        PublicDeadlineMetadataValues.boundedString(record, 'location', 240),
+        PublicDeadlineMetadataValues.boundedString(record, 'description'),
+        PublicDeadlineMetadataValues.boundedString(record, 'eligibility', 500),
+        PublicDeadlineMetadataValues.boundedString(record, 'notes'),
+        JsonUtil.bool(record['archived'], false),
+        PublicDeadlineMetadataValues.boundedString(sourceRecord, 'source_type', 80),
+        sourceAuthorityValue >= 0 && sourceAuthorityValue <= 100 ? sourceAuthorityValue : null));
       indexed.set(date, items);
     }
     indexed.forEach((items: PublicDeadlineItem[], date: string): void => {
@@ -554,7 +670,9 @@ export class PublicDeadlineResponseParser {
           '截止时间';
         items.push(new PublicDeadlineItem(
           'school:' + id + ':' + index.toString(), name, PublicDeadlineKind.competition,
-          PublicDeadlineSource.schoolNotice, deadline, sourceName + ' · ' + label, officialURL));
+          PublicDeadlineSource.schoolNotice, deadline, sourceName + ' · ' + label, officialURL,
+          sourceName, officialURL, ['校内竞赛通知'], [], null, null, null, null,
+          null, false, 'school_public_notice', null));
         indexed.set(date, items);
       }
     }
@@ -575,6 +693,12 @@ export class PublicDeadlineResponseParser {
   }
 
   static merge(groups: PublicDeadlineItem[][]): PublicDeadlineItem[] {
+    return PublicDeadlineResponseParser.mergeCatalog(groups)
+      .slice(0, CalendarDailyInfoSources.maximumItemsPerDay);
+  }
+
+  // 查询页目录不按“单日最多 100 条”的日历渲染上限截断。
+  static mergeCatalog(groups: PublicDeadlineItem[][]): PublicDeadlineItem[] {
     const seen: Set<string> = new Set<string>();
     const result: PublicDeadlineItem[] = [];
     for (const group of groups) {
@@ -594,7 +718,7 @@ export class PublicDeadlineResponseParser {
       }
       return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
     });
-    return result.slice(0, CalendarDailyInfoSources.maximumItemsPerDay);
+    return result;
   }
 
   private static extractRecords(root: Object): Object[] {
@@ -722,6 +846,7 @@ export class AssignmentDeadlineResponseParser {
 export interface CalendarDailyInfoFetching {
   fetchAlmanac(date: string): Promise<AlmanacInfo>;
   fetchDeadlines(date: string): Promise<PublicDeadlineSnapshot>;
+  fetchImportantEvents(forceRemote?: boolean): Promise<PublicDeadlineItem[]>;
   prewarmDeadlines(date: string, forceRemote?: boolean): Promise<PublicDeadlineSnapshot>;
   fetchCustomDeadlines(url: string, date: string,
     forceRemote?: boolean, refreshStaleCache?: boolean): Promise<PublicDeadlineSnapshot>;
@@ -826,6 +951,24 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     }
     const bundle: DeadlineIndexBundle = await this.deadlineIndexes(false, false);
     return this.snapshotFromBundle(date, bundle);
+  }
+
+  // 查询页需要完整目录，而教学日历仍按日期读取同一份五分钟缓存。
+  // 这里仅合并公开活动与校内通知，不读取云课堂作业或自定义源。
+  async fetchImportantEvents(forceRemote: boolean = false): Promise<PublicDeadlineItem[]> {
+    const bundle: DeadlineIndexBundle = await this.deadlineIndexes(forceRemote, true);
+    const groups: PublicDeadlineItem[][] = [];
+    if (bundle.contestItemsByDate !== null) {
+      bundle.contestItemsByDate.forEach((items: PublicDeadlineItem[]): void => {
+        groups.push(items);
+      });
+    }
+    if (bundle.schoolItemsByDate !== null) {
+      bundle.schoolItemsByDate.forEach((items: PublicDeadlineItem[]): void => {
+        groups.push(items);
+      });
+    }
+    return PublicDeadlineResponseParser.mergeCatalog(groups);
   }
 
   async prewarmDeadlines(date: string, forceRemote: boolean = false): Promise<PublicDeadlineSnapshot> {

@@ -16,6 +16,8 @@ fn main() {
         "fetch_weather",
         "fetch_almanac",
         "fetch_deadlines",
+        "fetch_important_events",
+        "fetch_shuttle_bus",
         "fetch_assignments",
         "fetch_deadline_calendar",
         "fetch_custom_deadline_calendar",

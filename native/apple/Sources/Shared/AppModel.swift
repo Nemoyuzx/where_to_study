@@ -198,6 +198,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var almanacEnabled: Bool
     @Published private(set) var competitionDeadlinesEnabled: Bool
     @Published private(set) var schoolContestNoticesEnabled: Bool
+    @Published private(set) var conferenceDeadlinesEnabled: Bool
     @Published private(set) var summerCampDeadlinesEnabled: Bool
     @Published private(set) var hackathonDeadlinesEnabled: Bool
     @Published private(set) var customDeadlinesEnabled: Bool
@@ -295,6 +296,9 @@ final class AppModel: ObservableObject {
         ) as? Bool ?? true
         schoolContestNoticesEnabled = defaults.object(
             forKey: Self.schoolContestNoticesEnabledKey
+        ) as? Bool ?? true
+        conferenceDeadlinesEnabled = defaults.object(
+            forKey: Self.conferenceDeadlinesEnabledKey
         ) as? Bool ?? true
         summerCampDeadlinesEnabled = defaults.object(
             forKey: Self.summerCampDeadlinesEnabledKey
@@ -720,6 +724,12 @@ final class AppModel: ObservableObject {
         defaults.set(enabled, forKey: Self.schoolContestNoticesEnabledKey)
     }
 
+    func setConferenceDeadlinesEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        conferenceDeadlinesEnabled = enabled
+        defaults.set(enabled, forKey: Self.conferenceDeadlinesEnabledKey)
+    }
+
     func setSummerCampDeadlinesEnabled(_ enabled: Bool) {
         guard !isSampleMode else { return }
         summerCampDeadlinesEnabled = enabled
@@ -795,6 +805,7 @@ final class AppModel: ObservableObject {
             item,
             competitionEnabled: competitionDeadlinesEnabled,
             schoolNoticeEnabled: schoolContestNoticesEnabled,
+            conferenceEnabled: conferenceDeadlinesEnabled,
             summerCampEnabled: summerCampDeadlinesEnabled,
             hackathonEnabled: hackathonDeadlinesEnabled,
             customEnabled: customDeadlinesEnabled
@@ -841,7 +852,8 @@ final class AppModel: ObservableObject {
 
     var hasEnabledBuiltInPublicDeadlines: Bool {
         competitionDeadlinesEnabled || schoolContestNoticesEnabled
-            || summerCampDeadlinesEnabled || hackathonDeadlinesEnabled
+            || conferenceDeadlinesEnabled || summerCampDeadlinesEnabled
+            || hackathonDeadlinesEnabled
     }
 
     var hasEnabledPublicDeadlines: Bool {
@@ -916,6 +928,7 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: Self.almanacEnabledKey)
         defaults.removeObject(forKey: Self.competitionDeadlinesEnabledKey)
         defaults.removeObject(forKey: Self.schoolContestNoticesEnabledKey)
+        defaults.removeObject(forKey: Self.conferenceDeadlinesEnabledKey)
         defaults.removeObject(forKey: Self.summerCampDeadlinesEnabledKey)
         defaults.removeObject(forKey: Self.hackathonDeadlinesEnabledKey)
         defaults.removeObject(forKey: Self.customDeadlinesEnabledKey)
@@ -940,6 +953,7 @@ final class AppModel: ObservableObject {
         almanacEnabled = true
         competitionDeadlinesEnabled = true
         schoolContestNoticesEnabled = true
+        conferenceDeadlinesEnabled = true
         summerCampDeadlinesEnabled = true
         hackathonDeadlinesEnabled = true
         customDeadlinesEnabled = false
@@ -1555,6 +1569,7 @@ final class AppModel: ObservableObject {
     private static let almanacEnabledKey = "almanacEnabled"
     private static let competitionDeadlinesEnabledKey = "competitionDeadlinesEnabled"
     private static let schoolContestNoticesEnabledKey = "schoolContestNoticesEnabled"
+    private static let conferenceDeadlinesEnabledKey = "conferenceDeadlinesEnabled"
     private static let summerCampDeadlinesEnabledKey = "summerCampDeadlinesEnabled"
     private static let hackathonDeadlinesEnabledKey = "hackathonDeadlinesEnabled"
     private static let customDeadlinesEnabledKey = "customDeadlinesEnabled"

@@ -53,7 +53,12 @@ final class TeachingCalendarSessionState: ObservableObject {
         let destination: String
     }
 
-    @Published var selectedDate = Date()
+    @Published var selectedDate = Date() {
+        didSet {
+            guard !isCommittingAnchoredMonthNavigation else { return }
+            preferredMonthDay = Calendar.shanghai.component(.day, from: selectedDate)
+        }
+    }
     @Published var modeRawValue = "周"
     @Published var isMonthExpanded = true
     @Published var isMonthDetailRaised = false
@@ -61,6 +66,30 @@ final class TeachingCalendarSessionState: ObservableObject {
     @Published private(set) var dismissOverlayGeneration = 0
     private var modeTransitionGeneration: UInt = 0
     private var pendingModeTransition: PendingModeTransition?
+    private var preferredMonthDay: Int?
+    private var isCommittingAnchoredMonthNavigation = false
+
+    func monthNavigationDestination(
+        direction: Int,
+        calendar: Calendar = .shanghai
+    ) -> Date? {
+        let preferredDay = preferredMonthDay
+            ?? calendar.component(.day, from: selectedDate)
+        preferredMonthDay = preferredDay
+        return TeachingCalendarLogic.movedDate(
+            from: selectedDate,
+            unit: .month,
+            direction: direction,
+            preferredDayOfMonth: preferredDay,
+            calendar: calendar
+        )
+    }
+
+    func commitMonthNavigation(to date: Date) {
+        isCommittingAnchoredMonthNavigation = true
+        selectedDate = date
+        isCommittingAnchoredMonthNavigation = false
+    }
 
     func applyKeyboardAction(
         _ action: AppKeyboardAction,
@@ -81,13 +110,20 @@ final class TeachingCalendarSessionState: ObservableObject {
             }
             let direction = action == .previousPeriod ? -1 : 1
             prepareTransition(direction: direction)
-            if let moved = TeachingCalendarLogic.movedDate(
-                from: selectedDate,
-                unit: unit,
-                direction: direction,
-                calendar: calendar
-            ) {
-                selectedDate = moved
+            let moved = unit == .month
+                ? monthNavigationDestination(direction: direction, calendar: calendar)
+                : TeachingCalendarLogic.movedDate(
+                    from: selectedDate,
+                    unit: unit,
+                    direction: direction,
+                    calendar: calendar
+                )
+            if let moved {
+                if unit == .month {
+                    commitMonthNavigation(to: moved)
+                } else {
+                    selectedDate = moved
+                }
             }
         case .today:
             prepareTransition(direction: TeachingCalendarNavigationMotion.direction(
@@ -659,6 +695,7 @@ enum TeachingCalendarLogic {
         from date: Date,
         unit: NavigationUnit,
         direction: Int,
+        preferredDayOfMonth: Int? = nil,
         calendar: Calendar = .shanghai
     ) -> Date? {
         let component: Calendar.Component
@@ -671,6 +708,32 @@ enum TeachingCalendarLogic {
             component = .day
             amount = direction * 7
         case .month:
+            if let preferredDayOfMonth,
+               let currentMonth = calendar.dateInterval(of: .month, for: date)?.start,
+               let destinationMonth = calendar.date(
+                   byAdding: .month,
+                   value: direction,
+                   to: currentMonth
+               ),
+               let validDays = calendar.range(of: .day, in: .month, for: destinationMonth)
+            {
+                var components = calendar.dateComponents(
+                    [.hour, .minute, .second, .nanosecond],
+                    from: date
+                )
+                let destinationComponents = calendar.dateComponents(
+                    [.year, .month],
+                    from: destinationMonth
+                )
+                components.timeZone = calendar.timeZone
+                components.year = destinationComponents.year
+                components.month = destinationComponents.month
+                components.day = min(
+                    max(preferredDayOfMonth, validDays.lowerBound),
+                    validDays.upperBound - 1
+                )
+                return calendar.date(from: components)
+            }
             component = .month
             amount = direction
         case .year:
@@ -926,6 +989,7 @@ struct TeachingCalendarView: View {
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
     @State private var showingDatePicker = false
+    @State private var showingInformationQueries = false
     @State private var presentedTimelineAgenda: CalendarAgendaSelection?
     @State private var monthPagingGeneration = 0
     @State private var yearPopoverScrollTarget = TeachingCalendarView.yearPopoverTopID
@@ -1003,6 +1067,9 @@ struct TeachingCalendarView: View {
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
         }
+        .sheet(isPresented: $showingInformationQueries) {
+            InformationQueriesPresentation()
+        }
     }
 
     private var calendarSnapshotContentChanges: AnyPublisher<Void, Never> {
@@ -1013,6 +1080,7 @@ struct TeachingCalendarView: View {
             model.$appLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$competitionDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$schoolContestNoticesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$conferenceDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$summerCampDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$hackathonDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
             model.$customDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
@@ -1207,6 +1275,12 @@ struct TeachingCalendarView: View {
     private var calendarActions: some View {
         VStack(alignment: .trailing, spacing: 6) {
             HStack(spacing: 8) {
+                Button {
+                    showingInformationQueries = true
+                } label: {
+                    Label("信息查询", systemImage: "magnifyingglass")
+                }
+                .accessibilityIdentifier("calendar.open-information-queries")
                 Button {
                     model.refreshSchedule()
                 } label: {
@@ -3351,15 +3425,22 @@ struct TeachingCalendarView: View {
     }
 
     private func moveDate(_ direction: Int) {
-        if let moved = TeachingCalendarLogic.movedDate(
-            from: selectedDate,
-            unit: navigationUnit,
-            direction: direction,
-            calendar: calendar
-        ) {
+        let moved = mode == .month
+            ? session.monthNavigationDestination(direction: direction, calendar: calendar)
+            : TeachingCalendarLogic.movedDate(
+                from: selectedDate,
+                unit: navigationUnit,
+                direction: direction,
+                calendar: calendar
+            )
+        if let moved {
             session.prepareTransition(direction: direction)
             if mode == .month {
-                prepareMonthPageChange(to: moved, direction: direction)
+                prepareMonthPageChange(
+                    to: moved,
+                    direction: direction,
+                    preservesMonthNavigationAnchor: true
+                )
             } else {
                 withAnimation(Self.viewAnimation) { selectedDate = moved }
             }
@@ -3379,14 +3460,22 @@ struct TeachingCalendarView: View {
         }
     }
 
-    private func prepareMonthPageChange(to date: Date, direction: Int) {
+    private func prepareMonthPageChange(
+        to date: Date,
+        direction: Int,
+        preservesMonthNavigationAnchor: Bool = false
+    ) {
         monthPagingGeneration += 1
         let generation = monthPagingGeneration
         session.prepareTransition(direction: direction)
         Task { @MainActor in
             await Task.yield()
             guard mode == .month, monthPagingGeneration == generation else { return }
-            selectedDate = date
+            if preservesMonthNavigationAnchor {
+                session.commitMonthNavigation(to: date)
+            } else {
+                selectedDate = date
+            }
         }
     }
 

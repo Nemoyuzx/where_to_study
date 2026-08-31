@@ -44,7 +44,8 @@ export struct CalendarDailyInfoCards {
   }
 
   private showsContestSource(): boolean {
-    return this.model.competitionDeadlinesEnabled || this.model.summerCampDeadlinesEnabled ||
+    return this.model.competitionDeadlinesEnabled || this.model.conferenceDeadlinesEnabled ||
+      this.model.summerCampDeadlinesEnabled ||
       this.model.hackathonDeadlinesEnabled || this.enabledDeadlineItems().some(
         (item: PublicDeadlineItem): boolean => item.source === PublicDeadlineSource.contestDDL);
   }
@@ -276,7 +277,7 @@ export struct CalendarDailyInfoCards {
   @Builder
   publicDeadlineCard() {
     Column({ space: 8 }) {
-      this.cardTitle('DDL · 竞赛 / 夏令营 / 黑客松')
+      this.cardTitle('DDL · 公开活动与校内通知')
       if (this.enabledDeadlineItems().length > 0) {
         ForEach(this.enabledDeadlineItems(), (item: PublicDeadlineItem) => {
           this.publicDeadlineRow(item)

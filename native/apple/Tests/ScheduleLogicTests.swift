@@ -880,6 +880,15 @@ final class ScheduleLogicTests: XCTestCase {
             organizer: nil,
             officialURL: nil
         )
+        let conference = PublicDeadlineItem(
+            id: "conference",
+            name: "会议原文",
+            kind: .conference,
+            source: .contestDDL,
+            deadline: "2026-08-23T21:30:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
         let custom = PublicDeadlineItem(
             id: "custom",
             name: "自定义原文",
@@ -917,6 +926,22 @@ final class ScheduleLogicTests: XCTestCase {
             competitionEnabled: false,
             schoolNoticeEnabled: false,
             summerCampEnabled: false,
+            hackathonEnabled: true
+        ))
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            conference,
+            competitionEnabled: false,
+            schoolNoticeEnabled: false,
+            conferenceEnabled: true,
+            summerCampEnabled: false,
+            hackathonEnabled: false
+        ))
+        XCTAssertFalse(CalendarDeadlinePresentation.isVisible(
+            conference,
+            competitionEnabled: true,
+            schoolNoticeEnabled: true,
+            conferenceEnabled: false,
+            summerCampEnabled: true,
             hackathonEnabled: true
         ))
         XCTAssertFalse(CalendarDeadlinePresentation.isVisible(
@@ -1336,6 +1361,61 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testMonthNavigationPreservesPreferredDayAcrossShortMonthsAndReversal() throws {
+        let calendar = Calendar.shanghai
+        let session = TeachingCalendarSessionState()
+        session.selectedDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 8, day: 31))
+        )
+
+        let september = try XCTUnwrap(
+            session.monthNavigationDestination(direction: 1, calendar: calendar)
+        )
+        session.commitMonthNavigation(to: september)
+        XCTAssertEqual(calendar.component(.day, from: session.selectedDate), 30)
+
+        let august = try XCTUnwrap(
+            session.monthNavigationDestination(direction: -1, calendar: calendar)
+        )
+        session.commitMonthNavigation(to: august)
+        XCTAssertEqual(
+            calendar.dateComponents([.year, .month, .day], from: session.selectedDate),
+            DateComponents(year: 2026, month: 8, day: 31)
+        )
+    }
+
+    func testMonthNavigationRestoresLeapDayAnchorAndResetsAfterExplicitSelection() throws {
+        let calendar = Calendar.shanghai
+        let session = TeachingCalendarSessionState()
+        session.selectedDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2028, month: 1, day: 31))
+        )
+
+        let february = try XCTUnwrap(
+            session.monthNavigationDestination(direction: 1, calendar: calendar)
+        )
+        session.commitMonthNavigation(to: february)
+        XCTAssertEqual(
+            calendar.dateComponents([.year, .month, .day], from: session.selectedDate),
+            DateComponents(year: 2028, month: 2, day: 29)
+        )
+
+        let march = try XCTUnwrap(
+            session.monthNavigationDestination(direction: 1, calendar: calendar)
+        )
+        session.commitMonthNavigation(to: march)
+        XCTAssertEqual(calendar.component(.day, from: session.selectedDate), 31)
+
+        session.selectedDate = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2028, month: 3, day: 15))
+        )
+        let april = try XCTUnwrap(
+            session.monthNavigationDestination(direction: 1, calendar: calendar)
+        )
+        session.commitMonthNavigation(to: april)
+        XCTAssertEqual(calendar.component(.day, from: session.selectedDate), 15)
+    }
+
     func testCalendarPeriodTitlesShowCivilAndTeachingWeeksTogether() throws {
         let calendar = Calendar.shanghai
         let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 8, day: 14)))
@@ -1442,6 +1522,30 @@ final class ScheduleLogicTests: XCTestCase {
         )
         XCTAssertEqual(String(format: format, locale: Locale(identifier: "en"), 3),
                        "Course summaries scheduled for 3 upcoming class days")
+    }
+
+    func testEnglishInformationQueryCopyUsesTheAppLocalizationBoundary() {
+        let keys = [
+            "信息查询",
+            "班车查询",
+            "重要事件",
+            "搜索名称、主办方或来源",
+            "学术会议",
+            "期刊专题",
+            "预推免",
+            "事件类型",
+            "活动分类",
+            "全部分类",
+            "显示已结束",
+            "无法同步公开活动或校内通知，请稍后重试。",
+        ]
+        for key in keys {
+            XCTAssertNotEqual(
+                AppLocalization.string(key, language: .english),
+                key,
+                "Missing English query localization for \(key)"
+            )
+        }
     }
 
     func testCalendarSwipeRequiresDeliberateHorizontalGesture() {

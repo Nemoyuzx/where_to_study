@@ -9,7 +9,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use app::{App, Tab, TAB_LABELS};
+use app::{App, QuerySection, Tab, TAB_LABELS};
 use chrono::Datelike;
 use crossterm::cursor::Show;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -46,6 +46,14 @@ enum Message {
     Holidays {
         year: i32,
         result: ServiceResult<where_to_study_lib::models::HolidaysResponse>,
+    },
+    Shuttle {
+        request_id: u64,
+        result: ServiceResult<where_to_study_lib::models::ShuttleBusResponse>,
+    },
+    ImportantEvents {
+        request_id: u64,
+        result: ServiceResult<where_to_study_lib::models::ImportantEventsResponse>,
     },
     CredentialsSaved(Result<String, String>),
     CredentialsCleared(Result<(), String>),
@@ -118,9 +126,14 @@ fn main() -> io::Result<()> {
         Ok(None) => {}
         Err(error) => app.set_error(error.message),
     }
+    match where_to_study_lib::public_queries::load_favorite_events() {
+        Ok(favorites) => app.favorite_events = favorites,
+        Err(error) => app.set_error(error.message),
+    }
 
     let (tx, rx) = mpsc::channel::<Message>();
     ensure_holidays(&mut app, &tx, today_in_app_tz().year());
+    refresh_events(&mut app, &tx, false);
 
     let mut session = TerminalSession::new()?;
     let result = run(&mut session.terminal, &mut app, &rx, &tx);
@@ -235,6 +248,36 @@ fn run(
                         app.set_error(error.message);
                     }
                 },
+                Message::Shuttle { request_id, result } => {
+                    if !app.finish_shuttle_request(request_id) {
+                        continue;
+                    }
+                    match result {
+                        Ok(response) => {
+                            app.shuttle = Some(response);
+                            app.set_status("班车信息已刷新".to_string());
+                        }
+                        Err(error) => app.set_error(error.message),
+                    }
+                }
+                Message::ImportantEvents { request_id, result } => {
+                    if !app.finish_events_request(request_id) {
+                        continue;
+                    }
+                    match result {
+                        Ok(response) => {
+                            app.important_events = Some(response);
+                            app.clamp_query_cursor();
+                            app.set_status("重要事件已刷新".to_string());
+                        }
+                        Err(error) if !app.favorite_events.is_empty() => app.set_error(format!(
+                            "远程重要事件不可用；仍可查看 {} 项本地收藏：{}",
+                            app.favorite_events.len(),
+                            error.message
+                        )),
+                        Err(error) => app.set_error(error.message),
+                    }
+                }
                 Message::CredentialsSaved(result) => match result {
                     Ok(account) => {
                         app.invalidate_data_requests();
@@ -270,6 +313,9 @@ fn current_theme(app: &App) -> Theme {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool {
+    if app.query_open {
+        return handle_query_key(app, key, tx);
+    }
     if app.selected_tab_index == 4 && app.settings_editing {
         return handle_settings_input(app, key, tx);
     }
@@ -279,7 +325,11 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
         KeyCode::Char('r') if key.modifiers.is_empty() => {
             app.clear_error();
             match app.selected_tab_index {
-                0 | 1 | 3 => refresh_schedule(app, tx),
+                0 | 1 => refresh_schedule(app, tx),
+                3 => {
+                    refresh_schedule(app, tx);
+                    refresh_events(app, tx, true);
+                }
                 2 => refresh_classrooms(app, tx),
                 _ => app.set_status("设置页没有需要刷新的远程数据".to_string()),
             }
@@ -314,6 +364,9 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
         }
         KeyCode::Char('e') if app.selected_tab_index == 4 => {
             app.settings_editing = true;
+        }
+        KeyCode::Char('i') if matches!(app.selected_tab_index, 3 | 4) => {
+            open_query(app, tx);
         }
         KeyCode::Enter if app.selected_tab_index == 4 => {
             app.settings_editing = true;
@@ -358,6 +411,143 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
         _ => {}
     }
     false
+}
+
+fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool {
+    if app.query_search_editing {
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter => app.query_search_editing = false,
+            KeyCode::Backspace => {
+                app.query_search.pop();
+                app.query_event_cursor = 0;
+                app.query_scroll = 0;
+            }
+            KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                app.query_search.push(ch);
+                app.query_event_cursor = 0;
+                app.query_scroll = 0;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
+    match key.code {
+        KeyCode::Char('q') if key.modifiers.is_empty() => return true,
+        KeyCode::Esc | KeyCode::Char('i') => {
+            app.query_open = false;
+            app.query_search_editing = false;
+        }
+        KeyCode::Tab => {
+            app.query_section = match app.query_section {
+                QuerySection::Shuttle => QuerySection::Events,
+                QuerySection::Events => QuerySection::Shuttle,
+            };
+            app.query_scroll = 0;
+        }
+        KeyCode::Char('1') => {
+            app.query_section = QuerySection::Shuttle;
+            app.query_scroll = 0;
+        }
+        KeyCode::Char('2') => {
+            app.query_section = QuerySection::Events;
+            app.query_scroll = 0;
+        }
+        KeyCode::Char('r') => match app.query_section {
+            QuerySection::Shuttle => refresh_shuttle(app, tx, true),
+            QuerySection::Events => refresh_events(app, tx, true),
+        },
+        KeyCode::Up if app.query_section == QuerySection::Events => app.move_query_cursor(-1),
+        KeyCode::Down if app.query_section == QuerySection::Events => app.move_query_cursor(1),
+        KeyCode::PageUp if app.query_section == QuerySection::Events => app.move_query_cursor(-10),
+        KeyCode::PageDown if app.query_section == QuerySection::Events => app.move_query_cursor(10),
+        KeyCode::Up if app.query_section == QuerySection::Shuttle => {
+            app.query_scroll = app.query_scroll.saturating_sub(1)
+        }
+        KeyCode::Down if app.query_section == QuerySection::Shuttle => {
+            app.query_scroll = app.query_scroll.saturating_add(1)
+        }
+        KeyCode::PageUp if app.query_section == QuerySection::Shuttle => {
+            app.query_scroll = app.query_scroll.saturating_sub(8)
+        }
+        KeyCode::PageDown if app.query_section == QuerySection::Shuttle => {
+            app.query_scroll = app.query_scroll.saturating_add(8)
+        }
+        KeyCode::Char('/') if app.query_section == QuerySection::Events => {
+            app.query_search_editing = true
+        }
+        KeyCode::Char('x') if app.query_section == QuerySection::Events => {
+            app.query_search.clear();
+            app.query_event_cursor = 0;
+            app.query_scroll = 0;
+        }
+        KeyCode::Char('t') if app.query_section == QuerySection::Events => {
+            app.cycle_query_event_type()
+        }
+        KeyCode::Char('c') if app.query_section == QuerySection::Events => {
+            app.cycle_query_category()
+        }
+        KeyCode::Char('p') if app.query_section == QuerySection::Events => app.cycle_query_source(),
+        KeyCode::Char('e') if app.query_section == QuerySection::Events => {
+            app.query_include_ended = !app.query_include_ended;
+            app.query_event_cursor = 0;
+            app.query_scroll = 0;
+        }
+        KeyCode::Char('v') if app.query_section == QuerySection::Events => {
+            app.query_favorites_only = !app.query_favorites_only;
+            app.query_event_cursor = 0;
+            app.query_scroll = 0;
+        }
+        KeyCode::Char('f') if app.query_section == QuerySection::Events => {
+            match app.toggle_selected_event_favorite() {
+                Ok(true) => app.set_status("已收藏重要事件，本地快照已保存".to_string()),
+                Ok(false) => app.set_status("已取消收藏重要事件".to_string()),
+                Err(error) => app.set_error(error.message),
+            }
+            app.clamp_query_cursor();
+        }
+        _ => {}
+    }
+    false
+}
+
+fn open_query(app: &mut App, tx: &mpsc::Sender<Message>) {
+    app.settings_editing = false;
+    app.query_open = true;
+    app.query_search_editing = false;
+    app.query_scroll = 0;
+    if app.shuttle.is_none() {
+        refresh_shuttle(app, tx, false);
+    }
+    if app.important_events.is_none() {
+        refresh_events(app, tx, false);
+    }
+}
+
+fn refresh_shuttle(app: &mut App, tx: &mpsc::Sender<Message>, force: bool) {
+    let request_id = app.start_shuttle_request();
+    let tx = tx.clone();
+    thread::spawn(move || {
+        let result = if force {
+            block_on(where_to_study_lib::public_queries::refresh_shuttle_bus())
+        } else {
+            block_on(where_to_study_lib::public_queries::fetch_shuttle_bus())
+        };
+        let _ = tx.send(Message::Shuttle { request_id, result });
+    });
+}
+
+fn refresh_events(app: &mut App, tx: &mpsc::Sender<Message>, force: bool) {
+    let request_id = app.start_events_request();
+    let tx = tx.clone();
+    thread::spawn(move || {
+        let result = if force {
+            block_on(where_to_study_lib::public_queries::refresh_important_events())
+        } else {
+            block_on(where_to_study_lib::public_queries::fetch_important_events())
+        };
+        let _ = tx.send(Message::ImportantEvents { request_id, result });
+    });
 }
 
 fn handle_settings_input(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool {
@@ -632,5 +822,37 @@ mod tests {
         assert!(!app.settings_editing);
         assert!(app.error_message.is_none());
         assert_eq!(app.status_message.as_deref(), Some("已沿用本地保存的密码"));
+    }
+
+    #[test]
+    fn calendar_and_settings_both_open_the_cached_query_subview() {
+        let (tx, _rx) = mpsc::channel();
+        let mut calendar = App::new(false);
+        switch_tab(&mut calendar, 3);
+        assert!(!handle_key(&mut calendar, key(KeyCode::Char('i')), &tx));
+        assert!(calendar.query_open);
+
+        let mut settings = App::new(false);
+        switch_tab(&mut settings, 4);
+        assert!(!handle_key(&mut settings, key(KeyCode::Char('i')), &tx));
+        assert!(settings.query_open);
+        assert!(!settings.settings_editing);
+    }
+
+    #[test]
+    fn query_shortcuts_switch_sections_and_toggle_filters_without_global_tabs() {
+        let (tx, _rx) = mpsc::channel();
+        let mut app = App::new(false);
+        app.query_open = true;
+        app.query_section = QuerySection::Shuttle;
+        assert!(!handle_key(&mut app, key(KeyCode::Char('2')), &tx));
+        assert_eq!(app.query_section, QuerySection::Events);
+        assert_eq!(app.selected_tab_index, 0);
+        assert!(!handle_key(&mut app, key(KeyCode::Char('e')), &tx));
+        assert!(app.query_include_ended);
+        assert!(!handle_key(&mut app, key(KeyCode::Char('/')), &tx));
+        assert!(app.query_search_editing);
+        assert!(!handle_key(&mut app, key(KeyCode::Char('A')), &tx));
+        assert_eq!(app.query_search, "A");
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "where-to-study-core"
-version = "0.2.7"
+version = "0.2.8"
 description = "Headless shared services for Where To Study clients"
 authors = ["Nemoyu"]
 license = "GPL-3.0-only"

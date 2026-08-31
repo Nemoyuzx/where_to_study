@@ -105,6 +105,7 @@ import {
   summarizeMonthEntries,
   yearCourseOpacity,
 } from './planner-domain.js'
+import QueryHub from './QueryHub.jsx'
 import './App.css'
 
 const NAV_ITEMS = [
@@ -139,6 +140,64 @@ const EN_TEXT = Object.freeze({
   '查看周': 'Week',
   '查看月': 'Month',
   '查询条件': 'Search options',
+  '综合查询': 'Query Center',
+  '查询类型': 'Query type',
+  '班车查询': 'Shuttle buses',
+  '重要事件': 'Important events',
+  '打开综合查询': 'Open Query Center',
+  '返回教学日历': 'Back to Teaching Calendar',
+  '今日校区班车': 'Today’s campus shuttle',
+  '西土城 ↔ 沙河': 'Xitucheng ↔ Shahe',
+  '刷新班车信息': 'Refresh shuttle information',
+  '正在读取最新班车信息…': 'Loading the latest shuttle schedule…',
+  '数据暂时无法读取': 'Data is temporarily unavailable',
+  '班车信息暂时无法读取。': 'Shuttle information is temporarily unavailable.',
+  '重要事件暂时无法读取。': 'Important events are temporarily unavailable.',
+  '重新加载': 'Reload',
+  '上一份完整时刻表，仅供对照': 'Previous complete timetable; reference only',
+  '当前执行': 'Currently active',
+  '尚未开始': 'Not started',
+  '历史时段': 'Past period',
+  '时段待确认': 'Period unconfirmed',
+  '等待班车通知': 'Waiting for a shuttle notice',
+  '更新于': 'Updated',
+  '后勤部原文': 'Logistics notice',
+  '运行时段': 'Operating period',
+  '时段': 'Period',
+  '选择星期': 'Select weekday',
+  '今': 'Now',
+  '所选星期': 'Selected weekday',
+  '已过发车时间': 'Departed',
+  '下一班': 'Next shuttle',
+  '计划班次': 'Scheduled',
+  '当天暂无班车': 'No shuttle on this day',
+  '今日没有生效的班车时刻表': 'No shuttle timetable is active today',
+  '暂无可安全展示的结构化班次': 'No safely validated structured timetable is available',
+  '第三方来源：北京邮电大学后勤部，经 Where To Study 服务端结构化整理；法定节假日及临时调整请以原文为准。': 'Third-party source: BUPT Logistics Department, structured by the Where To Study server. Check the original notice for holidays and temporary changes.',
+  '公开活动与校内通知': 'Public events and school notices',
+  '按截止时间查找重要事件': 'Find important events by deadline',
+  '刷新重要事件': 'Refresh important events',
+  '搜索赛事、会议、学校、方向…': 'Search events, conferences, schools, or fields…',
+  '类型': 'Type',
+  '全部类型': 'All types',
+  '分类': 'Category',
+  '全部分类': 'All categories',
+  '来源': 'Source',
+  '全部来源': 'All sources',
+  '公开活动': 'Public events',
+  '校内通知': 'School notices',
+  '显示已结束': 'Show ended',
+  '正在更新重要事件…': 'Updating important events…',
+  '按 DDL 由近到远': 'Nearest deadlines first',
+  '{count} 条结果': '{count} results',
+  '最近节点': 'Nearest milestone',
+  '学术会议': 'Academic conferences',
+  '期刊专题': 'Journal special issues',
+  '预推免': 'Pre-admission',
+  '没有符合条件的重要事件': 'No important events match these filters',
+  '显示更多': 'Show more',
+  '另有 {count} 条已收藏事件因当前筛选或来源变化未列出，可在收藏管理中查看。': '{count} additional favorites are hidden by the current filters or source changes. View them in Favorite Management.',
+  '第三方来源：Contest DDL 与校内竞赛通知脚本；不包含课程作业 DDL，所有时间请以官方原文为准。': 'Third-party sources: Contest DDL and the school-notice extraction script. Assignment deadlines are excluded; verify all times against the official source.',
   '查询校区': 'Search campus',
   '正在获取当天空教室…': 'Loading today’s empty classrooms…',
   '获取空教室信息': 'Load empty classrooms',
@@ -253,11 +312,13 @@ const EN_TEXT = Object.freeze({
   '在空教室联动查询上方显示默认折叠的今日、明日天气。': 'Show a collapsed today/tomorrow weather card above linked classroom search.',
   '在月视图日期详情中显示农历、干支与宜忌。': 'Show lunar date, pillars, and suitable/avoid advice in month details.',
   '在统一 DDL 卡片中显示 Contest DDL 收录的公开学科竞赛截止日期。': 'Show public academic competition deadlines from Contest DDL.',
+  '在统一 DDL 卡片中显示学术会议与期刊专题的投稿截止日期。': 'Show submission deadlines for academic conferences and journal special issues.',
   '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。': 'Show notices extracted by script from public pages on the university’s internal website.',
   '在统一 DDL 卡片中显示夏令营截止日期。': 'Show summer-camp deadlines in the combined deadline card.',
   '在统一 DDL 卡片中显示黑客松截止日期。': 'Show hackathon deadlines in the combined deadline card.',
   '课程作业会随账号自动同步，不提供单独关闭开关。': 'Assignment deadlines sync automatically with your account and do not have a separate switch.',
-  '天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。': 'Weather, almanac, and deadline cards identify their third-party sources. Academic competitions and script-extracted school notices have separate switches.',
+  '天气、黄历、班车与 DDL 会标明第三方来源；学科竞赛、学术会议和脚本提取的校内通知由独立开关控制。': 'Weather, almanac, shuttle, and deadline views identify their third-party sources. Academic competitions, conferences, and script-extracted school notices have separate calendar switches.',
+  '打开班车与重要事件查询': 'Open shuttle and important-event queries',
   '显示数据仅供参考，请以实际情况为准。': 'Displayed data is for reference only; rely on official information.',
   '本地数据': 'Local data',
   '清除已保存的教务账户与密码、个人课表、空教室、节假日缓存、自定义日程设置与收藏，并恢复本地设置。': 'Remove saved academic credentials, schedules, classroom and holiday caches, custom schedule settings, favorites, and reset local preferences.',
@@ -360,7 +421,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '天气、黄历与公开活动 / Weather, almanac, and public events',
-    body: 'UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、夏令营和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。用户还可选择公开 HTTPS JSON 自定义日程源；请求不附带个人数据，客户端拒绝含凭据、回环/私网字面量或重定向的地址并限制响应大小。各类别均有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, summer camps, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Users may also select a public HTTPS JSON custom feed. Requests contain no personal data; credential-bearing, loopback/private literal, redirecting, and oversized endpoints are rejected. Each category has its own switch, and displayed data is for reference only.',
+    body: 'UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、会议、期刊专题、夏令营、预推免和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。班车查询从 where-to-study.cn 读取后勤部公开通知的结构化结果，不发送账号、课表或位置。用户还可选择公开 HTTPS JSON 自定义日程源；请求不附带个人数据，客户端拒绝含凭据、回环/私网字面量或重定向的地址并限制响应大小。各类别均有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, conferences, journal special issues, summer camps, pre-admission events, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Shuttle queries read structured public Logistics Department notices from where-to-study.cn and send no account, schedule, or location data. Users may also select a public HTTPS JSON custom feed. Requests contain no personal data; credential-bearing, loopback/private literal, redirecting, and oversized endpoints are rejected. Each category has its own switch, and displayed data is for reference only.',
   },
   {
     title: '云课堂作业 / UCloud assignments',
@@ -437,7 +498,7 @@ function PrivacyPolicyDialog({ onClose }) {
           <div>
             <p className="eyebrow">Where To Study</p>
             <h2 id="privacy-dialog-title">隐私声明 / Privacy Policy</h2>
-            <span>生效日期 / Effective date: 2026-08-24</span>
+            <span>生效日期 / Effective date: 2026-08-31</span>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
@@ -540,6 +601,7 @@ function browserPreviewCommand(name, payload = {}) {
       weather_enabled: DEFAULT_SETTINGS.weatherEnabled,
       almanac_enabled: DEFAULT_SETTINGS.almanacEnabled,
       competition_deadlines_enabled: DEFAULT_SETTINGS.competitionDeadlinesEnabled,
+      conference_deadlines_enabled: DEFAULT_SETTINGS.conferenceDeadlinesEnabled,
       school_contest_notices_enabled: DEFAULT_SETTINGS.schoolContestNoticesEnabled,
       summer_camp_deadlines_enabled: DEFAULT_SETTINGS.summerCampDeadlinesEnabled,
       hackathon_deadlines_enabled: DEFAULT_SETTINGS.hackathonDeadlinesEnabled,
@@ -565,6 +627,7 @@ function browserPreviewCommand(name, payload = {}) {
       weather_enabled: Boolean(payload.weather_enabled),
       almanac_enabled: Boolean(payload.almanac_enabled),
       competition_deadlines_enabled: Boolean(payload.competition_deadlines_enabled),
+      conference_deadlines_enabled: Boolean(payload.conference_deadlines_enabled),
       school_contest_notices_enabled: Boolean(payload.school_contest_notices_enabled),
       summer_camp_deadlines_enabled: Boolean(payload.summer_camp_deadlines_enabled),
       hackathon_deadlines_enabled: Boolean(payload.hackathon_deadlines_enabled),
@@ -643,6 +706,59 @@ function browserPreviewCommand(name, payload = {}) {
       source: 'https://uapis.cn',
     }
   }
+  if (name === 'fetch_shuttle_bus') {
+    const today = shanghaiDateString()
+    return {
+      schema_version: '1.0',
+      generated_at: contractTimestamp(),
+      status: 'healthy',
+      source: { name: '北京邮电大学后勤部', page_url: 'https://hq.bupt.edu.cn/tzgg.htm' },
+      stats: { notices: 1, images: 2, parsed_schedules: 2, needs_review: 0 },
+      last_parsed_notice_id: 'preview-shuttle',
+      items: [{
+        id: 'preview-shuttle',
+        title: '关于两校区班车运行调整的通知',
+        published_at: today,
+        source_url: 'https://hq.bupt.edu.cn/tzgg.htm',
+        parse_status: 'parsed',
+        stops: [
+          { campus: '西土城路校区', location: '教三楼西侧' },
+          { campus: '沙河校区', location: '学生活动中心南侧' },
+        ],
+        notes: ['请提前五分钟候车。'],
+        schedules: [
+          ['西土城路校区', '沙河校区', ['06:50', '08:30', '12:00', '16:50', '19:30']],
+          ['沙河校区', '西土城路校区', ['06:30', '09:50', '13:00', '17:30', '21:10']],
+        ].map(([from, to, times]) => ({
+          period: { label: '当前执行时段', start_date: today, end_date: null },
+          from,
+          to,
+          parse_status: 'parsed',
+          parse_confidence: 0.98,
+          parse_engine: 'browser-preview',
+          rows: times.map((departureTime) => ({
+            departure_time: departureTime,
+            services: Object.fromEntries([
+              'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+            ].map((weekday) => [weekday, { vehicle: '大巴', count: 1 }])),
+          })),
+        })),
+      }],
+    }
+  }
+  if (name === 'fetch_important_events') {
+    const today = shanghaiDateString()
+    return {
+      fetched_at: contractTimestamp(),
+      source: 'browser-preview',
+      used_backup: false,
+      items: [
+        { id: 'preview-school-event', name: '校内创新竞赛通知示例', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${addDays(today, 1)}T20:00:00+08:00`, deadline_label: '报名截止', organizer: '北京邮电大学教学云平台', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1', source_name: '北京邮电大学教学云平台', source_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1', categories: ['校内竞赛通知'], tags: [], level: null, location: null, status: 'upcoming', description: null, published_at: today, stale: false, archived: false },
+        { id: 'preview-conference', name: '人工智能学术会议示例', event_type: 'conference', source_type: 'contest_ddl', primary_deadline: `${addDays(today, 3)}T19:59:59+08:00`, deadline_label: '提交截止', organizer: '示例学会', official_url: 'https://nemoyuzx.github.io/contest-ddl/', source_name: 'CCFDDL Open Deadlines', source_url: 'https://ccfddl.com/', categories: ['人工智能'], tags: ['CCF A'], level: 'CCF A', location: 'Beijing', status: 'submission_open', description: '示例会议征稿信息', published_at: null, stale: false, archived: false },
+        { id: 'preview-competition-query', name: '大学生创新竞赛', event_type: 'competition', source_type: 'contest_ddl', primary_deadline: `${addDays(today, 5)}T18:00:00+08:00`, deadline_label: '报名截止', organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/', source_name: 'Contest DDL', source_url: 'https://nemoyuzx.github.io/contest-ddl/', categories: ['创新创业'], tags: [], level: '国家级', location: '线上', status: 'registration_open', description: null, published_at: null, stale: false, archived: false },
+      ],
+    }
+  }
   if (name === 'fetch_deadlines') {
     return {
       date: payload.date,
@@ -652,6 +768,7 @@ function browserPreviewCommand(name, payload = {}) {
       items: [
         { id: 'preview-competition', name: '大学生创新竞赛', event_type: 'competition', source_type: 'contest_ddl', primary_deadline: `${payload.date}T18:00:00+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
         { id: 'preview-school-notice', name: '校内学科竞赛通知示例', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${payload.date}T20:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
+        { id: 'preview-conference-day', name: '学术会议截稿示例', event_type: 'conference', source_type: 'contest_ddl', primary_deadline: `${payload.date}T21:00:00+08:00`, organizer: '示例学会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
         { id: 'preview-hackathon', name: '校园黑客松', event_type: 'hackathon', source_type: 'contest_ddl', primary_deadline: `${payload.date}T23:59:59+08:00`, organizer: null, official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
       ],
     }
@@ -675,6 +792,7 @@ function browserPreviewCommand(name, payload = {}) {
         { id: 'preview-school-notice-range-2', name: '校内创新项目通知示例', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${startDate}T21:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
         { id: 'preview-school-over-public-range', name: '校内竞赛报名提醒', event_type: 'competition', source_type: 'school_notice', primary_deadline: `${secondDate}T12:00:00+08:00`, organizer: '北京邮电大学教学云平台 · 校内截止', official_url: 'https://ucloud.bupt.edu.cn/#/consulting?tab=1' },
         { id: 'preview-competition-range', name: '大学生创新竞赛', event_type: 'competition', source_type: 'contest_ddl', primary_deadline: `${secondDate}T18:00:00+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
+        { id: 'preview-conference-range', name: '人工智能会议截稿', event_type: 'conference', source_type: 'contest_ddl', primary_deadline: `${secondDate}T19:00:00+08:00`, organizer: '示例学会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
         { id: 'preview-summer-camp-range', name: '高校夏令营', event_type: 'summer_camp', source_type: 'contest_ddl', primary_deadline: `${thirdDate}T18:00:00+08:00`, organizer: '示例高校', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
         { id: 'preview-hackathon-range', name: '校园黑客松', event_type: 'hackathon', source_type: 'contest_ddl', primary_deadline: `${fourthDate}T23:59:59+08:00`, organizer: '示例组委会', official_url: 'https://nemoyuzx.github.io/contest-ddl/' },
       ],
@@ -888,7 +1006,10 @@ function AlmanacCard({ date, almanac, loading, error, onRetry, t }) {
 
 const DEADLINE_TYPE_META = {
   competition: { label: '学科竞赛', Icon: Trophy },
+  conference: { label: '学术会议', Icon: CalendarDays },
+  journal_special_issue: { label: '期刊专题', Icon: CalendarDays },
   summer_camp: { label: '夏令营', Icon: TentTree },
+  pre_admission: { label: '预推免', Icon: TentTree },
   hackathon: { label: '黑客松', Icon: Code2 },
   custom: { label: '自定义日程', Icon: CalendarPlus },
 }
@@ -1229,6 +1350,8 @@ function App() {
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
   const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false)
   const [favoriteManagerOpen, setFavoriteManagerOpen] = useState(false)
+  const [queryHubOpen, setQueryHubOpen] = useState(false)
+  const [queryHubReturnPage, setQueryHubReturnPage] = useState('calendar')
   const [favoriteDeadlines, setFavoriteDeadlines] = useState(loadFavoriteDeadlines)
   const [weather, setWeather] = useState(null)
   const [weatherLoading, setWeatherLoading] = useState(false)
@@ -1303,6 +1426,7 @@ function App() {
           event.preventDefault()
           setActivePage(destination)
           setFavoriteManagerOpen(false)
+          setQueryHubOpen(false)
           return
         }
       }
@@ -1310,6 +1434,7 @@ function App() {
         setCalendarPopover(null)
         setCalendarAgendaDialog(null)
         setFavoriteManagerOpen(false)
+        setQueryHubOpen(false)
         return
       }
       if (activePage !== 'calendar' || event.ctrlKey || event.metaKey) return
@@ -1594,6 +1719,7 @@ function App() {
     listen('tray:navigate', (event) => {
       if (['planner', 'calendar', 'settings'].includes(event.payload)) {
         setActivePage(event.payload)
+        setQueryHubOpen(false)
       }
     }).then((dispose) => {
       unlistenNavigate = dispose
@@ -1827,8 +1953,11 @@ function App() {
   const calendarItemsFor = (dateString) => calendarDayMap.get(dateString) || []
   const enabledDeadlineTypes = {
     competition: settings.competitionDeadlinesEnabled,
+    conference: settings.conferenceDeadlinesEnabled,
+    journal_special_issue: settings.conferenceDeadlinesEnabled,
     school_notice: settings.schoolContestNoticesEnabled,
     summer_camp: settings.summerCampDeadlinesEnabled,
+    pre_admission: settings.summerCampDeadlinesEnabled,
     hackathon: settings.hackathonDeadlinesEnabled,
     custom: settings.customDeadlinesEnabled,
   }
@@ -3133,6 +3262,19 @@ function App() {
     })
   }
 
+  function openQueryHub(returnPage = activePage) {
+    const destination = ['calendar', 'settings'].includes(returnPage) ? returnPage : 'calendar'
+    setQueryHubReturnPage(destination)
+    setFavoriteManagerOpen(false)
+    setQueryHubOpen(true)
+    window.requestAnimationFrame(() => pageContentRef.current?.scrollTo({ top: 0 }))
+  }
+
+  function closeQueryHub() {
+    setQueryHubOpen(false)
+    setActivePage(queryHubReturnPage)
+  }
+
   function clearAccountScopedViewState() {
     assignmentsRevisionRef.current += 1
     requestedCalendarSupplementRanges.current.clear()
@@ -3165,6 +3307,7 @@ function App() {
                 className={activePage === id ? 'active' : ''}
                 onClick={() => {
                   setFavoriteManagerOpen(false)
+                  setQueryHubOpen(false)
                   setActivePage(id)
                 }}
                 aria-label={t(label)}
@@ -3184,7 +3327,17 @@ function App() {
           className={`page-content ${activePage}-page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
         >
           <header className={`topbar ${activePage}-topbar`}>
-            {activePage === 'settings' && favoriteManagerOpen ? (
+            {queryHubOpen ? (
+              <div className="favorite-topbar-title query-hub-topbar-title">
+                <button type="button" onClick={closeQueryHub} aria-label={queryHubReturnPage === 'settings' ? t('返回设置') : t('返回教学日历')}>
+                  <ChevronLeft size={20} />
+                </button>
+                <div>
+                  <p className="eyebrow">Where To Study</p>
+                  <h1>{t('综合查询')}</h1>
+                </div>
+              </div>
+            ) : activePage === 'settings' && favoriteManagerOpen ? (
               <div className="favorite-topbar-title">
                 <button type="button" onClick={() => setFavoriteManagerOpen(false)} aria-label={t('返回设置')}>
                   <ChevronLeft size={20} />
@@ -3205,8 +3358,11 @@ function App() {
                 {activePage === 'calendar' ? <p className="calendar-week-context">{calendarWeekContext}</p> : null}
               </div>
             )}
-            {activePage === 'calendar' ? (
+            {!queryHubOpen && activePage === 'calendar' ? (
               <div className="calendar-toolbar-actions">
+                <button type="button" className="query-hub-entry-button" onClick={() => openQueryHub('calendar')} aria-label={t('打开综合查询')}>
+                  <Search size={16} />{t('综合查询')}
+                </button>
                 <div className="calendar-view-switch" aria-label={t('日历视图')}>
                   {CALENDAR_VIEWS.map((view) => (
                     <button
@@ -3236,7 +3392,18 @@ function App() {
             </div>
           ) : null}
 
-          {activePage === 'planner' ? (
+          {queryHubOpen ? (
+            <QueryHub
+              command={command}
+              favoriteItems={favoriteDeadlines}
+              isFavorite={isFavoriteDeadline}
+              language={uiLanguage}
+              onToggleFavorite={toggleFavoriteDeadline}
+              t={t}
+            />
+          ) : null}
+
+          {!queryHubOpen && activePage === 'planner' ? (
         <>
         {settings.weatherEnabled ? (
           <WeatherStrip
@@ -3438,7 +3605,7 @@ function App() {
         </>
           ) : null}
 
-          {activePage === 'calendar' ? (
+          {!queryHubOpen && activePage === 'calendar' ? (
         <section className="calendar-page">
           <div
             className={`teaching-calendar-layout ${calendarView === 'month' && compactCalendarLayout ? 'month-gesture-surface' : ''}`}
@@ -4083,7 +4250,7 @@ function App() {
         </section>
           ) : null}
 
-          {activePage === 'settings' && favoriteManagerOpen ? (
+          {!queryHubOpen && activePage === 'settings' && favoriteManagerOpen ? (
             <FavoriteDeadlineManager
               items={favoriteDeadlines}
               onRemove={toggleFavoriteDeadline}
@@ -4091,7 +4258,7 @@ function App() {
             />
           ) : null}
 
-          {activePage === 'settings' && !favoriteManagerOpen ? (
+          {!queryHubOpen && activePage === 'settings' && !favoriteManagerOpen ? (
         <section className="settings-layout">
           <section className="panel settings-reference-notice" aria-label={t('数据参考提示')}>
             <strong>{t('显示数据仅供参考，请以实际情况为准。')}</strong>
@@ -4235,6 +4402,7 @@ function App() {
                 ['weatherEnabled', '校区天气', '在空教室联动查询上方显示默认折叠的今日、明日天气。', ''],
                 ['almanacEnabled', '黄历信息', '在月视图日期详情中显示农历、干支与宜忌。', ''],
                 ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示 Contest DDL 收录的公开学科竞赛截止日期。', 'public-deadline'],
+                ['conferenceDeadlinesEnabled', '学术会议', '在统一 DDL 卡片中显示学术会议与期刊专题的投稿截止日期。', 'public-deadline'],
                 ['schoolContestNoticesEnabled', '校内竞赛通知', '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。', 'school-notice'],
                 ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。', 'public-deadline'],
                 ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。', 'public-deadline'],
@@ -4271,12 +4439,19 @@ function App() {
               </label>
               <button
                 type="button"
+                className="secondary settings-full-button query-hub-settings-link"
+                onClick={() => openQueryHub('settings')}
+              >
+                <Search size={17} /> {t('打开班车与重要事件查询')}
+              </button>
+              <button
+                type="button"
                 className="secondary settings-full-button favorite-manager-link"
                 onClick={() => setFavoriteManagerOpen(true)}
               >
                 <Star size={17} /> {t('收藏管理')} ({favoriteDeadlines.length})
               </button>
-              <p className="settings-source-note">{t('天气、黄历与 DDL 卡片底部会分别标明第三方数据来源；学科竞赛和脚本提取的校内竞赛通知由独立开关控制。')}</p>
+              <p className="settings-source-note">{t('天气、黄历、班车与 DDL 会标明第三方来源；学科竞赛、学术会议和脚本提取的校内通知由独立开关控制。')}</p>
             </section>
 
           <section className="panel settings-language">

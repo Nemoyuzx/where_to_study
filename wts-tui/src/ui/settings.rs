@@ -93,6 +93,20 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
                 "未加载"
             }
         )),
+        ListItem::new(format!(
+            "公共查询：班车 {} · 重要事件 {} · 收藏 {} 项（按 i 打开）",
+            if app.shuttle.is_some() {
+                "已缓存"
+            } else {
+                "未加载"
+            },
+            if app.important_events.is_some() {
+                "已缓存"
+            } else {
+                "未加载"
+            },
+            app.favorite_events.len()
+        )),
     ];
     let status_list =
         List::new(status_items).block(Block::default().borders(Borders::ALL).title("数据状态"));
