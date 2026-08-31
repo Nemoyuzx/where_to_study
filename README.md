@@ -55,23 +55,23 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.7 (73)` 正式签名 Universal 构建已上传 TestFlight；GitHub Release 同步提供 `0.2.7 (73)` 原生 Universal DMG 预览包 |
-| Android | Kotlin + Android Views | `0.2.7 (43)` 固定维护者密钥签名 Universal APK/AAB；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
-| Windows | Tauri 2 + React + Rust | 持续维护并发布 x64 NSIS；新 `v*` 构建生成 GitHub/Sigstore 来源证明，公众 Authenticode 仍需外部身份配置 |
-| Linux | Tauri 2 + React + Rust | 发布 arm64 与 x86_64 Debian、AppImage、CLI、TUI；新 `v*` 构建生成 GitHub/Sigstore 来源证明 |
-| CLI | Rust（复用共享核心逻辑） | `where-to-study-cli` 纯命令行客户端，发布 Linux x86_64/arm64 构建，见 [wts-cli/README.md](./wts-cli/README.md) |
-| 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `where-to-study-tui` 可视化终端客户端，发布 Linux x86_64/arm64 构建，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.7 (73)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.7 (1002012)` 已切换竞赛 API 到固定 HTTPS 域名；113 项单元测试、签名 APP/HAP 和 DevEco 云测试通过，GitHub Release 提供签名 APP/HAP；[加入 HarmonyOS 测试（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码：`A0IsJpKIcn3` |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.8 (74)` 正式签名 Universal 构建已上传 TestFlight；GitHub Pre-release 同步提供原生 Universal DMG 预览包 |
+| Android | Kotlin + Android Views | `0.2.8 (44)` 固定维护者密钥签名 Universal APK/AAB 已进入 GitHub Pre-release；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| Windows | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 x64 NSIS 和 GitHub/Sigstore 来源证明；公众 Authenticode 仍需外部身份配置 |
+| Linux | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 arm64/x86_64 Debian、AppImage、CLI、TUI 及 GitHub/Sigstore 来源证明 |
+| CLI | Rust（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-cli` 发布 Linux x86_64/arm64 构建，并新增班车/重要事件命令，见 [wts-cli/README.md](./wts-cli/README.md) |
+| 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-tui` 发布 Linux x86_64/arm64 构建，日历和设置均可进入班车/重要事件视图，见 [wts-tui/README.md](./wts-tui/README.md) |
+| iOS | SwiftUI 原生 | `0.2.8 (74)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002013)` 的 122 项单元测试、签名 APP/HAP、DevEco 上传和云测试通过；GitHub Pre-release 提供签名 APP/HAP |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
 > Apple 平台公测链接（版本可能不是最新，最新需要等待审核通过）：https://testflight.apple.com/join/yuzpAtDJ
 >
-> HarmonyOS 测试：`0.2.7 (1002012)` 已由 DevEco 上传 AppGallery Connect，且云测试通过；[打开测试邀请页面（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。
+> HarmonyOS 测试：`0.2.8 (1002013)` 已由 DevEco 上传 AppGallery Connect 且云测试通过。现有[历史邀请页面](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)仍显示 `0.2.6 (1002010)`，不得将其视为 0.2.8；新的 0.2.8 邀请测试任务尚待账号持有人确认提交。当前请从 [GitHub Pre-release](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8) 获取签名 APP/HAP。
 
 ## 下载
 
-[v0.2.7](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.7) 的 GitHub Release 附件包括 Windows x64 NSIS、Linux arm64/x86_64 Debian 包与 AppImage、Linux arm64/x86_64 CLI/TUI、固定维护者密钥签名的 Android APK/AAB、HarmonyOS 签名 APP/HAP，以及原生 macOS Universal DMG。本版本将全部图形客户端的竞赛备用源与校内通知迁移到 `https://where-to-study.cn`，并移除 Android 明文网络例外和 Apple ATS 例外。完整中英文改动见 [0.2.7 发布说明](./docs/release-v0.2.7.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品。正式签名的 iOS 与 macOS `0.2.7 (73)` 已由本地 Xcode 分平台上传 TestFlight；GitHub DMG 为 `0.2.7 (73)` 未公证开源预览包。
+[v0.2.8 Pre-release](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8) 提供 14 项附件：Windows x64 NSIS；Linux arm64/x86_64 Debian、AppImage、CLI、TUI；固定维护者密钥签名的 Android APK/AAB；HarmonyOS 签名 APP/HAP；以及原生 macOS Universal DMG。本版本新增班车与重要事件查询、搜索/分类/DDL 排序/完整本地收藏，并把会议事件接入教学日历；完整中英文改动见 [0.2.8 发布说明](./docs/release-v0.2.8.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品；iOS 与 macOS `0.2.8 (74)` 已由本地 Xcode 分平台上传 TestFlight，GitHub DMG 是未公证的开源预览包。因为这是 Pre-release，稳定入口 `releases/latest` 仍指向 `v0.2.7`。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
@@ -160,8 +160,8 @@ Linux 终端客户端可以直接从 Release 安装。以 x86_64 为例：
 
 ```bash
 mkdir -p ~/.local/bin
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.7/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
-curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.7/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.8/where-to-study-cli-linux-x86_64.tar.gz | tar -xz
+curl -L https://github.com/Nemoyuzx/where_to_study/releases/download/v0.2.8/where-to-study-tui-linux-x86_64.tar.gz | tar -xz
 install -m 0755 where-to-study-cli where-to-study-tui ~/.local/bin/
 ```
 

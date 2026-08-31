@@ -18,6 +18,7 @@
 - Contest DDL 的 `conference`、`journal_special_issue` 和 `pre_admission` 类型进入所有图形客户端的日、周、月、年日历链路；TUI 月历同步使用“会/事”标记显示会议与其它重要事件。
 - 设置新增默认开启的“学术会议”独立开关；期刊专题跟随会议开关，预推免跟随夏令营开关，颜色继续使用公开 DDL 分类色。
 - 日历范围预热、查询页和重复进入页面共享缓存；日期翻页、视图切换与查询滑块均不触发重复网络请求。
+- Tauri 桌面端即使只开启“学术会议”，也会正常执行年度预热、跨年范围加载、月详情显示和手动重试。
 
 ## 数据与安全
 
@@ -45,7 +46,7 @@
 
 ## 发布前验证
 
-- React/Tauri：131/131 Node 契约测试、Vite 生产构建与第三方许可证新鲜度检查通过。
+- React/Tauri：133/133 Node 契约测试、Vite 生产构建与第三方许可证新鲜度检查通过。
 - Rust：Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过。
 - Apple：本地 Xcode 严格构建通过；macOS 228/228，iOS 共 259 项（255 通过、4 项仅 iPad 条件跳过、0 失败）。
 - Android：194/194 Release JVM 测试、Lint、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、版本及 HTTPS-only 打包校验通过。
@@ -72,6 +73,7 @@ This is the cross-platform `0.2.8` pre-release, focused on the new shuttle and i
 - `conference`, `journal_special_issue`, and `pre_admission` now flow through day, week, month, and year views on every graphical client. The TUI month calendar marks conferences and other important events with separate indicators.
 - Settings adds a default-on Conference switch. Journal special issues follow it, pre-admission follows Summer Camps, and all retain the public-deadline color.
 - Calendar preheating, Query Center, and repeated presentation share caches. Paging, view switching, and segment animations do not trigger duplicate network requests.
+- On Tauri desktop, conference-only settings still drive annual preheating, cross-year range loading, month details, and manual retry.
 
 ## Data and security
 
@@ -90,7 +92,7 @@ This is the cross-platform `0.2.8` pre-release, focused on the new shuttle and i
 
 ## Pre-release verification
 
-- React/Tauri: 131/131 Node contract tests, the Vite production build, and third-party license freshness checks passed.
+- React/Tauri: 133/133 Node contract tests, the Vite production build, and third-party license freshness checks passed.
 - Rust: 151 Tauri tests passed with three live-service tests intentionally ignored; Core 61/61, CLI 16/16, and TUI 21/21 passed, with `-D warnings` Clippy clean for all four crates.
 - Apple: strict local-Xcode builds passed; macOS 228/228 and iOS 259 total tests (255 passed, four iPad-only conditional skips, zero failures).
 - Android: 194/194 release JVM tests, Lint, pinned-certificate APK/AAB signing, signer fingerprints, ZIP alignment, version, and HTTPS-only package checks passed.

@@ -75,8 +75,8 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - Xcode 已登录有效的 Apple Developer Program 团队，当前账户角色为 Admin。
 - 主 App ID、Widget App ID、App Group 与双平台 App Store Connect 记录已创建；App Store Connect Apple ID 为 `6801054949`。
 - 本机已安装有效的 Apple Development、Apple Distribution 与 Mac Installer Distribution 证书；iOS 主应用和 Widget 使用 Xcode 自动管理描述文件，macOS 主应用和 Widget 使用手动 App Store 描述文件。证书私钥和团队标识不写入仓库。
-- 上一版 macOS 与 iOS `0.2.7 (73)` 已完成本地 Xcode 正式签名归档和上传；两端均收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
-- 当前预发布候选为 iOS/macOS `0.2.8 (74)`；源码与版本断言已递增，必须从最终发布提交重新完成严格测试、归档和分平台上传后，才能记录为已上传。
+- 当前预发布候选 iOS/macOS `0.2.8 (74)` 已完成本地 Xcode 正式签名归档和分平台上传；两端均收到 `Upload succeeded`，iOS 导出验证与脚本流程成功。
+- 上传使用的 Apple 原生源码与最终 `v0.2.8` 标签一致；标签后的 Tauri 会议门禁修复不涉及 Apple 目标，因此不递增或重复上传 build 74。
 - TestFlight 发布以本地 Xcode 的 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成标准，不再额外打开 App Store Connect 检查 processing 或测试组状态。
 - 13 英寸 iPad 横屏四张 0.2.2 效果图已由专项 Xcode UI 测试生成并写入 `screenshot-manifest.md`；Build 25 素材只保留作历史校验。正式提交仍需按 `screenshot-plan.md` 补齐产品页所需的 iPhone 与 macOS 最新截图。
 - 尚未代替账号持有人填写或接受年龄分级、App Privacy、内容权利、欧盟 DSA、价格与地区等声明，也尚未提交 App Review。
@@ -88,7 +88,7 @@ GitHub Actions 的 `Build Native Clients` 工作流也支持勾选 `publish_appl
 - 核实北邮服务对账号、密码、课程和教室请求的实际保留行为，再决定 App Privacy 是否可以回答“不收集数据”。
 - 填写真实版权主体、App Review 联系人姓名/电话/邮箱，并确认支持 URL 提供用户可用的联系方式。
 - 完成年龄分级、欧盟 DSA 身份、价格、税务类别、销售地区和中国大陆 ICP 状态；没有有效 ICP 时不要勾选中国大陆销售地区。
-- iOS 与 macOS build 74 上传成功后，分别在真机和实际 Mac 上验证登录、课表、空教室、综合查询、日历导入、通知、深浅色和前后台切换。
+- 分别在真机和实际 Mac 上继续验证 build 74 的登录、课表、空教室、综合查询、日历导入、通知、深浅色和前后台切换。
 - 使用对应平台的最新构建重新生成并上传商店截图，填入本目录的中英文审核说明与简体中文元数据，最后再选择最新构建提交审核。
 
 ## Apple 官方核对入口

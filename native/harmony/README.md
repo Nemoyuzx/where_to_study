@@ -32,7 +32,7 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 113 个契约单元测试
+./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 122 个契约单元测试
 ./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 16 项、宽屏 5 项）
 ```
 
@@ -95,7 +95,7 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 教学日历和设置均可打开覆盖式“班车与重要事件查询”页面。班车只显示当天 active 且通过严格校验的时刻表；重要事件与教学日历共享同一个客户端、请求合并和五分钟缓存，支持真实 categories/元数据搜索、过期切换、DDL 升序与本地收藏，明确排除作业和自定义源。
 
 > 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
-> 的 assembleHap/assembleApp 编译；0.2.7 (1002012) Release APP/HAP 已通过 SHA-256、
-> 独立 HAP 签名、APP ZIP 结构与新 HTTPS 域名校验，113 个契约单元测试全部通过。DevEco“上传产品”已将
-> 0.2.7 (1002012) 上传 AppGallery Connect 用于测试和发布，云测试结果为“通过”。
-> GitHub Release 同步提供签名构建；[打开 HarmonyOS 测试邀请（链接已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。
+> 的 assembleHap/assembleApp 编译；0.2.8 (1002013) Release APP/HAP 已通过 SHA-256、
+> 独立 HAP 签名、APP ZIP 结构、版本和三项固定 HTTPS API 校验，122 个契约单元测试全部通过。DevEco“上传产品”已将
+> 0.2.8 (1002013) 上传 AppGallery Connect 用于测试和发布，云测试结果为“通过”，GitHub Pre-release 同步提供相同版本的签名构建。
+> 现有[历史测试邀请](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)仍显示 0.2.6 (1002010)，新的 0.2.8 邀请测试任务尚待账号持有人确认提交。
