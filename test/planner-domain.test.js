@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   accountHasSavedPassword,
   buildingsForCampus,
+  builtInDeadlineSourcesEnabled,
   dateFromString,
   deadlinePreheatPlan,
   calendarMonthExpansion,
@@ -457,6 +458,28 @@ test('deadline startup preheat follows every shared-feed switch and covers the w
     })
   }
   assert.equal(deadlinePreheatPlan(DEFAULT_SETTINGS, '2026-02-30'), null)
+})
+
+test('built-in deadline source activation treats conferences as an independent source', () => {
+  const disabled = {
+    competitionDeadlinesEnabled: false,
+    conferenceDeadlinesEnabled: false,
+    schoolContestNoticesEnabled: false,
+    summerCampDeadlinesEnabled: false,
+    hackathonDeadlinesEnabled: false,
+    customDeadlinesEnabled: true,
+  }
+
+  assert.equal(builtInDeadlineSourcesEnabled(disabled), false)
+  for (const field of [
+    'competitionDeadlinesEnabled',
+    'conferenceDeadlinesEnabled',
+    'schoolContestNoticesEnabled',
+    'summerCampDeadlinesEnabled',
+    'hackathonDeadlinesEnabled',
+  ]) {
+    assert.equal(builtInDeadlineSourcesEnabled({ ...disabled, [field]: true }), true)
+  }
 })
 
 test('conference and journal favorites use the existing local snapshot contract', () => {

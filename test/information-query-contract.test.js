@@ -156,3 +156,26 @@ test('TUI teaching calendar renders conferences from the shared important-event 
   assert.match(tuiCalendar, /"conference" \| "journal_special_issue"/)
   assert.match(tuiCalendar, /会=会议/)
 })
+
+test('Tauri calendar scheduling uses one conference-aware built-in deadline gate', () => {
+  assert.match(app, /const builtInDeadlineSourcesActive = builtInDeadlineSourcesEnabled\(settings\)/)
+  assert.doesNotMatch(app, /const anyDeadlineTypeEnabled/)
+  assert.match(
+    app,
+    /deadlinePreheatPlan\(settings,[\s\S]*?\}, \[\s*builtInDeadlineSourcesActive,\s*settingsLoaded,\s*todayYear,\s*\]\)/,
+  )
+  assert.match(
+    app,
+    /loadCalendarSupplements\(\s*startDate,\s*endDate,\s*builtInDeadlineSourcesActive,\s*periodic,\s*\)/,
+  )
+  assert.match(
+    app,
+    /calendarSupplementRevision,\s*builtInDeadlineSourcesActive,[\s\S]*?settingsLoaded,\s*\]\)/,
+  )
+  assert.match(app, /\{builtInDeadlineSourcesActive\s*\|\| settings\.customDeadlinesEnabled/)
+  assert.match(app, /enabledTypes=\{enabledDeadlineTypes\}/)
+  assert.match(
+    app,
+    /loadCalendarSupplements\(\s*calendarDate,\s*calendarDate,\s*builtInDeadlineSourcesActive,\s*true,\s*\)/,
+  )
+})

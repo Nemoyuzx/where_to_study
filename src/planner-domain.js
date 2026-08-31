@@ -199,15 +199,18 @@ export function dateFromString(dateString) {
   return date
 }
 
-export function deadlinePreheatPlan(settings, dateString) {
-  const enabled = Boolean(
+export function builtInDeadlineSourcesEnabled(settings) {
+  return Boolean(
     settings?.competitionDeadlinesEnabled
     || settings?.conferenceDeadlinesEnabled
     || settings?.schoolContestNoticesEnabled
     || settings?.summerCampDeadlinesEnabled
     || settings?.hackathonDeadlinesEnabled,
   )
-  if (!enabled) return null
+}
+
+export function deadlinePreheatPlan(settings, dateString) {
+  if (!builtInDeadlineSourcesEnabled(settings)) return null
   const date = dateFromString(dateString)
   if (Number.isNaN(date.getTime())) return null
   const year = date.getFullYear()

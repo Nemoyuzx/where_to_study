@@ -43,6 +43,7 @@ import {
   buildCalendarDayMap,
   buildMiniMonthDays,
   buildMonthDays,
+  builtInDeadlineSourcesEnabled,
   calendarDeadlineBorderKinds,
   calendarDeadlineBorderPriority,
   calendarSurfaceKey,
@@ -1137,7 +1138,9 @@ function ContestDeadlineCard({
   const items = suppliedItems
     || (response?.items || []).filter((item) => deadlineItemEnabled(item, enabledTypes))
   const showsContestSource = items.some((item) => item.source_type === 'contest_ddl')
-    || Boolean(enabledTypes.competition || enabledTypes.summer_camp || enabledTypes.hackathon)
+    || Object.entries(enabledTypes).some(([type, enabled]) => (
+      enabled && type !== 'school_notice' && type !== 'custom'
+    ))
   const showsSchoolSource = items.some((item) => item.source_type === 'school_notice')
     || Boolean(enabledTypes.school_notice)
   const customSources = [...new Map(items
@@ -1400,6 +1403,7 @@ function App() {
   const almanacByDateRef = useRef(almanacByDate)
   const todayDate = shanghaiDateString(now)
   const todayYear = todayDate.slice(0, 4)
+  const builtInDeadlineSourcesActive = builtInDeadlineSourcesEnabled(settings)
   const loading = loadingTasks[loadingTasks.length - 1] || ''
   calendarDateRef.current = calendarDate
   almanacByDateRef.current = almanacByDate
@@ -1822,10 +1826,7 @@ function App() {
     void preheatDeadlineCalendar(plan)
     return () => window.clearTimeout(deadlinePreheatTimerRef.current)
   }, [
-    settings.competitionDeadlinesEnabled,
-    settings.hackathonDeadlinesEnabled,
-    settings.schoolContestNoticesEnabled,
-    settings.summerCampDeadlinesEnabled,
+    builtInDeadlineSourcesActive,
     settingsLoaded,
     todayYear,
   ])
@@ -1854,14 +1855,10 @@ function App() {
       const startDate = `${targetYear}-01-01`
       const endDate = `${targetYear}-12-31`
       if (periodic) invalidateCalendarSupplementRange(startDate, endDate)
-      const anyDeadlineTypeEnabled = settings.competitionDeadlinesEnabled
-        || settings.schoolContestNoticesEnabled
-        || settings.summerCampDeadlinesEnabled
-        || settings.hackathonDeadlinesEnabled
       await loadCalendarSupplements(
         startDate,
         endDate,
-        anyDeadlineTypeEnabled,
+        builtInDeadlineSourcesActive,
         periodic,
       )
     }
@@ -1889,13 +1886,10 @@ function App() {
     }
   }, [
     calendarSupplementRevision,
+    builtInDeadlineSourcesActive,
     settings.almanacEnabled,
-    settings.competitionDeadlinesEnabled,
     settings.customDeadlinesEnabled,
     settings.customDeadlinesUrl,
-    settings.hackathonDeadlinesEnabled,
-    settings.schoolContestNoticesEnabled,
-    settings.summerCampDeadlinesEnabled,
     settingsLoaded,
   ])
 
@@ -4065,10 +4059,7 @@ function App() {
                           t={t}
                         />
                       ) : null}
-                      {settings.competitionDeadlinesEnabled
-                        || settings.schoolContestNoticesEnabled
-                        || settings.summerCampDeadlinesEnabled
-                        || settings.hackathonDeadlinesEnabled
+                      {builtInDeadlineSourcesActive
                         || settings.customDeadlinesEnabled
                         || favoriteDeadlines.length ? (
                           <ContestDeadlineCard
@@ -4081,13 +4072,7 @@ function App() {
                               || (settings.customDeadlinesEnabled
                                 ? customDeadlinesErrorByDate[calendarDate] : '')
                               || ''}
-                            enabledTypes={{
-                              competition: settings.competitionDeadlinesEnabled,
-                              school_notice: settings.schoolContestNoticesEnabled,
-                              summer_camp: settings.summerCampDeadlinesEnabled,
-                              hackathon: settings.hackathonDeadlinesEnabled,
-                              custom: settings.customDeadlinesEnabled,
-                            }}
+                            enabledTypes={enabledDeadlineTypes}
                             isFavorite={isFavoriteDeadline}
                             onToggleFavorite={toggleFavoriteDeadline}
                             onRetry={() => {
@@ -4095,10 +4080,7 @@ function App() {
                               void loadCalendarSupplements(
                                 calendarDate,
                                 calendarDate,
-                                settings.competitionDeadlinesEnabled
-                                  || settings.schoolContestNoticesEnabled
-                                  || settings.summerCampDeadlinesEnabled
-                                  || settings.hackathonDeadlinesEnabled,
+                                builtInDeadlineSourcesActive,
                                 true,
                               )
                             }}
