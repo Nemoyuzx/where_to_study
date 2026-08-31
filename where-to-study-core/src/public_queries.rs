@@ -911,7 +911,12 @@ pub fn favorite_key(item: &ImportantEventItem) -> String {
 pub fn available_event_types(items: &[ImportantEventItem]) -> Vec<String> {
     IMPORTANT_EVENT_TYPES
         .iter()
-        .filter(|event_type| items.iter().any(|item| item.event_type == **event_type))
+        .filter(|event_type| {
+            items.iter().any(|item| {
+                item.event_type == **event_type
+                    && matches!(item.source_type.as_str(), "contest_ddl" | "school_notice")
+            })
+        })
         .map(|event_type| (*event_type).to_string())
         .collect()
 }
@@ -1261,6 +1266,19 @@ mod tests {
             favorites_only: false,
         };
         assert_eq!(filter_important_events(&items, &[], &filter, now).len(), 1);
+    }
+
+    #[test]
+    fn available_types_ignore_custom_favorites() {
+        let (mut items, _) = parse_contest_events(&contest_fixture()).unwrap();
+        let mut custom = items[0].clone();
+        custom.id = "custom-journal".to_string();
+        custom.event_type = "journal_special_issue".to_string();
+        custom.source_type = "custom".to_string();
+        items.push(custom);
+        let types = available_event_types(&items);
+        assert!(types.contains(&"conference".to_string()));
+        assert!(!types.contains(&"journal_special_issue".to_string()));
     }
 
     #[test]

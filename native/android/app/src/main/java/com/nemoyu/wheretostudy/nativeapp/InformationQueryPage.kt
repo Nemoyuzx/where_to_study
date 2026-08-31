@@ -61,6 +61,11 @@ internal class InformationQuerySessionState(
     }
 }
 
+internal data class ImportantEventFilterSelection(
+    val category: ImportantEventCategory,
+    val metadataCategory: String?,
+)
+
 internal object ImportantEventQueryLogic {
     fun filter(
         liveItems: List<PublicDeadlineItem>,
@@ -71,15 +76,8 @@ internal object ImportantEventQueryLogic {
         showsEnded: Boolean,
         nowMillis: Long,
     ): List<PublicDeadlineItem> {
-        val unique = linkedMapOf<String, PublicDeadlineItem>()
-        liveItems.forEach { item ->
-            if (item.source != PublicDeadlineSource.CUSTOM) unique[item.favoriteID] = item
-        }
-        favorites.forEach { item ->
-            if (item.source != PublicDeadlineSource.CUSTOM) unique.putIfAbsent(item.favoriteID, item)
-        }
         val normalizedQuery = query.trim().lowercase(Locale.ROOT)
-        return unique.values.asSequence()
+        return mergedCatalog(liveItems, favorites).asSequence()
             .filter { showsEnded || !isEnded(it, nowMillis) }
             .filter { category.matches(it) }
             .filter { metadataCategory == null || metadataCategory in it.categories }
@@ -113,16 +111,54 @@ internal object ImportantEventQueryLogic {
             .toList()
     }
 
+    fun availableTypeFilters(
+        liveItems: List<PublicDeadlineItem>,
+        favorites: List<PublicDeadlineItem>,
+    ): List<ImportantEventCategory> {
+        val catalog = mergedCatalog(liveItems, favorites)
+        return ImportantEventCategory.entries.filter { category ->
+            category == ImportantEventCategory.ALL || catalog.any { item -> category.matches(item) }
+        }
+    }
+
     fun metadataCategories(
         liveItems: List<PublicDeadlineItem>,
         favorites: List<PublicDeadlineItem>,
-    ): List<String> = (liveItems + favorites)
+        category: ImportantEventCategory,
+        showsEnded: Boolean,
+        nowMillis: Long,
+    ): List<String> = mergedCatalog(liveItems, favorites)
         .asSequence()
-        .filter { it.source != PublicDeadlineSource.CUSTOM }
+        .filter { item -> category.matches(item) }
+        .filter { showsEnded || !isEnded(it, nowMillis) }
         .flatMap { it.categories.asSequence() }
         .distinct()
         .sortedWith { left, right -> left.compareTo(right, ignoreCase = true) }
         .toList()
+
+    fun normalizedSelection(
+        liveItems: List<PublicDeadlineItem>,
+        favorites: List<PublicDeadlineItem>,
+        category: ImportantEventCategory,
+        metadataCategory: String?,
+        showsEnded: Boolean,
+        nowMillis: Long,
+    ): ImportantEventFilterSelection {
+        val availableTypes = availableTypeFilters(liveItems, favorites)
+        val normalizedType = category.takeIf(availableTypes::contains)
+            ?: ImportantEventCategory.ALL
+        val availableMetadata = metadataCategories(
+            liveItems,
+            favorites,
+            normalizedType,
+            showsEnded,
+            nowMillis,
+        )
+        return ImportantEventFilterSelection(
+            category = normalizedType,
+            metadataCategory = metadataCategory?.takeIf(availableMetadata::contains),
+        )
+    }
 
     fun isEnded(item: PublicDeadlineItem, nowMillis: Long): Boolean =
         item.archived || (deadlineMillis(item.deadline)?.let { it < nowMillis } ?: true)
@@ -143,18 +179,41 @@ internal object ImportantEventQueryLogic {
             ?.time
     }
 
+    private fun mergedCatalog(
+        liveItems: List<PublicDeadlineItem>,
+        favorites: List<PublicDeadlineItem>,
+    ): Collection<PublicDeadlineItem> {
+        val unique = linkedMapOf<String, PublicDeadlineItem>()
+        liveItems.forEach { item ->
+            if (item.source != PublicDeadlineSource.CUSTOM) unique[item.favoriteID] = item
+        }
+        favorites.forEach { item ->
+            if (item.source != PublicDeadlineSource.CUSTOM) unique.putIfAbsent(item.favoriteID, item)
+        }
+        return unique.values
+    }
+
     private fun ImportantEventCategory.matches(item: PublicDeadlineItem): Boolean = when (this) {
         ImportantEventCategory.ALL -> true
         ImportantEventCategory.SCHOOL_NOTICE -> item.source == PublicDeadlineSource.SCHOOL_NOTICE
         ImportantEventCategory.COMPETITION ->
             item.source != PublicDeadlineSource.SCHOOL_NOTICE &&
                 item.kind == PublicDeadlineKind.COMPETITION
-        ImportantEventCategory.CONFERENCE -> item.kind == PublicDeadlineKind.CONFERENCE
+        ImportantEventCategory.CONFERENCE ->
+            item.source != PublicDeadlineSource.SCHOOL_NOTICE &&
+                item.kind == PublicDeadlineKind.CONFERENCE
         ImportantEventCategory.JOURNAL_SPECIAL_ISSUE ->
-            item.kind == PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE
-        ImportantEventCategory.HACKATHON -> item.kind == PublicDeadlineKind.HACKATHON
-        ImportantEventCategory.SUMMER_CAMP -> item.kind == PublicDeadlineKind.SUMMER_CAMP
-        ImportantEventCategory.PRE_ADMISSION -> item.kind == PublicDeadlineKind.PRE_ADMISSION
+            item.source != PublicDeadlineSource.SCHOOL_NOTICE &&
+                item.kind == PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE
+        ImportantEventCategory.HACKATHON ->
+            item.source != PublicDeadlineSource.SCHOOL_NOTICE &&
+                item.kind == PublicDeadlineKind.HACKATHON
+        ImportantEventCategory.SUMMER_CAMP ->
+            item.source != PublicDeadlineSource.SCHOOL_NOTICE &&
+                item.kind == PublicDeadlineKind.SUMMER_CAMP
+        ImportantEventCategory.PRE_ADMISSION ->
+            item.source != PublicDeadlineSource.SCHOOL_NOTICE &&
+                item.kind == PublicDeadlineKind.PRE_ADMISSION
     }
 }
 
@@ -485,51 +544,75 @@ internal class InformationQueryPage(
             }
         }
 
-    private fun importantEventsContent(): ScrollView = ScrollView(activity).apply {
-        isFillViewport = true
-        clipToPadding = false
-        isVerticalScrollBarEnabled = false
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(20), activity.dp(8), activity.dp(20), activity.dp(28))
-            addView(searchField())
-            addView(spacer(activity, 8))
-            addView(categoryPicker())
-            metadataCategoryPicker()?.let { picker ->
-                addView(spacer(activity, 6))
-                addView(picker)
-            }
-            addView(Switch(activity).apply {
-                id = R.id.information_query_show_ended
-                text = "显示已结束"
-                textSize = 13f
-                setTextColor(Palette.text)
-                isChecked = sessionState.showsEnded
-                setOnCheckedChangeListener { button, checked ->
-                    activity.performControlHaptic(button)
-                    sessionState.showsEnded = checked
-                    sessionState.visibleEventCount = InformationQuerySessionState.INITIAL_EVENT_COUNT
-                    root.findViewById<LinearLayout?>(R.id.information_query_events_list)
-                        ?.let(::renderImportantEventList)
-                }
-            })
-            addView(TextView(activity).apply {
-                id = R.id.information_query_result_count
-                textSize = 12f
-                setTextColor(Palette.muted)
-                setPadding(0, activity.dp(4), 0, activity.dp(8))
-            })
-            val eventList = LinearLayout(activity).apply {
-                id = R.id.information_query_events_list
+    private fun importantEventsContent(): ScrollView {
+        val liveItems = dailyInfoRepository.importantEvents().orEmpty()
+        val favorites = preferences.favoriteDeadlines
+        val nowMillis = Calendar.getInstance(shanghai).timeInMillis
+        val normalizedSelection = ImportantEventQueryLogic.normalizedSelection(
+            liveItems,
+            favorites,
+            sessionState.category,
+            sessionState.metadataCategory,
+            sessionState.showsEnded,
+            nowMillis,
+        )
+        sessionState.category = normalizedSelection.category
+        sessionState.metadataCategory = normalizedSelection.metadataCategory
+        val typeFilters = ImportantEventQueryLogic.availableTypeFilters(liveItems, favorites)
+        val metadataCategories = ImportantEventQueryLogic.metadataCategories(
+            liveItems,
+            favorites,
+            sessionState.category,
+            sessionState.showsEnded,
+            nowMillis,
+        )
+
+        return ScrollView(activity).apply {
+            isFillViewport = true
+            clipToPadding = false
+            isVerticalScrollBarEnabled = false
+            addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
-            }
-            addView(eventList)
-            renderImportantEventList(eventList)
-            addView(querySourceFooter(
-                "第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业",
-                CalendarDailyInfoSources.deadlinePrimaryPage,
-            ))
-        })
+                setPadding(activity.dp(20), activity.dp(8), activity.dp(20), activity.dp(28))
+                addView(searchField())
+                addView(spacer(activity, 8))
+                addView(categoryPicker(typeFilters))
+                metadataCategoryPicker(metadataCategories)?.let { picker ->
+                    addView(spacer(activity, 6))
+                    addView(picker)
+                }
+                addView(Switch(activity).apply {
+                    id = R.id.information_query_show_ended
+                    text = "显示已结束"
+                    textSize = 13f
+                    setTextColor(Palette.text)
+                    isChecked = sessionState.showsEnded
+                    setOnCheckedChangeListener { button, checked ->
+                        activity.performControlHaptic(button)
+                        sessionState.showsEnded = checked
+                        sessionState.visibleEventCount =
+                            InformationQuerySessionState.INITIAL_EVENT_COUNT
+                        renderMode(animate = false)
+                    }
+                })
+                addView(TextView(activity).apply {
+                    id = R.id.information_query_result_count
+                    textSize = 12f
+                    setTextColor(Palette.muted)
+                    setPadding(0, activity.dp(4), 0, activity.dp(8))
+                })
+                val eventList = LinearLayout(activity).apply {
+                    id = R.id.information_query_events_list
+                    orientation = LinearLayout.VERTICAL
+                }
+                addView(eventList)
+                renderImportantEventList(eventList)
+                addView(querySourceFooter(
+                    "第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业",
+                    CalendarDailyInfoSources.deadlinePrimaryPage,
+                ))
+            })
+        }
     }
 
     private fun searchField(): EditText = EditText(activity).apply {
@@ -558,12 +641,14 @@ internal class InformationQueryPage(
         })
     }
 
-    private fun categoryPicker(): HorizontalScrollView = HorizontalScrollView(activity).apply {
+    private fun categoryPicker(
+        categories: List<ImportantEventCategory>,
+    ): HorizontalScrollView = HorizontalScrollView(activity).apply {
         isHorizontalScrollBarEnabled = false
         addView(LinearLayout(activity).apply {
             id = R.id.information_query_category_row
             orientation = LinearLayout.HORIZONTAL
-            ImportantEventCategory.entries.forEach { category ->
+            categories.forEach { category ->
                 addView(TextView(activity).apply {
                     text = category.label
                     textSize = 12f
@@ -588,25 +673,9 @@ internal class InformationQueryPage(
                         if (sessionState.category == category) return@setOnClickListener
                         activity.performControlHaptic(source)
                         sessionState.category = category
+                        sessionState.metadataCategory = null
                         sessionState.visibleEventCount = InformationQuerySessionState.INITIAL_EVENT_COUNT
-                        (parent as? ViewGroup)?.let { row ->
-                            repeat(row.childCount) { index ->
-                                (row.getChildAt(index) as? TextView)?.let { button ->
-                                    val item = ImportantEventCategory.entries[index]
-                                    val selected = item == sessionState.category
-                                    button.setTextColor(if (selected) Palette.onPrimary else Palette.text)
-                                    button.setTypeface(button.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
-                                    button.background = roundedBackground(
-                                        activity,
-                                        if (selected) Palette.primaryFill else Palette.surface,
-                                        if (selected) Palette.primaryFill else Palette.border,
-                                        radius = 17,
-                                    )
-                                }
-                            }
-                        }
-                        root.findViewById<LinearLayout?>(R.id.information_query_events_list)
-                            ?.let(::renderImportantEventList)
+                        renderMode(animate = false)
                     }
                 }, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -616,11 +685,7 @@ internal class InformationQueryPage(
         })
     }
 
-    private fun metadataCategoryPicker(): HorizontalScrollView? {
-        val options = ImportantEventQueryLogic.metadataCategories(
-            dailyInfoRepository.importantEvents().orEmpty(),
-            preferences.favoriteDeadlines,
-        )
+    private fun metadataCategoryPicker(options: List<String>): HorizontalScrollView? {
         if (options.isEmpty()) {
             sessionState.metadataCategory = null
             return null
@@ -860,10 +925,12 @@ internal class InformationQueryPage(
         setOnClickListener { source ->
             activity.performControlHaptic(source)
             preferences.setFavorite(item, favorite = !preferences.isFavorite(item))
-            bind()
-            root.findViewById<LinearLayout?>(R.id.information_query_events_list)?.post {
-                root.findViewById<LinearLayout?>(R.id.information_query_events_list)
-                    ?.let(::renderImportantEventList)
+            content.post {
+                if (::root.isInitialized && root.isAttachedToWindow &&
+                    sessionState.selectedMode == InformationQueryMode.IMPORTANT_EVENTS
+                ) {
+                    renderMode(animate = false)
+                }
             }
         }
     }

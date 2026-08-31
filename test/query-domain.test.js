@@ -6,6 +6,7 @@ import {
   filterImportantEvents,
   importantEventFavorite,
   importantEventFilterOptions,
+  mergeImportantEventCatalog,
   selectShuttleNotice,
   shuttlePeriodState,
 } from '../src/query-domain.js'
@@ -123,6 +124,21 @@ test('important-event query searches metadata, filters categories, and sorts by 
   })
   assert.deepEqual(conference.map((item) => item.id), ['future-late'])
   assert.deepEqual(importantEventFilterOptions(items).types, ['competition', 'conference', 'hackathon'])
+  assert.deepEqual(importantEventFilterOptions(items, {
+    type: 'conference',
+    source: 'public',
+    now: new Date('2026-08-31T00:00:00+08:00'),
+  }).categories, ['人工智能'])
+  assert.deepEqual(importantEventFilterOptions(items, {
+    type: 'competition',
+    source: 'school',
+    now: new Date('2026-08-31T00:00:00+08:00'),
+  }).categories, ['校内竞赛通知'])
+  assert.deepEqual(importantEventFilterOptions(items, {
+    type: 'hackathon',
+    source: 'public',
+    now: new Date('2026-08-31T00:00:00+08:00'),
+  }).categories, [])
 })
 
 test('important-event favorites reuse the teaching-calendar snapshot contract', () => {
@@ -173,4 +189,35 @@ test('important-event favorites reuse the teaching-calendar snapshot contract', 
     stale: true,
     archived: false,
   })
+})
+
+test('important-event catalog keeps favorite-only built-in types without duplicating live items', () => {
+  const live = {
+    id: 'live-competition',
+    name: '现有竞赛',
+    event_type: 'competition',
+    source_type: 'contest_ddl',
+    primary_deadline: '2099-06-01T12:00:00+08:00',
+    categories: ['程序设计'],
+  }
+  const favorite = {
+    id: 'saved-pre-admission',
+    name: '已收藏预推免',
+    event_type: 'pre_admission',
+    source_type: 'contest_ddl',
+    primary_deadline: '2099-06-02T12:00:00+08:00',
+    categories: ['预推免'],
+  }
+  const custom = {
+    ...favorite,
+    id: 'custom-journal',
+    event_type: 'journal_special_issue',
+    source_type: 'custom',
+  }
+  const catalog = mergeImportantEventCatalog([live], [live, favorite, custom])
+  assert.deepEqual(catalog, [live, favorite])
+  assert.deepEqual(
+    importantEventFilterOptions(catalog).types,
+    ['competition', 'pre_admission'],
+  )
 })

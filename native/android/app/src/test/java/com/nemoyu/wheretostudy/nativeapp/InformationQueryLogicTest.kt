@@ -171,6 +171,150 @@ class InformationQueryLogicTest {
             ImportantEventQueryLogic.metadataCategories(
                 listOf(futureConference),
                 emptyList(),
+                ImportantEventCategory.CONFERENCE,
+                showsEnded = false,
+                nowMillis = nowMillis,
+            ),
+        )
+    }
+
+    @Test
+    fun availableEventTypesComeFromRemoteAndFavoriteCatalogButExcludeCustomSources() {
+        val competition = item(
+            "competition", PublicDeadlineKind.COMPETITION,
+            PublicDeadlineSource.CONTEST_DDL, "2026-09-01T12:00:00+08:00",
+        )
+        val conference = item(
+            "conference", PublicDeadlineKind.CONFERENCE,
+            PublicDeadlineSource.CONTEST_DDL, "2026-09-02T12:00:00+08:00",
+        )
+        val schoolNotice = item(
+            "school", PublicDeadlineKind.COMPETITION,
+            PublicDeadlineSource.SCHOOL_NOTICE, "2026-09-03T12:00:00+08:00",
+        )
+        val favoriteJournal = item(
+            "journal", PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE,
+            PublicDeadlineSource.CONTEST_DDL, "2026-09-04T12:00:00+08:00",
+        )
+        val customPreAdmission = item(
+            "custom", PublicDeadlineKind.PRE_ADMISSION,
+            PublicDeadlineSource.CUSTOM, "2026-09-05T12:00:00+08:00",
+        )
+
+        assertEquals(
+            listOf(
+                ImportantEventCategory.ALL,
+                ImportantEventCategory.COMPETITION,
+                ImportantEventCategory.CONFERENCE,
+                ImportantEventCategory.JOURNAL_SPECIAL_ISSUE,
+                ImportantEventCategory.SCHOOL_NOTICE,
+            ),
+            ImportantEventQueryLogic.availableTypeFilters(
+                listOf(competition, conference, schoolNotice, customPreAdmission),
+                listOf(favoriteJournal),
+            ),
+        )
+    }
+
+    @Test
+    fun metadataCategoriesFollowSelectedTypeAndEndedState() {
+        val nowMillis = OffsetDateTime.parse("2026-08-31T12:00:00+08:00")
+            .toInstant().toEpochMilli()
+        val futureConference = item(
+            "future-conference", PublicDeadlineKind.CONFERENCE,
+            PublicDeadlineSource.CONTEST_DDL, "2026-09-02T12:00:00+08:00",
+            categories = listOf("人工智能"),
+        )
+        val expiredConference = item(
+            "expired-conference", PublicDeadlineKind.CONFERENCE,
+            PublicDeadlineSource.CONTEST_DDL, "2026-08-01T12:00:00+08:00",
+            categories = listOf("系统"),
+        )
+        val futureCompetition = item(
+            "future-competition", PublicDeadlineKind.COMPETITION,
+            PublicDeadlineSource.CONTEST_DDL, "2026-09-03T12:00:00+08:00",
+            categories = listOf("数学建模"),
+        )
+        val custom = item(
+            "custom", PublicDeadlineKind.CUSTOM,
+            PublicDeadlineSource.CUSTOM, "2026-09-04T12:00:00+08:00",
+            categories = listOf("自定义"),
+        )
+        val catalog = listOf(futureConference, expiredConference, futureCompetition, custom)
+
+        assertEquals(
+            listOf("人工智能"),
+            ImportantEventQueryLogic.metadataCategories(
+                catalog,
+                emptyList(),
+                ImportantEventCategory.CONFERENCE,
+                showsEnded = false,
+                nowMillis = nowMillis,
+            ),
+        )
+        assertEquals(
+            listOf("人工智能", "系统"),
+            ImportantEventQueryLogic.metadataCategories(
+                catalog,
+                emptyList(),
+                ImportantEventCategory.CONFERENCE,
+                showsEnded = true,
+                nowMillis = nowMillis,
+            ),
+        )
+        assertEquals(
+            listOf("数学建模"),
+            ImportantEventQueryLogic.metadataCategories(
+                catalog,
+                emptyList(),
+                ImportantEventCategory.COMPETITION,
+                showsEnded = false,
+                nowMillis = nowMillis,
+            ),
+        )
+    }
+
+    @Test
+    fun unavailableTypeAndMetadataSelectionsFallBackSafely() {
+        val nowMillis = OffsetDateTime.parse("2026-08-31T12:00:00+08:00")
+            .toInstant().toEpochMilli()
+        val conference = item(
+            "conference", PublicDeadlineKind.CONFERENCE,
+            PublicDeadlineSource.CONTEST_DDL, "2026-09-02T12:00:00+08:00",
+            categories = listOf("人工智能"),
+        )
+
+        assertEquals(
+            ImportantEventFilterSelection(ImportantEventCategory.ALL, null),
+            ImportantEventQueryLogic.normalizedSelection(
+                listOf(conference),
+                emptyList(),
+                ImportantEventCategory.PRE_ADMISSION,
+                "预推免",
+                showsEnded = false,
+                nowMillis = nowMillis,
+            ),
+        )
+        assertEquals(
+            ImportantEventFilterSelection(ImportantEventCategory.CONFERENCE, null),
+            ImportantEventQueryLogic.normalizedSelection(
+                listOf(conference),
+                emptyList(),
+                ImportantEventCategory.CONFERENCE,
+                "系统",
+                showsEnded = false,
+                nowMillis = nowMillis,
+            ),
+        )
+        assertEquals(
+            ImportantEventFilterSelection(ImportantEventCategory.CONFERENCE, "人工智能"),
+            ImportantEventQueryLogic.normalizedSelection(
+                listOf(conference),
+                emptyList(),
+                ImportantEventCategory.CONFERENCE,
+                "人工智能",
+                showsEnded = false,
+                nowMillis = nowMillis,
             ),
         )
     }

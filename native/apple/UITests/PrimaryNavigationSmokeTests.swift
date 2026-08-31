@@ -41,6 +41,12 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(showEnded.waitForExistence(timeout: 5))
         XCTAssertEqual(showEnded.value as? String, "0")
         XCTAssertTrue(app.staticTexts["示例学术会议"].waitForExistence(timeout: 5))
+        for category in ["all", "schoolNotice", "competition", "conference", "summerCamp", "hackathon"] {
+            XCTAssertTrue(app.descendants(matching: .any)["queries.events.type.\(category)"]
+                .waitForExistence(timeout: 5))
+        }
+        XCTAssertFalse(app.descendants(matching: .any)["queries.events.type.journalSpecialIssue"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["queries.events.type.preAdmission"].exists)
 
         navigate(to: "教学日历", in: app)
         XCTAssertFalse(app.descendants(matching: .any)["calendar.open-information-queries"].exists)

@@ -106,6 +106,20 @@ export class ImportantEventQueryLogic {
     return ImportantEventQueryLogic.sorted(filtered);
   }
 
+  static availableFilters(items: PublicDeadlineItem[]): ImportantEventFilter[] {
+    const result: ImportantEventFilter[] = [ImportantEventFilter.all];
+    for (const filter of QueryPageContract.filters) {
+      if (filter === ImportantEventFilter.all) {
+        continue;
+      }
+      if (items.some((item: PublicDeadlineItem): boolean =>
+        ImportantEventQueryLogic.matchesType(item, filter))) {
+        result.push(filter);
+      }
+    }
+    return result;
+  }
+
   static availableCategories(items: PublicDeadlineItem[],
     typeFilter: ImportantEventFilter, showEnded: boolean = false,
     nowMs: number = Date.now()): string[] {

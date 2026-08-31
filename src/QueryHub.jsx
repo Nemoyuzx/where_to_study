@@ -19,6 +19,7 @@ import {
   filterImportantEvents,
   importantEventFavorite,
   importantEventFilterOptions,
+  mergeImportantEventCatalog,
   shanghaiClockMinutes,
   shanghaiWeekdayKey,
   SHUTTLE_WEEKDAYS,
@@ -153,18 +154,27 @@ export default function QueryHub({
     nowMinutes: shanghaiClockMinutes(now),
     selectedPeriod,
   }), [currentWeekday, now, selectedPeriod, selectedWeekday, shuttle, today])
-  const eventOptions = useMemo(
-    () => importantEventFilterOptions(importantEvents?.items || []),
-    [importantEvents],
+  const eventCatalog = useMemo(
+    () => mergeImportantEventCatalog(importantEvents?.items || [], favoriteItems),
+    [favoriteItems, importantEvents],
   )
-  const filteredEvents = useMemo(() => filterImportantEvents(importantEvents?.items || [], {
+  const eventOptions = useMemo(
+    () => importantEventFilterOptions(eventCatalog, {
+      type: eventType,
+      source: eventSource,
+      includeExpired,
+      now,
+    }),
+    [eventCatalog, eventSource, eventType, includeExpired, now],
+  )
+  const filteredEvents = useMemo(() => filterImportantEvents(eventCatalog, {
     query,
     type: eventType,
     category,
     source: eventSource,
     includeExpired,
     now,
-  }), [category, eventSource, eventType, importantEvents, includeExpired, now, query])
+  }), [category, eventCatalog, eventSource, eventType, includeExpired, now, query])
   const favoriteOnlyMissing = useMemo(() => favoriteItems.filter((favorite) => (
     ['contest_ddl', 'school_notice'].includes(favorite.source_type)
       && !filteredEvents.some((item) => (
@@ -174,6 +184,18 @@ export default function QueryHub({
       ))
   )), [favoriteItems, filteredEvents])
   const visibleEvents = filteredEvents.slice(0, visibleCount)
+
+  useEffect(() => {
+    if (eventType !== 'all' && !eventOptions.types.includes(eventType)) {
+      setEventType('all')
+    }
+  }, [eventOptions.types, eventType])
+
+  useEffect(() => {
+    if (category !== 'all' && !eventOptions.categories.includes(category)) {
+      setCategory('all')
+    }
+  }, [category, eventOptions.categories])
 
   return (
     <section className="query-hub" aria-label={t('综合查询')}>
@@ -260,9 +282,9 @@ export default function QueryHub({
           </header>
           <div className="event-query-controls">
             <label className="event-query-search"><Search size={17} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('搜索赛事、会议、学校、方向…')} /></label>
-            <label><span>{t('类型')}</span><select value={eventType} onChange={(event) => setEventType(event.target.value)}><option value="all">{t('全部类型')}</option>{eventOptions.types.map((type) => <option value={type} key={type}>{typeLabel(type, t)}</option>)}</select></label>
+            <label><span>{t('类型')}</span><select value={eventType} onChange={(event) => { setEventType(event.target.value); setCategory('all') }}><option value="all">{t('全部类型')}</option>{eventOptions.types.map((type) => <option value={type} key={type}>{typeLabel(type, t)}</option>)}</select></label>
             <label><span>{t('分类')}</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">{t('全部分类')}</option>{eventOptions.categories.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
-            <label><span>{t('来源')}</span><select value={eventSource} onChange={(event) => setEventSource(event.target.value)}><option value="all">{t('全部来源')}</option><option value="public">{t('公开活动')}</option><option value="school">{t('校内通知')}</option></select></label>
+            <label><span>{t('来源')}</span><select value={eventSource} onChange={(event) => { setEventSource(event.target.value); setCategory('all') }}><option value="all">{t('全部来源')}</option><option value="public">{t('公开活动')}</option><option value="school">{t('校内通知')}</option></select></label>
             <div className="event-expired-toggle"><span>{t('显示已结束')}</span><button type="button" role="switch" className="settings-switch" aria-checked={includeExpired} onClick={() => setIncludeExpired((value) => !value)}><span aria-hidden="true" /></button></div>
           </div>
           {eventsLoading && !importantEvents ? <div className="query-loading"><Loader2 className="spin" />{t('正在更新重要事件…')}</div> : null}

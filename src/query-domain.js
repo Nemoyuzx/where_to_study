@@ -186,11 +186,43 @@ export function importantEventFavorite(item = {}) {
   }
 }
 
-export function importantEventFilterOptions(items) {
-  const source = Array.isArray(items) ? items : []
+export function mergeImportantEventCatalog(liveItems, favoriteItems) {
+  const merged = new Map()
+  for (const items of [liveItems, favoriteItems]) {
+    for (const item of Array.isArray(items) ? items : []) {
+      if (!['contest_ddl', 'school_notice'].includes(item?.source_type)) continue
+      const key = [item.source_type, item.id, item.primary_deadline].join('\u0000')
+      if (!merged.has(key)) merged.set(key, item)
+    }
+  }
+  return [...merged.values()]
+}
+
+export function importantEventFilterOptions(items, {
+  type = 'all',
+  source = 'all',
+  includeExpired = false,
+  now = new Date(),
+} = {}) {
+  const itemSource = Array.isArray(items) ? items : []
+  const nowTimestamp = now.getTime()
+  const supported = itemSource.filter((item) => (
+    deadlineTimestamp(item.primary_deadline) !== null
+      && IMPORTANT_EVENT_TYPES.includes(item.event_type)
+      && ['contest_ddl', 'school_notice'].includes(item.source_type)
+  ))
+  const categoryItems = supported.filter((item) => {
+    const timestamp = deadlineTimestamp(item.primary_deadline)
+    return (type === 'all' || item.event_type === type)
+      && (source === 'all'
+        || (source === 'school' && item.source_type === 'school_notice')
+        || (source === 'public' && item.source_type !== 'school_notice'))
+      && (includeExpired || (timestamp >= nowTimestamp && !item.archived))
+  })
   return {
-    types: IMPORTANT_EVENT_TYPES.filter((type) => source.some((item) => item.event_type === type)),
-    categories: [...new Set(source.flatMap((item) => item.categories || []))]
+    types: IMPORTANT_EVENT_TYPES.filter((value) =>
+      supported.some((item) => item.event_type === value)),
+    categories: [...new Set(categoryItems.flatMap((item) => item.categories || []))]
       .sort((left, right) => left.localeCompare(right, 'zh-Hans-CN')),
   }
 }

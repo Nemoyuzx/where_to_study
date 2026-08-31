@@ -106,10 +106,40 @@ enum ImportantEventQueryLogic {
         }
     }
 
-    static func metadataCategories(in items: [PublicDeadlineItem]) -> [String] {
-        Array(Set(items.flatMap(\.categories))).sorted {
+    static func availableCategories(
+        in items: [PublicDeadlineItem]
+    ) -> [ImportantEventCategory] {
+        ImportantEventCategory.allCases.filter { category in
+            category == .all || items.contains(where: category.includes)
+        }
+    }
+
+    static func metadataCategories(
+        in items: [PublicDeadlineItem],
+        category: ImportantEventCategory = .all,
+        showsEnded: Bool = false,
+        now: Date = .now
+    ) -> [String] {
+        let scopedItems = items.filter { item in
+            category.includes(item) && (showsEnded || !isEnded(item, now: now))
+        }
+        return Array(Set(scopedItems.flatMap(\.categories))).sorted {
             $0.localizedStandardCompare($1) == .orderedAscending
         }
+    }
+
+    static func normalizedCategory(
+        _ category: ImportantEventCategory,
+        availableCategories: [ImportantEventCategory]
+    ) -> ImportantEventCategory {
+        availableCategories.contains(category) ? category : .all
+    }
+
+    static func normalizedMetadataCategory(
+        _ category: String,
+        availableCategories: [String]
+    ) -> String {
+        category.isEmpty || availableCategories.contains(category) ? category : ""
     }
 
     static func isEnded(_ item: PublicDeadlineItem, now: Date = .now) -> Bool {
@@ -427,12 +457,25 @@ struct InformationQueriesView: View {
             liveItems: liveItems,
             favoriteItems: model.favoriteDeadlines
         )
-        let metadataCategories = ImportantEventQueryLogic.metadataCategories(in: allItems)
+        let availableCategories = ImportantEventQueryLogic.availableCategories(in: allItems)
+        let effectiveCategory = ImportantEventQueryLogic.normalizedCategory(
+            selectedCategory,
+            availableCategories: availableCategories
+        )
+        let metadataCategories = ImportantEventQueryLogic.metadataCategories(
+            in: allItems,
+            category: effectiveCategory,
+            showsEnded: showsEndedEvents
+        )
+        let effectiveMetadataCategory = ImportantEventQueryLogic.normalizedMetadataCategory(
+            selectedMetadataCategory,
+            availableCategories: metadataCategories
+        )
         let filtered = ImportantEventQueryLogic.filteredItems(
             allItems,
             query: searchText,
-            category: selectedCategory,
-            metadataCategory: selectedMetadataCategory,
+            category: effectiveCategory,
+            metadataCategory: effectiveMetadataCategory,
             showsEnded: showsEndedEvents
         )
 
@@ -467,28 +510,32 @@ struct InformationQueriesView: View {
                         .foregroundStyle(AppTheme.secondaryText)
                     ScrollView(.horizontal) {
                         HStack(spacing: 8) {
-                            ForEach(ImportantEventCategory.allCases) { category in
+                            ForEach(availableCategories) { category in
                                 Button {
                                     AppHaptics.selection()
+                                    if selectedCategory != category {
+                                        selectedMetadataCategory = ""
+                                    }
                                     selectedCategory = category
                                 } label: {
                                     Text(model.localized(category.titleKey))
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(
-                                            selectedCategory == category
+                                            effectiveCategory == category
                                                 ? AppTheme.onPrimary
                                                 : AppTheme.text
                                         )
                                         .padding(.horizontal, 11)
                                         .padding(.vertical, 7)
                                         .background(
-                                            selectedCategory == category
+                                            effectiveCategory == category
                                                 ? AppTheme.primaryFill
                                                 : AppTheme.background,
                                             in: Capsule()
                                         )
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("queries.events.type.\(category.rawValue)")
                             }
                         }
                     }
@@ -573,6 +620,21 @@ struct InformationQueriesView: View {
             sourceNotice(
                 text: "第三方来源：公开活动来自 Contest DDL（服务器提供备用接口）；校内竞赛通知由脚本从学校内部网站公开通知页提取整理。查询页不包含课程作业 DDL。",
                 url: CalendarDeadlineSources.primaryPage
+            )
+        }
+        .onChange(of: availableCategories) { categories in
+            let normalized = ImportantEventQueryLogic.normalizedCategory(
+                selectedCategory,
+                availableCategories: categories
+            )
+            guard normalized != selectedCategory else { return }
+            selectedCategory = normalized
+            selectedMetadataCategory = ""
+        }
+        .onChange(of: metadataCategories) { categories in
+            selectedMetadataCategory = ImportantEventQueryLogic.normalizedMetadataCategory(
+                selectedMetadataCategory,
+                availableCategories: categories
             )
         }
     }

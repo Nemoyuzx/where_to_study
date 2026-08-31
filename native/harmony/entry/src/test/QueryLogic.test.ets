@@ -70,6 +70,45 @@ export default function queryLogicTest() {
         new Date('2026-08-31T00:00:00+08:00').getTime())[0]).assertEqual('人工智能');
     });
 
+    it('only_exposes_event_types_present_in_remote_or_favorites', 0, () => {
+      const remote: PublicDeadlineItem[] = [
+        new PublicDeadlineItem('contest', 'Contest', PublicDeadlineKind.competition,
+          PublicDeadlineSource.contestDDL, '2026-09-02T12:00:00+08:00', null, null),
+        new PublicDeadlineItem('conference', 'Conference', PublicDeadlineKind.conference,
+          PublicDeadlineSource.contestDDL, '2026-09-03T12:00:00+08:00', null, null)
+      ];
+      let filters: ImportantEventFilter[] = ImportantEventQueryLogic.availableFilters(
+        ImportantEventQueryLogic.mergeCatalog(remote, []));
+      expect(filters.indexOf(ImportantEventFilter.competition) >= 0).assertTrue();
+      expect(filters.indexOf(ImportantEventFilter.conference) >= 0).assertTrue();
+      expect(filters.indexOf(ImportantEventFilter.journalSpecialIssue) < 0).assertTrue();
+      expect(filters.indexOf(ImportantEventFilter.preAdmission) < 0).assertTrue();
+
+      const favorite: PublicDeadlineItem = new PublicDeadlineItem(
+        'favorite-journal', 'Favorite Journal', PublicDeadlineKind.journalSpecialIssue,
+        PublicDeadlineSource.contestDDL, '2026-10-04T12:00:00+08:00', null, null);
+      filters = ImportantEventQueryLogic.availableFilters(
+        ImportantEventQueryLogic.mergeCatalog(remote, [favorite]));
+      expect(filters.indexOf(ImportantEventFilter.journalSpecialIssue) >= 0).assertTrue();
+      expect(filters.indexOf(ImportantEventFilter.preAdmission) < 0).assertTrue();
+    });
+
+    it('metadata_categories_follow_the_selected_event_type', 0, () => {
+      const items: PublicDeadlineItem[] = [
+        new PublicDeadlineItem('contest', 'Contest', PublicDeadlineKind.competition,
+          PublicDeadlineSource.contestDDL, '2026-09-02T12:00:00+08:00', null, null,
+          null, null, ['程序设计']),
+        new PublicDeadlineItem('conference', 'Conference', PublicDeadlineKind.conference,
+          PublicDeadlineSource.contestDDL, '2026-09-03T12:00:00+08:00', null, null,
+          null, null, ['人工智能'])
+      ];
+      const categories: string[] = ImportantEventQueryLogic.availableCategories(
+        items, ImportantEventFilter.conference, false,
+        new Date('2026-08-31T00:00:00+08:00').getTime());
+      expect(categories.length).assertEqual(1);
+      expect(categories[0]).assertEqual('人工智能');
+    });
+
     it('ended_and_archived_events_are_hidden_by_default', 0, () => {
       const items: PublicDeadlineItem[] = [
         new PublicDeadlineItem('past', 'Past', PublicDeadlineKind.competition,

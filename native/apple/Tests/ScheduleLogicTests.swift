@@ -20,6 +20,113 @@ final class ScheduleLogicTests: XCTestCase {
             .appendingPathComponent(name))
     }
 
+    func testInformationQueryOnlyOffersEventTypesPresentInRemoteOrFavoriteItems() {
+        let competition = PublicDeadlineItem(
+            id: "competition",
+            name: "未来竞赛",
+            kind: .competition,
+            source: .contestDDL,
+            deadline: "2026-09-02T12:00:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
+        let favoritePreAdmission = PublicDeadlineItem(
+            id: "favorite-pre-admission",
+            name: "收藏的预推免",
+            kind: .preAdmission,
+            source: .contestDDL,
+            deadline: "2026-09-03T12:00:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
+        let items = ImportantEventQueryLogic.mergedItems(
+            liveItems: [competition],
+            favoriteItems: [favoritePreAdmission]
+        )
+
+        XCTAssertEqual(
+            ImportantEventQueryLogic.availableCategories(in: items),
+            [.all, .competition, .preAdmission]
+        )
+        XCTAssertEqual(
+            ImportantEventQueryLogic.normalizedCategory(
+                .journalSpecialIssue,
+                availableCategories: ImportantEventQueryLogic.availableCategories(in: items)
+            ),
+            .all
+        )
+    }
+
+    func testInformationQueryMetadataCategoriesFollowTypeAndEndedScope() throws {
+        let now = try XCTUnwrap(StrictContractDateParser.date(from: "2026-08-31"))
+        let activeCompetition = PublicDeadlineItem(
+            id: "active-competition",
+            name: "未来竞赛",
+            kind: .competition,
+            source: .contestDDL,
+            deadline: "2026-09-02T12:00:00+08:00",
+            organizer: nil,
+            officialURL: nil,
+            categories: ["AI"]
+        )
+        let endedCompetition = PublicDeadlineItem(
+            id: "ended-competition",
+            name: "已结束竞赛",
+            kind: .competition,
+            source: .contestDDL,
+            deadline: "2026-08-30T12:00:00+08:00",
+            organizer: nil,
+            officialURL: nil,
+            categories: ["Robotics"]
+        )
+        let activeConference = PublicDeadlineItem(
+            id: "active-conference",
+            name: "未来会议",
+            kind: .conference,
+            source: .contestDDL,
+            deadline: "2026-09-04T12:00:00+08:00",
+            organizer: nil,
+            officialURL: nil,
+            categories: ["Systems"]
+        )
+        let items = [activeCompetition, endedCompetition, activeConference]
+
+        XCTAssertEqual(
+            ImportantEventQueryLogic.metadataCategories(
+                in: items,
+                category: .competition,
+                showsEnded: false,
+                now: now
+            ),
+            ["AI"]
+        )
+        XCTAssertEqual(
+            Set(ImportantEventQueryLogic.metadataCategories(
+                in: items,
+                category: .competition,
+                showsEnded: true,
+                now: now
+            )),
+            Set(["AI", "Robotics"])
+        )
+        XCTAssertEqual(
+            ImportantEventQueryLogic.metadataCategories(
+                in: items,
+                category: .conference,
+                showsEnded: false,
+                now: now
+            ),
+            ["Systems"]
+        )
+        XCTAssertEqual(
+            ImportantEventQueryLogic.normalizedMetadataCategory(
+                "Robotics",
+                availableCategories: ["AI"]
+            ),
+            ""
+        )
+    }
+
     func testClassroomDefaultsExposeEveryOriginalBuildingForEachCampus() {
         XCTAssertEqual(
             ClassroomDefaults.buildings(for: "01"),

@@ -267,7 +267,7 @@ fn run(
                     match result {
                         Ok(response) => {
                             app.important_events = Some(response);
-                            app.clamp_query_cursor();
+                            app.normalize_query_filters();
                             app.set_status("重要事件已刷新".to_string());
                         }
                         Err(error) if !app.favorite_events.is_empty() => app.set_error(format!(
@@ -485,13 +485,11 @@ fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) ->
         KeyCode::Char('p') if app.query_section == QuerySection::Events => app.cycle_query_source(),
         KeyCode::Char('e') if app.query_section == QuerySection::Events => {
             app.query_include_ended = !app.query_include_ended;
-            app.query_event_cursor = 0;
-            app.query_scroll = 0;
+            app.normalize_query_filters();
         }
         KeyCode::Char('v') if app.query_section == QuerySection::Events => {
             app.query_favorites_only = !app.query_favorites_only;
-            app.query_event_cursor = 0;
-            app.query_scroll = 0;
+            app.normalize_query_filters();
         }
         KeyCode::Char('f') if app.query_section == QuerySection::Events => {
             match app.toggle_selected_event_favorite() {
@@ -499,7 +497,7 @@ fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) ->
                 Ok(false) => app.set_status("已取消收藏重要事件".to_string()),
                 Err(error) => app.set_error(error.message),
             }
-            app.clamp_query_cursor();
+            app.normalize_query_filters();
         }
         _ => {}
     }

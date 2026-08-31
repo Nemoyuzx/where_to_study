@@ -377,7 +377,21 @@ impl App {
     }
 
     pub fn event_categories(&self) -> Vec<String> {
-        where_to_study_lib::public_queries::available_event_categories(&self.all_query_events())
+        let items = self.all_query_events();
+        let scoped = where_to_study_lib::public_queries::filter_important_events(
+            &items,
+            &self.favorite_events,
+            &ImportantEventFilter {
+                query: String::new(),
+                event_type: self.query_event_type.clone(),
+                category: None,
+                source: self.query_source,
+                include_ended: self.query_include_ended,
+                favorites_only: self.query_favorites_only,
+            },
+            chrono::Utc::now(),
+        );
+        where_to_study_lib::public_queries::available_event_categories(&scoped)
     }
 
     pub fn visible_query_events(&self) -> Vec<ImportantEventItem> {
@@ -422,6 +436,7 @@ impl App {
     pub fn cycle_query_event_type(&mut self) {
         let options = self.event_types();
         self.query_event_type = cycle_optional(&options, self.query_event_type.as_deref());
+        self.query_category = None;
         self.query_event_cursor = 0;
         self.query_scroll = 0;
     }
@@ -439,8 +454,29 @@ impl App {
             ImportantEventSourceFilter::Public => ImportantEventSourceFilter::School,
             ImportantEventSourceFilter::School => ImportantEventSourceFilter::All,
         };
+        self.query_category = None;
         self.query_event_cursor = 0;
         self.query_scroll = 0;
+    }
+
+    pub fn normalize_query_filters(&mut self) {
+        let types = self.event_types();
+        if self
+            .query_event_type
+            .as_ref()
+            .is_some_and(|selected| !types.contains(selected))
+        {
+            self.query_event_type = None;
+        }
+        let categories = self.event_categories();
+        if self
+            .query_category
+            .as_ref()
+            .is_some_and(|selected| !categories.contains(selected))
+        {
+            self.query_category = None;
+        }
+        self.clamp_query_cursor();
     }
 
     pub fn is_favorite(&self, item: &ImportantEventItem) -> bool {
@@ -680,12 +716,37 @@ mod tests {
                 sample_event("past", "2020-01-01T12:00:00+08:00", "系统"),
             ],
         });
-        assert_eq!(app.event_categories(), ["人工智能", "系统"]);
+        assert_eq!(app.event_categories(), ["人工智能"]);
         assert_eq!(app.visible_query_events().len(), 1);
         app.query_include_ended = true;
+        assert_eq!(app.event_categories(), ["人工智能", "系统"]);
         assert_eq!(app.visible_query_events().len(), 2);
         app.query_category = Some("系统".to_string());
         assert_eq!(app.visible_query_events()[0].id, "past");
+    }
+
+    #[test]
+    fn query_categories_follow_type_and_reset_when_filters_change() {
+        let mut contest = sample_event("contest", "2099-09-01T12:00:00+08:00", "程序设计");
+        contest.event_type = "competition".to_string();
+        let conference = sample_event("conference", "2099-09-02T12:00:00+08:00", "人工智能");
+        let mut app = App::new(false);
+        app.important_events = Some(ImportantEventsResponse {
+            fetched_at: "2026-08-31T00:00:00+08:00".to_string(),
+            source: "fixture".to_string(),
+            used_backup: false,
+            items: vec![contest, conference],
+        });
+        app.query_event_type = Some("conference".to_string());
+        assert_eq!(app.event_categories(), ["人工智能"]);
+        app.query_category = Some("人工智能".to_string());
+        app.cycle_query_event_type();
+        assert!(app.query_category.is_none());
+        app.query_event_type = Some("journal_special_issue".to_string());
+        app.query_category = Some("不存在".to_string());
+        app.normalize_query_filters();
+        assert!(app.query_event_type.is_none());
+        assert!(app.query_category.is_none());
     }
 
     #[test]

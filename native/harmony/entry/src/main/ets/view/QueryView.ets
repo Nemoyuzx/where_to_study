@@ -38,7 +38,7 @@ export struct QueryView {
   }
 
   private eventFilter(): ImportantEventFilter {
-    for (const filter of QueryPageContract.filters) {
+    for (const filter of this.availableEventFilters()) {
       if (filter === this.eventFilterRawValue) {
         return filter;
       }
@@ -66,17 +66,28 @@ export struct QueryView {
   }
 
   private visibleEvents(): PublicDeadlineItem[] {
-    const catalog: PublicDeadlineItem[] = ImportantEventQueryLogic.mergeCatalog(
+    return ImportantEventQueryLogic.filter(this.eventCatalog(), this.searchText, this.eventFilter(),
+      this.effectiveEventCategory(), this.showEndedEvents);
+  }
+
+  private eventCatalog(): PublicDeadlineItem[] {
+    return ImportantEventQueryLogic.mergeCatalog(
       this.model.importantEventsCatalog, this.model.favoriteDeadlines);
-    return ImportantEventQueryLogic.filter(catalog, this.searchText, this.eventFilter(),
-      this.eventCategory, this.showEndedEvents);
+  }
+
+  private availableEventFilters(): ImportantEventFilter[] {
+    return ImportantEventQueryLogic.availableFilters(this.eventCatalog());
   }
 
   private availableEventCategories(): string[] {
     return ImportantEventQueryLogic.availableCategories(
-      ImportantEventQueryLogic.mergeCatalog(
-        this.model.importantEventsCatalog, this.model.favoriteDeadlines),
+      this.eventCatalog(),
       this.eventFilter(), this.showEndedEvents);
+  }
+
+  private effectiveEventCategory(): string {
+    return this.availableEventCategories().indexOf(this.eventCategory) >= 0 ?
+      this.eventCategory : '';
   }
 
   private openURL(url: string | null): void {
@@ -393,7 +404,7 @@ export struct QueryView {
         })
       Scroll() {
         Row({ space: 7 }) {
-          ForEach(QueryPageContract.filters, (filter: ImportantEventFilter) => {
+          ForEach(this.availableEventFilters(), (filter: ImportantEventFilter) => {
             Text(this.model.text(QueryPageContract.filterTitle(filter)))
               .fontSize(12)
               .fontWeight(this.eventFilter() === filter ? FontWeight.Bold : FontWeight.Regular)
@@ -420,13 +431,15 @@ export struct QueryView {
           Row({ space: 7 }) {
             Text(this.model.text('全部分类'))
               .fontSize(12)
-              .fontWeight(this.eventCategory.length === 0 ? FontWeight.Bold : FontWeight.Regular)
-              .fontColor(this.eventCategory.length === 0 ? AppTheme.onPrimary() : AppTheme.text())
+              .fontWeight(this.effectiveEventCategory().length === 0 ?
+                FontWeight.Bold : FontWeight.Regular)
+              .fontColor(this.effectiveEventCategory().length === 0 ?
+                AppTheme.onPrimary() : AppTheme.text())
               .height(28)
               .padding({ left: 10, right: 10 })
               .textAlign(TextAlign.Center)
               .borderRadius(14)
-              .backgroundColor(this.eventCategory.length === 0 ?
+              .backgroundColor(this.effectiveEventCategory().length === 0 ?
                 AppTheme.primaryFill() : AppTheme.surface())
               .onClick(() => {
                 this.eventCategory = '';
@@ -434,13 +447,15 @@ export struct QueryView {
             ForEach(this.availableEventCategories(), (category: string) => {
               Text(category)
                 .fontSize(12)
-                .fontWeight(this.eventCategory === category ? FontWeight.Bold : FontWeight.Regular)
-                .fontColor(this.eventCategory === category ? AppTheme.onPrimary() : AppTheme.text())
+                .fontWeight(this.effectiveEventCategory() === category ?
+                  FontWeight.Bold : FontWeight.Regular)
+                .fontColor(this.effectiveEventCategory() === category ?
+                  AppTheme.onPrimary() : AppTheme.text())
                 .height(28)
                 .padding({ left: 10, right: 10 })
                 .textAlign(TextAlign.Center)
                 .borderRadius(14)
-                .backgroundColor(this.eventCategory === category ?
+                .backgroundColor(this.effectiveEventCategory() === category ?
                   AppTheme.primaryFill() : AppTheme.surface())
                 .onClick(() => {
                   this.eventCategory = category;

@@ -36,6 +36,14 @@ final class ShuttleBusClientTests: XCTestCase {
         XCTAssertThrowsError(try ShuttleBusClient.parse(data: Data(data.utf8)))
     }
 
+    func testParserDropsNeedsReviewScheduleWithUnknownDirectionWithoutRejectingPayload() throws {
+        let snapshot = try ShuttleBusClient.parse(data: fixtureData)
+        let notice = try XCTUnwrap(snapshot.notices.first)
+
+        XCTAssertEqual(notice.schedules.count, 2)
+        XCTAssertTrue(notice.schedules.allSatisfy { !$0.from.isEmpty && !$0.to.isEmpty })
+    }
+
     func testRedirectDelegateRejectsRedirectBeforeFollowingIt() throws {
         let original = try XCTUnwrap(URL(string: "https://where-to-study.cn/api/shuttle-bus"))
         let redirected = try XCTUnwrap(URL(string: "https://example.com/redirected"))
@@ -304,6 +312,13 @@ final class ShuttleBusClientTests: XCTestCase {
                 "to":"西土城路校区",
                 "parse_status":"parsed",
                 "rows":[{"departure_time":"07:00","services":{"monday":{"vehicle":"大巴","count":1}}}]
+              },
+              {
+                "period":{"label":"通知所示时段","start_date":null,"end_date":null},
+                "from":null,
+                "to":null,
+                "parse_status":"needs_review",
+                "rows":[]
               }
             ]
           }]

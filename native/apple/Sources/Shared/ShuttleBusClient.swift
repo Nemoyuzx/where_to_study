@@ -168,8 +168,10 @@ struct ShuttleBusClient: ShuttleBusFetching {
 
     private static func validatedSchedule(_ value: ShuttleBusScheduleDTO) -> ShuttleBusSchedule? {
         guard value.parseStatus == "parsed",
-              !value.from.isEmpty,
-              !value.to.isEmpty,
+              let from = value.from?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !from.isEmpty,
+              let to = value.to?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !to.isEmpty,
               value.rows.count <= 64
         else { return nil }
         if let startDate = value.period.startDate,
@@ -199,8 +201,8 @@ struct ShuttleBusClient: ShuttleBusFetching {
                 startDate: value.period.startDate,
                 endDate: value.period.endDate
             ),
-            from: value.from,
-            to: value.to,
+            from: from,
+            to: to,
             parseStatus: value.parseStatus,
             rows: rows
         )
@@ -462,8 +464,8 @@ private struct ShuttleBusStopDTO: Decodable {
 
 private struct ShuttleBusScheduleDTO: Decodable {
     let period: ShuttleBusPeriodDTO
-    let from: String
-    let to: String
+    let from: String?
+    let to: String?
     let parseStatus: String
     let rows: [ShuttleBusScheduleRowDTO]
 

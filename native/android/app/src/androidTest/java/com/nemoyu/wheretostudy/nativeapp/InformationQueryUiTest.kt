@@ -73,9 +73,12 @@ class InformationQueryUiTest {
 
     @Test
     fun queryPageUsesAnimatedTabsAndExposesSearchFilterAndFavorites() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
         val preferences = AppPreferences(context)
         val previousLanguage = preferences.languageCode
+        val previousFavorites = preferences.favoriteDeadlines
+        previousFavorites.forEach { preferences.setFavorite(it, favorite = false) }
         preferences.languageCode = AppLanguage.ENGLISH.code
         val intent = Intent(context, MainActivity::class.java)
             .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
@@ -96,12 +99,28 @@ class InformationQueryUiTest {
                     assertNotNull(activity.findViewById<View?>(R.id.information_query_shuttle_status))
                     assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).performClick())
                 }
-                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+                instrumentation.waitForIdleSync()
+                assertTrue(
+                    UiDevice.getInstance(instrumentation).wait(
+                        Until.hasObject(By.text(context.uiText("学术会议"))),
+                        5_000,
+                    ),
+                )
                 scenario.onActivity { activity ->
                     assertNotNull(activity.findViewById<EditText?>(R.id.information_query_search))
                     assertNotNull(
                         activity.findViewById<View?>(R.id.information_query_metadata_category_row),
                     )
+                    val typeRow = activity.findViewById<LinearLayout>(
+                        R.id.information_query_category_row,
+                    )
+                    assertEquals(
+                        listOf("全部", "学科竞赛", "学术会议", "黑客松", "夏令营", "校内通知")
+                            .map(activity::uiText),
+                        childTexts(typeRow),
+                    )
+                    assertTrue(activity.uiText("期刊专题") !in childTexts(typeRow))
+                    assertTrue(activity.uiText("预推免") !in childTexts(typeRow))
                     assertNotNull(activity.findViewById<View?>(R.id.information_query_show_ended))
                     val list = activity.findViewById<LinearLayout>(R.id.information_query_events_list)
                     assertTrue("Sample events must render in the query list", list.childCount > 0)
@@ -110,12 +129,38 @@ class InformationQueryUiTest {
                             .text.isNotBlank(),
                     )
                     assertNotNull(activity.findViewById<View?>(R.id.information_query_event_favorite))
+
+                    assertTrue(
+                        findTextChild(typeRow, activity.uiText("学术会议")).performClick(),
+                    )
+                    val conferenceMetadata = activity.findViewById<LinearLayout>(
+                        R.id.information_query_metadata_category_row,
+                    )
+                    assertTrue("计算机" in childTexts(conferenceMetadata))
+                    assertTrue(findTextChild(conferenceMetadata, "计算机").performClick())
+                    val refreshedTypeRow = activity.findViewById<LinearLayout>(
+                        R.id.information_query_category_row,
+                    )
+                    assertTrue(
+                        findTextChild(refreshedTypeRow, activity.uiText("学科竞赛")).performClick(),
+                    )
+                    assertTrue(
+                        activity.findViewById<View?>(R.id.information_query_metadata_category_row) ==
+                            null,
+                    )
                     assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
                     assertTrue(activity.findViewById<View?>(R.id.information_query_page) == null)
                 }
             }
         } finally {
-            AppPreferences(context).languageCode = previousLanguage
+            val restoredPreferences = AppPreferences(context)
+            restoredPreferences.favoriteDeadlines.forEach {
+                restoredPreferences.setFavorite(it, favorite = false)
+            }
+            previousFavorites.reversed().forEach {
+                restoredPreferences.setFavorite(it, favorite = true)
+            }
+            restoredPreferences.languageCode = previousLanguage
         }
     }
 
@@ -143,4 +188,12 @@ class InformationQueryUiTest {
             descendantText(view.getChildAt(index))
         }
     }
+
+    private fun childTexts(row: ViewGroup): List<String> = (0 until row.childCount).mapNotNull {
+        (row.getChildAt(it) as? TextView)?.text?.toString()
+    }
+
+    private fun findTextChild(row: ViewGroup, text: String): TextView = (0 until row.childCount)
+        .mapNotNull { row.getChildAt(it) as? TextView }
+        .first { it.text.toString() == text }
 }
