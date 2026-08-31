@@ -42,6 +42,12 @@ class InformationQueryUiTest {
             )
             device.findObject(By.text(context.uiText("班车与重要事件查询"))).click()
             instrumentation.waitForIdleSync()
+            assertTrue(
+                device.wait(
+                    Until.hasObject(By.text(context.uiText("班车查询"))),
+                    5_000,
+                ),
+            )
             scenario.onActivity { activity ->
                 assertNotNull(activity.findViewById<View?>(R.id.information_query_page))
             }
