@@ -705,6 +705,15 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(AdaptiveLayoutPolicy.contentColumnCount(width: 760), 2)
     }
 
+    func testPrimaryNavigationOrderTitlesAndAccessibilityIdentifiers() {
+        XCTAssertEqual(AppSection.allCases, [.planner, .calendar, .queries, .settings])
+        XCTAssertEqual(AppSection.allCases.map(\.titleKey), ["空教室", "教学日历", "查询", "设置"])
+        XCTAssertEqual(
+            AppSection.allCases.map(\.accessibilityIdentifier),
+            ["navigation.planner", "navigation.calendar", "navigation.queries", "navigation.settings"]
+        )
+    }
+
     func testSettingsLanguageCardPrecedesPrivacyAndLocalDataInEveryLayout() {
         let expectedBottomOrder: [SettingsSurfaceID] = [
             .language,
@@ -1253,7 +1262,8 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(session.dismissOverlayGeneration, originalDismissGeneration + 1)
         XCTAssertEqual(AppSection.planner.keyboardShortcutDigit, "1")
         XCTAssertEqual(AppSection.calendar.keyboardShortcutDigit, "2")
-        XCTAssertEqual(AppSection.settings.keyboardShortcutDigit, "3")
+        XCTAssertEqual(AppSection.queries.keyboardShortcutDigit, "3")
+        XCTAssertEqual(AppSection.settings.keyboardShortcutDigit, "4")
     }
 
     func testMacKeyboardNotificationRejectsUnknownActions() {

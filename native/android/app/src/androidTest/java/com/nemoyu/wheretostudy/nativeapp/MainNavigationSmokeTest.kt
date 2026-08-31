@@ -754,7 +754,7 @@ class MainNavigationSmokeTest {
                 scenario.onActivity { activity ->
                     val settings = activity.findViewById<ScrollView>(R.id.page_settings)
                     assertFalse(containsSpinner(settings))
-                    assertEquals(11, countSwitches(settings))
+                    assertEquals(12, countSwitches(settings))
                     listOf(
                         R.id.settings_language_selector,
                         R.id.settings_campus_selector,
@@ -1098,7 +1098,7 @@ class MainNavigationSmokeTest {
                 scenario.onActivity { activity ->
                     originalGeometry = phoneNavigationGeometry(activity)
                     assertEquals(
-                        listOf("空教室", "教学日历", "设置"),
+                        listOf("空教室", "教学日历", "查询", "设置"),
                         phoneNavigationLabels(activity),
                     )
                     activity.updateAppLanguage(AppLanguage.ENGLISH)
@@ -1112,7 +1112,7 @@ class MainNavigationSmokeTest {
                         phoneNavigationGeometry(activity),
                     )
                     assertEquals(
-                        listOf("Empty Classrooms", "Teaching Calendar", "Settings"),
+                        listOf("Empty Classrooms", "Teaching Calendar", "Query", "Settings"),
                         phoneNavigationLabels(activity),
                     )
                     activity.updateAppLanguage(AppLanguage.SIMPLIFIED_CHINESE)
@@ -1126,7 +1126,7 @@ class MainNavigationSmokeTest {
                         phoneNavigationGeometry(activity),
                     )
                     assertEquals(
-                        listOf("空教室", "教学日历", "设置"),
+                        listOf("空教室", "教学日历", "查询", "设置"),
                         phoneNavigationLabels(activity),
                     )
                 }
@@ -1264,6 +1264,16 @@ class MainNavigationSmokeTest {
                 }
             }
             assertCollapsibleNavigationRailWhenAvailable(scenario, device)
+
+            val hapticsBeforeQueryNavigation = hapticCount(scenario)
+            click(device, "navigation_query")
+            assertEquals(
+                "Query primary navigation must report haptic feedback while UI testing",
+                hapticsBeforeQueryNavigation + 1,
+                hapticCount(scenario),
+            )
+            assertVisible(device, "page_query")
+            assertVisible(device, "information_query_page")
 
             val hapticsBeforeCalendarNavigation = hapticCount(scenario)
             click(device, "navigation_calendar")
@@ -1781,7 +1791,7 @@ class MainNavigationSmokeTest {
                 }
                 assertEquals(
                     "Every Boolean setting must remain a native animated Switch",
-                    11,
+                    12,
                     countSwitches(settingsPage),
                 )
 
@@ -2089,6 +2099,7 @@ class MainNavigationSmokeTest {
     private fun phoneNavigationLabels(activity: MainActivity): List<String> = listOf(
         R.id.navigation_planner,
         R.id.navigation_calendar,
+        R.id.navigation_query,
         R.id.navigation_settings,
     ).map { id -> activity.findViewById<TextView>(id).text.toString() }
 
@@ -2221,6 +2232,7 @@ class MainNavigationSmokeTest {
             listOf(
                 R.id.navigation_planner,
                 R.id.navigation_calendar,
+                R.id.navigation_query,
                 R.id.navigation_settings,
             ).forEach { navigationID ->
                 val navigation = activity.findViewById<TextView>(navigationID)

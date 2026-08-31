@@ -1895,28 +1895,18 @@ internal class TeachingCalendarPage(
                 PopupMenu(activity, anchor).apply {
                     menu.add(
                         0,
-                        R.id.calendar_information_query_menu_item,
-                        0,
-                        activity.uiText("班车与重要事件查询"),
-                    )
-                    menu.add(
-                        0,
                         R.id.calendar_import_menu_item,
-                        1,
+                        0,
                         activity.uiText("导入手机日历"),
                     )
                     menu.add(
                         0,
                         R.id.calendar_import_favorites_menu_item,
-                        2,
+                        1,
                         activity.uiText("导入已收藏日程"),
                     )
                     setOnMenuItemClickListener { item ->
                         when (item.itemId) {
-                            R.id.calendar_information_query_menu_item -> {
-                                activity.openInformationQuery()
-                                true
-                            }
                             R.id.calendar_import_menu_item -> {
                                 confirmImport()
                                 true

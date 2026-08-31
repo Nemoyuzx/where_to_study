@@ -15,7 +15,7 @@ Where To Study is an independent, unofficial schedule and empty-classroom client
 7. In Settings, review the bilingual reference notice and the separate Competition and School Notice switches, then toggle the 07:30 course summary. Sample mode requests no Notification access.
 8. Favorite an event with the star at the right side of its details, then open the independent Favorite Management page in Settings and remove it. Favorites stay only on the device.
 9. On iOS or macOS, add the Today’s Courses widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path.
-10. Open Shuttle and Important Event Queries from both Teaching Calendar and Settings. Switch the top segment; the sample shuttle is offline, and Important Events supports search, categories, conference favorites, and excludes assignments.
+10. Open the primary Query destination between Teaching Calendar and Settings. Switch the top segment; the sample shuttle is offline, and Important Events supports search, categories, conference favorites, and excludes assignments.
 11. Return to Settings and select Return to Live Data to leave sample mode.
 
 Sample mode uses only fictional courses, classrooms, and holiday data bundled with the app. It does not connect to the school service or access/modify Keychain credentials, live user caches, Calendar, or Notifications. On iOS and macOS it writes only the fictional schedule to the Widget App Group; leaving sample mode immediately restores the locally cached live schedule snapshot.

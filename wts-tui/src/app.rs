@@ -16,6 +16,7 @@ pub enum Tab {
     Schedule,
     Planner,
     Calendar,
+    Query,
     Settings,
 }
 
@@ -50,7 +51,6 @@ pub struct App {
     pub settings_editing: bool,
     pub credentials_saved: bool,
     pub saved_account: String,
-    pub query_open: bool,
     pub query_section: QuerySection,
     pub shuttle: Option<ShuttleBusResponse>,
     pub important_events: Option<ImportantEventsResponse>,
@@ -100,7 +100,6 @@ impl App {
             settings_editing: false,
             credentials_saved: false,
             saved_account: String::new(),
-            query_open: false,
             query_section: QuerySection::Shuttle,
             shuttle: None,
             important_events: None,
@@ -472,7 +471,7 @@ fn cycle_optional(options: &[String], current: Option<&str>) -> Option<String> {
     }
 }
 
-pub const TAB_LABELS: [&str; 5] = ["概览", "课表", "空教室", "日历", "设置"];
+pub const TAB_LABELS: [&str; 6] = ["概览", "课表", "空教室", "日历", "查询", "设置"];
 
 #[cfg(test)]
 mod tests {

@@ -37,8 +37,6 @@ class MonthEventItem {
 export struct ExpandedTeachingCalendarView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
-  @Event onQueryRequested: () => void = () => {
-  };
   @Local presentedDay: DateParts | null = null;
   @Local allDayDialogDay: DateParts | null = null;
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
@@ -429,19 +427,6 @@ export struct ExpandedTeachingCalendarView {
 
       Blank()
         .width(12)
-
-      Text(this.model.text('查询'))
-        .fontSize(13)
-        .fontColor(AppTheme.primary())
-        .height(32)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(6)
-        .border({ width: 1, color: AppTheme.border() })
-        .backgroundColor(AppTheme.background())
-        .id('calendar.open_query.expanded')
-        .onClick(() => {
-          this.onQueryRequested();
-        })
 
       Text(this.model.isRefreshingSchedule ? this.model.text('正在获取…') :
         this.model.text('获取/刷新个人课表'))

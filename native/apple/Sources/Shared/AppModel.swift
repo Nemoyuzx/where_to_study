@@ -92,6 +92,7 @@ enum CredentialSettingsLogic {
 enum AppSection: String, CaseIterable, Identifiable {
     case planner
     case calendar
+    case queries
     case settings
 
     var id: String { rawValue }
@@ -100,6 +101,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .planner: "空教室"
         case .calendar: "教学日历"
+        case .queries: "查询"
         case .settings: "设置"
         }
     }
@@ -108,6 +110,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .planner: "house"
         case .calendar: "calendar"
+        case .queries: "magnifyingglass"
         case .settings: "gearshape"
         }
     }
@@ -120,7 +123,8 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .planner: "1"
         case .calendar: "2"
-        case .settings: "3"
+        case .queries: "3"
+        case .settings: "4"
         }
     }
 }

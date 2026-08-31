@@ -75,6 +75,9 @@ class ThemeModeSmokeTest {
                     colors = colors,
                 )
 
+                activity.findViewById<View>(R.id.navigation_query).performClick()
+                assertPageTheme(activity, R.id.page_query, R.id.navigation_query, "查询", colors)
+
                 activity.findViewById<View>(R.id.navigation_settings).performClick()
                 assertPageTheme(activity, R.id.page_settings, R.id.navigation_settings, "设置", colors)
 
@@ -99,7 +102,7 @@ class ThemeModeSmokeTest {
         assertNotNull("Missing page $pageID", page)
         assertEquals(colors.background, (page.background as ColorDrawable).color)
         assertEquals(colors.primaryText, activity.findViewById<TextView>(navigationID).currentTextColor)
-        val titleView = title?.let { findText(page, it) }
+        val titleView = title?.let { findText(page, activity.uiText(it)) }
             ?: page.findViewById(R.id.calendar_period_label)
         assertNotNull("Missing page title: ${title ?: "calendar period"}", titleView)
         assertEquals(colors.text, titleView?.currentTextColor)

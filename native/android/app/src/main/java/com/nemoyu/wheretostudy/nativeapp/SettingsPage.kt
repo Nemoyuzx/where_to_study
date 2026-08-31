@@ -620,12 +620,6 @@ class SettingsPage(
     private fun informationSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "日期详情与生活信息"))
-        addView(settingsLinkButton("班车与重要事件查询") {
-            activity.openInformationQuery()
-        }.apply {
-            id = R.id.settings_information_query_button
-        })
-        addView(spacer(activity, compactGap))
         addView(featureSwitch("校区天气", preferences.weatherEnabled) {
             preferences.weatherEnabled = it
         })

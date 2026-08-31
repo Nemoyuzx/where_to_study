@@ -313,15 +313,32 @@ fn current_theme(app: &App) -> Theme {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool {
-    if app.query_open {
-        return handle_query_key(app, key, tx);
-    }
-    if app.selected_tab_index == 4 && app.settings_editing {
+    if app.selected_tab_index == 5 && app.settings_editing {
         return handle_settings_input(app, key, tx);
+    }
+    if app.selected_tab_index == 4 && app.query_search_editing {
+        return handle_query_key(app, key, tx);
     }
 
     match key.code {
         KeyCode::Char('q') if key.modifiers.is_empty() => return true,
+        KeyCode::Tab => {
+            let next = (app.selected_tab_index + 1) % TAB_LABELS.len();
+            activate_tab(app, next, tx);
+            return false;
+        }
+        KeyCode::Char(ch @ '1'..='6') => {
+            activate_tab(app, ch.to_digit(10).unwrap_or(1) as usize - 1, tx);
+            return false;
+        }
+        _ => {}
+    }
+
+    if app.selected_tab_index == 4 {
+        return handle_query_key(app, key, tx);
+    }
+
+    match key.code {
         KeyCode::Char('r') if key.modifiers.is_empty() => {
             app.clear_error();
             match app.selected_tab_index {
@@ -336,10 +353,6 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
         }
         KeyCode::Char('l') if key.modifiers.is_empty() => login_with_form(app, tx),
         KeyCode::Char('o') if key.modifiers.is_empty() => clear_credentials(app, tx),
-        KeyCode::Tab => {
-            let next = (app.selected_tab_index + 1) % TAB_LABELS.len();
-            switch_tab(app, next);
-        }
         KeyCode::Char(ch) if app.selected_tab_index == 2 => {
             if let Some(slot) = slot_key_index(ch) {
                 toggle_slot(app, slot);
@@ -359,16 +372,10 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
                 }
             }
         }
-        KeyCode::Char(ch @ '1'..='5') => {
-            switch_tab(app, ch.to_digit(10).unwrap_or(1) as usize - 1);
-        }
-        KeyCode::Char('e') if app.selected_tab_index == 4 => {
+        KeyCode::Char('e') if app.selected_tab_index == 5 => {
             app.settings_editing = true;
         }
-        KeyCode::Char('i') if matches!(app.selected_tab_index, 3 | 4) => {
-            open_query(app, tx);
-        }
-        KeyCode::Enter if app.selected_tab_index == 4 => {
+        KeyCode::Enter if app.selected_tab_index == 5 => {
             app.settings_editing = true;
         }
         KeyCode::Char(' ') => match app.selected_tab_index {
@@ -384,12 +391,12 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
         },
         KeyCode::Up => match app.selected_tab_index {
             2 => app.move_building_cursor(-1),
-            4 => app.settings_focus = app.settings_focus.saturating_sub(1),
+            5 => app.settings_focus = app.settings_focus.saturating_sub(1),
             _ => {}
         },
         KeyCode::Down => match app.selected_tab_index {
             2 => app.move_building_cursor(1),
-            4 => app.settings_focus = (app.settings_focus + 1).min(1),
+            5 => app.settings_focus = (app.settings_focus + 1).min(1),
             _ => {}
         },
         KeyCode::PageUp if app.selected_tab_index == 2 => {
@@ -433,23 +440,11 @@ fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) ->
     }
 
     match key.code {
-        KeyCode::Char('q') if key.modifiers.is_empty() => return true,
-        KeyCode::Esc | KeyCode::Char('i') => {
-            app.query_open = false;
-            app.query_search_editing = false;
-        }
-        KeyCode::Tab => {
-            app.query_section = match app.query_section {
-                QuerySection::Shuttle => QuerySection::Events,
-                QuerySection::Events => QuerySection::Shuttle,
-            };
-            app.query_scroll = 0;
-        }
-        KeyCode::Char('1') => {
+        KeyCode::Left => {
             app.query_section = QuerySection::Shuttle;
             app.query_scroll = 0;
         }
-        KeyCode::Char('2') => {
+        KeyCode::Right => {
             app.query_section = QuerySection::Events;
             app.query_scroll = 0;
         }
@@ -511,9 +506,8 @@ fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) ->
     false
 }
 
-fn open_query(app: &mut App, tx: &mpsc::Sender<Message>) {
+fn ensure_query_loaded(app: &mut App, tx: &mpsc::Sender<Message>) {
     app.settings_editing = false;
-    app.query_open = true;
     app.query_search_editing = false;
     app.query_scroll = 0;
     if app.shuttle.is_none() {
@@ -762,8 +756,16 @@ fn switch_tab(app: &mut App, index: usize) {
         1 => Tab::Schedule,
         2 => Tab::Planner,
         3 => Tab::Calendar,
+        4 => Tab::Query,
         _ => Tab::Settings,
     };
+}
+
+fn activate_tab(app: &mut App, index: usize, tx: &mpsc::Sender<Message>) {
+    switch_tab(app, index);
+    if index == 4 {
+        ensure_query_loaded(app, tx);
+    }
 }
 
 #[cfg(test)]
@@ -778,7 +780,7 @@ mod tests {
     fn settings_input_does_not_trigger_global_shortcuts() {
         let (tx, _rx) = mpsc::channel();
         let mut app = App::new(false);
-        switch_tab(&mut app, 4);
+        switch_tab(&mut app, 5);
         app.settings_editing = true;
         assert!(!handle_key(&mut app, key(KeyCode::Char('q')), &tx));
         assert_eq!(app.login_account, "q");
@@ -825,34 +827,34 @@ mod tests {
     }
 
     #[test]
-    fn calendar_and_settings_both_open_the_cached_query_subview() {
-        let (tx, _rx) = mpsc::channel();
-        let mut calendar = App::new(false);
-        switch_tab(&mut calendar, 3);
-        assert!(!handle_key(&mut calendar, key(KeyCode::Char('i')), &tx));
-        assert!(calendar.query_open);
-
-        let mut settings = App::new(false);
-        switch_tab(&mut settings, 4);
-        assert!(!handle_key(&mut settings, key(KeyCode::Char('i')), &tx));
-        assert!(settings.query_open);
-        assert!(!settings.settings_editing);
+    fn query_is_a_primary_tab_between_calendar_and_settings() {
+        let mut app = App::new(false);
+        switch_tab(&mut app, 3);
+        assert!(matches!(app.tab, Tab::Calendar));
+        switch_tab(&mut app, 4);
+        assert!(matches!(app.tab, Tab::Query));
+        switch_tab(&mut app, 5);
+        assert!(matches!(app.tab, Tab::Settings));
     }
 
     #[test]
     fn query_shortcuts_switch_sections_and_toggle_filters_without_global_tabs() {
         let (tx, _rx) = mpsc::channel();
         let mut app = App::new(false);
-        app.query_open = true;
+        switch_tab(&mut app, 4);
         app.query_section = QuerySection::Shuttle;
-        assert!(!handle_key(&mut app, key(KeyCode::Char('2')), &tx));
+        assert!(!handle_key(&mut app, key(KeyCode::Right), &tx));
         assert_eq!(app.query_section, QuerySection::Events);
-        assert_eq!(app.selected_tab_index, 0);
+        assert_eq!(app.selected_tab_index, 4);
         assert!(!handle_key(&mut app, key(KeyCode::Char('e')), &tx));
         assert!(app.query_include_ended);
         assert!(!handle_key(&mut app, key(KeyCode::Char('/')), &tx));
         assert!(app.query_search_editing);
         assert!(!handle_key(&mut app, key(KeyCode::Char('A')), &tx));
         assert_eq!(app.query_search, "A");
+        app.query_search_editing = false;
+        assert!(!handle_key(&mut app, key(KeyCode::Char('6')), &tx));
+        assert!(matches!(app.tab, Tab::Settings));
+        assert_eq!(app.selected_tab_index, 5);
     }
 }

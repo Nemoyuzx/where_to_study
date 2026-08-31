@@ -22,12 +22,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         QuerySection::Shuttle => 0,
         QuerySection::Events => 1,
     };
-    let origin = if app.selected_tab_index == 3 {
-        "教学日历 / 查询"
-    } else {
-        "设置 / 查询"
-    };
-    let tabs = Tabs::new(["1 班车查询", "2 重要事件查询"])
+    let tabs = Tabs::new(["班车查询", "重要事件查询"])
         .select(selected)
         .highlight_style(
             Style::default()
@@ -36,7 +31,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
                 .add_modifier(Modifier::BOLD),
         )
         .divider("  ")
-        .block(Block::default().borders(Borders::ALL).title(origin));
+        .block(Block::default().borders(Borders::ALL).title("查询"));
     frame.render_widget(tabs, chunks[0]);
 
     match app.query_section {
@@ -315,24 +310,24 @@ mod tests {
     }
 
     #[test]
-    fn calendar_entry_renders_the_shuttle_and_event_switch_at_the_top() {
+    fn primary_query_tab_renders_the_shuttle_and_event_switch_at_the_top() {
         let mut app = App::new(false);
-        app.selected_tab_index = 3;
+        app.selected_tab_index = 4;
         app.query_section = QuerySection::Shuttle;
         let text = rendered_text(&mut app);
-        assert!(text.contains("教学日历/查询"));
+        assert!(text.contains("查询"));
         assert!(text.contains("班车查询"));
         assert!(text.contains("重要事件查询"));
         assert!(text.contains("当前生效时刻表"));
     }
 
     #[test]
-    fn settings_entry_renders_event_search_and_filter_controls() {
+    fn primary_query_tab_renders_event_search_and_filter_controls() {
         let mut app = App::new(false);
         app.selected_tab_index = 4;
         app.query_section = QuerySection::Events;
         let text = rendered_text(&mut app);
-        assert!(text.contains("设置/查询"));
+        assert!(text.contains("查询"));
         assert!(text.contains("真实分类"));
         assert!(text.contains("仅收藏"));
         assert!(text.contains("详情与来源"));

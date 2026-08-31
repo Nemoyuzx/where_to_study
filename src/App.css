@@ -3110,6 +3110,7 @@ button:disabled {
 
   .workspace,
   .calendar-page,
+  .query-hub,
   .settings-layout {
     padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
   }
@@ -3181,7 +3182,7 @@ button:disabled {
     position: fixed;
     top: auto;
     transform: translateX(-50%);
-    width: min(320px, calc(100vw - 24px));
+    width: min(380px, calc(100vw - 24px));
     z-index: 20;
   }
 
@@ -3193,7 +3194,7 @@ button:disabled {
     align-items: center;
     gap: 4px;
     grid-auto-rows: 50px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
   }
 
@@ -4797,26 +4798,6 @@ input:disabled {
   color: var(--text-disabled);
 }
 
-.query-hub-entry-button {
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--primary-text);
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
-  gap: 7px;
-  min-height: 34px;
-  padding: 0 11px;
-}
-
-.query-hub-entry-button:hover,
-.query-hub-entry-button:focus-visible {
-  background: var(--primary-surface-soft);
-  border-color: var(--primary-border);
-}
-
 .query-hub {
   display: grid;
   gap: 14px;
@@ -5478,10 +5459,6 @@ input:disabled {
 }
 
 @media (max-width: 480px) {
-  .query-hub-topbar-title h1 {
-    font-size: 22px;
-  }
-
   .shuttle-weekday-options {
     gap: 3px;
   }

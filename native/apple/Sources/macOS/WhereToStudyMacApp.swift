@@ -48,6 +48,8 @@ private struct MacAppKeyboardCommands: Commands {
                 .keyboardShortcut(KeyEquivalent(AppSection.planner.keyboardShortcutDigit), modifiers: [.option])
             Button("教学日历") { model.selectedSection = .calendar }
                 .keyboardShortcut(KeyEquivalent(AppSection.calendar.keyboardShortcutDigit), modifiers: [.option])
+            Button("查询") { model.selectedSection = .queries }
+                .keyboardShortcut(KeyEquivalent(AppSection.queries.keyboardShortcutDigit), modifiers: [.option])
             Button("设置") { model.selectedSection = .settings }
                 .keyboardShortcut(KeyEquivalent(AppSection.settings.keyboardShortcutDigit), modifiers: [.option])
 

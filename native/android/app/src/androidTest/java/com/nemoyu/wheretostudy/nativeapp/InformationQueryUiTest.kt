@@ -2,6 +2,7 @@ package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Intent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -20,7 +21,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class InformationQueryUiTest {
     @Test
-    fun teachingCalendarOverflowOpensQueryOnTheUnifiedPhoneAndWideChrome() {
+    fun queryIsAnIndependentPrimaryDestinationInTheRequiredNavigationOrder() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
@@ -29,27 +30,43 @@ class InformationQueryUiTest {
 
         ActivityScenario.launch<MainActivity>(intent).use { scenario ->
             scenario.onActivity { activity ->
+                val navigation = checkNotNull(
+                    activity.findViewById<ViewGroup?>(R.id.phone_navigation)
+                        ?: activity.findViewById<ViewGroup?>(R.id.tablet_navigation),
+                )
+                val navigationIDs = listOf(
+                    R.id.navigation_planner,
+                    R.id.navigation_calendar,
+                    R.id.navigation_query,
+                    R.id.navigation_settings,
+                )
+                val indices = navigationIDs.map { id ->
+                    navigation.indexOfChild(activity.findViewById<View>(id))
+                }
+                assertTrue(indices.all { it >= 0 })
+                assertEquals(indices.sorted(), indices)
+                assertEquals(
+                    listOf("空教室", "教学日历", "查询", "设置").map(activity::uiText),
+                    navigationIDs.map { id -> activity.findViewById<TextView>(id).text.toString() },
+                )
+                assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
+                assertNotNull(activity.findViewById<View?>(R.id.page_query))
+                assertNotNull(activity.findViewById<View?>(R.id.information_query_page))
+            }
+
+            instrumentation.waitForIdleSync()
+            assertTrue(device.wait(Until.hasObject(By.text(context.uiText("班车查询"))), 5_000))
+
+            scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
-                assertNotNull(activity.findViewById<View?>(R.id.calendar_phone_header))
-                assertTrue(activity.findViewById<View>(R.id.calendar_overflow_button).performClick())
+                if (activity.findViewById<View?>(R.id.calendar_phone_header) != null) {
+                    assertTrue(activity.findViewById<View>(R.id.calendar_overflow_button).performClick())
+                }
             }
             instrumentation.waitForIdleSync()
-            assertTrue(
-                device.wait(
-                    Until.hasObject(By.text(context.uiText("班车与重要事件查询"))),
-                    3_000,
-                ),
-            )
-            device.findObject(By.text(context.uiText("班车与重要事件查询"))).click()
-            instrumentation.waitForIdleSync()
-            assertTrue(
-                device.wait(
-                    Until.hasObject(By.text(context.uiText("班车查询"))),
-                    5_000,
-                ),
-            )
-            scenario.onActivity { activity ->
-                assertNotNull(activity.findViewById<View?>(R.id.information_query_page))
+            if (device.hasObject(By.text(context.uiText("导入手机日历")))) {
+                assertTrue(!device.hasObject(By.text(context.uiText("班车与重要事件查询"))))
+                device.pressBack()
             }
         }
     }
@@ -74,7 +91,7 @@ class InformationQueryUiTest {
                         "Unable to load important events",
                         activity.uiText("重要事件数据暂时不可用。"),
                     )
-                    activity.openInformationQuery(InformationQueryMode.SHUTTLE)
+                    assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
                     assertNotNull(activity.findViewById<View?>(R.id.information_query_mode_switch))
                     assertNotNull(activity.findViewById<View?>(R.id.information_query_shuttle_status))
                     assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).performClick())
@@ -93,7 +110,7 @@ class InformationQueryUiTest {
                             .text.isNotBlank(),
                     )
                     assertNotNull(activity.findViewById<View?>(R.id.information_query_event_favorite))
-                    assertTrue(activity.findViewById<View>(R.id.information_query_back).performClick())
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
                     assertTrue(activity.findViewById<View?>(R.id.information_query_page) == null)
                 }
             }
@@ -103,7 +120,7 @@ class InformationQueryUiTest {
     }
 
     @Test
-    fun settingsContainsQueryEntryAndIndependentConferenceSwitch() {
+    fun settingsKeepsIndependentConferenceSwitchWithoutADuplicateQueryEntry() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val intent = Intent(context, MainActivity::class.java)
             .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
@@ -111,11 +128,19 @@ class InformationQueryUiTest {
         ActivityScenario.launch<MainActivity>(intent).use { scenario ->
             scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
-                assertNotNull(activity.findViewById<View?>(R.id.settings_information_query_button))
                 assertNotNull(activity.findViewById<View?>(R.id.settings_conference_deadlines_switch))
-                assertTrue(activity.findViewById<View>(R.id.settings_information_query_button).performClick())
-                assertNotNull(activity.findViewById<View?>(R.id.information_query_page))
+                val settingsPage = activity.findViewById<View>(R.id.page_settings)
+                assertTrue(!descendantText(settingsPage).contains(activity.uiText("班车与重要事件查询")))
+                assertNotNull(activity.findViewById<View?>(R.id.navigation_query))
             }
+        }
+    }
+
+    private fun descendantText(view: View): String {
+        if (view is TextView) return view.text.toString()
+        if (view !is ViewGroup) return ""
+        return (0 until view.childCount).joinToString(" ") { index ->
+            descendantText(view.getChildAt(index))
         }
     }
 }

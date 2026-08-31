@@ -15,10 +15,10 @@ Silicon 兼容构建。
 - SwiftUI、Android 与鸿蒙原生端可选择每天 7:30 接收本地课程摘要，关闭提醒、切换账号或清除数据会撤销后续任务。
 - 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；ISO 8601 公历周与教学周并列显示，且不再推断或标注考试周。日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 - 联动查询顶部提供默认折叠的今日/明日校区天气卡片；月视图日期详情按“课程日程 → 云课堂作业 DDL → 黄历宜忌 → 统一活动 DDL”排列，学科竞赛、校内竞赛通知、夏令营与黑客松均可独立关闭。
-- 教学日历和设置均可进入“综合查询”：顶部滑块切换当天校区班车与重要事件。班车按当前执行时段展示西土城/沙河双向班次和下一班；重要事件可搜索名称、学校与方向，按类型/分类/来源筛选并默认按 DDL 由近到远排列。
+- 图形客户端的一级导航条在“教学日历”和“设置”之间提供独立“查询”页：顶部滑块切换当天校区班车与重要事件。班车按当前执行时段展示西土城/沙河双向班次和下一班；重要事件可搜索名称、学校与方向，按类型/分类/来源筛选并默认按 DDL 由近到远排列。
 - 作业 DDL、校内竞赛、公开活动和自定义日程同时进入日/周全天区、月格和年视图日期详情；超出紧凑区域时使用可点击的 `+N` 展开完整列表。
 - Contest DDL 中的学术会议与期刊专题已进入教学日历；重要事件查询只合并公开活动和校内竞赛通知，不包含课程作业或自定义源，并可直接复用教学日历的本地收藏。
-- 终端客户端同步支持公开查询：CLI 提供 `shuttle` / `events` 与 JSON 输出；TUI 可从日历、设置按 `i` 进入班车/重要事件子视图，并与 CLI 共享安全的本地活动收藏。
+- 终端客户端同步支持公开查询：CLI 提供 `shuttle` / `events` 与 JSON 输出；TUI 在“日历”和“设置”之间提供独立“查询”标签，并与 CLI 共享安全的本地活动收藏。
 - 活动日程可以收藏为完整的本地快照：即使关闭对应来源、接口暂时失败或上游删除条目，收藏仍会保留在原日期；设置中提供独立收藏管理页。还可填写符合[自定义日程接口规范](./docs/custom-schedule-api.md)的 HTTPS JSON 地址，将自有日程并入同一教学日历。
 - 图形客户端支持跟随系统、简体中文与 English；静态界面切换语言，第三方 API 返回的课程、天气、黄历、作业和竞赛内容保持原文。
 
@@ -60,7 +60,7 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 | Windows | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 x64 NSIS 和 GitHub/Sigstore 来源证明；公众 Authenticode 仍需外部身份配置 |
 | Linux | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 arm64/x86_64 Debian、AppImage、CLI、TUI 及 GitHub/Sigstore 来源证明 |
 | CLI | Rust（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-cli` 发布 Linux x86_64/arm64 构建，并新增班车/重要事件命令，见 [wts-cli/README.md](./wts-cli/README.md) |
-| 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-tui` 发布 Linux x86_64/arm64 构建，日历和设置均可进入班车/重要事件视图，见 [wts-tui/README.md](./wts-tui/README.md) |
+| 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-tui` 发布 Linux x86_64/arm64 构建；主分支已将班车/重要事件改为独立一级“查询”标签，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.2.8 (74)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002013)` 的 122 项单元测试、签名 APP/HAP、DevEco 上传和云测试通过；GitHub Pre-release 提供签名 APP/HAP |
 

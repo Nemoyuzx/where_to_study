@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     ) {
         PLANNER("空教室", R.id.navigation_planner, R.id.page_planner, R.drawable.ic_nav_classroom),
         CALENDAR("教学日历", R.id.navigation_calendar, R.id.page_calendar, R.drawable.ic_nav_calendar),
+        QUERY("查询", R.id.navigation_query, R.id.page_query, R.drawable.ic_nav_query),
         SETTINGS("设置", R.id.navigation_settings, R.id.page_settings, R.drawable.ic_nav_settings),
     }
 
@@ -102,8 +103,6 @@ class MainActivity : Activity() {
     private var navigationRailToggle: TextView? = null
     private var foldingFeatureSpacer: View? = null
     private var favoriteDeadlinesOverlay: View? = null
-    private var informationQueryOverlay: View? = null
-    private var informationQueryOpen = false
     private var navigationRailAnimator: ValueAnimator? = null
     internal var controlHapticEventCount = 0
         private set
@@ -178,9 +177,6 @@ class MainActivity : Activity() {
                 ?.getBoolean(TEACHING_CALENDAR_DAY_WEEK_AGENDA_EXPANDED_KEY, true)
                 ?: true,
         )
-        informationQueryOpen = savedInstanceState
-            ?.getBoolean(INFORMATION_QUERY_OPEN_KEY, false)
-            ?: false
         informationQuerySessionState = InformationQuerySessionState(
             savedInstanceState?.getString(INFORMATION_QUERY_MODE_KEY),
         )
@@ -380,7 +376,6 @@ class MainActivity : Activity() {
         navigationRailToggle = null
         foldingFeatureSpacer = null
         favoriteDeadlinesOverlay = null
-        informationQueryOverlay = null
         adaptiveRoot.removeAllViews()
         val layout = if (spec.usesBottomNavigation) {
             phoneLayout()
@@ -396,7 +391,6 @@ class MainActivity : Activity() {
         )
         navigate(selectedDestination)
         if (settingsRoute == SettingsRoute.FAVORITES) showFavoriteManagementOverlay()
-        if (informationQueryOpen) showInformationQueryOverlay()
     }
 
     private fun resolveAdaptiveLayout(
@@ -660,6 +654,24 @@ class MainActivity : Activity() {
                 teachingCalendarSessionState,
                 currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
+            Destination.QUERY -> FrameLayout(this).apply {
+                setBackgroundColor(Palette.background)
+                addView(
+                    InformationQueryPage(
+                        activity = this@MainActivity,
+                        shuttleRepository = shuttleBusRepository,
+                        dailyInfoRepository = calendarDailyInfoRepository,
+                        preferences = preferences,
+                        availableWidthDp = currentLayoutSpec?.contentWidthDp
+                            ?: currentWindowWidthDp(),
+                        sessionState = informationQuerySessionState,
+                    ).build(),
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
             Destination.SETTINGS -> SettingsPage(
                 this,
                 credentialStore,
@@ -701,18 +713,6 @@ class MainActivity : Activity() {
         favoriteDeadlinesOverlay = null
     }
 
-    internal fun openInformationQuery(mode: InformationQueryMode? = null) {
-        mode?.let { informationQuerySessionState.selectedMode = it }
-        informationQueryOpen = true
-        showInformationQueryOverlay()
-    }
-
-    fun closeInformationQuery() {
-        informationQueryOpen = false
-        informationQueryOverlay?.let(adaptiveRoot::removeView)
-        informationQueryOverlay = null
-    }
-
     private fun updatePhoneNavigationVisibility() {
         if (currentLayoutSpec?.usesBottomNavigation != true) return
         adaptiveRoot.findViewById<View?>(R.id.phone_navigation)?.visibility = View.VISIBLE
@@ -738,29 +738,6 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun showInformationQueryOverlay() {
-        if (!::adaptiveRoot.isInitialized) return
-        informationQueryOverlay?.let(adaptiveRoot::removeView)
-        val overlay = InformationQueryPage(
-            activity = this,
-            shuttleRepository = shuttleBusRepository,
-            dailyInfoRepository = calendarDailyInfoRepository,
-            preferences = preferences,
-            availableWidthDp = currentWindowWidthDp(),
-            sessionState = informationQuerySessionState,
-        ).build().apply {
-            elevation = dp(26).toFloat()
-        }
-        informationQueryOverlay = overlay
-        adaptiveRoot.addView(
-            overlay,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ),
-        )
-    }
-
     @SuppressLint("GestureBackNavigation")
     @Deprecated("Legacy fallback below API 33; predictive back is registered in onCreate")
     override fun onBackPressed() {
@@ -768,10 +745,6 @@ class MainActivity : Activity() {
     }
 
     private fun handleAppBack(): Boolean {
-        if (informationQueryOpen) {
-            closeInformationQuery()
-            return true
-        }
         if (selectedDestination != Destination.SETTINGS ||
             settingsRoute != SettingsRoute.FAVORITES
         ) return false
@@ -974,7 +947,6 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString(SELECTED_DESTINATION_KEY, selectedDestination.name)
         outState.putString(SETTINGS_ROUTE_KEY, settingsRoute.name)
-        outState.putBoolean(INFORMATION_QUERY_OPEN_KEY, informationQueryOpen)
         outState.putString(
             INFORMATION_QUERY_MODE_KEY,
             informationQuerySessionState.selectedMode.name,
@@ -1266,7 +1238,6 @@ class MainActivity : Activity() {
         const val NAVIGATION_RAIL_COLLAPSED_KEY = "navigation_rail_collapsed"
         const val SELECTED_DESTINATION_KEY = "selected_destination"
         const val SETTINGS_ROUTE_KEY = "settings_route"
-        const val INFORMATION_QUERY_OPEN_KEY = "information_query_open"
         const val INFORMATION_QUERY_MODE_KEY = "information_query_mode"
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"

@@ -6,7 +6,6 @@ enum SettingsSurfaceID: String, Hashable {
     case semester
     case notification
     case information
-    case queries
     case widget
     case language
     case aboutAndPrivacy
@@ -118,7 +117,6 @@ enum SettingsLayoutPolicy {
     static let trailingColumn: [SettingsSurfaceID] = [
         .notification,
         .information,
-        .queries,
         .widget,
         .language,
         .aboutAndPrivacy,
@@ -130,7 +128,6 @@ enum SettingsLayoutPolicy {
         .semester,
         .notification,
         .information,
-        .queries,
         .widget,
         .language,
         .aboutAndPrivacy,
@@ -309,8 +306,6 @@ struct SettingsView: View {
             notificationSurface
         case .information:
             informationSurface
-        case .queries:
-            queriesSurface
         case .widget:
             widgetSurface
         case .language:
@@ -698,27 +693,6 @@ struct SettingsView: View {
                 Text("天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。")
                     .font(.caption)
                     .foregroundStyle(AppTheme.secondaryText)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var queriesSurface: some View {
-        Surface {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("信息查询", systemImage: "magnifyingglass")
-                    .font(.headline)
-                Text("查询今日班车状态与当前生效时刻表，或搜索、分类浏览公开活动和校内竞赛通知。")
-                    .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
-                NavigationLink {
-                    InformationQueriesView()
-                } label: {
-                    Label("打开班车与重要事件查询", systemImage: "bus")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("settings.open-information-queries")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

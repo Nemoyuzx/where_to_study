@@ -112,12 +112,14 @@ import './App.css'
 const NAV_ITEMS = [
   { id: 'planner', label: '空教室', Icon: Home },
   { id: 'calendar', label: '教学日历', Icon: CalendarRange },
+  { id: 'query', label: '查询', Icon: Search },
   { id: 'settings', label: '设置', Icon: Settings },
 ]
 
 const EN_TEXT = Object.freeze({
   '空教室': 'Empty Classrooms',
   '教学日历': 'Teaching Calendar',
+  '查询': 'Query',
   '设置': 'Settings',
   '联动查询': 'Linked Search',
   '应用导航': 'App navigation',
@@ -1353,8 +1355,6 @@ function App() {
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
   const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false)
   const [favoriteManagerOpen, setFavoriteManagerOpen] = useState(false)
-  const [queryHubOpen, setQueryHubOpen] = useState(false)
-  const [queryHubReturnPage, setQueryHubReturnPage] = useState('calendar')
   const [favoriteDeadlines, setFavoriteDeadlines] = useState(loadFavoriteDeadlines)
   const [weather, setWeather] = useState(null)
   const [weatherLoading, setWeatherLoading] = useState(false)
@@ -1425,12 +1425,11 @@ function App() {
       const target = event.target instanceof Element ? event.target : null
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       if (event.altKey && !event.ctrlKey && !event.metaKey) {
-        const destination = { '1': 'planner', '2': 'calendar', '3': 'settings' }[event.key]
+        const destination = { '1': 'planner', '2': 'calendar', '3': 'query', '4': 'settings' }[event.key]
         if (destination) {
           event.preventDefault()
           setActivePage(destination)
           setFavoriteManagerOpen(false)
-          setQueryHubOpen(false)
           return
         }
       }
@@ -1438,7 +1437,6 @@ function App() {
         setCalendarPopover(null)
         setCalendarAgendaDialog(null)
         setFavoriteManagerOpen(false)
-        setQueryHubOpen(false)
         return
       }
       if (activePage !== 'calendar' || event.ctrlKey || event.metaKey) return
@@ -1721,9 +1719,8 @@ function App() {
     let unlistenHideNotice = null
 
     listen('tray:navigate', (event) => {
-      if (['planner', 'calendar', 'settings'].includes(event.payload)) {
+      if (['planner', 'calendar', 'query', 'settings'].includes(event.payload)) {
         setActivePage(event.payload)
-        setQueryHubOpen(false)
       }
     }).then((dispose) => {
       unlistenNavigate = dispose
@@ -3256,19 +3253,6 @@ function App() {
     })
   }
 
-  function openQueryHub(returnPage = activePage) {
-    const destination = ['calendar', 'settings'].includes(returnPage) ? returnPage : 'calendar'
-    setQueryHubReturnPage(destination)
-    setFavoriteManagerOpen(false)
-    setQueryHubOpen(true)
-    window.requestAnimationFrame(() => pageContentRef.current?.scrollTo({ top: 0 }))
-  }
-
-  function closeQueryHub() {
-    setQueryHubOpen(false)
-    setActivePage(queryHubReturnPage)
-  }
-
   function clearAccountScopedViewState() {
     assignmentsRevisionRef.current += 1
     requestedCalendarSupplementRanges.current.clear()
@@ -3301,7 +3285,6 @@ function App() {
                 className={activePage === id ? 'active' : ''}
                 onClick={() => {
                   setFavoriteManagerOpen(false)
-                  setQueryHubOpen(false)
                   setActivePage(id)
                 }}
                 aria-label={t(label)}
@@ -3321,17 +3304,7 @@ function App() {
           className={`page-content ${activePage}-page-content ${activePage === 'calendar' && calendarView === 'month' ? 'calendar-month-page' : ''}`}
         >
           <header className={`topbar ${activePage}-topbar`}>
-            {queryHubOpen ? (
-              <div className="favorite-topbar-title query-hub-topbar-title">
-                <button type="button" onClick={closeQueryHub} aria-label={queryHubReturnPage === 'settings' ? t('返回设置') : t('返回教学日历')}>
-                  <ChevronLeft size={20} />
-                </button>
-                <div>
-                  <p className="eyebrow">Where To Study</p>
-                  <h1>{t('综合查询')}</h1>
-                </div>
-              </div>
-            ) : activePage === 'settings' && favoriteManagerOpen ? (
+            {activePage === 'settings' && favoriteManagerOpen ? (
               <div className="favorite-topbar-title">
                 <button type="button" onClick={() => setFavoriteManagerOpen(false)} aria-label={t('返回设置')}>
                   <ChevronLeft size={20} />
@@ -3346,17 +3319,16 @@ function App() {
                 <p className="eyebrow">{activePage === 'calendar' ? 'BUPT Classroom Planner' : 'Where To Study'}</p>
                 <h1>{activePage === 'calendar'
                   ? calendarHeaderTitle
+                  : activePage === 'query'
+                    ? t('综合查询')
                   : activePage === 'settings'
                     ? t('设置')
                     : t('联动查询')}</h1>
                 {activePage === 'calendar' ? <p className="calendar-week-context">{calendarWeekContext}</p> : null}
               </div>
             )}
-            {!queryHubOpen && activePage === 'calendar' ? (
+            {activePage === 'calendar' ? (
               <div className="calendar-toolbar-actions">
-                <button type="button" className="query-hub-entry-button" onClick={() => openQueryHub('calendar')} aria-label={t('打开综合查询')}>
-                  <Search size={16} />{t('综合查询')}
-                </button>
                 <div className="calendar-view-switch" aria-label={t('日历视图')}>
                   {CALENDAR_VIEWS.map((view) => (
                     <button
@@ -3386,7 +3358,7 @@ function App() {
             </div>
           ) : null}
 
-          {queryHubOpen ? (
+          {activePage === 'query' ? (
             <QueryHub
               command={command}
               favoriteItems={favoriteDeadlines}
@@ -3397,7 +3369,7 @@ function App() {
             />
           ) : null}
 
-          {!queryHubOpen && activePage === 'planner' ? (
+          {activePage === 'planner' ? (
         <>
         {settings.weatherEnabled ? (
           <WeatherStrip
@@ -3599,7 +3571,7 @@ function App() {
         </>
           ) : null}
 
-          {!queryHubOpen && activePage === 'calendar' ? (
+          {activePage === 'calendar' ? (
         <section className="calendar-page">
           <div
             className={`teaching-calendar-layout ${calendarView === 'month' && compactCalendarLayout ? 'month-gesture-surface' : ''}`}
@@ -4232,7 +4204,7 @@ function App() {
         </section>
           ) : null}
 
-          {!queryHubOpen && activePage === 'settings' && favoriteManagerOpen ? (
+          {activePage === 'settings' && favoriteManagerOpen ? (
             <FavoriteDeadlineManager
               items={favoriteDeadlines}
               onRemove={toggleFavoriteDeadline}
@@ -4240,7 +4212,7 @@ function App() {
             />
           ) : null}
 
-          {!queryHubOpen && activePage === 'settings' && !favoriteManagerOpen ? (
+          {activePage === 'settings' && !favoriteManagerOpen ? (
         <section className="settings-layout">
           <section className="panel settings-reference-notice" aria-label={t('数据参考提示')}>
             <strong>{t('显示数据仅供参考，请以实际情况为准。')}</strong>
@@ -4419,13 +4391,6 @@ function App() {
                   onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentSettings() }}
                 />
               </label>
-              <button
-                type="button"
-                className="secondary settings-full-button query-hub-settings-link"
-                onClick={() => openQueryHub('settings')}
-              >
-                <Search size={17} /> {t('打开班车与重要事件查询')}
-              </button>
               <button
                 type="button"
                 className="secondary settings-full-button favorite-manager-link"

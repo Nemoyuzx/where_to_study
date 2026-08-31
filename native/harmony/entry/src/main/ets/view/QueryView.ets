@@ -17,8 +17,6 @@ import {
 @ComponentV2
 export struct QueryView {
   @Consumer('appModel') model: AppModel = new AppModel();
-  @Event onClose: () => void = () => {
-  };
   @Local selectedTabRawValue: string = QueryPageTab.shuttle;
   @Local eventFilterRawValue: string = ImportantEventFilter.all;
   @Local eventCategory: string = '';
@@ -114,20 +112,6 @@ export struct QueryView {
   @Builder
   pageHeader() {
     Row({ space: 10 }) {
-      Button() {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(18)
-          .fontColor([AppTheme.text()])
-      }
-      .type(ButtonType.Normal)
-      .width(38)
-      .height(38)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(19)
-      .id('query.back')
-      .onClick(() => {
-        this.onClose();
-      })
       Column({ space: 2 }) {
         Text('Where To Study')
           .fontSize(11)

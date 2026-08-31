@@ -230,7 +230,6 @@ export class AppLocalization {
     '保存自定义日程地址': 'Save Custom Schedule URL',
     '显示自定义日程': 'Show Custom Schedule',
     '收藏管理': 'Favorite Management',
-    '打开查询': 'Open Query',
     '返回设置': 'Back to Settings',
     '暂无收藏日程': 'No Favorite Schedules',
     '在日程详情右侧点击星标后，即使关闭来源或上游删除条目，收藏仍会保存在本机。':

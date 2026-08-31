@@ -1,7 +1,8 @@
-// 与 iOS 端 AppSection 对应的三个一级页面。
+// 与 Apple / Android 端 AppSection 对应的四个一级页面。
 export enum AppSection {
   planner = 'planner',
   calendar = 'calendar',
+  query = 'query',
   settings = 'settings'
 }
 
@@ -9,6 +10,7 @@ export class AppSectionInfo {
   static readonly all: AppSection[] = [
     AppSection.planner,
     AppSection.calendar,
+    AppSection.query,
     AppSection.settings
   ];
 
@@ -19,16 +21,22 @@ export class AppSectionInfo {
     if (section === AppSection.calendar) {
       return '教学日历';
     }
+    if (section === AppSection.query) {
+      return '查询';
+    }
     return '设置';
   }
 
-  // SF Symbols house / calendar / gearshape 的鸿蒙符号库对应名称。
+  // 与其他图形客户端一致的 house / calendar / search / gear 语义。
   static symbol(section: AppSection): Resource {
     if (section === AppSection.planner) {
       return $r('sys.symbol.house');
     }
     if (section === AppSection.calendar) {
       return $r('sys.symbol.calendar');
+    }
+    if (section === AppSection.query) {
+      return $r('sys.symbol.magnifyingglass');
     }
     return $r('sys.symbol.gearshape');
   }

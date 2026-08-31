@@ -989,7 +989,6 @@ struct TeachingCalendarView: View {
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
     @State private var showingDatePicker = false
-    @State private var showingInformationQueries = false
     @State private var presentedTimelineAgenda: CalendarAgendaSelection?
     @State private var monthPagingGeneration = 0
     @State private var yearPopoverScrollTarget = TeachingCalendarView.yearPopoverTopID
@@ -1066,9 +1065,6 @@ struct TeachingCalendarView: View {
         }
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
-        }
-        .sheet(isPresented: $showingInformationQueries) {
-            InformationQueriesPresentation()
         }
     }
 
@@ -1275,12 +1271,6 @@ struct TeachingCalendarView: View {
     private var calendarActions: some View {
         VStack(alignment: .trailing, spacing: 6) {
             HStack(spacing: 8) {
-                Button {
-                    showingInformationQueries = true
-                } label: {
-                    Label("信息查询", systemImage: "magnifyingglass")
-                }
-                .accessibilityIdentifier("calendar.open-information-queries")
                 Button {
                     model.refreshSchedule()
                 } label: {

@@ -58,16 +58,13 @@ pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
 
     // Content area
     let content_area = chunks[1];
-    if app.query_open {
-        query::draw(frame, content_area, app, theme);
-    } else {
-        match app.selected_tab_index {
-            0 => home::draw(frame, content_area, app, theme),
-            1 => schedule::draw(frame, content_area, app, theme),
-            2 => planner::draw(frame, content_area, app, theme),
-            3 => calendar::draw(frame, content_area, app, theme),
-            _ => settings::draw(frame, content_area, app, theme),
-        }
+    match app.selected_tab_index {
+        0 => home::draw(frame, content_area, app, theme),
+        1 => schedule::draw(frame, content_area, app, theme),
+        2 => planner::draw(frame, content_area, app, theme),
+        3 => calendar::draw(frame, content_area, app, theme),
+        4 => query::draw(frame, content_area, app, theme),
+        _ => settings::draw(frame, content_area, app, theme),
     }
 
     // Status bar
@@ -84,10 +81,10 @@ pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
     frame.render_widget(status_bar, chunks[2]);
 
     // Key hint bar
-    let hint = if app.query_open {
-        "Esc/i 返回 · 1/2/Tab 班车/事件 · r 刷新 · ↑↓ 浏览 · 事件：/ 搜索 t 类型 c 分类 p 来源 e 已结束 f 收藏"
+    let hint = if app.selected_tab_index == 4 {
+        "←/→ 切换班车/事件 · r 刷新 · ↑↓ 浏览 · Tab/1-6 切换页面 · 事件：/ 搜索 t 类型 c 分类 p 来源 e 已结束 f 收藏"
     } else {
-        "q 退出 · r 刷新 · l 登录 · o 退出登录 · Tab 切换页 · 日历/设置按 i 查询"
+        "q 退出 · r 刷新 · l 登录 · o 退出登录 · Tab/1-6 切换页面"
     };
     let hint_bar = Paragraph::new(Span::styled(hint, theme.muted_text()));
     frame.render_widget(hint_bar, chunks[3]);

@@ -12,6 +12,8 @@ const tauriShuttle = text('../src-tauri/src/shuttle.rs')
 const tauriCapability = text('../src-tauri/capabilities/default.json')
 
 const appleQuery = text('../native/apple/Sources/Shared/InformationQueriesView.swift')
+const appleAppModel = text('../native/apple/Sources/Shared/AppModel.swift')
+const appleRoot = text('../native/apple/Sources/Shared/RootView.swift')
 const appleDeadlineClient = text('../native/apple/Sources/Shared/CalendarDeadlineClient.swift')
 const appleShuttle = text('../native/apple/Sources/Shared/ShuttleBusClient.swift')
 const appleSettings = text('../native/apple/Sources/Shared/SettingsView.swift')
@@ -19,12 +21,15 @@ const appleDesktopCalendar = text('../native/apple/Sources/Shared/TeachingCalend
 const appleMobileCalendar = text('../native/apple/Sources/Shared/MobileTeachingCalendarView.swift')
 
 const androidQuery = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/InformationQueryPage.kt')
+const androidMain = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/MainActivity.kt')
 const androidDeadlineClient = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/CalendarDailyInfoClient.kt')
 const androidShuttle = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/ShuttleBusClient.kt')
 const androidSettings = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/SettingsPage.kt')
 const androidCalendar = text('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/TeachingCalendarPage.kt')
 
 const harmonyQuery = text('../native/harmony/entry/src/main/ets/view/QueryView.ets')
+const harmonyRoot = text('../native/harmony/entry/src/main/ets/view/RootView.ets')
+const harmonySections = text('../native/harmony/entry/src/main/ets/common/AppSection.ets')
 const harmonyLogic = text('../native/harmony/entry/src/main/ets/common/QueryLogic.ets')
 const harmonyModel = text('../native/harmony/entry/src/main/ets/model/AppModel.ets')
 const harmonyDeadlineClient = text('../native/harmony/entry/src/main/ets/net/CalendarDailyInfoClient.ets')
@@ -36,30 +41,48 @@ const corePublicQueries = text('../where-to-study-core/src/public_queries.rs')
 const cliMain = text('../wts-cli/src/main.rs')
 const cliCommands = text('../wts-cli/src/commands.rs')
 const tuiMain = text('../wts-tui/src/main.rs')
+const tuiApp = text('../wts-tui/src/app.rs')
 const tuiQuery = text('../wts-tui/src/ui/query.rs')
 const tuiCalendar = text('../wts-tui/src/ui/calendar.rs')
 
-test('every graphical platform exposes the two-segment query from calendar and settings', () => {
-  assert.match(app, /openQueryHub\('calendar'\)/)
-  assert.match(app, /openQueryHub\('settings'\)/)
+const assertOrdered = (source, fragments) => {
+  let cursor = -1
+  for (const fragment of fragments) {
+    const next = source.indexOf(fragment, cursor + 1)
+    assert.notEqual(next, -1, `missing ordered fragment: ${fragment}`)
+    assert.ok(next > cursor, `out-of-order fragment: ${fragment}`)
+    cursor = next
+  }
+}
+
+test('every graphical platform exposes query as a primary destination between calendar and settings', () => {
+  assertOrdered(app, ["id: 'planner'", "id: 'calendar'", "id: 'query'", "id: 'settings'"])
+  assert.match(app, /activePage === 'query'[\s\S]*<QueryHub/)
+  assert.doesNotMatch(app, /openQueryHub|queryHubOpen|queryHubReturnPage/)
   assert.match(queryHub, /role="tab"[\s\S]*'班车查询'/)
   assert.match(queryHub, /role="tab"[\s\S]*'重要事件'/)
 
-  assert.match(appleSettings, /InformationQueriesView\(\)/)
-  assert.match(appleDesktopCalendar, /InformationQueriesPresentation\(\)/)
-  assert.match(appleMobileCalendar, /InformationQueriesPresentation\(\)/)
+  assertOrdered(appleAppModel, ['case planner', 'case calendar', 'case queries', 'case settings'])
+  assert.match(appleRoot, /case \.queries: InformationQueriesView\(\)/)
+  assert.doesNotMatch(appleSettings, /InformationQueriesView|InformationQueriesPresentation/)
+  assert.doesNotMatch(appleDesktopCalendar, /InformationQueriesView|InformationQueriesPresentation/)
+  assert.doesNotMatch(appleMobileCalendar, /InformationQueriesView|InformationQueriesPresentation/)
   assert.match(appleQuery, /Picker\("查询类型"/)
 
-  assert.match(androidSettings, /openInformationQuery\(\)/)
-  assert.match(androidCalendar, /openInformationQuery\(\)/)
+  assertOrdered(androidMain, ['PLANNER("空教室"', 'CALENDAR("教学日历"', 'QUERY("查询"', 'SETTINGS("设置"'])
+  assert.match(androidMain, /Destination\.QUERY ->[\s\S]*InformationQueryPage\(/)
+  assert.doesNotMatch(androidSettings, /openInformationQuery|information_query_entry/)
+  assert.doesNotMatch(androidCalendar, /openInformationQuery|calendar_information_query_menu_item/)
   assert.match(androidCalendar, /fun build\(\): View = phoneBuild\(\)/)
   assert.match(androidCalendar, /addView\(calendarImportButton\(compact = true\)\)/)
-  assert.match(androidCalendar, /calendar_information_query_menu_item[\s\S]*openInformationQuery\(\)/)
   assert.match(androidQuery, /SHUTTLE\("班车查询"\)/)
   assert.match(androidQuery, /IMPORTANT_EVENTS\("重要事件"\)/)
 
-  assert.match(harmonySettings, /onQueryVisibilityChanged\(true\)/)
-  assert.match(harmonyCalendar, /onQueryVisibilityChanged\(true\)/)
+  assertOrdered(harmonySections, ['AppSection.planner', 'AppSection.calendar', 'AppSection.query', 'AppSection.settings'])
+  assert.match(harmonyRoot, /currentSection === AppSection\.query[\s\S]*QueryView\(\)/)
+  assert.doesNotMatch(harmonyRoot, /queryVisible|setQueryVisible/)
+  assert.doesNotMatch(harmonySettings, /onQueryVisibilityChanged|打开查询/)
+  assert.doesNotMatch(harmonyCalendar, /onQueryVisibilityChanged|onQueryRequested/)
   assert.match(harmonyQuery, /ForEach\(QueryPageContract\.tabs/)
   assert.match(harmonyQuery, /QueryPageContract\.tabTitle\(tab\)/)
   assert.match(harmonyLogic, /'班车查询'/)
@@ -143,7 +166,10 @@ test('CLI and TUI reuse the secure Core query and favorite contract', () => {
   assert.match(cliCommands, /public_queries::fetch_shuttle_bus/)
   assert.match(cliCommands, /public_queries::fetch_important_events/)
 
-  assert.match(tuiMain, /KeyCode::Char\('i'\) if matches!\(app\.selected_tab_index, 3 \| 4\)/)
+  assert.match(tuiApp, /TAB_LABELS: \[&str; 6\] = \["概览", "课表", "空教室", "日历", "查询", "设置"\]/)
+  assert.match(tuiMain, /4 => Tab::Query/)
+  assert.match(tuiMain, /if index == 4 \{\s*ensure_query_loaded\(app, tx\)/)
+  assert.doesNotMatch(tuiMain, /KeyCode::Char\('i'\).*selected_tab_index/)
   assert.match(tuiQuery, /QuerySection::Shuttle/)
   assert.match(tuiQuery, /QuerySection::Events/)
   assert.match(tuiQuery, /app\.query_category/)

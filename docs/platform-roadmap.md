@@ -76,11 +76,11 @@
 
 详细的源码、测试、打包和待完成事项检查点见 [`development-status.md`](development-status.md)。
 
-- Windows/Tauri：教学日历和设置均可进入班车/重要事件查询；班车只显示当天 active 时刻表，重要事件支持公开+校内来源、元数据搜索、真实分类、DDL 升序和完整收藏；会议独立开关、年度预热、跨年加载、双层 DDL 边框、教学周与键盘操作均已完成，React 单文件仍需拆分。
+- Windows/Tauri：导航条已增加位于教学日历和设置之间的独立查询页；班车只显示当天 active 时刻表，重要事件支持公开+校内来源、元数据搜索、真实分类、DDL 升序和完整收藏；会议独立开关、年度预热、跨年加载、双层 DDL 边框、教学周与键盘操作均已完成，React 单文件仍需拆分。
 - Linux/Tauri：与 Windows 共享 React/Rust 功能，`v0.2.8` 使用 Ubuntu 22.04 原生 CI 发布 x86_64/arm64 Debian 包与 AppImage，并同步提供 CLI/TUI 查询命令或视图。
-- macOS/iOS 原生：共享 SwiftUI 已接入双入口班车/重要事件查询、并行缓存预热、搜索分类/DDL 排序/收藏和会议日历；个人课表、Keychain、节假日、日/周/月/年、天气/黄历、云课堂作业、系统日历和两校区空教室保持完整。
-- Android 原生：Kotlin + Android Views 已在手机、折叠屏和平板共享双入口查询、当天班车与活动搜索分类收藏；Keystore、课表/空教室、日/周/月/年、课程摘要、天气/黄历、云课堂作业、双层边框和跨月动画保持完整。
-- 鸿蒙原生：ArkTS + ArkUI 的手机、折叠屏、平板与 PC 均接入共享缓存的班车/重要事件双入口及会议日历；DevEco Studio 6.1.1 / API 24 的 `0.2.8 (1002013)` Release APP/HAP 与 122 项单元测试通过，已上传 AGC 并通过云测试。
+- macOS/iOS 原生：共享 SwiftUI 已将查询改为教学日历和设置之间的独立一级导航，并保留并行缓存预热、搜索分类/DDL 排序/收藏和会议日历；个人课表、Keychain、节假日、日/周/月/年、天气/黄历、云课堂作业、系统日历和两校区空教室保持完整。
+- Android 原生：Kotlin + Android Views 已在手机底栏、折叠屏和平板侧栏增加独立一级查询页，当天班车与活动搜索分类收藏共享现有缓存；Keystore、课表/空教室、日/周/月/年、课程摘要、天气/黄历、云课堂作业、双层边框和跨月动画保持完整。
+- 鸿蒙原生：ArkTS + ArkUI 的手机、折叠屏、平板与 PC 均已改为共享缓存的独立一级查询页及会议日历；DevEco Studio 6.1.1 / API 24 的本地签名 APP/HAP 与 122 项单元测试通过。
 - 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift、Kotlin 和 ArkTS 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
 - 原生分发限制：Android `0.2.8 (44)` 使用固定维护者密钥签名；Apple iOS 与 macOS `0.2.8 (74)` 已由本地 Xcode 分平台上传 TestFlight；HarmonyOS `0.2.8 (1002013)` 已上传 AGC，邀请测试处于预审中。GitHub `v0.2.8` Pre-release 同步提供 14 项附件，Windows/Linux/CLI/TUI 有来源证明；Windows 公众 Authenticode 和 Linux 原生 APT 信任仍需各自的外部身份/仓库基础设施。
 - 开源授权：根目录已加入 GPL-3.0-only 标准许可证文本，项目元数据、贡献指南和发布文档使用同一 SPDX 标识。

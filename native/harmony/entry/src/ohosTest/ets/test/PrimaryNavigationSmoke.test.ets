@@ -1,5 +1,5 @@
 // 主导航 UI 冒烟测试，对应 iOS 端 PrimaryNavigationSmokeTests 的关键断言：
-// 三个一级页面可导航、示例模式（review-demo）展示本地数据、
+// 四个一级页面可导航、示例模式（review-demo）展示本地数据、
 // 日历四视图切换与月视图展开收起。
 import { describe, it, expect, beforeAll } from '@ohos/hypium';
 import { Driver, ON, MatchPattern, Component, Point } from '@ohos.UiTest';
@@ -78,7 +78,8 @@ async function findTextByScrollingDown(
 
 async function phoneNavigationGeometry(driver: Driver): Promise<number[]> {
   const ids: string[] = [
-    'phone_navigation', 'navigation.planner', 'navigation.calendar', 'navigation.settings'
+    'phone_navigation', 'navigation.planner', 'navigation.calendar', 'navigation.query',
+    'navigation.settings'
   ];
   const values: number[] = [];
   for (let index: number = 0; index < ids.length; index++) {
@@ -111,6 +112,12 @@ export default function primaryNavigationSmokeTest() {
       expect(todayButton !== null).assertTrue();
       const weekMode: Component | null = await findText(driver, '周');
       expect(weekMode !== null).assertTrue();
+      // 查询是教学日历和设置之间的独立一级页面。
+      const queryTab: Component = await driver.findComponent(ON.id('navigation.query'));
+      expect(queryTab !== null).assertTrue();
+      await queryTab.click();
+      await driver.delayMs(800);
+      expect(await driver.findComponent(ON.id('query.tab.shuttle')) !== null).assertTrue();
       // 设置
       const settingsTab: Component | null = await findText(driver, '设置');
       expect(settingsTab !== null).assertTrue();
@@ -243,19 +250,12 @@ export default function primaryNavigationSmokeTest() {
       expect(januaryLabel !== null).assertTrue();
     });
 
-    it('query_page_is_reachable_from_calendar_and_settings', 0, async () => {
+    it('query_page_is_a_primary_navigation_destination', 0, async () => {
       await launchApp(true);
       const driver: Driver = Driver.create();
-      const calendarTab: Component | null = await findText(driver, '教学日历');
-      expect(calendarTab !== null).assertTrue();
-      await calendarTab?.click();
-      await driver.delayMs(700);
-      const more: Component | null = await findText(driver, '⋯');
-      expect(more !== null).assertTrue();
-      await more?.click();
-      await driver.delayMs(300);
-      const calendarQuery: Component = await driver.findComponent(ON.id('calendar.open_query'));
-      await calendarQuery.click();
+      const queryTab: Component = await driver.findComponent(ON.id('navigation.query'));
+      expect(queryTab !== null).assertTrue();
+      await queryTab.click();
       await driver.delayMs(500);
       expect(await driver.findComponent(ON.id('query.tab.shuttle')) !== null).assertTrue();
       const eventsTab: Component = await driver.findComponent(ON.id('query.tab.events'));
@@ -263,17 +263,11 @@ export default function primaryNavigationSmokeTest() {
       await eventsTab.click();
       await driver.delayMs(300);
       expect(await driver.findComponent(ON.id('query.events.show_ended')) !== null).assertTrue();
-      await (await driver.findComponent(ON.id('query.back'))).click();
-
-      const settingsTab: Component | null = await findText(driver, '设置');
-      expect(settingsTab !== null).assertTrue();
-      await settingsTab?.click();
-      await driver.delayMs(600);
-      const settingsQuery: Component | null = await findTextByScrollingDown(driver, '打开查询', 10);
-      expect(settingsQuery !== null).assertTrue();
-      await settingsQuery?.click();
+      expect(await driver.findComponent(ON.id('phone_navigation')) !== null).assertTrue();
+      const settingsTab: Component = await driver.findComponent(ON.id('navigation.settings'));
+      await settingsTab.click();
       await driver.delayMs(500);
-      expect(await driver.findComponent(ON.id('query.tab.events')) !== null).assertTrue();
+      expect(await findText(driver, '个人账户') !== null).assertTrue();
     });
 
     it('language_setting_updates_static_ui_without_relaunch', 0, async () => {

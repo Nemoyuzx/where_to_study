@@ -13,8 +13,6 @@ import { CalendarViewportPreloadController } from './calendar/CalendarViewportPr
 export struct CalendarSectionView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param containerWidth: number = 390;
-  @Event onQueryVisibilityChanged: (visible: boolean) => void = () => {
-  };
   @Local session: TeachingCalendarSession = new TeachingCalendarSession();
   private viewportPreloader: CalendarViewportPreloadController =
     new CalendarViewportPreloadController();
@@ -44,19 +42,9 @@ export struct CalendarSectionView {
 
   build() {
     if (AdaptiveLayoutPolicy.useExpandedCalendar(this.containerWidth)) {
-      ExpandedTeachingCalendarView({
-        session: this.session,
-        onQueryRequested: (): void => {
-          this.onQueryVisibilityChanged(true);
-        }
-      })
+      ExpandedTeachingCalendarView({ session: this.session })
     } else {
-      MobileTeachingCalendarView({
-        session: this.session,
-        onQueryRequested: (): void => {
-          this.onQueryVisibilityChanged(true);
-        }
-      })
+      MobileTeachingCalendarView({ session: this.session })
     }
   }
 }

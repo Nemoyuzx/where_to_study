@@ -224,33 +224,14 @@ internal class InformationQueryPage(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         setPadding(activity.dp(20), activity.dp(16), activity.dp(20), activity.dp(8))
-        addView(TextView(activity).apply {
-            id = R.id.information_query_back
-            text = "‹"
-            textSize = 28f
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            setTextColor(Palette.primaryText)
-            contentDescription = activity.uiText("返回")
-            isClickable = true
-            isFocusable = true
-            background = roundedBackground(activity, Palette.surfaceVariant, radius = 8)
-            setOnClickListener {
-                activity.performControlHaptic(it)
-                activity.closeInformationQuery()
-            }
-        }, LinearLayout.LayoutParams(activity.dp(42), activity.dp(42)).apply {
-            marginEnd = activity.dp(12)
-        })
         addView(pageTitle(
             activity,
             "查询",
             "校区班车与重要事件",
             titleSizeSp = if (availableWidthDp < 600) 26f else 34f,
         ).apply { setPadding(0, 0, 0, 0) }, LinearLayout.LayoutParams(
-            0,
+            ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
-            1f,
         ))
     }
 

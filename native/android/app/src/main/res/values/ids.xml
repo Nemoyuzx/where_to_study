@@ -7,9 +7,11 @@
     <item name="navigation_rail_toggle" type="id" />
     <item name="navigation_planner" type="id" />
     <item name="navigation_calendar" type="id" />
+    <item name="navigation_query" type="id" />
     <item name="navigation_settings" type="id" />
     <item name="page_planner" type="id" />
     <item name="page_calendar" type="id" />
+    <item name="page_query" type="id" />
     <item name="page_settings" type="id" />
     <item name="planner_fetch_button" type="id" />
     <item name="planner_fetch_icon" type="id" />
@@ -32,9 +34,7 @@
     <item name="settings_custom_deadlines_url" type="id" />
     <item name="settings_custom_deadlines_save" type="id" />
     <item name="settings_favorite_deadlines_button" type="id" />
-    <item name="settings_information_query_button" type="id" />
     <item name="information_query_page" type="id" />
-    <item name="information_query_back" type="id" />
     <item name="information_query_mode_switch" type="id" />
     <item name="information_query_shuttle_tab" type="id" />
     <item name="information_query_events_tab" type="id" />
@@ -82,7 +82,6 @@
     <item name="calendar_overflow_button" type="id" />
     <item name="calendar_import_menu_item" type="id" />
     <item name="calendar_import_favorites_menu_item" type="id" />
-    <item name="calendar_information_query_menu_item" type="id" />
     <item name="calendar_almanac_advice_row" type="id" />
     <item name="calendar_almanac_advice_label" type="id" />
     <item name="calendar_almanac_advice_text" type="id" />

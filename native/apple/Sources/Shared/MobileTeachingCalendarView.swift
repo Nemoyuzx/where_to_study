@@ -300,7 +300,6 @@ struct MobileTeachingCalendarView: View {
     @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
     @State private var monthPagingState = MobileMonthPagingState()
     @State private var areTimelineCoursesExpanded = true
-    @State private var showingInformationQueries = false
 
     private let calendar = Calendar.shanghai
 
@@ -349,9 +348,6 @@ struct MobileTeachingCalendarView: View {
         .sheet(item: $presentedDetail) { selection in
             detailSheet(selection)
                 .presentationDetents([.medium, .large])
-        }
-        .fullScreenCover(isPresented: $showingInformationQueries) {
-            InformationQueriesPresentation()
         }
         .overlay {
             if let selection = presentedWeekAgenda {
@@ -453,13 +449,6 @@ struct MobileTeachingCalendarView: View {
 
     private var actionMenu: some View {
         Menu {
-            Button {
-                showingInformationQueries = true
-            } label: {
-                Label("信息查询", systemImage: "magnifyingglass")
-            }
-            .accessibilityIdentifier("calendar.open-information-queries")
-
             Button {
                 model.refreshSchedule()
             } label: {

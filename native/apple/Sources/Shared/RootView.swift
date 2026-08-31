@@ -491,6 +491,7 @@ struct RootView: View {
             #else
             TeachingCalendarView(session: teachingCalendarSession)
             #endif
+        case .queries: InformationQueriesView()
         case .settings: SettingsView()
         }
     }

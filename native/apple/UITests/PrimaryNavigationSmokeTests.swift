@@ -14,37 +14,26 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         navigate(to: "教学日历", in: app)
         assertScreen("screen.calendar", in: app)
         assertMobileCalendarControls(in: app)
+        navigate(to: "查询", in: app)
+        assertScreen("screen.information-queries", in: app)
         navigate(to: "设置", in: app)
         assertScreen("screen.settings", in: app)
         navigate(to: "空教室", in: app)
         assertScreen("screen.planner", in: app)
     }
 
-    func testInformationQueriesAreAccessibleFromCalendarAndSettings() {
+    func testInformationQueriesAreAPrimaryNavigationDestination() {
         continueAfterFailure = false
         let app = configuredApplication()
         app.launchArguments = ["--review-demo"]
         app.launch()
         defer { app.terminate() }
 
-        navigate(to: "教学日历", in: app)
-        let actions = app.buttons["课表操作"]
-        XCTAssertTrue(actions.waitForExistence(timeout: 5))
-        actions.tap()
-        let calendarEntry = app.buttons["calendar.open-information-queries"]
-        XCTAssertTrue(calendarEntry.waitForExistence(timeout: 5))
-        calendarEntry.tap()
+        navigate(to: "查询", in: app)
         assertScreen("screen.information-queries", in: app)
         XCTAssertTrue(app.segmentedControls.buttons["班车查询"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["queries.shuttle.status"]
             .waitForExistence(timeout: 5))
-        app.buttons["完成"].tap()
-
-        navigate(to: "设置", in: app)
-        let settingsEntry = app.descendants(matching: .any)["settings.open-information-queries"]
-        revealByScrolling(visibleElement: settingsEntry, in: app)
-        settingsEntry.tap()
-        assertScreen("screen.information-queries", in: app)
         let events = app.segmentedControls.buttons["重要事件"]
         XCTAssertTrue(events.waitForExistence(timeout: 5))
         events.tap()
@@ -52,6 +41,11 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(showEnded.waitForExistence(timeout: 5))
         XCTAssertEqual(showEnded.value as? String, "0")
         XCTAssertTrue(app.staticTexts["示例学术会议"].waitForExistence(timeout: 5))
+
+        navigate(to: "教学日历", in: app)
+        XCTAssertFalse(app.descendants(matching: .any)["calendar.open-information-queries"].exists)
+        navigate(to: "设置", in: app)
+        XCTAssertFalse(app.descendants(matching: .any)["settings.open-information-queries"].exists)
     }
 
     func testReviewDemoShowsLocalDataWithoutAccount() {
@@ -1023,6 +1017,9 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             XCTAssertTrue(app.buttons["展开日程"].waitForExistence(timeout: 5))
             attachScreenshot(named: "ipad-calendar-portrait-expanded-state-preserved")
         }
+        navigateFromSidebar(to: "查询", in: app)
+        assertScreen("screen.information-queries", in: app)
+        XCTAssertTrue(app.segmentedControls.buttons["班车查询"].waitForExistence(timeout: 5))
         navigateFromSidebar(to: "设置", in: app)
         assertScreen("screen.settings", in: app)
         attachScreenshot(named: "ipad-settings-portrait")
@@ -1352,6 +1349,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         switch title {
         case "空教室": return "planner"
         case "教学日历": return "calendar"
+        case "查询": return "queries"
         case "设置": return "settings"
         default:
             XCTFail("Unknown section: \(title)")
