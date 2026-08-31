@@ -98,4 +98,4 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 > 的 assembleHap/assembleApp 编译；0.2.8 (1002013) Release APP/HAP 已通过 SHA-256、
 > 独立 HAP 签名、APP ZIP 结构、版本和三项固定 HTTPS API 校验，122 个契约单元测试全部通过。DevEco“上传产品”已将
 > 0.2.8 (1002013) 上传 AppGallery Connect 用于测试和发布，云测试结果为“通过”，GitHub Pre-release 同步提供相同版本的签名构建。
-> 现有[历史测试邀请](https://appgallery.huawei.com/link/invite-test-wap?taskId=dfc32d0293987b9d09911717759ac063&invitationCode=A0IsJpKIcn3)仍显示 0.2.6 (1002010)，新的 0.2.8 邀请测试任务尚待账号持有人确认提交。
+> 0.2.8 邀请测试已提交并处于“预审中”；[打开邀请页面（链接已含邀请码，审核通过后生效）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。预审通过前公开页可能显示任务不存在。

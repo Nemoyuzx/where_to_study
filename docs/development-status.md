@@ -8,7 +8,7 @@
 - 当前构建号：Apple `CURRENT_PROJECT_VERSION=74`；Android `versionCode=44`；HarmonyOS `versionCode=1002013`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：`v0.2.8` 是 Pre-release；iOS 与 macOS build 74 已由本地 Xcode 分平台上传，HarmonyOS 1002013 已由 DevEco 上传且云测试通过，GitHub 提供 14 项经摘要核对的公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试任务仍待账号持有人确认提交；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.8` 是 Pre-release；iOS 与 macOS build 74 已由本地 Xcode 分平台上传，HarmonyOS 1002013 已由 DevEco 上传且云测试通过，GitHub 提供 14 项经摘要核对的公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试已提交并处于预审中；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -103,7 +103,7 @@
 | Apple | 本地 Xcode 严格构建通过；macOS 228/228，iOS 共 259 项（255 通过、4 项仅 iPad 条件跳过、0 失败） |
 | TestFlight | iOS 与 macOS `0.2.8 (74)` 均收到 `Upload succeeded`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.8 (44)` 的 194/194 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过 |
-| HarmonyOS | `0.2.8 (1002013)` 的 122/122 ArkTS 单元测试、签名 HAP/APP、版本与三项 API 打包校验通过；DevEco 已上传 AGC 且云测试为“通过” |
+| HarmonyOS | `0.2.8 (1002013)` 的 122/122 ArkTS 单元测试、签名 HAP/APP、版本与三项 API 打包校验通过；DevEco 已上传 AGC、云测试为“通过”，邀请测试审核已提交并处于预审中 |
 | GitHub | 最终 tag 指向 `0d9237c`；七条标签工作流成功；14 项 Pre-release 附件逐项匹配本地大小与 SHA-256，Windows/Linux/CLI/TUI 九项来源证明同时约束 tag、workflow、GitHub runner 与最终 commit |
 
 完整中英文发布说明见 [`release-v0.2.8.md`](release-v0.2.8.md)。

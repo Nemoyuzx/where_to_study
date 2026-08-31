@@ -41,6 +41,7 @@
 - GitHub Release 标记为 Pre-release；稳定版 `releases/latest` 继续指向 `v0.2.7`。
 - GitHub 提供 Windows x64 NSIS、Linux x86_64/arm64 Debian 与 AppImage、Linux CLI/TUI、签名 Android APK/AAB、签名 HarmonyOS APP/HAP 和原生 macOS Universal DMG，共 14 个公开附件。
 - iOS 与正式签名 macOS 通过 TestFlight 分发，不上传 iOS 制品；GitHub macOS DMG 是未公证的开源预览包。
+- HarmonyOS `0.2.8 (1002013)` 已上传并通过 DevEco 云测试；邀请测试已提交预审，[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)将在审核通过后生效。
 - Windows/Linux/CLI/TUI 标签构建同时生成 GitHub/Sigstore 来源证明。Windows 安装器尚未使用公众 Authenticode 证书，来源证明不等同系统“已验证发布者”。
 - `.sha256` 文件只用于发布前后内部核验，不作为公开附件。
 
@@ -87,6 +88,7 @@ This is the cross-platform `0.2.8` pre-release, focused on the new shuttle and i
 - The GitHub release is marked as a pre-release; stable `releases/latest` remains `v0.2.7`.
 - Fourteen public assets cover Windows NSIS, Linux Debian/AppImage/CLI/TUI on both architectures, signed Android APK/AAB, signed HarmonyOS APP/HAP, and the native macOS Universal DMG.
 - iOS and the distribution-signed macOS build are delivered through TestFlight. No iOS artifact is published on GitHub; the GitHub DMG remains an unnotarized open-source preview.
+- HarmonyOS `0.2.8 (1002013)` has been uploaded and passed DevEco cloud testing. Its invitation test is in pre-review; the [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) becomes active after approval.
 - Windows, Linux, CLI, and TUI tag artifacts receive GitHub/Sigstore provenance attestations. The Windows installer still lacks a public Authenticode publisher certificate; provenance is not the same as a Windows verified publisher.
 - SHA-256 sidecars remain internal release-verification files rather than public assets.
 
