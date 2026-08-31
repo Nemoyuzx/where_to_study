@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前预发布版本：[v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；稳定版 `releases/latest` 仍为 `v0.2.7`
 - 应用版本：`0.2.8`
-- 当前构建号：Apple `CURRENT_PROJECT_VERSION=74`；Android `versionCode=44`；HarmonyOS `versionCode=1002013`；Tauri Android `versionCode=2011`
+- 当前构建号：Apple `CURRENT_PROJECT_VERSION=75`；Android `versionCode=44`；HarmonyOS `versionCode=1002013`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：`v0.2.8` 是 Pre-release；iOS 与 macOS build 74 已由本地 Xcode 分平台上传，HarmonyOS 1002013 已由 DevEco 上传且云测试通过，GitHub 提供 14 项经摘要核对的公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试已提交并处于预审中；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.8` 是 Pre-release；iOS 与 macOS build 75 已由本地 Xcode 分平台上传，HarmonyOS 1002013 已由 DevEco 上传且云测试通过，GitHub 提供 14 项经摘要核对的公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试已提交并处于预审中；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -101,7 +101,7 @@
 | React/Tauri UI | 133/133 Node 契约与回归测试、Vite 生产构建和许可证新鲜度检查通过；会议唯一开启链路覆盖预热、跨年加载、月详情、来源声明与重试 |
 | Rust | Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过 |
 | Apple | 本地 Xcode 严格构建通过；macOS 228/228，iOS 共 259 项（255 通过、4 项仅 iPad 条件跳过、0 失败） |
-| TestFlight | iOS 与 macOS `0.2.8 (74)` 均收到 `Upload succeeded`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
+| TestFlight | iOS 与 macOS `0.2.8 (75)` 均收到 `Upload succeeded`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.8 (44)` 的 194/194 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过 |
 | HarmonyOS | `0.2.8 (1002013)` 的 122/122 ArkTS 单元测试、签名 HAP/APP、版本与三项 API 打包校验通过；DevEco 已上传 AGC、云测试为“通过”，邀请测试审核已提交并处于预审中 |
 | GitHub | 最终 tag 指向 `0d9237c`；七条标签工作流成功；14 项 Pre-release 附件逐项匹配本地大小与 SHA-256，Windows/Linux/CLI/TUI 九项来源证明同时约束 tag、workflow、GitHub runner 与最终 commit |
@@ -187,7 +187,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.8 预发布制品
 
-`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (44)` APK/AAB；HarmonyOS `0.2.8 (1002013)` APP/HAP；以及原生 macOS `0.2.8 (74)` Universal DMG 预览包。iOS 与正式签名 macOS build 74 由本地 Xcode 分平台上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
+`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (44)` APK/AAB；HarmonyOS `0.2.8 (1002013)` APP/HAP；以及原生 macOS `0.2.8 (75)` Universal DMG 预览包。iOS 与正式签名 macOS build 75 由本地 Xcode 分平台上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
 
 ## 0.2.7 稳定版发布制品
 

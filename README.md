@@ -55,13 +55,13 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.8 (74)` 正式签名 Universal 构建已上传 TestFlight；GitHub Pre-release 同步提供原生 Universal DMG 预览包 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.8 (75)` 正式签名 Universal 构建已上传 TestFlight；GitHub Pre-release 同步提供原生 Universal DMG 预览包 |
 | Android | Kotlin + Android Views | `0.2.8 (44)` 固定维护者密钥签名 Universal APK/AAB 已进入 GitHub Pre-release；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
 | Windows | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 x64 NSIS 和 GitHub/Sigstore 来源证明；公众 Authenticode 仍需外部身份配置 |
 | Linux | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 arm64/x86_64 Debian、AppImage、CLI、TUI 及 GitHub/Sigstore 来源证明 |
 | CLI | Rust（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-cli` 发布 Linux x86_64/arm64 构建，并新增班车/重要事件命令，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-tui` 发布 Linux x86_64/arm64 构建；主分支已将班车/重要事件改为独立一级“查询”标签，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.8 (74)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| iOS | SwiftUI 原生 | `0.2.8 (75)` 正式签名构建已上传 TestFlight；不作为 GitHub Release 附件 |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002013)` 的 122 项单元测试、签名 APP/HAP、DevEco 上传和云测试通过；GitHub Pre-release 提供签名 APP/HAP |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
@@ -71,7 +71,7 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 ## 下载
 
-[v0.2.8 Pre-release](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8) 提供 14 项附件：Windows x64 NSIS；Linux arm64/x86_64 Debian、AppImage、CLI、TUI；固定维护者密钥签名的 Android APK/AAB；HarmonyOS 签名 APP/HAP；以及原生 macOS Universal DMG。本版本新增班车与重要事件查询、搜索/分类/DDL 排序/完整本地收藏，并把会议事件接入教学日历；完整中英文改动见 [0.2.8 发布说明](./docs/release-v0.2.8.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品；iOS 与 macOS `0.2.8 (74)` 已由本地 Xcode 分平台上传 TestFlight，GitHub DMG 是未公证的开源预览包。因为这是 Pre-release，稳定入口 `releases/latest` 仍指向 `v0.2.7`。
+[v0.2.8 Pre-release](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8) 提供 14 项附件：Windows x64 NSIS；Linux arm64/x86_64 Debian、AppImage、CLI、TUI；固定维护者密钥签名的 Android APK/AAB；HarmonyOS 签名 APP/HAP；以及原生 macOS Universal DMG。本版本新增班车与重要事件查询、搜索/分类/DDL 排序/完整本地收藏，并把会议事件接入教学日历；完整中英文改动见 [0.2.8 发布说明](./docs/release-v0.2.8.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品；iOS 与 macOS `0.2.8 (75)` 已由本地 Xcode 分平台上传 TestFlight，GitHub DMG 是未公证的开源预览包。因为这是 Pre-release，稳定入口 `releases/latest` 仍指向 `v0.2.7`。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
