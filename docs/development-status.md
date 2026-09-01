@@ -1,14 +1,14 @@
-# v0.2.8 预发布检查点（2026-08-31）
+# v0.2.8 预发布检查点（2026-09-01）
 
 ## 当前状态
 
 - 分支：`main`
 - 当前预发布版本：[v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；稳定版 `releases/latest` 仍为 `v0.2.7`
 - 应用版本：`0.2.8`
-- 当前构建号：Apple `CURRENT_PROJECT_VERSION=75`；Android `versionCode=44`；HarmonyOS `versionCode=1002013`；Tauri Android `versionCode=2011`
+- 当前构建号：Apple `CURRENT_PROJECT_VERSION=76`；Android `versionCode=44`；HarmonyOS `versionCode=1002014`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：`v0.2.8` 是 Pre-release；iOS 与 macOS build 75 已由本地 Xcode 分平台上传，HarmonyOS 1002013 已由 DevEco 上传且云测试通过，GitHub 提供 14 项经摘要核对的公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试已提交并处于预审中；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.8` 是 Pre-release；iOS build 76 与 macOS build 75 已由本地 Xcode 分别上传，HarmonyOS 1002014 已由 DevEco 上传且云测试通过，GitHub 提供 14 项公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试已提交并处于预审中；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -90,7 +90,7 @@
 - 联动查询页补齐两校区天气与默认折叠卡片，折叠时保留摘要，展开后显示今日和明日详情。
 - 查询已改为教学日历和设置之间的独立一级导航；AppModel 共享请求合并与五分钟缓存，支持当天 active 班车、真实分类/元数据搜索、过期切换、DDL 升序和完整本地收藏，并明确排除作业与自定义源。
 - 月视图日期详情补齐云课堂原生 CAS 登录与实时作业同步、黄历宜忌与竞赛/夏令营/黑客松统一 DDL 卡片，设置页提供天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松六个独立开关与来源声明。
-- 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年双层 DDL 同心边框、只折叠课程的日周摘要、独立的今天/选中状态、范围缓存和中英文界面；日/周时间轴轴区与日期区均使用整点实线和节次虚线；构建及 122 项 ArkTS 单元测试通过。
+- 手机、平板、折叠屏和 PC 宽屏日历均补齐作业/全部活动 DDL 全天区、独立居中 `+N` 弹窗、月/年双层 DDL 同心边框、只折叠课程的日周摘要、独立的今天/选中状态、范围缓存和中英文界面；日/周时间轴轴区与日期区均使用整点实线和节次虚线；手机月视图修复双页横向翻月、三档详情手势、31 日锚点与动画外相邻月预热；构建及 127 项 ArkTS 单元测试通过。
 - 设置页输入控件不再受手机全屏根容器的焦点属性阻断；账号与密码框显式启用触摸聚焦和系统输入法，键盘弹出时使用 RESIZE 避让，Pura 90 实测及设备侧自动化均通过。
 
 ## 0.2.8 预发布最终验证
@@ -98,13 +98,13 @@
 | 范围 | 结果 |
 | --- | --- |
 | 固定公开 API | 班车 Schema 1.0、Contest DDL Schema 1.4、校内通知 Schema 1.0 均直接返回 HTTP 200 JSON 且无重定向；公开活动 454 条、会议 67 条、校内通知 15 条，查询源均无作业 |
-| React/Tauri UI | 133/133 Node 契约与回归测试、Vite 生产构建和许可证新鲜度检查通过；会议唯一开启链路覆盖预热、跨年加载、月详情、来源声明与重试 |
+| React/Tauri UI | 134/134 Node 契约与回归测试、Vite 生产构建和许可证新鲜度检查通过；会议唯一开启链路覆盖预热、跨年加载、月详情、来源声明与重试 |
 | Rust | Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过 |
-| Apple | 本地 Xcode 严格构建通过；macOS 228/228，iOS 共 259 项（255 通过、4 项仅 iPad 条件跳过、0 失败） |
-| TestFlight | iOS 与 macOS `0.2.8 (75)` 均收到 `Upload succeeded`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
+| Apple | 本地 Xcode 严格构建与完整平台测试通过；25 项 UI 场景中 20 通过、5 项设备/线上门控跳过、0 失败；生产班车 Store/UI 门控测试另行执行 2/2 通过、0 跳过 |
+| TestFlight | iOS `0.2.8 (76)` 与 macOS `0.2.8 (75)` 均收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.8 (44)` 的 194/194 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过 |
-| HarmonyOS | `0.2.8 (1002013)` 的 122/122 ArkTS 单元测试、签名 HAP/APP、版本与三项 API 打包校验通过；DevEco 已上传 AGC、云测试为“通过”，邀请测试审核已提交并处于预审中 |
-| GitHub | 最终 tag 指向 `0d9237c`；七条标签工作流成功；14 项 Pre-release 附件逐项匹配本地大小与 SHA-256，Windows/Linux/CLI/TUI 九项来源证明同时约束 tag、workflow、GitHub runner 与最终 commit |
+| HarmonyOS | `0.2.8 (1002014)` 的 127/127 ArkTS 单元测试、签名 HAP/APP、版本、HAP 发布签名与三项 API 打包校验通过；DevEco 已上传 AGC、云测试为“通过”，邀请测试审核已提交并处于预审中 |
+| GitHub | `v0.2.8` 保持原 Pre-release/tag；来自修复提交 `ba0d11e` 的 HarmonyOS 1002014 HAP/APP 已逐项替换并匹配远端大小与 SHA-256，其余 12 项附件保持不变 |
 
 完整中英文发布说明见 [`release-v0.2.8.md`](release-v0.2.8.md)。
 
@@ -187,7 +187,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.8 预发布制品
 
-`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (44)` APK/AAB；HarmonyOS `0.2.8 (1002013)` APP/HAP；以及原生 macOS `0.2.8 (75)` Universal DMG 预览包。iOS 与正式签名 macOS build 75 由本地 Xcode 分平台上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
+`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (44)` APK/AAB；HarmonyOS `0.2.8 (1002014)` APP/HAP；以及原生 macOS `0.2.8 (75)` Universal DMG 预览包。iOS build 76 与正式签名 macOS build 75 由本地 Xcode 分别上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
 
 ## 0.2.7 稳定版发布制品
 
