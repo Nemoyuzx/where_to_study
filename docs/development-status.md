@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前预发布版本：[v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；稳定版 `releases/latest` 仍为 `v0.2.7`
 - 应用版本：`0.2.8`
-- 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002015`；Tauri Android `versionCode=2011`
+- 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002016`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：`v0.2.8` 是 Pre-release；iOS build 77 与 macOS build 75 已由本地 Xcode 上传，HarmonyOS 1002015 已由 DevEco 上传且云测试通过，GitHub 提供 14 项公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试沿用现有入口；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.8` 是 Pre-release；iOS build 77 与 macOS build 75 已由本地 Xcode 上传，HarmonyOS 1002016 已由 DevEco 上传且云测试通过，GitHub 提供 14 项公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试沿用现有入口；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -106,8 +106,8 @@
 | Apple | 本地 Xcode 严格构建与完整平台测试通过；基础套件 26 项 UI 中 21 通过、5 项设备/线上门控跳过、0 失败；横竖屏年视图和生产班车 Store/UI 门控另行执行并通过 |
 | TestFlight | iOS `0.2.8 (77)` 与 macOS `0.2.8 (75)` 均收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.8 (45)` 的 199/199 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过 |
-| HarmonyOS | `0.2.8 (1002015)` 的 129/129 ArkTS 单元测试、签名 HAP/APP、版本、HAP 发布签名与三项 API 打包校验通过；DevEco 已上传 AGC 且云测试为“通过” |
-| GitHub | `v0.2.8` 保持原 Pre-release/tag；来自修复提交 `04a355c` 的 Android 45 与 HarmonyOS 1002015 四项资产已逐项替换并匹配远端大小与 SHA-256，其余 10 项附件保持不变 |
+| HarmonyOS | `0.2.8 (1002016)` 的 130/130 ArkTS 单元测试、签名 HAP/APP、版本、HAP 发布签名、三项 API 打包校验与手机导航 28vp 设备回归通过；DevEco 已上传 AGC 且云测试为“通过” |
+| GitHub | `v0.2.8` 保持原 Pre-release/tag；Android 45 资产保持不变，来自安全区修复提交 `87f0fbe` 的 HarmonyOS 1002016 HAP/APP 已逐项替换并匹配远端大小与 SHA-256，其余 12 项附件保持不变 |
 
 完整中英文发布说明见 [`release-v0.2.8.md`](release-v0.2.8.md)。
 
@@ -190,7 +190,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.8 预发布制品
 
-`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (45)` APK/AAB；HarmonyOS `0.2.8 (1002015)` APP/HAP；以及原生 macOS `0.2.8 (75)` Universal DMG 预览包。iOS build 77 与正式签名 macOS build 75 由本地 Xcode 上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
+`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (45)` APK/AAB；HarmonyOS `0.2.8 (1002016)` APP/HAP；以及原生 macOS `0.2.8 (75)` Universal DMG 预览包。iOS build 77 与正式签名 macOS build 75 由本地 Xcode 上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
 
 ## 0.2.7 稳定版发布制品
 
