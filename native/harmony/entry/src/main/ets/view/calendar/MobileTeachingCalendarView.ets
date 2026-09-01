@@ -8,8 +8,8 @@ import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { PageTitle, SurfaceCard } from '../SharedComponents';
 import {
-  CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets,
-  CalendarTimelineDay,
+  CalendarFormatters, CalendarGestureAxis, CalendarMode, CalendarModeInfo,
+  CalendarPageTransitionOffsets, CalendarTimelineDay,
   CalendarTimelineLogic, CalendarYearDeadlinePriority, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
@@ -63,28 +63,31 @@ export struct MobileTeachingCalendarView {
   @Local pageTransitionActive: boolean = false;
   @Local incomingDate: DateParts = StrictDates.todayParts();
   @Local incomingModeRawValue: string = CalendarMode.week;
+  @Local incomingMonthSheetPosition: number = TeachingCalendarLogic.monthSheetExpandedPosition;
   @Local modeIndicatorRawValue: string = CalendarMode.week;
   @Local monthSheetPosition: number = TeachingCalendarLogic.monthSheetExpandedPosition;
   @Local monthDragStartPosition: number = TeachingCalendarLogic.monthSheetExpandedPosition;
   @Local monthDragging: boolean = false;
-  @Local monthDetailsReady: boolean = true;
-  @Local monthPageOpacity: number = 1;
+  @Local monthDetailsScrollEnabled: boolean = false;
   @Local courseSectionExpanded: boolean = true;
   private pageAnimating: boolean = false;
   private timelineScroller: Scroller = new Scroller();
   private incomingTimelineScroller: Scroller = new Scroller();
   private monthDetailsScroller: Scroller = new Scroller();
+  private incomingMonthDetailsScroller: Scroller = new Scroller();
+  private monthGestureAxis: CalendarGestureAxis | null = null;
+  private monthGestureRoutedToDetails: boolean = false;
   private monthDetailsAtTopAtGestureStart: boolean = true;
-  private monthDetailsReadyRevision: number = 0;
+  private monthScrollEnableRevision: number = 0;
   private timelineScrollTimer: number = -1;
 
   aboutToAppear(): void {
     this.modeIndicatorRawValue = this.session.modeRawValue;
-    this.monthSheetPosition = this.session.isMonthExpanded ?
-      TeachingCalendarLogic.monthSheetExpandedPosition :
-      TeachingCalendarLogic.monthSheetDetailsPosition;
-    this.ensureVisibleHolidays();
-    this.ensureVisibleCalendarData();
+    this.monthSheetPosition = TeachingCalendarLogic.clampMonthSheetPosition(
+      this.session.monthSheetPosition);
+    this.incomingMonthSheetPosition = this.monthSheetPosition;
+    this.monthDetailsScrollEnabled = TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(
+      this.monthSheetPosition);
     this.darkModeProbe.register((dark: boolean) => {
       this.isDarkMode = dark;
     });
@@ -99,28 +102,11 @@ export struct MobileTeachingCalendarView {
     }
   }
 
-  @Monitor('session.selectedDate')
-  onSelectedDateChange(monitor: IMonitor): void {
-    this.ensureVisibleHolidays();
-    this.ensureVisibleCalendarData();
-  }
-
   @Monitor('session.modeRawValue')
   onModeChange(monitor: IMonitor): void {
     if (!this.pageAnimating) {
       this.modeIndicatorRawValue = this.session.modeRawValue;
     }
-    this.ensureVisibleHolidays();
-    this.ensureVisibleCalendarData();
-  }
-
-  @Monitor('model.almanacEnabled', 'model.competitionDeadlinesEnabled',
-    'model.conferenceDeadlinesEnabled',
-    'model.schoolContestNoticesEnabled', 'model.summerCampDeadlinesEnabled',
-    'model.hackathonDeadlinesEnabled', 'model.customDeadlinesEnabled',
-    'model.customDeadlinesURL', 'model.favoriteDeadlines')
-  onDailyInfoFeatureChange(monitor: IMonitor): void {
-    this.ensureVisibleCalendarData();
   }
 
   private mode(): CalendarMode {
@@ -140,7 +126,7 @@ export struct MobileTeachingCalendarView {
   }
 
   private setSelectedDate(date: DateParts): void {
-    this.session.selectedDate = date;
+    this.session.selectDate(date);
   }
 
   private setMode(mode: CalendarMode): void {
@@ -234,70 +220,18 @@ export struct MobileTeachingCalendarView {
     return '';
   }
 
-  private ensureVisibleHolidays(): void {
-    this.ensureHolidays(this.mode(), this.selectedDate());
-  }
-
-  private ensureVisibleCalendarData(): void {
-    const selected: DateParts = this.selectedDate();
-    if (this.mode() === CalendarMode.month) {
-      this.model.prefetchCalendarMarkers(this.monthGridDates(selected));
-      if (this.monthDetailsReady &&
-        this.monthSheetPosition > TeachingCalendarLogic.monthSheetExpandedPosition + 0.01) {
-        this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(selected));
-      }
-    } else if (this.mode() === CalendarMode.week) {
-      this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(selected));
-      this.model.prefetchCalendarMarkers(this.weekDates(selected));
-    } else if (this.mode() === CalendarMode.day) {
-      this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(selected));
-      this.model.prefetchCalendarMarkers([selected]);
-    } else {
-      this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(selected));
-      this.model.prefetchCalendarMarkers(this.yearDates(selected));
-    }
-  }
-
-  private ensureHolidays(renderMode: CalendarMode, renderDate: DateParts): void {
-    for (const year of this.visibleHolidayYears(renderMode, renderDate)) {
-      this.model.ensureHolidays(year, false);
-    }
-  }
-
   private animateDate(direction: number): void {
-    if (this.mode() === CalendarMode.month) {
-      this.animateMonthChange(direction);
-      return;
-    }
-    this.animatePageChange(direction, TeachingCalendarLogic.movedDate(
-      this.selectedDate(), this.mode(), direction), this.mode());
+    const mode: CalendarMode = this.mode();
+    const anchoredMonthNavigation: boolean = mode === CalendarMode.month;
+    const target: DateParts = anchoredMonthNavigation ?
+      this.session.monthNavigationDestination(direction) :
+      TeachingCalendarLogic.movedDate(this.selectedDate(), mode, direction);
+    this.animatePageChange(direction, target, mode, anchoredMonthNavigation);
   }
 
-  private animateMonthChange(direction: number): void {
-    if (direction === 0 || this.pageAnimating) {
-      return;
-    }
-    this.performCalendarHaptic();
-    this.pageAnimating = true;
-    this.monthDetailsReady = false;
-    const target: DateParts = TeachingCalendarLogic.movedDate(
-      this.selectedDate(), CalendarMode.month, direction);
-    animateTo({ duration: 110, curve: Curve.EaseOut }, (): void => {
-      this.monthPageOpacity = 0.72;
-    });
-    setTimeout(() => {
-      this.setSelectedDate(target);
-      animateTo({ duration: 150, curve: Curve.EaseOut }, (): void => {
-        this.monthPageOpacity = 1;
-      });
-      setTimeout(() => {
-        this.pageAnimating = false;
-        this.revealMonthDetailsAfter(0);
-      }, 156);
-    }, 116);
-  }
-
-  private animatePageChange(direction: number, targetDate: DateParts, targetMode: CalendarMode): void {
+  private animatePageChange(direction: number, targetDate: DateParts, targetMode: CalendarMode,
+    preservesMonthNavigationAnchor: boolean = false,
+    targetMonthSheetPosition: number | null = null): void {
     if (direction === 0 || this.pageAnimating) {
       return;
     }
@@ -306,7 +240,9 @@ export struct MobileTeachingCalendarView {
     const distance: number = Math.max(this.contentWidth, 320);
     this.incomingDate = targetDate;
     this.incomingModeRawValue = targetMode;
-    this.ensureHolidays(targetMode, targetDate);
+    this.incomingMonthSheetPosition = targetMonthSheetPosition === null ?
+      TeachingCalendarLogic.clampMonthSheetPosition(this.monthSheetPosition) :
+      TeachingCalendarLogic.clampMonthSheetPosition(targetMonthSheetPosition as number);
     const offsets: CalendarPageTransitionOffsets =
       TeachingCalendarLogic.pageTransitionOffsets(direction, distance);
     this.incomingPageOffsetX = offsets.incomingStartX;
@@ -321,12 +257,29 @@ export struct MobileTeachingCalendarView {
         this.incomingPageOffsetX = 0;
       });
       setTimeout(() => {
-        this.setSelectedDate(targetDate);
+        if (!targetDate.equals(this.selectedDate())) {
+          if (preservesMonthNavigationAnchor) {
+            this.session.commitMonthNavigation(targetDate);
+          } else {
+            this.setSelectedDate(targetDate);
+          }
+        }
         this.setMode(targetMode);
+        if (targetMode === CalendarMode.month) {
+          this.monthSheetPosition = this.incomingMonthSheetPosition;
+          this.session.setMonthSheetPosition(this.monthSheetPosition);
+          this.monthDetailsScrollEnabled = TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(
+            this.monthSheetPosition);
+        }
         this.pageOffsetX = 0;
         this.incomingPageOffsetX = 0;
         this.pageTransitionActive = false;
         this.pageAnimating = false;
+        if (targetMode === CalendarMode.month) {
+          setTimeout(() => {
+            this.resetMonthDetailsScroll();
+          }, 0);
+        }
       }, 310);
     }, 16);
   }
@@ -337,9 +290,8 @@ export struct MobileTeachingCalendarView {
     }
     if (this.mode() === CalendarMode.month &&
       this.monthSheetPosition > TeachingCalendarLogic.monthSheetExpandedPosition + 0.01) {
-      this.monthDetailsReady = false;
       this.setSelectedDate(date);
-      this.revealMonthDetailsAfter(130);
+      this.resetMonthDetailsScroll();
       return;
     }
     this.setSelectedDate(date);
@@ -365,9 +317,13 @@ export struct MobileTeachingCalendarView {
 
   private beginMonthGesture(): void {
     this.monthDragging = false;
+    this.monthGestureAxis = null;
+    this.monthGestureRoutedToDetails = false;
     this.monthDragStartPosition = this.monthSheetPosition;
-    if (this.monthSheetPosition <= TeachingCalendarLogic.monthSheetExpandedPosition + 0.01 ||
-      !this.monthDetailsReady) {
+    this.monthScrollEnableRevision++;
+    this.monthDetailsScrollEnabled = TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(
+      this.monthDragStartPosition);
+    if (this.monthSheetPosition <= TeachingCalendarLogic.monthSheetExpandedPosition + 0.01) {
       this.monthDetailsAtTopAtGestureStart = true;
       return;
     }
@@ -376,9 +332,27 @@ export struct MobileTeachingCalendarView {
   }
 
   private updateMonthGesture(offsetX: number, offsetY: number): void {
-    if (!this.monthDragging && TeachingCalendarLogic.monthSheetOwnsGesture(
-      offsetY, this.monthDragStartPosition, this.monthDetailsAtTopAtGestureStart) &&
-      TeachingCalendarLogic.canMoveMonthSheet(
+    if (this.monthGestureRoutedToDetails) {
+      return;
+    }
+    if (this.monthGestureAxis === null) {
+      const axis: CalendarGestureAxis | null = TeachingCalendarLogic.gestureAxis(offsetX, offsetY);
+      if (axis === null) {
+        return;
+      }
+      if (axis === CalendarGestureAxis.vertical && !TeachingCalendarLogic.monthSheetOwnsGesture(
+        offsetY, this.monthDragStartPosition, this.monthDetailsAtTopAtGestureStart)) {
+        // 手势从已上滚的详情区开始时，整次手势都交给 List，
+        // 不在到达顶部的同一次拖动中改变月视图档位。
+        this.monthGestureRoutedToDetails = true;
+        return;
+      }
+      this.monthGestureAxis = axis;
+    }
+    if (this.monthGestureAxis !== CalendarGestureAxis.vertical) {
+      return;
+    }
+    if (!this.monthDragging && TeachingCalendarLogic.canMoveMonthSheet(
       offsetX, offsetY, this.monthDragStartPosition)) {
       this.monthDragging = true;
     }
@@ -390,19 +364,33 @@ export struct MobileTeachingCalendarView {
 
   private finishMonthGesture(offsetX: number, offsetY: number,
     velocityX: number, velocityY: number): void {
+    if (this.monthGestureRoutedToDetails) {
+      this.resetMonthGestureRouting();
+      return;
+    }
     if (this.monthDragging) {
       const target: number = TeachingCalendarLogic.settledMonthSheetPosition(
         this.monthSheetPosition, velocityY);
+      this.resetMonthGestureRouting();
       this.settleMonthSheet(target);
-      this.monthDragging = false;
       return;
     }
-    const predicted: number = Math.abs(velocityX) > 200 ? velocityX * 0.25 : offsetX;
-    const direction: number | null = TeachingCalendarLogic.swipeDirection(offsetX, offsetY, predicted);
-    if (direction !== null) {
-      this.animateDate(direction);
+    if (this.monthGestureAxis === CalendarGestureAxis.horizontal) {
+      const predicted: number = Math.abs(velocityX) > 200 ? velocityX * 0.25 : offsetX;
+      const direction: number | null = TeachingCalendarLogic.swipeDirection(offsetX, offsetY, predicted);
+      this.resetMonthGestureRouting();
+      if (direction !== null) {
+        this.animateDate(direction);
+      }
       return;
     }
+    this.resetMonthGestureRouting();
+  }
+
+  private resetMonthGestureRouting(): void {
+    this.monthDragging = false;
+    this.monthGestureAxis = null;
+    this.monthGestureRoutedToDetails = false;
   }
 
   private settleMonthSheet(position: number, haptic: boolean = true): void {
@@ -415,25 +403,27 @@ export struct MobileTeachingCalendarView {
       curve: Curve.EaseInOut }, (): void => {
       this.monthSheetPosition = target;
     });
-    this.session.isMonthExpanded = target === TeachingCalendarLogic.monthSheetExpandedPosition;
-    if (target > TeachingCalendarLogic.monthSheetExpandedPosition) {
-      this.revealMonthDetailsAfter(duration + 12);
+    this.session.setMonthSheetPosition(target);
+    const scrollRevision: number = ++this.monthScrollEnableRevision;
+    if (target < TeachingCalendarLogic.monthSheetWeekPosition) {
+      this.monthDetailsScrollEnabled = false;
+    } else {
+      setTimeout(() => {
+        if (scrollRevision === this.monthScrollEnableRevision &&
+          this.session.monthSheetPosition >= TeachingCalendarLogic.monthSheetWeekPosition - 0.01) {
+          this.monthDetailsScrollEnabled = true;
+        }
+      }, duration + 12);
+    }
+    if (target < TeachingCalendarLogic.monthSheetWeekPosition) {
+      this.resetMonthDetailsScroll();
     }
   }
 
-  private revealMonthDetailsAfter(delay: number): void {
-    this.monthDetailsReadyRevision++;
-    const revision: number = this.monthDetailsReadyRevision;
+  private resetMonthDetailsScroll(): void {
     setTimeout(() => {
-      if (revision === this.monthDetailsReadyRevision &&
-        this.monthSheetPosition > TeachingCalendarLogic.monthSheetExpandedPosition + 0.01) {
-        this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(this.selectedDate()));
-        this.monthDetailsReady = true;
-        setTimeout(() => {
-          this.monthDetailsScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
-        }, 0);
-      }
-    }, Math.max(delay, 0));
+      this.monthDetailsScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
+    }, 0);
   }
 
   build() {
@@ -495,7 +485,7 @@ export struct MobileTeachingCalendarView {
     if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
       this.timelineContent(this.mode(), this.selectedDate(), true)
     } else if (this.mode() === CalendarMode.month) {
-      this.monthView(this.selectedDate(), true)
+      this.monthView(this.selectedDate(), true, this.monthSheetPosition)
     } else {
       this.yearView(this.selectedDate(), true)
     }
@@ -508,7 +498,7 @@ export struct MobileTeachingCalendarView {
       this.timelineContent(CalendarModeInfo.fromRawValue(this.incomingModeRawValue),
         this.incomingDate, false)
     } else if (CalendarModeInfo.fromRawValue(this.incomingModeRawValue) === CalendarMode.month) {
-      this.monthView(this.incomingDate, false)
+      this.monthView(this.incomingDate, false, this.incomingMonthSheetPosition)
     } else {
       this.yearView(this.incomingDate, false)
     }
@@ -1083,26 +1073,26 @@ export struct MobileTeachingCalendarView {
   // ---------- 月视图 ----------
 
   @Builder
-  monthView(renderDate: DateParts, interactive: boolean) {
+  monthView(renderDate: DateParts, interactive: boolean, sheetPosition: number) {
     Column({ space: 0 }) {
       this.statusArea(false, CalendarMode.month, renderDate)
       this.monthWeekdayHeader()
       ForEach(this.monthWeeks(renderDate), (week: DateParts[], rowIndex: number) => {
         Row({ space: 2 }) {
           ForEach(week, (day: DateParts) => {
-            this.monthDayButton(day, rowIndex, renderDate, interactive)
+            this.monthDayButton(day, rowIndex, renderDate, interactive, sheetPosition)
           }, (day: DateParts) => 'month-day.' + StrictDates.formatDateParts(day))
         }
         .width('100%')
-        .height(this.monthRowHeight(rowIndex, renderDate))
-        .opacity(this.monthRowHeight(rowIndex, renderDate) <= 0 ? 0 : 1)
+        .height(this.monthRowHeight(rowIndex, renderDate, sheetPosition))
+        .opacity(this.monthRowHeight(rowIndex, renderDate, sheetPosition) <= 0 ? 0 : 1)
         .clip(true)
       }, (week: DateParts[], rowIndex: number) => 'month-week.' + rowIndex.toString() + '.' +
         StrictDates.formatDateParts(week[0]))
 
-      this.monthExpansionHandle()
-      if (this.monthSheetPosition > 0.01 && this.monthDetailsReady) {
-        List({ space: 0, scroller: this.monthDetailsScroller }) {
+      this.monthExpansionHandle(sheetPosition, interactive)
+      List({ space: 0, scroller: interactive ?
+        this.monthDetailsScroller : this.incomingMonthDetailsScroller }) {
           ListItem() {
             Column({ space: 10 }) {
               // ArkUI 会复用 Builder 子树；按日期设置 key，翻月后强制刷新详情内容。
@@ -1118,22 +1108,22 @@ export struct MobileTeachingCalendarView {
         .layoutWeight(1)
         .width('100%')
         .padding({ top: 8 })
-        .opacity(Math.min(this.monthSheetPosition, 1))
-        .enableScrollInteraction(this.monthSheetPosition >=
-          TeachingCalendarLogic.monthSheetWeekPosition - 0.01)
+        .opacity(Math.min(sheetPosition, 1))
+        .enableScrollInteraction(interactive && this.monthDetailsScrollEnabled)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.None)
         .borderRadius(10)
         .backgroundColor(AppTheme.background())
         .clip(true)
         .transition(TransitionEffect.OPACITY.animation({ duration: 140, curve: Curve.EaseOut }))
-      }
     }
     .padding({ left: 0, right: 0, top: 8, bottom: 0 })
     .width('100%')
     .height('100%')
-    .opacity(this.monthPageOpacity)
-    .gesture(
+    // 与 iOS simultaneousGesture 一致：页面手势与详情 List 并行识别，
+    // 然后由上方的轴锁定/顶部快照决定归属。排他手势会导致 List
+    // 抢走横向事件，从而出现“左右滑动却不翻月”。
+    .parallelGesture(
       PanGesture({ fingers: 1, direction: PanDirection.All, distance: 18 })
         .onActionStart(() => {
           if (interactive) {
@@ -1153,8 +1143,8 @@ export struct MobileTeachingCalendarView {
         .onActionCancel(() => {
           if (interactive && this.monthDragging) {
             this.settleMonthSheet(Math.round(this.monthDragStartPosition));
-            this.monthDragging = false;
           }
+          this.resetMonthGestureRouting();
         })
     )
   }
@@ -1203,17 +1193,19 @@ export struct MobileTeachingCalendarView {
       Math.floor((this.contentHeight - reserved) / 6)));
   }
 
-  private monthRowHeight(rowIndex: number, renderDate: DateParts = this.selectedDate()): number {
-    return TeachingCalendarLogic.monthRowHeight(this.monthSheetPosition, rowIndex,
+  private monthRowHeight(rowIndex: number, renderDate: DateParts = this.selectedDate(),
+    sheetPosition: number = this.monthSheetPosition): number {
+    return TeachingCalendarLogic.monthRowHeight(sheetPosition, rowIndex,
       this.selectedMonthWeekIndex(renderDate), this.expandedMonthCellHeight());
   }
 
-  private monthExpansionProgress(): number {
-    return TeachingCalendarLogic.monthCellExpansionProgress(this.monthSheetPosition);
+  private monthExpansionProgress(sheetPosition: number = this.monthSheetPosition): number {
+    return TeachingCalendarLogic.monthCellExpansionProgress(sheetPosition);
   }
 
   @Builder
-  monthDayButton(day: DateParts, rowIndex: number, renderDate: DateParts, interactive: boolean) {
+  monthDayButton(day: DateParts, rowIndex: number, renderDate: DateParts, interactive: boolean,
+    sheetPosition: number) {
     Stack({ alignContent: Alignment.Center }) {
       Column({ space: 0 }) {
         Row({ space: 3 }) {
@@ -1233,10 +1225,10 @@ export struct MobileTeachingCalendarView {
         .height(24)
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
-        if (this.monthExpansionProgress() > 0.01) {
-          this.expandedMonthEvents(day, renderDate, interactive)
+        if (this.monthExpansionProgress(sheetPosition) > 0.01) {
+          this.expandedMonthEvents(day, renderDate, interactive, sheetPosition)
         }
-        if (this.monthExpansionProgress() < 0.99) {
+        if (this.monthExpansionProgress(sheetPosition) < 0.99) {
           Text(this.compactMonthMarker(day))
             .fontSize(9.5)
             .fontColor(this.monthForeground(day, renderDate))
@@ -1245,23 +1237,27 @@ export struct MobileTeachingCalendarView {
             .textAlign(TextAlign.Center)
             .width('100%')
             .height(TeachingCalendarLogic.interpolateMonthMetric(12, 0,
-              this.monthExpansionProgress()))
-            .opacity(1 - this.monthExpansionProgress())
+              this.monthExpansionProgress(sheetPosition)))
+            .opacity(1 - this.monthExpansionProgress(sheetPosition))
         }
       }
       .padding({
-        left: TeachingCalendarLogic.interpolateMonthMetric(4, 3, this.monthExpansionProgress()),
-        right: TeachingCalendarLogic.interpolateMonthMetric(4, 3, this.monthExpansionProgress()),
+        left: TeachingCalendarLogic.interpolateMonthMetric(4, 3,
+          this.monthExpansionProgress(sheetPosition)),
+        right: TeachingCalendarLogic.interpolateMonthMetric(4, 3,
+          this.monthExpansionProgress(sheetPosition)),
         top: 5,
-        bottom: TeachingCalendarLogic.interpolateMonthMetric(5, 2, this.monthExpansionProgress())
+        bottom: TeachingCalendarLogic.interpolateMonthMetric(5, 2,
+          this.monthExpansionProgress(sheetPosition))
       })
       .width('100%')
       .height('100%')
-      .justifyContent(this.monthExpansionProgress() > 0.01 ? FlexAlign.Start : FlexAlign.Center)
+      .justifyContent(this.monthExpansionProgress(sheetPosition) > 0.01 ?
+        FlexAlign.Start : FlexAlign.Center)
       this.deadlineBorderLayers(day, 10, 7, 6)
     }
     .layoutWeight(1)
-    .height(this.monthRowHeight(rowIndex, renderDate))
+    .height(this.monthRowHeight(rowIndex, renderDate, sheetPosition))
     .backgroundColor(this.monthBackground(day, renderDate))
     .borderRadius(10)
     .clip(true)
@@ -1269,20 +1265,23 @@ export struct MobileTeachingCalendarView {
       if (!interactive) {
         return;
       }
-      const target: number = TeachingCalendarLogic.monthSheetDetailsPosition;
+      const target: number = TeachingCalendarLogic.monthDaySelectionTargetPosition();
       if (!day.equals(renderDate) || Math.round(this.monthSheetPosition) !== target) {
         this.performCalendarHaptic();
       }
-      this.monthDetailsReady = false;
-      this.settleMonthSheet(target, false);
       const selected: DateParts = this.selectedDate();
       if (day.year !== selected.year || day.month !== selected.month) {
         const direction: number = StrictDates.epochDay(day.year, day.month, day.day) >
           StrictDates.epochDay(selected.year, selected.month, selected.day) ? 1 : -1;
-        this.animatePageChange(direction, day, CalendarMode.month);
+        // incoming 直接以目标中档挂载；纵向收拢只影响 outgoing，
+        // 避免横向换月时新页格子跟着共享的纵向动画二次收缩。
+        this.animatePageChange(direction, day, CalendarMode.month, false, target);
+        this.settleMonthSheet(target, false);
         return;
       }
       this.setSelectedDate(day);
+      this.settleMonthSheet(target, false);
+      this.resetMonthDetailsScroll();
     })
   }
 
@@ -1301,32 +1300,38 @@ export struct MobileTeachingCalendarView {
     return result;
   }
 
-  private monthEventCapacity(day: DateParts, renderDate: DateParts): number {
-    const height: number = this.monthRowHeight(this.selectedMonthWeekIndex(renderDate), renderDate);
+  private monthEventCapacity(day: DateParts, renderDate: DateParts,
+    sheetPosition: number): number {
+    const height: number = this.monthRowHeight(
+      this.selectedMonthWeekIndex(renderDate), renderDate, sheetPosition);
     const available: number = TeachingCalendarLogic.monthEntryAvailableHeight(
-      height, this.monthExpansionProgress());
+      height, this.monthExpansionProgress(sheetPosition));
     return TeachingCalendarLogic.monthEntrySlotCapacity(available);
   }
 
-  private visibleMonthEventCount(day: DateParts, renderDate: DateParts): number {
+  private visibleMonthEventCount(day: DateParts, renderDate: DateParts,
+    sheetPosition: number): number {
     return TeachingCalendarLogic.visibleMonthEntryCount(
-      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate));
+      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate, sheetPosition));
   }
 
-  private hiddenMonthEventCount(day: DateParts, renderDate: DateParts): number {
+  private hiddenMonthEventCount(day: DateParts, renderDate: DateParts,
+    sheetPosition: number): number {
     return TeachingCalendarLogic.hiddenMonthEntryCount(
-      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate));
+      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate, sheetPosition));
   }
 
   @Builder
-  expandedMonthEvents(day: DateParts, renderDate: DateParts, interactive: boolean) {
+  expandedMonthEvents(day: DateParts, renderDate: DateParts, interactive: boolean,
+    sheetPosition: number) {
     Column({ space: 1 }) {
-      ForEach(this.monthEvents(day).slice(0, this.visibleMonthEventCount(day, renderDate)),
+      ForEach(this.monthEvents(day).slice(0,
+        this.visibleMonthEventCount(day, renderDate, sheetPosition)),
         (event: MonthEvent) => {
           this.monthEventItem(event, day.equals(renderDate))
         }, (event: MonthEvent) => 'month-event.' + event.id)
-      if (this.hiddenMonthEventCount(day, renderDate) > 0) {
-        Text('+' + this.hiddenMonthEventCount(day, renderDate).toString())
+      if (this.hiddenMonthEventCount(day, renderDate, sheetPosition) > 0) {
+        Text('+' + this.hiddenMonthEventCount(day, renderDate, sheetPosition).toString())
           .fontSize(9.5)
           .fontWeight(FontWeight.Medium)
           .fontColor(day.equals(renderDate) ? AppTheme.onPrimary() : AppTheme.text())
@@ -1340,9 +1345,10 @@ export struct MobileTeachingCalendarView {
       }
     .width('100%')
     .height(TeachingCalendarLogic.monthEntryAvailableHeight(
-      this.monthRowHeight(this.selectedMonthWeekIndex(renderDate), renderDate), this.monthExpansionProgress()))
+      this.monthRowHeight(this.selectedMonthWeekIndex(renderDate), renderDate, sheetPosition),
+      this.monthExpansionProgress(sheetPosition)))
     .alignItems(HorizontalAlign.Start)
-    .opacity(this.monthExpansionProgress())
+    .opacity(this.monthExpansionProgress(sheetPosition))
   }
 
   @Builder
@@ -1393,7 +1399,7 @@ export struct MobileTeachingCalendarView {
   }
 
   @Builder
-  monthExpansionHandle() {
+  monthExpansionHandle(sheetPosition: number, interactive: boolean) {
     Column() {
       Row({ space: 0 }) {
         Column()
@@ -1401,25 +1407,26 @@ export struct MobileTeachingCalendarView {
           .height(4)
           .borderRadius(2)
           .backgroundColor(AppTheme.secondaryText())
-          .rotate({ angle: -24 * this.monthExpansionProgress(), centerX: '100%', centerY: '50%' })
+          .rotate({ angle: -24 * this.monthExpansionProgress(sheetPosition),
+            centerX: '100%', centerY: '50%' })
         Column()
           .width(20)
           .height(4)
           .borderRadius(2)
           .backgroundColor(AppTheme.secondaryText())
-          .rotate({ angle: 24 * this.monthExpansionProgress(), centerX: '0%', centerY: '50%' })
+          .rotate({ angle: 24 * this.monthExpansionProgress(sheetPosition),
+            centerX: '0%', centerY: '50%' })
       }
     }
     .width('100%')
     .height(28)
     .justifyContent(FlexAlign.Center)
     .onClick(() => {
-      const rounded: number = Math.round(this.monthSheetPosition);
-      const target: number = rounded === 0 ? 1 : (rounded === 1 ? 0 : 1);
-      if (rounded === TeachingCalendarLogic.monthSheetExpandedPosition &&
-        target > TeachingCalendarLogic.monthSheetExpandedPosition) {
-        this.monthDetailsReady = false;
+      if (!interactive) {
+        return;
       }
+      const rounded: number = Math.round(sheetPosition);
+      const target: number = TeachingCalendarLogic.monthHandleTargetPosition(rounded);
       this.settleMonthSheet(target);
     })
   }

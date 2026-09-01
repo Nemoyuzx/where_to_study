@@ -60,17 +60,33 @@ export class CalendarViewportPreloadPlanner {
 }
 
 export class CalendarViewportPreloadController {
-  private signature: string = '';
+  private signatures: string[] = [];
+  private readonly signatureCapacity: number;
+
+  constructor(signatureCapacity: number = 12) {
+    this.signatureCapacity = Math.max(Math.floor(signatureCapacity), 1);
+  }
 
   prewarm(target: CalendarViewportPreloadTarget, mode: CalendarMode,
     selectedDate: DateParts, refresh: boolean = false): void {
     const signature: string = mode + ':' + StrictDates.formatDateParts(selectedDate);
-    if (!refresh && signature === this.signature) {
+    if (!refresh && this.signatures.includes(signature)) {
       return;
     }
-    this.signature = signature;
+    this.remember(signature);
     const plan: CalendarViewportPreloadPlan =
       CalendarViewportPreloadPlanner.plan(mode, selectedDate);
     target.prewarmCalendarViewport(plan.selectedDate, plan.markerDays, plan.holidayYears);
+  }
+
+  private remember(signature: string): void {
+    const existing: number = this.signatures.indexOf(signature);
+    if (existing >= 0) {
+      this.signatures.splice(existing, 1);
+    }
+    this.signatures.push(signature);
+    while (this.signatures.length > this.signatureCapacity) {
+      this.signatures.shift();
+    }
   }
 }

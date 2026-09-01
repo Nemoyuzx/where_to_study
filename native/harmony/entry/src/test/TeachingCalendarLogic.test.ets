@@ -3,8 +3,8 @@ import { describe, it, expect } from '@ohos/hypium';
 import { DateParts, StrictDates } from '../main/ets/common/StrictDates';
 import { Course } from '../main/ets/common/Models';
 import {
-  CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets, CalendarPopoverPosition,
-  CalendarTimelineLogic,
+  CalendarGestureAxis, CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets,
+  CalendarPopoverPosition, CalendarTimelineLogic,
   CalendarYearDeadlinePriority, TeachingCalendarLogic
 } from '../main/ets/view/calendar/CalendarLogic';
 import { AppSection, AppSectionInfo } from '../main/ets/common/AppSection';
@@ -14,10 +14,13 @@ import {
 } from '../main/ets/view/calendar/CalendarViewportPreloadController';
 import { MobileCalendarTimelineLayout } from
   '../main/ets/view/calendar/MobileCalendarTimelineView';
+import { TeachingCalendarSession } from
+  '../main/ets/view/calendar/TeachingCalendarSession';
 
 class CalendarPreloadProbe implements CalendarViewportPreloadTarget {
   calls: number = 0;
   selectedDate: DateParts | null = null;
+  selectedDateKeys: string[] = [];
   markerCount: number = 0;
   holidayYears: number[] = [];
 
@@ -25,6 +28,7 @@ class CalendarPreloadProbe implements CalendarViewportPreloadTarget {
     holidayYears: number[]): void {
     this.calls++;
     this.selectedDate = selectedDate;
+    this.selectedDateKeys.push(StrictDates.formatDateParts(selectedDate));
     this.markerCount = markerDays.length;
     this.holidayYears = holidayYears;
   }
@@ -59,6 +63,26 @@ export default function teachingCalendarLogicTest() {
       const feb: DateParts = TeachingCalendarLogic.addMonths(jan31, 1);
       expect(feb.month).assertEqual(2);
       expect(feb.day).assertEqual(28);
+      const march: DateParts = TeachingCalendarLogic.addMonths(feb, 1, 31);
+      expect(march.month).assertEqual(3);
+      expect(march.day).assertEqual(31);
+    });
+
+    it('month_navigation_preserves_explicit_day_anchor_across_short_months', 0, () => {
+      const session: TeachingCalendarSession = new TeachingCalendarSession();
+      session.selectDate(new DateParts(2026, 1, 31));
+      const february: DateParts = session.monthNavigationDestination(1);
+      expect(february.month).assertEqual(2);
+      expect(february.day).assertEqual(28);
+      session.commitMonthNavigation(february);
+      const march: DateParts = session.monthNavigationDestination(1);
+      expect(march.month).assertEqual(3);
+      expect(march.day).assertEqual(31);
+
+      session.selectDate(new DateParts(2026, 3, 15));
+      session.commitMonthNavigation(session.monthNavigationDestination(-1));
+      expect(session.selectedDate.month).assertEqual(2);
+      expect(session.selectedDate.day).assertEqual(15);
     });
 
     it('year_mode_movement_clamps_leap_day', 0, () => {
@@ -78,6 +102,14 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.swipeDirection(80, 70, 120)).assertNull();
     });
 
+    it('month_gesture_locks_to_the_first_deliberate_axis', 0, () => {
+      expect(TeachingCalendarLogic.gestureAxis(4, 5)).assertNull();
+      expect(TeachingCalendarLogic.gestureAxis(24, 8))
+        .assertEqual(CalendarGestureAxis.horizontal);
+      expect(TeachingCalendarLogic.gestureAxis(8, -24))
+        .assertEqual(CalendarGestureAxis.vertical);
+    });
+
     it('month_expansion_requires_deliberate_vertical_gesture', 0, () => {
       expect(TeachingCalendarLogic.monthExpansionAction(8, -72)).assertEqual(-1);
       expect(TeachingCalendarLogic.monthExpansionAction(8, 72)).assertEqual(1);
@@ -90,6 +122,28 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.monthSheetOwnsGesture(80, 2, true)).assertTrue();
       expect(TeachingCalendarLogic.monthSheetOwnsGesture(-80, 1, true)).assertTrue();
       expect(TeachingCalendarLogic.monthSheetOwnsGesture(-80, 2, true)).assertFalse();
+    });
+
+    it('month_sheet_handle_and_day_selection_match_mobile_three_stop_behavior', 0, () => {
+      expect(TeachingCalendarLogic.monthHandleTargetPosition(0)).assertEqual(1);
+      expect(TeachingCalendarLogic.monthHandleTargetPosition(1)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthHandleTargetPosition(2)).assertEqual(1);
+      expect(TeachingCalendarLogic.monthDaySelectionTargetPosition()).assertEqual(1);
+      expect(TeachingCalendarLogic.settledMonthSheetPosition(0.7, 0)).assertEqual(1);
+      expect(TeachingCalendarLogic.settledMonthSheetPosition(1.3, 0)).assertEqual(1);
+      expect(TeachingCalendarLogic.settledMonthSheetPosition(1, -700)).assertEqual(2);
+      expect(TeachingCalendarLogic.settledMonthSheetPosition(1, 700)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(1)).assertFalse();
+      expect(TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(1.99)).assertFalse();
+      expect(TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(2)).assertTrue();
+
+      const session: TeachingCalendarSession = new TeachingCalendarSession();
+      session.setMonthSheetPosition(2);
+      expect(session.monthSheetPosition).assertEqual(2);
+      session.setMonthSheetPosition(3);
+      expect(session.monthSheetPosition).assertEqual(2);
+      session.setMonthSheetPosition(-1);
+      expect(session.monthSheetPosition).assertEqual(0);
     });
 
     it('expanded_month_events_reserve_last_row_for_overflow', 0, () => {
@@ -244,8 +298,8 @@ export default function teachingCalendarLogicTest() {
       expect(clamped.y + 268).assertEqual(284);
     });
 
-    it('calendar_viewport_preloader_is_independent_and_single_flight_by_viewport', 0, () => {
-      const selected: DateParts = new DateParts(2026, 8, 24);
+    it('calendar_viewport_preloader_caches_current_and_adjacent_months', 0, () => {
+      const selected: DateParts = new DateParts(2026, 1, 31);
       const month: CalendarViewportPreloadPlan =
         CalendarViewportPreloadPlanner.plan(CalendarMode.month, selected);
       expect(month.markerDays.length).assertEqual(42);
@@ -255,18 +309,45 @@ export default function teachingCalendarLogicTest() {
       expect(year.markerDays.length).assertEqual(365);
 
       const controller: CalendarViewportPreloadController =
-        new CalendarViewportPreloadController();
+        new CalendarViewportPreloadController(8);
       const probe: CalendarPreloadProbe = new CalendarPreloadProbe();
-      controller.prewarm(probe, CalendarMode.month, selected);
-      expect(probe.calls).assertEqual(1);
-      expect(probe.markerCount).assertEqual(42);
-      controller.prewarm(probe, CalendarMode.month, selected);
-      expect(probe.calls).assertEqual(1);
-      controller.prewarm(probe, CalendarMode.week, selected);
-      expect(probe.calls).assertEqual(2);
-      expect(probe.markerCount).assertEqual(7);
-      controller.prewarm(probe, CalendarMode.week, selected, true);
+      const session: TeachingCalendarSession = new TeachingCalendarSession();
+      session.selectDate(selected);
+      const firstWindow: DateParts[] = [session.selectedDate,
+        session.monthNavigationDestination(-1), session.monthNavigationDestination(1)];
+      for (const date of firstWindow) {
+        controller.prewarm(probe, CalendarMode.month, date);
+      }
       expect(probe.calls).assertEqual(3);
+      expect(probe.markerCount).assertEqual(42);
+      expect(probe.selectedDateKeys.includes('2025-12-31')).assertTrue();
+      expect(probe.selectedDateKeys.includes('2026-01-31')).assertTrue();
+      expect(probe.selectedDateKeys.includes('2026-02-28')).assertTrue();
+
+      session.commitMonthNavigation(session.monthNavigationDestination(1));
+      const committedWindow: DateParts[] = [session.selectedDate,
+        session.monthNavigationDestination(-1), session.monthNavigationDestination(1)];
+      for (const date of committedWindow) {
+        controller.prewarm(probe, CalendarMode.month, date);
+      }
+      // 2 月提交后，1/2 月都已预热，只新增恢复锚点的 3 月 31 日。
+      expect(probe.calls).assertEqual(4);
+      expect(probe.selectedDateKeys.includes('2026-03-31')).assertTrue();
+
+      for (const date of committedWindow) {
+        controller.prewarm(probe, CalendarMode.month, date, true);
+      }
+      // 来源开关变化时 refresh 仍强制重跑当前与两个相邻月。
+      expect(probe.calls).assertEqual(7);
+
+      const bounded: CalendarViewportPreloadController =
+        new CalendarViewportPreloadController(2);
+      const boundedProbe: CalendarPreloadProbe = new CalendarPreloadProbe();
+      bounded.prewarm(boundedProbe, CalendarMode.month, new DateParts(2026, 1, 1));
+      bounded.prewarm(boundedProbe, CalendarMode.month, new DateParts(2026, 2, 1));
+      bounded.prewarm(boundedProbe, CalendarMode.month, new DateParts(2026, 3, 1));
+      bounded.prewarm(boundedProbe, CalendarMode.month, new DateParts(2026, 1, 1));
+      expect(boundedProbe.calls).assertEqual(4);
     });
 
     it('week_column_selection_stays_behind_course_pointer_targets', 0, () => {

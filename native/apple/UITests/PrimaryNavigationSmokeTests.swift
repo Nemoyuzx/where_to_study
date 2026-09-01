@@ -54,6 +54,31 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["settings.open-information-queries"].exists)
     }
 
+    func testLiveShuttleDataRendersOnIPhone() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only live query check")
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["WTS_RUN_LIVE_SHUTTLE_TESTS"] == "1",
+            "Set WTS_RUN_LIVE_SHUTTLE_TESTS=1 to exercise the production shuttle API."
+        )
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--ui-testing-live"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "查询", in: app)
+        assertScreen("screen.information-queries", in: app)
+        let status = app.descendants(matching: .any)["queries.shuttle.status"].firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 30))
+        XCTAssertTrue(
+            ["今日班车按时刻表运行", "今日没有计划班次"].contains(status.label),
+            "Unexpected shuttle state: \(status.label)"
+        )
+        XCTAssertFalse(app.staticTexts["班车信息暂不可用"].exists)
+        XCTAssertTrue(app.staticTexts["西土城路校区 → 沙河校区"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["沙河校区 → 西土城路校区"].waitForExistence(timeout: 5))
+    }
+
     func testReviewDemoShowsLocalDataWithoutAccount() {
         continueAfterFailure = false
         let app = configuredApplication()

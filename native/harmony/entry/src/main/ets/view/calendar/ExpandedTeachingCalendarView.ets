@@ -80,7 +80,7 @@ export struct ExpandedTeachingCalendarView {
   }
 
   private setSelectedDate(date: DateParts): void {
-    this.session.selectedDate = date;
+    this.session.selectDate(date);
   }
 
   private setMode(mode: CalendarMode): void {
@@ -154,16 +154,24 @@ export struct ExpandedTeachingCalendarView {
   }
 
   private moveDate(direction: number): void {
-    this.animateSelectedDate(TeachingCalendarLogic.movedDate(
-      this.selectedDate(), this.mode(), direction));
+    const anchoredMonthNavigation: boolean = this.mode() === CalendarMode.month;
+    const target: DateParts = anchoredMonthNavigation ?
+      this.session.monthNavigationDestination(direction) :
+      TeachingCalendarLogic.movedDate(this.selectedDate(), this.mode(), direction);
+    this.animateSelectedDate(target, anchoredMonthNavigation);
   }
 
-  private animateSelectedDate(target: DateParts): void {
+  private animateSelectedDate(target: DateParts,
+    preservesMonthNavigationAnchor: boolean = false): void {
     if (target.equals(this.selectedDate())) {
       return;
     }
     if (this.calendarContentAnimating) {
-      this.setSelectedDate(target);
+      if (preservesMonthNavigationAnchor) {
+        this.session.commitMonthNavigation(target);
+      } else {
+        this.setSelectedDate(target);
+      }
       return;
     }
     this.calendarContentAnimating = true;
@@ -171,7 +179,11 @@ export struct ExpandedTeachingCalendarView {
       this.calendarContentOpacity = 0.72;
     });
     setTimeout(() => {
-      this.setSelectedDate(target);
+      if (preservesMonthNavigationAnchor) {
+        this.session.commitMonthNavigation(target);
+      } else {
+        this.setSelectedDate(target);
+      }
       this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut }, () => {
         this.calendarContentOpacity = 1;
       });

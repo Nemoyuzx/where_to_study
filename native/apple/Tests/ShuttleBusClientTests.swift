@@ -44,6 +44,28 @@ final class ShuttleBusClientTests: XCTestCase {
         XCTAssertTrue(notice.schedules.allSatisfy { !$0.from.isEmpty && !$0.to.isEmpty })
     }
 
+    @MainActor
+    func testLiveClientStoreAndTodayUIState() async throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["WTS_RUN_LIVE_SHUTTLE_TESTS"] == "1",
+            "Set WTS_RUN_LIVE_SHUTTLE_TESTS=1 to exercise the production shuttle API."
+        )
+
+        let store = ShuttleBusStore()
+        await store.load(force: true)
+
+        XCTAssertTrue(store.errorMessage.isEmpty, store.errorMessage)
+        let snapshot = try XCTUnwrap(store.snapshot)
+        XCTAssertEqual(snapshot.sourcePage.host, "hq.bupt.edu.cn")
+        let schedules = ShuttleBusTodayLogic.activeSchedules(in: snapshot, on: .now)
+        XCTAssertFalse(schedules.isEmpty, "The production payload should contain an active timetable today.")
+        XCTAssertGreaterThan(
+            schedules.flatMap { ShuttleBusTodayLogic.departures(for: $0, on: .now) }.count,
+            0,
+            "The iPhone UI should have at least one departure to render today."
+        )
+    }
+
     func testRedirectDelegateRejectsRedirectBeforeFollowingIt() throws {
         let original = try XCTUnwrap(URL(string: "https://where-to-study.cn/api/shuttle-bus"))
         let redirected = try XCTUnwrap(URL(string: "https://example.com/redirected"))

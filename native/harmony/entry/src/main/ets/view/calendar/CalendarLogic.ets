@@ -34,6 +34,13 @@ export enum CalendarMode {
   year = '年'
 }
 
+// 手势起步后锁定主轴，避免横向翻月在手指轻微偏移时
+// 被月视图纵向三档展开手势中途抢占。
+export enum CalendarGestureAxis {
+  horizontal = 'horizontal',
+  vertical = 'vertical'
+}
+
 // 月/年视图用至多两层同心边框表达 DDL 类型，课程数量仍由格子底色表达。
 // 多个来源落在同一天时保持 assignment > school notice > other 的稳定优先级。
 export enum CalendarYearDeadlinePriority {
@@ -325,7 +332,8 @@ export class TeachingCalendarLogic {
       Math.min(date.day, StrictDates.daysInMonth(nextYear, date.month)));
   }
 
-  static addMonths(date: DateParts, direction: number): DateParts {
+  static addMonths(date: DateParts, direction: number,
+    preferredDayOfMonth: number = date.day): DateParts {
     const zeroBased: number = date.month - 1 + direction;
     const year: number = date.year + Math.floor(zeroBased / 12);
     let month: number = zeroBased % 12;
@@ -333,7 +341,7 @@ export class TeachingCalendarLogic {
       month += 12;
     }
     const maxDay: number = StrictDates.daysInMonth(year, month + 1);
-    const day: number = Math.min(date.day, maxDay);
+    const day: number = Math.min(Math.max(Math.floor(preferredDayOfMonth), 1), maxDay);
     return new DateParts(year, month + 1, day);
   }
 
@@ -350,12 +358,44 @@ export class TeachingCalendarLogic {
     return projected < 0 ? 1 : -1;
   }
 
+  static gestureAxis(horizontal: number, vertical: number,
+    activationDistance: number = 8): CalendarGestureAxis | null {
+    const horizontalDistance: number = Math.abs(horizontal);
+    const verticalDistance: number = Math.abs(vertical);
+    if (Math.max(horizontalDistance, verticalDistance) < activationDistance) {
+      return null;
+    }
+    return horizontalDistance > verticalDistance ?
+      CalendarGestureAxis.horizontal : CalendarGestureAxis.vertical;
+  }
+
   static monthExpansionAction(horizontal: number, vertical: number): number | null {
     // 返回 1 = expand，-1 = collapse，null = 无动作。
     if (Math.abs(vertical) < 44 || Math.abs(vertical) < Math.abs(horizontal) * 1.25) {
       return null;
     }
     return vertical > 0 ? 1 : -1;
+  }
+
+  static monthHandleTargetPosition(position: number): number {
+    const rounded: number = Math.round(
+      TeachingCalendarLogic.clampMonthSheetPosition(position));
+    if (rounded === TeachingCalendarLogic.monthSheetExpandedPosition) {
+      return TeachingCalendarLogic.monthSheetDetailsPosition;
+    }
+    if (rounded === TeachingCalendarLogic.monthSheetDetailsPosition) {
+      return TeachingCalendarLogic.monthSheetExpandedPosition;
+    }
+    return TeachingCalendarLogic.monthSheetDetailsPosition;
+  }
+
+  static monthDaySelectionTargetPosition(): number {
+    return TeachingCalendarLogic.monthSheetDetailsPosition;
+  }
+
+  static monthDetailsCanScrollAtGestureStart(position: number): boolean {
+    return TeachingCalendarLogic.clampMonthSheetPosition(position) >=
+      TeachingCalendarLogic.monthSheetWeekPosition - 0.001;
   }
 
   static canMoveMonthSheet(horizontal: number, vertical: number,

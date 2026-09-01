@@ -8,6 +8,7 @@ import { ExpandedTeachingCalendarView } from './calendar/ExpandedTeachingCalenda
 import { TeachingCalendarSession } from './calendar/TeachingCalendarSession';
 import { CalendarMode, CalendarModeInfo } from './calendar/CalendarLogic';
 import { CalendarViewportPreloadController } from './calendar/CalendarViewportPreloadController';
+import { DateParts } from '../common/StrictDates';
 
 @ComponentV2
 export struct CalendarSectionView {
@@ -37,7 +38,14 @@ export struct CalendarSectionView {
 
   private prewarmViewport(refresh: boolean = false): void {
     const mode: CalendarMode = CalendarModeInfo.fromRawValue(this.session.modeRawValue);
-    this.viewportPreloader.prewarm(this.model, mode, this.session.selectedDate, refresh);
+    const dates: DateParts[] = mode === CalendarMode.month ? [
+      this.session.selectedDate,
+      this.session.monthNavigationDestination(-1),
+      this.session.monthNavigationDestination(1)
+    ] : [this.session.selectedDate];
+    for (const date of dates) {
+      this.viewportPreloader.prewarm(this.model, mode, date, refresh);
+    }
   }
 
   build() {
