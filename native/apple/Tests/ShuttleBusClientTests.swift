@@ -121,7 +121,8 @@ final class ShuttleBusClientTests: XCTestCase {
             ImportantEventQueryLogic.filteredItems(
                 merged,
                 query: "人工智能",
-                category: .conference
+                category: .conference,
+                now: fixedNow
             ).map(\.id),
             ["later"]
         )
@@ -129,7 +130,8 @@ final class ShuttleBusClientTests: XCTestCase {
             ImportantEventQueryLogic.filteredItems(
                 merged,
                 query: "",
-                category: .schoolNotice
+                category: .schoolNotice,
+                now: fixedNow
             ).map(\.id),
             ["earlier"]
         )
@@ -179,7 +181,10 @@ final class ShuttleBusClientTests: XCTestCase {
             now: fixedNow
         ).isEmpty)
         XCTAssertEqual(
-            Set(ImportantEventQueryLogic.metadataCategories(in: [item])),
+            Set(ImportantEventQueryLogic.metadataCategories(
+                in: [item],
+                now: fixedNow
+            )),
             Set(["人工智能", "计算机视觉"])
         )
     }
