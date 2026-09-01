@@ -82,5 +82,5 @@
 - Android 原生：Kotlin + Android Views 已在手机底栏、折叠屏和平板侧栏增加独立一级查询页，当天班车与活动搜索分类收藏共享现有缓存；Keystore、课表/空教室、日/周/月/年、课程摘要、天气/黄历、云课堂作业、双层边框和跨月动画保持完整。
 - 鸿蒙原生：ArkTS + ArkUI 的手机、折叠屏、平板与 PC 均已改为共享缓存的独立一级查询页及会议日历；手机月视图已修复双页横向翻月、三档详情手势和独立相邻月预热；DevEco Studio 6.1.1 / API 24 的本地签名 APP/HAP 与 127 项单元测试通过。
 - 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift、Kotlin 和 ArkTS 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
-- 原生分发限制：Android `0.2.8 (44)` 使用固定维护者密钥签名；Apple iOS `0.2.8 (76)` 与 macOS `0.2.8 (75)` 已由本地 Xcode 分别上传 TestFlight；HarmonyOS `0.2.8 (1002014)` 已上传 AGC 并通过云测试，邀请测试处于预审中。GitHub `v0.2.8` Pre-release 同步提供 14 项附件，Windows/Linux/CLI/TUI 有来源证明；Windows 公众 Authenticode 和 Linux 原生 APT 信任仍需各自的外部身份/仓库基础设施。
+- 原生分发限制：Android `0.2.8 (45)` 使用固定维护者密钥签名；Apple iOS `0.2.8 (77)` 与 macOS `0.2.8 (75)` 已由本地 Xcode 上传 TestFlight；HarmonyOS `0.2.8 (1002015)` 已由 DevEco 上传并通过云测试。GitHub `v0.2.8` Pre-release 同步提供 14 项附件，Windows/Linux/CLI/TUI 有来源证明；Windows 公众 Authenticode 和 Linux 原生 APT 信任仍需各自的外部身份/仓库基础设施。
 - 开源授权：根目录已加入 GPL-3.0-only 标准许可证文本，项目元数据、贡献指南和发布文档使用同一 SPDX 标识。

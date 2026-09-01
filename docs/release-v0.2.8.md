@@ -11,16 +11,18 @@
 - 重要事件合并 Contest DDL 公开活动与校内竞赛通知，明确排除课程作业和自定义日程；默认隐藏已结束/归档事项并按 DDL 由近到远排列。
 - 支持名称、学校/组织方、方向、标签、等级、地点和来源搜索，以及类型、真实分类、来源和“显示已结束”筛选。
 - 每条重要事件都复用教学日历的本地收藏；来源关闭、失败或删除条目后，完整收藏快照仍保留在设备上。
+- 所有图形客户端首批只渲染 20 条重要事件，接近列表底部时自动追加 20 条；筛选和数据变化同步重置显示窗口，追加过程不触发新的网络请求。
 - CLI 新增 `shuttle` / `events` 命令与 JSON 输出；TUI 在“日历”和“设置”之间提供独立“查询”标签，并提供搜索、类型、真实分类、来源、已结束与收藏快捷键。
-- iOS build 76 纳入班车接口可空复核记录兼容修复；真实 iPhone 模拟器测试从生产 API 拉取并渲染西土城、沙河双向班次。
+- iOS build 77 纳入班车接口可空复核记录兼容修复；真实 iPhone 模拟器测试从生产 API 拉取并渲染西土城、沙河双向班次。
 
 ## 教学日历
 
 - Contest DDL 的 `conference`、`journal_special_issue` 和 `pre_admission` 类型进入所有图形客户端的日、周、月、年日历链路；TUI 月历同步使用“会/事”标记显示会议与其它重要事件。
-- 设置新增默认开启的“学术会议”独立开关；期刊专题跟随会议开关，预推免跟随夏令营开关，颜色继续使用公开 DDL 分类色。
+- 作业、学科竞赛、学术会议/期刊专题、校内竞赛、夏令营/预推免、黑客松和自定义日程分别使用独立颜色；设置色点、日周全天日程、月/年双层边框、弹窗与详情保持同一映射。
 - 日历范围预热、查询页和重复进入页面共享缓存；日期翻页、视图切换与查询滑块均不触发重复网络请求。
 - Tauri 桌面端即使只开启“学术会议”，也会正常执行年度预热、跨年范围加载、月详情显示和手动重试。
-- HarmonyOS build 1002014 修复手机月视图横向翻月与三档日程面板手势，保存完整档位和月份日期锚点，并在父层独立预热当前月及相邻月份。
+- HarmonyOS build 1002015 保留手机月视图双页横向翻月与三档日程面板手势，并同步增量事件列表和独立日程颜色。
+- iPhone 年视图在横竖屏都为悬浮底部导航预留完整净空；12 月最后一日可滚动到导航条上方并点击打开详情。
 
 ## 数据与安全
 
@@ -32,10 +34,10 @@
 ## 版本矩阵
 
 - Web / Tauri / Rust Core / CLI / TUI：`0.2.8`
-- iOS：`0.2.8 (76)`
+- iOS：`0.2.8 (77)`
 - 原生 macOS：`0.2.8 (75)`
-- Android：`0.2.8 (44)`
-- HarmonyOS：`0.2.8 (1002014)`
+- Android：`0.2.8 (45)`
+- HarmonyOS：`0.2.8 (1002015)`
 - Tauri Android 兼容元数据：`versionCode=2011`
 - Legacy Tauri iOS：build 47
 
@@ -44,18 +46,18 @@
 - GitHub Release 标记为 Pre-release；稳定版 `releases/latest` 继续指向 `v0.2.7`。
 - GitHub 提供 Windows x64 NSIS、Linux x86_64/arm64 Debian 与 AppImage、Linux CLI/TUI、签名 Android APK/AAB、签名 HarmonyOS APP/HAP 和原生 macOS Universal DMG，共 14 个公开附件。
 - iOS 与正式签名 macOS 通过 TestFlight 分发，不上传 iOS 制品；GitHub macOS DMG 是未公证的开源预览包。
-- iOS `0.2.8 (76)` 与 macOS `0.2.8 (75)` 均由本地 Xcode 完成归档、导出和上传，并分别收到 `Upload succeeded`；按约定未继续检查 App Store Connect processing。
-- HarmonyOS `0.2.8 (1002014)` 已由 DevEco 以“测试和正式上架”上传并通过云测试；邀请测试已提交预审，[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)将在审核通过后生效。
+- iOS `0.2.8 (77)` 与 macOS `0.2.8 (75)` 均由本地 Xcode 完成归档、导出和上传，并分别收到 `Upload succeeded`；按约定未继续检查 App Store Connect processing。
+- HarmonyOS `0.2.8 (1002015)` 已由 DevEco 以“测试和正式上架”上传并通过云测试；邀请测试沿用[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)。
 - Windows/Linux/CLI/TUI 标签构建同时生成 GitHub/Sigstore 来源证明。Windows 安装器尚未使用公众 Authenticode 证书，来源证明不等同系统“已验证发布者”。
 - `.sha256` 文件只用于发布前后内部核验，不作为公开附件。
 
 ## 发布前验证
 
-- React/Tauri：134/134 Node 契约测试、Vite 生产构建与第三方许可证新鲜度检查通过。
+- React/Tauri：138/138 Node 契约测试、Vite 生产构建、真实深浅色渲染与第三方许可证新鲜度检查通过。
 - Rust：Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过。
-- Apple：本地 Xcode 严格构建与完整平台测试通过；25 项 UI 场景中 20 项通过、5 项设备/线上门控场景按设计跳过、0 失败；生产班车 Store 与真实 App UI 两项门控测试另行执行，2/2 通过、0 跳过。
-- Android：194/194 Release JVM 测试、Lint、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、版本及 HTTPS-only 打包校验通过。
-- HarmonyOS：127/127 ArkTS 单元测试、签名 HAP/APP 构建、版本、HAP 发布签名和三项固定公开 API 打包校验通过；DevEco 云测试通过。
+- Apple：本地 Xcode 严格构建与完整平台测试通过；基础套件 26 项 UI 场景中 21 项通过、5 项设备/线上门控场景按设计跳过、0 失败；横竖屏年视图净空与生产班车 Store/真实 App UI 门控另行执行并通过。
+- Android：199/199 Release JVM 测试、Lint、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、版本及 HTTPS-only 打包校验通过。
+- HarmonyOS：129/129 ArkTS 单元测试、签名 HAP/APP 构建、版本、HAP 发布签名、三项固定公开 API 打包校验与 DevEco 云测试通过。
 - 线上固定 API：班车 Schema 1.0、Contest DDL Schema 1.4 与校内通知 Schema 1.0 均通过固定 HTTPS 地址直接返回有效 JSON。
 
 ---
@@ -71,16 +73,18 @@ This is the cross-platform `0.2.8` pre-release, focused on the new shuttle and i
 - Important Events merges public Contest DDL data with school notices, excludes assignments and custom feeds, hides ended/archived entries by default, and sorts by ascending deadline.
 - Search covers names, organizations, fields, tags, ranks, locations, and sources. Type, real category, source, and ended-event filters are provided.
 - Every event reuses the teaching-calendar favorite snapshot contract and remains locally available if a source is disabled, unavailable, or removes it.
+- Every graphical client renders 20 events initially and appends 20 near the scroll edge. Filter/data revisions synchronously reset the window, and rendering never pages the network.
 - CLI adds `shuttle` and `events` commands with JSON output. TUI exposes Query as its own tab between Calendar and Settings, with search, type, real-category, source, ended-event, and favorite shortcuts.
-- iOS build 76 includes the nullable review-record compatibility fix for the shuttle feed; live iPhone-simulator tests fetched the production API and rendered both campus directions.
+- iOS build 77 includes the nullable review-record compatibility fix for the shuttle feed; live iPhone-simulator tests fetched the production API and rendered both campus directions.
 
 ## Teaching Calendar
 
 - `conference`, `journal_special_issue`, and `pre_admission` now flow through day, week, month, and year views on every graphical client. The TUI month calendar marks conferences and other important events with separate indicators.
-- Settings adds a default-on Conference switch. Journal special issues follow it, pre-admission follows Summer Camps, and all retain the public-deadline color.
+- Assignments, competitions, conferences/journal issues, school notices, summer camps/pre-admission, hackathons, and custom schedules each use their own color across settings legends, all-day rows, month/year borders, dialogs, and details.
 - Calendar preheating, Query Center, and repeated presentation share caches. Paging, view switching, and segment animations do not trigger duplicate network requests.
 - On Tauri desktop, conference-only settings still drive annual preheating, cross-year range loading, month details, and manual retry.
-- HarmonyOS build 1002014 fixes horizontal month paging and the three-stop daily-details sheet, preserves its full state and preferred day, and prewarms the current and adjacent months outside animations.
+- HarmonyOS build 1002015 keeps the double-page month transition and three-stop details sheet while adding incremental event rendering and independent deadline colors.
+- The iPhone year view reserves full floating-tab clearance in both orientations; December 31 remains scrollable, visible above the tab bar, and tappable.
 
 ## Data and security
 
@@ -94,16 +98,16 @@ This is the cross-platform `0.2.8` pre-release, focused on the new shuttle and i
 - The GitHub release is marked as a pre-release; stable `releases/latest` remains `v0.2.7`.
 - Fourteen public assets cover Windows NSIS, Linux Debian/AppImage/CLI/TUI on both architectures, signed Android APK/AAB, signed HarmonyOS APP/HAP, and the native macOS Universal DMG.
 - iOS and the distribution-signed macOS build are delivered through TestFlight. No iOS artifact is published on GitHub; the GitHub DMG remains an unnotarized open-source preview.
-- iOS `0.2.8 (76)` and macOS `0.2.8 (75)` were archived, exported, and uploaded from local Xcode; each returned `Upload succeeded`. App Store Connect processing was intentionally not inspected afterward.
-- HarmonyOS `0.2.8 (1002014)` was uploaded for testing and release through DevEco and passed cloud testing. Its invitation test is in pre-review; the [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) becomes active after approval.
+- iOS `0.2.8 (77)` and macOS `0.2.8 (75)` were archived, exported, and uploaded from local Xcode; each returned `Upload succeeded`. App Store Connect processing was intentionally not inspected afterward.
+- HarmonyOS `0.2.8 (1002015)` was uploaded for testing and release through DevEco and passed cloud testing. The [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) remains the public test entry.
 - Windows, Linux, CLI, and TUI tag artifacts receive GitHub/Sigstore provenance attestations. The Windows installer still lacks a public Authenticode publisher certificate; provenance is not the same as a Windows verified publisher.
 - SHA-256 sidecars remain internal release-verification files rather than public assets.
 
 ## Pre-release verification
 
-- React/Tauri: 134/134 Node contract tests, the Vite production build, and third-party license freshness checks passed.
+- React/Tauri: 138/138 Node contract tests, the Vite production build, real light/dark rendering checks, and third-party license freshness checks passed.
 - Rust: 151 Tauri tests passed with three live-service tests intentionally ignored; Core 61/61, CLI 16/16, and TUI 21/21 passed, with `-D warnings` Clippy clean for all four crates.
-- Apple: strict local-Xcode builds and the full platform suite passed; 20 of 25 UI scenarios passed with five device/live-gated skips and zero failures. The two production-shuttle Store/UI gates were then run separately and passed 2/2 with no skips.
-- Android: 194/194 release JVM tests, Lint, pinned-certificate APK/AAB signing, signer fingerprints, ZIP alignment, version, and HTTPS-only package checks passed.
-- HarmonyOS: 127/127 ArkTS tests, signed HAP/APP builds, packed-version and release-signature checks, all three pinned public-API package checks, and DevEco cloud testing passed.
+- Apple: strict local-Xcode builds and the full platform suite passed; 21 of 26 baseline UI scenarios passed with five device/live-gated skips and zero failures. Portrait/landscape year-clearance and the production-shuttle Store/UI gates also passed separately.
+- Android: 199/199 release JVM tests, Lint, pinned-certificate APK/AAB signing, signer fingerprints, ZIP alignment, version, and HTTPS-only package checks passed.
+- HarmonyOS: 129/129 ArkTS tests, signed HAP/APP builds, packed-version and release-signature checks, all three pinned public-API package checks, and DevEco cloud testing passed.
 - Live fixed APIs returned valid JSON directly over HTTPS for Shuttle Schema 1.0, Contest DDL Schema 1.4, and school notices Schema 1.0.

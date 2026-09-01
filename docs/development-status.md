@@ -5,10 +5,10 @@
 - 分支：`main`
 - 当前预发布版本：[v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；稳定版 `releases/latest` 仍为 `v0.2.7`
 - 应用版本：`0.2.8`
-- 当前构建号：Apple `CURRENT_PROJECT_VERSION=76`；Android `versionCode=44`；HarmonyOS `versionCode=1002014`；Tauri Android `versionCode=2011`
+- 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002015`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：`v0.2.8` 是 Pre-release；iOS build 76 与 macOS build 75 已由本地 Xcode 分别上传，HarmonyOS 1002014 已由 DevEco 上传且云测试通过，GitHub 提供 14 项公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试已提交并处于预审中；项目按 GPL-3.0-only 开源
+- 发布边界：`v0.2.8` 是 Pre-release；iOS build 77 与 macOS build 75 已由本地 Xcode 上传，HarmonyOS 1002015 已由 DevEco 上传且云测试通过，GitHub 提供 14 项公开附件并保持稳定 `latest` 为 v0.2.7。HarmonyOS 0.2.8 邀请测试沿用现有入口；项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -31,6 +31,8 @@
 - 设置与安全凭据提交具备回滚；WebView 不接收密码；已删除 Tauri 课程浮窗及其权限和事件面。
 - Tauri 空教室、教学日历和设置页与原生 macOS 保持同样的布局与卡片层级，并补齐课程提醒开关和学期自动检测。
 - 导航条已增加位于教学日历和设置之间的独立查询页；班车只展示上海当天 active 时刻表，重要事件合并公开活动与校内通知、排除作业，支持元数据搜索、真实分类、DDL 升序与完整本地收藏。会议作为唯一开启类型时也会驱动年度预热、跨年加载、月详情和重试。
+- 重要事件首批渲染 20 条，接近底部自动追加 20 条；筛选代次同步失效旧批次，视图追加完全复用本地缓存，不触发新网络请求。
+- 作业、学科竞赛、会议/期刊、校内竞赛、夏令营/预推免、黑客松和自定义日程分别使用独立颜色，并贯通设置色点、月/年双层边框、日周全天与详情。
 - Tauri 月视图的星期栏、日期、周数、事件行、字号、间距和选中态进一步对齐原生 macOS；月/年日期格使用最多两层同心边框表达不同 DDL 分类，今天与选中状态独立显示。
 - 教学日历日期详情通过原生 Rust HTTP 客户端复用安全存储凭据完成北邮统一认证，实时读取云课堂当前课程与作业，不依赖浏览器会话。
 - 日/周全天区、月格与年视图日期详情统一显示作业和校内竞赛通知；可见范围用批量命令和短时原始数据缓存一次发布，日期/月份动画不等待网络结果。
@@ -54,6 +56,7 @@
 - iOS 展开月视图的课程/节日条不再形成日期点击死区；拖动结束后的选择抑制只保留到下一事件循环，新的日期点击可以接管尚未结束的档位动画。
 - iOS 月份分页仅替换月格，详情 ScrollView 与手势层保持稳定；详情通过连续高度、裁剪和淡化更新，日期驱动的单一可取消任务负责触发 Store 加载。
 - iPhone 横屏取消竖屏底部导航占位；iPad 和 macOS 收起侧栏的选中图标保持居中正方形，设置与联动查询页面保留正常安全边距。
+- iPhone 年视图在横竖屏都保留 104pt 悬浮导航净空；12 月最后一天可滚动到导航条上方并打开详情，两个方向均有真实 UI 用例。
 - Windows/Tauri 当前使用的绿色日历课桌图标成为全平台唯一源图；同步脚本生成 Windows、Tauri macOS、原生 iOS 和 Android 图标，Apple AppIcon 同时移除透明通道以满足上传要求。
 - iOS/macOS 设置页提供学期自动检测、手动学期参数与 Widget 展示条数/地点偏好；课程提醒使用系统开关且与同列其他卡片等宽。
 - iOS/macOS 今日课程 Widget 增加课程数量和教师信息偏好，并在设置页提供与实际尺寸一致的预览；当天无课时直接显示“今日无课”。
@@ -98,13 +101,13 @@
 | 范围 | 结果 |
 | --- | --- |
 | 固定公开 API | 班车 Schema 1.0、Contest DDL Schema 1.4、校内通知 Schema 1.0 均直接返回 HTTP 200 JSON 且无重定向；公开活动 454 条、会议 67 条、校内通知 15 条，查询源均无作业 |
-| React/Tauri UI | 134/134 Node 契约与回归测试、Vite 生产构建和许可证新鲜度检查通过；会议唯一开启链路覆盖预热、跨年加载、月详情、来源声明与重试 |
+| React/Tauri UI | 138/138 Node 契约与回归测试、Vite 生产构建、深浅色实际渲染和许可证新鲜度检查通过；会议唯一开启链路覆盖预热、跨年加载、月详情、来源声明与重试 |
 | Rust | Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过 |
-| Apple | 本地 Xcode 严格构建与完整平台测试通过；25 项 UI 场景中 20 通过、5 项设备/线上门控跳过、0 失败；生产班车 Store/UI 门控测试另行执行 2/2 通过、0 跳过 |
-| TestFlight | iOS `0.2.8 (76)` 与 macOS `0.2.8 (75)` 均收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
-| Android | `0.2.8 (44)` 的 194/194 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过 |
-| HarmonyOS | `0.2.8 (1002014)` 的 127/127 ArkTS 单元测试、签名 HAP/APP、版本、HAP 发布签名与三项 API 打包校验通过；DevEco 已上传 AGC、云测试为“通过”，邀请测试审核已提交并处于预审中 |
-| GitHub | `v0.2.8` 保持原 Pre-release/tag；来自修复提交 `ba0d11e` 的 HarmonyOS 1002014 HAP/APP 已逐项替换并匹配远端大小与 SHA-256，其余 12 项附件保持不变 |
+| Apple | 本地 Xcode 严格构建与完整平台测试通过；基础套件 26 项 UI 中 21 通过、5 项设备/线上门控跳过、0 失败；横竖屏年视图和生产班车 Store/UI 门控另行执行并通过 |
+| TestFlight | iOS `0.2.8 (77)` 与 macOS `0.2.8 (75)` 均收到 `Upload succeeded` / `EXPORT SUCCEEDED`；按约定未打开 App Store Connect 检查 processing 或测试组状态 |
+| Android | `0.2.8 (45)` 的 199/199 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过 |
+| HarmonyOS | `0.2.8 (1002015)` 的 129/129 ArkTS 单元测试、签名 HAP/APP、版本、HAP 发布签名与三项 API 打包校验通过；DevEco 已上传 AGC 且云测试为“通过” |
+| GitHub | `v0.2.8` 保持原 Pre-release/tag；来自修复提交 `04a355c` 的 Android 45 与 HarmonyOS 1002015 四项资产已逐项替换并匹配远端大小与 SHA-256，其余 10 项附件保持不变 |
 
 完整中英文发布说明见 [`release-v0.2.8.md`](release-v0.2.8.md)。
 
@@ -187,7 +190,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.8 预发布制品
 
-`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (44)` APK/AAB；HarmonyOS `0.2.8 (1002014)` APP/HAP；以及原生 macOS `0.2.8 (75)` Universal DMG 预览包。iOS build 76 与正式签名 macOS build 75 由本地 Xcode 分别上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
+`v0.2.8` 已发布为 GitHub Pre-release，共 14 项公开附件：Windows x64 NSIS；Linux arm64/x86_64 Debian/AppImage/CLI/TUI；固定 release key 签名的 Android `0.2.8 (45)` APK/AAB；HarmonyOS `0.2.8 (1002015)` APP/HAP；以及原生 macOS `0.2.8 (75)` Universal DMG 预览包。iOS build 77 与正式签名 macOS build 75 由本地 Xcode 上传；不上传 iOS、`.sha256` 或原生 macOS ZIP。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode；稳定 `releases/latest` 保持指向 `v0.2.7`。
 
 ## 0.2.7 稳定版发布制品
 
