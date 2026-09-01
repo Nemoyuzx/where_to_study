@@ -2,7 +2,9 @@
 // DeviceState 依赖设备 API，这里用纯函数 useSidebarFor/useTwoColumnFor/
 // useExpandedCalendarFor 验证阈值与半折叠降级规则。
 import { describe, it, expect } from '@ohos/hypium';
-import { AdaptiveLayoutPolicy, DeviceFoldState } from '../main/ets/common/DeviceState';
+import {
+  AdaptiveLayoutPolicy, DeviceFoldState, PhoneNavigationLayout
+} from '../main/ets/common/DeviceState';
 
 export default function adaptivePolicyTest() {
   describe('AdaptivePolicyTest', () => {
@@ -31,6 +33,17 @@ export default function adaptivePolicyTest() {
       expect(AdaptiveLayoutPolicy.useSidebarFor(1024, DeviceFoldState.folded)).assertTrue();
       expect(AdaptiveLayoutPolicy.useSidebarFor(1024, DeviceFoldState.unknown)).assertTrue();
       expect(AdaptiveLayoutPolicy.useSidebarFor(430, DeviceFoldState.folded)).assertFalse();
+    });
+
+    it('phone_navigation_uses_device_inset_with_28vp_minimum', 0, () => {
+      expect(PhoneNavigationLayout.bottomMarginFor(0)).assertEqual(28);
+      expect(PhoneNavigationLayout.bottomMarginFor(10, 24)).assertEqual(28);
+      expect(PhoneNavigationLayout.bottomMarginFor(28, 0)).assertEqual(28);
+      expect(PhoneNavigationLayout.bottomMarginFor(34, 20)).assertEqual(34);
+      expect(PhoneNavigationLayout.bottomMarginFor(20, 36)).assertEqual(36);
+      expect(PhoneNavigationLayout.bottomMarginFor(-10, 12)).assertEqual(28);
+      expect(PhoneNavigationLayout.bottomMarginFor(Number.NaN, 18)).assertEqual(28);
+      expect(PhoneNavigationLayout.bottomMarginFor(Number.POSITIVE_INFINITY, 18)).assertEqual(28);
     });
   });
 }

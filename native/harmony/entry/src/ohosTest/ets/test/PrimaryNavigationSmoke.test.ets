@@ -4,6 +4,8 @@
 import { describe, it, expect, beforeAll } from '@ohos/hypium';
 import { Driver, ON, MatchPattern, Component, Point } from '@ohos.UiTest';
 import AbilityDelegatorRegistry from '@ohos.app.ability.abilityDelegatorRegistry';
+import { display } from '@kit.ArkUI';
+import { PhoneNavigationLayout } from '../../../main/ets/common/DeviceState';
 
 const BUNDLE_NAME: string = 'com.nemoyu.wheretostudy';
 
@@ -95,6 +97,22 @@ async function expectText(driver: Driver, text: string, message: string): Promis
   expect(component !== null).assertTrue();
 }
 
+async function expectPhoneNavigationBottomClearance(driver: Driver): Promise<void> {
+  const displaySize: Point = await driver.getDisplaySize();
+  const pixelsPerVp: number = display.getDefaultDisplaySync().densityPixels;
+  expect(pixelsPerVp > 0).assertTrue();
+  const navigationItemIDs: string[] = [
+    'navigation.planner', 'navigation.calendar', 'navigation.query', 'navigation.settings'
+  ];
+  for (let index: number = 0; index < navigationItemIDs.length; index++) {
+    const item: Component = await driver.findComponent(ON.id(navigationItemIDs[index]));
+    const bounds = await item.getBounds();
+    const bottomClearanceVp: number = (displaySize.y - bounds.bottom) / pixelsPerVp;
+    // 审核检查的是 OCR/交互控件而不是阴影外扩边界；允许坐标取整产生 0.5vp 误差。
+    expect(bottomClearanceVp + 0.5 >= PhoneNavigationLayout.minimumBottomClearanceVp).assertTrue();
+  }
+}
+
 export default function primaryNavigationSmokeTest() {
   describe('PrimaryNavigationSmoke', () => {
     it('primary_pages_are_navigable', 0, async () => {
@@ -132,6 +150,12 @@ export default function primaryNavigationSmokeTest() {
       await driver.delayMs(1200);
       const plannerTitleAgain: Component | null = await findText(driver, '联动查询');
       expect(plannerTitleAgain !== null).assertTrue();
+    });
+
+    it('phone_navigation_clears_system_bottom_by_at_least_28vp', 0, async () => {
+      await launchApp(false);
+      const driver: Driver = Driver.create();
+      await expectPhoneNavigationBottomClearance(driver);
     });
 
     it('settings_account_and_password_accept_touch_input', 0, async () => {

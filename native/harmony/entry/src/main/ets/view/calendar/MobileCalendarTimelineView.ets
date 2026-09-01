@@ -5,6 +5,7 @@ import { Course, SlotMetadata } from '../../common/Models';
 import { DateParts, StrictDates } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { AppModel } from '../../model/AppModel';
+import { PhoneNavigationLayout } from '../../common/DeviceState';
 import { CalendarFormatters, CalendarTimelineDay, CalendarTimelineLogic } from './CalendarLogic';
 
 export class MobileCalendarTimelineLayout {
@@ -12,7 +13,7 @@ export class MobileCalendarTimelineLayout {
   static readonly endMinute: number = 22 * 60;
   static readonly hourHeight: number = 72;
   static readonly axisWidth: number = 48;
-  static readonly bottomContentInset: number = 84;
+  static readonly bottomContentInset: number = PhoneNavigationLayout.minimumContentBottomInsetVp;
   static readonly columnSelectionLayerZ: number = 1;
   static readonly courseBlockLayerZ: number = 3;
   static readonly timelineHeight: number =

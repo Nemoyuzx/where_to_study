@@ -21,6 +21,7 @@ import {
 } from '../../net/CalendarDailyInfoClient';
 import { vibrator } from '@kit.SensorServiceKit';
 import { AppLanguage } from '../../common/AppLocalization';
+import { PhoneNavigationLayout } from '../../common/DeviceState';
 
 class MonthEvent {
   readonly id: string;
@@ -1100,6 +1101,7 @@ export struct MobileTeachingCalendarView {
               }, (day: DateParts) => 'month-summary.' + StrictDates.formatDateParts(day))
             }
             .width('100%')
+            .padding({ bottom: PhoneNavigationLayout.minimumContentBottomInsetVp })
             .alignItems(HorizontalAlign.Start)
           }
         }
@@ -1481,7 +1483,12 @@ export struct MobileTeachingCalendarView {
         .rowsGap(18)
         .width('100%')
       }
-      .padding(16)
+      .padding({
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: PhoneNavigationLayout.minimumContentBottomInsetVp
+      })
       .width('100%')
       .alignItems(HorizontalAlign.Start)
     }

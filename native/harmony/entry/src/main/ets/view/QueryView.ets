@@ -2,6 +2,7 @@
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 import { DeadlineVisual } from '../common/DeadlineVisual';
+import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
@@ -244,7 +245,12 @@ export struct QueryView {
         }
         .width('100%')
         .constraintSize({ maxWidth: 1100 })
-        .padding({ left: 16, right: 16, top: 2, bottom: this.isWide() ? 28 : 92 })
+        .padding({
+          left: 16,
+          right: 16,
+          top: 2,
+          bottom: this.isWide() ? 28 : PhoneNavigationLayout.minimumContentBottomInsetVp
+        })
         .alignSelf(ItemAlign.Center)
         .alignItems(HorizontalAlign.Start)
       }
@@ -561,7 +567,11 @@ export struct QueryView {
     .layoutWeight(1)
     .width('100%')
     .constraintSize({ maxWidth: 1100 })
-    .padding({ left: 16, right: 16, bottom: this.isWide() ? 18 : 78 })
+    .padding({
+      left: 16,
+      right: 16,
+      bottom: this.isWide() ? 18 : PhoneNavigationLayout.minimumContentBottomInsetVp
+    })
     .alignSelf(ItemAlign.Center)
     .alignItems(HorizontalAlign.Start)
   }

@@ -28,6 +28,16 @@ LAYOUT_HOST="/tmp/wts_smoke_layout.json"
 PASS=0
 FAIL=0
 
+display_metrics() {
+  "${HDC}" -t "${TARGET}" shell hidumper -s DisplayManagerService -a -a 2>/dev/null |
+    awk -F ':' '
+      $1 ~ /^[[:space:]]*Width$/ { gsub(/[[:space:]]/, "", $2); width=$2 }
+      $1 ~ /^[[:space:]]*Height$/ { gsub(/[[:space:]]/, "", $2); height=$2 }
+      $1 ~ /^[[:space:]]*DensityInCurResolution$/ { gsub(/[[:space:]]/, "", $2); density=$2 }
+      END { if (width != "" && height != "" && density != "") print width, height, density }
+    '
+}
+
 dump_layout() {
   # BUG-035 修复：dump/recv 失败时显式报错并返回非零，避免基于过期布局断言。
   "${HDC}" -t "${TARGET}" shell rm -f "${LAYOUT_DEV}" >/dev/null 2>&1 || true
@@ -79,7 +89,13 @@ assert_text() {
 
 swipe_up() {
   # swipe_up：向上滑动一屏（用于查看折叠区域下方的内容）
-  "${HDC}" -t "${TARGET}" shell uitest uiInput swipe 660 2000 660 800 1500 >/dev/null 2>&1
+  local width height density x start_y end_y
+  read -r width height density <<<"$(display_metrics)"
+  x=$(( width / 2 ))
+  start_y=$(( height * 78 / 100 ))
+  end_y=$(( height * 35 / 100 ))
+  "${HDC}" -t "${TARGET}" shell uitest uiInput swipe "$x" "$start_y" "$x" "$end_y" 1500 \
+    >/dev/null 2>&1
   sleep 1
 }
 
@@ -95,11 +111,6 @@ tap_text() {
   read -r x1 y1 x2 y2 <<<"$bounds"
   x=$(( (x1 + x2) / 2 ))
   y=$(( (y1 + y2) / 2 ))
-  # 底部导航区（ymin >= 2600）的 dump 坐标比可点击区域低约 65px（Pura 90 实测），
-  # 统一上移修正；不再依赖单设备绝对坐标（BUG-061 修复）。
-  if [[ "${2:--1}" -ge 2600 ]]; then
-    y=$(( y - 65 ))
-  fi
   "${HDC}" -t "${TARGET}" shell uitest uiInput click "$x" "$y" >/dev/null 2>&1
   sleep 1
 }
@@ -134,6 +145,37 @@ assert_id_attr() {
   fi
 }
 
+assert_phone_navigation_bottom_clearance() {
+  local width height density id bounds x1 y1 x2 y2 clearance failed
+  read -r width height density <<<"$(display_metrics)"
+  if [[ -z "${height:-}" || -z "${density:-}" ]]; then
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 无法读取屏幕高度或像素密度" >&2
+    return
+  fi
+  failed=0
+  for id in navigation.planner navigation.calendar navigation.query navigation.settings; do
+    bounds="$(find_id "$id")"
+    if [[ -z "$bounds" ]]; then
+      failed=1
+      continue
+    fi
+    read -r x1 y1 x2 y2 <<<"$bounds"
+    clearance="$(awk -v screen="$height" -v bottom="$y2" -v scale="$density" \
+      'BEGIN { printf "%.2f", (screen - bottom) / scale }')"
+    if ! awk -v value="$clearance" 'BEGIN { exit !(value >= 28) }'; then
+      echo "  ✗ $id 底部净空仅 ${clearance}vp（要求 >= 28vp）" >&2
+      failed=1
+    fi
+  done
+  if [[ "$failed" -eq 0 ]]; then
+    PASS=$((PASS + 1))
+    echo "  ✓ 四个手机导航控件底部净空均不小于 28vp"
+  else
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 launch_app() {
   # launch_app <flag>  flag: uiTesting | reviewDemo
   "${HDC}" -t "${TARGET}" shell aa force-stop "${BUNDLE}" >/dev/null 2>&1 || true
@@ -165,13 +207,14 @@ echo "[1] 三个一级页面可导航（uiTesting 模式）"
 launch_app uiTesting
 dump_layout || true
 assert_text "空教室页标题" "联动查询"
-tap_text "教学日历" 2600 2800
+assert_phone_navigation_bottom_clearance
+tap_id "navigation.calendar"
 dump_layout || true
 assert_text "教学日历页" "今天"
-tap_text "设置" 2600 2800
+tap_id "navigation.settings"
 dump_layout || true
 assert_text "设置页" "个人账户"
-tap_text "空教室" 2600 2800
+tap_id "navigation.planner"
 dump_layout || true
 assert_text "返回空教室页" "联动查询"
 
@@ -182,7 +225,7 @@ assert_text "示例模式横幅" "示例数据 · 不连接北邮教务服务"
 swipe_up
 dump_layout || true
 assert_text "示例课表课程" "数据挖掘"
-tap_text "设置" 2600 2800
+tap_id "navigation.settings"
 swipe_up
 dump_layout || true
 assert_text "本地安全存储说明" "账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。"
@@ -190,7 +233,7 @@ assert_text "本地安全存储说明" "账号和密码仅保存于本机，并�
 echo "[3] 设置页账号与密码可触摸聚焦并输入"
 launch_app uiTestingLive
 dump_layout || true
-tap_text "设置" 2600 2800
+tap_id "navigation.settings"
 dump_layout || true
 tap_id "settings_account_input"
 assert_id_attr "学号输入框获得焦点" "settings_account_input" "focused" "true"
@@ -202,17 +245,17 @@ assert_id_attr "密码输入框获得焦点" "settings_password_input" "focused"
 echo "[4] 教学日历日/周/月/年四视图切换"
 launch_app reviewDemo
 dump_layout || true
-tap_text "教学日历" 2600 2800
+tap_id "navigation.calendar"
 dump_layout || true
-assert_text "周视图标题" "周" 380 620
-tap_text "日" 380 620
+assert_text "周视图标题" "周"
+tap_text "日"
 dump_layout || true
-assert_text "日视图模式按钮" "日" 380 620
-tap_text "月" 380 620
+assert_text "日视图模式按钮" "日"
+tap_text "月"
 dump_layout || true
-assert_text "月视图模式按钮" "月" 380 620
-assert_text "月视图星期表头" "一" 480 700
-tap_text "年" 380 620
+assert_text "月视图模式按钮" "月"
+assert_text "月视图星期表头" "一"
+tap_text "年"
 dump_layout || true
 assert_text "年视图说明" "颜色越深表示当天日程越多"
 assert_text "年视图一月" "1月"

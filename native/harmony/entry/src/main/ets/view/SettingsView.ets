@@ -2,7 +2,7 @@
 import { AppModel } from '../model/AppModel';
 import { AppMeta } from '../common/AppMeta';
 import { AppTheme } from '../common/AppTheme';
-import { AdaptiveLayoutPolicy } from '../common/DeviceState';
+import { AdaptiveLayoutPolicy, PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { PrivacyPolicyView } from './PrivacyPolicyView';
@@ -130,7 +130,7 @@ export struct SettingsView {
         left: 20,
         right: 20,
         top: this.isCompact() ? 16 : 20,
-        bottom: this.isCompact() ? 88 : 28
+        bottom: this.isCompact() ? PhoneNavigationLayout.minimumContentBottomInsetVp : 28
       })
       .width('100%')
       .alignItems(HorizontalAlign.Start)

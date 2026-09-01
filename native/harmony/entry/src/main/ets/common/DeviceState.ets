@@ -145,3 +145,27 @@ export class AdaptiveLayoutPolicy {
       width, DeviceState.instance().foldState());
   }
 }
+
+// 手机悬浮一级导航的系统底部避让策略。
+// HarmonyOS 审核要求可交互底部控件至少抬高 28vp；实际设备若上报了
+// 更高的导航指示条或系统避让区，则以设备值为准。
+export class PhoneNavigationLayout {
+  static readonly navigationHeightVp: number = 60;
+  static readonly minimumBottomClearanceVp: number = 28;
+  static readonly minimumContentBottomInsetVp: number = 100;
+
+  private static normalizedInset(value: number): number {
+    return value >= 0 && value < 1000 ? value : 0;
+  }
+
+  static bottomMarginFor(
+    navigationIndicatorInsetVp: number,
+    systemInsetVp: number = 0
+  ): number {
+    return Math.max(
+      PhoneNavigationLayout.minimumBottomClearanceVp,
+      PhoneNavigationLayout.normalizedInset(navigationIndicatorInsetVp),
+      PhoneNavigationLayout.normalizedInset(systemInsetVp)
+    );
+  }
+}
