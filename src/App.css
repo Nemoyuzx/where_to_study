@@ -607,6 +607,31 @@ button:disabled {
   color: var(--school-notice-outline);
 }
 
+.settings-color-dot.competition-deadline {
+  background: var(--competition-deadline-outline);
+  color: var(--competition-deadline-outline);
+}
+
+.settings-color-dot.conference-deadline {
+  background: var(--conference-deadline-outline);
+  color: var(--conference-deadline-outline);
+}
+
+.settings-color-dot.summer-camp-deadline {
+  background: var(--summer-camp-deadline-outline);
+  color: var(--summer-camp-deadline-outline);
+}
+
+.settings-color-dot.hackathon-deadline {
+  background: var(--hackathon-deadline-outline);
+  color: var(--hackathon-deadline-outline);
+}
+
+.settings-color-dot.custom-deadline {
+  background: var(--custom-deadline-outline);
+  color: var(--custom-deadline-outline);
+}
+
 .settings-color-dot.public-deadline {
   background: var(--other-deadline-outline);
   color: var(--other-deadline-outline);
@@ -824,6 +849,26 @@ button:disabled {
 
 .calendar-agenda-list .school-notice {
   border-left-color: var(--school-notice-outline);
+}
+
+.calendar-agenda-list .competition-deadline {
+  border-left-color: var(--competition-deadline-outline);
+}
+
+.calendar-agenda-list .conference-deadline {
+  border-left-color: var(--conference-deadline-outline);
+}
+
+.calendar-agenda-list .summer-camp-deadline {
+  border-left-color: var(--summer-camp-deadline-outline);
+}
+
+.calendar-agenda-list .hackathon-deadline {
+  border-left-color: var(--hackathon-deadline-outline);
+}
+
+.calendar-agenda-list .custom-deadline {
+  border-left-color: var(--custom-deadline-outline);
 }
 
 .calendar-agenda-list .assignment {
@@ -1943,6 +1988,31 @@ button:disabled {
   color: var(--school-notice-text);
 }
 
+.time-all-day-cell > .time-all-day-item.competition-deadline {
+  background: var(--competition-deadline-surface);
+  color: var(--competition-deadline-text);
+}
+
+.time-all-day-cell > .time-all-day-item.conference-deadline {
+  background: var(--conference-deadline-surface);
+  color: var(--conference-deadline-text);
+}
+
+.time-all-day-cell > .time-all-day-item.summer-camp-deadline {
+  background: var(--summer-camp-deadline-surface);
+  color: var(--summer-camp-deadline-text);
+}
+
+.time-all-day-cell > .time-all-day-item.hackathon-deadline {
+  background: var(--hackathon-deadline-surface);
+  color: var(--hackathon-deadline-text);
+}
+
+.time-all-day-cell > .time-all-day-item.custom-deadline {
+  background: var(--custom-deadline-surface);
+  color: var(--custom-deadline-text);
+}
+
 .time-all-day-cell > .time-all-day-item.public-deadline {
   background: var(--other-deadline-surface);
   color: var(--other-deadline-text);
@@ -2533,6 +2603,36 @@ button:disabled {
   color: var(--school-notice-text);
 }
 
+.month-cell .month-entry.competition-deadline {
+  background: var(--competition-deadline-surface);
+  border-color: var(--competition-deadline-border);
+  color: var(--competition-deadline-text);
+}
+
+.month-cell .month-entry.conference-deadline {
+  background: var(--conference-deadline-surface);
+  border-color: var(--conference-deadline-border);
+  color: var(--conference-deadline-text);
+}
+
+.month-cell .month-entry.summer-camp-deadline {
+  background: var(--summer-camp-deadline-surface);
+  border-color: var(--summer-camp-deadline-border);
+  color: var(--summer-camp-deadline-text);
+}
+
+.month-cell .month-entry.hackathon-deadline {
+  background: var(--hackathon-deadline-surface);
+  border-color: var(--hackathon-deadline-border);
+  color: var(--hackathon-deadline-text);
+}
+
+.month-cell .month-entry.custom-deadline {
+  background: var(--custom-deadline-surface);
+  border-color: var(--custom-deadline-border);
+  color: var(--custom-deadline-text);
+}
+
 .month-cell .month-entry.public-deadline {
   background: var(--other-deadline-surface);
   border-color: var(--other-deadline-border);
@@ -2654,12 +2754,52 @@ button:disabled {
   --deadline-border-outer: var(--school-notice-outline);
 }
 
+.mini-month-grid button.deadline-border-competition-deadline {
+  --deadline-border-outer: var(--competition-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-conference-deadline {
+  --deadline-border-outer: var(--conference-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-summer-camp-deadline {
+  --deadline-border-outer: var(--summer-camp-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-hackathon-deadline {
+  --deadline-border-outer: var(--hackathon-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-custom-deadline {
+  --deadline-border-outer: var(--custom-deadline-outline);
+}
+
 .mini-month-grid button.deadline-border-public-deadline {
   --deadline-border-outer: var(--other-deadline-outline);
 }
 
 .mini-month-grid button.deadline-border-inner-school-notice {
   --deadline-border-inner: var(--school-notice-outline);
+}
+
+.mini-month-grid button.deadline-border-inner-competition-deadline {
+  --deadline-border-inner: var(--competition-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-inner-conference-deadline {
+  --deadline-border-inner: var(--conference-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-inner-summer-camp-deadline {
+  --deadline-border-inner: var(--summer-camp-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-inner-hackathon-deadline {
+  --deadline-border-inner: var(--hackathon-deadline-outline);
+}
+
+.mini-month-grid button.deadline-border-inner-custom-deadline {
+  --deadline-border-inner: var(--custom-deadline-outline);
 }
 
 .mini-month-grid button.deadline-border-inner-public-deadline {
@@ -2689,9 +2829,7 @@ button:disabled {
   inset: 4px;
 }
 
-.mini-month-grid button.today.deadline-border-assignment > span,
-.mini-month-grid button.today.deadline-border-school-notice > span,
-.mini-month-grid button.today.deadline-border-public-deadline > span {
+.mini-month-grid button.today[class*="deadline-border-"] > span {
   align-items: center;
   background: var(--current-time);
   border-radius: 50%;
@@ -2739,14 +2877,47 @@ button:disabled {
   top: auto;
 }
 
+.mini-month-grid button em.competition-deadline,
+.mini-month-grid button em.conference-deadline,
+.mini-month-grid button em.summer-camp-deadline,
+.mini-month-grid button em.hackathon-deadline,
+.mini-month-grid button em.custom-deadline,
 .mini-month-grid button em.public-deadline {
-  background: var(--other-deadline-surface);
   bottom: 1px;
-  color: var(--other-deadline-text);
   left: 50%;
   right: auto;
   top: auto;
   transform: translateX(-50%);
+}
+
+.mini-month-grid button em.competition-deadline {
+  background: var(--competition-deadline-surface);
+  color: var(--competition-deadline-text);
+}
+
+.mini-month-grid button em.conference-deadline {
+  background: var(--conference-deadline-surface);
+  color: var(--conference-deadline-text);
+}
+
+.mini-month-grid button em.summer-camp-deadline {
+  background: var(--summer-camp-deadline-surface);
+  color: var(--summer-camp-deadline-text);
+}
+
+.mini-month-grid button em.hackathon-deadline {
+  background: var(--hackathon-deadline-surface);
+  color: var(--hackathon-deadline-text);
+}
+
+.mini-month-grid button em.custom-deadline {
+  background: var(--custom-deadline-surface);
+  color: var(--custom-deadline-text);
+}
+
+.mini-month-grid button em.public-deadline {
+  background: var(--other-deadline-surface);
+  color: var(--other-deadline-text);
 }
 
 .year-day-popover {
@@ -2837,6 +3008,26 @@ button:disabled {
 
 .popover-supplement-list .school-notice {
   border-left: 3px solid var(--school-notice-outline);
+}
+
+.popover-supplement-list .competition-deadline {
+  border-left: 3px solid var(--competition-deadline-outline);
+}
+
+.popover-supplement-list .conference-deadline {
+  border-left: 3px solid var(--conference-deadline-outline);
+}
+
+.popover-supplement-list .summer-camp-deadline {
+  border-left: 3px solid var(--summer-camp-deadline-outline);
+}
+
+.popover-supplement-list .hackathon-deadline {
+  border-left: 3px solid var(--hackathon-deadline-outline);
+}
+
+.popover-supplement-list .custom-deadline {
+  border-left: 3px solid var(--custom-deadline-outline);
 }
 
 .popover-supplement-list .public-deadline {
@@ -4145,12 +4336,52 @@ button:disabled {
   --deadline-border-outer: var(--school-notice-outline);
 }
 
+.month-cell.deadline-border-competition-deadline {
+  --deadline-border-outer: var(--competition-deadline-outline);
+}
+
+.month-cell.deadline-border-conference-deadline {
+  --deadline-border-outer: var(--conference-deadline-outline);
+}
+
+.month-cell.deadline-border-summer-camp-deadline {
+  --deadline-border-outer: var(--summer-camp-deadline-outline);
+}
+
+.month-cell.deadline-border-hackathon-deadline {
+  --deadline-border-outer: var(--hackathon-deadline-outline);
+}
+
+.month-cell.deadline-border-custom-deadline {
+  --deadline-border-outer: var(--custom-deadline-outline);
+}
+
 .month-cell.deadline-border-public-deadline {
   --deadline-border-outer: var(--other-deadline-outline);
 }
 
 .month-cell.deadline-border-inner-school-notice {
   --deadline-border-inner: var(--school-notice-outline);
+}
+
+.month-cell.deadline-border-inner-competition-deadline {
+  --deadline-border-inner: var(--competition-deadline-outline);
+}
+
+.month-cell.deadline-border-inner-conference-deadline {
+  --deadline-border-inner: var(--conference-deadline-outline);
+}
+
+.month-cell.deadline-border-inner-summer-camp-deadline {
+  --deadline-border-inner: var(--summer-camp-deadline-outline);
+}
+
+.month-cell.deadline-border-inner-hackathon-deadline {
+  --deadline-border-inner: var(--hackathon-deadline-outline);
+}
+
+.month-cell.deadline-border-inner-custom-deadline {
+  --deadline-border-inner: var(--custom-deadline-outline);
 }
 
 .month-cell.deadline-border-inner-public-deadline {
@@ -4178,9 +4409,7 @@ button:disabled {
   inset: 4px;
 }
 
-.month-cell.today.deadline-border-assignment .month-cell-date-button,
-.month-cell.today.deadline-border-school-notice .month-cell-date-button,
-.month-cell.today.deadline-border-public-deadline .month-cell-date-button {
+.month-cell.today[class*="deadline-border-"] .month-cell-date-button {
   align-items: center;
   background: var(--current-time);
   border-radius: 50%;
@@ -4549,9 +4778,38 @@ button:disabled {
   text-decoration: none;
 }
 
+.deadline-list > article.assignment {
+  border-left: 3px solid var(--busy-border);
+}
+
 .deadline-list .deadline-favorite-row {
+  border-left-width: 3px;
   grid-template-columns: minmax(0, 1fr) auto;
   padding: 0;
+}
+
+.deadline-list .deadline-favorite-row.school-notice {
+  border-left-color: var(--school-notice-outline);
+}
+
+.deadline-list .deadline-favorite-row.competition-deadline {
+  border-left-color: var(--competition-deadline-outline);
+}
+
+.deadline-list .deadline-favorite-row.conference-deadline {
+  border-left-color: var(--conference-deadline-outline);
+}
+
+.deadline-list .deadline-favorite-row.summer-camp-deadline {
+  border-left-color: var(--summer-camp-deadline-outline);
+}
+
+.deadline-list .deadline-favorite-row.hackathon-deadline {
+  border-left-color: var(--hackathon-deadline-outline);
+}
+
+.deadline-list .deadline-favorite-row.custom-deadline {
+  border-left-color: var(--custom-deadline-outline);
 }
 
 .deadline-event-main {
@@ -5198,10 +5456,13 @@ input:disabled {
 }
 
 .important-event-list > article {
+  --important-event-outline: var(--other-deadline-outline);
+  --important-event-surface: var(--other-deadline-surface);
+  --important-event-text: var(--other-deadline-text);
   align-items: center;
   background: var(--surface-subtle);
   border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--other-deadline-outline);
+  border-left: 3px solid var(--important-event-outline);
   border-radius: 10px;
   display: grid;
   gap: 12px;
@@ -5209,8 +5470,40 @@ input:disabled {
   padding: 12px;
 }
 
-.important-event-list > article.school {
-  border-left-color: var(--school-notice-outline);
+.important-event-list > article.school-notice {
+  --important-event-outline: var(--school-notice-outline);
+  --important-event-surface: var(--school-notice-surface);
+  --important-event-text: var(--school-notice-text);
+}
+
+.important-event-list > article.competition-deadline {
+  --important-event-outline: var(--competition-deadline-outline);
+  --important-event-surface: var(--competition-deadline-surface);
+  --important-event-text: var(--competition-deadline-text);
+}
+
+.important-event-list > article.conference-deadline {
+  --important-event-outline: var(--conference-deadline-outline);
+  --important-event-surface: var(--conference-deadline-surface);
+  --important-event-text: var(--conference-deadline-text);
+}
+
+.important-event-list > article.summer-camp-deadline {
+  --important-event-outline: var(--summer-camp-deadline-outline);
+  --important-event-surface: var(--summer-camp-deadline-surface);
+  --important-event-text: var(--summer-camp-deadline-text);
+}
+
+.important-event-list > article.hackathon-deadline {
+  --important-event-outline: var(--hackathon-deadline-outline);
+  --important-event-surface: var(--hackathon-deadline-surface);
+  --important-event-text: var(--hackathon-deadline-text);
+}
+
+.important-event-list > article.custom-deadline {
+  --important-event-outline: var(--custom-deadline-outline);
+  --important-event-surface: var(--custom-deadline-surface);
+  --important-event-text: var(--custom-deadline-text);
 }
 
 .important-event-main {
@@ -5248,9 +5541,9 @@ input:disabled {
 
 .important-event-kicker span,
 .important-event-tags span {
-  background: var(--other-deadline-surface);
+  background: var(--important-event-surface);
   border-radius: 999px;
-  color: var(--other-deadline-text);
+  color: var(--important-event-text);
   font-size: 9px;
   font-weight: 700;
   padding: 3px 7px;
@@ -5259,11 +5552,6 @@ input:disabled {
 .important-event-kicker small {
   color: var(--text-secondary);
   font-size: 10px;
-}
-
-.important-event-list > article.school .important-event-kicker span {
-  background: var(--school-notice-surface);
-  color: var(--school-notice-text);
 }
 
 .important-event-tags span.rank {
@@ -5288,11 +5576,13 @@ input:disabled {
   font-size: 10px;
 }
 
-.event-load-more {
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  color: var(--primary-text);
+.event-load-sentinel {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 12px;
+  gap: 7px;
+  justify-content: center;
   min-height: 38px;
 }
 

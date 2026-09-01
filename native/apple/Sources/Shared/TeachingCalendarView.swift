@@ -263,7 +263,11 @@ private enum CalendarAgendaItemKind {
     case workday
     case assignment
     case schoolNotice
-    case publicDeadline
+    case competition
+    case conference
+    case summerCamp
+    case hackathon
+    case customDeadline
 }
 
 private struct CalendarAgendaDisplayItem: Identifiable {
@@ -401,7 +405,11 @@ private struct DesktopMonthEvent: Identifiable {
         case workday
         case assignment
         case schoolNotice
-        case publicDeadline
+        case competition
+        case conference
+        case summerCamp
+        case hackathon
+        case customDeadline
     }
 
     let id: String
@@ -1690,7 +1698,7 @@ struct TeachingCalendarView: View {
                 id: "\(dateKey)|public|\(item.id)",
                 title: item.name,
                 time: deadlineTime(item.deadline),
-                kind: .publicDeadline,
+                kind: desktopMonthEventKind(for: item),
                 deadlineItem: item
             )
         }
@@ -1721,8 +1729,16 @@ struct TeachingCalendarView: View {
             return AppTheme.assignment
         case .schoolNotice:
             return AppTheme.schoolNotice
-        case .publicDeadline:
-            return AppTheme.publicDeadline
+        case .competition:
+            return AppTheme.competitionDeadline
+        case .conference:
+            return AppTheme.conferenceDeadline
+        case .summerCamp:
+            return AppTheme.summerCampDeadline
+        case .hackathon:
+            return AppTheme.hackathonDeadline
+        case .customDeadline:
+            return AppTheme.customDeadline
         }
     }
 
@@ -1733,7 +1749,20 @@ struct TeachingCalendarView: View {
         case .workday: "briefcase.fill"
         case .assignment: "doc.text.fill"
         case .schoolNotice: "building.columns.fill"
-        case .publicDeadline: "flag.checkered"
+        case .competition, .conference, .summerCamp, .hackathon, .customDeadline:
+            "flag.checkered"
+        }
+    }
+
+    private func desktopMonthEventKind(for item: PublicDeadlineItem) -> DesktopMonthEvent.Kind {
+        if item.source == .schoolNotice { return .schoolNotice }
+        if item.source == .custom { return .customDeadline }
+        switch item.kind {
+        case .competition: return .competition
+        case .conference, .journalSpecialIssue: return .conference
+        case .summerCamp, .preAdmission: return .summerCamp
+        case .hackathon: return .hackathon
+        case .custom: return .customDeadline
         }
     }
     #endif
@@ -1770,8 +1799,8 @@ struct TeachingCalendarView: View {
                 id: "public-\(item.id)",
                 title: item.name,
                 categoryKey: item.kind.title,
-                agendaKind: .publicDeadline,
-                tint: AppTheme.publicDeadline,
+                agendaKind: calendarAgendaKind(for: item),
+                tint: CalendarDeadlinePresentation.tint(for: item),
                 deadlineItem: item
             )
         }
@@ -2592,10 +2621,19 @@ struct TeachingCalendarView: View {
     }
 
     private func compactPublicDeadlineRows(_ items: [PublicDeadlineItem]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let kinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
+            in: items.map { item in
+                CalendarAllDayEvent(
+                    id: item.favoriteID,
+                    title: item.name,
+                    kind: CalendarDeadlinePresentation.eventKind(for: item)
+                )
+            }
+        )
+        return VStack(alignment: .leading, spacing: 6) {
             Label("公开活动 DDL", systemImage: "flag.checkered")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.publicDeadline)
+                .foregroundStyle(AppTheme.text)
             ForEach(items) { item in
                 HStack(alignment: .top, spacing: 8) {
                     if let destination = item.officialURL {
@@ -2614,7 +2652,20 @@ struct TeachingCalendarView: View {
             }
         }
         .padding(9)
-        .background(AppTheme.publicDeadline.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 7))
+        .overlay {
+            ZStack {
+                if let first = kinds.first {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(allDayEventTint(first).opacity(0.65), lineWidth: 1.5)
+                }
+                if kinds.count > 1 {
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(allDayEventTint(kinds[1]).opacity(0.65), lineWidth: 1)
+                        .padding(3)
+                }
+            }
+        }
         .accessibilityIdentifier("calendar.regular.day-detail.public-deadlines")
     }
 
@@ -2869,9 +2920,7 @@ struct TeachingCalendarView: View {
     private func publicDeadlineRowContent(_ item: PublicDeadlineItem) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: item.kind.systemImage)
-                .foregroundStyle(
-                    item.source == .schoolNotice ? AppTheme.schoolNotice : AppTheme.publicDeadline
-                )
+                .foregroundStyle(CalendarDeadlinePresentation.tint(for: item))
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
@@ -2949,6 +2998,18 @@ struct TeachingCalendarView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
     }
 
+    private func calendarAgendaKind(for item: PublicDeadlineItem) -> CalendarAgendaItemKind {
+        if item.source == .schoolNotice { return .schoolNotice }
+        if item.source == .custom { return .customDeadline }
+        switch item.kind {
+        case .competition: return .competition
+        case .conference, .journalSpecialIssue: return .conference
+        case .summerCamp, .preAdmission: return .summerCamp
+        case .hackathon: return .hackathon
+        case .custom: return .customDeadline
+        }
+    }
+
     private func calendarAgendaDisplayItem(
         _ event: CalendarAllDayEvent
     ) -> CalendarAgendaDisplayItem {
@@ -2957,7 +3018,11 @@ struct TeachingCalendarView: View {
         case .workday: .workday
         case .assignment: .assignment
         case .schoolNotice: .schoolNotice
-        case .publicDeadline: .publicDeadline
+        case .competition: .competition
+        case .conference: .conference
+        case .summerCamp: .summerCamp
+        case .hackathon: .hackathon
+        case .customDeadline: .customDeadline
         }
         return CalendarAgendaDisplayItem(
             id: event.id,
@@ -3004,9 +3069,21 @@ struct TeachingCalendarView: View {
         case .schoolNotice:
             kind = .schoolNotice
             categoryKey = "校内竞赛通知"
-        case .publicDeadline:
-            kind = .publicDeadline
-            categoryKey = "公开活动 DDL"
+        case .competition:
+            kind = .competition
+            categoryKey = event.deadlineItem?.kind.title ?? "学科竞赛 DDL"
+        case .conference:
+            kind = .conference
+            categoryKey = event.deadlineItem?.kind.title ?? "学术会议/期刊专题 DDL"
+        case .summerCamp:
+            kind = .summerCamp
+            categoryKey = event.deadlineItem?.kind.title ?? "夏令营/预推免 DDL"
+        case .hackathon:
+            kind = .hackathon
+            categoryKey = event.deadlineItem?.kind.title ?? "黑客松 DDL"
+        case .customDeadline:
+            kind = .customDeadline
+            categoryKey = event.deadlineItem?.kind.title ?? "自定义日程"
         }
         return CalendarAgendaDisplayItem(
             id: event.id,
@@ -3026,7 +3103,11 @@ struct TeachingCalendarView: View {
         case .workday: AppTheme.primary
         case .assignment: AppTheme.assignment
         case .schoolNotice: AppTheme.schoolNotice
-        case .publicDeadline: AppTheme.publicDeadline
+        case .competition: AppTheme.competitionDeadline
+        case .conference: AppTheme.conferenceDeadline
+        case .summerCamp: AppTheme.summerCampDeadline
+        case .hackathon: AppTheme.hackathonDeadline
+        case .customDeadline: AppTheme.customDeadline
         }
     }
 
@@ -3136,23 +3217,11 @@ struct TeachingCalendarView: View {
     }
 
     private func allDayEventCategoryKey(_ kind: CalendarAllDayEventKind) -> String {
-        switch kind {
-        case .holiday: "法定节假日"
-        case .workday: "调休工作日"
-        case .assignment: "课程作业 DDL"
-        case .schoolNotice: "校内竞赛通知"
-        case .publicDeadline: "公开活动 DDL"
-        }
+        CalendarDeadlinePresentation.categoryKey(for: kind)
     }
 
     private func allDayEventTint(_ kind: CalendarAllDayEventKind) -> Color {
-        switch kind {
-        case .holiday: Self.holidayRed
-        case .workday: AppTheme.primary
-        case .assignment: AppTheme.assignment
-        case .schoolNotice: AppTheme.schoolNotice
-        case .publicDeadline: AppTheme.publicDeadline
-        }
+        CalendarDeadlinePresentation.tint(for: kind)
     }
 
     private var periodTitle: String {
@@ -3256,7 +3325,7 @@ struct TeachingCalendarView: View {
                 id: "\(dateKey)-public-\(item.id)",
                 title: item.name,
                 time: deadlineTime(item.deadline),
-                kind: .publicDeadline,
+                kind: CalendarDeadlinePresentation.eventKind(for: item),
                 deadlineItem: item
             )
         }

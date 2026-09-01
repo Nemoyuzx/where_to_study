@@ -119,7 +119,11 @@ private enum class CalendarSupplementaryKind {
     HOLIDAY,
     ASSIGNMENT,
     SCHOOL_NOTICE,
-    PUBLIC_DEADLINE,
+    COMPETITION,
+    CONFERENCE_OR_JOURNAL,
+    SUMMER_CAMP_OR_PRE_ADMISSION,
+    HACKATHON,
+    CUSTOM,
 }
 
 private data class CalendarSupplementaryItem(
@@ -134,7 +138,11 @@ private enum class MonthCalendarEntryKind {
     COURSE,
     ASSIGNMENT,
     SCHOOL_NOTICE,
-    PUBLIC_DEADLINE,
+    COMPETITION,
+    CONFERENCE_OR_JOURNAL,
+    SUMMER_CAMP_OR_PRE_ADMISSION,
+    HACKATHON,
+    CUSTOM,
     OVERFLOW,
 }
 
@@ -488,21 +496,29 @@ object TeachingCalendarLogic {
     fun monthDetailsBorderWidthDp(): Float = 0f
 
     fun monthCellBorderColor(
-        supplementaryKind: YearCalendarSupplementaryKind?,
+        supplementaryKind: DeadlineVisualKind?,
         today: Boolean,
         assignmentColor: Int,
         schoolNoticeColor: Int,
         publicDeadlineColor: Int,
         todayColor: Int,
+        conferenceDeadlineColor: Int = publicDeadlineColor,
+        summerCampDeadlineColor: Int = publicDeadlineColor,
+        hackathonDeadlineColor: Int = publicDeadlineColor,
+        customDeadlineColor: Int = publicDeadlineColor,
     ): Int = when (supplementaryKind) {
-        YearCalendarSupplementaryKind.ASSIGNMENT -> assignmentColor
-        YearCalendarSupplementaryKind.SCHOOL_NOTICE -> schoolNoticeColor
-        YearCalendarSupplementaryKind.PUBLIC_DEADLINE -> publicDeadlineColor
+        DeadlineVisualKind.ASSIGNMENT -> assignmentColor
+        DeadlineVisualKind.SCHOOL_NOTICE -> schoolNoticeColor
+        DeadlineVisualKind.COMPETITION -> publicDeadlineColor
+        DeadlineVisualKind.CONFERENCE_OR_JOURNAL -> conferenceDeadlineColor
+        DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION -> summerCampDeadlineColor
+        DeadlineVisualKind.HACKATHON -> hackathonDeadlineColor
+        DeadlineVisualKind.CUSTOM -> customDeadlineColor
         null -> if (today) todayColor else Color.TRANSPARENT
     }
 
     fun monthCellBorderWidthDp(
-        supplementaryKind: YearCalendarSupplementaryKind?,
+        supplementaryKind: DeadlineVisualKind?,
         today: Boolean,
     ): Float = when {
         supplementaryKind != null -> YearCalendarLogic.supplementaryOuterBorderWidthDp()
@@ -2550,8 +2566,7 @@ internal class TeachingCalendarPage(
         val today = sameDay(day, Calendar.getInstance(shanghai))
         val supplementaryKinds = YearCalendarLogic.supplementaryKinds(
             assignmentCount = assignments.size,
-            schoolNoticeCount = schoolNotices.size,
-            publicDeadlineCount = publicDeadlines.size,
+            deadlineItems = schoolNotices + publicDeadlines,
         )
         cell.background = calendarCellBackground(
             selected = selected,
@@ -2619,7 +2634,7 @@ internal class TeachingCalendarPage(
             publicDeadlines.forEach { deadline ->
                 add(MonthCalendarEntry(
                     "${activity.uiText("公")} ${deadline.name}",
-                    MonthCalendarEntryKind.PUBLIC_DEADLINE,
+                    monthEntryKind(deadline),
                     deadline,
                 ))
             }
@@ -2642,9 +2657,8 @@ internal class TeachingCalendarPage(
             }
             setTextColor(when {
                 selected -> Palette.onPrimary
-                assignments.isNotEmpty() -> Palette.assignment
-                schoolNotices.isNotEmpty() -> Palette.schoolNotice
-                publicDeadlines.isNotEmpty() -> Palette.publicDeadline
+                supplementaryKinds.isNotEmpty() ->
+                    DeadlineVisualLogic.color(supplementaryKinds.first())
                 else -> Palette.muted
             })
         }
@@ -3170,7 +3184,11 @@ internal class TeachingCalendarPage(
         CalendarSupplementaryKind.HOLIDAY -> Palette.holiday
         CalendarSupplementaryKind.ASSIGNMENT -> Palette.assignment
         CalendarSupplementaryKind.SCHOOL_NOTICE -> Palette.schoolNotice
-        CalendarSupplementaryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
+        CalendarSupplementaryKind.COMPETITION -> Palette.publicDeadline
+        CalendarSupplementaryKind.CONFERENCE_OR_JOURNAL -> Palette.conferenceDeadline
+        CalendarSupplementaryKind.SUMMER_CAMP_OR_PRE_ADMISSION -> Palette.summerCampDeadline
+        CalendarSupplementaryKind.HACKATHON -> Palette.hackathonDeadline
+        CalendarSupplementaryKind.CUSTOM -> Palette.customDeadline
     }
 
     private fun monthEntryAccent(kind: MonthCalendarEntryKind): Int = when (kind) {
@@ -3178,7 +3196,11 @@ internal class TeachingCalendarPage(
         MonthCalendarEntryKind.COURSE -> Palette.primary
         MonthCalendarEntryKind.ASSIGNMENT -> Palette.assignment
         MonthCalendarEntryKind.SCHOOL_NOTICE -> Palette.schoolNotice
-        MonthCalendarEntryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
+        MonthCalendarEntryKind.COMPETITION -> Palette.publicDeadline
+        MonthCalendarEntryKind.CONFERENCE_OR_JOURNAL -> Palette.conferenceDeadline
+        MonthCalendarEntryKind.SUMMER_CAMP_OR_PRE_ADMISSION -> Palette.summerCampDeadline
+        MonthCalendarEntryKind.HACKATHON -> Palette.hackathonDeadline
+        MonthCalendarEntryKind.CUSTOM -> Palette.customDeadline
         MonthCalendarEntryKind.OVERFLOW -> Palette.primaryText
     }
 
@@ -3470,9 +3492,10 @@ internal class TeachingCalendarPage(
 
     private fun publicDeadlineRow(item: PublicDeadlineItem): LinearLayout =
         LinearLayout(activity).apply {
+            val accent = DeadlineVisualLogic.color(item)
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = roundedBackground(activity, Palette.background, Palette.border, radius = 7)
+            background = roundedBackground(activity, Palette.background, accent, radius = 7)
             setPadding(activity.dp(10), activity.dp(7), activity.dp(5), activity.dp(7))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -3496,7 +3519,7 @@ internal class TeachingCalendarPage(
                         text = listOfNotNull(deadlineCategoryTitle(item), item.organizer)
                             .joinToString(" · ")
                         textSize = 11f
-                        setTextColor(Palette.muted)
+                        setTextColor(accent)
                         setPadding(0, activity.dp(2), 0, 0)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -3689,7 +3712,7 @@ internal class TeachingCalendarPage(
                     title = deadline.name,
                     subtitle = listOfNotNull(deadline.deadline, deadline.organizer)
                         .joinToString(" · "),
-                    accent = Palette.publicDeadline,
+                    accent = DeadlineVisualLogic.color(deadline),
                     deadlineItem = deadline,
                 ))
             }
@@ -3985,8 +4008,7 @@ internal class TeachingCalendarPage(
         holidays = holidaysOn(day),
         supplementaryKinds = YearCalendarLogic.supplementaryKinds(
             assignmentCount = assignmentsOn(day).size,
-            schoolNoticeCount = schoolNoticesOn(day).size,
-            publicDeadlineCount = publicDeadlinesOn(day).size,
+            deadlineItems = schoolNoticesOn(day) + publicDeadlinesOn(day),
         ),
     )
 
@@ -4005,7 +4027,7 @@ internal class TeachingCalendarPage(
         today: Boolean,
         courseCount: Int,
         muted: Boolean,
-        supplementaryKinds: List<YearCalendarSupplementaryKind> = emptyList(),
+        supplementaryKinds: List<DeadlineVisualKind> = emptyList(),
     ): Drawable {
         val fill = when {
             selected -> Palette.selectedDate
@@ -4026,6 +4048,10 @@ internal class TeachingCalendarPage(
             schoolNoticeColor = Palette.schoolNotice,
             publicDeadlineColor = Palette.publicDeadline,
             todayColor = Palette.nowIndicator,
+            conferenceDeadlineColor = Palette.conferenceDeadline,
+            summerCampDeadlineColor = Palette.summerCampDeadline,
+            hackathonDeadlineColor = Palette.hackathonDeadline,
+            customDeadlineColor = Palette.customDeadline,
         )
         val borderWidthDp = TeachingCalendarLogic.monthCellBorderWidthDp(
             outerKind,
@@ -4049,6 +4075,10 @@ internal class TeachingCalendarPage(
                 schoolNoticeColor = Palette.schoolNotice,
                 publicDeadlineColor = Palette.publicDeadline,
                 todayColor = Palette.nowIndicator,
+                conferenceDeadlineColor = Palette.conferenceDeadline,
+                summerCampDeadlineColor = Palette.summerCampDeadline,
+                hackathonDeadlineColor = Palette.hackathonDeadline,
+                customDeadlineColor = Palette.customDeadline,
             ),
             radius = 7,
             borderWidthDp = TeachingCalendarLogic.monthCellInnerBorderWidthDp(),
@@ -4132,7 +4162,7 @@ internal class TeachingCalendarPage(
         }
         publicDeadlinesOn(date).forEach { deadline ->
             add(CalendarSupplementaryItem(
-                kind = CalendarSupplementaryKind.PUBLIC_DEADLINE,
+                kind = calendarSupplementaryKind(deadline),
                 title = "${activity.uiText(deadlineKindTitle(deadline.kind))} · ${deadline.name}",
                 subtitle = listOfNotNull(
                     deadlineTime(deadline.deadline),
@@ -4162,6 +4192,32 @@ internal class TeachingCalendarPage(
         PublicDeadlineKind.PRE_ADMISSION -> "推"
         PublicDeadlineKind.CUSTOM -> "自"
     })
+
+    private fun calendarSupplementaryKind(item: PublicDeadlineItem): CalendarSupplementaryKind =
+        when (DeadlineVisualLogic.kind(item)) {
+            DeadlineVisualKind.ASSIGNMENT -> CalendarSupplementaryKind.ASSIGNMENT
+            DeadlineVisualKind.SCHOOL_NOTICE -> CalendarSupplementaryKind.SCHOOL_NOTICE
+            DeadlineVisualKind.COMPETITION -> CalendarSupplementaryKind.COMPETITION
+            DeadlineVisualKind.CONFERENCE_OR_JOURNAL ->
+                CalendarSupplementaryKind.CONFERENCE_OR_JOURNAL
+            DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION ->
+                CalendarSupplementaryKind.SUMMER_CAMP_OR_PRE_ADMISSION
+            DeadlineVisualKind.HACKATHON -> CalendarSupplementaryKind.HACKATHON
+            DeadlineVisualKind.CUSTOM -> CalendarSupplementaryKind.CUSTOM
+        }
+
+    private fun monthEntryKind(item: PublicDeadlineItem): MonthCalendarEntryKind =
+        when (DeadlineVisualLogic.kind(item)) {
+            DeadlineVisualKind.ASSIGNMENT -> MonthCalendarEntryKind.ASSIGNMENT
+            DeadlineVisualKind.SCHOOL_NOTICE -> MonthCalendarEntryKind.SCHOOL_NOTICE
+            DeadlineVisualKind.COMPETITION -> MonthCalendarEntryKind.COMPETITION
+            DeadlineVisualKind.CONFERENCE_OR_JOURNAL ->
+                MonthCalendarEntryKind.CONFERENCE_OR_JOURNAL
+            DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION ->
+                MonthCalendarEntryKind.SUMMER_CAMP_OR_PRE_ADMISSION
+            DeadlineVisualKind.HACKATHON -> MonthCalendarEntryKind.HACKATHON
+            DeadlineVisualKind.CUSTOM -> MonthCalendarEntryKind.CUSTOM
+        }
 
     private fun coursesOn(date: Calendar): List<Course> =
         ScheduleLogic.courses(scheduleRepository.schedule, date)

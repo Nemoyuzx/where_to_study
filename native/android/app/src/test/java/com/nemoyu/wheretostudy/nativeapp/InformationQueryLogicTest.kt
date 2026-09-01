@@ -12,6 +12,87 @@ import org.junit.Test
 
 class InformationQueryLogicTest {
     @Test
+    fun importantEventPagingStartsSmallAdvancesInBoundedBatchesAndRestoresSafely() {
+        assertEquals(20, InformationQuerySessionState.INITIAL_EVENT_COUNT)
+        assertEquals(20, InformationQuerySessionState.EVENT_PAGE_SIZE)
+        assertEquals(40, ImportantEventQueryLogic.nextVisibleCount(20, 55))
+        assertEquals(55, ImportantEventQueryLogic.nextVisibleCount(40, 55))
+        assertEquals(55, ImportantEventQueryLogic.nextVisibleCount(55, 55))
+        assertEquals(0, ImportantEventQueryLogic.nextVisibleCount(-8, -1))
+
+        val session = InformationQuerySessionState(InformationQueryMode.IMPORTANT_EVENTS.name)
+        assertEquals(InformationQueryMode.IMPORTANT_EVENTS, session.selectedMode)
+        assertEquals(20, session.visibleEventCount)
+        assertEquals(0, session.eventScrollY)
+    }
+
+    @Test
+    fun deadlineVisualKindsGroupRelatedSwitchesButKeepEveryIndependentColorLane() {
+        val competition = item(
+            "competition-color", PublicDeadlineKind.COMPETITION,
+            PublicDeadlineSource.CONTEST_DDL, "2035-01-01T12:00:00+08:00",
+        )
+        val journal = item(
+            "journal-color", PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE,
+            PublicDeadlineSource.CONTEST_DDL, "2035-01-02T12:00:00+08:00",
+        )
+        val preAdmission = item(
+            "pre-color", PublicDeadlineKind.PRE_ADMISSION,
+            PublicDeadlineSource.CONTEST_DDL, "2035-01-03T12:00:00+08:00",
+        )
+        val hackathon = item(
+            "hackathon-color", PublicDeadlineKind.HACKATHON,
+            PublicDeadlineSource.CONTEST_DDL, "2035-01-04T12:00:00+08:00",
+        )
+        val school = item(
+            "school-color", PublicDeadlineKind.COMPETITION,
+            PublicDeadlineSource.SCHOOL_NOTICE, "2035-01-05T12:00:00+08:00",
+        )
+        val custom = item(
+            "custom-color", PublicDeadlineKind.CUSTOM,
+            PublicDeadlineSource.CUSTOM, "2035-01-06T12:00:00+08:00",
+        )
+
+        assertEquals(DeadlineVisualKind.COMPETITION, DeadlineVisualLogic.kind(competition))
+        assertEquals(
+            DeadlineVisualKind.CONFERENCE_OR_JOURNAL,
+            DeadlineVisualLogic.kind(journal),
+        )
+        assertEquals(
+            DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION,
+            DeadlineVisualLogic.kind(preAdmission),
+        )
+        assertEquals(DeadlineVisualKind.HACKATHON, DeadlineVisualLogic.kind(hackathon))
+        assertEquals(DeadlineVisualKind.SCHOOL_NOTICE, DeadlineVisualLogic.kind(school))
+        assertEquals(DeadlineVisualKind.CUSTOM, DeadlineVisualLogic.kind(custom))
+        assertEquals(
+            listOf(
+                DeadlineVisualKind.ASSIGNMENT,
+                DeadlineVisualKind.SCHOOL_NOTICE,
+                DeadlineVisualKind.COMPETITION,
+                DeadlineVisualKind.CONFERENCE_OR_JOURNAL,
+                DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION,
+                DeadlineVisualKind.HACKATHON,
+                DeadlineVisualKind.CUSTOM,
+            ),
+            DeadlineVisualLogic.orderedKinds(
+                assignmentCount = 1,
+                items = listOf(custom, hackathon, preAdmission, journal, competition, school),
+            ),
+        )
+        assertEquals(
+            listOf(DeadlineVisualKind.ASSIGNMENT, DeadlineVisualKind.SCHOOL_NOTICE),
+            YearCalendarLogic.borderKinds(
+                DeadlineVisualLogic.orderedKinds(
+                    assignmentCount = 1,
+                    items = listOf(competition, school, journal),
+                ),
+            ),
+        )
+    }
+
+
+    @Test
     fun shuttleClientPinsCanonicalHttpsEndpointAndPayloadLimit() {
         var calls = 0
         val snapshot = ShuttleBusClient { uri, scheme, host, maximumBytes ->

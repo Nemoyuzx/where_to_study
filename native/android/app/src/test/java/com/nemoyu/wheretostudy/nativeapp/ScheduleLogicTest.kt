@@ -570,39 +570,52 @@ class ScheduleLogicTest {
     }
 
     @Test
-    fun yearDeadlineBorderPriorityIsAssignmentThenSchoolThenPublic() {
-        assertEquals(
-            YearCalendarSupplementaryKind.ASSIGNMENT,
-            YearCalendarLogic.supplementaryKind(1, 4, 8),
+    fun yearDeadlineBorderPriorityIsAssignmentThenSchoolThenTypedPublicEvent() {
+        fun deadline(
+            id: String,
+            kind: PublicDeadlineKind,
+            source: PublicDeadlineSource = PublicDeadlineSource.CONTEST_DDL,
+        ) = PublicDeadlineItem(
+            id = id,
+            name = id,
+            kind = kind,
+            source = source,
+            deadline = "2035-01-01T12:00:00+08:00",
+            organizer = null,
+            officialURL = null,
         )
-        assertEquals(
-            YearCalendarSupplementaryKind.SCHOOL_NOTICE,
-            YearCalendarLogic.supplementaryKind(0, 2, 8),
+        val school = deadline(
+            "school",
+            PublicDeadlineKind.COMPETITION,
+            PublicDeadlineSource.SCHOOL_NOTICE,
         )
-        assertEquals(
-            YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
-            YearCalendarLogic.supplementaryKind(0, 0, 3),
+        val competition = deadline("competition", PublicDeadlineKind.COMPETITION)
+        val conference = deadline("conference", PublicDeadlineKind.CONFERENCE)
+        val allKinds = YearCalendarLogic.supplementaryKinds(
+            assignmentCount = 1,
+            deadlineItems = listOf(conference, competition, school),
         )
-        assertEquals(null, YearCalendarLogic.supplementaryKind(0, 0, 0))
         assertEquals(
             listOf(
-                YearCalendarSupplementaryKind.ASSIGNMENT,
-                YearCalendarSupplementaryKind.SCHOOL_NOTICE,
-                YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
+                DeadlineVisualKind.ASSIGNMENT,
+                DeadlineVisualKind.SCHOOL_NOTICE,
+                DeadlineVisualKind.COMPETITION,
+                DeadlineVisualKind.CONFERENCE_OR_JOURNAL,
             ),
-            YearCalendarLogic.supplementaryKinds(1, 4, 8),
+            allKinds,
         )
+        assertEquals(emptyList<DeadlineVisualKind>(), YearCalendarLogic.supplementaryKinds(0, emptyList()))
         assertEquals(
             listOf(
-                YearCalendarSupplementaryKind.ASSIGNMENT,
-                YearCalendarSupplementaryKind.SCHOOL_NOTICE,
+                DeadlineVisualKind.ASSIGNMENT,
+                DeadlineVisualKind.SCHOOL_NOTICE,
             ),
             YearCalendarLogic.borderKinds(
                 listOf(
-                    YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
-                    YearCalendarSupplementaryKind.SCHOOL_NOTICE,
-                    YearCalendarSupplementaryKind.ASSIGNMENT,
-                    YearCalendarSupplementaryKind.ASSIGNMENT,
+                    DeadlineVisualKind.CONFERENCE_OR_JOURNAL,
+                    DeadlineVisualKind.COMPETITION,
+                    DeadlineVisualKind.SCHOOL_NOTICE,
+                    DeadlineVisualKind.ASSIGNMENT,
                 ),
             ),
         )
@@ -806,7 +819,7 @@ class ScheduleLogicTest {
         assertEquals(
             1.2f,
             TeachingCalendarLogic.monthCellBorderWidthDp(
-                YearCalendarSupplementaryKind.ASSIGNMENT,
+                DeadlineVisualKind.ASSIGNMENT,
                 today = false,
             ),
             0f,
@@ -856,12 +869,76 @@ class ScheduleLogicTest {
 
     @Test
     fun supplementaryCalendarKindsHaveDistinctAccessibleAccents() {
+        assertEquals(
+            listOf(
+                0xFF9A6500.toInt(),
+                0xFF006B75.toInt(),
+                0xFF6D3CC3.toInt(),
+                0xFFB42368.toInt(),
+                0xFF2E7D46.toInt(),
+                0xFFC4511C.toInt(),
+                0xFF51697F.toInt(),
+            ),
+            listOf(
+                ThemePalettes.light.assignment,
+                ThemePalettes.light.publicDeadline,
+                ThemePalettes.light.conferenceDeadline,
+                ThemePalettes.light.schoolNotice,
+                ThemePalettes.light.summerCampDeadline,
+                ThemePalettes.light.hackathonDeadline,
+                ThemePalettes.light.customDeadline,
+            ),
+        )
+        assertEquals(
+            listOf(
+                0xFFFFC14D.toInt(),
+                0xFF68D5E5.toInt(),
+                0xFFC4A7F5.toInt(),
+                0xFFF28AB8.toInt(),
+                0xFF72D68C.toInt(),
+                0xFFFF9B64.toInt(),
+                0xFF9CB0C4.toInt(),
+            ),
+            listOf(
+                ThemePalettes.dark.assignment,
+                ThemePalettes.dark.publicDeadline,
+                ThemePalettes.dark.conferenceDeadline,
+                ThemePalettes.dark.schoolNotice,
+                ThemePalettes.dark.summerCampDeadline,
+                ThemePalettes.dark.hackathonDeadline,
+                ThemePalettes.dark.customDeadline,
+            ),
+        )
         assertTrue(ThemePalettes.light.primary != ThemePalettes.light.assignment)
         assertTrue(ThemePalettes.light.primary != ThemePalettes.light.schoolNotice)
         assertTrue(ThemePalettes.light.holiday != ThemePalettes.light.assignment)
         assertTrue(ThemePalettes.light.holiday != ThemePalettes.light.schoolNotice)
         assertTrue(ThemePalettes.light.assignment != ThemePalettes.light.schoolNotice)
         assertTrue(ThemePalettes.dark.assignment != ThemePalettes.dark.schoolNotice)
+        assertEquals(
+            7,
+            listOf(
+                ThemePalettes.light.assignment,
+                ThemePalettes.light.schoolNotice,
+                ThemePalettes.light.publicDeadline,
+                ThemePalettes.light.conferenceDeadline,
+                ThemePalettes.light.summerCampDeadline,
+                ThemePalettes.light.hackathonDeadline,
+                ThemePalettes.light.customDeadline,
+            ).toSet().size,
+        )
+        assertEquals(
+            7,
+            listOf(
+                ThemePalettes.dark.assignment,
+                ThemePalettes.dark.schoolNotice,
+                ThemePalettes.dark.publicDeadline,
+                ThemePalettes.dark.conferenceDeadline,
+                ThemePalettes.dark.summerCampDeadline,
+                ThemePalettes.dark.hackathonDeadline,
+                ThemePalettes.dark.customDeadline,
+            ).toSet().size,
+        )
     }
 
     @Test

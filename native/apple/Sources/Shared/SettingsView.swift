@@ -52,7 +52,7 @@ private struct FavoriteDeadlineManagementView: View {
     private func favoriteRow(_ item: PublicDeadlineItem) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: item.kind.systemImage)
-                .foregroundStyle(item.source == .schoolNotice ? AppTheme.schoolNotice : AppTheme.publicDeadline)
+                .foregroundStyle(CalendarDeadlinePresentation.tint(for: item))
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.name)
@@ -598,7 +598,7 @@ struct SettingsView: View {
                     "学科竞赛 DDL",
                     isOn: model.competitionDeadlinesEnabled,
                     set: model.setCompetitionDeadlinesEnabled,
-                    markerColor: AppTheme.publicDeadline
+                    markerColor: AppTheme.competitionDeadline
                 )
                 featureToggle(
                     "校内竞赛通知",
@@ -607,26 +607,25 @@ struct SettingsView: View {
                     markerColor: AppTheme.schoolNotice
                 )
                 featureToggle(
-                    "学术会议 DDL",
+                    "学术会议/期刊专题 DDL",
                     isOn: model.conferenceDeadlinesEnabled,
                     set: model.setConferenceDeadlinesEnabled,
-                    markerColor: AppTheme.publicDeadline
+                    markerColor: AppTheme.conferenceDeadline
                 )
                 featureToggle(
-                    "夏令营 DDL",
+                    "夏令营/预推免 DDL",
                     isOn: model.summerCampDeadlinesEnabled,
                     set: model.setSummerCampDeadlinesEnabled,
-                    markerColor: AppTheme.publicDeadline
+                    markerColor: AppTheme.summerCampDeadline
                 )
                 featureToggle(
                     "黑客松 DDL",
                     isOn: model.hackathonDeadlinesEnabled,
                     set: model.setHackathonDeadlinesEnabled,
-                    markerColor: AppTheme.publicDeadline
+                    markerColor: AppTheme.hackathonDeadline
                 )
                 Divider()
                 Toggle(
-                    "自定义日程源",
                     isOn: Binding(
                         get: { model.customDeadlinesEnabled },
                         set: { enabled in
@@ -634,7 +633,16 @@ struct SettingsView: View {
                             model.setCustomDeadlinesEnabled(enabled)
                         }
                     )
-                )
+                ) {
+                    HStack(spacing: 8) {
+                        Text(model.localized("自定义日程源"))
+                        Spacer(minLength: 8)
+                        Circle()
+                            .fill(AppTheme.customDeadline)
+                            .frame(width: 8, height: 8)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .toggleStyle(.switch)
                 .tint(AppTheme.primary)
                 .disabled(model.isSampleMode)

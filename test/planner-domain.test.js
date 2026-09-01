@@ -9,6 +9,8 @@ import {
   calendarMonthExpansion,
   calendarDeadlineBorderKinds,
   calendarDeadlineBorderPriority,
+  calendarDeadlinePublicMarkerKind,
+  calendarDeadlineVisualKind,
   calendarMonthDragProgress,
   calendarMonthExpansionTarget,
   calendarSurfaceKey,
@@ -200,6 +202,25 @@ test('calendar deadline borders keep the two highest distinct deadline kinds', (
     ['assignment', 'school-notice', 'public-deadline'],
   )
   assert.deepEqual(calendarDeadlineBorderKinds([assignment], 0), [])
+})
+
+test('every independent deadline switch maps to a stable visual color kind', () => {
+  const cases = [
+    [{ source_type: 'assignment' }, 'assignment'],
+    [{ source_type: 'school_notice', event_type: 'competition' }, 'school-notice'],
+    [{ source_type: 'contest_ddl', event_type: 'competition' }, 'competition-deadline'],
+    [{ source_type: 'contest_ddl', event_type: 'conference' }, 'conference-deadline'],
+    [{ source_type: 'contest_ddl', event_type: 'journal_special_issue' }, 'conference-deadline'],
+    [{ source_type: 'contest_ddl', event_type: 'summer_camp' }, 'summer-camp-deadline'],
+    [{ source_type: 'contest_ddl', event_type: 'pre_admission' }, 'summer-camp-deadline'],
+    [{ source_type: 'contest_ddl', event_type: 'hackathon' }, 'hackathon-deadline'],
+    [{ source_type: 'custom', event_type: 'custom' }, 'custom-deadline'],
+  ]
+  cases.forEach(([entry, kind]) => assert.equal(calendarDeadlineVisualKind(entry), kind))
+
+  const entries = cases.map(([entry]) => entry)
+  assert.deepEqual(calendarDeadlineBorderKinds(entries), ['assignment', 'school-notice'])
+  assert.equal(calendarDeadlinePublicMarkerKind(entries), 'competition-deadline')
 })
 
 test('expanded month grid caps web rows at the native mobile height', () => {

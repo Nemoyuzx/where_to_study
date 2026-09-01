@@ -79,6 +79,94 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["沙河校区 → 西土城路校区"].waitForExistence(timeout: 5))
     }
 
+    func testPhoneYearViewKeepsLastDateAboveFloatingTabBar() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only layout check")
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer {
+            XCUIDevice.shared.orientation = .portrait
+            app.terminate()
+        }
+
+        navigate(to: "教学日历", in: app)
+        let yearMode = app.segmentedControls.buttons["年"]
+        XCTAssertTrue(yearMode.waitForExistence(timeout: 5))
+        yearMode.tap()
+
+        var shanghaiCalendar = Calendar(identifier: .gregorian)
+        shanghaiCalendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let yearText = String(shanghaiCalendar.component(.year, from: Date()))
+        XCTAssertTrue(
+            app.buttons["calendar.mobile.year-month.\(yearText)-01"].waitForExistence(timeout: 5)
+        )
+        let yearScroll = app.scrollViews.firstMatch
+        XCTAssertTrue(yearScroll.waitForExistence(timeout: 5))
+        let lastDate = app.buttons["calendar.mobile.year-day.\(yearText)-12-31"].firstMatch
+
+        for _ in 0 ..< 12 where !lastDate.isHittable {
+            verticalSwipe(in: app, within: yearScroll, upward: true, requestedTravel: 180)
+        }
+
+        XCTAssertTrue(lastDate.exists)
+        XCTAssertTrue(lastDate.isHittable, "The last year date must scroll clear of the floating tab bar")
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.exists)
+        XCTAssertLessThanOrEqual(lastDate.frame.maxY, tabBar.frame.minY)
+
+        lastDate.tap()
+        XCTAssertTrue(app.buttons["calendar.mobile.year-jump.日"].waitForExistence(timeout: 5))
+    }
+
+    func testPhoneLandscapeYearViewKeepsLastDateAboveFloatingTabBar() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only layout check")
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer {
+            XCUIDevice.shared.orientation = .portrait
+            app.terminate()
+        }
+
+        navigate(to: "教学日历", in: app)
+        let yearMode = app.segmentedControls.buttons["年"]
+        XCTAssertTrue(yearMode.waitForExistence(timeout: 5))
+        yearMode.tap()
+
+        var shanghaiCalendar = Calendar(identifier: .gregorian)
+        shanghaiCalendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let yearText = String(shanghaiCalendar.component(.year, from: Date()))
+        XCTAssertTrue(
+            app.buttons["calendar.mobile.year-month.\(yearText)-01"].waitForExistence(timeout: 5)
+        )
+        let lastDate = app.buttons["calendar.mobile.year-day.\(yearText)-12-31"].firstMatch
+        let yearScroll = app.scrollViews.firstMatch
+        XCTAssertTrue(yearScroll.waitForExistence(timeout: 5))
+        for _ in 0 ..< 8 where !lastDate.isHittable {
+            verticalSwipe(in: app, within: yearScroll, upward: true, requestedTravel: 180)
+        }
+
+        let landscapeAttachment = XCTAttachment(screenshot: app.screenshot())
+        landscapeAttachment.name = "calendar-year-last-date-landscape"
+        landscapeAttachment.lifetime = .keepAlways
+        add(landscapeAttachment)
+        XCTAssertTrue(lastDate.isHittable, "The last year date must remain reachable in landscape")
+        let landscapeTabBar = app.tabBars.firstMatch
+        XCTAssertTrue(landscapeTabBar.exists)
+        XCTAssertLessThanOrEqual(
+            lastDate.frame.maxY,
+            landscapeTabBar.frame.minY,
+            "Landscape year content must also clear the floating tab bar"
+        )
+
+        lastDate.tap()
+        XCTAssertTrue(app.buttons["calendar.mobile.year-jump.日"].waitForExistence(timeout: 5))
+    }
+
     func testReviewDemoShowsLocalDataWithoutAccount() {
         continueAfterFailure = false
         let app = configuredApplication()

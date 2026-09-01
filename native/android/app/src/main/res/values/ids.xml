@@ -31,6 +31,7 @@
     <item name="settings_widget_course_limit_selector" type="id" />
     <item name="settings_widget_preview_size_selector" type="id" />
     <item name="settings_custom_deadlines_switch" type="id" />
+    <item name="settings_custom_deadlines_dot" type="id" />
     <item name="settings_custom_deadlines_url" type="id" />
     <item name="settings_custom_deadlines_save" type="id" />
     <item name="settings_favorite_deadlines_button" type="id" />
@@ -46,6 +47,7 @@
     <item name="information_query_metadata_category_row" type="id" />
     <item name="information_query_show_ended" type="id" />
     <item name="information_query_result_count" type="id" />
+    <item name="information_query_events_scroll" type="id" />
     <item name="information_query_events_list" type="id" />
     <item name="information_query_event_favorite" type="id" />
     <item name="favorite_deadlines_page" type="id" />

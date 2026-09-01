@@ -5,7 +5,11 @@ enum CalendarAllDayEventKind: String, Equatable, Sendable {
     case workday
     case assignment
     case schoolNotice
-    case publicDeadline
+    case competition
+    case conference
+    case summerCamp
+    case hackathon
+    case customDeadline
 }
 
 struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
@@ -37,7 +41,11 @@ enum CalendarDeadlinePresentation {
     private static let deadlinePriority: [CalendarAllDayEventKind] = [
         .assignment,
         .schoolNotice,
-        .publicDeadline,
+        .competition,
+        .conference,
+        .summerCamp,
+        .hackathon,
+        .customDeadline,
     ]
 
     static func isVisible(
@@ -82,6 +90,50 @@ enum CalendarDeadlinePresentation {
         deadlineKind: CalendarAllDayEventKind?
     ) -> Bool {
         isToday && deadlineKind != nil
+    }
+
+    static func eventKind(for item: PublicDeadlineItem) -> CalendarAllDayEventKind {
+        if item.source == .schoolNotice { return .schoolNotice }
+        if item.source == .custom { return .customDeadline }
+        switch item.kind {
+        case .competition: return .competition
+        case .conference, .journalSpecialIssue: return .conference
+        case .summerCamp, .preAdmission: return .summerCamp
+        case .hackathon: return .hackathon
+        case .custom: return .customDeadline
+        }
+    }
+
+    static func tint(for item: PublicDeadlineItem) -> Color {
+        tint(for: eventKind(for: item))
+    }
+
+    static func tint(for kind: CalendarAllDayEventKind) -> Color {
+        switch kind {
+        case .holiday: AppTheme.danger
+        case .workday: AppTheme.primary
+        case .assignment: AppTheme.assignment
+        case .schoolNotice: AppTheme.schoolNotice
+        case .competition: AppTheme.competitionDeadline
+        case .conference: AppTheme.conferenceDeadline
+        case .summerCamp: AppTheme.summerCampDeadline
+        case .hackathon: AppTheme.hackathonDeadline
+        case .customDeadline: AppTheme.customDeadline
+        }
+    }
+
+    static func categoryKey(for kind: CalendarAllDayEventKind) -> String {
+        switch kind {
+        case .holiday: "法定节假日"
+        case .workday: "调休工作日"
+        case .assignment: "课程作业 DDL"
+        case .schoolNotice: "校内竞赛通知"
+        case .competition: "学科竞赛 DDL"
+        case .conference: "学术会议/期刊专题 DDL"
+        case .summerCamp: "夏令营/预推免 DDL"
+        case .hackathon: "黑客松 DDL"
+        case .customDeadline: "自定义日程"
+        }
     }
 }
 
@@ -588,13 +640,7 @@ struct CalendarTimelineView: View {
     }
 
     private func allDayTint(_ kind: CalendarAllDayEventKind) -> Color {
-        switch kind {
-        case .holiday: AppTheme.danger
-        case .workday: AppTheme.primary
-        case .assignment: AppTheme.assignment
-        case .schoolNotice: AppTheme.schoolNotice
-        case .publicDeadline: AppTheme.publicDeadline
-        }
+        CalendarDeadlinePresentation.tint(for: kind)
     }
 
     private func courseBlocks(dayWidth: CGFloat) -> some View {

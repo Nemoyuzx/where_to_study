@@ -24,10 +24,30 @@ final class AppThemeTests: XCTestCase {
         XCTAssertEqual(AppThemePalette.dark.selectedDate, color(0x1D, 0x4E, 0xD8))
         XCTAssertEqual(AppThemePalette.light.assignment, color(0x9A, 0x65, 0x00))
         XCTAssertEqual(AppThemePalette.dark.assignment, color(0xFF, 0xC1, 0x4D))
-        XCTAssertEqual(AppThemePalette.light.schoolNotice, color(0x5B, 0x4B, 0xC4))
-        XCTAssertEqual(AppThemePalette.dark.schoolNotice, color(0xB7, 0xA8, 0xFF))
-        XCTAssertEqual(AppThemePalette.light.publicDeadline, color(0x00, 0x7C, 0x91))
+        XCTAssertEqual(AppThemePalette.light.schoolNotice, color(0xB4, 0x23, 0x68))
+        XCTAssertEqual(AppThemePalette.dark.schoolNotice, color(0xF2, 0x8A, 0xB8))
+        XCTAssertEqual(AppThemePalette.light.publicDeadline, color(0x00, 0x6B, 0x75))
         XCTAssertEqual(AppThemePalette.dark.publicDeadline, color(0x68, 0xD5, 0xE5))
+        XCTAssertEqual(AppThemePalette.light.conferenceDeadline, color(0x6D, 0x3C, 0xC3))
+        XCTAssertEqual(AppThemePalette.dark.conferenceDeadline, color(0xC4, 0xA7, 0xF5))
+        XCTAssertEqual(AppThemePalette.light.summerCampDeadline, color(0x2E, 0x7D, 0x46))
+        XCTAssertEqual(AppThemePalette.dark.summerCampDeadline, color(0x72, 0xD6, 0x8C))
+        XCTAssertEqual(AppThemePalette.light.hackathonDeadline, color(0xC4, 0x51, 0x1C))
+        XCTAssertEqual(AppThemePalette.dark.hackathonDeadline, color(0xFF, 0x9B, 0x64))
+        XCTAssertEqual(AppThemePalette.light.customDeadline, color(0x51, 0x69, 0x7F))
+        XCTAssertEqual(AppThemePalette.dark.customDeadline, color(0x9C, 0xB0, 0xC4))
+    }
+
+    func testCalendarSemanticColorsAreDistinctAndReadableOnSurfaces() {
+        let lightBackground = AppThemeColor(red: 244, green: 247, blue: 244)
+        let darkBackground = AppThemeColor(red: 24, green: 28, blue: 26)
+        let light = calendarColors(AppThemePalette.light)
+        let dark = calendarColors(AppThemePalette.dark)
+
+        XCTAssertEqual(Set(light.map(colorKey)).count, light.count)
+        XCTAssertEqual(Set(dark.map(colorKey)).count, dark.count)
+        light.forEach { XCTAssertGreaterThanOrEqual(contrast($0, lightBackground), 3) }
+        dark.forEach { XCTAssertGreaterThanOrEqual(contrast($0, darkBackground), 3) }
     }
 
     func testBrandForegroundMaintainsContrastAgainstPageBackgrounds() {
@@ -68,6 +88,22 @@ final class AppThemeTests: XCTestCase {
 
     private func color(_ red: Int, _ green: Int, _ blue: Int) -> AppThemeColor {
         AppThemeColor(red: red, green: green, blue: blue)
+    }
+
+    private func calendarColors(_ palette: AppThemePalette) -> [AppThemeColor] {
+        [
+            palette.assignment,
+            palette.publicDeadline,
+            palette.conferenceDeadline,
+            palette.schoolNotice,
+            palette.summerCampDeadline,
+            palette.hackathonDeadline,
+            palette.customDeadline,
+        ]
+    }
+
+    private func colorKey(_ color: AppThemeColor) -> String {
+        "\(color.red)-\(color.green)-\(color.blue)"
     }
 
     #if os(macOS)

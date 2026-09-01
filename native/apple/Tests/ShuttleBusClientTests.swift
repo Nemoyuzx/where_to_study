@@ -230,6 +230,42 @@ final class ShuttleBusClientTests: XCTestCase {
         )
     }
 
+    func testImportantEventIncrementalRenderingStartsSmallAndLoadsNearBottom() {
+        XCTAssertEqual(
+            ImportantEventIncrementalRendering.visibleCount(totalCount: 75, requestedCount: 20),
+            20
+        )
+        XCTAssertFalse(ImportantEventIncrementalRendering.shouldLoadNextBatch(
+            appearingIndex: 14,
+            visibleCount: 20,
+            totalCount: 75
+        ))
+        XCTAssertTrue(ImportantEventIncrementalRendering.shouldLoadNextBatch(
+            appearingIndex: 16,
+            visibleCount: 20,
+            totalCount: 75
+        ))
+        XCTAssertEqual(
+            ImportantEventIncrementalRendering.nextRequestedCount(
+                currentCount: 20,
+                totalCount: 75
+            ),
+            40
+        )
+        XCTAssertEqual(
+            ImportantEventIncrementalRendering.nextRequestedCount(
+                currentCount: 60,
+                totalCount: 75
+            ),
+            75
+        )
+        XCTAssertFalse(ImportantEventIncrementalRendering.shouldLoadNextBatch(
+            appearingIndex: 74,
+            visibleCount: 75,
+            totalCount: 75
+        ))
+    }
+
     func testModeSelectionIsLocalAndFirstAppearancePrewarmsBothSources() {
         XCTAssertTrue(InformationQueryLoadPolicy.sources(for: .modeSelection).isEmpty)
         XCTAssertEqual(

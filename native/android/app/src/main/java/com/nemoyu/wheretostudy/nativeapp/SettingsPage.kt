@@ -652,7 +652,7 @@ class SettingsPage(
             checked = preferences.conferenceDeadlinesEnabled,
             switchID = R.id.settings_conference_deadlines_switch,
             dotID = R.id.settings_conference_deadlines_dot,
-            color = Palette.publicDeadline,
+            color = Palette.conferenceDeadline,
         ) {
             preferences.conferenceDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
@@ -672,7 +672,7 @@ class SettingsPage(
             checked = preferences.summerCampDeadlinesEnabled,
             switchID = R.id.settings_summer_camp_deadlines_switch,
             dotID = R.id.settings_summer_camp_deadlines_dot,
-            color = Palette.publicDeadline,
+            color = Palette.summerCampDeadline,
         ) {
             preferences.summerCampDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
@@ -682,7 +682,7 @@ class SettingsPage(
             checked = preferences.hackathonDeadlinesEnabled,
             switchID = R.id.settings_hackathon_deadlines_switch,
             dotID = R.id.settings_hackathon_deadlines_dot,
-            color = Palette.publicDeadline,
+            color = Palette.hackathonDeadline,
         ) {
             preferences.hackathonDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
@@ -692,17 +692,15 @@ class SettingsPage(
                 topMargin = activity.dp(10)
                 bottomMargin = activity.dp(8)
             })
-        val customEnabled = Switch(activity).apply {
-            id = R.id.settings_custom_deadlines_switch
-            text = "自定义日程源"
-            textSize = 15f
-            setTextColor(Palette.text)
-            isChecked = preferences.customDeadlinesEnabled
-            minHeight = activity.dp(UiMetrics.controlHeightDp)
-            setPadding(0, 0, 0, 0)
-            setOnCheckedChangeListener { button, _ -> activity.performControlHaptic(button) }
-        }
-        addView(customEnabled)
+        val customRow = featureSwitchLegendRow(
+            label = "自定义日程源",
+            checked = preferences.customDeadlinesEnabled,
+            switchID = R.id.settings_custom_deadlines_switch,
+            dotID = R.id.settings_custom_deadlines_dot,
+            color = Palette.customDeadline,
+        ) { }
+        val customEnabled = customRow.findViewById<Switch>(R.id.settings_custom_deadlines_switch)
+        addView(customRow)
         val customURL = field("自定义日程 HTTPS JSON 地址", preferences.customDeadlinesURL, false).apply {
             id = R.id.settings_custom_deadlines_url
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI

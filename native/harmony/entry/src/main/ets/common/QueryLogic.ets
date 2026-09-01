@@ -53,6 +53,36 @@ export class QueryPageContract {
 }
 
 export class ImportantEventQueryLogic {
+  static readonly pageSize: number = 20;
+  static readonly preloadThreshold: number = 4;
+
+  static initialRequestedCount(): number {
+    return ImportantEventQueryLogic.pageSize;
+  }
+
+  static visibleCount(totalCount: number, requestedCount: number): number {
+    return Math.min(Math.max(0, Math.trunc(requestedCount)),
+      Math.max(0, Math.trunc(totalCount)));
+  }
+
+  static visiblePage(items: PublicDeadlineItem[], requestedCount: number): PublicDeadlineItem[] {
+    return items.slice(0, ImportantEventQueryLogic.visibleCount(items.length, requestedCount));
+  }
+
+  static shouldAppend(endingIndex: number, visibleCount: number, totalCount: number): boolean {
+    if (visibleCount <= 0 || visibleCount >= totalCount) {
+      return false;
+    }
+    return endingIndex >= Math.max(0,
+      visibleCount - ImportantEventQueryLogic.preloadThreshold);
+  }
+
+  static nextRequestedCount(currentCount: number, totalCount: number): number {
+    return Math.min(Math.max(0, Math.trunc(totalCount)),
+      Math.max(ImportantEventQueryLogic.pageSize,
+        Math.max(0, Math.trunc(currentCount)) + ImportantEventQueryLogic.pageSize));
+  }
+
   static mergeCatalog(remote: PublicDeadlineItem[], favorites: PublicDeadlineItem[]):
     PublicDeadlineItem[] {
     const result: PublicDeadlineItem[] = [];

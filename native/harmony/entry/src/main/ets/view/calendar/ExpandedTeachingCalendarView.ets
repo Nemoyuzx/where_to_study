@@ -6,11 +6,12 @@ import { AppModel } from '../../model/AppModel';
 import { Course, HolidayItem } from '../../common/Models';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
+import { DeadlineVisual, DeadlineVisualKind } from '../../common/DeadlineVisual';
 import { DeviceState } from '../../common/DeviceState';
 import { PageTitle } from '../SharedComponents';
 import {
   CalendarFormatters, CalendarMode, CalendarModeInfo, CalendarPopoverPosition, CalendarTimelineDay,
-  CalendarTimelineLogic, CalendarYearDeadlinePriority, DarkModeProbe, TeachingCalendarLogic
+  CalendarTimelineLogic, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
 import { CoursePlacement, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
@@ -612,10 +613,7 @@ export struct ExpandedTeachingCalendarView {
           this.model.text(PublicDeadlineKindInfo.title(item.kind)) + ' · ' + item.name;
         result.push(new ExpandedAllDayItem(date + '.deadline.' + item.id, title,
           this.deadlineTime(item.deadline),
-          item.source === PublicDeadlineSource.schoolNotice ?
-            AppTheme.schoolNotice() : AppTheme.publicDeadline(),
-          item.source === PublicDeadlineSource.schoolNotice ?
-            AppTheme.schoolNoticeSurface() : AppTheme.publicDeadlineSurface(), item,
+          DeadlineVisual.colorForItem(item), DeadlineVisual.surfaceForItem(item), item,
           item.officialURL));
     }
     return result;
@@ -804,7 +802,7 @@ export struct ExpandedTeachingCalendarView {
       result.push(new MonthEventItem('deadline-' + item.id,
         (school ? this.model.text('校内') :
           this.model.text(PublicDeadlineKindInfo.title(item.kind))) + ' ' + item.name,
-        school ? AppTheme.schoolNotice() : AppTheme.publicDeadline()));
+        DeadlineVisual.colorForItem(item)));
     }
     return result;
   }
@@ -968,52 +966,31 @@ export struct ExpandedTeachingCalendarView {
     }
   }
 
-  private yearDeadlinePriorities(day: DateParts): CalendarYearDeadlinePriority[] {
+  private yearDeadlineKinds(day: DateParts): DeadlineVisualKind[] {
     const date: string = StrictDates.formatDateParts(day);
     const assignmentCount: number = (this.model.assignmentDeadlinesByDate.get(date) ?? []).length;
-    let schoolCount: number = 0;
-    let otherCount: number = 0;
-    for (const item of this.model.deadlineItems(date)) {
-        if (item.source === PublicDeadlineSource.schoolNotice) {
-          schoolCount++;
-        } else {
-          otherCount++;
-        }
-    }
-    return TeachingCalendarLogic.yearDeadlineBorderLayers(
-      assignmentCount, schoolCount, otherCount);
+    return DeadlineVisual.borderKinds(assignmentCount, this.model.deadlineItems(date));
   }
 
   @Builder
   deadlineBorderLayers(day: DateParts, outerRadius: number, innerRadius: number,
     innerInset: number) {
-    ForEach(this.yearDeadlinePriorities(day),
-      (priority: CalendarYearDeadlinePriority, index: number) => {
+    ForEach(this.yearDeadlineKinds(day),
+      (kind: DeadlineVisualKind, index: number) => {
       Column()
         .width(index === 0 ? '100%' : this.deadlineInnerSize(innerInset))
         .height(index === 0 ? '100%' : this.deadlineInnerSize(innerInset))
         .border({
           width: index === 0 ? 1.5 : 1,
-          color: this.yearDeadlineBorderColor(priority)
+          color: DeadlineVisual.color(kind)
         })
         .borderRadius(index === 0 ? outerRadius : innerRadius)
         .hitTestBehavior(HitTestMode.None)
-      }, (priority: CalendarYearDeadlinePriority, index: number) =>
-        priority + '.' + index.toString())
+      }, (kind: DeadlineVisualKind, index: number) => kind + '.' + index.toString())
   }
 
   private deadlineInnerSize(innerInset: number): string {
     return 'calc(100% - ' + innerInset.toString() + 'vp)';
-  }
-
-  private yearDeadlineBorderColor(priority: CalendarYearDeadlinePriority): ResourceColor {
-    if (priority === CalendarYearDeadlinePriority.assignment) {
-      return AppTheme.assignment();
-    }
-    if (priority === CalendarYearDeadlinePriority.schoolNotice) {
-      return AppTheme.schoolNotice();
-    }
-    return AppTheme.publicDeadline();
   }
 
   private presentAllDayDialog(day: DateParts, mode: CalendarMode): void {

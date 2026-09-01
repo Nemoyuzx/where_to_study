@@ -6,10 +6,29 @@ import {
   filterImportantEvents,
   importantEventFavorite,
   importantEventFilterOptions,
+  importantEventVisibleCount,
+  IMPORTANT_EVENT_BATCH_SIZE,
   mergeImportantEventCatalog,
+  nextImportantEventVisibleCount,
   selectShuttleNotice,
   shuttlePeriodState,
 } from '../src/query-domain.js'
+
+test('important events append in bounded UI batches without refetching', () => {
+  assert.equal(IMPORTANT_EVENT_BATCH_SIZE, 20)
+  assert.equal(nextImportantEventVisibleCount(0, 53), 20)
+  assert.equal(nextImportantEventVisibleCount(20, 53), 40)
+  assert.equal(nextImportantEventVisibleCount(40, 53), 53)
+  assert.equal(nextImportantEventVisibleCount(53, 53), 53)
+  assert.equal(nextImportantEventVisibleCount(-4, 8), 8)
+  assert.equal(importantEventVisibleCount({ key: 'old', count: 40 }, 'old', 60), 40)
+  assert.equal(
+    importantEventVisibleCount({ key: 'old', count: 40 }, 'same-length-new-filter', 60),
+    20,
+    'a same-length filter must synchronously hide the old extra batches',
+  )
+  assert.equal(importantEventVisibleCount({ key: '', count: 20 }, 'new', 7), 7)
+})
 
 const shuttlePayload = {
   last_parsed_notice_id: 'parsed',

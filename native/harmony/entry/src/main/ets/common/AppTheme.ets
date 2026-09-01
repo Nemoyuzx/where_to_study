@@ -87,12 +87,53 @@ export class AppTheme {
     return $r('app.color.app_school_notice_surface');
   }
 
+  static competitionDeadline(): Resource {
+    return $r('app.color.app_competition_deadline');
+  }
+
+  static competitionDeadlineSurface(): Resource {
+    return $r('app.color.app_competition_deadline_surface');
+  }
+
+  static conferenceDeadline(): Resource {
+    return $r('app.color.app_conference_deadline');
+  }
+
+  static conferenceDeadlineSurface(): Resource {
+    return $r('app.color.app_conference_deadline_surface');
+  }
+
+  static summerCampDeadline(): Resource {
+    return $r('app.color.app_summer_camp_deadline');
+  }
+
+  static summerCampDeadlineSurface(): Resource {
+    return $r('app.color.app_summer_camp_deadline_surface');
+  }
+
+  static hackathonDeadline(): Resource {
+    return $r('app.color.app_hackathon_deadline');
+  }
+
+  static hackathonDeadlineSurface(): Resource {
+    return $r('app.color.app_hackathon_deadline_surface');
+  }
+
+  static customDeadline(): Resource {
+    return $r('app.color.app_custom_deadline');
+  }
+
+  static customDeadlineSurface(): Resource {
+    return $r('app.color.app_custom_deadline_surface');
+  }
+
+  // 兼容旧调用：公开 DDL 的默认颜色等同于学科竞赛色。
   static publicDeadline(): Resource {
-    return $r('app.color.app_public_deadline');
+    return AppTheme.competitionDeadline();
   }
 
   static publicDeadlineSurface(): Resource {
-    return $r('app.color.app_public_deadline_surface');
+    return AppTheme.competitionDeadlineSurface();
   }
 
   // 主色深档（对应 Android Palette.primaryDark，两模式同值）。

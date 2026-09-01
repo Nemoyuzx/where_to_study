@@ -37,6 +37,16 @@ enum MobileCalendarTimelineLayout {
     }
 }
 
+enum MobileCalendarYearLayout {
+    // The compact calendar intentionally extends beneath UIKit's floating tab bar.
+    // Keep the last mini-month and its tappable dates above that overlay.
+    static let bottomContentInset: CGFloat = 104
+
+    static func contentBottomInset(isLandscape _: Bool) -> CGFloat {
+        bottomContentInset
+    }
+}
+
 enum MobileCalendarAllDayLayout {
     static let height: CGFloat = 40
 

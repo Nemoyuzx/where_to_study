@@ -374,7 +374,7 @@ test('desktop calendar supplements are year-preheated, cached, and rendered in e
   assert.match(appSource, /const monthAgendaEntries = \[/)
   assert.match(appSource, /className=\{`month-entry \$\{entry\.type\}`\}/)
   assert.match(appSource, /className="school-notice"/)
-  assert.match(appSource, /type: 'public-deadline'/)
+  assert.match(appSource, /type: calendarDeadlineVisualKind\(item\)/)
   assert.match(appSource, /deadlineItemEnabled\(item, enabledDeadlineTypes\)/)
   assert.match(appSource, /sourceView: 'month'/)
   assert.match(appSource, /entries: allDayEntriesFor\(dateString\)/)
@@ -386,21 +386,23 @@ test('desktop calendar supplements are year-preheated, cached, and rendered in e
   assert.match(appSource, /agendaViewLabel\(calendarAgendaDialog\.sourceView, t\)/)
   assert.match(appCss, /\.month-cell \.month-entry\.assignment/)
   assert.match(appCss, /\.month-cell \.month-entry\.school-notice/)
-  assert.match(appCss, /\.month-cell \.month-entry\.public-deadline/)
-  assert.match(appCss, /\.time-all-day-cell > \.time-all-day-item\.public-deadline/)
-  assert.match(appCss, /\.calendar-agenda-list \.public-deadline/)
+  for (const kind of ['competition', 'conference', 'summer-camp', 'hackathon', 'custom']) {
+    assert.match(appCss, new RegExp(`\\.month-cell \\.month-entry\\.${kind}-deadline`))
+    assert.match(appCss, new RegExp(`\\.time-all-day-cell > \\.time-all-day-item\\.${kind}-deadline`))
+    assert.match(appCss, new RegExp(`\\.calendar-agenda-list \\.${kind}-deadline`))
+  }
   assert.match(appCss, /\.popover-supplement-list/)
-  assert.match(appCss, /\.popover-supplement-list \.public-deadline/)
+  assert.match(appCss, /\.popover-supplement-list \.conference-deadline/)
   assert.match(appSource, /calendarDeadlineBorderPriority\(supplementalEntries\)/)
   assert.match(appCss, /\.month-cell\.deadline-border-assignment/)
   assert.match(appCss, /\.month-cell\.deadline-border-school-notice/)
-  assert.match(appCss, /\.month-cell\.deadline-border-public-deadline/)
+  assert.match(appCss, /\.month-cell\.deadline-border-competition-deadline/)
   assert.match(appCss, /\.mini-month-grid button\.deadline-border-assignment/)
   assert.match(appCss, /\.mini-month-grid button\.deadline-border-school-notice/)
-  assert.match(appCss, /\.mini-month-grid button\.deadline-border-public-deadline/)
+  assert.match(appCss, /\.mini-month-grid button\.deadline-border-competition-deadline/)
   assert.match(
     appCss,
-    /\.mini-month-grid button\.today\.deadline-border-assignment > span/,
+    /\.mini-month-grid button\.today\[class\*="deadline-border-"\] > span/,
   )
 })
 
@@ -415,7 +417,11 @@ test('desktop school notices preheat after settings load instead of starting on 
 })
 
 test('native calendars render public deadlines, centered agendas, and shared month-year priority', () => {
-  assert.match(appleCalendarSource, /case publicDeadline/)
+  assert.match(appleCalendarSource, /case competition/)
+  assert.match(appleCalendarSource, /case conference/)
+  assert.match(appleCalendarSource, /case summerCamp/)
+  assert.match(appleCalendarSource, /case hackathon/)
+  assert.match(appleCalendarSource, /case customDeadline/)
   assert.match(appleCalendarSource, /CalendarDeadlinePresentation\.topTwoDeadlineKinds/)
   assert.match(appleTimelineSource, /showsSecondaryTodayIndicator/)
   assert.doesNotMatch(appleCalendarSource, /calendar\.regular\.month-agenda-dialog/)
@@ -432,7 +438,8 @@ test('native calendars render public deadlines, centered agendas, and shared mon
   assert.match(appleMobileCalendarSource, /if deadlineKinds\.count > 1/)
   assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)[\s\S]*AppTheme\.danger/)
 
-  assert.match(androidCalendarSource, /PUBLIC_DEADLINE/)
+  assert.match(androidCalendarSource, /DeadlineVisualKind\.COMPETITION/)
+  assert.match(androidCalendarSource, /DeadlineVisualLogic\.color/)
   assert.match(androidCalendarSource, /showCenteredAgendaDialog/)
   assert.match(androidCalendarSource, /monthCellBorderColor/)
   assert.match(androidCalendarSource, /val showsTodayBadge = today && supplementaryKinds\.isNotEmpty\(\)/)
@@ -453,8 +460,7 @@ test('native calendars render public deadlines, centered agendas, and shared mon
   assert.match(androidYearCalendarSource, /today && borderKinds\.isNotEmpty\(\)/)
   assert.match(androidYearCalendarSource, /canvas\.drawCircle\(/)
 
-  assert.match(harmonyCalendarLogicSource, /CalendarYearDeadlinePriority/)
-  assert.match(harmonyCalendarLogicSource, /yearDeadlineBorderLayers/)
+  assert.match(harmonyMobileCalendarSource, /DeadlineVisual\.borderKinds/)
   assert.match(harmonyMobileCalendarSource, /presentAllDayDialog/)
   assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day/)
   assert.doesNotMatch(harmonyExpandedCalendarSource, /monthAllDayDialogOverlay/)
@@ -462,7 +468,7 @@ test('native calendars render public deadlines, centered agendas, and shared mon
     harmonyCalendarLogicSource,
     /supportsAllDayDialog\(mode: CalendarMode\): boolean \{[\s\S]*mode === CalendarMode\.day \|\| mode === CalendarMode\.week/,
   )
-  assert.match(harmonyExpandedCalendarSource, /yearDeadlineBorderColor/)
+  assert.match(harmonyExpandedCalendarSource, /DeadlineVisual\.color\(kind\)/)
   assert.match(harmonyAppModelSource, /assignmentMarkerLoadingDates/)
   assert.match(harmonyAppModelSource, /deadlineMarkerLoadingDates/)
   assert.match(harmonyAppModelSource, /assignmentWork\.finally/)
@@ -497,7 +503,12 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
 
   assert.match(appleSettingsSource, /deadlineLegend\("课程作业 DDL", color: AppTheme\.assignment\)/)
   assert.match(appleSettingsSource, /markerColor: AppTheme\.schoolNotice/)
-  assert.match(appleSettingsSource, /markerColor: AppTheme\.publicDeadline/)
+  for (const color of [
+    'competitionDeadline', 'conferenceDeadline', 'summerCampDeadline',
+    'hackathonDeadline', 'customDeadline',
+  ]) {
+    assert.match(appleSettingsSource, new RegExp(`AppTheme\\.${color}`))
+  }
   assert.match(appleSettingsSource, /Toggle\([\s\S]*\.toggleStyle\(\.switch\)/)
   assert.match(appleSettingsSource, /ForEach\(1 \.\.\. TodayCourseWidgetData\.maximumCourseLimit/)
   assert.match(appleSettingsSource, /Picker\("预览尺寸"/)
@@ -627,7 +638,7 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
     harmonyExpandedCalendarSource,
     /backgroundColor\(day\.equals\(this\.selectedDate\(\)\) \?\s*AppTheme\.selectedDate\(\)/,
   )
-  assert.match(harmonyCalendarLogicSource, /static yearDeadlineBorderLayers/)
+  assert.match(harmonyMobileCalendarSource, /DeadlineVisual\.borderKinds/)
   assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 10, 7, 6\)/)
   assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 4, 2, 4\)/)
   assert.match(harmonyExpandedCalendarSource, /deadlineBorderLayers\(day/)
@@ -645,7 +656,11 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
 
   assert.match(harmonySettingsSource, /deadlineLegend\('课程作业 DDL', AppTheme\.assignment\(\)\)/)
   assert.match(harmonySettingsSource, /'校内竞赛通知'[\s\S]*AppTheme\.schoolNotice\(\), true/)
-  assert.match(harmonySettingsSource, /'学科竞赛 DDL'[\s\S]*AppTheme\.publicDeadline\(\), true/)
+  assert.match(harmonySettingsSource, /'学科竞赛 DDL'[\s\S]*AppTheme\.competitionDeadline\(\), true/)
+  assert.match(harmonySettingsSource, /'学术会议\/期刊专题 DDL'[\s\S]*AppTheme\.conferenceDeadline\(\), true/)
+  assert.match(harmonySettingsSource, /'夏令营\/预推免 DDL'[\s\S]*AppTheme\.summerCampDeadline\(\), true/)
+  assert.match(harmonySettingsSource, /'黑客松 DDL'[\s\S]*AppTheme\.hackathonDeadline\(\), true/)
+  assert.match(harmonySettingsSource, /'显示自定义日程'[\s\S]*AppTheme\.customDeadline\(\), true/)
   assert.match(harmonySettingsSource, /Toggle\(\{ type: ToggleType\.Switch, isOn: isOn \}\)/)
   assert.doesNotMatch(harmonySettingsSource, /\bSelect\(/)
   assert.match(harmonySettingsSource, /segmentedOptions\(labels: string\[\]/)
@@ -916,5 +931,9 @@ test('light and dark text combinations meet WCAG AA contrast', () => {
     assertContrast(tokens, '--gold-text', '--gold-surface')
     assertContrast(tokens, '--error-text', '--error-surface')
     assertContrast(tokens, '--other-deadline-text', '--other-deadline-surface')
+    assertContrast(tokens, '--school-notice-text', '--school-notice-surface')
+    for (const kind of ['competition', 'conference', 'summer-camp', 'hackathon', 'custom']) {
+      assertContrast(tokens, `--${kind}-deadline-text`, `--${kind}-deadline-surface`)
+    }
   }
 })

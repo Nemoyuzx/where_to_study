@@ -1,10 +1,13 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,6 +23,88 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class InformationQueryUiTest {
+    @Test
+    fun importantEventsAppendAutomaticallyNearTheBottomWithoutALoadMoreButton() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val preferences = AppPreferences(context)
+        val previousFavorites = preferences.favoriteDeadlines
+        previousFavorites.forEach { preferences.setFavorite(it, favorite = false) }
+        val pagingFavorites = (1..25).map { index ->
+            PublicDeadlineItem(
+                id = "paging-$index",
+                name = "Paging event $index",
+                kind = PublicDeadlineKind.COMPETITION,
+                source = PublicDeadlineSource.CONTEST_DDL,
+                deadline = "2035-01-${index.toString().padStart(2, '0')}T12:00:00+08:00",
+                organizer = "Paging test",
+                officialURL = null,
+            )
+        }
+        pagingFavorites.forEach { preferences.setFavorite(it, favorite = true) }
+        val intent = Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        try {
+            ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
+                    assertTrue(
+                        activity.findViewById<View>(R.id.information_query_events_tab).performClick(),
+                    )
+                }
+                instrumentation.waitForIdleSync()
+                assertTrue(
+                    UiDevice.getInstance(instrumentation).wait(
+                        Until.hasObject(By.text(context.uiText("示例学术会议"))),
+                        5_000,
+                    ),
+                )
+
+                scenario.onActivity { activity ->
+                    val list = activity.findViewById<LinearLayout>(
+                        R.id.information_query_events_list,
+                    )
+                    assertEquals(InformationQuerySessionState.INITIAL_EVENT_COUNT, list.childCount)
+                    assertTrue("A load-more button must not be rendered", "加载更多" !in descendantText(list))
+                    activity.findViewById<ScrollView>(R.id.information_query_events_scroll)
+                        .fullScroll(View.FOCUS_DOWN)
+                }
+                instrumentation.waitForIdleSync()
+
+                scenario.onActivity { activity ->
+                    val list = activity.findViewById<LinearLayout>(
+                        R.id.information_query_events_list,
+                    )
+                    assertEquals(30, list.childCount)
+                    assertTrue("加载更多" !in descendantText(list))
+                    assertTrue(
+                        activity.findViewById<ImageView>(R.id.information_query_event_favorite)
+                            .performClick(),
+                    )
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(
+                        "A favorite-triggered view rebuild must preserve the loaded batch",
+                        30,
+                        activity.findViewById<LinearLayout>(
+                            R.id.information_query_events_list,
+                        ).childCount,
+                    )
+                }
+            }
+        } finally {
+            val restoredPreferences = AppPreferences(context)
+            restoredPreferences.favoriteDeadlines.forEach {
+                restoredPreferences.setFavorite(it, favorite = false)
+            }
+            previousFavorites.reversed().forEach {
+                restoredPreferences.setFavorite(it, favorite = true)
+            }
+        }
+    }
+
     @Test
     fun queryIsAnIndependentPrimaryDestinationInTheRequiredNavigationOrder() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -174,6 +259,41 @@ class InformationQueryUiTest {
             scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
                 assertNotNull(activity.findViewById<View?>(R.id.settings_conference_deadlines_switch))
+                assertLegendColor(
+                    activity,
+                    R.id.settings_assignment_deadline_legend_dot,
+                    Palette.assignment,
+                )
+                assertLegendColor(
+                    activity,
+                    R.id.settings_competition_deadlines_dot,
+                    Palette.publicDeadline,
+                )
+                assertLegendColor(
+                    activity,
+                    R.id.settings_conference_deadlines_dot,
+                    Palette.conferenceDeadline,
+                )
+                assertLegendColor(
+                    activity,
+                    R.id.settings_school_contest_notices_dot,
+                    Palette.schoolNotice,
+                )
+                assertLegendColor(
+                    activity,
+                    R.id.settings_summer_camp_deadlines_dot,
+                    Palette.summerCampDeadline,
+                )
+                assertLegendColor(
+                    activity,
+                    R.id.settings_hackathon_deadlines_dot,
+                    Palette.hackathonDeadline,
+                )
+                assertLegendColor(
+                    activity,
+                    R.id.settings_custom_deadlines_dot,
+                    Palette.customDeadline,
+                )
                 val settingsPage = activity.findViewById<View>(R.id.page_settings)
                 assertTrue(!descendantText(settingsPage).contains(activity.uiText("班车与重要事件查询")))
                 assertNotNull(activity.findViewById<View?>(R.id.navigation_query))
@@ -196,4 +316,10 @@ class InformationQueryUiTest {
     private fun findTextChild(row: ViewGroup, text: String): TextView = (0 until row.childCount)
         .mapNotNull { row.getChildAt(it) as? TextView }
         .first { it.text.toString() == text }
+
+    private fun assertLegendColor(activity: MainActivity, viewID: Int, expected: Int) {
+        val background = activity.findViewById<View>(viewID).background as GradientDrawable
+        assertEquals(expected, background.color?.defaultColor)
+    }
+
 }

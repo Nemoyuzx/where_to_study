@@ -1005,6 +1005,24 @@ final class ScheduleLogicTests: XCTestCase {
             organizer: nil,
             officialURL: nil
         )
+        let journal = PublicDeadlineItem(
+            id: "journal",
+            name: "期刊专题原文",
+            kind: .journalSpecialIssue,
+            source: .contestDDL,
+            deadline: "2026-08-23T21:40:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
+        let preAdmission = PublicDeadlineItem(
+            id: "pre-admission",
+            name: "预推免原文",
+            kind: .preAdmission,
+            source: .contestDDL,
+            deadline: "2026-08-23T21:50:00+08:00",
+            organizer: nil,
+            officialURL: nil
+        )
         let custom = PublicDeadlineItem(
             id: "custom",
             name: "自定义原文",
@@ -1060,6 +1078,22 @@ final class ScheduleLogicTests: XCTestCase {
             summerCampEnabled: true,
             hackathonEnabled: true
         ))
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            journal,
+            competitionEnabled: false,
+            schoolNoticeEnabled: false,
+            conferenceEnabled: true,
+            summerCampEnabled: false,
+            hackathonEnabled: false
+        ))
+        XCTAssertTrue(CalendarDeadlinePresentation.isVisible(
+            preAdmission,
+            competitionEnabled: false,
+            schoolNoticeEnabled: false,
+            conferenceEnabled: false,
+            summerCampEnabled: true,
+            hackathonEnabled: false
+        ))
         XCTAssertFalse(CalendarDeadlinePresentation.isVisible(
             contest,
             competitionEnabled: false,
@@ -1083,6 +1117,15 @@ final class ScheduleLogicTests: XCTestCase {
             hackathonEnabled: true,
             customEnabled: false
         ))
+
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: contest), .competition)
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: school), .schoolNotice)
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: conference), .conference)
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: journal), .conference)
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: summerCamp), .summerCamp)
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: preAdmission), .summerCamp)
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: hackathon), .hackathon)
+        XCTAssertEqual(CalendarDeadlinePresentation.eventKind(for: custom), .customDeadline)
     }
 
     func testCalendarDeadlineBorderPriorityIsAssignmentThenSchoolThenPublic() {
@@ -1090,7 +1133,12 @@ final class ScheduleLogicTests: XCTestCase {
         let publicDDL = CalendarAllDayEvent(
             id: "public",
             title: "公开竞赛原文",
-            kind: .publicDeadline
+            kind: .competition
+        )
+        let conference = CalendarAllDayEvent(
+            id: "conference",
+            title: "会议原文",
+            kind: .conference
         )
         let school = CalendarAllDayEvent(
             id: "school",
@@ -1107,11 +1155,11 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(CalendarDeadlinePresentation.topTwoDeadlineKinds(in: [holiday]), [])
         XCTAssertEqual(
             CalendarDeadlinePresentation.preferredDeadlineKind(in: [holiday, publicDDL]),
-            .publicDeadline
+            .competition
         )
         XCTAssertEqual(
             CalendarDeadlinePresentation.topTwoDeadlineKinds(in: [holiday, publicDDL]),
-            [.publicDeadline]
+            [.competition]
         )
         XCTAssertEqual(
             CalendarDeadlinePresentation.preferredDeadlineKind(in: [publicDDL, school]),
@@ -1119,7 +1167,12 @@ final class ScheduleLogicTests: XCTestCase {
         )
         XCTAssertEqual(
             CalendarDeadlinePresentation.topTwoDeadlineKinds(in: [publicDDL, school]),
-            [.schoolNotice, .publicDeadline]
+            [.schoolNotice, .competition]
+        )
+        XCTAssertEqual(
+            CalendarDeadlinePresentation.topTwoDeadlineKinds(in: [conference, publicDDL]),
+            [.competition, .conference],
+            "Distinct public DDL categories should retain two independent border colors"
         )
         XCTAssertEqual(
             CalendarDeadlinePresentation.preferredDeadlineKind(in: [school, assignment, publicDDL]),
@@ -1138,7 +1191,7 @@ final class ScheduleLogicTests: XCTestCase {
         ))
         XCTAssertTrue(CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
             isToday: true,
-            deadlineKind: .publicDeadline
+            deadlineKind: .competition
         ))
         XCTAssertFalse(CalendarDeadlinePresentation.showsSecondaryTodayIndicator(
             isToday: true,
@@ -2043,12 +2096,20 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     #if os(iOS)
-    func testLandscapeCalendarRemovesPortraitTabBarInset() {
+    func testLandscapeTimelineRemovesInsetWhileYearKeepsTabBarClearance() {
         XCTAssertEqual(
             MobileCalendarTimelineLayout.contentBottomInset(isLandscape: false),
             MobileCalendarTimelineLayout.bottomContentInset
         )
         XCTAssertEqual(MobileCalendarTimelineLayout.contentBottomInset(isLandscape: true), 0)
+        XCTAssertEqual(
+            MobileCalendarYearLayout.contentBottomInset(isLandscape: false),
+            MobileCalendarYearLayout.bottomContentInset
+        )
+        XCTAssertEqual(
+            MobileCalendarYearLayout.contentBottomInset(isLandscape: true),
+            MobileCalendarYearLayout.bottomContentInset
+        )
     }
     #endif
 

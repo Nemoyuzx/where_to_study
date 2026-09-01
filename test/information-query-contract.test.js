@@ -131,6 +131,33 @@ test('important-event queries retain metadata, hide ended items, and never inclu
   assert.doesNotMatch(harmonyQuery, /assignmentDeadlines|loadAssignments/)
 })
 
+test('desktop important events render a small first batch and append near the scroll edge', () => {
+  assert.match(queryHub, /importantEventVisibleCount\([\s\S]*eventRenderWindow,[\s\S]*eventRenderKey/)
+  assert.match(queryHub, /if \(current\.key !== eventRenderKey\) return current/)
+  assert.match(queryHub, /new IntersectionObserver[\s\S]*rootMargin: '320px 0px'/)
+  assert.match(queryHub, /eventLoadSentinelRef[\s\S]*nextImportantEventVisibleCount/)
+  assert.doesNotMatch(queryHub, /className="event-load-more"/)
+})
+
+test('all graphical clients incrementally render important events without paging the network', () => {
+  assert.match(appleQuery, /ImportantEventIncrementalRendering[\s\S]*static let batchSize = 20/)
+  assert.match(appleQuery, /ForEach\(Array\(visibleItems\.enumerated\(\)\)/)
+  assert.match(appleQuery, /\.onAppear[\s\S]*loadMoreImportantEventsIfNeeded/)
+
+  assert.match(androidQuery, /INITIAL_EVENT_COUNT = 20/)
+  assert.match(androidQuery, /EVENT_PAGE_SIZE = 20/)
+  assert.match(androidQuery, /setOnScrollChangeListener[\s\S]*appendImportantEventPage/)
+  assert.doesNotMatch(androidQuery, /text = "加载更多"/)
+
+  assert.match(harmonyLogic, /static readonly pageSize: number = 20/)
+  assert.match(harmonyQuery, /List\(\{ space: 9, scroller: this\.eventScroller \}\)/)
+  assert.match(harmonyQuery, /\.onScrollIndex[\s\S]*this\.appendEventPage\(end\)/)
+
+  for (const source of [queryHub, appleQuery, androidQuery, harmonyQuery]) {
+    assert.doesNotMatch(source, /fetch_important_events[\s\S]{0,120}(?:visibleCount|requestedVisibleEventCount)/)
+  }
+})
+
 test('event-query network loading is independent from segment animation and shared where available', () => {
   assert.match(queryHub, /void loadShuttle\(\)[\s\S]*void loadImportantEvents\(\)/)
   assert.doesNotMatch(queryHub, /useEffect\([^)]*tab/)

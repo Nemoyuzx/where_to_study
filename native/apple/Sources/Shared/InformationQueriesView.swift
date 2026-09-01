@@ -157,6 +157,28 @@ enum ImportantEventQueryLogic {
     }
 }
 
+enum ImportantEventIncrementalRendering {
+    static let batchSize = 20
+    static let preloadThreshold = 4
+
+    static func visibleCount(totalCount: Int, requestedCount: Int) -> Int {
+        min(max(0, requestedCount), max(0, totalCount))
+    }
+
+    static func shouldLoadNextBatch(
+        appearingIndex: Int,
+        visibleCount: Int,
+        totalCount: Int
+    ) -> Bool {
+        guard visibleCount > 0, visibleCount < totalCount else { return false }
+        return appearingIndex >= max(0, visibleCount - preloadThreshold)
+    }
+
+    static func nextRequestedCount(currentCount: Int, totalCount: Int) -> Int {
+        min(max(0, totalCount), max(batchSize, currentCount + batchSize))
+    }
+}
+
 private extension Array where Element == String {
     func appending(contentsOf values: [String]) -> [String] {
         self + values
@@ -231,6 +253,7 @@ struct InformationQueriesView: View {
     @State private var selectedCategory: ImportantEventCategory = .all
     @State private var selectedMetadataCategory = ""
     @State private var showsEndedEvents = false
+    @State private var requestedVisibleEventCount = ImportantEventIncrementalRendering.batchSize
 
     var body: some View {
         GeometryReader { proxy in
@@ -478,6 +501,11 @@ struct InformationQueriesView: View {
             metadataCategory: effectiveMetadataCategory,
             showsEnded: showsEndedEvents
         )
+        let visibleCount = ImportantEventIncrementalRendering.visibleCount(
+            totalCount: filtered.count,
+            requestedCount: requestedVisibleEventCount
+        )
+        let visibleItems = Array(filtered.prefix(visibleCount))
 
         return VStack(alignment: .leading, spacing: 14) {
             Surface {
@@ -611,8 +639,15 @@ struct InformationQueriesView: View {
                 )
             } else {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(filtered, id: \.favoriteID) { item in
+                    ForEach(Array(visibleItems.enumerated()), id: \.element.favoriteID) { index, item in
                         importantEventRow(item)
+                            .onAppear {
+                                loadMoreImportantEventsIfNeeded(
+                                    appearingIndex: index,
+                                    visibleCount: visibleItems.count,
+                                    totalCount: filtered.count
+                                )
+                            }
                     }
                 }
             }
@@ -637,11 +672,39 @@ struct InformationQueriesView: View {
                 availableCategories: categories
             )
         }
+        .onChange(of: searchText) { _ in resetImportantEventRendering() }
+        .onChange(of: selectedCategory) { _ in resetImportantEventRendering() }
+        .onChange(of: selectedMetadataCategory) { _ in resetImportantEventRendering() }
+        .onChange(of: showsEndedEvents) { _ in resetImportantEventRendering() }
+    }
+
+    private func resetImportantEventRendering() {
+        requestedVisibleEventCount = ImportantEventIncrementalRendering.batchSize
+    }
+
+    private func loadMoreImportantEventsIfNeeded(
+        appearingIndex: Int,
+        visibleCount: Int,
+        totalCount: Int
+    ) {
+        // Several rows near the boundary may appear in the same layout pass. Only the
+        // first one is allowed to advance this page; later callbacks still carry the
+        // old visibleCount and must not skip additional batches.
+        guard requestedVisibleEventCount == visibleCount else { return }
+        guard ImportantEventIncrementalRendering.shouldLoadNextBatch(
+            appearingIndex: appearingIndex,
+            visibleCount: visibleCount,
+            totalCount: totalCount
+        ) else { return }
+        requestedVisibleEventCount = ImportantEventIncrementalRendering.nextRequestedCount(
+            currentCount: requestedVisibleEventCount,
+            totalCount: totalCount
+        )
     }
 
     private func importantEventRow(_ item: PublicDeadlineItem) -> some View {
         let isFavorite = model.isFavorite(item)
-        let tint = item.source == .schoolNotice ? AppTheme.schoolNotice : AppTheme.publicDeadline
+        let tint = CalendarDeadlinePresentation.tint(for: item)
         return Surface {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: item.kind.systemImage)

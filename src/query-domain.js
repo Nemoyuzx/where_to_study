@@ -17,6 +17,29 @@ export const IMPORTANT_EVENT_TYPES = Object.freeze([
   'pre_admission',
 ])
 
+export const IMPORTANT_EVENT_BATCH_SIZE = 20
+
+export function nextImportantEventVisibleCount(
+  currentCount,
+  totalCount,
+  batchSize = IMPORTANT_EVENT_BATCH_SIZE,
+) {
+  const total = Math.max(0, Math.trunc(Number(totalCount) || 0))
+  const current = Math.max(0, Math.trunc(Number(currentCount) || 0))
+  const batch = Math.max(1, Math.trunc(Number(batchSize) || IMPORTANT_EVENT_BATCH_SIZE))
+  return Math.min(total, current + batch)
+}
+
+export function importantEventVisibleCount(renderWindow, renderKey, totalCount) {
+  const requested = renderWindow?.key === renderKey
+    ? renderWindow.count
+    : IMPORTANT_EVENT_BATCH_SIZE
+  return Math.min(
+    Math.max(0, Math.trunc(Number(totalCount) || 0)),
+    Math.max(0, Math.trunc(Number(requested) || 0)),
+  )
+}
+
 export function shuttlePeriodKey(period = {}) {
   return `${period.start_date || 'unknown'}:${period.end_date || 'open'}:${period.label || ''}`
 }

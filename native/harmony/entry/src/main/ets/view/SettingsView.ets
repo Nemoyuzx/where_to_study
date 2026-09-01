@@ -707,23 +707,23 @@ export struct SettingsView {
       this.featureToggle('学科竞赛 DDL', this.model.competitionDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setCompetitionDeadlinesEnabled(value);
-        }, AppTheme.publicDeadline(), true)
-      this.featureToggle('学术会议 DDL', this.model.conferenceDeadlinesEnabled,
+        }, AppTheme.competitionDeadline(), true)
+      this.featureToggle('学术会议/期刊专题 DDL', this.model.conferenceDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setConferenceDeadlinesEnabled(value);
-        }, AppTheme.publicDeadline(), true)
+        }, AppTheme.conferenceDeadline(), true)
       this.featureToggle('校内竞赛通知', this.model.schoolContestNoticesEnabled,
         (value: boolean): void => {
           this.model.setSchoolContestNoticesEnabled(value);
         }, AppTheme.schoolNotice(), true)
-      this.featureToggle('夏令营 DDL', this.model.summerCampDeadlinesEnabled,
+      this.featureToggle('夏令营/预推免 DDL', this.model.summerCampDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setSummerCampDeadlinesEnabled(value);
-        }, AppTheme.publicDeadline(), true)
+        }, AppTheme.summerCampDeadline(), true)
       this.featureToggle('黑客松 DDL', this.model.hackathonDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setHackathonDeadlinesEnabled(value);
-        }, AppTheme.publicDeadline(), true)
+        }, AppTheme.hackathonDeadline(), true)
 
       Divider()
         .color(AppTheme.border())
@@ -748,7 +748,7 @@ export struct SettingsView {
           this.model.setCustomDeadlinesEnabled(value).catch(() => {
             this.model.statusMessage = '无法保存自定义日程开关';
           });
-        }, AppTheme.publicDeadline(), true)
+        }, AppTheme.customDeadline(), true)
       this.linkButton('收藏管理', (): void => {
         this.setFavoriteManagerVisible(true);
       })

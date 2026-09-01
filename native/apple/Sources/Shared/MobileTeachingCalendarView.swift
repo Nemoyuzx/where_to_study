@@ -792,13 +792,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func allDayEventTint(_ kind: CalendarAllDayEventKind) -> Color {
-        switch kind {
-        case .holiday: AppTheme.danger
-        case .workday: AppTheme.primary
-        case .assignment: AppTheme.assignment
-        case .schoolNotice: AppTheme.schoolNotice
-        case .publicDeadline: AppTheme.publicDeadline
-        }
+        CalendarDeadlinePresentation.tint(for: kind)
     }
 
     private var monthView: some View {
@@ -1323,7 +1317,7 @@ struct MobileTeachingCalendarView: View {
                 id: "\(dateKey)-public-\(item.id)",
                 title: item.name,
                 categoryKey: item.kind.title,
-                tint: AppTheme.publicDeadline,
+                tint: CalendarDeadlinePresentation.tint(for: item),
                 deadlineItem: item
             )
         }
@@ -1358,7 +1352,12 @@ struct MobileTeachingCalendarView: View {
                 }
             }
             .padding(16)
-            .padding(.bottom, 16)
+            .padding(
+                .bottom,
+                MobileCalendarYearLayout.contentBottomInset(
+                    isLandscape: usesLandscapeMonthStops
+                )
+            )
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("calendar.mobile.year")
@@ -1702,9 +1701,7 @@ struct MobileTeachingCalendarView: View {
     private func mobileDeadlineRowContent(_ item: PublicDeadlineItem) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: item.kind.systemImage)
-                .foregroundStyle(
-                    item.source == .schoolNotice ? AppTheme.schoolNotice : AppTheme.publicDeadline
-                )
+                .foregroundStyle(CalendarDeadlinePresentation.tint(for: item))
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
@@ -1860,13 +1857,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func allDayEventCategoryKey(_ kind: CalendarAllDayEventKind) -> String {
-        switch kind {
-        case .holiday: "法定节假日"
-        case .workday: "调休工作日"
-        case .assignment: "课程作业 DDL"
-        case .schoolNotice: "校内竞赛通知"
-        case .publicDeadline: "公开活动 DDL"
-        }
+        CalendarDeadlinePresentation.categoryKey(for: kind)
     }
 
     private func detailSheet(_ selection: MobileCalendarDetailSelection) -> some View {
@@ -1981,10 +1972,19 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func compactPublicDeadlineDetail(_ items: [PublicDeadlineItem]) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        let kinds = CalendarDeadlinePresentation.topTwoDeadlineKinds(
+            in: items.map { item in
+                CalendarAllDayEvent(
+                    id: item.favoriteID,
+                    title: item.name,
+                    kind: CalendarDeadlinePresentation.eventKind(for: item)
+                )
+            }
+        )
+        return VStack(alignment: .leading, spacing: 9) {
             Label("公开活动 DDL", systemImage: "flag.checkered")
                 .font(.headline)
-                .foregroundStyle(AppTheme.publicDeadline)
+                .foregroundStyle(AppTheme.text)
             ForEach(items) { item in
                 mobileDeadlineRow(item)
             }
@@ -1992,7 +1992,19 @@ struct MobileTeachingCalendarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(AppTheme.surface)
-        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.publicDeadline.opacity(0.5)) }
+        .overlay {
+            ZStack {
+                if let first = kinds.first {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(allDayEventTint(first).opacity(0.65), lineWidth: 1.5)
+                }
+                if kinds.count > 1 {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(allDayEventTint(kinds[1]).opacity(0.65), lineWidth: 1)
+                        .padding(3)
+                }
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.day-detail.public-deadlines")
     }
@@ -2205,7 +2217,7 @@ struct MobileTeachingCalendarView: View {
                 id: "\(dateKey)-public-\(item.id)",
                 title: item.name,
                 time: deadlineTime(item.deadline),
-                kind: .publicDeadline,
+                kind: CalendarDeadlinePresentation.eventKind(for: item),
                 deadlineItem: item
             )
         }

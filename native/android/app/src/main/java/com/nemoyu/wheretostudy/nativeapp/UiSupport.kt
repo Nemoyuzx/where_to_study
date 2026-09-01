@@ -36,6 +36,10 @@ data class ThemeColors(
     val assignment: Int,
     val schoolNotice: Int,
     val publicDeadline: Int,
+    val conferenceDeadline: Int,
+    val summerCampDeadline: Int,
+    val hackathonDeadline: Int,
+    val customDeadline: Int,
     val outOfMonth: Int,
     val selectionSurface: Int,
     val segmentedSelection: Int,
@@ -53,8 +57,10 @@ object ThemePalettes {
         border = 0xFFC6C6C8.toInt(), danger = 0xFF8A2D1C.toInt(),
         dangerSurface = 0xFFFFF2F1.toInt(), dangerBorder = 0xFFFFB8B3.toInt(),
         nowIndicator = 0xFFFF3B30.toInt(), holiday = 0xFFC62835.toInt(),
-        assignment = 0xFF9A6500.toInt(), schoolNotice = 0xFF5B4BC4.toInt(),
-        publicDeadline = 0xFF007C91.toInt(),
+        assignment = 0xFF9A6500.toInt(), schoolNotice = 0xFFB42368.toInt(),
+        publicDeadline = 0xFF006B75.toInt(),
+        conferenceDeadline = 0xFF6D3CC3.toInt(), summerCampDeadline = 0xFF2E7D46.toInt(),
+        hackathonDeadline = 0xFFC4511C.toInt(), customDeadline = 0xFF51697F.toInt(),
         outOfMonth = 0xFF6E6E73.toInt(), selectionSurface = 0xFFDDECE8.toInt(),
         segmentedSelection = 0xFFFFFFFF.toInt(),
     )
@@ -70,8 +76,10 @@ object ThemePalettes {
         border = 0xFF38383A.toInt(), danger = 0xFFFFB4A2.toInt(),
         dangerSurface = 0xFF3B1715.toInt(), dangerBorder = 0xFF7D312C.toInt(),
         nowIndicator = 0xFFFF453A.toInt(), holiday = 0xFFFF9A9D.toInt(),
-        assignment = 0xFFFFC14D.toInt(), schoolNotice = 0xFFB7A8FF.toInt(),
+        assignment = 0xFFFFC14D.toInt(), schoolNotice = 0xFFF28AB8.toInt(),
         publicDeadline = 0xFF68D5E5.toInt(),
+        conferenceDeadline = 0xFFC4A7F5.toInt(), summerCampDeadline = 0xFF72D68C.toInt(),
+        hackathonDeadline = 0xFFFF9B64.toInt(), customDeadline = 0xFF9CB0C4.toInt(),
         outOfMonth = 0xFF98989D.toInt(), selectionSurface = 0xFF233A35.toInt(),
         segmentedSelection = 0xFF636366.toInt(),
     )
@@ -107,6 +115,10 @@ object Palette {
     val assignment get() = colors.assignment
     val schoolNotice get() = colors.schoolNotice
     val publicDeadline get() = colors.publicDeadline
+    val conferenceDeadline get() = colors.conferenceDeadline
+    val summerCampDeadline get() = colors.summerCampDeadline
+    val hackathonDeadline get() = colors.hackathonDeadline
+    val customDeadline get() = colors.customDeadline
     val outOfMonth get() = colors.outOfMonth
     val selectionSurface get() = colors.selectionSurface
     val segmentedSelection get() = colors.segmentedSelection
@@ -114,6 +126,69 @@ object Palette {
     fun configure(context: Context) {
         colors = ThemePalettes.forConfiguration(context.resources.configuration)
     }
+}
+
+enum class DeadlineVisualKind {
+    ASSIGNMENT,
+    SCHOOL_NOTICE,
+    COMPETITION,
+    CONFERENCE_OR_JOURNAL,
+    SUMMER_CAMP_OR_PRE_ADMISSION,
+    HACKATHON,
+    CUSTOM,
+}
+
+object DeadlineVisualLogic {
+    /**
+     * One semantic mapping is shared by settings legends, calendar markers,
+     * detail rows and query cards so a source cannot change color by view.
+     */
+    fun kind(item: PublicDeadlineItem): DeadlineVisualKind = when {
+        item.source == PublicDeadlineSource.SCHOOL_NOTICE -> DeadlineVisualKind.SCHOOL_NOTICE
+        item.source == PublicDeadlineSource.CUSTOM || item.kind == PublicDeadlineKind.CUSTOM ->
+            DeadlineVisualKind.CUSTOM
+        item.kind == PublicDeadlineKind.COMPETITION -> DeadlineVisualKind.COMPETITION
+        item.kind == PublicDeadlineKind.CONFERENCE ||
+            item.kind == PublicDeadlineKind.JOURNAL_SPECIAL_ISSUE ->
+            DeadlineVisualKind.CONFERENCE_OR_JOURNAL
+        item.kind == PublicDeadlineKind.SUMMER_CAMP ||
+            item.kind == PublicDeadlineKind.PRE_ADMISSION ->
+            DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION
+        item.kind == PublicDeadlineKind.HACKATHON -> DeadlineVisualKind.HACKATHON
+        else -> DeadlineVisualKind.CUSTOM
+    }
+
+    fun color(kind: DeadlineVisualKind): Int = when (kind) {
+        DeadlineVisualKind.ASSIGNMENT -> Palette.assignment
+        DeadlineVisualKind.SCHOOL_NOTICE -> Palette.schoolNotice
+        DeadlineVisualKind.COMPETITION -> Palette.publicDeadline
+        DeadlineVisualKind.CONFERENCE_OR_JOURNAL -> Palette.conferenceDeadline
+        DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION -> Palette.summerCampDeadline
+        DeadlineVisualKind.HACKATHON -> Palette.hackathonDeadline
+        DeadlineVisualKind.CUSTOM -> Palette.customDeadline
+    }
+
+    fun color(item: PublicDeadlineItem): Int = color(kind(item))
+
+    fun orderedKinds(
+        assignmentCount: Int,
+        items: Collection<PublicDeadlineItem>,
+    ): List<DeadlineVisualKind> {
+        val present = items.mapTo(mutableSetOf(), ::kind)
+        return buildList {
+            if (assignmentCount > 0) add(DeadlineVisualKind.ASSIGNMENT)
+            addAll(priority.filter(present::contains))
+        }
+    }
+
+    private val priority = listOf(
+        DeadlineVisualKind.SCHOOL_NOTICE,
+        DeadlineVisualKind.COMPETITION,
+        DeadlineVisualKind.CONFERENCE_OR_JOURNAL,
+        DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION,
+        DeadlineVisualKind.HACKATHON,
+        DeadlineVisualKind.CUSTOM,
+    )
 }
 
 object UiMetrics {

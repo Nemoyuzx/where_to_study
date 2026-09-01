@@ -2,6 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
 } from '../main/ets/common/QueryLogic';
+import { DeadlineVisual, DeadlineVisualKind } from '../main/ets/common/DeadlineVisual';
 import {
   PublicDeadlineItem, PublicDeadlineKind, PublicDeadlineResponseParser,
   PublicDeadlineSource
@@ -128,10 +129,75 @@ export default function queryLogicTest() {
         items, '', ImportantEventFilter.all, '', true, now);
       expect(all.length).assertEqual(3);
     });
+
+    it('important_events_render_in_twenty_item_batches_near_the_list_end', 0, () => {
+      const items: PublicDeadlineItem[] = [];
+      for (let index: number = 0; index < 45; index++) {
+        items.push(new PublicDeadlineItem('item-' + index.toString(),
+          'Item ' + index.toString(), PublicDeadlineKind.competition,
+          PublicDeadlineSource.contestDDL, '2026-09-30T12:00:00+08:00', null, null));
+      }
+      const initial: number = ImportantEventQueryLogic.initialRequestedCount();
+      expect(initial).assertEqual(20);
+      expect(ImportantEventQueryLogic.visiblePage(items, initial).length).assertEqual(20);
+      expect(ImportantEventQueryLogic.shouldAppend(15, 20, 45)).assertFalse();
+      expect(ImportantEventQueryLogic.shouldAppend(16, 20, 45)).assertTrue();
+      const second: number = ImportantEventQueryLogic.nextRequestedCount(initial, items.length);
+      expect(second).assertEqual(40);
+      expect(ImportantEventQueryLogic.visiblePage(items, second).length).assertEqual(40);
+      const finalCount: number = ImportantEventQueryLogic.nextRequestedCount(second, items.length);
+      expect(finalCount).assertEqual(45);
+      expect(ImportantEventQueryLogic.shouldAppend(44, 45, 45)).assertFalse();
+      // 搜索/筛选/数据变化均回到这个纯逻辑入口，不继承上一份结果的 40/45 条额度。
+      expect(ImportantEventQueryLogic.visiblePage(items, initial).length).assertEqual(20);
+    });
+
+    it('deadline_visual_mapping_keeps_switch_groups_and_two_layer_priority', 0, () => {
+      const competition: PublicDeadlineItem = visualEvent('competition',
+        PublicDeadlineKind.competition, PublicDeadlineSource.contestDDL);
+      const conference: PublicDeadlineItem = visualEvent('conference',
+        PublicDeadlineKind.conference, PublicDeadlineSource.contestDDL);
+      const journal: PublicDeadlineItem = visualEvent('journal',
+        PublicDeadlineKind.journalSpecialIssue, PublicDeadlineSource.contestDDL);
+      const school: PublicDeadlineItem = visualEvent('school',
+        PublicDeadlineKind.competition, PublicDeadlineSource.schoolNotice);
+      const summer: PublicDeadlineItem = visualEvent('summer',
+        PublicDeadlineKind.summerCamp, PublicDeadlineSource.contestDDL);
+      const admission: PublicDeadlineItem = visualEvent('admission',
+        PublicDeadlineKind.preAdmission, PublicDeadlineSource.contestDDL);
+      const hackathon: PublicDeadlineItem = visualEvent('hackathon',
+        PublicDeadlineKind.hackathon, PublicDeadlineSource.contestDDL);
+      const custom: PublicDeadlineItem = visualEvent('custom',
+        PublicDeadlineKind.competition, PublicDeadlineSource.custom);
+      expect(DeadlineVisual.kind(competition)).assertEqual(DeadlineVisualKind.competition);
+      expect(DeadlineVisual.kind(conference)).assertEqual(DeadlineVisualKind.conferenceOrJournal);
+      expect(DeadlineVisual.kind(journal)).assertEqual(DeadlineVisualKind.conferenceOrJournal);
+      expect(DeadlineVisual.kind(school)).assertEqual(DeadlineVisualKind.schoolNotice);
+      expect(DeadlineVisual.kind(summer)).assertEqual(DeadlineVisualKind.summerCampOrPreAdmission);
+      expect(DeadlineVisual.kind(admission)).assertEqual(DeadlineVisualKind.summerCampOrPreAdmission);
+      expect(DeadlineVisual.kind(hackathon)).assertEqual(DeadlineVisualKind.hackathon);
+      expect(DeadlineVisual.kind(custom)).assertEqual(DeadlineVisualKind.custom);
+
+      const assignmentFirst: DeadlineVisualKind[] = DeadlineVisual.borderKinds(
+        1, [conference, school, competition]);
+      expect(assignmentFirst.length).assertEqual(2);
+      expect(assignmentFirst[0]).assertEqual(DeadlineVisualKind.assignment);
+      expect(assignmentFirst[1]).assertEqual(DeadlineVisualKind.schoolNotice);
+      const schoolFirst: DeadlineVisualKind[] = DeadlineVisual.borderKinds(
+        0, [conference, school]);
+      expect(schoolFirst[0]).assertEqual(DeadlineVisualKind.schoolNotice);
+      expect(schoolFirst[1]).assertEqual(DeadlineVisualKind.conferenceOrJournal);
+    });
   });
 }
 
 function event(kind: string, name: string, deadline: string): string {
   return '{"id":"' + name + '","name":"' + name + '","event_type":"' + kind +
     '","primary_deadline":"' + deadline + '"}';
+}
+
+function visualEvent(id: string, kind: PublicDeadlineKind,
+  source: PublicDeadlineSource): PublicDeadlineItem {
+  return new PublicDeadlineItem(id, id, kind, source,
+    '2026-09-30T12:00:00+08:00', null, null);
 }

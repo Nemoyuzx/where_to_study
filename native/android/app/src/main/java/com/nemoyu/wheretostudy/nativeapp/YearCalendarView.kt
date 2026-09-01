@@ -20,14 +20,8 @@ data class YearCalendarDay(
     val date: Calendar,
     val courseCount: Int,
     val holidays: List<HolidayItem>,
-    val supplementaryKinds: List<YearCalendarSupplementaryKind> = emptyList(),
+    val supplementaryKinds: List<DeadlineVisualKind> = emptyList(),
 )
-
-enum class YearCalendarSupplementaryKind {
-    ASSIGNMENT,
-    SCHOOL_NOTICE,
-    PUBLIC_DEADLINE,
-}
 
 object YearCalendarLogic {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
@@ -64,34 +58,24 @@ object YearCalendarLogic {
      */
     fun supplementaryKinds(
         assignmentCount: Int,
-        schoolNoticeCount: Int,
-        publicDeadlineCount: Int,
-    ): List<YearCalendarSupplementaryKind> = buildList {
-        if (assignmentCount > 0) add(YearCalendarSupplementaryKind.ASSIGNMENT)
-        if (schoolNoticeCount > 0) add(YearCalendarSupplementaryKind.SCHOOL_NOTICE)
-        if (publicDeadlineCount > 0) add(YearCalendarSupplementaryKind.PUBLIC_DEADLINE)
-    }
+        deadlineItems: Collection<PublicDeadlineItem>,
+    ): List<DeadlineVisualKind> = DeadlineVisualLogic.orderedKinds(assignmentCount, deadlineItems)
 
     fun borderKinds(
-        kinds: Collection<YearCalendarSupplementaryKind>,
-    ): List<YearCalendarSupplementaryKind> {
+        kinds: Collection<DeadlineVisualKind>,
+    ): List<DeadlineVisualKind> {
         val present = kinds.toSet()
         return listOf(
-            YearCalendarSupplementaryKind.ASSIGNMENT,
-            YearCalendarSupplementaryKind.SCHOOL_NOTICE,
-            YearCalendarSupplementaryKind.PUBLIC_DEADLINE,
+            DeadlineVisualKind.ASSIGNMENT,
+            DeadlineVisualKind.SCHOOL_NOTICE,
+            DeadlineVisualKind.COMPETITION,
+            DeadlineVisualKind.CONFERENCE_OR_JOURNAL,
+            DeadlineVisualKind.SUMMER_CAMP_OR_PRE_ADMISSION,
+            DeadlineVisualKind.HACKATHON,
+            DeadlineVisualKind.CUSTOM,
         ).filter(present::contains).take(2)
     }
 
-    fun supplementaryKind(
-        assignmentCount: Int,
-        schoolNoticeCount: Int,
-        publicDeadlineCount: Int,
-    ): YearCalendarSupplementaryKind? = supplementaryKinds(
-        assignmentCount,
-        schoolNoticeCount,
-        publicDeadlineCount,
-    ).firstOrNull()
 }
 
 @SuppressLint("ViewConstructor")
@@ -423,11 +407,8 @@ class YearCalendarView(
         (Color.blue(background) + (Color.blue(foreground) - Color.blue(background)) * amount).toInt(),
     )
 
-    private fun supplementaryColor(kind: YearCalendarSupplementaryKind): Int = when (kind) {
-        YearCalendarSupplementaryKind.ASSIGNMENT -> Palette.assignment
-        YearCalendarSupplementaryKind.SCHOOL_NOTICE -> Palette.schoolNotice
-        YearCalendarSupplementaryKind.PUBLIC_DEADLINE -> Palette.publicDeadline
-    }
+    private fun supplementaryColor(kind: DeadlineVisualKind): Int =
+        DeadlineVisualLogic.color(kind)
 
     private fun dp(value: Int): Int = context.dp(value)
 

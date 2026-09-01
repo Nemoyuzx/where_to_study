@@ -46,6 +46,8 @@ import {
   builtInDeadlineSourcesEnabled,
   calendarDeadlineBorderKinds,
   calendarDeadlineBorderPriority,
+  calendarDeadlinePublicMarkerKind,
+  calendarDeadlineVisualKind,
   calendarSurfaceKey,
   calendarTransition,
   buildingsForCampus,
@@ -198,6 +200,7 @@ const EN_TEXT = Object.freeze({
   '期刊专题': 'Journal special issues',
   '预推免': 'Pre-admission',
   '没有符合条件的重要事件': 'No important events match these filters',
+  '继续加载重要事件': 'Loading more important events',
   '显示更多': 'Show more',
   '另有 {count} 条已收藏事件因当前筛选或来源变化未列出，可在收藏管理中查看。': '{count} additional favorites are hidden by the current filters or source changes. View them in Favorite Management.',
   '第三方来源：Contest DDL 与校内竞赛通知脚本；不包含课程作业 DDL，所有时间请以官方原文为准。': 'Third-party sources: Contest DDL and the school-notice extraction script. Assignment deadlines are excluded; verify all times against the official source.',
@@ -1038,7 +1041,7 @@ function supplementalEntryPrefix(entry, t) {
 function supplementalEntryKind(entry, language, t) {
   if (entry.type === 'assignment') return language === 'en' ? 'Assignment' : '作业'
   if (entry.type === 'school-notice') return t('校内竞赛通知')
-  return t('其它 DDL')
+  return t(DEADLINE_TYPE_META[entry.deadlineType]?.label || '其它 DDL')
 }
 
 function agendaViewLabel(view, t) {
@@ -1108,7 +1111,7 @@ function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) 
       ) : response?.items?.length ? (
         <div className="deadline-list">
           {response.items.map((item) => (
-            <article key={item.id}>
+            <article key={item.id} className="assignment">
               <div>
                 <strong>{item.title}</strong>
                 <span>{item.course_name || t('课程名称未标注')}{item.status ? ` · ${item.status}` : ''}</span>
@@ -1172,6 +1175,7 @@ function ContestDeadlineCard({
               ? { label: t('校内竞赛通知'), Icon: Trophy }
               : DEADLINE_TYPE_META[item.event_type] || DEADLINE_TYPE_META.competition
             const ItemIcon = meta.Icon
+            const visualKind = calendarDeadlineVisualKind(item)
             const body = (
               <>
                 <ItemIcon size={17} />
@@ -1183,7 +1187,7 @@ function ContestDeadlineCard({
               </>
             )
             return (
-              <article key={favoriteDeadlineKey(item)} className="deadline-favorite-row">
+              <article key={favoriteDeadlineKey(item)} className={`deadline-favorite-row ${visualKind}`}>
                 {item.official_url ? (
                   <a className="deadline-event-main" href={item.official_url} target="_blank" rel="noreferrer">{body}</a>
                 ) : <div className="deadline-event-main">{body}</div>}
@@ -2005,8 +2009,8 @@ function App() {
     ...enabledDeadlineItemsFor(dateString)
       .filter((item) => item.source_type !== 'school_notice')
       .map((item) => ({
-        key: `public-deadline-${item.id}-${item.primary_deadline}`,
-        type: 'public-deadline',
+        key: `${calendarDeadlineVisualKind(item)}-${item.id}-${item.primary_deadline}`,
+        type: calendarDeadlineVisualKind(item),
         deadlineType: item.event_type,
         label: item.name,
         subtitle: item.organizer || '',
@@ -4088,7 +4092,8 @@ function App() {
                             const hasWorkday = hasCalendarItemType(calendarItems, 'workday')
                             const hasAssignment = supplementalEntries.some((item) => item.type === 'assignment')
                             const hasSchoolNotice = supplementalEntries.some((item) => item.type === 'school-notice')
-                            const hasPublicDeadline = supplementalEntries.some((item) => item.type === 'public-deadline')
+                            const publicDeadlineKind = calendarDeadlinePublicMarkerKind(supplementalEntries)
+                            const hasPublicDeadline = Boolean(publicDeadlineKind)
                             const [, deadlineBorderSecondary] = calendarDeadlineBorderKinds(supplementalEntries)
                             const deadlineBorderPriority = calendarDeadlineBorderPriority(supplementalEntries)
                             return (
@@ -4109,7 +4114,7 @@ function App() {
                                 {hasWorkday ? <em className="workday">{uiLanguage === 'en' ? 'W' : t('班')}</em> : null}
                                 {hasAssignment ? <em className="assignment">{t('作')}</em> : null}
                                 {hasSchoolNotice ? <em className="school-notice">{t('赛')}</em> : null}
-                                {hasPublicDeadline ? <em className="public-deadline">D</em> : null}
+                                {hasPublicDeadline ? <em className={publicDeadlineKind}>D</em> : null}
                               </button>
                             )
                           })}
@@ -4355,12 +4360,12 @@ function App() {
               {[
                 ['weatherEnabled', '校区天气', '在空教室联动查询上方显示默认折叠的今日、明日天气。', ''],
                 ['almanacEnabled', '黄历信息', '在月视图日期详情中显示农历、干支与宜忌。', ''],
-                ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示 Contest DDL 收录的公开学科竞赛截止日期。', 'public-deadline'],
-                ['conferenceDeadlinesEnabled', '学术会议', '在统一 DDL 卡片中显示学术会议与期刊专题的投稿截止日期。', 'public-deadline'],
+                ['competitionDeadlinesEnabled', '学科竞赛', '在统一 DDL 卡片中显示 Contest DDL 收录的公开学科竞赛截止日期。', 'competition-deadline'],
+                ['conferenceDeadlinesEnabled', '学术会议', '在统一 DDL 卡片中显示学术会议与期刊专题的投稿截止日期。', 'conference-deadline'],
                 ['schoolContestNoticesEnabled', '校内竞赛通知', '由脚本从学校内部网站公开通知页提取整理，并在统一 DDL 卡片中显示。', 'school-notice'],
-                ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。', 'public-deadline'],
-                ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。', 'public-deadline'],
-                ['customDeadlinesEnabled', '自定义日程', '从用户填写的 HTTPS JSON 接口获取日程；已收藏条目不受此开关影响。', 'public-deadline'],
+                ['summerCampDeadlinesEnabled', '夏令营', '在统一 DDL 卡片中显示夏令营截止日期。', 'summer-camp-deadline'],
+                ['hackathonDeadlinesEnabled', '黑客松', '在统一 DDL 卡片中显示黑客松截止日期。', 'hackathon-deadline'],
+                ['customDeadlinesEnabled', '自定义日程', '从用户填写的 HTTPS JSON 接口获取日程；已收藏条目不受此开关影响。', 'custom-deadline'],
               ].map(([field, title, description, colorKind]) => (
                 <div className="settings-switch-row" key={field}>
                   <div>

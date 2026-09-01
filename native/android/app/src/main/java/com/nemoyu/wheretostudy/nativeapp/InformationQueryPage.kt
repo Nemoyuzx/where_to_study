@@ -55,9 +55,11 @@ internal class InformationQuerySessionState(
     var metadataCategory: String? = null
     var showsEnded: Boolean = false
     var visibleEventCount: Int = INITIAL_EVENT_COUNT
+    var eventScrollY: Int = 0
 
     companion object {
-        const val INITIAL_EVENT_COUNT = 30
+        const val INITIAL_EVENT_COUNT = 20
+        const val EVENT_PAGE_SIZE = 20
     }
 }
 
@@ -67,6 +69,10 @@ internal data class ImportantEventFilterSelection(
 )
 
 internal object ImportantEventQueryLogic {
+    fun nextVisibleCount(currentCount: Int, totalCount: Int): Int =
+        (currentCount.coerceAtLeast(0) + InformationQuerySessionState.EVENT_PAGE_SIZE)
+            .coerceAtMost(totalCount.coerceAtLeast(0))
+
     fun filter(
         liveItems: List<PublicDeadlineItem>,
         favorites: List<PublicDeadlineItem>,
@@ -227,6 +233,7 @@ internal class InformationQueryPage(
 ) {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
+    private var isAppendingImportantEventPage = false
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val shuttleObserver: () -> Unit = {
         if (::root.isInitialized && root.isAttachedToWindow &&
@@ -567,58 +574,79 @@ internal class InformationQueryPage(
             nowMillis,
         )
 
-        return ScrollView(activity).apply {
+        val scrollView = ScrollView(activity).apply {
+            id = R.id.information_query_events_scroll
             isFillViewport = true
             clipToPadding = false
             isVerticalScrollBarEnabled = false
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(activity.dp(20), activity.dp(8), activity.dp(20), activity.dp(28))
-                addView(searchField())
-                addView(spacer(activity, 8))
-                addView(categoryPicker(typeFilters))
-                metadataCategoryPicker(metadataCategories)?.let { picker ->
-                    addView(spacer(activity, 6))
-                    addView(picker)
-                }
-                addView(Switch(activity).apply {
-                    id = R.id.information_query_show_ended
-                    text = "显示已结束"
-                    textSize = 13f
-                    setTextColor(Palette.text)
-                    isChecked = sessionState.showsEnded
-                    setOnCheckedChangeListener { button, checked ->
-                        activity.performControlHaptic(button)
-                        sessionState.showsEnded = checked
-                        sessionState.visibleEventCount =
-                            InformationQuerySessionState.INITIAL_EVENT_COUNT
-                        renderMode(animate = false)
-                    }
-                })
-                addView(TextView(activity).apply {
-                    id = R.id.information_query_result_count
-                    textSize = 12f
-                    setTextColor(Palette.muted)
-                    setPadding(0, activity.dp(4), 0, activity.dp(8))
-                })
-                val eventList = LinearLayout(activity).apply {
-                    id = R.id.information_query_events_list
-                    orientation = LinearLayout.VERTICAL
-                }
-                addView(eventList)
-                renderImportantEventList(eventList)
-                addView(querySourceFooter(
-                    "第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业",
-                    CalendarDailyInfoSources.deadlinePrimaryPage,
-                ))
-            })
         }
+        lateinit var eventList: LinearLayout
+        val body = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(activity.dp(20), activity.dp(8), activity.dp(20), activity.dp(28))
+            addView(searchField())
+            addView(spacer(activity, 8))
+            addView(categoryPicker(typeFilters))
+            metadataCategoryPicker(metadataCategories)?.let { picker ->
+                addView(spacer(activity, 6))
+                addView(picker)
+            }
+            addView(Switch(activity).apply {
+                id = R.id.information_query_show_ended
+                text = "显示已结束"
+                textSize = 13f
+                setTextColor(Palette.text)
+                isChecked = sessionState.showsEnded
+                setOnCheckedChangeListener { button, checked ->
+                    activity.performControlHaptic(button)
+                    sessionState.showsEnded = checked
+                    resetImportantEventPaging()
+                    renderMode(animate = false)
+                }
+            })
+            addView(TextView(activity).apply {
+                id = R.id.information_query_result_count
+                textSize = 12f
+                setTextColor(Palette.muted)
+                setPadding(0, activity.dp(4), 0, activity.dp(8))
+            })
+            eventList = LinearLayout(activity).apply {
+                id = R.id.information_query_events_list
+                orientation = LinearLayout.VERTICAL
+            }
+            addView(eventList)
+            renderImportantEventList(eventList)
+            addView(querySourceFooter(
+                "第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业",
+                CalendarDailyInfoSources.deadlinePrimaryPage,
+            ))
+        }
+        scrollView.addView(body)
+        scrollView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            sessionState.eventScrollY = scrollY.coerceAtLeast(0)
+            val contentHeight = scrollView.getChildAt(0)?.height ?: return@setOnScrollChangeListener
+            val remaining = contentHeight - scrollView.height - scrollY
+            if (remaining <= activity.dp(240)) {
+                appendImportantEventPage(eventList)
+            }
+        }
+        if (sessionState.eventScrollY > 0) {
+            scrollView.post {
+                if (scrollView.isAttachedToWindow) {
+                    scrollView.scrollTo(0, sessionState.eventScrollY)
+                }
+            }
+        }
+        return scrollView
     }
 
     private fun searchField(): EditText = EditText(activity).apply {
         id = R.id.information_query_search
         hint = activity.uiText("搜索名称、主办方或分类")
         setText(sessionState.query)
+        // User input is already locale-independent. Prevent the tree-localizer
+        // from writing it back and accidentally resetting incremental paging.
+        UiText.preserveRawText(this)
         textSize = 14f
         setTextColor(Palette.text)
         setHintTextColor(Palette.muted)
@@ -631,7 +659,7 @@ internal class InformationQueryPage(
             override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) {
                 sessionState.query = value?.toString().orEmpty()
-                sessionState.visibleEventCount = InformationQuerySessionState.INITIAL_EVENT_COUNT
+                resetImportantEventPaging()
                 if (::root.isInitialized) {
                     root.findViewById<LinearLayout?>(R.id.information_query_events_list)
                         ?.let(::renderImportantEventList)
@@ -674,7 +702,7 @@ internal class InformationQueryPage(
                         activity.performControlHaptic(source)
                         sessionState.category = category
                         sessionState.metadataCategory = null
-                        sessionState.visibleEventCount = InformationQuerySessionState.INITIAL_EVENT_COUNT
+                        resetImportantEventPaging()
                         renderMode(animate = false)
                     }
                 }, LinearLayout.LayoutParams(
@@ -732,7 +760,7 @@ internal class InformationQueryPage(
                             if (sessionState.metadataCategory == category) return@setOnClickListener
                             activity.performControlHaptic(source)
                             sessionState.metadataCategory = category
-                            sessionState.visibleEventCount = InformationQuerySessionState.INITIAL_EVENT_COUNT
+                            resetImportantEventPaging()
                             val row = parent as ViewGroup
                             repeat(row.childCount - 1) { index ->
                                 val button = row.getChildAt(index + 1) as TextView
@@ -782,27 +810,8 @@ internal class InformationQueryPage(
                 if (items.isEmpty()) {
                     host.addView(statusText("暂无符合条件的重要事件"))
                 } else {
-                    items.take(sessionState.visibleEventCount).forEach { host.addView(eventCard(it)) }
-                    if (items.size > sessionState.visibleEventCount) {
-                        host.addView(TextView(activity).apply {
-                            text = "加载更多"
-                            textSize = 14f
-                            gravity = Gravity.CENTER
-                            setTextColor(Palette.primaryText)
-                            setTypeface(typeface, Typeface.BOLD)
-                            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 8)
-                            isClickable = true
-                            isFocusable = true
-                            layoutParams = LinearLayout.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                activity.dp(40),
-                            ).apply { bottomMargin = activity.dp(12) }
-                            setOnClickListener { source ->
-                                activity.performControlHaptic(source)
-                                sessionState.visibleEventCount += 30
-                                renderImportantEventList(host)
-                            }
-                        })
+                    items.take(sessionState.visibleEventCount).forEach { item ->
+                        host.addView(eventCard(item).also(UiText::localizeTree))
                     }
                 }
             }
@@ -810,6 +819,45 @@ internal class InformationQueryPage(
                 dailyInfoRepository.importantEventsError() ?: "重要事件获取失败。",
             ) { dailyInfoRepository.loadImportantEvents(force = true) })
             else -> host.addView(statusCard("正在同步公开活动与校内竞赛通知…"))
+        }
+    }
+
+    private fun appendImportantEventPage(host: LinearLayout) {
+        if (isAppendingImportantEventPage || !host.isAttachedToWindow ||
+            sessionState.selectedMode != InformationQueryMode.IMPORTANT_EVENTS
+        ) return
+        val live = dailyInfoRepository.importantEvents() ?: return
+        val items = ImportantEventQueryLogic.filter(
+            liveItems = live,
+            favorites = preferences.favoriteDeadlines,
+            query = sessionState.query,
+            category = sessionState.category,
+            metadataCategory = sessionState.metadataCategory,
+            showsEnded = sessionState.showsEnded,
+            nowMillis = Calendar.getInstance(shanghai).timeInMillis,
+        )
+        val renderedCount = (0 until host.childCount).count { index ->
+            host.getChildAt(index).getTag(R.id.favorite_deadline_item_key) != null
+        }
+        val nextCount = ImportantEventQueryLogic.nextVisibleCount(renderedCount, items.size)
+        if (nextCount <= renderedCount) return
+
+        isAppendingImportantEventPage = true
+        try {
+            sessionState.visibleEventCount = nextCount
+            items.subList(renderedCount, nextCount).forEach { item ->
+                host.addView(eventCard(item).also(UiText::localizeTree))
+            }
+        } finally {
+            isAppendingImportantEventPage = false
+        }
+    }
+
+    private fun resetImportantEventPaging() {
+        sessionState.visibleEventCount = InformationQuerySessionState.INITIAL_EVENT_COUNT
+        sessionState.eventScrollY = 0
+        if (::root.isInitialized) {
+            root.findViewById<ScrollView?>(R.id.information_query_events_scroll)?.scrollTo(0, 0)
         }
     }
 
@@ -841,9 +889,7 @@ internal class InformationQueryPage(
                         ).joinToString(" · ")
                         UiText.preserveRawText(this)
                         textSize = 11f
-                        setTextColor(if (item.source == PublicDeadlineSource.SCHOOL_NOTICE) {
-                            Palette.schoolNotice
-                        } else Palette.publicDeadline)
+                        setTextColor(DeadlineVisualLogic.color(item))
                         setPadding(0, activity.dp(4), 0, 0)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))

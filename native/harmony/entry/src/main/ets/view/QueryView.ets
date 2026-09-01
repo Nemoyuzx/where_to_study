@@ -1,6 +1,7 @@
 // 全平台“查询”入口的 HarmonyOS 原生页面：班车查询 + 重要事件。
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
+import { DeadlineVisual } from '../common/DeadlineVisual';
 import { AppContext } from '../store/AppContext';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
@@ -22,11 +23,19 @@ export struct QueryView {
   @Local eventCategory: string = '';
   @Local showEndedEvents: boolean = false;
   @Local searchText: string = '';
+  @Local requestedVisibleEventCount: number = ImportantEventQueryLogic.initialRequestedCount();
   @Local contentWidth: number = 390;
   @Local shuttleSnapshot: ShuttleBusSnapshot | null = null;
   @Local shuttleLoading: boolean = false;
   @Local shuttleError: string = '';
   private readonly shuttleClient: ShuttleBusFetching = new ShuttleBusClient();
+  private readonly eventScroller: Scroller = new Scroller();
+
+  @Monitor('searchText', 'eventFilterRawValue', 'eventCategory', 'showEndedEvents',
+    'model.importantEventsCatalog', 'model.favoriteDeadlines')
+  onEventQueryOrDataChange(monitor: IMonitor): void {
+    this.resetEventRendering();
+  }
 
   aboutToAppear(): void {
     this.loadShuttle();
@@ -65,9 +74,34 @@ export struct QueryView {
     });
   }
 
-  private visibleEvents(): PublicDeadlineItem[] {
+  private filteredEvents(): PublicDeadlineItem[] {
     return ImportantEventQueryLogic.filter(this.eventCatalog(), this.searchText, this.eventFilter(),
       this.effectiveEventCategory(), this.showEndedEvents);
+  }
+
+  private visibleEvents(): PublicDeadlineItem[] {
+    return ImportantEventQueryLogic.visiblePage(
+      this.filteredEvents(), this.requestedVisibleEventCount);
+  }
+
+  private resetEventRendering(): void {
+    this.requestedVisibleEventCount = ImportantEventQueryLogic.initialRequestedCount();
+    try {
+      this.eventScroller.scrollToIndex(0, false, ScrollAlign.START);
+    } catch (e) {
+      // 查询页尚未切到重要事件或列表为空时 Scroller 还未绑定；状态仍已完成重置。
+    }
+  }
+
+  private appendEventPage(endingIndex: number): void {
+    const totalCount: number = this.filteredEvents().length;
+    const visibleCount: number = ImportantEventQueryLogic.visibleCount(
+      totalCount, this.requestedVisibleEventCount);
+    if (!ImportantEventQueryLogic.shouldAppend(endingIndex, visibleCount, totalCount)) {
+      return;
+    }
+    this.requestedVisibleEventCount = ImportantEventQueryLogic.nextRequestedCount(
+      this.requestedVisibleEventCount, totalCount);
   }
 
   private eventCatalog(): PublicDeadlineItem[] {
@@ -506,7 +540,7 @@ export struct QueryView {
         .width('100%')
         .justifyContent(FlexAlign.Center)
       } else {
-        List({ space: 9 }) {
+        List({ space: 9, scroller: this.eventScroller }) {
           ForEach(this.visibleEvents(), (item: PublicDeadlineItem) => {
             ListItem() {
               this.eventRow(item)
@@ -517,6 +551,9 @@ export struct QueryView {
         .width('100%')
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.None)
+        .onScrollIndex((start: number, end: number, center: number) => {
+          this.appendEventPage(end);
+        })
       }
       this.sourceCard('第三方来源：Contest DDL 公开活动与校内竞赛通知；校内通知由脚本从学校内部网站公开通知页提取整理。',
         CalendarDailyInfoSources.deadlinePrimaryPage)
@@ -538,8 +575,7 @@ export struct QueryView {
             '校内竞赛通知' : PublicDeadlineKindInfo.title(item.kind)))
             .fontSize(11)
             .fontWeight(FontWeight.Bold)
-            .fontColor(item.source === PublicDeadlineSource.schoolNotice ?
-              AppTheme.schoolNotice() : AppTheme.publicDeadline())
+            .fontColor(DeadlineVisual.colorForItem(item))
           Text(this.deadlineLabel(item.deadline))
             .fontSize(11)
             .fontColor(AppTheme.secondaryText())

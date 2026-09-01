@@ -88,11 +88,11 @@ test("all tracked client projects use the 0.2.8 pre-release version", () => {
   assert.match(cliManifest, /^version = "0\.2\.8"$/m);
   assert.match(tuiManifest, /^version = "0\.2\.8"$/m);
   assert.match(nativeAndroid, /versionName = "0\.2\.8"/);
-  assert.match(nativeAndroid, /versionCode = 44/);
+  assert.match(nativeAndroid, /versionCode = 45/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.8"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "76"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "77"/);
   assert.match(nativeHarmony, /"versionName": "0\.2\.8"/);
-  assert.match(nativeHarmony, /"versionCode": 1002014/);
+  assert.match(nativeHarmony, /"versionCode": 1002015/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.8/);
   assert.match(tauriApple, /CFBundleVersion: "47"/);
   assert.match(tauriAppleInfo, /<string>0\.2\.8<\/string>/);

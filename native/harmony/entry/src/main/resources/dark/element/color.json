@@ -90,11 +90,51 @@
     },
     {
       "name": "app_school_notice",
-      "value": "#B7A8FF"
+      "value": "#F28AB8"
     },
     {
       "name": "app_school_notice_surface",
-      "value": "#33B7A8FF"
+      "value": "#33F28AB8"
+    },
+    {
+      "name": "app_competition_deadline",
+      "value": "#68D5E5"
+    },
+    {
+      "name": "app_competition_deadline_surface",
+      "value": "#3368D5E5"
+    },
+    {
+      "name": "app_conference_deadline",
+      "value": "#C4A7F5"
+    },
+    {
+      "name": "app_conference_deadline_surface",
+      "value": "#33C4A7F5"
+    },
+    {
+      "name": "app_summer_camp_deadline",
+      "value": "#72D68C"
+    },
+    {
+      "name": "app_summer_camp_deadline_surface",
+      "value": "#3372D68C"
+    },
+    {
+      "name": "app_hackathon_deadline",
+      "value": "#FF9B64"
+    },
+    {
+      "name": "app_hackathon_deadline_surface",
+      "value": "#33FF9B64"
+    },
+    {
+      "name": "app_custom_deadline",
+      "value": "#9CB0C4"
+    },
+    {
+      "name": "app_custom_deadline_surface",
+      "value": "#339CB0C4"
     },
     {
       "name": "app_public_deadline",

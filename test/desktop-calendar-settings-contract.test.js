@@ -35,8 +35,8 @@ test('today and deadline priority indicators remain visible on selected dates', 
   )
   assert.match(appCss, /\.month-cell\.deadline-border-assignment\s*\{/)
   assert.match(appCss, /\.month-cell\.deadline-border-school-notice\s*\{/)
-  assert.match(appCss, /\.month-cell\.deadline-border-public-deadline\s*\{/)
-  assert.match(appCss, /\.mini-month-grid button\.today\.deadline-border-assignment > span/)
+  assert.match(appCss, /\.month-cell\.deadline-border-competition-deadline\s*\{/)
+  assert.match(appCss, /\.mini-month-grid button\.today\[class\*="deadline-border-"\] > span/)
 })
 
 test('desktop month and year cells render two distinct deadline border layers', () => {
@@ -67,12 +67,25 @@ test('desktop month and year cells render two distinct deadline border layers', 
     const selectorPattern = `\\.${selector}`
     assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-assignment\\s*\\{[^}]*var\\(--busy-border\\)`, 's'))
     assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-inner-school-notice\\s*\\{[^}]*var\\(--school-notice-outline\\)`, 's'))
-    assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-inner-public-deadline\\s*\\{[^}]*var\\(--other-deadline-outline\\)`, 's'))
+    for (const [kind, token] of [
+      ['competition-deadline', 'competition-deadline-outline'],
+      ['conference-deadline', 'conference-deadline-outline'],
+      ['summer-camp-deadline', 'summer-camp-deadline-outline'],
+      ['hackathon-deadline', 'hackathon-deadline-outline'],
+      ['custom-deadline', 'custom-deadline-outline'],
+    ]) {
+      assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-${kind}\\s*\\{[^}]*var\\(--${token}\\)`, 's'))
+      assert.match(appCss, new RegExp(`${selectorPattern}\\.deadline-border-inner-${kind}\\s*\\{[^}]*var\\(--${token}\\)`, 's'))
+    }
   }
   const darkTokens = indexCss.slice(indexCss.indexOf('@media (prefers-color-scheme: dark)'))
   assert.match(darkTokens, /--busy-border:\s*#FFC14D;/)
-  assert.match(darkTokens, /--school-notice-outline:\s*#B7A8FF;/)
-  assert.match(darkTokens, /--other-deadline-outline:\s*#68D5E5;/)
+  assert.match(darkTokens, /--school-notice-outline:\s*#F28AB8;/)
+  assert.match(darkTokens, /--competition-deadline-outline:\s*#68D5E5;/)
+  assert.match(darkTokens, /--conference-deadline-outline:\s*#C4A7F5;/)
+  assert.match(darkTokens, /--summer-camp-deadline-outline:\s*#72D68C;/)
+  assert.match(darkTokens, /--hackathon-deadline-outline:\s*#FF9B64;/)
+  assert.match(darkTokens, /--custom-deadline-outline:\s*#9CB0C4;/)
 })
 
 test('desktop month geometry and typography mirror the native macOS grid', () => {
@@ -187,13 +200,16 @@ test('desktop settings expose matching deadline color dots and switch controls',
   assert.match(appSource, /settings-readonly-color-row[\s\S]*settings-color-dot assignment/)
   assert.match(
     appSource,
-    /competitionDeadlinesEnabled[\s\S]*'public-deadline'[\s\S]*schoolContestNoticesEnabled[\s\S]*'school-notice'/,
+    /competitionDeadlinesEnabled[\s\S]*'competition-deadline'[\s\S]*conferenceDeadlinesEnabled[\s\S]*'conference-deadline'[\s\S]*schoolContestNoticesEnabled[\s\S]*'school-notice'/,
   )
-  assert.match(appSource, /summerCampDeadlinesEnabled[\s\S]*'public-deadline'/)
-  assert.match(appSource, /hackathonDeadlinesEnabled[\s\S]*'public-deadline'/)
+  assert.match(appSource, /summerCampDeadlinesEnabled[\s\S]*'summer-camp-deadline'/)
+  assert.match(appSource, /hackathonDeadlinesEnabled[\s\S]*'hackathon-deadline'/)
+  assert.match(appSource, /customDeadlinesEnabled[\s\S]*'custom-deadline'/)
   assert.match(appCss, /\.settings-color-dot\.assignment\s*\{[^}]*var\(--busy-border\)/s)
   assert.match(appCss, /\.settings-color-dot\.school-notice\s*\{[^}]*var\(--school-notice-outline\)/s)
-  assert.match(appCss, /\.settings-color-dot\.public-deadline\s*\{[^}]*var\(--other-deadline-outline\)/s)
+  for (const kind of ['competition', 'conference', 'summer-camp', 'hackathon', 'custom']) {
+    assert.match(appCss, new RegExp(`\\.settings-color-dot\\.${kind}-deadline\\s*\\{[^}]*var\\(--${kind}-deadline-outline\\)`, 's'))
+  }
   assert.doesNotMatch(appSource, /type="checkbox"/)
   assert.match(
     appSource,
@@ -295,6 +311,6 @@ test('desktop year selection persists and today survives holiday and deadline pr
   )
   assert.match(
     appCss,
-    /\.mini-month-grid button\.today\.deadline-border-assignment > span/,
+    /\.mini-month-grid button\.today\[class\*="deadline-border-"\] > span/,
   )
 })

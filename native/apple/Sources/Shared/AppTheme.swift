@@ -33,6 +33,10 @@ struct AppThemePalette: Equatable, Sendable {
     let assignment: AppThemeColor
     let schoolNotice: AppThemeColor
     let publicDeadline: AppThemeColor
+    let conferenceDeadline: AppThemeColor
+    let summerCampDeadline: AppThemeColor
+    let hackathonDeadline: AppThemeColor
+    let customDeadline: AppThemeColor
 
     static let light = AppThemePalette(
         primary: AppThemeColor(red: 22, green: 107, blue: 93),
@@ -41,8 +45,12 @@ struct AppThemePalette: Equatable, Sendable {
         onPrimary: AppThemeColor(red: 255, green: 255, blue: 255),
         selectedDate: AppThemeColor(red: 37, green: 99, blue: 235),
         assignment: AppThemeColor(red: 154, green: 101, blue: 0),
-        schoolNotice: AppThemeColor(red: 91, green: 75, blue: 196),
-        publicDeadline: AppThemeColor(red: 0, green: 124, blue: 145)
+        schoolNotice: AppThemeColor(red: 180, green: 35, blue: 104),
+        publicDeadline: AppThemeColor(red: 0, green: 107, blue: 117),
+        conferenceDeadline: AppThemeColor(red: 109, green: 60, blue: 195),
+        summerCampDeadline: AppThemeColor(red: 46, green: 125, blue: 70),
+        hackathonDeadline: AppThemeColor(red: 196, green: 81, blue: 28),
+        customDeadline: AppThemeColor(red: 81, green: 105, blue: 127)
     )
 
     static let dark = AppThemePalette(
@@ -52,8 +60,12 @@ struct AppThemePalette: Equatable, Sendable {
         onPrimary: AppThemeColor(red: 255, green: 255, blue: 255),
         selectedDate: AppThemeColor(red: 29, green: 78, blue: 216),
         assignment: AppThemeColor(red: 255, green: 193, blue: 77),
-        schoolNotice: AppThemeColor(red: 183, green: 168, blue: 255),
-        publicDeadline: AppThemeColor(red: 104, green: 213, blue: 229)
+        schoolNotice: AppThemeColor(red: 242, green: 138, blue: 184),
+        publicDeadline: AppThemeColor(red: 104, green: 213, blue: 229),
+        conferenceDeadline: AppThemeColor(red: 196, green: 167, blue: 245),
+        summerCampDeadline: AppThemeColor(red: 114, green: 214, blue: 140),
+        hackathonDeadline: AppThemeColor(red: 255, green: 155, blue: 100),
+        customDeadline: AppThemeColor(red: 156, green: 176, blue: 196)
     )
 }
 
@@ -65,7 +77,12 @@ enum AppTheme {
     static let selectedDate = adaptiveColor(\.selectedDate)
     static let assignment = adaptiveColor(\.assignment)
     static let schoolNotice = adaptiveColor(\.schoolNotice)
+    static let competitionDeadline = adaptiveColor(\.publicDeadline)
     static let publicDeadline = adaptiveColor(\.publicDeadline)
+    static let conferenceDeadline = adaptiveColor(\.conferenceDeadline)
+    static let summerCampDeadline = adaptiveColor(\.summerCampDeadline)
+    static let hackathonDeadline = adaptiveColor(\.hackathonDeadline)
+    static let customDeadline = adaptiveColor(\.customDeadline)
 
     #if os(macOS)
     static let background = Color(nsColor: .windowBackgroundColor)

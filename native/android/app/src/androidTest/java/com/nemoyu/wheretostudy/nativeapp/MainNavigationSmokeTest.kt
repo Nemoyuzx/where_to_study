@@ -1803,6 +1803,11 @@ class MainNavigationSmokeTest {
                         Palette.publicDeadline to preferences.competitionDeadlinesEnabled,
                     ),
                     Triple(
+                        R.id.settings_conference_deadlines_switch,
+                        R.id.settings_conference_deadlines_dot,
+                        Palette.conferenceDeadline to preferences.conferenceDeadlinesEnabled,
+                    ),
+                    Triple(
                         R.id.settings_school_contest_notices_switch,
                         R.id.settings_school_contest_notices_dot,
                         Palette.schoolNotice to preferences.schoolContestNoticesEnabled,
@@ -1810,12 +1815,17 @@ class MainNavigationSmokeTest {
                     Triple(
                         R.id.settings_summer_camp_deadlines_switch,
                         R.id.settings_summer_camp_deadlines_dot,
-                        Palette.publicDeadline to preferences.summerCampDeadlinesEnabled,
+                        Palette.summerCampDeadline to preferences.summerCampDeadlinesEnabled,
                     ),
                     Triple(
                         R.id.settings_hackathon_deadlines_switch,
                         R.id.settings_hackathon_deadlines_dot,
-                        Palette.publicDeadline to preferences.hackathonDeadlinesEnabled,
+                        Palette.hackathonDeadline to preferences.hackathonDeadlinesEnabled,
+                    ),
+                    Triple(
+                        R.id.settings_custom_deadlines_switch,
+                        R.id.settings_custom_deadlines_dot,
+                        Palette.customDeadline to preferences.customDeadlinesEnabled,
                     ),
                 ).forEach { (switchID, dotID, expected) ->
                     val toggle = activity.findViewById<View>(switchID)

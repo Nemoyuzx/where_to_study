@@ -348,13 +348,36 @@ export function desktopMonthGridMetrics(availableHeight) {
 const CALENDAR_DEADLINE_BORDER_PRIORITY = [
   'assignment',
   'school-notice',
+  'competition-deadline',
+  'conference-deadline',
+  'summer-camp-deadline',
+  'hackathon-deadline',
+  'custom-deadline',
   'public-deadline',
 ]
+
+export function calendarDeadlineVisualKind(entry = {}) {
+  if (entry.type === 'assignment' || entry.source_type === 'assignment') return 'assignment'
+  if (entry.type === 'school-notice' || entry.source_type === 'school_notice') return 'school-notice'
+  if (entry.type === 'custom-deadline' || entry.source_type === 'custom') return 'custom-deadline'
+
+  const type = entry.deadlineType || entry.event_type || entry.type
+  if (type === 'competition' || type === 'competition-deadline') return 'competition-deadline'
+  if (['conference', 'journal_special_issue', 'conference-deadline'].includes(type)) {
+    return 'conference-deadline'
+  }
+  if (['summer_camp', 'pre_admission', 'summer-camp-deadline'].includes(type)) {
+    return 'summer-camp-deadline'
+  }
+  if (type === 'hackathon' || type === 'hackathon-deadline') return 'hackathon-deadline'
+  if (type === 'custom' || type === 'custom-deadline') return 'custom-deadline'
+  return 'public-deadline'
+}
 
 export function calendarDeadlineBorderKinds(entries, limit = 2) {
   const visibleLimit = Math.max(0, Math.trunc(Number(limit) || 0))
   if (!visibleLimit) return []
-  const presentKinds = new Set(entries.map((entry) => entry.type))
+  const presentKinds = new Set(entries.map(calendarDeadlineVisualKind))
   return CALENDAR_DEADLINE_BORDER_PRIORITY
     .filter((kind) => presentKinds.has(kind))
     .slice(0, visibleLimit)
@@ -362,6 +385,15 @@ export function calendarDeadlineBorderKinds(entries, limit = 2) {
 
 export function calendarDeadlineBorderPriority(entries) {
   return calendarDeadlineBorderKinds(entries, 1)[0] || ''
+}
+
+export function calendarDeadlinePublicMarkerKind(entries) {
+  return calendarDeadlineBorderKinds(
+    entries.filter((entry) => !['assignment', 'school-notice'].includes(
+      calendarDeadlineVisualKind(entry),
+    )),
+    1,
+  )[0] || ''
 }
 
 export function expandedMonthGridMetrics(

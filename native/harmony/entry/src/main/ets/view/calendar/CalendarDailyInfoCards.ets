@@ -1,6 +1,7 @@
 // 月视图日期详情中的共享卡片：课程作业、黄历宜忌、统一 DDL。
 // Mobile 与 Expanded 教学日历复用，确保顺序、来源声明和开关语义一致。
 import { AppTheme } from '../../common/AppTheme';
+import { DeadlineVisual } from '../../common/DeadlineVisual';
 import { DateParts, StrictDates } from '../../common/StrictDates';
 import { AppModel } from '../../model/AppModel';
 import {
@@ -127,7 +128,7 @@ export struct CalendarDailyInfoCards {
         .width(4)
         .height(38)
         .borderRadius(2)
-        .backgroundColor(AppTheme.primaryFill())
+        .backgroundColor(AppTheme.assignment())
       Column({ space: 2 }) {
         Text(item.title)
           .fontSize(13)
@@ -374,10 +375,10 @@ export struct CalendarDailyInfoCards {
         '校内竞赛通知' : PublicDeadlineKindInfo.title(item.kind)))
         .fontSize(10)
         .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.onPrimary())
+        .fontColor(DeadlineVisual.colorForItem(item))
         .padding({ left: 7, right: 7, top: 3, bottom: 3 })
         .borderRadius(9)
-        .backgroundColor(AppTheme.primaryFill())
+        .backgroundColor(DeadlineVisual.surfaceForItem(item))
       Column({ space: 2 }) {
         Text(item.name)
           .fontSize(13)

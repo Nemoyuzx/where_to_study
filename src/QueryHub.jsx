@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BusFront,
@@ -13,13 +13,16 @@ import {
   Star,
 } from 'lucide-react'
 
-import { shanghaiDateString } from './planner-domain.js'
+import { calendarDeadlineVisualKind, shanghaiDateString } from './planner-domain.js'
 import {
   buildShuttleDayView,
   filterImportantEvents,
   importantEventFavorite,
   importantEventFilterOptions,
+  importantEventVisibleCount,
+  IMPORTANT_EVENT_BATCH_SIZE,
   mergeImportantEventCatalog,
+  nextImportantEventVisibleCount,
   shanghaiClockMinutes,
   shanghaiWeekdayKey,
   SHUTTLE_WEEKDAYS,
@@ -105,7 +108,7 @@ export default function QueryHub({
   const [category, setCategory] = useState('all')
   const [eventSource, setEventSource] = useState('all')
   const [includeExpired, setIncludeExpired] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(50)
+  const eventLoadSentinelRef = useRef(null)
 
   const loadShuttle = async () => {
     setShuttleLoading(true)
@@ -141,10 +144,6 @@ export default function QueryHub({
     return () => window.clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    setVisibleCount(50)
-  }, [query, eventType, category, eventSource, includeExpired])
-
   const today = shanghaiDateString(now)
   const currentWeekday = shanghaiWeekdayKey(now)
   const shuttleView = useMemo(() => buildShuttleDayView(shuttle || {}, {
@@ -158,6 +157,21 @@ export default function QueryHub({
     () => mergeImportantEventCatalog(importantEvents?.items || [], favoriteItems),
     [favoriteItems, importantEvents],
   )
+  const eventCatalogIdentity = useMemo(() => eventCatalog.map((item) => (
+    `${item.source_type}\u001f${item.id}\u001f${item.primary_deadline}`
+  )).join('\u001e'), [eventCatalog])
+  const eventRenderKey = [
+    query,
+    eventType,
+    category,
+    eventSource,
+    includeExpired ? 'ended' : 'active',
+    eventCatalogIdentity,
+  ].join('\u001d')
+  const [eventRenderWindow, setEventRenderWindow] = useState(() => ({
+    key: '',
+    count: IMPORTANT_EVENT_BATCH_SIZE,
+  }))
   const eventOptions = useMemo(
     () => importantEventFilterOptions(eventCatalog, {
       type: eventType,
@@ -183,7 +197,31 @@ export default function QueryHub({
           && item.primary_deadline === favorite.primary_deadline
       ))
   )), [favoriteItems, filteredEvents])
+  const visibleCount = importantEventVisibleCount(
+    eventRenderWindow,
+    eventRenderKey,
+    filteredEvents.length,
+  )
   const visibleEvents = filteredEvents.slice(0, visibleCount)
+
+  useEffect(() => {
+    setEventRenderWindow({ key: eventRenderKey, count: IMPORTANT_EVENT_BATCH_SIZE })
+  }, [eventRenderKey])
+
+  useEffect(() => {
+    const sentinel = eventLoadSentinelRef.current
+    if (!sentinel || visibleCount >= filteredEvents.length) return undefined
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      setEventRenderWindow((current) => {
+        if (current.key !== eventRenderKey) return current
+        const count = nextImportantEventVisibleCount(current.count, filteredEvents.length)
+        return count === current.count ? current : { key: current.key, count }
+      })
+    }, { rootMargin: '320px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [eventRenderKey, filteredEvents.length, visibleCount])
 
   useEffect(() => {
     if (eventType !== 'all' && !eventOptions.types.includes(eventType)) {
@@ -296,7 +334,7 @@ export default function QueryHub({
               const selected = isFavorite(favorite)
               const details = [item.organizer, item.level, item.location].filter(Boolean)
               return (
-                <article className={item.source_type === 'school_notice' ? 'school' : item.event_type} key={`${item.source_type}-${item.id}-${item.primary_deadline}`}>
+                <article className={calendarDeadlineVisualKind(item)} key={`${item.source_type}-${item.id}-${item.primary_deadline}`}>
                   <div className="important-event-main">
                     <div className="important-event-kicker"><span>{item.source_type === 'school_notice' ? t('校内通知') : typeLabel(item.event_type, t)}</span><small>{item.deadline_label || t('最近节点')}</small></div>
                     <h3>{item.official_url ? <a href={item.official_url} target="_blank" rel="noreferrer">{item.name}<ExternalLink size={14} /></a> : item.name}</h3>
@@ -310,7 +348,14 @@ export default function QueryHub({
             })}
             {!eventsLoading && !eventsError && visibleEvents.length === 0 ? <p className="query-empty">{t('没有符合条件的重要事件')}</p> : null}
           </div>
-          {visibleCount < filteredEvents.length ? <button type="button" className="event-load-more" onClick={() => setVisibleCount((count) => count + 50)}>{t('显示更多')}</button> : null}
+          {visibleCount < filteredEvents.length ? (
+            <div
+              ref={eventLoadSentinelRef}
+              className="event-load-sentinel"
+              role="status"
+              aria-label={t('继续加载重要事件')}
+            ><Loader2 className="spin" size={17} /><span>{t('继续加载重要事件')}</span></div>
+          ) : null}
           {favoriteOnlyMissing.length ? <p className="query-source-note">{t('另有 {count} 条已收藏事件因当前筛选或来源变化未列出，可在收藏管理中查看。', { count: favoriteOnlyMissing.length })}</p> : null}
           <p className="query-source-note">{t('第三方来源：Contest DDL 与校内竞赛通知脚本；不包含课程作业 DDL，所有时间请以官方原文为准。')} <a href="https://where-to-study.cn/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a> · <a href="https://where-to-study.cn/api/contest-notices" target="_blank" rel="noreferrer">contest-notices API</a></p>
         </div>
