@@ -105,15 +105,20 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let yearScroll = app.scrollViews.firstMatch
         XCTAssertTrue(yearScroll.waitForExistence(timeout: 5))
         let lastDate = app.buttons["calendar.mobile.year-day.\(yearText)-12-31"].firstMatch
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.exists)
 
-        for _ in 0 ..< 12 where !lastDate.isHittable {
+        for _ in 0 ..< 12 {
+            if lastDate.exists,
+               lastDate.isHittable,
+               lastDate.frame.maxY <= tabBar.frame.minY {
+                break
+            }
             verticalSwipe(in: app, within: yearScroll, upward: true, requestedTravel: 180)
         }
 
         XCTAssertTrue(lastDate.exists)
         XCTAssertTrue(lastDate.isHittable, "The last year date must scroll clear of the floating tab bar")
-        let tabBar = app.tabBars.firstMatch
-        XCTAssertTrue(tabBar.exists)
         XCTAssertLessThanOrEqual(lastDate.frame.maxY, tabBar.frame.minY)
 
         lastDate.tap()
@@ -145,8 +150,15 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         )
         let lastDate = app.buttons["calendar.mobile.year-day.\(yearText)-12-31"].firstMatch
         let yearScroll = app.scrollViews.firstMatch
+        let landscapeTabBar = app.tabBars.firstMatch
         XCTAssertTrue(yearScroll.waitForExistence(timeout: 5))
-        for _ in 0 ..< 8 where !lastDate.isHittable {
+        XCTAssertTrue(landscapeTabBar.exists)
+        for _ in 0 ..< 12 {
+            if lastDate.exists,
+               lastDate.isHittable,
+               lastDate.frame.maxY <= landscapeTabBar.frame.minY {
+                break
+            }
             verticalSwipe(in: app, within: yearScroll, upward: true, requestedTravel: 180)
         }
 
@@ -155,8 +167,6 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         landscapeAttachment.lifetime = .keepAlways
         add(landscapeAttachment)
         XCTAssertTrue(lastDate.isHittable, "The last year date must remain reachable in landscape")
-        let landscapeTabBar = app.tabBars.firstMatch
-        XCTAssertTrue(landscapeTabBar.exists)
         XCTAssertLessThanOrEqual(
             lastDate.frame.maxY,
             landscapeTabBar.frame.minY,
