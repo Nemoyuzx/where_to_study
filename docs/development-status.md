@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 分支：`main`
-- 当前稳定版本：[v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；GitHub Release 已转为正式版并更新 `releases/latest`
+- 当前稳定版本：[Where To Study v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；GitHub Release 已转为正式版并更新 `releases/latest`
 - 应用版本：`0.2.8`
 - 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002016`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
