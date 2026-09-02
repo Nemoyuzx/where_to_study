@@ -462,6 +462,4 @@ jobs:
           path: |
             release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android-universal.apk
             release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android-universal.apk.sha256
-            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android.aab
-            release-artifacts/Where-To-Study-${{ env.RELEASE_LABEL }}-native-android.aab.sha256
           if-no-files-found: error

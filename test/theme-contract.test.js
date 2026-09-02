@@ -502,13 +502,23 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
   assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)/)
 
   assert.match(appleSettingsSource, /deadlineLegend\("课程作业 DDL", color: AppTheme\.assignment\)/)
-  assert.match(appleSettingsSource, /markerColor: AppTheme\.schoolNotice/)
-  for (const color of [
-    'competitionDeadline', 'conferenceDeadline', 'summerCampDeadline',
-    'hackathonDeadline', 'customDeadline',
+  for (const [title, color] of [
+    ['学科竞赛 DDL', 'competitionDeadline'],
+    ['校内竞赛通知', 'schoolNotice'],
+    ['学术会议/期刊专题 DDL', 'conferenceDeadline'],
+    ['夏令营/预推免 DDL', 'summerCampDeadline'],
+    ['黑客松 DDL', 'hackathonDeadline'],
   ]) {
-    assert.match(appleSettingsSource, new RegExp(`AppTheme\\.${color}`))
+    assert.match(
+      appleSettingsSource,
+      new RegExp(`featureToggle\\(\\s*"${title}"[\\s\\S]*?markerColor: AppTheme\\.${color}\\s*\\)`),
+      `${title} must display its own ${color} marker beside the matching switch`,
+    )
   }
+  assert.match(
+    appleSettingsSource,
+    /Text\(model\.localized\("自定义日程源"\)\)[\s\S]*?Circle\(\)[\s\S]*?\.fill\(AppTheme\.customDeadline\)/,
+  )
   assert.match(appleSettingsSource, /Toggle\([\s\S]*\.toggleStyle\(\.switch\)/)
   assert.match(appleSettingsSource, /ForEach\(1 \.\.\. TodayCourseWidgetData\.maximumCourseLimit/)
   assert.match(appleSettingsSource, /Picker\("预览尺寸"/)

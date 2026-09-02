@@ -8,8 +8,8 @@
 | Linux | Tauri 2 + React | Rust | Debian/AppImage |
 | macOS | SwiftUI | 共享 Rust 核心或等价原生适配层 | `.app` / notarized `.dmg` |
 | iOS | SwiftUI | 共享 Rust 核心或等价原生适配层 | TestFlight / App Store |
-| Android | Kotlin + Android Views | 共享 Rust 核心或等价原生适配层 | signed AAB/APK |
-| HarmonyOS | ArkTS + ArkUI（6.1.1 / API 24） | 等价原生适配层（参考 SwiftUI 实现） | 华为应用市场（待定） |
+| Android | Kotlin + Android Views | 共享 Rust 核心或等价原生适配层 | GitHub signed APK；商店/内部 AAB |
+| HarmonyOS | ArkTS + ArkUI（6.1.1 / API 24） | 等价原生适配层（参考 SwiftUI 实现） | AppGallery Connect（不上传 GitHub 安装包） |
 
 现有根目录 Tauri 工程只承担 Windows 客户端。Android 的 Tauri 生成工程与构建链已删除，唯一 Android 源码和发布入口是 `native/android`；`src-tauri/gen/apple` 仅保留为待下线的旧 Tauri iOS 生成目录，不作为当前原生客户端源码。
 
@@ -59,7 +59,7 @@
 ### 阶段 4：发布
 
 - 自动化单元测试、UI 冒烟测试和 release 构建。
-- Android AAB/APK 签名，Apple archive/notarization，Windows 签名。
+- Android APK/AAB 签名（GitHub 只公开 APK，AAB 仅商店/内部交付），Apple archive/notarization，Windows 签名。
 - 许可证、隐私说明、安全政策和贡献指南完整。
 
 ## 资源预算
@@ -76,11 +76,11 @@
 
 详细的源码、测试、打包和待完成事项检查点见 [`development-status.md`](development-status.md)。
 
-- Windows/Tauri：导航条已增加位于教学日历和设置之间的独立查询页；班车只显示当天 active 时刻表，重要事件支持公开+校内来源、元数据搜索、真实分类、DDL 升序和完整收藏；会议独立开关、年度预热、跨年加载、双层 DDL 边框、教学周与键盘操作均已完成，React 单文件仍需拆分。
-- Linux/Tauri：与 Windows 共享 React/Rust 功能，`v0.2.8` 使用 Ubuntu 22.04 原生 CI 发布 x86_64/arm64 Debian 包与 AppImage，并同步提供 CLI/TUI 查询命令或视图。
+- Windows/Tauri：导航条已增加位于教学日历和设置之间的独立查询页；班车只显示当天 active 时刻表，重要事件支持公开+校内来源、元数据搜索、真实分类、DDL 升序和完整收藏；会议独立开关、年度预热、跨年加载、双层 DDL 边框、教学周与键盘操作均已完成。`v0.2.8` NSIS 已由 [main push run 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916)（`04a355c`）完成，且该提交到最终 `main` 的运行时代码输入无差异；React 单文件仍需拆分。
+- Linux/Tauri：与 Windows 共享 React/Rust 功能；`v0.2.8` GUI 已由 [main push run 33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`）完成 Ubuntu 构建，CLI/TUI 已由 [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）完成；这些提交到最终 `main` 的全部运行时代码输入无差异。
 - macOS/iOS 原生：共享 SwiftUI 已将查询改为教学日历和设置之间的独立一级导航，并保留并行缓存预热、搜索分类/DDL 排序/收藏和会议日历；个人课表、Keychain、节假日、日/周/月/年、天气/黄历、云课堂作业、系统日历和两校区空教室保持完整。
 - Android 原生：Kotlin + Android Views 已在手机底栏、折叠屏和平板侧栏增加独立一级查询页，当天班车与活动搜索分类收藏共享现有缓存；Keystore、课表/空教室、日/周/月/年、课程摘要、天气/黄历、云课堂作业、双层边框和跨月动画保持完整。
 - 鸿蒙原生：ArkTS + ArkUI 的手机、折叠屏、平板与 PC 均已改为共享缓存的独立一级查询页及会议日历；手机月视图已修复双页横向翻月、三档详情手势和独立相邻月预热；DevEco Studio 6.1.1 / API 24 的本地签名 APP/HAP 与 127 项单元测试通过。
 - 阶段 2 状态：同一脱敏接口响应已在 Rust、Swift、Kotlin 和 ArkTS 生成一致的教学楼、三位教室号、双门教室号、座位数与可用节次；启动时仅在当天缓存缺失且已有凭据时刷新，不进行高频轮询。
-- 原生分发限制：Android `0.2.8 (45)` 使用固定维护者密钥签名；Apple iOS `0.2.8 (77)` 与 macOS `0.2.8 (75)` 已由本地 Xcode 上传 TestFlight；HarmonyOS `0.2.8 (1002016)` 已由 DevEco 上传并通过云测试。GitHub `v0.2.8` Pre-release 同步提供 14 项附件，Windows/Linux/CLI/TUI 有来源证明；Windows 公众 Authenticode 和 Linux 原生 APT 信任仍需各自的外部身份/仓库基础设施。
+- 原生分发限制：Android `0.2.8 (45)` 使用固定维护者密钥签名，GitHub 只公开 APK、AAB 仅用于商店/内部交付；Apple iOS 与 macOS `0.2.8 (77)` 均已由本地 Xcode 上传 TestFlight；HarmonyOS `0.2.8 (1002016)` 已由 DevEco 上传并通过云测试，只通过 AppGallery Connect 分发。GitHub `v0.2.8` 正式版固定为 11 项公开附件，10 个桌面附件已替换、Android APK 保留，11 个均重新下载并证明字节一致。刷新附件来自 main push 构建，不声明 tag/Sigstore 来源证明；Windows 公众 Authenticode 和 Linux 原生 APT 信任仍需各自的外部身份/仓库基础设施。
 - 开源授权：根目录已加入 GPL-3.0-only 标准许可证文本，项目元数据、贡献指南和发布文档使用同一 SPDX 标识。

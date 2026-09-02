@@ -55,23 +55,23 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 | 平台 | 客户端技术 | 发布状态 |
 | --- | --- | --- |
-| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.8 (75)` 正式签名 Universal 构建已上传 TestFlight；GitHub Pre-release 同步提供原生 Universal DMG 预览包 |
-| Android | Kotlin + Android Views | `0.2.8 (45)` 固定维护者密钥签名 Universal APK/AAB 已进入 GitHub Pre-release；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
-| Windows | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 x64 NSIS 和 GitHub/Sigstore 来源证明；公众 Authenticode 仍需外部身份配置 |
-| Linux | Tauri 2 + React + Rust | `v0.2.8` Pre-release 提供 arm64/x86_64 Debian、AppImage、CLI、TUI 及 GitHub/Sigstore 来源证明 |
+| macOS | SwiftUI 原生；另提供 Tauri 2 兼容构建 | `0.2.8 (77)` 正式签名构建已上传 TestFlight；Universal DMG 已从最终运行时代码重建并进入 GitHub 正式版 |
+| Android | Kotlin + Android Views | `0.2.8 (45)` 使用固定维护者密钥签名；GitHub 正式版只公开 Universal APK，AAB 仅用于商店/内部交付；支持手机、折叠屏和平板布局、系统日历、课程提醒与桌面小组件 |
+| Windows | Tauri 2 + React + Rust | `v0.2.8` 正式版 x64 NSIS 来自 [main push run 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916)（`04a355c`）；公众 Authenticode 仍需外部身份配置 |
+| Linux | Tauri 2 + React + Rust | `v0.2.8` 正式版 GUI 来自 [run 33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`），CLI/TUI 来自 [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`） |
 | CLI | Rust（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-cli` 发布 Linux x86_64/arm64 构建，并新增班车/重要事件命令，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-tui` 发布 Linux x86_64/arm64 构建；主分支已将班车/重要事件改为独立一级“查询”标签，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.2.8 (77)` 日历与事件渲染修复构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002016)` 的 130 项单元测试、28vp 底部安全区设备回归、签名 APP/HAP 与 DevEco 云测试已通过；GitHub Pre-release 提供同一修复构建 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002016)` 的 130 项单元测试、28vp 底部安全区设备回归、签名 APP/HAP 与 DevEco 云测试已通过；安装与测试仅通过 AppGallery Connect 分发，不在 GitHub 上传安装包 |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
 > Apple 平台公测链接（版本可能不是最新，最新需要等待审核通过）：https://testflight.apple.com/join/yuzpAtDJ
 >
-> HarmonyOS 测试：`0.2.8 (1002016)` 已由 DevEco 上传 AppGallery Connect 且云测试通过；[打开 0.2.8 邀请页面（链接已含邀请码，审核通过后生效）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。预审通过前公开页可能显示任务不存在；此时请从 [GitHub Pre-release](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8) 获取签名 APP/HAP。
+> HarmonyOS 测试：`0.2.8 (1002016)` 已由 DevEco 上传 AppGallery Connect 且云测试通过；[打开 0.2.8 邀请页面（链接已含邀请码，审核通过后生效）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。预审通过前公开页可能显示任务不存在；HarmonyOS APP/HAP 不作为 GitHub Release 附件。
 
 ## 下载
 
-[v0.2.8 Pre-release](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8) 提供 14 项附件：Windows x64 NSIS；Linux arm64/x86_64 Debian、AppImage、CLI、TUI；固定维护者密钥签名的 Android `0.2.8 (45)` APK/AAB；HarmonyOS `1002016` 签名 APP/HAP；以及原生 macOS Universal DMG。本版本新增班车与重要事件查询、滚动增量渲染、完整本地收藏、按开关区分的日程颜色和鸿蒙系统导航条安全区适配；完整中英文改动见 [0.2.8 发布说明](./docs/release-v0.2.8.md)。GitHub Release 不附带 `.sha256` 或 iOS 制品；iOS `0.2.8 (77)` 与 macOS `0.2.8 (75)` 已由本地 Xcode上传 TestFlight，GitHub DMG 是未公证的开源预览包。因为这是 Pre-release，稳定入口 `releases/latest` 仍指向 `v0.2.7`。
+[v0.2.8 正式版](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8) 提供 11 项公开附件：Windows x64 NSIS 1 项；Linux arm64/x86_64 Debian、AppImage、CLI、TUI 共 8 项；固定维护者密钥签名的 Android `0.2.8 (45)` Universal APK 1 项；原生 macOS Universal DMG 1 项。10 个桌面附件已替换，Android APK 保留；11 个附件均从 GitHub 重新下载并与本地发布文件逐字节一致。Windows/Linux GUI 分别来自 [run 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`），CLI/TUI 分别来自 [run 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）；已证明这些提交到最终 `main` 的全部运行时代码输入无差异，因此没有重复触发构建。这些是 main push 构建，tag-only attestation 按设计跳过，不声称刷新附件具有 tag/Sigstore 来源证明。GitHub 不上传 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP。本版本新增班车与重要事件查询、滚动增量渲染、完整本地收藏、按开关区分的日程颜色和鸿蒙系统导航条安全区适配；完整中英文改动见 [0.2.8 发布说明](./docs/release-v0.2.8.md)。iOS 与 macOS `0.2.8 (77)` 均已由本地 Xcode 上传 TestFlight；按约定不检查 App Store Connect processing。GitHub DMG 是未公证的开源预览包，Windows 安装器尚无公众 Authenticode 签名。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
@@ -221,7 +221,7 @@ APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX APPLE_BUILD_NUMBER=31 \
 - `.github/workflows/build-linux.yml`：在 Ubuntu x86_64/arm64 runner 上构建、安装验证 Linux Debian/AppImage，并为标签制品生成来源证明。
 - `.github/workflows/build-cli.yml` 与 `.github/workflows/build-tui.yml`：构建两个架构的 Linux 终端制品，并为标签制品生成来源证明。
 - `.github/workflows/build-macos.yml`：在 `macos-15` 上构建并压缩 macOS Apple Silicon 应用。
-- `.github/workflows/build-native.yml`：在主分支及手动触发时运行 Rust/Apple 测试，在主分支运行 Android Debug 门禁；版本标签额外生成 SwiftUI macOS Universal、无签名 iOS archive，以及签名 Android APK/AAB。
+- `.github/workflows/build-native.yml`：在主分支及手动触发时运行 Rust/Apple 测试，在主分支运行 Android Debug 门禁；版本标签额外生成 SwiftUI macOS Universal、无签名 iOS archive，以及签名 Android APK/AAB，但公开 GitHub Release 只接收 APK，AAB 保留给商店/内部交付。
 - `.github/workflows/security.yml`：扫描提交历史中的敏感信息，并审计完整 npm 与 Rust 锁文件依赖。
 
 正式原生 Android 标签构建使用以下 secrets：`ANDROID_RELEASE_KEYSTORE_BASE64`、`ANDROID_RELEASE_STORE_PASSWORD`、`ANDROID_RELEASE_KEY_ALIAS`、`ANDROID_RELEASE_KEY_PASSWORD`。标签工作流生成的未签名 iOS archive 与 macOS 构建仅作为受限的 Actions artifact 用于内部验证，不上传到公开 GitHub Release；App Store 构建使用本地、Xcode Cloud 或受保护 CI 环境中的 Apple 分发凭据，不把证书或私钥提交到仓库。

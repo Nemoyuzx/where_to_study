@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -36,7 +37,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the 0.2.8 pre-release version", () => {
+test("all tracked client projects use the 0.2.8 release version", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -65,6 +66,10 @@ test("all tracked client projects use the 0.2.8 pre-release version", () => {
   );
   const tuiWorkflow = readFileSync(
     path.join(root, ".github", "workflows", "build-tui.yml"),
+    "utf8",
+  );
+  const nativeWorkflow = readFileSync(
+    path.join(root, ".github", "workflows", "build-native.yml"),
     "utf8",
   );
   const androidPackageScript = readFileSync(
@@ -99,9 +104,24 @@ test("all tracked client projects use the 0.2.8 pre-release version", () => {
   assert.match(tauriAppleInfo, /<string>47<\/string>/);
   assert.match(cliWorkflow, /grep -F '0\.2\.8'/);
   assert.match(tuiWorkflow, /grep -F '0\.2\.8'/);
+  assert.match(nativeWorkflow, /native-android-universal\.apk/);
+  assert.doesNotMatch(nativeWorkflow, /native-android\.aab/);
   assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.8\}"/);
   assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.8\}"/);
   assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.8\}"/);
+});
+
+test("GitHub workflows publish neither HarmonyOS packages nor Android AAB files", () => {
+  const workflowDirectory = path.join(root, ".github", "workflows");
+  const workflowSource = readdirSync(workflowDirectory)
+    .filter((filename) => /\.ya?ml$/.test(filename))
+    .map((filename) => readFileSync(path.join(workflowDirectory, filename), "utf8"))
+    .join("\n");
+
+  assert.doesNotMatch(
+    workflowSource,
+    /\.hap\b|harmonyos-signed\.app|native-android\.aab/i,
+  );
 });
 
 test("Android adaptive icons keep the canonical logo inside the launcher safe zone", () => {

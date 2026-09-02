@@ -27,4 +27,4 @@
 ./scripts/native-android-package.sh vX.Y.Z
 ```
 
-签名初始化脚本将本地 keystore 和 `keystore.properties` 写入已忽略的 `native/android/keystore/` 与 `native/android/keystore.properties`。打包脚本优先从 `ANDROID_SIGNING_*` 环境变量读取签名配置，未设置时使用上述本地配置。脚本运行 Release 单元测试与 Lint，验证 APK 签名和 ZIP 对齐，并验证 AAB 的 JAR 签名与 ZIP 完整性。APK、AAB 及各自 SHA-256 文件会写入 `release-artifacts/`，签名文件和密码不会进入仓库或安装包目录。APK/AAB 还会携带并逐字节校验根 `LICENSE`、`THIRD_PARTY_LICENSES.html` 与 `THIRD_PARTY_NOTICES.md`。
+签名初始化脚本将本地 keystore 和 `keystore.properties` 写入已忽略的 `native/android/keystore/` 与 `native/android/keystore.properties`。打包脚本优先从 `ANDROID_SIGNING_*` 环境变量读取签名配置，未设置时使用上述本地配置。脚本运行 Release 单元测试与 Lint，验证 APK 签名和 ZIP 对齐，并验证 AAB 的 JAR 签名与 ZIP 完整性。APK、AAB 及各自 SHA-256 文件会写入 `release-artifacts/`，签名文件和密码不会进入仓库或安装包目录。APK/AAB 还会携带并逐字节校验根 `LICENSE`、`THIRD_PARTY_LICENSES.html` 与 `THIRD_PARTY_NOTICES.md`。公开 GitHub Release 只上传 Universal APK；AAB 仅保留给应用商店或内部交付，`.sha256` 只用于发布核验。
