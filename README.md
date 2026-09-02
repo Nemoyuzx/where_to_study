@@ -62,12 +62,12 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 | CLI | Rust（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-cli` 发布 Linux x86_64/arm64 构建，并新增班车/重要事件命令，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-tui` 发布 Linux x86_64/arm64 构建；主分支已将班车/重要事件改为独立一级“查询”标签，见 [wts-tui/README.md](./wts-tui/README.md) |
 | iOS | SwiftUI 原生 | `0.2.8 (77)` 日历与事件渲染修复构建已上传 TestFlight；不作为 GitHub Release 附件 |
-| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002016)` 的 130 项单元测试、28vp 底部安全区设备回归、签名 APP/HAP 与 DevEco 云测试已通过；安装与测试仅通过 AppGallery Connect 分发，不在 GitHub 上传安装包 |
+| HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002017)` 的 132 项单元测试、手机 UI 21/21、月视图翻页/折叠与 ASSET 安全存储设备回归、签名 APP/HAP 与 DevEco 云测试已通过；安装与测试仅通过 AppGallery Connect 分发，不在 GitHub 上传安装包 |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
 > Apple 平台公测链接（版本可能不是最新，最新需要等待审核通过）：https://testflight.apple.com/join/yuzpAtDJ
 >
-> HarmonyOS 测试：`0.2.8 (1002016)` 已由 DevEco 上传 AppGallery Connect 且云测试通过；[打开 0.2.8 邀请页面（链接已含邀请码，审核通过后生效）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。预审通过前公开页可能显示任务不存在；HarmonyOS APP/HAP 不作为 GitHub Release 附件。
+> HarmonyOS 测试：`0.2.8 (1002017)` 已由 DevEco 上传 AppGallery Connect 且云测试通过；[打开 0.2.8 邀请页面（链接已含邀请码，审核通过后生效）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。预审通过前公开页可能显示任务不存在；HarmonyOS APP/HAP 不作为 GitHub Release 附件。
 
 ## 下载
 

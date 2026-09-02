@@ -21,7 +21,9 @@
 - 作业、学科竞赛、学术会议/期刊专题、校内竞赛、夏令营/预推免、黑客松和自定义日程分别使用独立颜色；设置色点、日周全天日程、月/年双层边框、弹窗与详情保持同一映射。
 - 日历范围预热、查询页和重复进入页面共享缓存；日期翻页、视图切换与查询滑块均不触发重复网络请求。
 - Tauri 桌面端即使只开启“学术会议”，也会正常执行年度预热、跨年范围加载、月详情显示和手动重试。
-- HarmonyOS build 1002016 保留手机月视图双页横向翻月与三档日程面板手势，并同步增量事件列表和独立日程颜色；底部导航会读取系统导航指示条/系统避让区，四个交互控件至少避让物理屏幕底部 28vp。
+- HarmonyOS build 1002017 修复手机月视图动画结束后仍回到旧月份的问题：翻页完成会提交目标月份与选中日期，并继续保留双页横向动画、相邻月预热和三档日程面板手势。对应热修提交为 [`15d4e33`](https://github.com/Nemoyuzx/where_to_study/commit/15d4e33219db0bcad404339890561b5f4d7ca680)。
+- HarmonyOS 的系统安全存储查询现显式使用 `ReturnType.ALL`，确保能读取已保存账号的完整属性，不再把字段缺失误报为“系统安全存储不可用”；隔离 alias 的新增、读取、更新和删除设备回归均通过。
+- HarmonyOS 底部导航继续读取系统导航指示条/系统避让区，四个交互控件至少避让物理屏幕底部 28vp；增量事件列表与独立日程颜色保持不变。
 - iPhone 年视图在横竖屏都为悬浮底部导航预留完整净空；12 月最后一日可滚动到导航条上方并点击打开详情。
 
 ## 数据与安全
@@ -37,7 +39,7 @@
 - iOS：`0.2.8 (77)`
 - 原生 macOS：`0.2.8 (77)`
 - Android：`0.2.8 (45)`
-- HarmonyOS：`0.2.8 (1002016)`
+- HarmonyOS：`0.2.8 (1002017)`
 - Tauri Android 兼容元数据：`versionCode=2011`
 - Legacy Tauri iOS：build 47
 
@@ -48,7 +50,7 @@
 - GitHub 不上传 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；AAB 保留给应用商店/内部交付，HarmonyOS 仅通过 AppGallery Connect 分发。
 - iOS 与正式签名 macOS 通过 TestFlight 分发，不上传 iOS 制品；GitHub macOS DMG 是未公证的开源预览包。
 - iOS 与 macOS `0.2.8 (77)` 均由本地 Xcode 完成上传；macOS 流程收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`。Apple 平台以上传脚本成功为完成边界，按约定不继续检查 App Store Connect processing。
-- HarmonyOS `0.2.8 (1002016)` 已由 DevEco 以“测试和正式上架”上传并通过云测试；邀请测试沿用[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)。
+- HarmonyOS `0.2.8 (1002017)` 已由 DevEco 以“测试和正式上架”上传并通过云测试；邀请测试沿用[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)。
 - Windows/Linux GUI 分别来自 [main push run 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`）；CLI/TUI 分别来自 [run 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）。已证明这些提交到最终 `main` 的全部运行时代码输入无差异，因此没有重复 dispatch。
 - 上述刷新附件均来自 main push 构建，tag-only attestation 按设计跳过，不声称具有 tag/Sigstore 来源证明。Windows 安装器仍未使用公众 Authenticode 证书。
 - `.sha256` 文件只用于发布前后内部核验，不作为公开附件。
@@ -59,7 +61,7 @@
 - Rust：Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过。
 - Apple：本地 Xcode 严格构建与完整平台测试通过；基础套件 26 项 UI 场景中 21 项通过、5 项设备/线上门控场景按设计跳过、0 失败；横竖屏年视图净空与生产班车 Store/真实 App UI 门控另行执行并通过。
 - Android：199/199 Release JVM 测试、Lint、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、版本及 HTTPS-only 打包校验通过。
-- HarmonyOS：130/130 ArkTS 单元测试、签名 HAP/APP 构建、版本、HAP 发布签名、三项固定公开 API 打包校验、手机一级导航与 28vp 底部净空设备测试 2/2 及 DevEco 云测试通过。
+- HarmonyOS：132/132 ArkTS 单元测试、签名 HAP/APP 构建、版本、HAP 发布签名及三项固定公开 API 打包校验通过；Pura 90 手机 UI 21/21、月视图双向翻页与折叠 1/1、隔离 ASSET alias 新增/读取/更新/删除 1/1 及 DevEco 云测试均通过。
 - 线上固定 API：班车 Schema 1.0、Contest DDL Schema 1.4 与校内通知 Schema 1.0 均通过固定 HTTPS 地址直接返回有效 JSON。
 - GitHub：10 个桌面附件已替换，Android Universal APK 保留；全部 11 个公开附件均重新下载并证明与本地发布文件逐字节一致。
 
@@ -86,7 +88,9 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - Assignments, competitions, conferences/journal issues, school notices, summer camps/pre-admission, hackathons, and custom schedules each use their own color across settings legends, all-day rows, month/year borders, dialogs, and details.
 - Calendar preheating, Query Center, and repeated presentation share caches. Paging, view switching, and segment animations do not trigger duplicate network requests.
 - On Tauri desktop, conference-only settings still drive annual preheating, cross-year range loading, month details, and manual retry.
-- HarmonyOS build 1002016 keeps the double-page month transition and three-stop details sheet while adding incremental event rendering and independent deadline colors. The bottom navigation now follows the system/navigation-indicator avoid area and keeps all four controls at least 28vp above the physical display bottom.
+- HarmonyOS build 1002017 fixes month paging that could animate to the next page and then restore the old month. Completing the transition now commits the destination month and selected date while preserving double-page motion, adjacent-month preheating, and the three-stop details sheet. The hotfix is [`15d4e33`](https://github.com/Nemoyuzx/where_to_study/commit/15d4e33219db0bcad404339890561b5f4d7ca680).
+- HarmonyOS secure-storage queries now explicitly request `ReturnType.ALL`, so saved account attributes are returned in full instead of being misreported as unavailable. Isolated-alias add, load, update, and delete device checks passed.
+- HarmonyOS bottom navigation continues to follow the system/navigation-indicator avoid area and keeps all four controls at least 28vp above the physical display bottom; incremental event rendering and independent deadline colors remain intact.
 - The iPhone year view reserves full floating-tab clearance in both orientations; December 31 remains scrollable, visible above the tab bar, and tappable.
 
 ## Data and security
@@ -103,7 +107,7 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - GitHub publishes no Android AAB, HarmonyOS APP/HAP, iOS artifact, SHA-256 sidecar, or native macOS ZIP. AAB remains store/internal-only, and HarmonyOS is distributed only through AppGallery Connect.
 - iOS and the distribution-signed macOS build are delivered through TestFlight. No iOS artifact is published on GitHub; the GitHub DMG remains an unnotarized open-source preview.
 - iOS and macOS `0.2.8 (77)` were both uploaded from local Xcode. The macOS flow reported `Validated signed archive`, `EXPORT SUCCEEDED`, and `Upload succeeded`. The upload script is the Apple completion boundary, and App Store Connect processing was intentionally not inspected afterward.
-- HarmonyOS `0.2.8 (1002016)` was uploaded for testing and release through DevEco and passed cloud testing. The [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) remains the public test entry.
+- HarmonyOS `0.2.8 (1002017)` was uploaded for testing and release through DevEco and passed cloud testing. The [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) remains the public test entry.
 - Windows and Linux GUI artifacts came from main-push [runs 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) and [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143) at `04a355c`; CLI/TUI came from [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) and [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633) at `6e92141`. Every runtime code input from those commits through final `main` was proven unchanged, so no duplicate dispatch was needed.
 - These refreshed assets are main-push builds, so the tag-only attestation step was skipped by design. No tag/Sigstore provenance claim is made for them. The Windows installer still lacks a public Authenticode publisher certificate.
 - SHA-256 sidecars remain internal release-verification files rather than public assets.
@@ -114,6 +118,6 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - Rust: 151 Tauri tests passed with three live-service tests intentionally ignored; Core 61/61, CLI 16/16, and TUI 21/21 passed, with `-D warnings` Clippy clean for all four crates.
 - Apple: strict local-Xcode builds and the full platform suite passed; 21 of 26 baseline UI scenarios passed with five device/live-gated skips and zero failures. Portrait/landscape year-clearance and the production-shuttle Store/UI gates also passed separately.
 - Android: 199/199 release JVM tests, Lint, pinned-certificate APK/AAB signing, signer fingerprints, ZIP alignment, version, and HTTPS-only package checks passed.
-- HarmonyOS: 130/130 ArkTS tests, signed HAP/APP builds, packed-version and release-signature checks, all three pinned public-API package checks, 2/2 device checks for primary navigation and 28vp bottom clearance, and DevEco cloud testing passed.
+- HarmonyOS: 132/132 ArkTS tests, signed HAP/APP builds, packed-version and release-signature checks, and all three pinned public-API package checks passed. Pura 90 phone UI 21/21, bidirectional month-paging/folding 1/1, isolated-ASSET-alias add/load/update/delete 1/1, and DevEco cloud testing also passed.
 - Live fixed APIs returned valid JSON directly over HTTPS for Shuttle Schema 1.0, Contest DDL Schema 1.4, and school notices Schema 1.0.
 - GitHub: ten desktop assets were replaced and the Android Universal APK was retained; all 11 public assets were downloaded again and proved byte-identical to the local release files.
