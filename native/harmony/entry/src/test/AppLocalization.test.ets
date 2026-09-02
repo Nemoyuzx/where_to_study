@@ -25,6 +25,12 @@ export default function appLocalizationTest() {
         .assertEqual('The shuttle data format is invalid.');
       expect(AppLocalization.text('班车服务返回 HTTP 503。', AppLanguage.english, 'en-US'))
         .assertEqual('The shuttle service returned HTTP 503.');
+      expect(AppLocalization.text('系统安全存储不可用，账号密码未能保存，请稍后重试。',
+        AppLanguage.english, 'en-US'))
+        .assertEqual('Secure storage is unavailable. Your account and password were not saved. Try again later.');
+      expect(AppLocalization.text('系统安全存储操作失败（24000002）。',
+        AppLanguage.english, 'en-US'))
+        .assertEqual('Secure storage failed (24000002).');
     });
 
     it('dynamic_static_labels_use_english_patterns', 0, () => {

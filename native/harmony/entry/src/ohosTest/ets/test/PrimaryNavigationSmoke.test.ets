@@ -6,8 +6,15 @@ import { Driver, ON, MatchPattern, Component, Point } from '@ohos.UiTest';
 import AbilityDelegatorRegistry from '@ohos.app.ability.abilityDelegatorRegistry';
 import { display } from '@kit.ArkUI';
 import { PhoneNavigationLayout } from '../../../main/ets/common/DeviceState';
+import { DateParts, StrictDates } from '../../../main/ets/common/StrictDates';
+import { TeachingCalendarLogic } from '../../../main/ets/view/calendar/CalendarLogic';
 
 const BUNDLE_NAME: string = 'com.nemoyu.wheretostudy';
+
+function monthPageID(date: DateParts): string {
+  return 'calendar.mobile.month-page.' + date.year.toString() + '-' +
+    (date.month < 10 ? '0' : '') + date.month.toString();
+}
 
 async function launchApp(reviewDemo: boolean): Promise<void> {
   const delegator = AbilityDelegatorRegistry.getAbilityDelegator();
@@ -68,7 +75,8 @@ async function findTextByScrollingDown(
   }
   const size: Point = await driver.getDisplaySize();
   for (let attempt: number = 0; attempt < attempts; attempt++) {
-    await driver.swipe(size.x / 2, size.y * 0.72, size.x / 2, size.y * 0.34);
+    await driver.swipe(Math.round(size.x / 2), Math.round(size.y * 0.72),
+      Math.round(size.x / 2), Math.round(size.y * 0.34), 1000);
     await driver.delayMs(300);
     component = await findText(driver, text, 600);
     if (component !== null) {
@@ -229,12 +237,12 @@ export default function primaryNavigationSmokeTest() {
       expect(calendarTab !== null).assertTrue();
       await calendarTab?.click();
       await driver.delayMs(1500);
-      // 周视图标题：YYYY年M月 第 N 周
+      // 周视图标题同时包含公历周和教学周。
       const weekTitle: Component | null = await findTextPattern(
-        driver, ' 周', MatchPattern.ENDS_WITH);
+        driver, '公历第', MatchPattern.CONTAINS);
       expect(weekTitle !== null).assertTrue();
       const weekText: string = weekTitle !== null ? await weekTitle.getText() : '';
-      expect(weekText.includes('第 ')).assertTrue();
+      expect(weekText.includes('教学周')).assertTrue();
       // 日视图
       const dayMode: Component | null = await findText(driver, '日');
       expect(dayMode !== null).assertTrue();
@@ -253,16 +261,36 @@ export default function primaryNavigationSmokeTest() {
       expect(monthTitle !== null).assertTrue();
       const mondayHeader: Component | null = await findText(driver, '一');
       expect(mondayHeader !== null).assertTrue();
-      // 收起月历：点击展开/收起把手（位于月网格下方，用下滑手势触发）
+      // 动画完成后必须由目标月份的 current page 接管，不能卸载 incoming 后
+      // 又露出旧 Builder 子树。向后、向前各走一次覆盖双向切换。
+      const originalDate: DateParts = StrictDates.todayParts();
+      const nextDate: DateParts = TeachingCalendarLogic.addMonths(
+        originalDate, 1, originalDate.day);
       const size: Point = await driver.getDisplaySize();
-      await driver.swipe(size.x / 2, size.y * 0.68, size.x / 2, size.y * 0.30);
-      await driver.delayMs(1000);
-      const collapsedSummary: Component | null = await findText(
-        driver, '暂无课程');
-      expect(collapsedSummary !== null).assertTrue();
-      // 再展开
-      await driver.swipe(size.x / 2, size.y * 0.30, size.x / 2, size.y * 0.68);
-      await driver.delayMs(1000);
+      await driver.swipe(Math.round(size.x * 0.82), Math.round(size.y * 0.42),
+        Math.round(size.x * 0.18), Math.round(size.y * 0.42), 1000);
+      await driver.delayMs(700);
+      expect(await driver.findComponent(ON.id(monthPageID(nextDate))) !== null).assertTrue();
+      expect(await driver.findComponent(ON.id('calendar.mobile.month-summary.' +
+        StrictDates.formatDateParts(nextDate))) !== null).assertTrue();
+      expect(await findText(driver,
+        nextDate.year.toString() + '年' + nextDate.month.toString() + '月') !== null).assertTrue();
+      await driver.swipe(Math.round(size.x * 0.18), Math.round(size.y * 0.42),
+        Math.round(size.x * 0.82), Math.round(size.y * 0.42), 1000);
+      await driver.delayMs(700);
+      expect(await driver.findComponent(ON.id(monthPageID(originalDate))) !== null).assertTrue();
+      // 点击同一个图标收起并重新展开，验证两个稳定档位。
+      const expandedHandle: Component = await driver.findComponent(
+        ON.id('calendar.mobile.month-handle.0'));
+      await expandedHandle.click();
+      await driver.delayMs(500);
+      const collapsedHandle: Component = await driver.findComponent(
+        ON.id('calendar.mobile.month-handle.1'));
+      expect(collapsedHandle !== null).assertTrue();
+      await collapsedHandle.click();
+      await driver.delayMs(500);
+      expect(await driver.findComponent(ON.id('calendar.mobile.month-handle.0')) !== null)
+        .assertTrue();
       // 年视图
       const yearMode: Component | null = await findText(driver, '年');
       expect(yearMode !== null).assertTrue();

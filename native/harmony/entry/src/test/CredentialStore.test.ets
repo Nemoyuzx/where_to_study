@@ -1,6 +1,8 @@
 import { asset } from '@kit.AssetStoreKit';
 import { describe, it, expect } from '@ohos/hypium';
-import { Credentials, credentialUpdateAttributes } from '../main/ets/store/CredentialStore';
+import {
+  Credentials, credentialQueryAttributes, credentialUpdateAttributes
+} from '../main/ets/store/CredentialStore';
 
 export default function credentialStoreTest() {
   describe('CredentialStoreTest', () => {
@@ -12,6 +14,16 @@ export default function credentialStoreTest() {
       expect(attributes.has(asset.Tag.SECRET)).assertTrue();
       expect(attributes.has(asset.Tag.ACCESSIBILITY)).assertFalse();
       expect(attributes.size).assertEqual(1);
+    });
+
+    it('query_attributes_request_the_secret_explicitly', 0, () => {
+      const attributes: asset.AssetMap = credentialQueryAttributes('bupt-jwgl-test');
+
+      expect(attributes.has(asset.Tag.ALIAS)).assertTrue();
+      expect(attributes.get(asset.Tag.RETURN_TYPE) as number)
+        .assertEqual(asset.ReturnType.ALL);
+      expect(attributes.has(asset.Tag.SECRET)).assertFalse();
+      expect(attributes.size).assertEqual(2);
     });
   });
 }

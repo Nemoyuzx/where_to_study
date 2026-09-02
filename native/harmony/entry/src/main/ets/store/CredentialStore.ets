@@ -48,22 +48,37 @@ export function credentialUpdateAttributes(credentials: Credentials): asset.Asse
   return map;
 }
 
+// ASSET query 默认只返回属性，不会返回 SECRET。读取单条凭据明文时必须显式
+// 请求 ReturnType.ALL；update/remove 的匹配条件仍只使用 ALIAS。
+export function credentialQueryAttributes(alias: string): asset.AssetMap {
+  const map: asset.AssetMap = new Map();
+  const encoder: util.TextEncoder = new util.TextEncoder();
+  map.set(asset.Tag.ALIAS, encoder.encodeInto(alias));
+  map.set(asset.Tag.RETURN_TYPE, asset.ReturnType.ALL);
+  return map;
+}
+
 // ASSET 在条目不存在时报错码 24000002（201 表示调用方无权限）。
 const ASSET_NOT_FOUND: number = 24000002;
 
 export class AssetCredentialStore implements CredentialStoring {
-  private static readonly alias: string = 'bupt-jwgl';
+  private readonly alias: string;
 
-  private static aliasAttr(): asset.AssetMap {
+  constructor(alias: string = 'bupt-jwgl') {
+    this.alias = alias;
+  }
+
+  private aliasAttr(): asset.AssetMap {
     const map: asset.AssetMap = new Map();
     const encoder: util.TextEncoder = new util.TextEncoder();
-    map.set(asset.Tag.ALIAS, encoder.encodeInto(AssetCredentialStore.alias));
+    map.set(asset.Tag.ALIAS, encoder.encodeInto(this.alias));
     return map;
   }
 
   async load(): Promise<Credentials | null> {
     try {
-      const results: Array<asset.AssetMap> = await asset.query(AssetCredentialStore.aliasAttr());
+      const results: Array<asset.AssetMap> = await asset.query(
+        credentialQueryAttributes(this.alias));
       if (results.length === 0) {
         return null;
       }
@@ -85,13 +100,13 @@ export class AssetCredentialStore implements CredentialStoring {
   async save(credentials: Credentials): Promise<void> {
     const updateAttr: asset.AssetMap = credentialUpdateAttributes(credentials);
     try {
-      await asset.update(AssetCredentialStore.aliasAttr(), updateAttr);
+      await asset.update(this.aliasAttr(), updateAttr);
     } catch (e) {
       const err: BusinessError = e as BusinessError;
       if (err.code !== ASSET_NOT_FOUND) {
         throw new Error('系统安全存储操作失败（' + err.code.toString() + '）。');
       }
-      const addAttr: asset.AssetMap = AssetCredentialStore.aliasAttr();
+      const addAttr: asset.AssetMap = this.aliasAttr();
       const encoder: util.TextEncoder = new util.TextEncoder();
       addAttr.set(asset.Tag.SECRET, encoder.encodeInto(credentials.toJsonText()));
       addAttr.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_FIRST_UNLOCKED);
@@ -102,9 +117,7 @@ export class AssetCredentialStore implements CredentialStoring {
         throw new Error('系统安全存储操作失败（' + err2.code.toString() + '）。');
       }
     }
-    // 往返校验：部分模拟器/系统镜像缺少 ASSET 扩展库（libasset_ext_ffi.z.so），
-    // update/add 不报错但实际未持久化。若不校验，后续保存会误判为"未保存过
-    // 账号"并提示"更换教务账号时必须输入新密码"。这里读回验证，未落盘即报错。
+    // 往返校验防止系统存储异常被误报为保存成功。
     const stored: Credentials | null = await this.load();
     if (stored === null || stored.account !== credentials.account ||
       stored.password !== credentials.password) {
@@ -114,7 +127,7 @@ export class AssetCredentialStore implements CredentialStoring {
 
   async clear(): Promise<void> {
     try {
-      await asset.remove(AssetCredentialStore.aliasAttr());
+      await asset.remove(this.aliasAttr());
     } catch (e) {
       const err: BusinessError = e as BusinessError;
       if (err.code === ASSET_NOT_FOUND) {

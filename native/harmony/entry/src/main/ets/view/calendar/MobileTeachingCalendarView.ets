@@ -82,6 +82,7 @@ export struct MobileTeachingCalendarView {
   private monthDetailsAtTopAtGestureStart: boolean = true;
   private monthScrollEnableRevision: number = 0;
   private timelineScrollTimer: number = -1;
+  private pendingTimelineRestoreOffsetY: number | null = null;
 
   aboutToAppear(): void {
     this.modeIndicatorRawValue = this.session.modeRawValue;
@@ -273,15 +274,17 @@ export struct MobileTeachingCalendarView {
           this.monthDetailsScrollEnabled = TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(
             this.monthSheetPosition);
         }
+        // 先让带新 identity 的 current page 在已经居中的 incoming page 后方挂载。
+        // 下一帧再卸载 incoming，避免同一批状态提交使旧 Builder 子树重新出现。
         this.pageOffsetX = 0;
-        this.incomingPageOffsetX = 0;
-        this.pageTransitionActive = false;
-        this.pageAnimating = false;
-        if (targetMode === CalendarMode.month) {
-          setTimeout(() => {
+        setTimeout(() => {
+          this.incomingPageOffsetX = 0;
+          this.pageTransitionActive = false;
+          this.pageAnimating = false;
+          if (targetMode === CalendarMode.month) {
             this.resetMonthDetailsScroll();
-          }, 0);
-        }
+          }
+        }, 16);
       }, 310);
     }, 16);
   }
@@ -289,6 +292,16 @@ export struct MobileTeachingCalendarView {
   private navigateTo(date: DateParts): void {
     if (!date.equals(this.selectedDate())) {
       this.performCalendarHaptic();
+    }
+    if (this.mode() === CalendarMode.week && !date.equals(this.selectedDate()) &&
+      this.weekDates(date)[0].equals(this.weekDates(this.selectedDate())[0])) {
+      try {
+        const currentOffsetY: number = this.timelineScroller.currentOffset().yOffset;
+        this.pendingTimelineRestoreOffsetY = Number.isFinite(currentOffsetY) ?
+          Math.max(currentOffsetY, 0) : null;
+      } catch (e) {
+        this.pendingTimelineRestoreOffsetY = null;
+      }
     }
     if (this.mode() === CalendarMode.month &&
       this.monthSheetPosition > TeachingCalendarLogic.monthSheetExpandedPosition + 0.01) {
@@ -433,12 +446,24 @@ export struct MobileTeachingCalendarView {
       Column() {
         this.compactHeader()
         Stack({ alignContent: Alignment.TopStart }) {
-          Column() {
-            this.currentCalendarPage()
-          }
-          .width('100%')
-          .height('100%')
-          .translate({ x: this.pageOffsetX })
+          // ComponentV2 不会因为嵌套 @Builder 的 DateParts 参数变化而可靠地
+          // 重建既有子树。以“模式 + 日期”为 current page identity，翻页提交后
+          // 强制重建目标页，避免 incoming 卸载后重新露出旧月份。
+          ForEach([this.currentPageIdentity()], (identity: string) => {
+            Column() {
+              if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
+                this.timelineContent(this.mode(), this.selectedDate(), true)
+              } else if (this.mode() === CalendarMode.month) {
+                this.monthView(this.selectedDate(), true)
+              } else {
+                this.yearView(this.selectedDate(), true)
+              }
+            }
+            .width('100%')
+            .height('100%')
+            .translate({ x: this.pageOffsetX })
+            .id('calendar.mobile.current-page.' + identity)
+          }, (identity: string) => identity)
 
           if (this.pageTransitionActive) {
             Column() {
@@ -482,15 +507,12 @@ export struct MobileTeachingCalendarView {
     })
   }
 
-  @Builder
-  currentCalendarPage() {
-    if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
-      this.timelineContent(this.mode(), this.selectedDate(), true)
-    } else if (this.mode() === CalendarMode.month) {
-      this.monthView(this.selectedDate(), true, this.monthSheetPosition)
-    } else {
-      this.yearView(this.selectedDate(), true)
-    }
+  private currentPageIdentity(): string {
+    return this.session.modeRawValue + '.' + StrictDates.formatDateParts(this.selectedDate());
+  }
+
+  private monthPageIdentity(date: DateParts): string {
+    return date.year.toString() + '-' + (date.month < 10 ? '0' : '') + date.month.toString();
   }
 
   @Builder
@@ -500,7 +522,7 @@ export struct MobileTeachingCalendarView {
       this.timelineContent(CalendarModeInfo.fromRawValue(this.incomingModeRawValue),
         this.incomingDate, false)
     } else if (CalendarModeInfo.fromRawValue(this.incomingModeRawValue) === CalendarMode.month) {
-      this.monthView(this.incomingDate, false, this.incomingMonthSheetPosition)
+      this.monthView(this.incomingDate, false)
     } else {
       this.yearView(this.incomingDate, false)
     }
@@ -792,6 +814,7 @@ export struct MobileTeachingCalendarView {
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.None)
       .width('100%')
+      .id('calendar.mobile.timeline-scroll')
       .onAppear(() => {
         if (interactive) {
           this.scrollTimelineToInitialHour(renderMode, renderDate, this.timelineScroller);
@@ -1071,33 +1094,43 @@ export struct MobileTeachingCalendarView {
 
   // ---------- 月视图 ----------
 
+  private renderedMonthSheetPosition(interactive: boolean): number {
+    return interactive ? this.monthSheetPosition : this.incomingMonthSheetPosition;
+  }
+
   @Builder
-  monthView(renderDate: DateParts, interactive: boolean, sheetPosition: number) {
+  monthView(renderDate: DateParts, interactive: boolean) {
     Column({ space: 0 }) {
       this.statusArea(false, CalendarMode.month, renderDate)
       this.monthWeekdayHeader()
       ForEach(this.monthWeeks(renderDate), (week: DateParts[], rowIndex: number) => {
         Row({ space: 2 }) {
           ForEach(week, (day: DateParts) => {
-            this.monthDayButton(day, rowIndex, renderDate, interactive, sheetPosition)
+            this.monthDayButton(day, rowIndex, renderDate, interactive)
           }, (day: DateParts) => 'month-day.' + StrictDates.formatDateParts(day))
         }
         .width('100%')
-        .height(this.monthRowHeight(rowIndex, renderDate, sheetPosition))
-        .opacity(this.monthRowHeight(rowIndex, renderDate, sheetPosition) <= 0 ? 0 : 1)
+        .height(this.monthRowHeight(rowIndex, renderDate,
+          this.renderedMonthSheetPosition(interactive)))
+        .opacity(this.monthRowHeight(rowIndex, renderDate,
+          this.renderedMonthSheetPosition(interactive)) <= 0 ? 0 : 1)
         .clip(true)
       }, (week: DateParts[], rowIndex: number) => 'month-week.' + rowIndex.toString() + '.' +
         StrictDates.formatDateParts(week[0]))
 
-      this.monthExpansionHandle(sheetPosition, interactive)
+      this.monthExpansionHandle(interactive)
       List({ space: 0, scroller: interactive ?
         this.monthDetailsScroller : this.incomingMonthDetailsScroller }) {
           ListItem() {
             Column({ space: 10 }) {
               // ArkUI 会复用 Builder 子树；按日期设置 key，翻月后强制刷新详情内容。
               ForEach([renderDate], (day: DateParts) => {
-                this.daySummaryCard(day)
-                CalendarDailyInfoCards({ day: day })
+                Column({ space: 10 }) {
+                  this.daySummaryCard(day)
+                  CalendarDailyInfoCards({ day: day })
+                }
+                .width('100%')
+                .id('calendar.mobile.month-summary.' + StrictDates.formatDateParts(day))
               }, (day: DateParts) => 'month-summary.' + StrictDates.formatDateParts(day))
             }
             .width('100%')
@@ -1108,7 +1141,7 @@ export struct MobileTeachingCalendarView {
         .layoutWeight(1)
         .width('100%')
         .padding({ top: 8 })
-        .opacity(Math.min(sheetPosition, 1))
+        .opacity(Math.min(this.renderedMonthSheetPosition(interactive), 1))
         .enableScrollInteraction(interactive && this.monthDetailsScrollEnabled)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.None)
@@ -1120,6 +1153,7 @@ export struct MobileTeachingCalendarView {
     .padding({ left: 0, right: 0, top: 8, bottom: 0 })
     .width('100%')
     .height('100%')
+    .id('calendar.mobile.month-page.' + this.monthPageIdentity(renderDate))
     // 与 iOS simultaneousGesture 一致：页面手势与详情 List 并行识别，
     // 然后由上方的轴锁定/顶部快照决定归属。排他手势会导致 List
     // 抢走横向事件，从而出现“左右滑动却不翻月”。
@@ -1204,8 +1238,8 @@ export struct MobileTeachingCalendarView {
   }
 
   @Builder
-  monthDayButton(day: DateParts, rowIndex: number, renderDate: DateParts, interactive: boolean,
-    sheetPosition: number) {
+  monthDayButton(day: DateParts, rowIndex: number, renderDate: DateParts,
+    interactive: boolean) {
     Stack({ alignContent: Alignment.Center }) {
       Column({ space: 0 }) {
         Row({ space: 3 }) {
@@ -1225,10 +1259,10 @@ export struct MobileTeachingCalendarView {
         .height(24)
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
-        if (this.monthExpansionProgress(sheetPosition) > 0.01) {
-          this.expandedMonthEvents(day, renderDate, interactive, sheetPosition)
+        if (this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive)) > 0.01) {
+          this.expandedMonthEvents(day, renderDate, interactive)
         }
-        if (this.monthExpansionProgress(sheetPosition) < 0.99) {
+        if (this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive)) < 0.99) {
           Text(this.compactMonthMarker(day))
             .fontSize(9.5)
             .fontColor(this.monthForeground(day, renderDate))
@@ -1237,27 +1271,30 @@ export struct MobileTeachingCalendarView {
             .textAlign(TextAlign.Center)
             .width('100%')
             .height(TeachingCalendarLogic.interpolateMonthMetric(12, 0,
-              this.monthExpansionProgress(sheetPosition)))
-            .opacity(1 - this.monthExpansionProgress(sheetPosition))
+              this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive))))
+            .opacity(1 - this.monthExpansionProgress(
+              this.renderedMonthSheetPosition(interactive)))
         }
       }
       .padding({
         left: TeachingCalendarLogic.interpolateMonthMetric(4, 3,
-          this.monthExpansionProgress(sheetPosition)),
+          this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive))),
         right: TeachingCalendarLogic.interpolateMonthMetric(4, 3,
-          this.monthExpansionProgress(sheetPosition)),
+          this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive))),
         top: 5,
         bottom: TeachingCalendarLogic.interpolateMonthMetric(5, 2,
-          this.monthExpansionProgress(sheetPosition))
+          this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive)))
       })
       .width('100%')
       .height('100%')
-      .justifyContent(this.monthExpansionProgress(sheetPosition) > 0.01 ?
+      .justifyContent(this.monthExpansionProgress(
+        this.renderedMonthSheetPosition(interactive)) > 0.01 ?
         FlexAlign.Start : FlexAlign.Center)
       this.deadlineBorderLayers(day, 10, 7, 6)
     }
     .layoutWeight(1)
-    .height(this.monthRowHeight(rowIndex, renderDate, sheetPosition))
+    .height(this.monthRowHeight(rowIndex, renderDate,
+      this.renderedMonthSheetPosition(interactive)))
     .backgroundColor(this.monthBackground(day, renderDate))
     .borderRadius(10)
     .clip(true)
@@ -1301,7 +1338,8 @@ export struct MobileTeachingCalendarView {
   }
 
   private monthEventCapacity(day: DateParts, renderDate: DateParts,
-    sheetPosition: number): number {
+    interactive: boolean): number {
+    const sheetPosition: number = this.renderedMonthSheetPosition(interactive);
     const height: number = this.monthRowHeight(
       this.selectedMonthWeekIndex(renderDate), renderDate, sheetPosition);
     const available: number = TeachingCalendarLogic.monthEntryAvailableHeight(
@@ -1310,28 +1348,27 @@ export struct MobileTeachingCalendarView {
   }
 
   private visibleMonthEventCount(day: DateParts, renderDate: DateParts,
-    sheetPosition: number): number {
+    interactive: boolean): number {
     return TeachingCalendarLogic.visibleMonthEntryCount(
-      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate, sheetPosition));
+      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate, interactive));
   }
 
   private hiddenMonthEventCount(day: DateParts, renderDate: DateParts,
-    sheetPosition: number): number {
+    interactive: boolean): number {
     return TeachingCalendarLogic.hiddenMonthEntryCount(
-      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate, sheetPosition));
+      this.monthEvents(day).length, this.monthEventCapacity(day, renderDate, interactive));
   }
 
   @Builder
-  expandedMonthEvents(day: DateParts, renderDate: DateParts, interactive: boolean,
-    sheetPosition: number) {
+  expandedMonthEvents(day: DateParts, renderDate: DateParts, interactive: boolean) {
     Column({ space: 1 }) {
       ForEach(this.monthEvents(day).slice(0,
-        this.visibleMonthEventCount(day, renderDate, sheetPosition)),
+        this.visibleMonthEventCount(day, renderDate, interactive)),
         (event: MonthEvent) => {
           this.monthEventItem(event, day.equals(renderDate))
         }, (event: MonthEvent) => 'month-event.' + event.id)
-      if (this.hiddenMonthEventCount(day, renderDate, sheetPosition) > 0) {
-        Text('+' + this.hiddenMonthEventCount(day, renderDate, sheetPosition).toString())
+      if (this.hiddenMonthEventCount(day, renderDate, interactive) > 0) {
+        Text('+' + this.hiddenMonthEventCount(day, renderDate, interactive).toString())
           .fontSize(9.5)
           .fontWeight(FontWeight.Medium)
           .fontColor(day.equals(renderDate) ? AppTheme.onPrimary() : AppTheme.text())
@@ -1345,10 +1382,11 @@ export struct MobileTeachingCalendarView {
       }
     .width('100%')
     .height(TeachingCalendarLogic.monthEntryAvailableHeight(
-      this.monthRowHeight(this.selectedMonthWeekIndex(renderDate), renderDate, sheetPosition),
-      this.monthExpansionProgress(sheetPosition)))
+      this.monthRowHeight(this.selectedMonthWeekIndex(renderDate), renderDate,
+        this.renderedMonthSheetPosition(interactive)),
+      this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive))))
     .alignItems(HorizontalAlign.Start)
-    .opacity(this.monthExpansionProgress(sheetPosition))
+    .opacity(this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive)))
   }
 
   @Builder
@@ -1398,7 +1436,7 @@ export struct MobileTeachingCalendarView {
   }
 
   @Builder
-  monthExpansionHandle(sheetPosition: number, interactive: boolean) {
+  monthExpansionHandle(interactive: boolean) {
     Column() {
       Row({ space: 0 }) {
         Column()
@@ -1406,25 +1444,29 @@ export struct MobileTeachingCalendarView {
           .height(4)
           .borderRadius(2)
           .backgroundColor(AppTheme.secondaryText())
-          .rotate({ angle: -24 * this.monthExpansionProgress(sheetPosition),
+          .rotate({ angle: -24 * this.monthExpansionProgress(
+            this.renderedMonthSheetPosition(interactive)),
             centerX: '100%', centerY: '50%' })
         Column()
           .width(20)
           .height(4)
           .borderRadius(2)
           .backgroundColor(AppTheme.secondaryText())
-          .rotate({ angle: 24 * this.monthExpansionProgress(sheetPosition),
+          .rotate({ angle: 24 * this.monthExpansionProgress(
+            this.renderedMonthSheetPosition(interactive)),
             centerX: '0%', centerY: '50%' })
       }
     }
     .width('100%')
     .height(28)
     .justifyContent(FlexAlign.Center)
+    .id('calendar.mobile.month-handle.' + Math.round(
+      this.renderedMonthSheetPosition(interactive)).toString())
     .onClick(() => {
       if (!interactive) {
         return;
       }
-      const rounded: number = Math.round(sheetPosition);
+      const rounded: number = Math.round(this.renderedMonthSheetPosition(interactive));
       const target: number = TeachingCalendarLogic.monthHandleTargetPosition(rounded);
       this.settleMonthSheet(target);
     })
@@ -2047,6 +2089,8 @@ export struct MobileTeachingCalendarView {
     }
     const hour: number = MobileCalendarTimelineLayout.initialVisibleHour(
       this.shanghaiHour(), includesToday);
+    const restoreOffsetY: number | null = this.pendingTimelineRestoreOffsetY;
+    this.pendingTimelineRestoreOffsetY = null;
     if (this.timelineScrollTimer >= 0) {
       clearTimeout(this.timelineScrollTimer);
     }
@@ -2054,7 +2098,8 @@ export struct MobileTeachingCalendarView {
       this.timelineScrollTimer = -1;
       scroller.scrollTo({
         xOffset: 0,
-        yOffset: (hour - 8) * MobileCalendarTimelineLayout.hourHeight
+        yOffset: restoreOffsetY === null ?
+          (hour - 8) * MobileCalendarTimelineLayout.hourHeight : restoreOffsetY
       });
     }, 150);
   }

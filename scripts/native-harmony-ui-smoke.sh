@@ -41,6 +41,7 @@ display_metrics() {
 dump_layout() {
   # BUG-035 修复：dump/recv 失败时显式报错并返回非零，避免基于过期布局断言。
   "${HDC}" -t "${TARGET}" shell rm -f "${LAYOUT_DEV}" >/dev/null 2>&1 || true
+  rm -f "${LAYOUT_HOST}"
   local out
   out="$("${HDC}" -t "${TARGET}" shell uitest dumpLayout -p "${LAYOUT_DEV}" 2>&1)" || true
   sleep 1
@@ -142,6 +143,20 @@ assert_id_attr() {
   else
     FAIL=$((FAIL + 1))
     echo "  ✗ $1（$2.$3：期望 $4，实际 ${actual:-<空>}）" >&2
+  fi
+}
+
+assert_id_exists() {
+  # assert_id_exists <描述> <id>
+  local bounds
+  dump_layout || true
+  bounds="$(find_id "$2")"
+  if [[ -n "$bounds" ]]; then
+    PASS=$((PASS + 1))
+    echo "  ✓ $1"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ $1（未找到 ID：$2）" >&2
   fi
 }
 
@@ -388,6 +403,29 @@ tap_text "月"
 dump_layout || true
 assert_text "月视图模式按钮" "月"
 assert_text "月视图星期表头" "一"
+read -r current_month_id next_month_id next_month_summary_id next_month_title <<<"$(python3 - <<'PY'
+import calendar
+from datetime import datetime
+from zoneinfo import ZoneInfo
+today = datetime.now(ZoneInfo('Asia/Shanghai'))
+year, month = today.year, today.month
+next_year = year + (1 if month == 12 else 0)
+next_month = 1 if month == 12 else month + 1
+next_day = min(today.day, calendar.monthrange(next_year, next_month)[1])
+print(f'calendar.mobile.month-page.{year:04d}-{month:02d}',
+      f'calendar.mobile.month-page.{next_year:04d}-{next_month:02d}',
+      f'calendar.mobile.month-summary.{next_year:04d}-{next_month:02d}-{next_day:02d}',
+      f'{next_year}年{next_month}月')
+PY
+)"
+tap_text "›" 0 800
+dump_layout || true
+assert_text "月视图翻页后标题更新" "$next_month_title"
+assert_id_exists "动画结束后保留目标月份网格" "$next_month_id"
+assert_id_exists "动画结束后日期详情同步到目标月份" "$next_month_summary_id"
+tap_text "‹" 0 800
+dump_layout || true
+assert_id_exists "反向翻页后恢复原月份网格" "$current_month_id"
 tap_text "年"
 dump_layout || true
 assert_text "年视图说明" "颜色越深表示当天日程越多"

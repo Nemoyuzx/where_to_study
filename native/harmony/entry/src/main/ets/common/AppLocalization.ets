@@ -210,6 +210,8 @@ export class AppLocalization {
     '西土城': 'Xitucheng',
     '沙河': 'Shahe',
     '保存设置': 'Save Settings',
+    '系统安全存储不可用，账号密码未能保存，请稍后重试。':
+      'Secure storage is unavailable. Your account and password were not saved. Try again later.',
     '账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。':
       'Your account and password stay on this device and are protected by HarmonyOS ASSET.',
     '学期设置': 'Semester',
@@ -402,6 +404,10 @@ export class AppLocalization {
     if (source.startsWith('班车服务返回 HTTP ')) {
       return 'The shuttle service returned HTTP ' +
         source.substring('班车服务返回 HTTP '.length).replace('。', '.');
+    }
+    if (source.startsWith('系统安全存储操作失败（')) {
+      return 'Secure storage failed (' +
+        source.substring('系统安全存储操作失败（'.length).replace('）。', ').');
     }
     if (source.startsWith('公开活动 DDL 不可用')) {
       return 'Public event deadlines are temporarily unavailable.';

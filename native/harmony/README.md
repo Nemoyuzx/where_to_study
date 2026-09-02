@@ -32,8 +32,8 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 131 个契约单元测试
-./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 16 项、宽屏 11 项）
+./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 132 个契约单元测试
+./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 21 项、宽屏 11 项）
 ```
 
 手动命令（hvigorw 在 DevEco 安装目录下）：`hvigorw assembleHap` 与
@@ -101,8 +101,9 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 
 重要事件首批只渲染 20 条，接近列表底部后自动追加 20 条；搜索、筛选和数据变化会重置本地显示窗口，但不会重新请求网络。作业、学科竞赛、会议/期刊、校内竞赛、夏令营/预推免、黑客松与自定义日程分别使用独立颜色，并贯通设置、月/年双层边框、日周全天与详情。
 
-> 构建与运行验证：已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
-> 的 assembleHap/assembleApp 编译；0.2.8 (1002016) Release APP/HAP 已通过 SHA-256、
-> 独立 HAP 签名、APP ZIP 结构、版本和三项固定 HTTPS API 校验，130 个契约单元测试全部通过；手机仿真器上的一级导航与 28vp 底部净空设备测试 2/2 通过。DevEco“上传产品”已将
+> 构建与运行验证：当前源码已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
+> 的 assembleHap/assembleApp 编译与 132 个契约单元测试；Pura 90 仿真器上的手机 UI
+> 冒烟测试 21/21、月视图双向翻页与折叠设备测试 1/1、隔离 alias 的 ASSET 新增/读取/更新/删除测试 1/1 均通过。已发布的 0.2.8 (1002016) Release APP/HAP 另已通过 SHA-256、
+> 独立 HAP 签名、APP ZIP 结构、版本和三项固定 HTTPS API 校验。DevEco“上传产品”已将
 > 0.2.8 (1002016) 上传 AppGallery Connect 用于测试和发布，云测试结果为“通过”。HarmonyOS 安装包仅通过 AppGallery Connect 分发，不上传 GitHub Release。
 > 0.2.8 邀请测试已提交并处于“预审中”；[打开邀请页面（链接已含邀请码，审核通过后生效）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)，邀请码为 `A0IsJpKIcn3`。预审通过前公开页可能显示任务不存在。

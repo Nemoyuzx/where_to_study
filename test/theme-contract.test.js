@@ -187,6 +187,10 @@ const harmonyAppModelSource = readFileSync(
   new URL('../native/harmony/entry/src/main/ets/model/AppModel.ets', import.meta.url),
   'utf8',
 )
+const harmonyCredentialStoreSource = readFileSync(
+  new URL('../native/harmony/entry/src/main/ets/store/CredentialStore.ets', import.meta.url),
+  'utf8',
+)
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 const nativeAndroidLightTheme = readFileSync(
   new URL(
@@ -881,6 +885,56 @@ test('calendar paging keeps an outgoing page while the new page slides in', () =
   assert.match(appCss, /@keyframes calendar-slide-exit-next\s*\{[^}]*translateX\(0\)[\s\S]*translateX\(-100%\)/)
   assert.match(appCss, /@keyframes calendar-slide-exit-previous\s*\{[^}]*translateX\(0\)[\s\S]*translateX\(100%\)/)
   assert.doesNotMatch(appCss, /calendar-view-enter/)
+
+  assert.match(harmonyMobileCalendarSource, /ForEach\(\[this\.currentPageIdentity\(\)\]/)
+  assert.match(harmonyMobileCalendarSource, /calendar\.mobile\.current-page\.'/)
+  assert.match(harmonyMobileCalendarSource, /calendar\.mobile\.month-page\.'/)
+  assert.match(harmonyMobileCalendarSource, /calendar\.mobile\.month-summary\.'/)
+  assert.match(harmonyMobileCalendarSource, /calendar\.mobile\.month-handle\.'/)
+  assert.match(
+    harmonyMobileCalendarSource,
+    /private renderedMonthSheetPosition\(interactive: boolean\): number/,
+  )
+  assert.match(
+    harmonyMobileCalendarSource,
+    /monthView\(renderDate: DateParts, interactive: boolean\)/,
+  )
+  assert.doesNotMatch(
+    harmonyMobileCalendarSource,
+    /monthView\(renderDate: DateParts, interactive: boolean, sheetPosition:/,
+  )
+  assert.doesNotMatch(harmonyMobileCalendarSource, /this\.currentCalendarPage\(\)/)
+  assert.match(harmonyMobileCalendarSource, /pendingTimelineRestoreOffsetY/)
+  assert.match(harmonyMobileCalendarSource, /calendar\.mobile\.timeline-scroll/)
+  assert.match(
+    harmonyMobileCalendarSource,
+    /const currentOffsetY: number = this\.timelineScroller\.currentOffset\(\)\.yOffset/,
+  )
+  assert.match(
+    harmonyMobileCalendarSource,
+    /yOffset: restoreOffsetY === null \?/,
+  )
+  const commitIndex = harmonyMobileCalendarSource.indexOf('this.session.commitMonthNavigation(targetDate)')
+  const nextFrameIndex = harmonyMobileCalendarSource.indexOf('setTimeout(() => {', commitIndex)
+  const unmountIndex = harmonyMobileCalendarSource.indexOf('this.pageTransitionActive = false', commitIndex)
+  assert.ok(commitIndex >= 0 && commitIndex < nextFrameIndex && nextFrameIndex < unmountIndex)
+})
+
+test('Harmony secure credential queries explicitly request secret data', () => {
+  assert.match(
+    harmonyCredentialStoreSource,
+    /map\.set\(asset\.Tag\.RETURN_TYPE, asset\.ReturnType\.ALL\)/,
+  )
+  assert.match(
+    harmonyCredentialStoreSource,
+    /asset\.query\(\s*credentialQueryAttributes\(this\.alias\)\)/,
+  )
+  assert.match(harmonyCredentialStoreSource, /await asset\.update\(this\.aliasAttr\(\), updateAttr\)/)
+  assert.match(harmonyCredentialStoreSource, /await asset\.remove\(this\.aliasAttr\(\)\)/)
+  assert.doesNotMatch(
+    harmonyCredentialStoreSource,
+    /private aliasAttr\(\)[\s\S]*?RETURN_TYPE[\s\S]*?return map/,
+  )
 })
 
 test('month expansion stays mobile-only and morphs its drag handle with progress', () => {
