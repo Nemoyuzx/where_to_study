@@ -362,10 +362,12 @@ export class AppLocalization {
       return exact;
     }
     if (source.endsWith(' 门课')) {
-      return source.substring(0, source.length - 3) + ' courses';
+      const count: string = source.substring(0, source.length - 3);
+      return count + (count === '1' ? ' course' : ' courses');
     }
     if (source.endsWith(' 门')) {
-      return source.substring(0, source.length - 2) + ' courses';
+      const count: string = source.substring(0, source.length - 2);
+      return count + (count === '1' ? ' course' : ' courses');
     }
     if (source.endsWith('视图')) {
       return AppLocalization.text(source.substring(0, source.length - 2), setting,

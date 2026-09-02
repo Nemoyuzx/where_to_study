@@ -357,6 +357,15 @@ export default function teachingCalendarLogicTest() {
       expect(MobileCalendarTimelineLayout.columnTapSelectsDay(true)).assertFalse();
     });
 
+    it('expanded_tablet_week_fills_the_viewport_without_clipping', 0, () => {
+      expect(MobileCalendarTimelineLayout.expandedAxisWidth(false)).assertEqual(144);
+      expect(MobileCalendarTimelineLayout.expandedAxisWidth(true)).assertEqual(156);
+      expect(MobileCalendarTimelineLayout.fittedDayWidth(1050, 7)).assertEqual(150);
+      expect(MobileCalendarTimelineLayout.fittedDayWidth(700, 7) * 7).assertEqual(700);
+      expect(MobileCalendarTimelineLayout.expandedViewportHeight(960)).assertEqual(680);
+      expect(MobileCalendarTimelineLayout.expandedViewportHeight(600)).assertEqual(360);
+    });
+
     it('timeline_minute_and_metadata_helpers', 0, () => {
       expect(CalendarTimelineLogic.minuteOf('09:50')).assertEqual(9 * 60 + 50);
       expect(CalendarTimelineLogic.minuteOf('24:00')).assertNull();

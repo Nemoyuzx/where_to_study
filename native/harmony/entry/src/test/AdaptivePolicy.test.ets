@@ -12,14 +12,15 @@ export default function adaptivePolicyTest() {
       expect(AdaptiveLayoutPolicy.useSidebarFor(430, DeviceFoldState.expanded)).assertFalse();
       expect(AdaptiveLayoutPolicy.useSidebarFor(699, DeviceFoldState.expanded)).assertFalse();
       expect(AdaptiveLayoutPolicy.useTwoColumnFor(759, DeviceFoldState.expanded)).assertFalse();
-      expect(AdaptiveLayoutPolicy.useExpandedCalendarFor(759, DeviceFoldState.expanded)).assertFalse();
+      expect(AdaptiveLayoutPolicy.useExpandedCalendarFor(867, DeviceFoldState.expanded)).assertFalse();
     });
 
     it('wide_widths_use_sidebar_two_columns_expanded_calendar', 0, () => {
       expect(AdaptiveLayoutPolicy.useSidebarFor(700, DeviceFoldState.expanded)).assertTrue();
       expect(AdaptiveLayoutPolicy.useSidebarFor(1024, DeviceFoldState.expanded)).assertTrue();
       expect(AdaptiveLayoutPolicy.useTwoColumnFor(760, DeviceFoldState.expanded)).assertTrue();
-      expect(AdaptiveLayoutPolicy.useExpandedCalendarFor(760, DeviceFoldState.expanded)).assertTrue();
+      expect(AdaptiveLayoutPolicy.useExpandedCalendarFor(760, DeviceFoldState.expanded)).assertFalse();
+      expect(AdaptiveLayoutPolicy.useExpandedCalendarFor(868, DeviceFoldState.expanded)).assertTrue();
     });
 
     it('half_folded_forces_compact_even_when_wide', 0, () => {

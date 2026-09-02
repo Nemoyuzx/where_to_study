@@ -676,6 +676,39 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
   assert.match(harmonySettingsSource, /segmentedOptions\(labels: string\[\]/)
 })
 
+test('Harmony tablet week view fills its viewport and keeps all-day columns aligned', () => {
+  assert.match(
+    harmonyTimelineSource,
+    /return MobileCalendarTimelineLayout\.fittedDayWidth\(this\.viewportWidth, this\.dayCount\(\)\)/,
+  )
+  assert.match(
+    harmonyExpandedCalendarSource,
+    /\.height\(MobileCalendarTimelineLayout\.expandedViewportHeight\(this\.rootHeight\)\)/,
+  )
+  assert.doesNotMatch(harmonyExpandedCalendarSource, /this\.contentHeight - 280/)
+
+  const allDayRow = harmonyExpandedCalendarSource.match(
+    /allDayRow\(\)[\s\S]*?private allDayItemsOn/,
+  )?.[0] ?? ''
+  assert.match(
+    allDayRow,
+    /\.width\(MobileCalendarTimelineLayout\.expandedAxisWidth\(this\.isPc\)\)/,
+  )
+  assert.match(allDayRow, /\.id\('calendar\.expanded\.all-day-axis'\)/)
+  assert.match(allDayRow, /calendar\.expanded\.all-day\.'/)
+  assert.match(allDayRow, /Row\(\{ space: 0 \}\)/)
+  assert.match(allDayRow, /\.padding\(\{ left: 2, right: 2 \}\)/)
+  assert.match(harmonyTimelineSource, /calendar\.expanded\.timeline-axis-header/)
+  assert.match(harmonyTimelineSource, /calendar\.expanded\.day-header\.'/)
+  assert.match(
+    harmonyTimelineSource,
+    /Text\(this\.isEnglish\(\) \? CalendarFormatters\.weekdayLabel\(day\.date, true\)/,
+  )
+  assert.match(harmonyExpandedCalendarSource, /return base \+ ' · Cal '/)
+  assert.match(harmonyExpandedCalendarSource, /calendar\.expanded\.timeline-scroll/)
+  assert.ok((harmonyExpandedCalendarSource.match(/\.scrollBar\(BarState\.Off\)/g) ?? []).length >= 2)
+})
+
 test('desktop calendar supplement commands are exposed by the Tauri capability manifest', () => {
   const capability = JSON.parse(tauriCapabilities)
   const commands = [

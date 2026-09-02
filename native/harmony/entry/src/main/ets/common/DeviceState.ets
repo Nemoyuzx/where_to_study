@@ -60,6 +60,15 @@ export class DeviceState {
     }
   }
 
+  static screenHeightVp(): number {
+    try {
+      const defaultDisplay: display.Display = display.getDefaultDisplaySync();
+      return defaultDisplay.height / defaultDisplay.densityPixels;
+    } catch (e) {
+      return 844;
+    }
+  }
+
   // EntryAbility.onDestroy 调用：注销折叠监听（BUG-017 修复）。
   detach(): void {
     if (!this.listening) {
@@ -112,7 +121,8 @@ export class DeviceState {
 // 可在主机侧单元测试中直接验证折叠/宽度组合。
 export class AdaptiveLayoutPolicy {
   static readonly minimumSidebarWidth: number = 700;
-  static readonly minimumExpandedCalendarWidth: number = 760;
+  // Expanded 日历按最宽的 PC 轴计算：40vp 页边距 + 156vp 轴 + 7 × 96vp 日期列。
+  static readonly minimumExpandedCalendarWidth: number = 868;
   static readonly minimumTwoColumnWidth: number = 760;
 
   static useSidebarFor(width: number, foldState: DeviceFoldState): boolean {

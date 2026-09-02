@@ -28,6 +28,8 @@ export default function appLocalizationTest() {
     });
 
     it('dynamic_static_labels_use_english_patterns', 0, () => {
+      expect(AppLocalization.text('1 门课', AppLanguage.english, 'en-US'))
+        .assertEqual('1 course');
       expect(AppLocalization.text('3 门课', AppLanguage.english, 'en-US'))
         .assertEqual('3 courses');
       expect(AppLocalization.text('第 4 节', AppLanguage.english, 'en-US'))

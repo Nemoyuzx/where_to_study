@@ -14,7 +14,9 @@ import {
   CalendarTimelineLogic, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
-import { CoursePlacement, MobileCalendarTimelineView } from './MobileCalendarTimelineView';
+import {
+  CoursePlacement, MobileCalendarTimelineLayout, MobileCalendarTimelineView
+} from './MobileCalendarTimelineView';
 import { CalendarDailyInfoCards } from './CalendarDailyInfoCards';
 import {
   CalendarDailyInfoSources, PublicDeadlineItem, PublicDeadlineKindInfo, PublicDeadlineSource
@@ -42,9 +44,8 @@ export struct ExpandedTeachingCalendarView {
   @Local allDayDialogDay: DateParts | null = null;
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local contentWidth: number = 900;
-  @Local contentHeight: number = 700;
-  @Local rootWidth: number = 900;
-  @Local rootHeight: number = 700;
+  @Local rootWidth: number = DeviceState.screenWidthVp();
+  @Local rootHeight: number = DeviceState.screenHeightVp();
   @Local rootGlobalX: number = 0;
   @Local rootGlobalY: number = 0;
   @Local presentedDayAnchorX: number = 450;
@@ -226,7 +227,7 @@ export struct ExpandedTeachingCalendarView {
     const calendarWeek: number = StrictDates.isoWeekNumber(this.selectedDate());
     const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
     if (this.isEnglish()) {
-      return base + ' · Calendar week ' + calendarWeek.toString() + ' · Teaching week ' +
+      return base + ' · Cal ' + calendarWeek.toString() + ' · Teach ' +
         (teachingWeek === null ? '—' : teachingWeek.toString());
     }
     return base + ' · 公历第' + calendarWeek.toString() + '周 · 第' +
@@ -357,12 +358,13 @@ export struct ExpandedTeachingCalendarView {
         .alignItems(HorizontalAlign.Start)
         .onAreaChange((oldArea: Area, newArea: Area) => {
           this.contentWidth = Number(newArea.width);
-          this.contentHeight = Number(newArea.height);
         })
       }
       .width('100%')
       .height('100%')
       .align(Alignment.Top)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
 
       if (this.presentedDay !== null) {
         this.jumpOverlay()
@@ -373,6 +375,7 @@ export struct ExpandedTeachingCalendarView {
     }
     .width('100%')
     .height('100%')
+    .id('calendar.expanded.root')
     .backgroundColor(AppTheme.background())
     .focusable(this.isPc)
     .focusOnTouch(this.isPc)
@@ -512,11 +515,16 @@ export struct ExpandedTeachingCalendarView {
       }
       .layoutWeight(1)
       .scrollable(ScrollDirection.Vertical)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
       .width('100%')
+      .id('calendar.expanded.timeline-scroll')
     }
     .width('100%')
-    // 高度随视口自适应（BUG-058 修复），下限保证时间线可用。
-    .height(Math.max(this.contentHeight - 280, 360))
+    .id('calendar.expanded.timeline-container')
+    // 使用根视口而不是内容列自身的测量高度，避免循环依赖把平板时间线
+    // 压缩到 360vp，并让周视图持续填满可用的垂直区域。
+    .height(MobileCalendarTimelineLayout.expandedViewportHeight(this.rootHeight))
   }
 
   private timelineDays(): CalendarTimelineDay[] {
@@ -539,11 +547,13 @@ export struct ExpandedTeachingCalendarView {
           .fontSize(11)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.secondaryText())
-          .width(58)
+          .width(MobileCalendarTimelineLayout.expandedAxisWidth(this.isPc))
           .height(58)
           .textAlign(TextAlign.Center)
-        Row({ space: 4 }) {
-          ForEach(this.timelineDays(), (day: CalendarTimelineDay) => {
+          .border({ width: { right: 1 }, color: AppTheme.border() })
+          .id('calendar.expanded.all-day-axis')
+        Row({ space: 0 }) {
+          ForEach(this.timelineDays(), (day: CalendarTimelineDay, dayIndex: number) => {
             Column({ space: 2 }) {
               ForEach(this.allDayItemsOn(day.date).slice(0, 2), (item: ExpandedAllDayItem) => {
                 Text(item.timeLabel + ' · ' + item.title)
@@ -577,7 +587,10 @@ export struct ExpandedTeachingCalendarView {
             }
             .layoutWeight(1)
             .height(58)
+            .padding({ left: 2, right: 2 })
+            .border({ width: { left: 1 }, color: AppTheme.border() })
             .justifyContent(FlexAlign.Center)
+            .id('calendar.expanded.all-day.' + dayIndex.toString())
           }, (day: CalendarTimelineDay) => 'wide-all-day-day.' +
             StrictDates.formatDateParts(day.date))
         }

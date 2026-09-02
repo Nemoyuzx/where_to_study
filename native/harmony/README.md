@@ -75,7 +75,8 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 ## 折叠屏与电脑端适配
 
 - **连续布局**：侧栏（>= 700vp）、空教室/设置双列（>= 760vp）、宽屏日历
-  （>= 760vp）按窗口宽度自动切换，折叠/展开、分屏、悬浮窗口缩放即时生效。
+  （>= 868vp，保证平板和 PC 的七个日期列均不少于 96vp）按窗口宽度自动切换，折叠/展开、
+  分屏、悬浮窗口缩放即时生效。
 - **折叠屏**：监听 foldStatusChange；半折叠（FOLD_STATUS_HALF_FOLDED）时铰链
   横贯屏幕中部，任何宽度都强制单列紧凑布局（规则见 common/DeviceState.ets 与
   entry/src/test/AdaptivePolicy.test.ets 的纯函数用例）。

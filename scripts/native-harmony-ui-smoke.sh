@@ -176,6 +176,94 @@ assert_phone_navigation_bottom_clearance() {
   fi
 }
 
+assert_wide_calendar_week_geometry() {
+  local wts_metrics_width wts_metrics_height wts_metrics_density
+  local wts_root_bounds wts_scroll_bounds wts_all_day_axis_bounds wts_timeline_axis_bounds
+  local wts_first_all_day_bounds wts_last_all_day_bounds wts_first_header_bounds wts_last_header_bounds
+  read -r wts_metrics_width wts_metrics_height wts_metrics_density <<<"$(display_metrics)"
+  wts_root_bounds="$(find_id 'calendar.expanded.root')"
+  wts_scroll_bounds="$(find_id 'calendar.expanded.timeline-scroll')"
+  wts_all_day_axis_bounds="$(find_id 'calendar.expanded.all-day-axis')"
+  wts_timeline_axis_bounds="$(find_id 'calendar.expanded.timeline-axis-header')"
+  wts_first_all_day_bounds="$(find_id 'calendar.expanded.all-day.0')"
+  wts_last_all_day_bounds="$(find_id 'calendar.expanded.all-day.6')"
+  wts_first_header_bounds="$(find_id 'calendar.expanded.day-header.0')"
+  wts_last_header_bounds="$(find_id 'calendar.expanded.day-header.6')"
+
+  if [[ -z "${wts_metrics_density:-}" || -z "$wts_root_bounds" || -z "$wts_scroll_bounds" ||
+    -z "$wts_all_day_axis_bounds" || -z "$wts_timeline_axis_bounds" ||
+    -z "$wts_first_all_day_bounds" || -z "$wts_last_all_day_bounds" ||
+    -z "$wts_first_header_bounds" || -z "$wts_last_header_bounds" ]]; then
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 宽屏周视图几何节点不完整" >&2
+    return
+  fi
+
+  local wts_root_x1 wts_root_y1 wts_root_x2 wts_root_y2
+  local wts_scroll_x1 wts_scroll_y1 wts_scroll_x2 wts_scroll_y2
+  local wts_all_day_axis_x1 wts_all_day_axis_y1 wts_all_day_axis_x2 wts_all_day_axis_y2
+  local wts_timeline_axis_x1 wts_timeline_axis_y1 wts_timeline_axis_x2 wts_timeline_axis_y2
+  local wts_first_all_day_x1 wts_first_all_day_y1 wts_first_all_day_x2 wts_first_all_day_y2
+  local wts_last_all_day_x1 wts_last_all_day_y1 wts_last_all_day_x2 wts_last_all_day_y2
+  local wts_first_header_x1 wts_first_header_y1 wts_first_header_x2 wts_first_header_y2
+  local wts_last_header_x1 wts_last_header_y1 wts_last_header_x2 wts_last_header_y2
+  read -r wts_root_x1 wts_root_y1 wts_root_x2 wts_root_y2 <<<"$wts_root_bounds"
+  read -r wts_scroll_x1 wts_scroll_y1 wts_scroll_x2 wts_scroll_y2 <<<"$wts_scroll_bounds"
+  read -r wts_all_day_axis_x1 wts_all_day_axis_y1 wts_all_day_axis_x2 wts_all_day_axis_y2 \
+    <<<"$wts_all_day_axis_bounds"
+  read -r wts_timeline_axis_x1 wts_timeline_axis_y1 wts_timeline_axis_x2 wts_timeline_axis_y2 \
+    <<<"$wts_timeline_axis_bounds"
+  read -r wts_first_all_day_x1 wts_first_all_day_y1 wts_first_all_day_x2 wts_first_all_day_y2 \
+    <<<"$wts_first_all_day_bounds"
+  read -r wts_last_all_day_x1 wts_last_all_day_y1 wts_last_all_day_x2 wts_last_all_day_y2 \
+    <<<"$wts_last_all_day_bounds"
+  read -r wts_first_header_x1 wts_first_header_y1 wts_first_header_x2 wts_first_header_y2 \
+    <<<"$wts_first_header_bounds"
+  read -r wts_last_header_x1 wts_last_header_y1 wts_last_header_x2 wts_last_header_y2 \
+    <<<"$wts_last_header_bounds"
+
+  local wts_scroll_height_vp wts_bottom_gap_vp wts_axis_delta wts_first_delta wts_last_delta
+  wts_scroll_height_vp="$(awk -v top="$wts_scroll_y1" -v bottom="$wts_scroll_y2" \
+    -v scale="$wts_metrics_density" 'BEGIN { printf "%.2f", (bottom - top) / scale }')"
+  wts_bottom_gap_vp="$(awk -v root="$wts_root_y2" -v bottom="$wts_scroll_y2" \
+    -v scale="$wts_metrics_density" 'BEGIN { printf "%.2f", (root - bottom) / scale }')"
+  wts_axis_delta=$((wts_all_day_axis_x2 - wts_timeline_axis_x2))
+  wts_first_delta=$((wts_first_all_day_x1 - wts_first_header_x1))
+  wts_last_delta=$((wts_last_all_day_x2 - wts_last_header_x2))
+  ((wts_axis_delta < 0)) && wts_axis_delta=$((-wts_axis_delta))
+  ((wts_first_delta < 0)) && wts_first_delta=$((-wts_first_delta))
+  ((wts_last_delta < 0)) && wts_last_delta=$((-wts_last_delta))
+
+  if awk -v value="$wts_scroll_height_vp" 'BEGIN { exit !(value >= 480) }'; then
+    PASS=$((PASS + 1))
+    echo "  ✓ 宽屏时间线视口高度 ${wts_scroll_height_vp}vp"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 宽屏时间线视口仅 ${wts_scroll_height_vp}vp（要求 >= 480vp）" >&2
+  fi
+  if awk -v value="$wts_bottom_gap_vp" 'BEGIN { exit !(value >= -1 && value <= 96) }'; then
+    PASS=$((PASS + 1))
+    echo "  ✓ 宽屏时间线填满根视口（底部余量 ${wts_bottom_gap_vp}vp）"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 宽屏时间线底部余量 ${wts_bottom_gap_vp}vp（要求 <= 96vp）" >&2
+  fi
+  if ((wts_axis_delta <= 1 && wts_first_delta <= 1 && wts_last_delta <= 1)); then
+    PASS=$((PASS + 1))
+    echo "  ✓ 全天行与时间线七个日期列水平对齐"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 全天行与时间线错位（轴/首列/末列=${wts_axis_delta}/${wts_first_delta}/${wts_last_delta}px）" >&2
+  fi
+  if ((wts_first_header_x1 >= wts_scroll_x1 && wts_last_header_x2 <= wts_scroll_x2 + 1)); then
+    PASS=$((PASS + 1))
+    echo "  ✓ 周一至周日完整位于时间线视口内"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 周日期列超出时间线视口" >&2
+  fi
+}
+
 launch_app() {
   # launch_app <flag>  flag: uiTesting | reviewDemo
   "${HDC}" -t "${TARGET}" shell aa force-stop "${BUNDLE}" >/dev/null 2>&1 || true
@@ -270,6 +358,7 @@ assert_text "侧栏应用名" "Where To Study"
 tap_text "教学日历" 100 1000
 dump_layout || true
 assert_text "日历页（宽屏详情区）" "今天"
+assert_wide_calendar_week_geometry
 tap_text "设置" 100 1000
 dump_layout || true
 assert_text "设置页" "个人账户"
