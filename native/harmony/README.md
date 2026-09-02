@@ -32,8 +32,8 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 130 个契约单元测试
-./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 16 项、宽屏 5 项）
+./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 131 个契约单元测试
+./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 16 项、宽屏 11 项）
 ```
 
 手动命令（hvigorw 在 DevEco 安装目录下）：`hvigorw assembleHap` 与
@@ -75,7 +75,7 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 ## 折叠屏与电脑端适配
 
 - **连续布局**：侧栏（>= 700vp）、空教室/设置双列（>= 760vp）、宽屏日历
-  （>= 868vp，保证平板和 PC 的七个日期列均不少于 96vp）按窗口宽度自动切换，折叠/展开、
+  （内容区 >= 868vp，使用 macOS 的 156vp 双轴并保证七列不窄于约 97vp）按窗口宽度自动切换，折叠/展开、
   分屏、悬浮窗口缩放即时生效。
 - **折叠屏**：监听 foldStatusChange；半折叠（FOLD_STATUS_HALF_FOLDED）时铰链
   横贯屏幕中部，任何宽度都强制单列紧凑布局（规则见 common/DeviceState.ets 与

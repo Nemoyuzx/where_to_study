@@ -34,6 +34,10 @@ export default function appLocalizationTest() {
         .assertEqual('3 courses');
       expect(AppLocalization.text('第 4 节', AppLanguage.english, 'en-US'))
         .assertEqual('Period 4');
+      expect(AppLocalization.text('无课', AppLanguage.english, 'en-US'))
+        .assertEqual('No courses');
+      expect(AppLocalization.text('视图', AppLanguage.english, 'en-US'))
+        .assertEqual('View');
     });
   });
 }

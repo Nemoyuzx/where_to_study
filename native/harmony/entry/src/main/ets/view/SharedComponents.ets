@@ -10,11 +10,14 @@ export struct PageTitle {
   build() {
     Column({ space: 4 }) {
       Text(this.eyebrow.toUpperCase())
-        .fontSize(12)
+        .fontSize(10)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.secondaryText())
       Text(this.title)
-        .fontSize(34)
+        .fontSize(26)
+        .minFontSize(19.5)
+        .maxFontSize(26)
+        .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
         .maxLines(1)

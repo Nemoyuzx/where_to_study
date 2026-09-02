@@ -17,10 +17,16 @@ export class MobileCalendarTimelineLayout {
   static readonly bottomContentInset: number = PhoneNavigationLayout.minimumContentBottomInsetVp;
   static readonly columnSelectionLayerZ: number = 1;
   static readonly courseBlockLayerZ: number = 3;
-  static readonly tabletExpandedAxisWidth: number = 144;
-  static readonly pcExpandedAxisWidth: number = 156;
-  static readonly expandedTimelineChromeHeight: number = 280;
-  static readonly minimumExpandedTimelineViewportHeight: number = 360;
+  static readonly expandedHourAxisWidth: number = 52;
+  static readonly expandedSlotAxisWidth: number = 104;
+  static readonly expandedAxisWidthValue: number =
+    MobileCalendarTimelineLayout.expandedHourAxisWidth +
+    MobileCalendarTimelineLayout.expandedSlotAxisWidth;
+  static readonly expandedHourHeight: number = 64;
+  static readonly expandedHeaderHeight: number = 72;
+  static readonly expandedAllDayRowHeight: number = 22;
+  static readonly expandedMaximumAllDayRows: number = 3;
+  static readonly expandedMinimumDayWidth: number = 118;
   static readonly timelineHeight: number =
     (MobileCalendarTimelineLayout.endMinute - MobileCalendarTimelineLayout.startMinute) / 60 *
     MobileCalendarTimelineLayout.hourHeight;
@@ -48,9 +54,8 @@ export class MobileCalendarTimelineLayout {
     return !insideCourseBlock;
   }
 
-  static expandedAxisWidth(tauri: boolean): number {
-    return tauri ? MobileCalendarTimelineLayout.pcExpandedAxisWidth :
-      MobileCalendarTimelineLayout.tabletExpandedAxisWidth;
+  static expandedAxisWidth(): number {
+    return MobileCalendarTimelineLayout.expandedAxisWidthValue;
   }
 
   // 周视图没有独立的横向滚动同步层，七个日期列必须共同平分真实视口，
@@ -59,11 +64,119 @@ export class MobileCalendarTimelineLayout {
     return Math.max(viewportWidth, 1) / Math.max(dayCount, 1);
   }
 
-  // 宽屏页面的时间线高度必须来自根视口。若使用时间线所在内容列的
-  // 回调高度，会形成“子项高度依赖父项、父项又依赖子项”的闭环并收敛到 360vp。
-  static expandedViewportHeight(rootHeight: number): number {
-    return Math.max(rootHeight - MobileCalendarTimelineLayout.expandedTimelineChromeHeight,
-      MobileCalendarTimelineLayout.minimumExpandedTimelineViewportHeight);
+  static expandedAllDayRowCount(maximumEventCount: number): number {
+    return Math.min(Math.max(Math.floor(maximumEventCount), 0),
+      MobileCalendarTimelineLayout.expandedMaximumAllDayRows);
+  }
+
+  static expandedVisibleAllDayEventCount(eventCount: number): number {
+    const count: number = Math.max(Math.floor(eventCount), 0);
+    return count <= MobileCalendarTimelineLayout.expandedMaximumAllDayRows ? count :
+      MobileCalendarTimelineLayout.expandedMaximumAllDayRows - 1;
+  }
+
+  static expandedHiddenAllDayEventCount(eventCount: number): number {
+    return Math.max(Math.floor(eventCount) -
+      MobileCalendarTimelineLayout.expandedVisibleAllDayEventCount(eventCount), 0);
+  }
+
+  static expandedDayHeaderTitle(day: DateParts, english: boolean): string {
+    return day.month.toString() + '/' + day.day.toString() + ' ' +
+      CalendarFormatters.weekdayLabel(day, english);
+  }
+
+}
+
+// macOS CalendarTimelineView 的无状态日期头。宽屏端把它与全天行、时间轴主体
+// 放进同一个纵向 Scroll，三段共享同一日期区宽度，不重复创建时间刷新定时器。
+@ComponentV2
+export struct ExpandedCalendarTimelineDayHeaderView {
+  @Consumer('appModel') model: AppModel = new AppModel();
+  @Param days: CalendarTimelineDay[] = [];
+  @Param selectedDate: DateParts = StrictDates.todayParts();
+  @Param dayAreaWidth: number = 700;
+  @Event onSelectDay: (day: DateParts) => void = () => {
+  };
+
+  private dayWidthValue(): number {
+    return MobileCalendarTimelineLayout.fittedDayWidth(
+      this.dayAreaWidth, Math.max(this.days.length, 1));
+  }
+
+  private isEnglish(): boolean {
+    return this.model.resolvedLanguage() === AppLanguage.english;
+  }
+
+  build() {
+    Row({ space: 0 }) {
+      Stack({ alignContent: Alignment.TopStart }) {
+        Row({ space: 0 }) {
+          Text(this.model.text('整点'))
+            .fontSize(10)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.secondaryText())
+            .textAlign(TextAlign.Center)
+            .width(MobileCalendarTimelineLayout.expandedHourAxisWidth)
+          Text(this.model.text('课程节次'))
+            .fontSize(10)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.secondaryText())
+            .textAlign(TextAlign.Center)
+            .width(MobileCalendarTimelineLayout.expandedSlotAxisWidth)
+        }
+        .width(MobileCalendarTimelineLayout.expandedAxisWidth())
+        .height(MobileCalendarTimelineLayout.expandedHeaderHeight)
+        .justifyContent(FlexAlign.Center)
+        Divider()
+          .vertical(true)
+          .strokeWidth(1)
+          .color(AppTheme.border())
+          .height(MobileCalendarTimelineLayout.expandedHeaderHeight)
+          .position({ x: MobileCalendarTimelineLayout.expandedHourAxisWidth, y: 0 })
+      }
+      .width(MobileCalendarTimelineLayout.expandedAxisWidth())
+      .height(MobileCalendarTimelineLayout.expandedHeaderHeight)
+      .backgroundColor(AppTheme.background())
+      .border({ width: { bottom: 1, right: 1 }, color: AppTheme.border() })
+      .id('calendar.expanded.timeline-axis-header')
+
+      ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
+        Column({ space: 5 }) {
+          Text(MobileCalendarTimelineLayout.expandedDayHeaderTitle(day.date, this.isEnglish()))
+            .fontSize(10)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() : AppTheme.text())
+            .maxLines(1)
+          Text(this.model.text(day.courses.length === 0 ? '无课' :
+            day.courses.length.toString() + ' 门课'))
+            .fontSize(10)
+            .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() :
+              (day.courses.length > 0 ? AppTheme.primary() : AppTheme.secondaryText()))
+            .maxLines(1)
+          if (day.date.equals(StrictDates.todayParts())) {
+            Column()
+              .width('calc(100% - 12vp)')
+              .height(3)
+              .backgroundColor(AppTheme.nowIndicator())
+              .position({ x: 6, y: MobileCalendarTimelineLayout.expandedHeaderHeight - 3 })
+          }
+        }
+        .width(this.dayWidthValue())
+        .height(MobileCalendarTimelineLayout.expandedHeaderHeight)
+        .padding({ left: 4, right: 4 })
+        .justifyContent(FlexAlign.Center)
+        .border({ width: { left: 1, bottom: 1 }, color: AppTheme.border() })
+        .backgroundColor(day.date.equals(this.selectedDate) ?
+          AppTheme.selectedDate() : AppTheme.background())
+        .id('calendar.expanded.day-header.' + index.toString())
+        .onClick(() => {
+          this.onSelectDay(day.date);
+        })
+      }, (day: CalendarTimelineDay) => 'expanded-day-head.' +
+        StrictDates.formatDateParts(day.date))
+    }
+    .width('100%')
+    .height(MobileCalendarTimelineLayout.expandedHeaderHeight)
   }
 }
 
@@ -83,12 +196,10 @@ export struct MobileCalendarTimelineView {
   @Param days: CalendarTimelineDay[] = [];
   @Param selectedDate: DateParts = StrictDates.todayParts();
   @Param showsWeekColumns: boolean = false;
-  // 宽屏（平板/PC）形态：与 Android CalendarTimelineView 的 expanded 参数对应。
-  // 宽屏显示日头行（72vp）、课程节次轴与紧凑小时高；周列平分可用视口。
+  // 宽屏（平板/PC）形态直接使用 macOS CalendarTimelineView 的轴和小时规格。
   @Param expanded: boolean = false;
-  // PC（2in1）使用 Windows Tauri 数值（轴 52+104、时高 64）；
-  // 平板/折叠屏使用 Android 数值（轴 48+96、时高 68）。
-  @Param tauri: boolean = false;
+  // 宽屏父级为日期头、全天行和主体测量一次共同的日期区宽度；0 表示手机端自测。
+  @Param fixedDayAreaWidth: number = 0;
   // 各天课程布局缓存（BUG-046 修复）：由父组件在构造 days 时一次算好。
   @Param placements: Map<string, CoursePlacement[]> = new Map<string, CoursePlacement[]>();
   @Event onSelectDay: (day: DateParts) => void = () => {
@@ -134,37 +245,32 @@ export struct MobileCalendarTimelineView {
   }
 
   private dayWidthValue(): number {
-    return MobileCalendarTimelineLayout.fittedDayWidth(this.viewportWidth, this.dayCount());
+    return MobileCalendarTimelineLayout.fittedDayWidth(this.viewportWidthValue(), this.dayCount());
   }
 
-  // 宽屏布局数值：平板轴为 48+96，PC 轴为 52+104；日期列始终平分剩余宽度。
   private axisWidth(): number {
     if (!this.expanded) {
       return MobileCalendarTimelineLayout.axisWidth;
     }
-    return MobileCalendarTimelineLayout.expandedAxisWidth(this.tauri);
+    return MobileCalendarTimelineLayout.expandedAxisWidth();
   }
 
   private hourAxisWidth(): number {
-    return this.expanded ? (this.tauri ? 52 : 48) : 48;
+    return this.expanded ? MobileCalendarTimelineLayout.expandedHourAxisWidth : 48;
   }
 
   private slotAxisWidth(): number {
     if (!this.expanded) {
       return 0;
     }
-    return this.tauri ? 104 : 96;
+    return MobileCalendarTimelineLayout.expandedSlotAxisWidth;
   }
 
   private hourHeight(): number {
     if (!this.expanded) {
       return MobileCalendarTimelineLayout.hourHeight;
     }
-    return this.tauri ? 64 : 68;
-  }
-
-  private headerHeight(): number {
-    return this.expanded ? 72 : 0;
+    return MobileCalendarTimelineLayout.expandedHourHeight;
   }
 
   private bodyHeight(): number {
@@ -173,7 +279,11 @@ export struct MobileCalendarTimelineView {
   }
 
   private totalHeight(): number {
-    return this.headerHeight() + this.bodyHeight();
+    return this.bodyHeight();
+  }
+
+  private viewportWidthValue(): number {
+    return this.fixedDayAreaWidth > 0 ? this.fixedDayAreaWidth : this.viewportWidth;
   }
 
   private yPos(minute: number): number {
@@ -244,16 +354,12 @@ export struct MobileCalendarTimelineView {
 
   build() {
     Column() {
-      // 宽屏日头行（对齐 Android expanded 的 72vp day header + Tauri .time-day-head）
-      if (this.expanded) {
-        this.dayHeaderRow()
-      }
       Stack({ alignContent: Alignment.TopStart }) {
         // 左侧整点/节次轴与日期网格使用同一组线型；先画线、后画标签，
         // 保证平板和 PC 宽屏不会只在右侧日期列看到网格。
         ForEach(this.hours, (hour: number) => {
           Divider()
-            .strokeWidth(0.5)
+            .strokeWidth(this.expanded ? 1 : 0.5)
             .color(AppTheme.border())
             .width(this.axisWidth())
             .position({ x: 0, y: this.yPos(hour * 60) })
@@ -264,11 +370,11 @@ export struct MobileCalendarTimelineView {
               .width(this.slotAxisWidth())
               .height(2)
               .border({
-                width: { top: 1.2 },
+                width: { top: this.expanded ? 0.7 : 1.2 },
                 color: AppTheme.secondaryText(),
                 style: BorderStyle.Dashed
               })
-              .opacity(0.56)
+              .opacity(this.expanded ? 0.30 : 0.56)
               .position({ x: this.hourAxisWidth(), y: this.yPos(minute) })
           }, (minute: number) => 'axis-slot-line.' + minute.toString())
         }
@@ -278,7 +384,7 @@ export struct MobileCalendarTimelineView {
           ForEach(this.hours, (hour: number) => {
             if (!this.hourLabelObscured(hour)) {
               Text(CalendarFormatters.hourLabel(hour))
-                .fontSize(9)
+                .fontSize(this.expanded ? 10 : 9)
                 .fontColor(AppTheme.secondaryText())
                 .width(this.hourAxisWidth() - 8)
                 .textAlign(TextAlign.Center)
@@ -310,12 +416,24 @@ export struct MobileCalendarTimelineView {
           ForEach(SlotMetadata.defaults, (slot: SlotMetadata) => {
             this.slotAxisLabel(slot)
           }, (slot: SlotMetadata) => 'slot-axis.' + slot.index.toString())
+          Divider()
+            .vertical(true)
+            .strokeWidth(1)
+            .color(AppTheme.border())
+            .height(this.bodyHeight())
+            .position({ x: this.hourAxisWidth(), y: 0 })
+          Divider()
+            .vertical(true)
+            .strokeWidth(1)
+            .color(AppTheme.border())
+            .height(this.bodyHeight())
+            .position({ x: this.axisWidth(), y: 0 })
         }
 
         // 右侧网格视口
         Stack({ alignContent: Alignment.TopStart }) {
           // 选中日期列先铺底，确保后绘制的整点实线和节次虚线始终清晰可见。
-          if (this.showsWeekColumns) {
+          if (this.expanded || this.showsWeekColumns) {
             ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
               if (day.date.equals(this.selectedDate)) {
                 Column()
@@ -347,9 +465,9 @@ export struct MobileCalendarTimelineView {
           // 小时线
           ForEach(this.hours, (hour: number) => {
             Divider()
-              .strokeWidth(0.5)
+              .strokeWidth(this.expanded ? 1 : 0.5)
               .color(AppTheme.border())
-              .width(this.viewportWidth)
+              .width(this.viewportWidthValue())
               .hitTestBehavior(HitTestMode.None)
               .position({ x: 0, y: this.yPos(hour * 60) })
           }, (hour: number) => 'grid-hour.' + hour.toString())
@@ -357,14 +475,14 @@ export struct MobileCalendarTimelineView {
           // 课程节次边界使用更清晰的虚线，避免在深色模式和周视图窄列中消失。
           ForEach(CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes(), (minute: number) => {
             Column()
-              .width(this.viewportWidth)
+              .width(this.viewportWidthValue())
               .height(2)
               .border({
-                width: { top: 1.2 },
+                width: { top: this.expanded ? 0.7 : 1.2 },
                 color: AppTheme.border(),
                 style: BorderStyle.Dashed
               })
-              .opacity(0.56)
+              .opacity(this.expanded ? 0.30 : 0.56)
               .hitTestBehavior(HitTestMode.None)
               .position({ x: 0, y: this.yPos(minute) })
           }, (minute: number) => 'grid-slot.' + minute.toString())
@@ -374,9 +492,9 @@ export struct MobileCalendarTimelineView {
             ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
               Divider()
                 .vertical(true)
-                .strokeWidth(0.5)
+                .strokeWidth(this.expanded ? 1 : 0.5)
                 .color(AppTheme.border())
-                .opacity(0.7)
+                .opacity(this.expanded ? 1 : 0.7)
                 .height(this.bodyHeight())
                 .hitTestBehavior(HitTestMode.None)
                 .position({ x: index * this.dayWidthValue(), y: 0 })
@@ -404,7 +522,7 @@ export struct MobileCalendarTimelineView {
           }
 
         }
-        .width(this.viewportWidth)
+        .width(this.viewportWidthValue())
         .height(this.bodyHeight())
         .position({ x: this.axisWidth(), y: 0 })
         .clip(true)
@@ -428,79 +546,12 @@ export struct MobileCalendarTimelineView {
     })
   }
 
-  // 宽屏日头行：左侧角标（整点/课程节次）+ 每天日头（星期 + 月/日 + 课程数）。
-  @Builder
-  dayHeaderRow() {
-    Row({ space: 0 }) {
-      Row() {
-        Text(this.model.text('整点'))
-          .fontSize(10)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.secondaryText())
-          .textAlign(TextAlign.Center)
-          .width(this.hourAxisWidth())
-        Text(this.model.text('课程节次'))
-          .fontSize(10)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.secondaryText())
-          .textAlign(TextAlign.Center)
-          .width(this.slotAxisWidth())
-      }
-      .width(this.axisWidth())
-      .height(this.headerHeight())
-      .justifyContent(FlexAlign.Center)
-      .border({ width: { bottom: 1, right: 1 }, color: AppTheme.border() })
-      .id('calendar.expanded.timeline-axis-header')
-
-      ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
-        Column({ space: 3 }) {
-          Row({ space: 4 }) {
-            Text(this.isEnglish() ? CalendarFormatters.weekdayLabel(day.date, true) :
-              CalendarFormatters.weekdayLabels[StrictDates.weekdayMonday1(day.date) - 1])
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() : AppTheme.text())
-            Text(day.date.month.toString() + '/' + day.date.day.toString())
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() : AppTheme.text())
-          }
-          Text(this.model.text(day.courses.length === 0 ? '无课程' :
-            day.courses.length.toString() + ' 门课'))
-            .fontSize(10)
-            .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() :
-              (day.courses.length > 0 ? AppTheme.primary() : AppTheme.secondaryText()))
-            .maxLines(1)
-          // 今日红条：日头底部 3vp systemRed 横条（对应 Tauri inset 0 -3px 0 #FF3B30）。
-          if (day.date.equals(StrictDates.todayParts())) {
-            Column()
-              .width('100%')
-              .height(3)
-              .backgroundColor(AppTheme.nowIndicator())
-              .position({ x: 0, y: this.headerHeight() - 3 })
-          }
-        }
-        .width(this.dayWidthValue())
-        .height(this.headerHeight())
-        .justifyContent(FlexAlign.Center)
-        .border({ width: { left: 1, bottom: 1 }, color: AppTheme.border() })
-        .backgroundColor(day.date.equals(this.selectedDate) ? AppTheme.selectedDate() : AppTheme.surface())
-        .id('calendar.expanded.day-header.' + index.toString())
-        .onClick(() => {
-          this.onSelectDay(day.date);
-        })
-      }, (day: CalendarTimelineDay) => 'day-head.' + this.dayKey(day))
-    }
-    .width('100%')
-    .height(this.headerHeight())
-  }
-
   // 宽屏课程节次轴标签：第 N 节（bold）+ 起止时间。
   @Builder
   slotAxisLabel(slot: SlotMetadata) {
     Column({ space: 1 }) {
       Text(this.model.text('第' + slot.label + '节'))
-        .fontSize(11)
+        .fontSize(10)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.secondaryText())
         .maxLines(1)
@@ -543,11 +594,48 @@ export struct MobileCalendarTimelineView {
 
   @Builder
   courseBlock(dayIndex: number, placement: CoursePlacement) {
-    if (this.showsWeekColumns) {
+    if (this.expanded) {
+      this.courseBlockForExpanded(dayIndex, placement)
+    } else if (this.showsWeekColumns) {
       this.courseBlockForWeek(dayIndex, placement)
     } else {
       this.courseBlockForDay(dayIndex, placement)
     }
+  }
+
+  // 宽屏课程块直接对齐 macOS CalendarTimelineView：周视图使用 9/8/8 字号、
+  // 单行 metadata、每轨 6vp gutter、4vp padding、5vp 圆角且不加左强调边。
+  @Builder
+  courseBlockForExpanded(dayIndex: number, placement: CoursePlacement) {
+    Column({ space: 1 }) {
+      Text(placement.course.name)
+        .fontSize(this.showsWeekColumns ? 9 : 11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.onPrimary())
+        .maxLines(1)
+      if (this.blockHeight(placement.course) >= 38) {
+        Text(placement.course.timeRange)
+          .fontSize(this.showsWeekColumns ? 8 : 9)
+          .fontColor(AppTheme.onPrimary())
+          .maxLines(1)
+      }
+      if (this.blockHeight(placement.course) >= 42 &&
+        this.courseMetadataOf(placement.course).length > 0) {
+        Text(this.courseMetadataOf(placement.course))
+          .fontSize(this.showsWeekColumns ? 8 : 9)
+          .fontColor(AppTheme.onPrimary())
+          .maxLines(1)
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .padding(this.showsWeekColumns ? 4 : 5)
+    .width(this.blockExpandedWidth(dayIndex))
+    .height(this.blockHeight(placement.course))
+    .borderRadius(5)
+    .backgroundColor(AppTheme.primaryFill())
+    .zIndex(MobileCalendarTimelineLayout.courseBlockLayerZ)
+    .hitTestBehavior(HitTestMode.Block)
+    .position({ x: this.blockExpandedX(dayIndex, placement), y: this.blockTop(placement.course) })
   }
 
   @Builder
@@ -653,7 +741,7 @@ export struct MobileCalendarTimelineView {
 
   private blockHeight(course: Course): number {
     const top: number = this.blockTop(course);
-    const bottom: number = Math.max(top + 38,
+    const bottom: number = Math.max(top + (this.expanded ? 34 : 38),
       this.yPos(this.blockEndMinute(course)) - 2);
     return bottom - top;
   }
@@ -686,6 +774,15 @@ export struct MobileCalendarTimelineView {
       placement.track * this.blockTrackWidth(dayIndex) + 3;
   }
 
+  private blockExpandedWidth(dayIndex: number): number {
+    return Math.max(this.blockTrackWidth(dayIndex) - 6, 20);
+  }
+
+  private blockExpandedX(dayIndex: number, placement: CoursePlacement): number {
+    return dayIndex * this.dayWidthValue() +
+      placement.track * this.blockTrackWidth(dayIndex) + 3;
+  }
+
   private blockWeekWidth(dayIndex: number, placement: CoursePlacement): number {
     return Math.max(this.blockTrackWidth(dayIndex) - 2, 8);
   }
@@ -710,7 +807,7 @@ export struct MobileCalendarTimelineView {
         .backgroundColor(AppTheme.nowIndicator())
         .position({ x: this.indicatorLeft(), y: -3 })
     }
-    .width(this.viewportWidth)
+    .width(this.viewportWidthValue())
     .height(2)
     .position({ x: 0, y: this.indicatorY() })
     .hitTestBehavior(HitTestMode.None)
@@ -730,7 +827,7 @@ export struct MobileCalendarTimelineView {
   }
 
   private indicatorWidth(): number {
-    return this.showsWeekColumns ? this.dayWidthValue() : this.viewportWidth;
+    return this.showsWeekColumns ? this.dayWidthValue() : this.viewportWidthValue();
   }
 
   private indicatorY(): number {

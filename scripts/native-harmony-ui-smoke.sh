@@ -3,7 +3,7 @@
 # 对应 iOS 端 native/apple/UITests/PrimaryNavigationSmokeTests 的关键断言：
 # 1) 三个一级页面可导航；2) review-demo 示例模式展示本地数据；
 # 3) 设置页账号/密码触摸聚焦与输入；4) 教学日历日/周/月/年四视图切换；
-# 5) 宽屏（折叠屏展开/2in1/PC）侧栏导航。
+# 5) 宽屏（折叠屏展开/2in1/PC）侧栏导航与 macOS 时间线几何一致性。
 # 用法：./scripts/native-harmony-ui-smoke.sh [deviceSerial] [wide|phone]
 #   - 不传布局参数时按设备实际布局自动选择手机段/宽屏段（BUG-034 修复）；
 #   - 显式传 "wide" 强制宽屏段、"phone" 强制手机段。
@@ -179,12 +179,14 @@ assert_phone_navigation_bottom_clearance() {
 assert_wide_calendar_week_geometry() {
   local wts_metrics_width wts_metrics_height wts_metrics_density
   local wts_root_bounds wts_scroll_bounds wts_all_day_axis_bounds wts_timeline_axis_bounds
+  local wts_timeline_body_bounds
   local wts_first_all_day_bounds wts_last_all_day_bounds wts_first_header_bounds wts_last_header_bounds
   read -r wts_metrics_width wts_metrics_height wts_metrics_density <<<"$(display_metrics)"
   wts_root_bounds="$(find_id 'calendar.expanded.root')"
   wts_scroll_bounds="$(find_id 'calendar.expanded.timeline-scroll')"
   wts_all_day_axis_bounds="$(find_id 'calendar.expanded.all-day-axis')"
   wts_timeline_axis_bounds="$(find_id 'calendar.expanded.timeline-axis-header')"
+  wts_timeline_body_bounds="$(find_id 'calendar.expanded.timeline-body')"
   wts_first_all_day_bounds="$(find_id 'calendar.expanded.all-day.0')"
   wts_last_all_day_bounds="$(find_id 'calendar.expanded.all-day.6')"
   wts_first_header_bounds="$(find_id 'calendar.expanded.day-header.0')"
@@ -192,6 +194,7 @@ assert_wide_calendar_week_geometry() {
 
   if [[ -z "${wts_metrics_density:-}" || -z "$wts_root_bounds" || -z "$wts_scroll_bounds" ||
     -z "$wts_all_day_axis_bounds" || -z "$wts_timeline_axis_bounds" ||
+    -z "$wts_timeline_body_bounds" ||
     -z "$wts_first_all_day_bounds" || -z "$wts_last_all_day_bounds" ||
     -z "$wts_first_header_bounds" || -z "$wts_last_header_bounds" ]]; then
     FAIL=$((FAIL + 1))
@@ -203,6 +206,7 @@ assert_wide_calendar_week_geometry() {
   local wts_scroll_x1 wts_scroll_y1 wts_scroll_x2 wts_scroll_y2
   local wts_all_day_axis_x1 wts_all_day_axis_y1 wts_all_day_axis_x2 wts_all_day_axis_y2
   local wts_timeline_axis_x1 wts_timeline_axis_y1 wts_timeline_axis_x2 wts_timeline_axis_y2
+  local wts_timeline_body_x1 wts_timeline_body_y1 wts_timeline_body_x2 wts_timeline_body_y2
   local wts_first_all_day_x1 wts_first_all_day_y1 wts_first_all_day_x2 wts_first_all_day_y2
   local wts_last_all_day_x1 wts_last_all_day_y1 wts_last_all_day_x2 wts_last_all_day_y2
   local wts_first_header_x1 wts_first_header_y1 wts_first_header_x2 wts_first_header_y2
@@ -213,6 +217,8 @@ assert_wide_calendar_week_geometry() {
     <<<"$wts_all_day_axis_bounds"
   read -r wts_timeline_axis_x1 wts_timeline_axis_y1 wts_timeline_axis_x2 wts_timeline_axis_y2 \
     <<<"$wts_timeline_axis_bounds"
+  read -r wts_timeline_body_x1 wts_timeline_body_y1 wts_timeline_body_x2 wts_timeline_body_y2 \
+    <<<"$wts_timeline_body_bounds"
   read -r wts_first_all_day_x1 wts_first_all_day_y1 wts_first_all_day_x2 wts_first_all_day_y2 \
     <<<"$wts_first_all_day_bounds"
   read -r wts_last_all_day_x1 wts_last_all_day_y1 wts_last_all_day_x2 wts_last_all_day_y2 \
@@ -223,6 +229,7 @@ assert_wide_calendar_week_geometry() {
     <<<"$wts_last_header_bounds"
 
   local wts_scroll_height_vp wts_bottom_gap_vp wts_axis_delta wts_first_delta wts_last_delta
+  local wts_header_to_all_day_delta wts_all_day_to_body_delta
   wts_scroll_height_vp="$(awk -v top="$wts_scroll_y1" -v bottom="$wts_scroll_y2" \
     -v scale="$wts_metrics_density" 'BEGIN { printf "%.2f", (bottom - top) / scale }')"
   wts_bottom_gap_vp="$(awk -v root="$wts_root_y2" -v bottom="$wts_scroll_y2" \
@@ -230,9 +237,15 @@ assert_wide_calendar_week_geometry() {
   wts_axis_delta=$((wts_all_day_axis_x2 - wts_timeline_axis_x2))
   wts_first_delta=$((wts_first_all_day_x1 - wts_first_header_x1))
   wts_last_delta=$((wts_last_all_day_x2 - wts_last_header_x2))
+  wts_header_to_all_day_delta=$((wts_all_day_axis_y1 - wts_timeline_axis_y2))
+  wts_all_day_to_body_delta=$((wts_timeline_body_y1 - wts_all_day_axis_y2))
   ((wts_axis_delta < 0)) && wts_axis_delta=$((-wts_axis_delta))
   ((wts_first_delta < 0)) && wts_first_delta=$((-wts_first_delta))
   ((wts_last_delta < 0)) && wts_last_delta=$((-wts_last_delta))
+  ((wts_header_to_all_day_delta < 0)) &&
+    wts_header_to_all_day_delta=$((-wts_header_to_all_day_delta))
+  ((wts_all_day_to_body_delta < 0)) &&
+    wts_all_day_to_body_delta=$((-wts_all_day_to_body_delta))
 
   if awk -v value="$wts_scroll_height_vp" 'BEGIN { exit !(value >= 480) }'; then
     PASS=$((PASS + 1))
@@ -255,12 +268,44 @@ assert_wide_calendar_week_geometry() {
     FAIL=$((FAIL + 1))
     echo "  ✗ 全天行与时间线错位（轴/首列/末列=${wts_axis_delta}/${wts_first_delta}/${wts_last_delta}px）" >&2
   fi
+  if ((wts_header_to_all_day_delta <= 2 && wts_all_day_to_body_delta <= 2)); then
+    PASS=$((PASS + 1))
+    echo "  ✓ 日期头、全天行与时间轴按 macOS 顺序无缝衔接"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 日期头/全天行/时间轴垂直错位（${wts_header_to_all_day_delta}/${wts_all_day_to_body_delta}px）" >&2
+  fi
   if ((wts_first_header_x1 >= wts_scroll_x1 && wts_last_header_x2 <= wts_scroll_x2 + 1)); then
     PASS=$((PASS + 1))
     echo "  ✓ 周一至周日完整位于时间线视口内"
   else
     FAIL=$((FAIL + 1))
     echo "  ✗ 周日期列超出时间线视口" >&2
+  fi
+}
+
+assert_wide_calendar_scrolls_to_end() {
+  local width height density x start_y end_y bounds x1 y1 x2 y2
+  read -r width height density <<<"$(display_metrics)"
+  x=$(( width * 3 / 4 ))
+  start_y=$(( height * 82 / 100 ))
+  end_y=$(( height * 34 / 100 ))
+  for _ in 1 2 3; do
+    "${HDC}" -t "${TARGET}" shell uitest uiInput swipe "$x" "$start_y" "$x" "$end_y" 500 \
+      >/dev/null 2>&1
+    sleep 0.5
+  done
+  dump_layout || true
+  bounds="$(find_text '22:00')"
+  if [[ -n "$bounds" ]]; then
+    read -r x1 y1 x2 y2 <<<"$bounds"
+  fi
+  if [[ -n "$bounds" && "$y1" -ge 0 && "$y2" -le "$height" ]]; then
+    PASS=$((PASS + 1))
+    echo "  ✓ 宽屏时间线可滚动至 22:00"
+  else
+    FAIL=$((FAIL + 1))
+    echo "  ✗ 宽屏时间线未能滚动至可见的 22:00" >&2
   fi
 }
 
@@ -359,6 +404,7 @@ tap_text "教学日历" 100 1000
 dump_layout || true
 assert_text "日历页（宽屏详情区）" "今天"
 assert_wide_calendar_week_geometry
+assert_wide_calendar_scrolls_to_end
 tap_text "设置" 100 1000
 dump_layout || true
 assert_text "设置页" "个人账户"

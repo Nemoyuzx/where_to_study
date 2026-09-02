@@ -121,7 +121,8 @@ export class DeviceState {
 // 可在主机侧单元测试中直接验证折叠/宽度组合。
 export class AdaptiveLayoutPolicy {
   static readonly minimumSidebarWidth: number = 700;
-  // Expanded 日历按最宽的 PC 轴计算：40vp 页边距 + 156vp 轴 + 7 × 96vp 日期列。
+  // 32vp 页边距 + macOS 的 156vp 双轴 + 7 个至少约 97vp 的日期列。
+  // 达到 iPad 的 96pt 最小列宽后保留桌面层级，避免横屏平板退回手机日历。
   static readonly minimumExpandedCalendarWidth: number = 868;
   static readonly minimumTwoColumnWidth: number = 760;
 

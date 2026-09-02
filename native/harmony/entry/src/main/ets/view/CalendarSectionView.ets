@@ -1,6 +1,6 @@
 // 教学日历一级页面，对应 iOS 端 AdaptiveTeachingCalendarView：
-// 窄屏（< 760vp 或半折叠）使用 MobileTeachingCalendarView，
-// 宽屏（>= 760vp，含平板展开/2in1/PC）使用 ExpandedTeachingCalendarView。
+// 内容宽度不足 868vp 或半折叠时使用 MobileTeachingCalendarView；
+// 横屏平板达到七个 96vp 日期列的几何宽度后使用 ExpandedTeachingCalendarView。
 import { AppModel } from '../model/AppModel';
 import { AdaptiveLayoutPolicy } from '../common/DeviceState';
 import { MobileTeachingCalendarView } from './calendar/MobileTeachingCalendarView';

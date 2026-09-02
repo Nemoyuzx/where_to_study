@@ -235,40 +235,44 @@ export struct RootView {
     Column({ space: 14 }) {
       Column({ space: 4 }) {
         Text('BUPT')
-          .fontSize(12)
+          .fontSize(10)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.secondaryText())
         Text('Where To Study')
-          .fontSize(16)
+          .fontSize(13)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .padding({ left: 24, right: 24 })
+      .padding({ left: 40, right: 40 })
 
       Divider()
         .color(AppTheme.border())
 
-      ForEach(AppSectionInfo.all, (section: AppSection) => {
-        Row({ space: 8 }) {
-          SymbolGlyph(AppSectionInfo.symbol(section))
-            .fontSize(18)
-            .fontColor([AppTheme.text()])
-          Text(this.model.text(AppSectionInfo.title(section)))
-            .fontSize(16)
-            .fontWeight(this.currentSection === section ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(AppTheme.text())
-        }
-        .width('100%')
-        .height(36)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(6)
-        .backgroundColor(this.currentSection === section ? AppTheme.selection() : Color.Transparent)
-        .onClick(() => {
-          this.selectSection(section);
-        })
-      }, (section: AppSection) => AppSectionInfo.accessibilityId(section))
+      Column({ space: 8 }) {
+        ForEach(AppSectionInfo.all, (section: AppSection) => {
+          Row({ space: 8 }) {
+            SymbolGlyph(AppSectionInfo.symbol(section))
+              .fontSize(14)
+              .fontColor([AppTheme.text()])
+            Text(this.model.text(AppSectionInfo.title(section)))
+              .fontSize(13)
+              .fontWeight(this.currentSection === section ? FontWeight.Medium : FontWeight.Regular)
+              .fontColor(AppTheme.text())
+          }
+          .width('100%')
+          .height(32)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(6)
+          .backgroundColor(this.currentSection === section ? AppTheme.selection() : Color.Transparent)
+          .onClick(() => {
+            this.selectSection(section);
+          })
+        }, (section: AppSection) => AppSectionInfo.accessibilityId(section))
+      }
+      .width('100%')
+      .padding({ left: 8, right: 8 })
     }
     .width(this.sidebarWidth())
     .height('100%')

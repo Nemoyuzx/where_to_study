@@ -157,6 +157,10 @@ const harmonyThemeSource = readFileSync(
   new URL('../native/harmony/entry/src/main/ets/common/AppTheme.ets', import.meta.url),
   'utf8',
 )
+const harmonySharedComponentsSource = readFileSync(
+  new URL('../native/harmony/entry/src/main/ets/view/SharedComponents.ets', import.meta.url),
+  'utf8',
+)
 const harmonyLightColors = readFileSync(
   new URL('../native/harmony/entry/src/main/resources/base/element/color.json', import.meta.url),
   'utf8',
@@ -660,6 +664,7 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
   const hourLayer = harmonyTimelineSource.indexOf('// 小时线', selectedLayer)
   const slotLayer = harmonyTimelineSource.indexOf('// 课程节次边界', hourLayer)
   assert.ok(selectedLayer >= 0 && selectedLayer < hourLayer && hourLayer < slotLayer)
+  assert.match(harmonyTimelineSource, /if \(this\.expanded \|\| this\.showsWeekColumns\)/)
   assert.match(harmonyTimelineSource, /'axis-hour-line\.'/)
   assert.match(harmonyTimelineSource, /'axis-slot-line\.'/)
   assert.match(harmonyTimelineSource, /style: BorderStyle\.Dashed/)
@@ -676,37 +681,83 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
   assert.match(harmonySettingsSource, /segmentedOptions\(labels: string\[\]/)
 })
 
-test('Harmony tablet week view fills its viewport and keeps all-day columns aligned', () => {
+test('Harmony tablet week view follows the macOS header, all-day, and timeline hierarchy', () => {
   assert.match(
     harmonyTimelineSource,
-    /return MobileCalendarTimelineLayout\.fittedDayWidth\(this\.viewportWidth, this\.dayCount\(\)\)/,
+    /return MobileCalendarTimelineLayout\.fittedDayWidth\(this\.viewportWidthValue\(\), this\.dayCount\(\)\)/,
   )
-  assert.match(
-    harmonyExpandedCalendarSource,
-    /\.height\(MobileCalendarTimelineLayout\.expandedViewportHeight\(this\.rootHeight\)\)/,
-  )
-  assert.doesNotMatch(harmonyExpandedCalendarSource, /this\.contentHeight - 280/)
+  assert.doesNotMatch(harmonyExpandedCalendarSource, /expandedViewportHeight/)
+  assert.doesNotMatch(harmonyExpandedCalendarSource, /tauri:/)
+  assert.doesNotMatch(harmonyExpandedCalendarSource, /constraintSize\(\{ maxWidth: 1200 \}\)/)
+
+  const timelineContent = harmonyExpandedCalendarSource.match(
+    /@Builder\s+timelineContent\(\)[\s\S]*?private timelineDayAreaWidth/,
+  )?.[0] ?? ''
+  const dayHeaderIndex = timelineContent.indexOf('ExpandedCalendarTimelineDayHeaderView')
+  const allDayIndex = timelineContent.indexOf('this.allDayRow()')
+  const timelineBodyIndex = timelineContent.indexOf('MobileCalendarTimelineView')
+  assert.ok(dayHeaderIndex >= 0 && dayHeaderIndex < allDayIndex && allDayIndex < timelineBodyIndex)
+  assert.match(timelineContent, /fixedDayAreaWidth: this\.timelineDayAreaWidth\(\)/)
+  assert.match(timelineContent, /calendar\.expanded\.week-context/)
+  assert.match(timelineContent, /calendar\.expanded\.timeline-body/)
+  assert.match(timelineContent, /\.layoutWeight\(1\)[\s\S]*\.height\('100%'\)/)
 
   const allDayRow = harmonyExpandedCalendarSource.match(
     /allDayRow\(\)[\s\S]*?private allDayItemsOn/,
   )?.[0] ?? ''
   assert.match(
     allDayRow,
-    /\.width\(MobileCalendarTimelineLayout\.expandedAxisWidth\(this\.isPc\)\)/,
+    /\.width\(MobileCalendarTimelineLayout\.expandedAxisWidth\(\)\)/,
   )
   assert.match(allDayRow, /\.id\('calendar\.expanded\.all-day-axis'\)/)
   assert.match(allDayRow, /calendar\.expanded\.all-day\.'/)
   assert.match(allDayRow, /Row\(\{ space: 0 \}\)/)
-  assert.match(allDayRow, /\.padding\(\{ left: 2, right: 2 \}\)/)
+  assert.match(allDayRow, /expandedHourAxisWidth/)
+  assert.match(allDayRow, /expandedSlotAxisWidth/)
+  assert.match(allDayRow, /expandedAllDayRowHeight/)
+  assert.match(allDayRow, /expandedVisibleAllDayEventCount/)
+  assert.match(allDayRow, /expandedHiddenAllDayEventCount/)
+  assert.doesNotMatch(allDayRow, /\.height\(58\)/)
   assert.match(harmonyTimelineSource, /calendar\.expanded\.timeline-axis-header/)
   assert.match(harmonyTimelineSource, /calendar\.expanded\.day-header\.'/)
+  assert.match(harmonyTimelineSource, /expandedDayHeaderTitle\(day\.date, this\.isEnglish\(\)\)/)
+  assert.match(harmonyTimelineSource, /static readonly expandedHourAxisWidth: number = 52/)
+  assert.match(harmonyTimelineSource, /static readonly expandedSlotAxisWidth: number = 104/)
+  assert.match(harmonyTimelineSource, /static readonly expandedHourHeight: number = 64/)
+  assert.match(harmonyTimelineSource, /static readonly expandedMinimumDayWidth: number = 118/)
   assert.match(
     harmonyTimelineSource,
-    /Text\(this\.isEnglish\(\) \? CalendarFormatters\.weekdayLabel\(day\.date, true\)/,
+    /position\(\{ x: MobileCalendarTimelineLayout\.expandedHourAxisWidth, y: 0 \}\)/,
   )
-  assert.match(harmonyExpandedCalendarSource, /return base \+ ' · Cal '/)
+  assert.match(harmonyExpandedCalendarSource, /return base \+ ' · Calendar Week '/)
+  assert.match(harmonyExpandedCalendarSource, /return '公历第 ' \+ calendarWeek\.toString\(\) \+ ' 周'/)
   assert.match(harmonyExpandedCalendarSource, /calendar\.expanded\.timeline-scroll/)
   assert.ok((harmonyExpandedCalendarSource.match(/\.scrollBar\(BarState\.Off\)/g) ?? []).length >= 2)
+
+  const titleBar = harmonyExpandedCalendarSource.match(
+    /@Builder\s+titleBar\(\)[\s\S]*?@Builder\s+calendarPanelHeader\(\)/,
+  )?.[0] ?? ''
+  assert.match(titleBar, /this\.model\.text\('视图'\)/)
+  assert.match(titleBar, /\.width\(this\.isEnglish\(\) \? 243 : 170\)/)
+  const dateControls = harmonyExpandedCalendarSource.match(
+    /@Builder\s+dateControls\(\)[\s\S]*?@Builder\s+timelineContent\(\)/,
+  )?.[0] ?? ''
+  assert.match(dateControls, /\.width\(148\)[\s\S]*\.height\(32\)/)
+  assert.ok(
+    dateControls.indexOf("sys.symbol.arrow_clockwise") <
+      dateControls.indexOf("sys.symbol.calendar_badge_plus") &&
+      dateControls.indexOf("sys.symbol.calendar_badge_plus") <
+        dateControls.indexOf("sys.symbol.star"),
+  )
+  assert.match(harmonyExpandedCalendarSource, /@Local timelineDataRevision: number = 0/)
+  assert.match(harmonyExpandedCalendarSource, /private ensureTimelineSnapshot\(\): void/)
+  assert.match(harmonyExpandedCalendarSource, /cachedTimelineAllDayItems/)
+  assert.match(harmonyExpandedCalendarSource, /timelineAllDayItemsOn\(day\.date\)/)
+  assert.match(harmonySharedComponentsSource, /\.minFontSize\(19\.5\)/)
+  assert.match(
+    harmonySharedComponentsSource,
+    /heightAdaptivePolicy\(TextHeightAdaptivePolicy\.MIN_FONT_SIZE_FIRST\)/,
+  )
 })
 
 test('desktop calendar supplement commands are exposed by the Tauri capability manifest', () => {

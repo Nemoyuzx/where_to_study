@@ -15,7 +15,8 @@ import {
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
 import {
-  CoursePlacement, MobileCalendarTimelineLayout, MobileCalendarTimelineView
+  CoursePlacement, ExpandedCalendarTimelineDayHeaderView,
+  MobileCalendarTimelineLayout, MobileCalendarTimelineView
 } from './MobileCalendarTimelineView';
 import { CalendarDailyInfoCards } from './CalendarDailyInfoCards';
 import {
@@ -44,6 +45,7 @@ export struct ExpandedTeachingCalendarView {
   @Local allDayDialogDay: DateParts | null = null;
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local contentWidth: number = 900;
+  @Local timelineViewportWidth: number = 900;
   @Local rootWidth: number = DeviceState.screenWidthVp();
   @Local rootHeight: number = DeviceState.screenHeightVp();
   @Local rootGlobalX: number = 0;
@@ -53,11 +55,30 @@ export struct ExpandedTeachingCalendarView {
   @Local isDarkMode: boolean = false;
   @Local calendarContentOpacity: number = 1;
   @Local calendarContentAnimating: boolean = false;
+  // 时间线数据只在日期、课表或日程源变化时重建一次；同一帧的日期头、全天行和
+  // 主体共享快照，避免每个布局修饰符重复 merge/sort 一整周的 DDL。
+  @Local timelineDataRevision: number = 0;
   // PC（2in1）按 Windows Tauri 布局；平板/折叠屏按 Android 折叠屏布局。
   @Local isPc: boolean = DeviceState.isPc2in1();
   private darkModeProbe: DarkModeProbe = new DarkModeProbe();
-  private timelinePlacements: Map<string, CoursePlacement[]> =
+  private cachedTimelineRevision: number = -1;
+  private cachedTimelineScopeKey: string = '';
+  private cachedTimelineDays: CalendarTimelineDay[] = [];
+  private cachedTimelineAllDayItems: Map<string, ExpandedAllDayItem[]> =
+    new Map<string, ExpandedAllDayItem[]>();
+  private cachedTimelineAllDayRowCount: number = 0;
+  private cachedTimelinePlacements: Map<string, CoursePlacement[]> =
     new Map<string, CoursePlacement[]>();
+
+  @Monitor('session.selectedDate', 'session.modeRawValue', 'model.schedule',
+    'model.holidaysByYear', 'model.assignmentDeadlinesByDate', 'model.publicDeadlinesByDate',
+    'model.favoriteDeadlines', 'model.competitionDeadlinesEnabled',
+    'model.conferenceDeadlinesEnabled', 'model.schoolContestNoticesEnabled',
+    'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled',
+    'model.customDeadlinesEnabled', 'model.languageSettingRawValue', 'model.systemLanguageID')
+  onTimelineDataChange(monitor: IMonitor): void {
+    this.timelineDataRevision++;
+  }
 
   aboutToAppear(): void {
     this.darkModeProbe.register((dark: boolean) => {
@@ -227,11 +248,26 @@ export struct ExpandedTeachingCalendarView {
     const calendarWeek: number = StrictDates.isoWeekNumber(this.selectedDate());
     const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
     if (this.isEnglish()) {
-      return base + ' · Cal ' + calendarWeek.toString() + ' · Teach ' +
-        (teachingWeek === null ? '—' : teachingWeek.toString());
+      return base + ' · Calendar Week ' + calendarWeek.toString() +
+        (teachingWeek === null ? ' · Outside teaching weeks' :
+          ' · Teaching Week ' + teachingWeek.toString());
     }
-    return base + ' · 公历第' + calendarWeek.toString() + '周 · 第' +
-      (teachingWeek === null ? '—' : teachingWeek.toString()) + '教学周';
+    return base + ' · 公历第 ' + calendarWeek.toString() + ' 周' +
+      (teachingWeek === null ? ' · 非教学周' :
+        ' · 第 ' + teachingWeek.toString() + ' 教学周');
+  }
+
+  private timelineContextText(): string {
+    const calendarWeek: number = StrictDates.isoWeekNumber(this.selectedDate());
+    const teachingWeek: number | null = this.model.weekNumberOn(this.selectedDate());
+    if (this.isEnglish()) {
+      return 'Calendar Week ' + calendarWeek.toString() +
+        (teachingWeek === null ? ' · Outside teaching weeks' :
+          ' · Teaching Week ' + teachingWeek.toString());
+    }
+    return '公历第 ' + calendarWeek.toString() + ' 周' +
+      (teachingWeek === null ? ' · 非教学周' :
+        ' · 第 ' + teachingWeek.toString() + ' 教学周');
   }
 
   private monthWeekLabel(day: DateParts): string {
@@ -297,74 +333,61 @@ export struct ExpandedTeachingCalendarView {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Scroll() {
+      if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
         Column({ space: 16 }) {
-          Row({ space: 24 }) {
-            PageTitle({ eyebrow: 'BUPT Classroom Planner', title: this.periodTitle() })
-              .layoutWeight(1)
-            Row() {
-              ForEach(CalendarModeInfo.all, (item: CalendarMode) => {
-                Text(this.model.text(item))
-                  .fontSize(14)
-                  .fontWeight(this.mode() === item ? FontWeight.Medium : FontWeight.Regular)
-                  .fontColor(this.mode() === item ? AppTheme.onPrimary() : AppTheme.text())
-                  .textAlign(TextAlign.Center)
-                  .width(64)
-                  .height(30)
-                  .backgroundColor(this.mode() === item ?
-                    AppTheme.primaryFill() : Color.Transparent)
-                  .borderRadius(6)
-                  .onClick(() => {
-                    this.animateMode(item);
-                  })
-              }, (item: CalendarMode) => 'mode.' + item)
-            }
-            .padding(2)
-            .borderRadius(8)
-            .border({ width: 1, color: AppTheme.border() })
-            .backgroundColor(AppTheme.background())
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Bottom)
-
-          this.dateControls()
-
-          ForEach(this.statusMessages(), (message: string, index: number) => {
-            Text(this.model.text(message))
-              .fontSize(12)
-              .fontColor(AppTheme.secondaryText())
-              .width('100%')
-          }, (message: string, index: number) => 'status.' + index.toString() + '.' + message)
-
-          Divider()
-            .color(AppTheme.border())
-
-          Column() {
-            if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
+          this.titleBar()
+          Column({ space: 14 }) {
+            this.calendarPanelHeader()
+            Column() {
               this.timelineContent()
-            } else if (this.mode() === CalendarMode.month) {
-              this.monthContent()
-            } else {
-              this.yearContent()
             }
+            .layoutWeight(1)
+            .width('100%')
+            .opacity(this.calendarContentOpacity)
           }
+          .layoutWeight(1)
           .width('100%')
-          .opacity(this.calendarContentOpacity)
+          .alignItems(HorizontalAlign.Start)
         }
-        .padding(20)
+        .padding(16)
         .width('100%')
-        .constraintSize({ maxWidth: 1200 })
-        .alignSelf(ItemAlign.Center)
+        .height('100%')
         .alignItems(HorizontalAlign.Start)
         .onAreaChange((oldArea: Area, newArea: Area) => {
           this.contentWidth = Number(newArea.width);
         })
+      } else {
+        Scroll() {
+          Column({ space: 16 }) {
+            this.titleBar()
+            Column({ space: 14 }) {
+              this.calendarPanelHeader()
+              Column() {
+                if (this.mode() === CalendarMode.month) {
+                  this.monthContent()
+                } else {
+                  this.yearContent()
+                }
+              }
+              .width('100%')
+              .opacity(this.calendarContentOpacity)
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+          }
+          .padding(16)
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .onAreaChange((oldArea: Area, newArea: Area) => {
+            this.contentWidth = Number(newArea.width);
+          })
+        }
+        .width('100%')
+        .height('100%')
+        .align(Alignment.Top)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.None)
       }
-      .width('100%')
-      .height('100%')
-      .align(Alignment.Top)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
 
       if (this.presentedDay !== null) {
         this.jumpOverlay()
@@ -389,6 +412,63 @@ export struct ExpandedTeachingCalendarView {
   }
 
   @Builder
+  titleBar() {
+    Row({ space: 24 }) {
+      PageTitle({ eyebrow: 'BUPT Classroom Planner', title: this.periodTitle() })
+        .layoutWeight(1)
+      Row({ space: 8 }) {
+        Text(this.model.text('视图'))
+          .fontSize(13)
+          .fontColor(AppTheme.text())
+          .maxLines(1)
+        Row() {
+          ForEach(CalendarModeInfo.all, (item: CalendarMode) => {
+            Text(this.model.text(item))
+              .fontSize(13)
+              .fontWeight(this.mode() === item ? FontWeight.Medium : FontWeight.Regular)
+              .fontColor(this.mode() === item ? AppTheme.onPrimary() : AppTheme.text())
+              .textAlign(TextAlign.Center)
+              .layoutWeight(1)
+              .height(20)
+              .backgroundColor(this.mode() === item ?
+                AppTheme.primaryFill() : Color.Transparent)
+              .borderRadius(6)
+              .onClick(() => {
+                this.animateMode(item);
+              })
+          }, (item: CalendarMode) => 'mode.' + item)
+        }
+        .layoutWeight(1)
+        .height(24)
+        .padding(2)
+        .borderRadius(8)
+        .border({ width: 1, color: AppTheme.border() })
+        .backgroundColor(AppTheme.background())
+      }
+      .width(this.isEnglish() ? 243 : 170)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Bottom)
+  }
+
+  @Builder
+  calendarPanelHeader() {
+    Column({ space: 14 }) {
+      this.dateControls()
+      ForEach(this.statusMessages(), (message: string, index: number) => {
+        Text(this.model.text(message))
+          .fontSize(10)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }, (message: string, index: number) => 'status.' + index.toString() + '.' + message)
+      Divider()
+        .color(AppTheme.border())
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
   dateControls() {
     Row({ space: 8 }) {
       Text('‹')
@@ -408,10 +488,11 @@ export struct ExpandedTeachingCalendarView {
           .fontSize(14)
           .fontColor([AppTheme.text()])
         Text(StrictDates.formatDateParts(this.selectedDate()))
-          .fontSize(14)
+          .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.text())
       }
+      .width(148)
       .height(32)
       .padding({ left: 10, right: 10 })
       .borderRadius(7)
@@ -419,10 +500,11 @@ export struct ExpandedTeachingCalendarView {
       .backgroundColor(AppTheme.background())
 
       Text(this.model.text('今天'))
-        .fontSize(14)
+        .fontSize(13)
         .fontColor(AppTheme.text())
+        .width(48)
         .height(32)
-        .padding({ left: 10, right: 10 })
+        .textAlign(TextAlign.Center)
         .borderRadius(6)
         .border({ width: 1, color: AppTheme.border() })
         .onClick(() => {
@@ -442,45 +524,65 @@ export struct ExpandedTeachingCalendarView {
         })
 
       Blank()
-        .width(12)
-
-      Text(this.model.isRefreshingSchedule ? this.model.text('正在获取…') :
-        this.model.text('获取/刷新个人课表'))
-        .fontSize(13)
-        .fontColor(AppTheme.text())
-        .height(32)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(6)
-        .border({ width: 1, color: AppTheme.border() })
-        .backgroundColor(AppTheme.background())
-        .onClick(() => {
-          if (!this.model.isRefreshingSchedule && !this.model.isImportingCalendar) {
-            this.model.refreshSchedule();
-          }
-        })
+        .layoutWeight(1)
 
       Column({ space: 6 }) {
-        Text(this.model.isImportingCalendar ? this.model.text('正在导入…') :
-          this.model.text('导入系统日历'))
-          .fontSize(13)
-          .fontColor(AppTheme.text())
-          .height(32)
-          .padding({ left: 12, right: 12 })
-          .borderRadius(6)
-          .border({ width: 1, color: AppTheme.border() })
-          .backgroundColor(AppTheme.background())
-          .onClick(() => {
-            if (this.model.schedule !== null && !this.model.isRefreshingSchedule &&
-              !this.model.isImportingCalendar) {
-              this.model.importScheduleToCalendar();
-            }
-          })
+        Row({ space: 8 }) {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+              .fontSize(13)
+              .fontColor([AppTheme.text()])
+            Text(this.model.isRefreshingSchedule ? this.model.text('正在获取…') :
+              this.model.text('获取/刷新个人课表'))
+              .fontSize(13)
+              .fontColor(AppTheme.text())
+              .maxLines(1)
+          }
+            .height(24)
+            .padding({ left: 12, right: 12 })
+            .borderRadius(6)
+            .border({ width: 1, color: AppTheme.border() })
+            .backgroundColor(AppTheme.background())
+            .onClick(() => {
+              if (!this.model.isRefreshingSchedule && !this.model.isImportingCalendar) {
+                this.model.refreshSchedule();
+              }
+            })
 
-        Text(this.model.isImportingCalendar ? this.model.text('正在导入…') :
-          this.model.text('导入已收藏日程'))
-          .fontSize(13)
-          .fontColor(AppTheme.text())
-          .height(32)
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.calendar_badge_plus'))
+              .fontSize(13)
+              .fontColor([AppTheme.text()])
+            Text(this.model.isImportingCalendar ? this.model.text('正在导入…') :
+              this.model.text('导入系统日历'))
+              .fontSize(13)
+              .fontColor(AppTheme.text())
+              .maxLines(1)
+          }
+            .height(24)
+            .padding({ left: 12, right: 12 })
+            .borderRadius(6)
+            .border({ width: 1, color: AppTheme.border() })
+            .backgroundColor(AppTheme.background())
+            .onClick(() => {
+              if (this.model.schedule !== null && !this.model.isRefreshingSchedule &&
+                !this.model.isImportingCalendar) {
+                this.model.importScheduleToCalendar();
+              }
+            })
+        }
+
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.star'))
+            .fontSize(13)
+            .fontColor([AppTheme.text()])
+          Text(this.model.isImportingCalendar ? this.model.text('正在导入…') :
+            this.model.text('导入已收藏日程'))
+            .fontSize(13)
+            .fontColor(AppTheme.text())
+            .maxLines(1)
+        }
+          .height(24)
           .padding({ left: 12, right: 12 })
           .borderRadius(6)
           .border({ width: 1, color: AppTheme.border() })
@@ -492,6 +594,7 @@ export struct ExpandedTeachingCalendarView {
             }
           })
       }
+      .alignItems(HorizontalAlign.End)
     }
     .width('100%')
   }
@@ -499,19 +602,46 @@ export struct ExpandedTeachingCalendarView {
   @Builder
   timelineContent() {
     Column({ space: 12 }) {
-      this.allDayRow()
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.graduationcap'))
+          .fontSize(12)
+          .fontColor([AppTheme.secondaryText()])
+        Text(this.timelineContextText())
+          .fontSize(10)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.secondaryText())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .height(18)
+      .id('calendar.expanded.week-context')
+
       Scroll() {
-        MobileCalendarTimelineView({
-          days: this.timelineDays(),
-          placements: this.timelinePlacements,
-          selectedDate: this.selectedDate(),
-          showsWeekColumns: this.mode() === CalendarMode.week,
-          expanded: true,
-          tauri: this.isPc,
-          onSelectDay: (day: DateParts): void => {
-            this.setSelectedDate(day);
-          }
-        })
+        Column({ space: 0 }) {
+          ExpandedCalendarTimelineDayHeaderView({
+            days: this.timelineDays(),
+            selectedDate: this.selectedDate(),
+            dayAreaWidth: this.timelineDayAreaWidth(),
+            onSelectDay: (day: DateParts): void => {
+              this.setSelectedDate(day);
+            }
+          })
+          this.allDayRow()
+          MobileCalendarTimelineView({
+            days: this.timelineDays(),
+            placements: this.timelinePlacements(),
+            selectedDate: this.selectedDate(),
+            showsWeekColumns: this.mode() === CalendarMode.week,
+            expanded: true,
+            fixedDayAreaWidth: this.timelineDayAreaWidth(),
+            onSelectDay: (day: DateParts): void => {
+              this.setSelectedDate(day);
+            }
+          })
+            .id('calendar.expanded.timeline-body')
+        }
+        .width('100%')
       }
       .layoutWeight(1)
       .scrollable(ScrollDirection.Vertical)
@@ -519,88 +649,164 @@ export struct ExpandedTeachingCalendarView {
       .edgeEffect(EdgeEffect.None)
       .width('100%')
       .id('calendar.expanded.timeline-scroll')
+      .onAreaChange((oldArea: Area, newArea: Area) => {
+        this.timelineViewportWidth = Number(newArea.width);
+      })
     }
     .width('100%')
+    .height('100%')
     .id('calendar.expanded.timeline-container')
-    // 使用根视口而不是内容列自身的测量高度，避免循环依赖把平板时间线
-    // 压缩到 360vp，并让周视图持续填满可用的垂直区域。
-    .height(MobileCalendarTimelineLayout.expandedViewportHeight(this.rootHeight))
+  }
+
+  private timelineDayAreaWidth(): number {
+    return Math.max(this.timelineViewportWidth - MobileCalendarTimelineLayout.expandedAxisWidth(), 1);
+  }
+
+  private timelineDates(): DateParts[] {
+    return this.mode() === CalendarMode.week ?
+      this.weekDates() : [this.selectedDate()];
+  }
+
+  private timelineDayCount(): number {
+    return this.mode() === CalendarMode.week ? 7 : 1;
   }
 
   private timelineDays(): CalendarTimelineDay[] {
-    const days: DateParts[] = this.mode() === CalendarMode.week ?
-      this.weekDates() : [this.selectedDate()];
-    const result: CalendarTimelineDay[] = [];
-    for (const day of days) {
-      result.push(new CalendarTimelineDay(day, this.coursesOn(day), this.holidayItemsOn(day)));
+    this.ensureTimelineSnapshot();
+    return this.cachedTimelineDays;
+  }
+
+  private timelinePlacements(): Map<string, CoursePlacement[]> {
+    this.ensureTimelineSnapshot();
+    return this.cachedTimelinePlacements;
+  }
+
+  private timelineAllDayItemsOn(day: DateParts): ExpandedAllDayItem[] {
+    this.ensureTimelineSnapshot();
+    return this.cachedTimelineAllDayItems.get(StrictDates.formatDateParts(day)) ?? [];
+  }
+
+  private ensureTimelineSnapshot(): void {
+    const revision: number = this.timelineDataRevision;
+    const scopeKey: string = this.mode() + '|' + StrictDates.formatDateParts(this.selectedDate()) +
+      '|' + this.model.resolvedLanguage();
+    if (this.cachedTimelineRevision === revision && this.cachedTimelineScopeKey === scopeKey) {
+      return;
     }
-    // 一次算好课程布局，供时间线复用（BUG-046 修复）。
-    this.timelinePlacements = MobileCalendarTimelineView.placementsFor(result);
-    return result;
+    const days: DateParts[] = this.timelineDates();
+    const timelineDays: CalendarTimelineDay[] = [];
+    const allDayItems: Map<string, ExpandedAllDayItem[]> =
+      new Map<string, ExpandedAllDayItem[]>();
+    let maximumAllDayItems: number = 0;
+    for (const day of days) {
+      timelineDays.push(new CalendarTimelineDay(day, this.coursesOn(day), this.holidayItemsOn(day)));
+      const items: ExpandedAllDayItem[] = this.allDayItemsOn(day);
+      allDayItems.set(StrictDates.formatDateParts(day), items);
+      maximumAllDayItems = Math.max(maximumAllDayItems, items.length);
+    }
+    this.cachedTimelineDays = timelineDays;
+    this.cachedTimelineAllDayItems = allDayItems;
+    this.cachedTimelineAllDayRowCount =
+      MobileCalendarTimelineLayout.expandedAllDayRowCount(maximumAllDayItems);
+    this.cachedTimelinePlacements = MobileCalendarTimelineView.placementsFor(timelineDays);
+    this.cachedTimelineRevision = revision;
+    this.cachedTimelineScopeKey = scopeKey;
   }
 
   @Builder
   allDayRow() {
-    if (this.allDayEntries().length > 0) {
+    if (this.allDayRowCount() > 0) {
       Row({ space: 0 }) {
-        Text(this.model.text('全天'))
-          .fontSize(11)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.secondaryText())
-          .width(MobileCalendarTimelineLayout.expandedAxisWidth(this.isPc))
-          .height(58)
-          .textAlign(TextAlign.Center)
-          .border({ width: { right: 1 }, color: AppTheme.border() })
-          .id('calendar.expanded.all-day-axis')
+        Row({ space: 0 }) {
+          Blank()
+            .width(MobileCalendarTimelineLayout.expandedHourAxisWidth)
+            .height(this.allDayRowHeight())
+          Text(this.model.text('全天'))
+            .fontSize(10)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(AppTheme.text())
+            .width(MobileCalendarTimelineLayout.expandedSlotAxisWidth)
+            .height(this.allDayRowHeight())
+            .textAlign(TextAlign.Center)
+            .border({ width: { left: 1 }, color: AppTheme.border() })
+        }
+        .width(MobileCalendarTimelineLayout.expandedAxisWidth())
+        .height(this.allDayRowHeight())
+        .backgroundColor(AppTheme.background())
+        .border({ width: { right: 1, bottom: 1 }, color: AppTheme.border() })
+        .id('calendar.expanded.all-day-axis')
+
         Row({ space: 0 }) {
           ForEach(this.timelineDays(), (day: CalendarTimelineDay, dayIndex: number) => {
-            Column({ space: 2 }) {
-              ForEach(this.allDayItemsOn(day.date).slice(0, 2), (item: ExpandedAllDayItem) => {
-                Text(item.timeLabel + ' · ' + item.title)
-                  .fontSize(this.mode() === CalendarMode.week ? 9 : 11)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(item.tint)
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Column({ space: 0 }) {
+              ForEach(this.timelineAllDayItemsOn(day.date).slice(0,
+                MobileCalendarTimelineLayout.expandedVisibleAllDayEventCount(
+                  this.timelineAllDayItemsOn(day.date).length)), (item: ExpandedAllDayItem) => {
+                Row({ space: 3 }) {
+                  Text(item.timeLabel)
+                    .fontSize(9)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(item.tint)
+                    .maxLines(1)
+                  Text(item.title)
+                    .fontSize(9)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(item.tint)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                }
                   .width('100%')
-                  .height(18)
-                  .padding({ left: 5, right: 5 })
-                  .borderRadius(4)
+                  .height(MobileCalendarTimelineLayout.expandedAllDayRowHeight)
+                  .padding({ left: 4, right: 4 })
                   .backgroundColor(item.fill)
                   .onClick(() => {
                     this.activateAllDayItem(day.date, item, false);
                   })
               }, (item: ExpandedAllDayItem) => 'wide-all-day.' + item.id)
-              if (this.allDayItemsOn(day.date).length > 2) {
-                Text('+' + (this.allDayItemsOn(day.date).length - 2).toString())
-                  .fontSize(10)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(AppTheme.primary())
+              if (MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(
+                this.timelineAllDayItemsOn(day.date).length) > 0) {
+                Text('+' + MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(
+                  this.timelineAllDayItemsOn(day.date).length).toString())
+                  .fontSize(9)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(AppTheme.secondaryText())
                   .width('100%')
-                  .height(15)
+                  .height(MobileCalendarTimelineLayout.expandedAllDayRowHeight)
                   .textAlign(TextAlign.Start)
-                  .padding({ left: 5, right: 5 })
+                  .padding({ left: 4, right: 4 })
                   .onClick(() => {
                     this.presentAllDayDialog(day.date, this.mode());
                   })
               }
             }
-            .layoutWeight(1)
-            .height(58)
-            .padding({ left: 2, right: 2 })
-            .border({ width: { left: 1 }, color: AppTheme.border() })
-            .justifyContent(FlexAlign.Center)
+            .width(MobileCalendarTimelineLayout.fittedDayWidth(
+              this.timelineDayAreaWidth(), this.timelineDayCount()))
+            .height(this.allDayRowHeight())
+            .border({ width: { left: 1, bottom: 1 }, color: AppTheme.border() })
+            .backgroundColor(day.date.equals(this.selectedDate()) ?
+              AppTheme.selectedDateSurface() : AppTheme.background())
+            .alignItems(HorizontalAlign.Start)
             .id('calendar.expanded.all-day.' + dayIndex.toString())
           }, (day: CalendarTimelineDay) => 'wide-all-day-day.' +
             StrictDates.formatDateParts(day.date))
         }
-        .layoutWeight(1)
-        .height(58)
+        .width(this.timelineDayAreaWidth())
+        .height(this.allDayRowHeight())
       }
       .width('100%')
-      .height(58)
-      .backgroundColor(AppTheme.surface())
+      .height(this.allDayRowHeight())
+      .backgroundColor(AppTheme.background())
     }
+  }
+
+  private allDayRowCount(): number {
+    this.ensureTimelineSnapshot();
+    return this.cachedTimelineAllDayRowCount;
+  }
+
+  private allDayRowHeight(): number {
+    return this.allDayRowCount() * MobileCalendarTimelineLayout.expandedAllDayRowHeight;
   }
 
   private allDayItemsOn(day: DateParts): ExpandedAllDayItem[] {
@@ -628,18 +834,6 @@ export struct ExpandedTeachingCalendarView {
           this.deadlineTime(item.deadline),
           DeadlineVisual.colorForItem(item), DeadlineVisual.surfaceForItem(item), item,
           item.officialURL));
-    }
-    return result;
-  }
-
-  private allDayEntries(): ExpandedAllDayItem[] {
-    const days: DateParts[] = this.mode() === CalendarMode.week ?
-      this.weekDates() : [this.selectedDate()];
-    const result: ExpandedAllDayItem[] = [];
-    for (const day of days) {
-      for (const item of this.allDayItemsOn(day)) {
-        result.push(item);
-      }
     }
     return result;
   }

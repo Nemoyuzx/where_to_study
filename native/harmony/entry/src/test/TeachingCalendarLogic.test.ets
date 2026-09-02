@@ -357,13 +357,25 @@ export default function teachingCalendarLogicTest() {
       expect(MobileCalendarTimelineLayout.columnTapSelectsDay(true)).assertFalse();
     });
 
-    it('expanded_tablet_week_fills_the_viewport_without_clipping', 0, () => {
-      expect(MobileCalendarTimelineLayout.expandedAxisWidth(false)).assertEqual(144);
-      expect(MobileCalendarTimelineLayout.expandedAxisWidth(true)).assertEqual(156);
+    it('expanded_tablet_week_matches_macos_timeline_metrics', 0, () => {
+      expect(MobileCalendarTimelineLayout.expandedHourAxisWidth).assertEqual(52);
+      expect(MobileCalendarTimelineLayout.expandedSlotAxisWidth).assertEqual(104);
+      expect(MobileCalendarTimelineLayout.expandedAxisWidth()).assertEqual(156);
+      expect(MobileCalendarTimelineLayout.expandedHourHeight).assertEqual(64);
+      expect(MobileCalendarTimelineLayout.expandedHeaderHeight).assertEqual(72);
+      expect(MobileCalendarTimelineLayout.expandedMinimumDayWidth).assertEqual(118);
       expect(MobileCalendarTimelineLayout.fittedDayWidth(1050, 7)).assertEqual(150);
       expect(MobileCalendarTimelineLayout.fittedDayWidth(700, 7) * 7).assertEqual(700);
-      expect(MobileCalendarTimelineLayout.expandedViewportHeight(960)).assertEqual(680);
-      expect(MobileCalendarTimelineLayout.expandedViewportHeight(600)).assertEqual(360);
+      expect(MobileCalendarTimelineLayout.expandedAllDayRowCount(0)).assertEqual(0);
+      expect(MobileCalendarTimelineLayout.expandedAllDayRowCount(2)).assertEqual(2);
+      expect(MobileCalendarTimelineLayout.expandedAllDayRowCount(4)).assertEqual(3);
+      expect(MobileCalendarTimelineLayout.expandedVisibleAllDayEventCount(3)).assertEqual(3);
+      expect(MobileCalendarTimelineLayout.expandedVisibleAllDayEventCount(4)).assertEqual(2);
+      expect(MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(4)).assertEqual(2);
+      expect(MobileCalendarTimelineLayout.expandedDayHeaderTitle(
+        new DateParts(2026, 8, 31), false)).assertEqual('8/31 周一');
+      expect(MobileCalendarTimelineLayout.expandedDayHeaderTitle(
+        new DateParts(2026, 8, 31), true)).assertEqual('8/31 Mon');
     });
 
     it('timeline_minute_and_metadata_helpers', 0, () => {
