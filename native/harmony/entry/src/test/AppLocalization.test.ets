@@ -31,6 +31,16 @@ export default function appLocalizationTest() {
       expect(AppLocalization.text('系统安全存储操作失败（24000002）。',
         AppLanguage.english, 'en-US'))
         .assertEqual('Secure storage failed (24000002).');
+      expect(AppLocalization.text(
+        '安全连接校验失败（网络错误 2300060），请关闭网络代理、完成校园网认证或切换网络后重试。',
+        AppLanguage.english, 'en-US'))
+        .assertEqual('Secure connection validation failed (network error 2300060). Disable the network proxy, ' +
+          'complete campus-network sign-in, or switch networks.');
+      expect(AppLocalization.text(
+        '域名解析失败（网络错误 2300006），请检查 DNS、代理或校园网认证后重试。',
+        AppLanguage.english, 'en-US'))
+        .assertEqual('DNS resolution failed (network error 2300006). Check DNS, proxy, or ' +
+          'campus-network sign-in and try again.');
     });
 
     it('dynamic_static_labels_use_english_patterns', 0, () => {

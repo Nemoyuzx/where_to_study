@@ -1235,7 +1235,7 @@ class FixedPublicJsonTransport {
       if (result.byteLength > maximumBytes) {
         throw new CalendarDailyInfoError('公开数据响应过大。');
       }
-      return new util.TextDecoder('utf-8').decode(new Uint8Array(result));
+      return util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(result));
     }
     if (typeof result === 'string') {
       if (Utf8.bytes(result as string).length > maximumBytes) {

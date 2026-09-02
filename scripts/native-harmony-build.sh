@@ -44,15 +44,44 @@ for test_file in "$HARMONY_DIR"/entry/src/test/*.test.ets; do
   fi
 done
 
+for device_test_file in "$HARMONY_DIR"/entry/src/ohosTest/ets/test/*.test.ets; do
+  device_test_base="$(basename "$device_test_file" .ets)"
+  if [[ "$device_test_base" == "List.test" ]]; then
+    continue
+  fi
+  if ! grep -q "\./${device_test_base}'" \
+    "$HARMONY_DIR/entry/src/ohosTest/ets/test/List.test.ets"; then
+    echo "未注册的设备测试文件：${device_test_base}（请在 ohosTest List.test.ets 中 import 并调用）" >&2
+    exit 1
+  fi
+done
+
 # BUG-047：AppMeta.version 与 AppScope/app.json5 versionName 一致性校验。
 APP_META_VERSION="$(grep -oE "static readonly version: string = '[0-9.]+'" \
   "$HARMONY_DIR/entry/src/main/ets/common/AppMeta.ets" | grep -oE '[0-9.]+' | head -1)"
 APP_JSON_VERSION="$(grep -oE '"versionName": "[0-9.]+"' "$HARMONY_DIR/AppScope/app.json5" \
   | grep -oE '[0-9.]+' | head -1)"
+APP_JSON_VERSION_CODE="$(grep -oE '"versionCode": [0-9]+' "$HARMONY_DIR/AppScope/app.json5" \
+  | grep -oE '[0-9]+' | head -1)"
 if [[ -z "$APP_META_VERSION" || "$APP_META_VERSION" != "$APP_JSON_VERSION" ]]; then
   echo "版本不一致：AppMeta.ets=${APP_META_VERSION}, AppScope/app.json5=${APP_JSON_VERSION}" >&2
   exit 1
 fi
+if [[ -z "$APP_JSON_VERSION_CODE" ]]; then
+  echo "无法读取 AppScope/app.json5 versionCode" >&2
+  exit 1
+fi
+
+verify_packed_version() {
+  local package_path="$1"
+  local pack_info
+  pack_info="$(unzip -p "$package_path" pack.info)"
+  if ! grep -Eq '"code"[[:space:]]*:[[:space:]]*'"${APP_JSON_VERSION_CODE}" <<<"$pack_info" ||
+    ! grep -Eq '"name"[[:space:]]*:[[:space:]]*"'"${APP_JSON_VERSION}"'"' <<<"$pack_info"; then
+    echo "打包版本与 AppScope/app.json5 不一致：$package_path" >&2
+    exit 1
+  fi
+}
 
 cd "$HARMONY_DIR"
 "$OHPM" install
@@ -71,6 +100,7 @@ if [[ ! -f "$SIGNED_HAP" ]]; then
   echo "HarmonyOS signed HAP is missing: $SIGNED_HAP" >&2
   exit 1
 fi
+verify_packed_version "$SIGNED_HAP"
 if unzip -p "$SIGNED_HAP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
   echo "HarmonyOS HAP contains the retired contest API host." >&2
   exit 1
@@ -89,6 +119,7 @@ if [[ ! -f "$SIGNED_APP" ]]; then
   echo "HarmonyOS signed APP is missing: $SIGNED_APP" >&2
   exit 1
 fi
+verify_packed_version "$SIGNED_APP"
 unzip -t "$SIGNED_APP" >/dev/null
 if unzip -p "$SIGNED_APP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
   echo "HarmonyOS APP contains the retired contest API host." >&2

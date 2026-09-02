@@ -825,6 +825,7 @@ export struct SettingsView {
           .fontColor(AppTheme.text())
           .layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.model.dailyCourseNotificationsEnabled })
+          .id('settings_daily_course_notification_toggle')
           .selectedColor(AppTheme.primaryFill())
           .width(48)
           .height(28)

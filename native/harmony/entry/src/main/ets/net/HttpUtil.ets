@@ -5,12 +5,24 @@
 // 3. 传输失败统一转为可读错误信息。
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { UrlPolicy } from './UrlPolicy';
 import { Utf8 } from '../common/Utf8';
+import { NetworkDiagnostics } from './NetworkDiagnostics';
 
 export class HttpTooLargeError extends Error {
   constructor() {
     super('响应过大。');
+  }
+}
+
+export class HttpTransportError extends Error {
+  readonly code: number;
+
+  constructor(code: number) {
+    super(NetworkDiagnostics.userMessage(code));
+    this.code = code;
   }
 }
 
@@ -32,6 +44,7 @@ export class HttpRequestSpec {
   readTimeoutMs: number = 30000;
   maxBytes: number = 2 * 1024 * 1024;
   maxRedirects: number = 5;
+  addressFamily: http.AddressFamily = http.AddressFamily.DEFAULT;
 
   constructor() {
   }
@@ -48,46 +61,52 @@ export class HttpUtil {
         throw new Error('请求地址不符合安全策略。');
       }
       const client: http.HttpRequest = http.createHttp();
+      let response: http.HttpResponse;
       try {
-        const response: http.HttpResponse = await client.request(currentUrl, {
+        const options: http.HttpRequestOptions = {
           method: spec.method,
           header: spec.headers,
-          extraData: spec.body,
           connectTimeout: spec.connectTimeoutMs,
           readTimeout: spec.readTimeoutMs,
           // 以字节为单位接收并校验上限，避免 UTF-16 字符数与字节数的偏差（BUG-004 修复）。
           expectDataType: http.HttpDataType.ARRAY_BUFFER,
-          maxRedirects: 0
-        });
-        const code: number = typeof response.responseCode === 'number' ? response.responseCode as number : 0;
-        if (code >= 300 && code < 400) {
-          if (redirect >= maximumRedirects) {
-            throw new Error('请求重定向次数过多。');
-          }
-          const location: string | null = HttpUtil.headerValue(response.header, 'Location');
-          if (location === null) {
-            throw new Error('请求被重定向但没有目标地址。');
-          }
-          currentUrl = UrlPolicy.resolveRedirect(currentUrl, location);
-          continue;
+          maxRedirects: 0,
+          addressFamily: spec.addressFamily
+        };
+        // NetworkKit API 24 会对“POST + 空字符串 extraData”返回 401
+        // Parameter error。课表接口是无请求体的 POST，空请求体必须用“省略
+        // extraData”表达，而不是显式传入空字符串。
+        if (spec.body.length > 0) {
+          options.extraData = spec.body;
         }
-        const body: string = HttpUtil.responseBody(response.result, spec.maxBytes);
-        return new HttpResult(code, body);
+        response = await client.request(currentUrl, options);
       } catch (e) {
-        if (e instanceof HttpTooLargeError) {
-          throw e;
-        }
-        if (e instanceof Error) {
-          const message: string = e.message;
-          if (message === '请求地址不符合安全策略。' || message === '请求被重定向但没有目标地址。' ||
-            message === '请求重定向次数过多。' || message === '响应过大。') {
-            throw e;
-          }
-        }
-        throw new Error('无法连接服务器，请检查网络后重试。');
+        const error: BusinessError = e as BusinessError;
+        const errorCode: number = typeof error.code === 'number' ? error.code : 0;
+        // 不记录 URL、Header、请求体、Cookie、token 或凭据。原始系统消息按
+        // private 级别写入本机日志，界面只显示可报告的错误码。
+        hilog.error(0x0000, 'HttpUtil',
+          'NetworkKit request failed code=%{public}d msg=%{private}s',
+          errorCode, typeof error.message === 'string' ? error.message : '');
+        throw new HttpTransportError(errorCode);
       } finally {
         client.destroy();
       }
+      const code: number = typeof response.responseCode === 'number' ?
+        response.responseCode as number : 0;
+      if (code >= 300 && code < 400) {
+        if (redirect >= maximumRedirects) {
+          throw new Error('请求重定向次数过多。');
+        }
+        const location: string | null = HttpUtil.headerValue(response.header, 'Location');
+        if (location === null) {
+          throw new Error('请求被重定向但没有目标地址。');
+        }
+        currentUrl = UrlPolicy.resolveRedirect(currentUrl, location);
+        continue;
+      }
+      const body: string = HttpUtil.responseBody(response.result, spec.maxBytes);
+      return new HttpResult(code, body);
     }
     throw new Error('请求重定向次数过多。');
   }
@@ -98,7 +117,7 @@ export class HttpUtil {
       if (result.byteLength > maxBytes) {
         throw new HttpTooLargeError();
       }
-      return new util.TextDecoder('utf-8').decode(new Uint8Array(result));
+      return util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(result));
     }
     if (typeof result === 'string') {
       if (Utf8.bytes(result as string).length > maxBytes) {

@@ -8,6 +8,8 @@ import { DeviceState } from '../common/DeviceState';
 const DOMAIN: number = 0x0000;
 
 export default class EntryAbility extends UIAbility {
+  private mainWindowStage: window.WindowStage | null = null;
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     AppContext.init(this.context);
     // 与 iOS 端进程参数对应的 UI 测试/演示模式标记。
@@ -17,6 +19,18 @@ export default class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, 'WhereToStudy', 'EntryAbility onCreate');
   }
 
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    // 单例 Ability 在设备测试中会收到新的启动 Want，而不是再次 onCreate。
+    // 只有显式测试/演示参数才切换依赖并重载根页；普通二次启动保持用户现场。
+    if (!AppLaunchConfiguration.hasExplicitRuntimeMode(want)) {
+      return;
+    }
+    AppLaunchConfiguration.applyFromWant(want);
+    if (this.mainWindowStage !== null) {
+      this.loadRootContent(this.mainWindowStage);
+    }
+  }
+
   onDestroy(): void {
     // 注销折叠状态监听，避免监听累积（BUG-017 修复）。
     DeviceState.instance().detach();
@@ -24,6 +38,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    this.mainWindowStage = windowStage;
     // 2in1/PC 适配：限制窗口最小尺寸，避免布局被缩到无法使用。
     try {
       const mainWindow: window.Window = windowStage.getMainWindowSync();
@@ -45,6 +60,10 @@ export default class EntryAbility extends UIAbility {
     // 主窗口加载应用首页。状态从 windowStage.loadContent 传入的页面自行创建，
     // 与 iOS 端 @StateObject AppModel 的注入方式对应：页面树在 Index 根组件中
     // 创建唯一的 AppModel 并通过 @Provider/@Consumer 向下共享。
+    this.loadRootContent(windowStage);
+  }
+
+  private loadRootContent(windowStage: window.WindowStage): void {
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'WhereToStudy', 'Failed to load content: %{public}s', JSON.stringify(err));
@@ -55,6 +74,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageDestroy(): void {
+    this.mainWindowStage = null;
     hilog.info(DOMAIN, 'WhereToStudy', 'EntryAbility onWindowStageDestroy');
   }
 

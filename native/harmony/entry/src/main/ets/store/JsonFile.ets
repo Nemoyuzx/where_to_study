@@ -7,6 +7,8 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 // fs 的“文件不存在”错误码。
 const FS_NO_SUCH_FILE: number = 13900002;
+// mkdirSync 即使使用递归模式，目标目录已存在时仍会返回该错误。
+const FS_FILE_EXISTS: number = 13900015;
 
 export class JsonFile {
   // 与 security-logic-review 的 RST-5 一致：本地课表与空教室缓存读取上限 8 MiB。
@@ -45,7 +47,25 @@ export class JsonFile {
     try {
       fs.mkdirSync(dir, true);
     } catch (e) {
-      throw new Error('无法定位本地缓存目录。');
+      const err: BusinessError = e as BusinessError;
+      if (err.code === FS_FILE_EXISTS) {
+        try {
+          if (fs.statSync(dir).isDirectory()) {
+            // 目录已由其它缓存先创建，属于正常的幂等写入场景。
+          } else {
+            throw new Error('缓存路径不是目录。');
+          }
+        } catch (statError) {
+          if (statError instanceof Error && statError.message === '缓存路径不是目录。') {
+            throw statError;
+          }
+          throw new Error('无法定位本地缓存目录。');
+        }
+      } else {
+        hilog.error(0x0000, 'JsonFile',
+          'mkdirSync failed code=%{public}d msg=%{private}s', err.code, err.message);
+        throw new Error('无法定位本地缓存目录。');
+      }
     }
     const tmpPath: string = path + '.tmp';
     let file: fs.File | null = null;

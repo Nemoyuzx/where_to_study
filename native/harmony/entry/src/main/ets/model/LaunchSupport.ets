@@ -43,6 +43,14 @@ export class AppLaunchConfiguration {
       AppLaunchConfiguration.flag(params, 'reviewDemo', AppLaunchConfiguration.reviewDemoArgument);
   }
 
+  static hasExplicitRuntimeMode(want: Want): boolean {
+    const params: Record<string, Object> = want.parameters ?? {};
+    return params['uiTesting'] !== undefined || params[AppLaunchConfiguration.uiTestingArgument] !== undefined ||
+      params['uiTestingLive'] !== undefined ||
+      params[AppLaunchConfiguration.uiTestingLiveArgument] !== undefined ||
+      params['reviewDemo'] !== undefined || params[AppLaunchConfiguration.reviewDemoArgument] !== undefined;
+  }
+
   static isUITesting(): boolean {
     return AppLaunchConfiguration.uiTesting;
   }
@@ -61,20 +69,9 @@ export class AppLaunchConfiguration {
       return new AppModel();
     }
     if (AppLaunchConfiguration.isUITestingLive()) {
-      return new AppModel(
-        AppRuntimeMode.live(),
-        new SampleCredentialStore(),
-        new SampleScheduleStore(null),
-        new SampleScheduleClient(),
-        new SampleClassroomStore(null),
-        new SampleClassroomClient(),
-        new SampleHolidayStore(),
-        new SampleHolidayClient(),
-        new SampleCalendarImporter(),
-        new SampleDailyCourseNotificationScheduler(),
-        'ui-tests-live',
-        new SampleWeatherClient()
-      );
+      // 真实输入测试使用与正式 App 完全相同的 ASSET、文件存储和网络依赖；
+      // 测试本身不保存凭据。不要再用“live”名称包装 Sample 客户端。
+      return new AppModel();
     }
     return new AppModel(
       AppRuntimeMode.sample(AppLaunchConfiguration.isReviewDemo()),

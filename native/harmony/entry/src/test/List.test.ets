@@ -16,6 +16,7 @@ import calendarDailyInfoClientTest from './CalendarDailyInfoClient.test';
 import appLocalizationTest from './AppLocalization.test';
 import shuttleBusClientTest from './ShuttleBusClient.test';
 import queryLogicTest from './QueryLogic.test';
+import networkDiagnosticsTest from './NetworkDiagnostics.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -35,4 +36,5 @@ export default function testsuite() {
   appLocalizationTest();
   shuttleBusClientTest();
   queryLogicTest();
+  networkDiagnosticsTest();
 }

@@ -3,8 +3,11 @@
 import { http } from '@kit.NetworkKit';
 import { Credentials } from '../store/CredentialStore';
 import { JsonUtil } from '../common/JsonUtil';
-import { HttpTooLargeError, HttpRequestSpec, HttpResult, HttpUtil } from './HttpUtil';
+import {
+  HttpTooLargeError, HttpTransportError, HttpRequestSpec, HttpResult, HttpUtil
+} from './HttpUtil';
 import { ScheduleClientError } from './SjdErrors';
+import { NetworkDiagnostics } from './NetworkDiagnostics';
 import {
   SJDNetworkPolicy, SJDResponseEndpoint, SJDResponseLimits, SJDFormURLEncoder
 } from './SjdEncoding';
@@ -106,6 +109,9 @@ export class SJDAPIClient {
       if (e instanceof ScheduleClientError) {
         throw e;
       }
+      if (e instanceof Error && e.message.length > 0) {
+        throw ScheduleClientError.service(e.message);
+      }
       throw ScheduleClientError.service(failureMessage);
     }
     if (result.statusCode < 200 || result.statusCode >= 400) {
@@ -127,7 +133,22 @@ export class SJDAPIClient {
       throw ScheduleClientError.invalidResponse('移动教务请求地址不符合安全策略。');
     }
     try {
-      return await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
+      try {
+        return await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
+      } catch (e) {
+        // 部分真实设备网络会优先选择不可达的 IPv6 路径。默认族失败且错误
+        // 属于 DNS/连接/收发/超时时，仅对固定 SJD 主机回退一次 IPv4。
+        if (e instanceof HttpTransportError &&
+          spec.addressFamily === http.AddressFamily.DEFAULT &&
+          NetworkDiagnostics.shouldRetryIPv4(e.code)) {
+          spec.addressFamily = http.AddressFamily.ONLY_V4;
+          return await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
+        }
+        if (e instanceof Error) {
+          throw e;
+        }
+        throw new HttpTransportError(0);
+      }
     } catch (e) {
       if (e instanceof HttpTooLargeError) {
         throw ScheduleClientError.invalidResponse(SJDResponseLimits.oversizedMessage(endpoint));

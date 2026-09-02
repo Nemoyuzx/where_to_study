@@ -409,6 +409,45 @@ export class AppLocalization {
       return 'Secure storage failed (' +
         source.substring('系统安全存储操作失败（'.length).replace('）。', ').');
     }
+    if (source.startsWith('域名解析失败（网络错误 ')) {
+      const end: number = source.indexOf('）');
+      const code: string = end > 0 ?
+        source.substring('域名解析失败（网络错误 '.length, end) : 'unknown';
+      return 'DNS resolution failed (network error ' + code +
+        '). Check DNS, proxy, or campus-network sign-in and try again.';
+    }
+    if (source.startsWith('连接服务器超时（网络错误 ')) {
+      const end: number = source.indexOf('）');
+      const code: string = end > 0 ?
+        source.substring('连接服务器超时（网络错误 '.length, end) : 'unknown';
+      return 'The server connection timed out (network error ' + code +
+        '). Switch networks or try again later.';
+    }
+    if (source.startsWith('安全连接校验失败（网络错误 ')) {
+      const end: number = source.indexOf('）');
+      const code: string = end > 0 ?
+        source.substring('安全连接校验失败（网络错误 '.length, end) : 'unknown';
+      return 'Secure connection validation failed (network error ' + code +
+        '). Disable the network proxy, complete campus-network sign-in, or switch networks.';
+    }
+    if (source.startsWith('网络请求配置异常（错误 ')) {
+      const end: number = source.indexOf('）');
+      const code: string = end > 0 ?
+        source.substring('网络请求配置异常（错误 '.length, end) : 'unknown';
+      return 'The network request configuration is invalid (error ' + code +
+        '). Please report this to the developer.';
+    }
+    if (source.startsWith('无法连接服务器（网络错误 ')) {
+      const end: number = source.indexOf('）');
+      const code: string = end > 0 ?
+        source.substring('无法连接服务器（网络错误 '.length, end) : 'unknown';
+      return 'Unable to connect to the server (network error ' + code +
+        '). Switch networks or complete campus-network sign-in and try again.';
+    }
+    if (source === '无法连接服务器（未知网络错误），请切换网络或完成校园网认证后重试。') {
+      return 'Unable to connect to the server (unknown network error). Switch networks or ' +
+        'complete campus-network sign-in and try again.';
+    }
     if (source.startsWith('公开活动 DDL 不可用')) {
       return 'Public event deadlines are temporarily unavailable.';
     }

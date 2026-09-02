@@ -348,7 +348,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       if (result.byteLength > maximumBytes) {
         throw new Error('教学云接口响应过大。');
       }
-      return new util.TextDecoder('utf-8').decode(new Uint8Array(result));
+      return util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(result));
     }
     if (typeof result === 'string') {
       const text: string = result as string;
