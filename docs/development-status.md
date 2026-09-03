@@ -1,4 +1,4 @@
-# v0.2.8 正式发布检查点（2026-09-02）
+# v0.2.8 正式发布检查点（2026-09-03）
 
 ## 当前状态
 
@@ -8,7 +8,7 @@
 - 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002018`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：iOS 与 macOS build 77 均由本地 Xcode 上传，macOS 已收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing；HarmonyOS 1002018 已由 DevEco 上传且云测试通过，只通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；10 个桌面附件已替换、Android APK 保留，11 个均重新下载并证明字节一致。项目按 GPL-3.0-only 开源
+- 发布边界：iOS 与 macOS build 77 均由本地 Xcode 上传，macOS 已收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing；HarmonyOS 1002018 已由 DevEco 上传且云测试通过，只通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；Android APK 已从 `e10e6ab` 重新构建并替换，远端下载后与本地签名包逐字节一致，其余 10 个附件未改变。项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -86,6 +86,7 @@
 - Android 月视图日期详情已接入云课堂原生 CAS 登录与实时作业同步、黄历宜忌和统一活动 DDL 卡片；天气、黄历、学科竞赛、校内竞赛通知、夏令营和黑客松六个开关与来源声明和 Apple 端一致。手机日期详情到达最高档后可继续滚动到底，滚动视口使用圆角边缘遮罩约束卡片层级；日期选择只进行纵向月格/详情动画，横向位移仅属于真正的月份分页。黄历、DDL、作业和节假日返回后只局部更新当前节点，不再重建页面；折叠屏收起侧栏时图标在选中框内保持纵向居中。
 - iOS 与 Android 云课堂作业客户端按账户共享一次全量请求，不同日期只在内存中过滤；清除账号会取消或失效旧请求，阻止延迟结果回写。
 - Android 日/周只折叠选中日期的完整课程列表，全天日程始终可见；日视图为横向 3 项胶囊与 `+N`，周视图为 7 列首项与 `+N`。作业、校内竞赛和学科竞赛/夏令营/黑客松均进入月格、年视图与独立居中日程弹窗；月/年格以 `1.2dp` 外框和 `0.8dp` 内框按“作业 > 校内竞赛 > 其它 DDL”显示前两类，选中日期使用独立蓝色且关闭年视图弹窗后保持。三种设备形态均支持 System / 简体中文 / English，所有应用字号缩小一级，通知和桌面小组件同步跟随。
+- Android 手机查询页移除重复副标题，班车列表底部来源声明会完整避让悬浮导航，“重要事件”选中滑块不再裁切；底部导航调矮、加宽并加入 220ms 选中态动画。月视图最高详情档改为移动并裁切完整月格，只露出选中周，不再将其他周压缩成小方框；设置“关于”区域显示并链接 APP 备案号 `琼ICP备2026012322号-2A`。
 
 ### HarmonyOS 原生端
 
@@ -101,13 +102,13 @@
 | 范围 | 结果 |
 | --- | --- |
 | 固定公开 API | 班车 Schema 1.0、Contest DDL Schema 1.4、校内通知 Schema 1.0 均直接返回 HTTP 200 JSON 且无重定向；公开活动 454 条、会议 67 条、校内通知 15 条，查询源均无作业 |
-| React/Tauri UI | 139/139 Node 契约与回归测试、Vite 生产构建、深浅色实际渲染和许可证新鲜度检查通过；会议唯一开启链路覆盖预热、跨年加载、月详情、来源声明与重试 |
+| React/Tauri UI | 141/141 Node 契约与回归测试、Vite 生产构建、深浅色实际渲染和许可证新鲜度检查通过；会议唯一开启链路覆盖预热、跨年加载、月详情、来源声明与重试 |
 | Rust | Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过 |
 | Apple | 本地 Xcode 严格构建与完整平台测试通过；基础套件 26 项 UI 中 21 通过、5 项设备/线上门控跳过、0 失败；横竖屏年视图和生产班车 Store/UI 门控另行执行并通过 |
 | TestFlight | iOS 与 macOS `0.2.8 (77)` 均已上传；macOS 收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`。按约定以上传脚本成功为完成边界，不打开 App Store Connect 检查 processing 或测试组状态 |
-| Android | `0.2.8 (45)` 的 199/199 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过 |
+| Android | `0.2.8 (45)` 的 201/201 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过；API 36 手机查询页 5/5、完整导航 1/1、月视图滚动交接 1/1 通过，并完成深浅色视觉复核 |
 | HarmonyOS | `0.2.8 (1002018)` 的 136/136 ArkTS 单元测试、签名 HAP/APP、打包版本、发布签名和三项 API 校验通过；Pura 90 完整设备测试 12/12、手机 UI 21/21、真实 SJD 登录/无请求体课表 POST、重复缓存写入及获授权真实账号“保存→课表→重启→ASSET 再读取”均通过；DevEco 已上传 AGC 且云测试为“通过” |
-| GitHub | `v0.2.8` 已发布为正式版并更新 `releases/latest`；10 个桌面附件已替换、Android APK 保留，11 个公开附件均重新下载并证明字节一致。Windows/Linux GUI 为 [runs 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`），CLI/TUI 为 [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）；这些提交到最终 `main` 的运行时代码输入无差异，未重复 dispatch。刷新附件来自 main push，tag-only attestation 已跳过，不声明 tag/Sigstore 来源证明 |
+| GitHub | `v0.2.8` 已发布为正式版并更新 `releases/latest`；Android APK 已从 `e10e6ab` 重新构建并替换，SHA-256 为 `59def9159aa14310cdcc7ce7fe5a51912b8dee38040817158e07cb058ef096bf`，远端下载后与本地签名包逐字节一致，其余 10 个附件的名称、大小、摘要与资产 ID 未改变。Windows/Linux GUI 为 [runs 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`），CLI/TUI 为 [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）；桌面刷新附件来自 main push，Android APK 使用本地固定维护者密钥构建，tag-only attestation 已跳过，不声明 tag/Sigstore 来源证明 |
 
 完整中英文发布说明见 [`release-v0.2.8.md`](release-v0.2.8.md)。
 
@@ -190,7 +191,7 @@ Apple 测试结果（2026-08-24 使用 `xcresulttool` 复核）：
 
 ## 0.2.8 正式版制品
 
-`v0.2.8` 正式版固定为 11 项公开附件：Windows x64 NSIS 1 项；Linux arm64/x86_64 Debian/AppImage/CLI/TUI 共 8 项；固定 release key 签名的 Android `0.2.8 (45)` Universal APK 1 项；原生 macOS `0.2.8 (77)` Universal DMG 1 项。GitHub 不上传 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；HarmonyOS 只通过 AppGallery Connect 分发。10 个桌面附件已替换，Android APK 保留，11 个均重新下载并证明与本地发布文件逐字节一致。刷新附件来自 main push 构建且 tag-only attestation 按设计跳过，不声明 tag/Sigstore 来源证明。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode。
+`v0.2.8` 正式版固定为 11 项公开附件：Windows x64 NSIS 1 项；Linux arm64/x86_64 Debian/AppImage/CLI/TUI 共 8 项；固定 release key 签名的 Android `0.2.8 (45)` Universal APK 1 项；原生 macOS `0.2.8 (77)` Universal DMG 1 项。GitHub 不上传 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；HarmonyOS 只通过 AppGallery Connect 分发。Android APK 已从 `e10e6ab` 重新构建并替换，远端下载后与本地发布文件逐字节一致，其余 10 个附件未改变。桌面刷新附件来自 main push，Android APK 使用本地固定维护者密钥构建；tag-only attestation 按设计跳过，不声明 tag/Sigstore 来源证明。DMG 未做 Developer ID 公证，Windows 安装器尚无 Authenticode。
 
 ## 0.2.7 稳定版发布制品
 
