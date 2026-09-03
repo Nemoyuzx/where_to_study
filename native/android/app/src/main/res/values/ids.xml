@@ -25,6 +25,7 @@
     <item name="planner_weather_details" type="id" />
     <item name="privacy_policy_button" type="id" />
     <item name="settings_about_section" type="id" />
+    <item name="settings_app_filing_link" type="id" />
     <item name="settings_language_section" type="id" />
     <item name="settings_language_selector" type="id" />
     <item name="settings_campus_selector" type="id" />
@@ -37,10 +38,13 @@
     <item name="settings_favorite_deadlines_button" type="id" />
     <item name="information_query_page" type="id" />
     <item name="information_query_mode_switch" type="id" />
+    <item name="information_query_mode_thumb" type="id" />
     <item name="information_query_shuttle_tab" type="id" />
     <item name="information_query_events_tab" type="id" />
     <item name="information_query_content" type="id" />
     <item name="information_query_shuttle_status" type="id" />
+    <item name="information_query_shuttle_scroll" type="id" />
+    <item name="information_query_shuttle_source_footer" type="id" />
     <item name="information_query_shuttle_routes" type="id" />
     <item name="information_query_search" type="id" />
     <item name="information_query_category_row" type="id" />
@@ -102,6 +106,7 @@
     <item name="calendar_year_view" type="id" />
     <item name="calendar_month_view" type="id" />
     <item name="calendar_month_weekday_header" type="id" />
+    <item name="calendar_month_grid_viewport" type="id" />
     <item name="calendar_month_grid" type="id" />
     <item name="calendar_swipe_surface" type="id" />
     <item name="calendar_month_entry" type="id" />

@@ -2,9 +2,11 @@ package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.TransitionDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -18,11 +20,107 @@ import androidx.test.uiautomator.Until
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class InformationQueryUiTest {
+    @Test
+    fun phoneQueryLayoutClearsTheNavigationAndAnimatesUnclippedSelections() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val preferences = AppPreferences(context)
+        val previousLanguage = preferences.languageCode
+        preferences.languageCode = AppLanguage.SIMPLIFIED_CHINESE.code
+        val intent = Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        try {
+            ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+                var usesPhoneNavigation = false
+                scenario.onActivity { activity ->
+                    usesPhoneNavigation = activity.findViewById<View?>(R.id.phone_navigation) != null
+                }
+                assumeTrue(
+                    "This regression covers the compact floating navigation",
+                    usesPhoneNavigation,
+                )
+
+                scenario.onActivity { activity ->
+                    val navigation = activity.findViewById<View>(R.id.phone_navigation)
+                    val navigationLayout = navigation.layoutParams as FrameLayout.LayoutParams
+                    assertEquals(activity.dp(PhoneNavigationLayoutLogic.HEIGHT_DP), navigation.height)
+                    assertEquals(
+                        activity.dp(PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP),
+                        navigationLayout.marginStart,
+                    )
+                    assertEquals(
+                        activity.dp(PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP),
+                        navigationLayout.marginEnd,
+                    )
+
+                    val queryTab = activity.findViewById<View>(R.id.navigation_query)
+                    assertTrue(queryTab.performClick())
+                    assertTrue(
+                        "Primary navigation selection must cross-fade instead of jumping",
+                        queryTab.background is TransitionDrawable,
+                    )
+                    val queryPage = activity.findViewById<View>(R.id.information_query_page)
+                    assertTrue(
+                        "The Android query header must not render the removed subtitle",
+                        !descendantText(queryPage).contains("校区班车与重要事件"),
+                    )
+                }
+                instrumentation.waitForIdleSync()
+
+                scenario.onActivity { activity ->
+                    val shuttleScroll = activity.findViewById<ScrollView>(
+                        R.id.information_query_shuttle_scroll,
+                    )
+                    val shuttleBody = shuttleScroll.getChildAt(0)
+                    assertEquals(
+                        activity.dp(PhoneNavigationLayoutLogic.CONTENT_INSET_DP),
+                        shuttleBody.paddingBottom,
+                    )
+                    shuttleScroll.scrollTo(0, shuttleBody.height)
+                }
+                instrumentation.waitForIdleSync()
+
+                scenario.onActivity { activity ->
+                    val footer = activity.findViewById<View>(
+                        R.id.information_query_shuttle_source_footer,
+                    )
+                    val navigation = activity.findViewById<View>(R.id.phone_navigation)
+                    val footerLocation = IntArray(2).also(footer::getLocationOnScreen)
+                    val navigationLocation = IntArray(2).also(navigation::getLocationOnScreen)
+                    assertTrue(
+                        "The fully scrolled shuttle source must remain above the floating navigation",
+                        footerLocation[1] + footer.height <= navigationLocation[1],
+                    )
+                    assertTrue(
+                        activity.findViewById<View>(R.id.information_query_events_tab).performClick(),
+                    )
+                }
+                instrumentation.waitForIdleSync()
+
+                scenario.onActivity { activity ->
+                    val control = activity.findViewById<ViewGroup>(
+                        R.id.information_query_mode_switch,
+                    )
+                    val thumb = activity.findViewById<View>(R.id.information_query_mode_thumb)
+                    val visualRight = thumb.right + thumb.translationX
+                    assertTrue(
+                        "The Important Events thumb must retain the selector's right inset",
+                        visualRight <= control.width - control.paddingRight + 0.5f,
+                    )
+                }
+            }
+        } finally {
+            AppPreferences(context).languageCode = previousLanguage
+        }
+    }
+
     @Test
     fun importantEventsAppendAutomaticallyNearTheBottomWithoutALoadMoreButton() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -140,7 +238,12 @@ class InformationQueryUiTest {
             }
 
             instrumentation.waitForIdleSync()
-            assertTrue(device.wait(Until.hasObject(By.text(context.uiText("班车查询"))), 5_000))
+            assertTrue(
+                device.wait(
+                    Until.hasObject(By.res(context.packageName, "information_query_shuttle_tab")),
+                    5_000,
+                ),
+            )
 
             scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())

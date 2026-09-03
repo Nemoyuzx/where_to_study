@@ -7,6 +7,22 @@ import org.junit.Test
 
 class AdaptiveLayoutLogicTest {
     @Test
+    fun phoneNavigationIsWiderAndShorterWhileRetainingAContentSafetyGap() {
+        assertEquals(56, PhoneNavigationLayoutLogic.HEIGHT_DP)
+        assertEquals(46, PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP)
+        assertEquals(32, PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP)
+        assertTrue(
+            PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP < PhoneNavigationLayoutLogic.HEIGHT_DP,
+        )
+        assertEquals(
+            PhoneNavigationLayoutLogic.HEIGHT_DP +
+                PhoneNavigationLayoutLogic.BOTTOM_MARGIN_DP +
+                PhoneNavigationLayoutLogic.CONTENT_GAP_DP,
+            PhoneNavigationLayoutLogic.CONTENT_INSET_DP,
+        )
+    }
+
+    @Test
     fun collapsedNavigationItemsAreCenteredSquaresInsideTheRail() {
         assertEquals(72, AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_WIDTH_DP)
         assertEquals(48, AdaptiveLayoutLogic.COLLAPSED_NAVIGATION_ITEM_SIZE_DP)

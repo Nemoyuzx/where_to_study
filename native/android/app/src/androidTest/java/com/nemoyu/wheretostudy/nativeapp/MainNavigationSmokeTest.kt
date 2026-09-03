@@ -115,8 +115,11 @@ class MainNavigationSmokeTest {
         ).putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
 
         ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
-            click(device, "navigation_calendar")
-            click(device, "calendar_mode_month")
+            scenario.onActivity { activity ->
+                assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                assertTrue(activity.findViewById<View>(R.id.calendar_mode_month).performClick())
+            }
+            instrumentation.waitForIdleSync()
             scenario.onActivity { activity ->
                 assertNotNull(
                     "This regression runs against the compact phone month layout",
@@ -128,10 +131,11 @@ class MainNavigationSmokeTest {
             Thread.sleep(500L)
             instrumentation.waitForIdleSync()
 
-            var longDragDistancePx = 0
+            val longDragPoints = IntArray(4)
             scenario.onActivity { activity ->
                 val surface = activity.findViewById<View>(R.id.calendar_swipe_surface)
                 val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+                val details = activity.findViewById<View>(R.id.calendar_month_selected_details)
                 assertEquals(
                     "Selecting a day must commit the middle anchor before rendering",
                     activity.dp(TeachingCalendarLogic.monthCellHeightDp(expanded = false)),
@@ -141,46 +145,41 @@ class MainNavigationSmokeTest {
                     "月历与当日日程",
                     surface.createAccessibilityNodeInfo().contentDescription?.toString(),
                 )
-                longDragDistancePx = activity.dp(420)
+                val detailsLocation = IntArray(2).also(details::getLocationOnScreen)
+                val surfaceLocation = IntArray(2).also(surface::getLocationOnScreen)
+                val longDragDistancePx = activity.dp(420)
+                longDragPoints[0] = detailsLocation[0] + details.width / 2
+                val detailsBottom = detailsLocation[1] + details.height - activity.dp(16)
+                val navigationTop = activity.findViewById<View?>(R.id.phone_navigation)?.let { navigation ->
+                    IntArray(2).also(navigation::getLocationOnScreen)[1] - activity.dp(16)
+                } ?: detailsBottom
+                longDragPoints[1] = minOf(detailsBottom, navigationTop)
+                longDragPoints[2] = longDragPoints[0]
+                longDragPoints[3] = (longDragPoints[1] - longDragDistancePx).coerceAtLeast(
+                    surfaceLocation[1] + 16,
+                )
+                assertTrue(longDragPoints[1] - longDragPoints[3] > longDragDistancePx / 2)
             }
-            val detailsBounds = checkNotNull(
-                device.wait(
-                    Until.findObject(By.res(TARGET_PACKAGE, "calendar_month_selected_details")),
-                    UI_TIMEOUT_MILLIS,
-                ),
-            ).visibleBounds
-            val surfaceBounds = checkNotNull(
-                device.wait(
-                    Until.findObject(By.res(TARGET_PACKAGE, "calendar_swipe_surface")),
-                    UI_TIMEOUT_MILLIS,
-                ),
-            ).visibleBounds
-            val longDragX = detailsBounds.centerX()
-            val longDragStartY =
-                detailsBounds.bottom - (detailsBounds.height() / 8).coerceIn(8, 32)
-            val longDragEndY = (longDragStartY - longDragDistancePx).coerceAtLeast(
-                surfaceBounds.top + 16,
+            device.swipe(
+                longDragPoints[0],
+                longDragPoints[1],
+                longDragPoints[2],
+                longDragPoints[3],
+                60,
             )
-            assertTrue(longDragStartY - longDragEndY > longDragDistancePx / 2)
-            device.swipe(longDragX, longDragStartY, longDragX, longDragEndY, 60)
             device.waitForIdle()
+            Thread.sleep(400L)
+            instrumentation.waitForIdleSync()
             scenario.onActivity { activity ->
-                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
                 val details = activity.findViewById<ScrollView>(
                     R.id.calendar_month_selected_details,
                 )
-                assertEquals(
-                    "A long upward drag must reach the selected-week anchor",
-                    1,
-                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
-                )
+                assertSelectedWeekMonthViewport(activity)
                 assertTrue(
                     "Drag distance beyond the third anchor must continue into detail scrolling",
                     details.scrollY > 0,
                 )
             }
-            Thread.sleep(400L)
-            instrumentation.waitForIdleSync()
 
             scenario.onActivity { activity ->
                 val scrollBeforeRefresh = activity.findViewById<ScrollView>(
@@ -208,15 +207,10 @@ class MainNavigationSmokeTest {
             var lockedPullDownStartY = 0
             var lockedPullDownEndY = 0
             scenario.onActivity { activity ->
-                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
                 val details = activity.findViewById<ScrollView>(
                     R.id.calendar_month_selected_details,
                 )
-                assertEquals(
-                    "Activity recreation must retain the selected-week anchor",
-                    1,
-                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
-                )
+                assertSelectedWeekMonthViewport(activity)
                 assertTrue(
                     "Activity recreation must retain the detail scroll position",
                     details.scrollY > 0,
@@ -268,15 +262,10 @@ class MainNavigationSmokeTest {
             Thread.sleep(300L)
             instrumentation.waitForIdleSync()
             scenario.onActivity { activity ->
-                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
                 val details = activity.findViewById<ScrollView>(
                     R.id.calendar_month_selected_details,
                 )
-                assertEquals(
-                    "A pull that starts before details reach the top must keep the selected-week anchor",
-                    1,
-                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
-                )
+                assertSelectedWeekMonthViewport(activity)
                 assertFalse(
                     "The delegated pull should be allowed to finish at the top",
                     details.canScrollVertically(-1),
@@ -302,12 +291,7 @@ class MainNavigationSmokeTest {
             Thread.sleep(400L)
             instrumentation.waitForIdleSync()
             scenario.onActivity { activity ->
-                val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
-                assertEquals(
-                    "Pulling down at the top of details must return to the middle anchor",
-                    grid.childCount,
-                    (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
-                )
+                assertFullMonthViewport(activity)
                 assertEquals(
                     View.VISIBLE,
                     activity.findViewById<View>(R.id.calendar_month_selected_details).visibility,
@@ -1526,13 +1510,7 @@ class MainNavigationSmokeTest {
                     reverseVertical = false,
                 )
                 scenario.onActivity { activity ->
-                    val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
-                    val visibleRows = (0 until grid.childCount).count { grid.getChildAt(it).height > 0 }
-                    assertEquals(
-                        "Third month-sheet anchor must retain only the selected week",
-                        1,
-                        visibleRows,
-                    )
+                    assertSelectedWeekMonthViewport(activity)
                     assertEquals(
                         "Month detail surface must declare a borderless style",
                         0f,
@@ -1562,12 +1540,7 @@ class MainNavigationSmokeTest {
                     expected = true,
                 )
                 scenario.onActivity { activity ->
-                    val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
-                    assertEquals(
-                        "Returning to the middle anchor must restore the full month",
-                        grid.childCount,
-                        (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
-                    )
+                    assertFullMonthViewport(activity)
                 }
                 swipeResource(device, "calendar_month_grid", horizontalDirection = 0, reverseVertical = true)
                 assertActivityViewMounted(
@@ -1837,10 +1810,13 @@ class MainNavigationSmokeTest {
                     assertLegendDot(activity, dotID, expected.first)
                 }
             }
+            scrollUntilVisible(device, "settings_app_filing_link")
+            assertVisible(device, "settings_app_filing_link")
             scrollUntilVisible(device, "privacy_policy_button")
             assertVisible(device, "settings_github_link")
             scenario.onActivity { activity ->
                 val about = activity.findViewById<View>(R.id.settings_about_section)
+                val filing = activity.findViewById<TextView>(R.id.settings_app_filing_link)
                 val language = activity.findViewById<View>(R.id.settings_language_section)
                 val localData = activity.findViewById<View>(R.id.settings_local_data_section)
                 val settingsPage = activity.findViewById<ScrollView>(R.id.page_settings)
@@ -1849,6 +1825,9 @@ class MainNavigationSmokeTest {
                     "Privacy entry must remain inside the about section",
                     activity.findViewById<View>(R.id.privacy_policy_button).parent === about,
                 )
+                assertTrue("APP filing entry must remain inside About", filing.parent === about)
+                assertEquals("APP 备案：琼ICP备2026012322号-2A", filing.text.toString())
+                assertTrue("APP filing entry must open the MIIT registry", filing.isClickable)
                 assertTrue(
                     "Language section must precede the privacy entry",
                     depthFirstIndex(settingsContent, language) <
@@ -2397,12 +2376,8 @@ class MainNavigationSmokeTest {
                     importantForAccessibility,
                 )
             }
+            assertFullMonthViewport(activity)
             val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
-            assertEquals(
-                "Selecting a month day must use the middle anchor and retain every month row",
-                grid.childCount,
-                (0 until grid.childCount).count { grid.getChildAt(it).height > 0 },
-            )
             val selectedCells = buildList {
                 repeat(grid.childCount) { rowIndex ->
                     val row = grid.getChildAt(rowIndex) as ViewGroup
@@ -2716,6 +2691,47 @@ class MainNavigationSmokeTest {
         }
         Thread.sleep(360L)
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+    }
+
+    private fun assertSelectedWeekMonthViewport(activity: MainActivity) {
+        val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+        val viewport = activity.findViewById<View>(R.id.calendar_month_grid_viewport)
+        val collapsedRowHeight = activity.dp(TeachingCalendarLogic.monthCellHeightDp(false))
+        val selectedWeekIndex = grid.tag as Int
+        repeat(grid.childCount) { rowIndex ->
+            assertEquals(
+                "Raising details must preserve every month row's compact height",
+                collapsedRowHeight,
+                grid.getChildAt(rowIndex).height,
+            )
+        }
+        assertEquals(
+            "The raised-details detent must clip the month to one week",
+            collapsedRowHeight,
+            viewport.height,
+        )
+        assertEquals(
+            "The intact month grid must move upward until the selected week reaches the viewport",
+            (-selectedWeekIndex * collapsedRowHeight).toFloat(),
+            grid.translationY,
+            1f,
+        )
+    }
+
+    private fun assertFullMonthViewport(activity: MainActivity) {
+        val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
+        val viewport = activity.findViewById<View>(R.id.calendar_month_grid_viewport)
+        val rowHeight = grid.getChildAt(0).height
+        assertTrue(rowHeight > 0)
+        repeat(grid.childCount) { rowIndex ->
+            assertEquals(rowHeight, grid.getChildAt(rowIndex).height)
+        }
+        assertEquals(
+            "The middle detent must expose the full month without compressing individual weeks",
+            rowHeight * grid.childCount,
+            viewport.height,
+        )
+        assertEquals(0f, grid.translationY, 1f)
     }
 
     private fun scrollUntilVisible(device: UiDevice, resourceName: String) {

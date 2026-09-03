@@ -1112,6 +1112,10 @@ class SettingsPage(
             setLineSpacing(0f, 1.12f)
             setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
         })
+        addView(settingsLinkButton(APP_FILING_LABEL) {
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(APP_FILING_URL)))
+        }.apply { id = R.id.settings_app_filing_link })
+        addView(spacer(activity, compactGap))
         addView(settingsLinkButton("GitHub 项目主页") {
             activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PROJECT_URL)))
         }.apply { id = R.id.settings_github_link })
@@ -1344,6 +1348,8 @@ class SettingsPage(
     )
 
     private companion object {
+        const val APP_FILING_LABEL = "APP 备案：琼ICP备2026012322号-2A"
+        const val APP_FILING_URL = "https://beian.miit.gov.cn/"
         const val PROJECT_URL = "https://github.com/Nemoyuzx/where_to_study"
         const val PRIVACY_URL = "https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
         const val SEGMENT_ANIMATION_DURATION_MILLIS = 220L

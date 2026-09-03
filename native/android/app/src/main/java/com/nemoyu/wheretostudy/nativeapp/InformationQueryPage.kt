@@ -68,6 +68,25 @@ internal data class ImportantEventFilterSelection(
     val metadataCategory: String?,
 )
 
+internal object InformationQueryLayoutLogic {
+    const val DEFAULT_CONTENT_BOTTOM_PADDING_DP = 28
+    const val MODE_SELECTOR_INSET_DP = 3
+
+    fun contentBottomPaddingDp(usesBottomNavigation: Boolean): Int =
+        if (usesBottomNavigation) {
+            PhoneNavigationLayoutLogic.CONTENT_INSET_DP
+        } else {
+            DEFAULT_CONTENT_BOTTOM_PADDING_DP
+        }
+
+    fun modeThumbWidthPx(controlWidthPx: Int, horizontalPaddingPx: Int, itemCount: Int): Int =
+        ((controlWidthPx - horizontalPaddingPx.coerceAtLeast(0) * 2) /
+            itemCount.coerceAtLeast(1)).coerceAtLeast(1)
+
+    fun modeThumbTranslationXPx(thumbWidthPx: Int, index: Int, itemCount: Int): Int =
+        index.coerceIn(0, itemCount.coerceAtLeast(1) - 1) * thumbWidthPx.coerceAtLeast(1)
+}
+
 internal object ImportantEventQueryLogic {
     fun nextVisibleCount(currentCount: Int, totalCount: Int): Int =
         (currentCount.coerceAtLeast(0) + InformationQuerySessionState.EVENT_PAGE_SIZE)
@@ -230,6 +249,7 @@ internal class InformationQueryPage(
     private val preferences: AppPreferences,
     private val availableWidthDp: Int,
     private val sessionState: InformationQuerySessionState,
+    private val usesBottomNavigation: Boolean,
 ) {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
@@ -293,7 +313,6 @@ internal class InformationQueryPage(
         addView(pageTitle(
             activity,
             "查询",
-            "校区班车与重要事件",
             titleSizeSp = if (availableWidthDp < 600) 26f else 34f,
         ).apply { setPadding(0, 0, 0, 0) }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -306,17 +325,15 @@ internal class InformationQueryPage(
         val initialIndex = sessionState.selectedMode.ordinal
         val control = FrameLayout(activity).apply {
             id = R.id.information_query_mode_switch
-            setPadding(activity.dp(3), activity.dp(3), activity.dp(3), activity.dp(3))
+            val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
+            setPadding(inset, inset, inset, inset)
             background = roundedBackground(activity, Palette.surfaceVariant, radius = 10)
         }
         val thumb = View(activity).apply {
+            id = R.id.information_query_mode_thumb
             background = roundedBackground(activity, Palette.segmentedSelection, radius = 8)
         }
-        control.addView(thumb, FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT).apply {
-            marginStart = activity.dp(3)
-            topMargin = activity.dp(3)
-            bottomMargin = activity.dp(3)
-        })
+        control.addView(thumb, FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT))
         val row = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             labels.forEach { mode ->
@@ -361,13 +378,19 @@ internal class InformationQueryPage(
 
     private fun moveModeThumb(control: FrameLayout, thumb: View, index: Int, animate: Boolean) {
         if (control.width <= 0) return
-        val inset = activity.dp(3)
-        val width = ((control.width - inset * 2) / InformationQueryMode.entries.size)
-            .coerceAtLeast(1)
+        val width = InformationQueryLayoutLogic.modeThumbWidthPx(
+            controlWidthPx = control.width,
+            horizontalPaddingPx = control.paddingStart,
+            itemCount = InformationQueryMode.entries.size,
+        )
         thumb.layoutParams = (thumb.layoutParams as FrameLayout.LayoutParams).apply {
             this.width = width
         }
-        val target = (index * width).toFloat()
+        val target = InformationQueryLayoutLogic.modeThumbTranslationXPx(
+            thumbWidthPx = width,
+            index = index,
+            itemCount = InformationQueryMode.entries.size,
+        ).toFloat()
         thumb.animate().cancel()
         if (animate) {
             thumb.animate().translationX(target).setDuration(220L)
@@ -409,12 +432,20 @@ internal class InformationQueryPage(
     }
 
     private fun shuttleContent(): ScrollView = ScrollView(activity).apply {
+        id = R.id.information_query_shuttle_scroll
         isFillViewport = true
         clipToPadding = false
         isVerticalScrollBarEnabled = false
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(20), activity.dp(8), activity.dp(20), activity.dp(28))
+            setPadding(
+                activity.dp(20),
+                activity.dp(8),
+                activity.dp(20),
+                activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(
+                    usesBottomNavigation,
+                )),
+            )
             val snapshot = shuttleRepository.snapshot
             when {
                 snapshot != null -> renderShuttleSnapshot(snapshot)
@@ -500,6 +531,7 @@ internal class InformationQueryPage(
         addView(querySourceFooter(
             "第三方来源：北京邮电大学后勤部公开通知；时刻表由脚本解析，仅供参考",
             presentation.noticeURL ?: snapshot.sourcePage,
+            R.id.information_query_shuttle_source_footer,
         ))
     }
 
@@ -583,7 +615,14 @@ internal class InformationQueryPage(
         lateinit var eventList: LinearLayout
         val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(activity.dp(20), activity.dp(8), activity.dp(20), activity.dp(28))
+            setPadding(
+                activity.dp(20),
+                activity.dp(8),
+                activity.dp(20),
+                activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(
+                    usesBottomNavigation,
+                )),
+            )
             addView(searchField())
             addView(spacer(activity, 8))
             addView(categoryPicker(typeFilters))
@@ -1006,7 +1045,12 @@ internal class InformationQueryPage(
         setPadding(0, activity.dp(18), 0, activity.dp(18))
     }
 
-    private fun querySourceFooter(label: String, url: String): TextView = TextView(activity).apply {
+    private fun querySourceFooter(
+        label: String,
+        url: String,
+        viewID: Int = View.NO_ID,
+    ): TextView = TextView(activity).apply {
+        id = viewID
         text = "$label ↗"
         textSize = 11f
         setTextColor(Palette.primaryText)

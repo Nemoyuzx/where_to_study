@@ -12,6 +12,7 @@ import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.TransitionDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -265,16 +266,20 @@ class MainActivity : Activity() {
             background = roundedBackground(
                 this@MainActivity,
                 Palette.surfaceVariant,
-                radius = 30,
+                radius = PhoneNavigationLayoutLogic.HEIGHT_DP / 2,
             )
             elevation = dp(8).toFloat()
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = true))
             }
-        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60), Gravity.BOTTOM).apply {
-            marginStart = dp(44)
-            marginEnd = dp(44)
-            bottomMargin = dp(10)
+        }, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(PhoneNavigationLayoutLogic.HEIGHT_DP),
+            Gravity.BOTTOM,
+        ).apply {
+            marginStart = dp(PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP)
+            marginEnd = dp(PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP)
+            bottomMargin = dp(PhoneNavigationLayoutLogic.BOTTOM_MARGIN_DP)
         })
     }
 
@@ -466,7 +471,11 @@ class MainActivity : Activity() {
                 navigate(destination)
             }
             layoutParams = if (compact) {
-                LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+                LinearLayout.LayoutParams(
+                    0,
+                    dp(PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP),
+                    1f,
+                ).apply {
                     marginEnd = dp(4)
                 }
             } else {
@@ -606,6 +615,7 @@ class MainActivity : Activity() {
         (start + (end - start) * fraction).toInt()
 
     private fun navigate(destination: Destination) {
+        val previousDestination = selectedDestination
         selectedDestination = destination
         if (destination == Destination.SETTINGS) prewarmPublicDeadlinesIfEnabled()
         if (destination == Destination.SETTINGS) {
@@ -615,21 +625,59 @@ class MainActivity : Activity() {
         }
         navigationViews.forEach { (item, view) ->
             val selected = item == destination
+            val wasSelected = item == previousDestination
             val contentColor = if (selected) Palette.primaryText else Palette.muted
             view.setTextColor(contentColor)
             view.compoundDrawableTintList = ColorStateList.valueOf(contentColor)
             view.foregroundTintList = ColorStateList.valueOf(contentColor)
             view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
-            view.background = roundedBackground(
+            val selectionRadius = if (currentLayoutSpec?.usesBottomNavigation == true) {
+                PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP / 2
+            } else {
+                UiMetrics.controlRadiusDp
+            }
+            val targetBackgroundColor = when {
+                currentLayoutSpec?.usesBottomNavigation == true && selected -> Palette.background
+                currentLayoutSpec?.usesBottomNavigation == true -> Color.TRANSPARENT
+                selected -> Palette.selectionSurface
+                else -> Color.TRANSPARENT
+            }
+            val targetBackground = roundedBackground(
                 this,
-                when {
-                    currentLayoutSpec?.usesBottomNavigation == true && selected -> Palette.background
-                    currentLayoutSpec?.usesBottomNavigation == true -> Color.TRANSPARENT
-                    selected -> Palette.selectionSurface
-                    else -> Color.TRANSPARENT
-                },
-                radius = if (currentLayoutSpec?.usesBottomNavigation == true) 26 else UiMetrics.controlRadiusDp,
+                targetBackgroundColor,
+                radius = selectionRadius,
             )
+            val animatePhoneSelection = currentLayoutSpec?.usesBottomNavigation == true &&
+                previousDestination != destination && wasSelected != selected
+            if (animatePhoneSelection) {
+                val sourceBackgroundColor = if (wasSelected) Palette.background else Color.TRANSPARENT
+                view.background = TransitionDrawable(arrayOf(
+                    roundedBackground(this, sourceBackgroundColor, radius = selectionRadius),
+                    targetBackground,
+                )).apply {
+                    isCrossFadeEnabled = true
+                    startTransition(PhoneNavigationLayoutLogic.SELECTION_ANIMATION_MILLIS.toInt())
+                }
+                view.animate().cancel()
+                if (selected) {
+                    view.scaleX = 0.92f
+                    view.scaleY = 0.92f
+                    view.animate()
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .setDuration(PhoneNavigationLayoutLogic.SELECTION_ANIMATION_MILLIS)
+                        .setInterpolator(AccelerateDecelerateInterpolator())
+                        .start()
+                } else {
+                    view.scaleX = 1f
+                    view.scaleY = 1f
+                }
+            } else {
+                view.animate().cancel()
+                view.scaleX = 1f
+                view.scaleY = 1f
+                view.background = targetBackground
+            }
             UiText.localizeTree(view)
         }
         updatePhoneNavigationVisibility()
@@ -665,6 +713,7 @@ class MainActivity : Activity() {
                         availableWidthDp = currentLayoutSpec?.contentWidthDp
                             ?: currentWindowWidthDp(),
                         sessionState = informationQuerySessionState,
+                        usesBottomNavigation = currentLayoutSpec?.usesBottomNavigation == true,
                     ).build(),
                     FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,

@@ -12,6 +12,34 @@ import org.junit.Test
 
 class InformationQueryLogicTest {
     @Test
+    fun queryLayoutClearsPhoneNavigationAndKeepsTheLastModeThumbInsideItsTrack() {
+        assertEquals(
+            PhoneNavigationLayoutLogic.CONTENT_INSET_DP,
+            InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation = true),
+        )
+        assertEquals(
+            InformationQueryLayoutLogic.DEFAULT_CONTENT_BOTTOM_PADDING_DP,
+            InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation = false),
+        )
+
+        val controlWidthPx = 319
+        val insetPx = 3
+        val thumbWidthPx = InformationQueryLayoutLogic.modeThumbWidthPx(
+            controlWidthPx = controlWidthPx,
+            horizontalPaddingPx = insetPx,
+            itemCount = InformationQueryMode.entries.size,
+        )
+        val lastTranslationPx = InformationQueryLayoutLogic.modeThumbTranslationXPx(
+            thumbWidthPx = thumbWidthPx,
+            index = InformationQueryMode.IMPORTANT_EVENTS.ordinal,
+            itemCount = InformationQueryMode.entries.size,
+        )
+
+        assertTrue(insetPx + lastTranslationPx + thumbWidthPx <= controlWidthPx - insetPx)
+        assertEquals(0, InformationQueryLayoutLogic.modeThumbTranslationXPx(thumbWidthPx, -1, 2))
+    }
+
+    @Test
     fun importantEventPagingStartsSmallAdvancesInBoundedBatchesAndRestoresSafely() {
         assertEquals(20, InformationQuerySessionState.INITIAL_EVENT_COUNT)
         assertEquals(20, InformationQuerySessionState.EVENT_PAGE_SIZE)

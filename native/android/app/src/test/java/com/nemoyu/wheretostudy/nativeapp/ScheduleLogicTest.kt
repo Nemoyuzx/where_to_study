@@ -768,7 +768,13 @@ class ScheduleLogicTest {
         assertEquals(82, TeachingCalendarLogic.monthRowHeightDp(0f, 0, 3))
         assertEquals(46, TeachingCalendarLogic.monthRowHeightDp(1f, 0, 3))
         assertEquals(46, TeachingCalendarLogic.monthRowHeightDp(2f, 3, 3))
-        assertEquals(0, TeachingCalendarLogic.monthRowHeightDp(2f, 2, 3))
+        assertEquals(46, TeachingCalendarLogic.monthRowHeightDp(2f, 2, 3))
+        assertEquals(276, TeachingCalendarLogic.monthGridViewportHeight(1f, 6, 46))
+        assertEquals(161, TeachingCalendarLogic.monthGridViewportHeight(1.5f, 6, 46))
+        assertEquals(46, TeachingCalendarLogic.monthGridViewportHeight(2f, 6, 46))
+        assertEquals(0, TeachingCalendarLogic.monthGridTranslationY(1f, 3, 46))
+        assertEquals(-69, TeachingCalendarLogic.monthGridTranslationY(1.5f, 3, 46))
+        assertEquals(-138, TeachingCalendarLogic.monthGridTranslationY(2f, 3, 46))
     }
 
     @Test

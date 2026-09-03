@@ -294,6 +294,8 @@ object UiText {
         "本地数据" to "Local Data",
         "清除本地数据" to "Clear Local Data",
         "关于本应用" to "About",
+        "APP 备案：琼ICP备2026012322号-2A" to
+            "App filing: Qiong ICP No. 2026012322-2A",
         "隐私说明" to "Privacy",
         "GitHub 项目主页" to "GitHub Project",
         "在 GitHub 查看完整隐私声明" to "View Full Privacy Policy on GitHub",

@@ -224,7 +224,7 @@ object TeachingCalendarLogic {
     const val monthWeekdayHeaderBottomMarginDp = 8
     const val monthDragHandleHeightDp = 28
     const val compactCalendarBreakpointDp = 1200
-    // The floating phone navigation is 60dp tall with a 10dp bottom margin.
+    // The floating phone navigation is 56dp tall with a 10dp bottom margin.
     // Keep a small visual gap without shrinking the fixed month viewport by
     // the former 34dp of unused space.
     const val bottomNavigationContentInsetDp = 78
@@ -418,23 +418,46 @@ object TeachingCalendarLogic {
     fun monthSelectedWeekProgress(position: Float): Float =
         (position - monthSheetDetailsPosition).coerceIn(0f, 1f)
 
+    @Suppress("UNUSED_PARAMETER")
     fun monthRowHeightDp(
         position: Float,
         rowIndex: Int,
         selectedWeekIndex: Int,
         expandedHeightDp: Int = monthCellHeightDp(true),
     ): Int {
+        // The second transition clips and translates the intact grid, matching
+        // iOS. Individual week rows must not be squashed as details move up.
         val expandedProgress = monthCellExpansionProgress(position)
-        val fullMonthHeight = interpolateMonthMetric(
+        return interpolateMonthMetric(
             monthCellHeightDp(false),
             expandedHeightDp,
             expandedProgress,
         )
-        if (rowIndex == selectedWeekIndex) return fullMonthHeight
-        return (fullMonthHeight * (1f - monthSelectedWeekProgress(position)))
-            .roundToInt()
-            .coerceAtLeast(0)
     }
+
+    fun monthGridViewportHeight(
+        position: Float,
+        rowCount: Int,
+        rowHeight: Int,
+    ): Int {
+        val resolvedRows = rowCount.coerceAtLeast(0)
+        val resolvedRowHeight = rowHeight.coerceAtLeast(0)
+        if (resolvedRows == 0) return 0
+        val fullHeight = resolvedRows * resolvedRowHeight
+        return (fullHeight -
+            (fullHeight - resolvedRowHeight) * monthSelectedWeekProgress(position))
+            .roundToInt()
+            .coerceAtLeast(resolvedRowHeight)
+    }
+
+    fun monthGridTranslationY(
+        position: Float,
+        selectedWeekIndex: Int,
+        rowHeight: Int,
+    ): Int = -(
+        selectedWeekIndex.coerceAtLeast(0) * rowHeight.coerceAtLeast(0) *
+            monthSelectedWeekProgress(position)
+        ).roundToInt()
 
     fun monthEntryAvailableHeightDp(
         cellHeightDp: Int,
@@ -2333,6 +2356,12 @@ internal class TeachingCalendarPage(
         val dates = monthGridDates()
         val selectedWeekIndex = dates.indexOfFirst { sameDay(it, selectedDate) }
             .coerceAtLeast(0) / 7
+        val initialRowHeightPx = activity.dp(TeachingCalendarLogic.monthRowHeightDp(
+            position = renderedMonthSheetPosition,
+            rowIndex = selectedWeekIndex,
+            selectedWeekIndex = selectedWeekIndex,
+            expandedHeightDp = expandedMonthCellHeightDp,
+        ))
         val grid = LinearLayout(activity).apply {
             id = R.id.calendar_month_grid
             tag = selectedWeekIndex
@@ -2358,9 +2387,21 @@ internal class TeachingCalendarPage(
                 ))
             }
         }
-        addView(grid, LinearLayout.LayoutParams(
+        addView(FrameLayout(activity).apply {
+            id = R.id.calendar_month_grid_viewport
+            clipChildren = true
+            clipToPadding = true
+            addView(grid, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ))
+        }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            TeachingCalendarLogic.monthGridViewportHeight(
+                position = renderedMonthSheetPosition,
+                rowCount = grid.childCount,
+                rowHeight = initialRowHeightPx,
+            ),
         ))
         addView(monthExpansionHandle(onPositionChanged))
         val detailsDateKey = contractDate().format(selectedDate.time)
@@ -2763,16 +2804,17 @@ internal class TeachingCalendarPage(
         val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(resolved)
         val grid = monthView.findViewById<ViewGroup>(R.id.calendar_month_grid)
         val selectedWeekIndex = (grid.tag as? Int) ?: 0
+        val rowHeightDp = TeachingCalendarLogic.monthRowHeightDp(
+            position = resolved,
+            rowIndex = selectedWeekIndex,
+            selectedWeekIndex = selectedWeekIndex,
+            expandedHeightDp = expandedMonthCellHeightDp,
+        )
+        val rowHeightPx = activity.dp(rowHeightDp)
         repeat(grid.childCount) { rowIndex ->
             val row = grid.getChildAt(rowIndex) as ViewGroup
-            val rowHeightDp = TeachingCalendarLogic.monthRowHeightDp(
-                position = resolved,
-                rowIndex = rowIndex,
-                selectedWeekIndex = selectedWeekIndex,
-                expandedHeightDp = expandedMonthCellHeightDp,
-            )
             row.layoutParams = row.layoutParams.apply {
-                height = activity.dp(rowHeightDp)
+                height = rowHeightPx
             }
             repeat(row.childCount) { cellIndex ->
                 applyMonthDayCellProgress(
@@ -2782,6 +2824,20 @@ internal class TeachingCalendarPage(
                 )
             }
         }
+        monthView.findViewById<FrameLayout>(R.id.calendar_month_grid_viewport).apply {
+            layoutParams = layoutParams.apply {
+                height = TeachingCalendarLogic.monthGridViewportHeight(
+                    position = resolved,
+                    rowCount = grid.childCount,
+                    rowHeight = rowHeightPx,
+                )
+            }
+        }
+        grid.translationY = TeachingCalendarLogic.monthGridTranslationY(
+            position = resolved,
+            selectedWeekIndex = selectedWeekIndex,
+            rowHeight = rowHeightPx,
+        ).toFloat()
         monthView.findViewById<MonthDetailsScrollView>(R.id.calendar_month_selected_details).apply {
             visibility = if (resolved <= 0.01f) View.GONE else View.VISIBLE
             alpha = resolved.coerceIn(0f, 1f)

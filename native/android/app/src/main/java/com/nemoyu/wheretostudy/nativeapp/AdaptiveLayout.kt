@@ -22,6 +22,16 @@ data class AdaptiveLayoutSpec(
         get() = widthClass == WindowWidthClass.COMPACT && !avoidsVerticalHinge
 }
 
+object PhoneNavigationLayoutLogic {
+    const val HEIGHT_DP = 56
+    const val ITEM_HEIGHT_DP = 46
+    const val HORIZONTAL_MARGIN_DP = 32
+    const val BOTTOM_MARGIN_DP = 10
+    const val CONTENT_GAP_DP = 8
+    const val CONTENT_INSET_DP = HEIGHT_DP + BOTTOM_MARGIN_DP + CONTENT_GAP_DP
+    const val SELECTION_ANIMATION_MILLIS = 220L
+}
+
 object AdaptiveLayoutLogic {
     const val MEDIUM_BREAKPOINT_DP = 700
     const val EXPANDED_BREAKPOINT_DP = 1000
