@@ -139,11 +139,6 @@ private final class MobileCalendarSnapshotCache: ObservableObject {
         .store(in: &invalidationCancellables)
     }
 
-    func unbind() {
-        invalidationCancellables.removeAll()
-        boundModelID = nil
-        boundDeadlineStoreID = nil
-    }
 }
 
 final class MobileCalendarDateFormatterCache: ObservableObject {
@@ -357,9 +352,6 @@ struct MobileTeachingCalendarView: View {
         .onAppear {
             snapshotCache.bind(model: model, deadlineStore: calendarDeadlines)
             normalizeMonthPositionForLayout()
-        }
-        .onDisappear {
-            snapshotCache.unbind()
         }
         .onChange(of: selectedDate) { _ in
             resetMonthDetailsScroll()
@@ -875,38 +867,11 @@ struct MobileTeachingCalendarView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 10) {
-                        daySummaryCard(selectedDate)
-                        MobileDeadlineStoreContent { deadlineStore in
-                            mobileAssignmentCard(selectedDate, deadlineStore: deadlineStore)
-                        }
-                        if model.almanacEnabled {
-                            MobileAlmanacCard(day: selectedDate)
-                        }
-                        if model.hasCalendarDeadlinesToDisplay {
-                            MobileDeadlineStoreContent { deadlineStore in
-                                mobileDeadlineCard(selectedDate, deadlineStore: deadlineStore)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 1)
-                    .padding(.vertical, 2)
-                    .background(MobileMonthDetailsScrollConfiguration(
-                        canScrollBackward: $monthDetailsCanScrollBackward,
-                        resetID: monthDetailsScrollResetID,
-                        scrollState: monthDetailsScrollState
-                    ))
-                }
-                .frame(height: summaryHeight)
-                .opacity(1 - expansionProgress)
-                .clipped()
-                .allowsHitTesting(expansionProgress < 0.999 && summaryHeight > 1)
-                .scrollDisabled(effectiveMonthPosition != .detailRaised)
-                .accessibilityHidden(expansionProgress >= 0.25)
-                .accessibilityIdentifier("calendar.mobile.month-day-summary")
-                .accessibilityValue(monthDetailsCanScrollBackward ? "已滚动" : "顶部")
-                .background(Color.clear)
+                monthDetailsViewport(
+                    day: selectedDate,
+                    height: summaryHeight,
+                    expansionProgress: expansionProgress
+                )
 
                 Spacer(minLength: 0)
             }
@@ -928,6 +893,61 @@ struct MobileTeachingCalendarView: View {
             .accessibilityAction(named: Text(isMonthExpanded ? "收起月历" : "展开月历")) {
                 settleMonthPosition(to: isMonthExpanded ? .collapsed : .expanded)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func monthDetailsViewport(
+        day: Date,
+        height: CGFloat,
+        expansionProgress: CGFloat
+    ) -> some View {
+        if expansionProgress < 0.999, height > 1 {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 10) {
+                    daySummaryCard(day)
+                    MobileDeadlineStoreContent { deadlineStore in
+                        mobileAssignmentCard(day, deadlineStore: deadlineStore)
+                    }
+                    if model.almanacEnabled {
+                        MobileAlmanacCard(day: day)
+                    }
+                    if model.hasCalendarDeadlinesToDisplay {
+                        MobileDeadlineStoreContent { deadlineStore in
+                            mobileDeadlineCard(day, deadlineStore: deadlineStore)
+                        }
+                    }
+                }
+                .padding(.horizontal, 1)
+                .padding(.vertical, 2)
+                .background(MobileMonthDetailsScrollConfiguration(
+                    canScrollBackward: $monthDetailsCanScrollBackward,
+                    resetID: monthDetailsScrollResetID,
+                    scrollState: monthDetailsScrollState
+                ))
+            }
+            .frame(height: height)
+            .opacity(1 - expansionProgress)
+            .clipped()
+            .allowsHitTesting(true)
+            .scrollDisabled(effectiveMonthPosition != .detailRaised)
+            .accessibilityHidden(expansionProgress >= 0.25)
+            .accessibilityIdentifier("calendar.mobile.month-day-summary")
+            .accessibilityValue(monthDetailsCanScrollBackward ? "已滚动" : "顶部")
+            .background(Color.clear)
+        } else {
+            // Keep the viewport identity and geometry stable for UI semantics,
+            // but do not construct the hidden course/almanac/deadline tree
+            // while an expanded month page is entering or leaving.
+            ScrollView(.vertical, showsIndicators: false) {
+                Color.clear.frame(height: 0)
+            }
+                .frame(height: height)
+                .scrollDisabled(true)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .accessibilityIdentifier("calendar.mobile.month-day-summary")
+                .accessibilityValue("顶部")
         }
     }
 

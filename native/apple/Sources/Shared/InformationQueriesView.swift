@@ -247,13 +247,23 @@ enum InformationQueryErrorLocalization {
 struct InformationQueriesView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
+    #if os(iOS)
+    @ObservedObject private var shuttleStore: ShuttleBusStore
+    #else
     @StateObject private var shuttleStore = ShuttleBusStore()
+    #endif
     @State private var selectedMode: InformationQueryMode = .shuttle
     @State private var searchText = ""
     @State private var selectedCategory: ImportantEventCategory = .all
     @State private var selectedMetadataCategory = ""
     @State private var showsEndedEvents = false
     @State private var requestedVisibleEventCount = ImportantEventIncrementalRendering.batchSize
+
+    #if os(iOS)
+    init(shuttleStore: ShuttleBusStore) {
+        self.shuttleStore = shuttleStore
+    }
+    #endif
 
     var body: some View {
         GeometryReader { proxy in
@@ -408,6 +418,9 @@ struct InformationQueriesView: View {
                 url: snapshot.sourcePage
             )
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("queries.shuttle.snapshot")
+        .accessibilityValue(snapshot.sourceName)
     }
 
     private func shuttleRouteCard(
@@ -847,15 +860,27 @@ struct InformationQueriesView: View {
 
 struct InformationQueriesPresentation: View {
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
+    @StateObject private var shuttleStore = ShuttleBusStore()
+    #endif
 
     var body: some View {
         NavigationStack {
+            #if os(iOS)
+            InformationQueriesView(shuttleStore: shuttleStore)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { dismiss() }
+                    }
+                }
+            #else
             InformationQueriesView()
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("完成") { dismiss() }
                     }
                 }
+            #endif
         }
         #if os(macOS)
         .frame(minWidth: 680, idealWidth: 860, minHeight: 520, idealHeight: 720)

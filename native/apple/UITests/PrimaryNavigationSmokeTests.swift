@@ -347,6 +347,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             monthSummaryViewport.isHittable,
             "The stable details viewport must remain non-interactive while the month is expanded"
         )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["calendar.mobile.month-day-summary-card"].exists,
+            "The expanded month must not build the hidden daily-details card tree"
+        )
+        XCTAssertFalse(
+            app.descendants(matching: .any)["calendar.mobile.almanac"].exists,
+            "The expanded month must not build the hidden almanac card"
+        )
         let monthEventID = "calendar.mobile.month-event.\(currentShanghaiDateString())-assignment-sample-assignment"
         let monthEvent = app.staticTexts[monthEventID].firstMatch
         XCTAssertTrue(monthEvent.waitForExistence(timeout: 5))
@@ -955,6 +963,16 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         enterButton.tap()
         XCTAssertTrue(app.descendants(matching: .any)["banner.sample-mode"].waitForExistence(timeout: 5))
 
+        navigate(to: "查询", in: app)
+        let sampleShuttle = app.descendants(matching: .any)["queries.shuttle.snapshot"].firstMatch
+        XCTAssertTrue(sampleShuttle.waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            sampleShuttle.value as? String,
+            "示例数据",
+            "An in-flight live prewarm must never overwrite the sample-mode shuttle store"
+        )
+
+        navigate(to: "设置", in: app)
         let exitButton = app.descendants(matching: .any)["action.exit-sample-mode"]
         XCTAssertTrue(exitButton.waitForExistence(timeout: 5))
         exitButton.tap()

@@ -83,6 +83,24 @@ enum AdaptiveLayoutPolicy {
 private final class CalendarDataServices: ObservableObject {
     let dailyInfo = DailyInfoStore()
     let deadlines = CalendarDeadlineStore()
+    #if os(iOS)
+    private let liveShuttle = ShuttleBusStore()
+    private let sampleShuttle = ShuttleBusStore()
+
+    func shuttleStore(sampleMode: Bool) -> ShuttleBusStore {
+        sampleMode ? sampleShuttle : liveShuttle
+    }
+
+    func prewarmInformationQueries(sampleMode: Bool) {
+        let shuttle = shuttleStore(sampleMode: sampleMode)
+        Task(priority: .utility) { [shuttle] in
+            // Public deadlines already have their own root-level prewarm.
+            // Only the shuttle was previously deferred until the query tab's
+            // first frame, which made that navigation visibly data-bound.
+            await shuttle.load(sampleMode: sampleMode)
+        }
+    }
+    #endif
 }
 
 struct RootView: View {
@@ -96,6 +114,10 @@ struct RootView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isRegularSidebarExpanded = true
+    // Keep primary navigation outside AppModel on iOS. Publishing a tab-only
+    // change through the global model invalidates every heavy tab subtree just
+    // as UIKit is completing the tab transition.
+    @State private var iosSelectedSection: AppSection = .planner
     #endif
 
     private var dailyInfo: DailyInfoStore { calendarServices.dailyInfo }
@@ -134,6 +156,8 @@ struct RootView: View {
             model.refreshClassroomsIfNeeded()
             #if os(macOS)
             model.startDailyClassroomRefresh()
+            #else
+            calendarServices.prewarmInformationQueries(sampleMode: model.isSampleMode)
             #endif
         }
         .task(id: PublicDeadlinePrewarmID(
@@ -252,10 +276,18 @@ struct RootView: View {
         .onChange(of: model.account) { _ in
             calendarDeadlines.clearAssignments()
         }
+        .onChange(of: model.isSampleMode) { sampleMode in
+            #if os(iOS)
+            // Live and built-in sample data use separate stores so an in-flight
+            // live request can never overwrite the sample-mode query page (or
+            // vice versa) when the runtime mode changes.
+            calendarServices.prewarmInformationQueries(sampleMode: sampleMode)
+            #endif
+        }
         .onReceive(NotificationCenter.default.publisher(for: AppKeyboardCommandNotification.name)) {
             notification in
             guard let action = AppKeyboardCommandNotification.action(from: notification) else { return }
-            if action == .dismissOverlay || model.selectedSection == .calendar {
+            if action == .dismissOverlay || selectedSection == .calendar {
                 if let targetMode = action.targetCalendarModeRawValue {
                     Task { @MainActor in
                         await teachingCalendarSession.requestModeChange(to: targetMode)
@@ -290,7 +322,7 @@ struct RootView: View {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 250)
         } detail: {
-            sectionView(model.selectedSection)
+            sectionView(selectedSection)
         }
         .navigationSplitViewStyle(.balanced)
     }
@@ -312,22 +344,22 @@ struct RootView: View {
 
             List(AppSection.allCases) { section in
                 Button {
-                    model.selectedSection = section
+                    selectSection(section)
                 } label: {
                     Label(model.localized(section.titleKey), systemImage: section.systemImage)
-                        .font(.body.weight(model.selectedSection == section ? .semibold : .regular))
+                        .font(.body.weight(selectedSection == section ? .semibold : .regular))
                         .foregroundStyle(AppTheme.text)
                         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(
-                    model.selectedSection == section
+                    selectedSection == section
                         ? AppTheme.primary.opacity(0.14)
                         : Color.clear
                 )
                 .accessibilityIdentifier(section.accessibilityIdentifier)
-                .accessibilityAddTraits(model.selectedSection == section ? .isSelected : [])
+                .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
@@ -347,7 +379,7 @@ struct RootView: View {
 
             Divider()
 
-            sectionView(model.selectedSection)
+            sectionView(selectedSection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(AppTheme.background)
@@ -388,7 +420,7 @@ struct RootView: View {
 
             ForEach(AppSection.allCases) { section in
                 Button {
-                    model.selectedSection = section
+                    selectSection(section)
                 } label: {
                     HStack(spacing: 11) {
                         Image(systemName: section.systemImage)
@@ -396,12 +428,12 @@ struct RootView: View {
                             .frame(width: 24, height: 24, alignment: .center)
                         if isRegularSidebarExpanded {
                             Text(model.localized(section.titleKey))
-                                .font(.body.weight(model.selectedSection == section ? .semibold : .regular))
+                                .font(.body.weight(selectedSection == section ? .semibold : .regular))
                                 .lineLimit(1)
                                 .transition(.opacity)
                         }
                     }
-                    .foregroundStyle(model.selectedSection == section ? AppTheme.primary : AppTheme.text)
+                    .foregroundStyle(selectedSection == section ? AppTheme.primary : AppTheme.text)
                     .frame(
                         maxWidth: isRegularSidebarExpanded ? .infinity : nil,
                         minHeight: 42,
@@ -414,7 +446,7 @@ struct RootView: View {
                     )
                     .padding(.horizontal, isRegularSidebarExpanded ? 12 : 0)
                     .background(
-                        model.selectedSection == section
+                        selectedSection == section
                             ? AppTheme.primary.opacity(0.14)
                             : Color.clear,
                         in: RoundedRectangle(cornerRadius: 8)
@@ -425,7 +457,7 @@ struct RootView: View {
                 .frame(maxWidth: isRegularSidebarExpanded ? .infinity : nil, alignment: .center)
                 .accessibilityIdentifier(section.accessibilityIdentifier)
                 .accessibilityLabel(model.localized(section.titleKey))
-                .accessibilityAddTraits(model.selectedSection == section ? .isSelected : [])
+                .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
             }
 
             Spacer(minLength: 0)
@@ -439,7 +471,7 @@ struct RootView: View {
     }
 
     private var tabNavigation: some View {
-        TabView(selection: $model.selectedSection) {
+        TabView(selection: $iosSelectedSection) {
             ForEach(AppSection.allCases) { section in
                 compactTabSectionView(section)
                     .tabItem {
@@ -470,6 +502,22 @@ struct RootView: View {
     }
     #endif
 
+    private var selectedSection: AppSection {
+        #if os(iOS)
+        iosSelectedSection
+        #else
+        model.selectedSection
+        #endif
+    }
+
+    private func selectSection(_ section: AppSection) {
+        #if os(iOS)
+        iosSelectedSection = section
+        #else
+        model.selectedSection = section
+        #endif
+    }
+
     private var sidebarTitlePadding: CGFloat {
         #if os(macOS)
         40
@@ -491,7 +539,14 @@ struct RootView: View {
             #else
             TeachingCalendarView(session: teachingCalendarSession)
             #endif
-        case .queries: InformationQueriesView()
+        case .queries:
+            #if os(iOS)
+            InformationQueriesView(
+                shuttleStore: calendarServices.shuttleStore(sampleMode: model.isSampleMode)
+            )
+            #else
+            InformationQueriesView()
+            #endif
         case .settings: SettingsView()
         }
     }
