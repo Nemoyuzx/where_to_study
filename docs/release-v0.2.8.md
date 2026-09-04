@@ -27,7 +27,7 @@
 - 本地课表缓存现正确接受“缓存目录已存在”，不再把 `13900015 File exists` 当成写入失败；三处响应解码同时改用 API 24 的 `TextDecoder.create().decodeToString()`。
 - HarmonyOS 底部导航继续读取系统导航指示条/系统避让区，四个交互控件至少避让物理屏幕底部 28vp；增量事件列表与独立日程颜色保持不变。
 - iPhone 年视图在横竖屏都为悬浮底部导航预留完整净空；12 月最后一日可滚动到导航条上方并点击打开详情。
-- Android 月视图的最高详情档改为移动并裁切完整月格，只保留选中周可见，不再压缩其他周的日期框；详情滚动、下拉退档与状态恢复继续使用同一三档手势状态机。
+- Android 月视图的最高详情档保持六行月格的完整测量高度，并由专用 viewport 强制裁剪画布，只保留选中周可见；选择非首周日期后不再错误显示首周、额外周或空白，详情滚动、下拉退档与状态恢复继续使用同一三档手势状态机。对应修复提交为 [`49f23bc`](https://github.com/Nemoyuzx/where_to_study/commit/49f23bc2937751e55d58bcc46e51290175445d2c)。
 - Android 查询页为班车来源声明保留完整底部导航净空，移除重复副标题并修复“重要事件”滑块右侧裁切；手机底部导航同步调矮、加宽并加入选中态动画。设置“关于”区域显示 `琼ICP备2026012322号-2A` 并链接工信部备案系统。对应热修提交为 [`e10e6ab`](https://github.com/Nemoyuzx/where_to_study/commit/e10e6ab06d64ced3a9638cf7600ffc0cbf9ebdb1)。
 
 ## 数据与安全
@@ -57,7 +57,7 @@
 - HarmonyOS `0.2.8 (1002018)` 已由 DevEco 以“测试和正式上架”上传并通过云测试；邀请测试沿用[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)。
 - Windows/Linux GUI 分别来自 [main push run 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`）；CLI/TUI 分别来自 [run 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）。已证明这些提交到最终 `main` 的全部运行时代码输入无差异，因此没有重复 dispatch。
 - 上述刷新附件均来自 main push 构建，tag-only attestation 按设计跳过，不声称具有 tag/Sigstore 来源证明。Windows 安装器仍未使用公众 Authenticode 证书。
-- Android Universal APK 已从 `e10e6ab` 使用本地固定维护者密钥重新构建并替换，GitHub SHA-256 为 `59def9159aa14310cdcc7ce7fe5a51912b8dee38040817158e07cb058ef096bf`；其余 10 个附件保持不变。
+- Android Universal APK 已从 `49f23bc` 使用本地固定维护者密钥重新构建并替换，GitHub SHA-256 为 `b9fc08cf0229af709c57f5992e512fd48e087e1194e26e385f01189dff6581d8`；其余 10 个附件保持不变。
 - `.sha256` 文件只用于发布前后内部核验，不作为公开附件。
 
 ## 正式发布验证
@@ -65,7 +65,7 @@
 - React/Tauri：141/141 Node 契约测试、Vite 生产构建、真实深浅色渲染与第三方许可证新鲜度检查通过。
 - Rust：Tauri 151 项通过、3 项真实在线服务测试按设计忽略；共享 Core 61/61、CLI 16/16、TUI 21/21 通过，四个 crate 的 Clippy `-D warnings` 全部通过。
 - Apple：本地 Xcode 严格构建与完整平台测试通过；基础套件 26 项 UI 场景中 21 项通过、5 项设备/线上门控场景按设计跳过、0 失败；横竖屏年视图净空与生产班车 Store/真实 App UI 门控另行执行并通过。
-- Android：201/201 Release JVM 测试、Lint、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、版本及 HTTPS-only 打包校验通过；API 36 手机完成查询页 5/5、完整导航 1/1、月视图滚动交接 1/1 自动化，并完成深浅色 1080×2400 视觉复核。
+- Android：201/201 Release JVM 测试、Lint、固定证书签名 APK/AAB、证书指纹、ZIP 对齐、版本及 HTTPS-only 打包校验通过；API 36 手机完成查询页 5/5、浅色和深色完整导航、非首周月视图滚动交接自动化，并对第二周与第五周完成深浅色 1080×2400 视觉复核。
 - HarmonyOS：136/136 ArkTS 单元测试、签名 HAP/APP 构建、打包版本、发布签名及三项固定公开 API 校验通过；Pura 90 完整设备测试 12/12、手机 UI 21/21、真实 SJD 登录、无请求体课表 POST、重复缓存写入，以及获授权真实账号的保存、课表获取、强制重启与 ASSET 再读取均通过；测试后已清除模拟器凭据，DevEco 云测试亦通过。
 - 线上固定 API：班车 Schema 1.0、Contest DDL Schema 1.4 与校内通知 Schema 1.0 均通过固定 HTTPS 地址直接返回有效 JSON。
 - GitHub：10 个桌面附件保持既有版本，Android Universal APK 已替换；远端 APK 重新下载后与本地签名包逐字节一致，其余 10 个附件的名称、大小、摘要与资产 ID 均未改变。
@@ -99,7 +99,7 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - Schedule persistence now treats an existing cache directory as the expected idempotent case instead of failing on `13900015 File exists`. All three response decoders now use the API 24 `TextDecoder.create().decodeToString()` path.
 - HarmonyOS bottom navigation continues to follow the system/navigation-indicator avoid area and keeps all four controls at least 28vp above the physical display bottom; incremental event rendering and independent deadline colors remain intact.
 - The iPhone year view reserves full floating-tab clearance in both orientations; December 31 remains scrollable, visible above the tab bar, and tappable.
-- Android's highest month-details detent now translates and clips the intact month grid so only the selected week remains visible; other weeks are no longer compressed into short boxes. Detail scrolling, pull-down detents, and state restoration remain on the same three-stop gesture state machine.
+- Android's highest month-details detent keeps the full six-row grid measured and uses a dedicated viewport to hard-clip drawing to the selected week. Selecting a non-first week no longer shows the first week, extra rows, or blank space. Detail scrolling, pull-down detents, and state restoration remain on the same three-stop gesture state machine. The fix is [`49f23bc`](https://github.com/Nemoyuzx/where_to_study/commit/49f23bc2937751e55d58bcc46e51290175445d2c).
 - Android Query reserves full bottom-navigation clearance for shuttle attribution, removes the redundant subtitle, and fixes clipping on the Important Events selection thumb. The phone navigation is shorter, wider, and now animates selection changes. Settings → About displays `Qiong ICP No. 2026012322-2A` with a link to the MIIT registry. The hotfix is [`e10e6ab`](https://github.com/Nemoyuzx/where_to_study/commit/e10e6ab06d64ced3a9638cf7600ffc0cbf9ebdb1).
 
 ## Data and security
@@ -119,7 +119,7 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - HarmonyOS `0.2.8 (1002018)` was uploaded for testing and release through DevEco and passed cloud testing. The [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) remains the public test entry.
 - Windows and Linux GUI artifacts came from main-push [runs 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) and [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143) at `04a355c`; CLI/TUI came from [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) and [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633) at `6e92141`. Every runtime code input from those commits through final `main` was proven unchanged, so no duplicate dispatch was needed.
 - These refreshed assets are main-push builds, so the tag-only attestation step was skipped by design. No tag/Sigstore provenance claim is made for them. The Windows installer still lacks a public Authenticode publisher certificate.
-- The Android Universal APK was rebuilt from `e10e6ab` with the pinned local maintainer key and replaced in place. Its GitHub SHA-256 is `59def9159aa14310cdcc7ce7fe5a51912b8dee38040817158e07cb058ef096bf`; the other ten assets are unchanged.
+- The Android Universal APK was rebuilt from `49f23bc` with the pinned local maintainer key and replaced in place. Its GitHub SHA-256 is `b9fc08cf0229af709c57f5992e512fd48e087e1194e26e385f01189dff6581d8`; the other ten assets are unchanged.
 - SHA-256 sidecars remain internal release-verification files rather than public assets.
 
 ## Stable-release verification
@@ -127,7 +127,7 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - React/Tauri: 141/141 Node contract tests, the Vite production build, real light/dark rendering checks, and third-party license freshness checks passed.
 - Rust: 151 Tauri tests passed with three live-service tests intentionally ignored; Core 61/61, CLI 16/16, and TUI 21/21 passed, with `-D warnings` Clippy clean for all four crates.
 - Apple: strict local-Xcode builds and the full platform suite passed; 21 of 26 baseline UI scenarios passed with five device/live-gated skips and zero failures. Portrait/landscape year-clearance and the production-shuttle Store/UI gates also passed separately.
-- Android: 201/201 release JVM tests, Lint, pinned-certificate APK/AAB signing, signer fingerprints, ZIP alignment, version, and HTTPS-only package checks passed. API 36 phone checks covered Query 5/5, full navigation 1/1, and month scroll handoff 1/1, followed by light/dark 1080×2400 visual review.
+- Android: 201/201 release JVM tests, Lint, pinned-certificate APK/AAB signing, signer fingerprints, ZIP alignment, version, and HTTPS-only package checks passed. API 36 phone checks covered Query 5/5, full navigation in light and dark mode, and non-first-week month scroll handoff, followed by light/dark 1080×2400 visual review of the second and fifth weeks.
 - HarmonyOS: 136/136 ArkTS tests, signed HAP/APP builds, packed-version and release-signature checks, and all three pinned public-API package checks passed. The full Pura 90 device suite passed 12/12, the phone UI smoke suite passed 21/21, and live SJD login, bodyless curriculum POST, repeated cache writes, plus an authorized real-account save/fetch/forced-relaunch/ASSET-reload flow all passed. Simulator credentials were cleared afterward, and DevEco cloud testing also passed.
 - Live fixed APIs returned valid JSON directly over HTTPS for Shuttle Schema 1.0, Contest DDL Schema 1.4, and school notices Schema 1.0.
 - GitHub: the ten desktop assets retain their existing versions and the Android Universal APK was replaced. The downloaded remote APK is byte-identical to the local signed artifact, while the names, sizes, digests, and asset IDs of the other ten assets are unchanged.
