@@ -617,7 +617,9 @@ export struct MobileTeachingCalendarView {
       .borderRadius(10)
       .backgroundColor(AppTheme.surfaceVariant())
 
-      if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
+      // 日期条跟随动画目标模式，而不是等 session.modeRawValue 在页面动画
+      // 结束后才提交，避免周 -> 月时月页已经出现但周日期条仍滞留。
+      if (TeachingCalendarLogic.showsCompactDateStrip(this.indicatorMode())) {
         Column() {
           this.weekDateStrip()
         }
@@ -631,7 +633,7 @@ export struct MobileTeachingCalendarView {
   @Builder
   weekDateStrip() {
     Row({ space: 0 }) {
-      if (this.mode() === CalendarMode.week) {
+      if (TeachingCalendarLogic.showsCompactWeekAxis(this.indicatorMode())) {
         Column({ space: 0 }) {
           Text((this.isEnglish() ? 'Cal ' : '公历 ') +
             StrictDates.isoWeekNumber(this.selectedDate()).toString())
@@ -1103,20 +1105,32 @@ export struct MobileTeachingCalendarView {
     Column({ space: 0 }) {
       this.statusArea(false, CalendarMode.month, renderDate)
       this.monthWeekdayHeader()
-      ForEach(this.monthWeeks(renderDate), (week: DateParts[], rowIndex: number) => {
-        Row({ space: 2 }) {
-          ForEach(week, (day: DateParts) => {
-            this.monthDayButton(day, rowIndex, renderDate, interactive)
-          }, (day: DateParts) => 'month-day.' + StrictDates.formatDateParts(day))
+      Stack({ alignContent: Alignment.TopStart }) {
+        Column({ space: 0 }) {
+          ForEach(this.monthWeeks(renderDate), (week: DateParts[], rowIndex: number) => {
+            Row({ space: 2 }) {
+              ForEach(week, (day: DateParts) => {
+                this.monthDayButton(day, rowIndex, renderDate, interactive)
+              }, (day: DateParts) => 'month-day.' + StrictDates.formatDateParts(day))
+            }
+            .width('100%')
+            .height(this.monthGridRowHeight(renderDate,
+              this.renderedMonthSheetPosition(interactive)))
+          }, (week: DateParts[], rowIndex: number) => 'month-week.' + rowIndex.toString() + '.' +
+            StrictDates.formatDateParts(week[0]))
         }
         .width('100%')
-        .height(this.monthRowHeight(rowIndex, renderDate,
+        .height(this.monthGridContentHeight(renderDate,
           this.renderedMonthSheetPosition(interactive)))
-        .opacity(this.monthRowHeight(rowIndex, renderDate,
-          this.renderedMonthSheetPosition(interactive)) <= 0 ? 0 : 1)
-        .clip(true)
-      }, (week: DateParts[], rowIndex: number) => 'month-week.' + rowIndex.toString() + '.' +
-        StrictDates.formatDateParts(week[0]))
+        .translate({ y: this.monthGridTranslationY(renderDate,
+          this.renderedMonthSheetPosition(interactive)) })
+        .id('calendar.mobile.month-grid.' + this.monthPageIdentity(renderDate))
+      }
+      .width('100%')
+      .height(this.monthGridViewportHeight(renderDate,
+        this.renderedMonthSheetPosition(interactive)))
+      .clip(true)
+      .id('calendar.mobile.month-grid-viewport.' + this.monthPageIdentity(renderDate))
 
       this.monthExpansionHandle(interactive)
       List({ space: 0, scroller: interactive ?
@@ -1231,6 +1245,30 @@ export struct MobileTeachingCalendarView {
     sheetPosition: number = this.monthSheetPosition): number {
     return TeachingCalendarLogic.monthRowHeight(sheetPosition, rowIndex,
       this.selectedMonthWeekIndex(renderDate), this.expandedMonthCellHeight());
+  }
+
+  private monthGridRowHeight(renderDate: DateParts,
+    sheetPosition: number = this.monthSheetPosition): number {
+    return this.monthRowHeight(0, renderDate, sheetPosition);
+  }
+
+  private monthGridViewportHeight(renderDate: DateParts,
+    sheetPosition: number = this.monthSheetPosition): number {
+    return TeachingCalendarLogic.monthGridViewportHeight(sheetPosition, 6,
+      this.monthGridRowHeight(renderDate, sheetPosition));
+  }
+
+  private monthGridContentHeight(renderDate: DateParts,
+    sheetPosition: number = this.monthSheetPosition): number {
+    return TeachingCalendarLogic.monthGridContentHeight(6,
+      this.monthGridRowHeight(renderDate, sheetPosition));
+  }
+
+  private monthGridTranslationY(renderDate: DateParts,
+    sheetPosition: number = this.monthSheetPosition): number {
+    return TeachingCalendarLogic.monthGridTranslationY(sheetPosition,
+      this.selectedMonthWeekIndex(renderDate),
+      this.monthGridRowHeight(renderDate, sheetPosition));
   }
 
   private monthExpansionProgress(sheetPosition: number = this.monthSheetPosition): number {

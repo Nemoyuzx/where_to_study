@@ -169,6 +169,14 @@ export class TeachingCalendarLogic {
     return 0;
   }
 
+  static showsCompactDateStrip(mode: CalendarMode): boolean {
+    return mode === CalendarMode.day || mode === CalendarMode.week;
+  }
+
+  static showsCompactWeekAxis(mode: CalendarMode): boolean {
+    return mode === CalendarMode.week;
+  }
+
   static pageTransitionOffsets(direction: number, distance: number): CalendarPageTransitionOffsets {
     const resolvedDirection: number = Math.sign(direction);
     const resolvedDistance: number = Math.abs(distance);
@@ -468,16 +476,35 @@ export class TeachingCalendarLogic {
     return Math.round(collapsed + (expanded - collapsed) * resolved);
   }
 
-  static monthRowHeight(position: number, rowIndex: number, selectedWeekIndex: number,
+  static monthRowHeight(position: number, _rowIndex: number, _selectedWeekIndex: number,
     expandedHeight: number = TeachingCalendarLogic.monthExpandedCellHeight): number {
     const expandedProgress: number = TeachingCalendarLogic.monthCellExpansionProgress(position);
-    const fullHeight: number = TeachingCalendarLogic.interpolateMonthMetric(
+    // 第二段上划通过裁剪并平移完整月网格完成；每一周本身始终保持
+    // 相同高度，避免日期小方框被逐行压扁。
+    return TeachingCalendarLogic.interpolateMonthMetric(
       TeachingCalendarLogic.monthCollapsedCellHeight, expandedHeight, expandedProgress);
-    if (rowIndex === selectedWeekIndex) {
-      return fullHeight;
+  }
+
+  static monthGridViewportHeight(position: number, rowCount: number, rowHeight: number): number {
+    const resolvedRows: number = Math.max(Math.floor(rowCount), 0);
+    const resolvedRowHeight: number = Math.max(Math.floor(rowHeight), 0);
+    if (resolvedRows === 0) {
+      return 0;
     }
-    return Math.max(Math.round(fullHeight *
-      (1 - TeachingCalendarLogic.monthSelectedWeekProgress(position))), 0);
+    const fullHeight: number = resolvedRows * resolvedRowHeight;
+    return Math.max(Math.round(fullHeight - (fullHeight - resolvedRowHeight) *
+      TeachingCalendarLogic.monthSelectedWeekProgress(position)), resolvedRowHeight);
+  }
+
+  static monthGridContentHeight(rowCount: number, rowHeight: number): number {
+    return Math.max(Math.floor(rowCount), 0) * Math.max(Math.floor(rowHeight), 0);
+  }
+
+  static monthGridTranslationY(position: number, selectedWeekIndex: number,
+    rowHeight: number): number {
+    return -Math.round(Math.max(Math.floor(selectedWeekIndex), 0) *
+      Math.max(Math.floor(rowHeight), 0) *
+      TeachingCalendarLogic.monthSelectedWeekProgress(position));
   }
 
   static monthEntryAvailableHeight(cellHeight: number, expandedProgress: number): number {

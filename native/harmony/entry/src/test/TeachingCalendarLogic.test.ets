@@ -146,6 +146,35 @@ export default function teachingCalendarLogicTest() {
       expect(session.monthSheetPosition).assertEqual(0);
     });
 
+    it('month_week_detent_clips_and_translates_an_intact_grid', 0, () => {
+      const rowCount: number = 6;
+      const rowHeight: number = TeachingCalendarLogic.monthCollapsedCellHeight;
+      for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+        expect(TeachingCalendarLogic.monthRowHeight(2, rowIndex, 3)).assertEqual(rowHeight);
+      }
+      expect(TeachingCalendarLogic.monthGridContentHeight(rowCount, rowHeight))
+        .assertEqual(rowCount * rowHeight);
+      expect(TeachingCalendarLogic.monthGridViewportHeight(1, rowCount, rowHeight))
+        .assertEqual(rowCount * rowHeight);
+      expect(TeachingCalendarLogic.monthGridViewportHeight(1.5, rowCount, rowHeight))
+        .assertEqual(161);
+      expect(TeachingCalendarLogic.monthGridViewportHeight(2, rowCount, rowHeight))
+        .assertEqual(rowHeight);
+      expect(TeachingCalendarLogic.monthGridTranslationY(1, 3, rowHeight)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthGridTranslationY(1.5, 3, rowHeight)).assertEqual(-69);
+      expect(TeachingCalendarLogic.monthGridTranslationY(2, 3, rowHeight)).assertEqual(-138);
+    });
+
+    it('animated_target_mode_drives_the_compact_date_strip', 0, () => {
+      expect(TeachingCalendarLogic.showsCompactDateStrip(CalendarMode.day)).assertTrue();
+      expect(TeachingCalendarLogic.showsCompactDateStrip(CalendarMode.week)).assertTrue();
+      expect(TeachingCalendarLogic.showsCompactDateStrip(CalendarMode.month)).assertFalse();
+      expect(TeachingCalendarLogic.showsCompactDateStrip(CalendarMode.year)).assertFalse();
+      expect(TeachingCalendarLogic.showsCompactWeekAxis(CalendarMode.week)).assertTrue();
+      expect(TeachingCalendarLogic.showsCompactWeekAxis(CalendarMode.day)).assertFalse();
+      expect(TeachingCalendarLogic.showsCompactWeekAxis(CalendarMode.month)).assertFalse();
+    });
+
     it('expanded_month_events_reserve_last_row_for_overflow', 0, () => {
       expect(TeachingCalendarLogic.monthEventLayout(2, 2)[0]).assertEqual(2);
       expect(TeachingCalendarLogic.monthEventLayout(2, 2)[1]).assertEqual(0);
