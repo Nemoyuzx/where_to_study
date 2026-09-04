@@ -13,6 +13,14 @@
     <string name="holiday_marker">Off</string>
     <string name="workday_marker">Work</string>
     <string name="credential_security_note">Your account and password stay on this device and are protected by Android Keystore.</string>
+    <string name="privacy_consent_title">Privacy Policy and Personal Information</string>
+    <string name="privacy_consent_summary">Welcome to Where To Study. Please read and understand the Privacy Policy before continuing. When you save an account or request schedules, classrooms, or assignments, the app sends necessary information over HTTPS to relevant BUPT services. After valid credentials are saved, enabled settings may also refresh the schedule and today’s empty classrooms automatically. Schedules, credentials, and preferences stay on this device. By tapping “Agree and Continue,” you confirm that you have read and agree to the Privacy Policy. If you decline, the app exits and its main features remain unavailable.</string>
+    <string name="privacy_consent_accept">Agree and Continue</string>
+    <string name="privacy_consent_decline">Decline and Exit</string>
+    <string name="view_full_privacy_policy">View Full Privacy Policy</string>
+    <string name="privacy_policy_open_failed">Unable to open the full Privacy Policy. Please try again later.</string>
+    <string name="privacy_consent_save_failed">Unable to save your consent, so the app cannot continue.</string>
+    <string name="account_privacy_notice">Before saving an academic account, read the Privacy Policy to understand how credentials are used, where they are sent, and how they are stored locally.</string>
     <string name="daily_course_notification_toggle">Send today’s course summary at 07:30</string>
     <string name="daily_course_notification_description">Only notifies on days with courses; automatically reschedules after schedule or account changes.</string>
     <string name="widget_today_course_name">Today’s Courses</string>

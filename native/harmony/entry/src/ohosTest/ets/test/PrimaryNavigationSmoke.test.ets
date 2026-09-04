@@ -21,7 +21,9 @@ async function launchApp(reviewDemo: boolean): Promise<void> {
   await delegator.startAbility({
     bundleName: BUNDLE_NAME,
     abilityName: 'EntryAbility',
-    parameters: reviewDemo ? { 'reviewDemo': true } : { 'uiTesting': true }
+    parameters: reviewDemo ?
+      { 'reviewDemo': true, 'privacyConsentAcceptedForTesting': true } :
+      { 'uiTesting': true, 'privacyConsentAcceptedForTesting': true }
   });
   const driver: Driver = Driver.create();
   await driver.delayMs(4000);
@@ -32,7 +34,7 @@ async function launchLiveInputTest(): Promise<void> {
   await delegator.startAbility({
     bundleName: BUNDLE_NAME,
     abilityName: 'EntryAbility',
-    parameters: { 'uiTestingLive': true }
+    parameters: { 'uiTestingLive': true, 'privacyConsentAcceptedForTesting': true }
   });
   const driver: Driver = Driver.create();
   await driver.delayMs(4000);

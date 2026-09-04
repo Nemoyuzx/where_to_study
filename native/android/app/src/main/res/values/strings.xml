@@ -13,6 +13,14 @@
     <string name="holiday_marker">休</string>
     <string name="workday_marker">班</string>
     <string name="credential_security_note">账号和密码仅保存于本机，并由 Android Keystore 保护。</string>
+    <string name="privacy_consent_title">隐私政策与个人信息保护</string>
+    <string name="privacy_consent_summary">欢迎使用 Where To Study。请在继续前阅读并理解隐私政策。应用会在你保存账号或请求课表、空教室、作业时，通过 HTTPS 向北京邮电大学相关服务提交必要信息；保存有效账号后，还可能按已启用的设置自动刷新课表与当天空教室。课表、账号与偏好保存在本机。点击“同意并继续”表示你已阅读并同意隐私政策；拒绝后将退出应用且无法使用主功能。</string>
+    <string name="privacy_consent_accept">同意并继续</string>
+    <string name="privacy_consent_decline">拒绝并退出</string>
+    <string name="view_full_privacy_policy">查看完整隐私政策</string>
+    <string name="privacy_policy_open_failed">无法打开完整隐私政策，请稍后重试。</string>
+    <string name="privacy_consent_save_failed">无法保存同意状态，暂不能进入应用。</string>
+    <string name="account_privacy_notice">保存教务账号前，请先阅读隐私政策，了解凭据用途、传输对象与本地保存方式。</string>
     <string name="daily_course_notification_toggle">每天 07:30 发送当日课程摘要</string>
     <string name="daily_course_notification_description">仅在当天有课时通知；课表更新或账号变更后会自动重排。</string>
     <string name="widget_today_course_name">今日课程</string>

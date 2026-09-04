@@ -321,6 +321,16 @@
 "日历同步完成：新增 %d，更新 %d，删除 %d，已存在 %d" = "Calendar sync completed: %d inserted, %d updated, %d deleted, %d unchanged";
 "已安排未来 %d 个有课日的课程摘要" = "Course summaries scheduled for %d upcoming class days";
 "个人课表已更新，共 %d 门课程" = "Personal schedule updated: %d courses";
+"欢迎使用 Where To Study" = "Welcome to Where To Study";
+"首次使用前，请先阅读并同意《隐私政策》。应用会处理您主动提供的账号信息；保存有效账号后，还可能按已启用的设置自动刷新课表、空教室与公开数据。具体内容以完整政策为准。" = "Before using the app, please read and agree to the Privacy Policy. The app processes account information you provide. After valid credentials are saved, enabled settings may also refresh schedules, empty classrooms, and public data automatically. See the full policy for details.";
+"查看完整隐私政策" = "View Full Privacy Policy";
+"同意并继续" = "Agree and Continue";
+"不同意，暂不使用" = "Decline and Stop Using";
+"未同意隐私政策，无法使用应用" = "Privacy Policy Not Accepted";
+"您可以重新阅读隐私政策，并在同意后继续使用。" = "You can review the Privacy Policy again and continue after agreeing.";
+"重新查看并选择" = "Review and Choose Again";
+"保存账号前请阅读并同意隐私政策。" = "Read and agree to the Privacy Policy before saving an account.";
+"查看隐私政策" = "View Privacy Policy";
 "以下本地数据未能清除：" = "The following local data could not be cleared: ";
 "本地课表读取失败：" = "Unable to read the local schedule: ";
 "本地空教室读取失败：" = "Unable to read the local empty-room cache: ";

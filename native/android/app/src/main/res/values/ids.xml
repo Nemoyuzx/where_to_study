@@ -24,6 +24,9 @@
     <item name="planner_weather_toggle" type="id" />
     <item name="planner_weather_details" type="id" />
     <item name="privacy_policy_button" type="id" />
+    <item name="account_privacy_policy_button" type="id" />
+    <item name="privacy_consent_dialog_content" type="id" />
+    <item name="privacy_consent_full_policy" type="id" />
     <item name="settings_about_section" type="id" />
     <item name="settings_app_filing_link" type="id" />
     <item name="settings_language_section" type="id" />

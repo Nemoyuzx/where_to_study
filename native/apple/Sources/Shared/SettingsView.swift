@@ -435,6 +435,20 @@ struct SettingsView: View {
                         dismissKeyboard()
                     }
                     .accessibilityIdentifier("field.password")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("保存账号前请阅读并同意隐私政策。")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondaryText)
+                    Button {
+                        AppHaptics.impact()
+                        dismissKeyboard()
+                        showingPrivacyPolicy = true
+                    } label: {
+                        Label("查看隐私政策", systemImage: "hand.raised")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("action.open-account-privacy-policy")
+                }
                 Picker(
                     "默认校区",
                     selection: Binding(

@@ -230,6 +230,10 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
     override fun reconcile(context: Context): Boolean = runCatching {
         if (DailyCourseNotificationRuntimeMode.isUiTesting) return@runCatching true
         val appContext = context.applicationContext
+        if (!PrivacyConsentStore(appContext).hasAcceptedCurrentPolicy) {
+            cancel(appContext)
+            return@runCatching true
+        }
         val preferences = AppPreferences(appContext)
         val authorization = DailyCourseNotificationAuthorizationStore(appContext)
         val permissionGranted = DailyCourseSummaryNotificationRuntime.hasPermission(appContext)
@@ -351,6 +355,7 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
     }.getOrDefault(false)
 
     private fun canSchedule(context: Context): Boolean {
+        if (!PrivacyConsentStore(context).hasAcceptedCurrentPolicy) return false
         val credentials = SecureCredentialStore(context).load()
         val hasSchedule = loadUsableSchedule(context) != null
         return DailyCourseSummaryReconcileLogic.action(
@@ -416,6 +421,10 @@ class DailyCourseSummaryJobService : JobService() {
         if (!DailyCourseSummaryScheduler.isManagedJob(params.jobId) || activeParameters != null) {
             return false
         }
+        if (!PrivacyConsentStore(applicationContext).hasAcceptedCurrentPolicy) {
+            DailyCourseSummaryScheduler.cancel(applicationContext)
+            return false
+        }
         activeParameters = params
         val generation = LocalDataCoordinator.snapshot()
         val notificationRevision = DailyCourseSummaryScheduler.executionRevision()
@@ -449,6 +458,7 @@ class DailyCourseSummaryJobService : JobService() {
                 activeWork.complete()
                 val canDeliver = LocalDataCoordinator.isCurrent(generation) &&
                     DailyCourseSummaryScheduler.isExecutionCurrent(notificationRevision) &&
+                    PrivacyConsentStore(applicationContext).hasAcceptedCurrentPolicy &&
                     AppPreferences(applicationContext).dailyCourseNotificationsEnabled &&
                     DailyCourseNotificationAuthorizationStore(applicationContext).isAuthorized &&
                     DailyCourseSummaryNotificationRuntime.hasPermission(applicationContext)
@@ -524,6 +534,7 @@ object DailyCourseSummaryNotificationRuntime {
 
     fun show(context: Context, draft: DailyCourseSummaryDraft) {
         if (DailyCourseNotificationRuntimeMode.isUiTesting) return
+        if (!PrivacyConsentStore(context).hasAcceptedCurrentPolicy) return
         if (!hasPermission(context)) return
         val localizedContext = AppLocale.wrap(context, AppPreferences(context).languageCode)
         val manager = context.getSystemService(NotificationManager::class.java)

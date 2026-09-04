@@ -27,10 +27,12 @@ export class AppLaunchConfiguration {
   static readonly uiTestingArgument: string = '--ui-testing';
   static readonly uiTestingLiveArgument: string = '--ui-testing-live';
   static readonly reviewDemoArgument: string = '--review-demo';
+  static readonly privacyConsentAcceptedForTestingArgument: string = '--privacy-consent-accepted-for-testing';
 
   static uiTesting: boolean = false;
   static uiTestingLive: boolean = false;
   static reviewDemo: boolean = false;
+  static privacyConsentAcceptedForTesting: boolean = false;
 
   // EntryAbility.onCreate 时从 want.parameters 读取 UI 测试/演示模式标记。
   static applyFromWant(want: Want): void {
@@ -41,6 +43,9 @@ export class AppLaunchConfiguration {
       AppLaunchConfiguration.flag(params, 'uiTestingLive', AppLaunchConfiguration.uiTestingLiveArgument);
     AppLaunchConfiguration.reviewDemo =
       AppLaunchConfiguration.flag(params, 'reviewDemo', AppLaunchConfiguration.reviewDemoArgument);
+    AppLaunchConfiguration.privacyConsentAcceptedForTesting = AppLaunchConfiguration.flag(
+      params, 'privacyConsentAcceptedForTesting',
+      AppLaunchConfiguration.privacyConsentAcceptedForTestingArgument);
   }
 
   static hasExplicitRuntimeMode(want: Want): boolean {
@@ -61,6 +66,10 @@ export class AppLaunchConfiguration {
 
   static isReviewDemo(): boolean {
     return AppLaunchConfiguration.reviewDemo;
+  }
+
+  static hasAcceptedPrivacyConsentForTesting(): boolean {
+    return AppLaunchConfiguration.privacyConsentAcceptedForTesting;
   }
 
   static makeModel(): AppModel {

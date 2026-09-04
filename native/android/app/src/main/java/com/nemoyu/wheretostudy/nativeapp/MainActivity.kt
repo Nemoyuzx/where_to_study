@@ -6,13 +6,16 @@ import android.animation.AnimatorListenerAdapter
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.TransitionDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -25,6 +28,7 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.window.OnBackInvokedDispatcher
 import androidx.core.util.Consumer
@@ -62,6 +66,7 @@ class MainActivity : Activity() {
     private val navigationViews = mutableMapOf<Destination, TextView>()
     private val credentialStore by lazy { SecureCredentialStore(this) }
     private val preferences by lazy { AppPreferences(this) }
+    private val privacyConsentStore by lazy { PrivacyConsentStore(this) }
     private val plannerQueryState by lazy { PlannerQueryState(preferences.campusID) }
     private lateinit var teachingCalendarSessionState: TeachingCalendarSessionState
     private lateinit var informationQuerySessionState: InformationQuerySessionState
@@ -109,6 +114,8 @@ class MainActivity : Activity() {
         private set
     private var currentFoldingFeature: FoldingFeature? = null
     private var automaticScheduleLaunchRefreshKey: AutomaticScheduleLaunchRefreshKey? = null
+    private var applicationContentStarted = false
+    private var privacyConsentDialog: AlertDialog? = null
     private var windowLayoutListenerRegistered = false
     private val windowInfoTracker by lazy {
         WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this))
@@ -182,15 +189,6 @@ class MainActivity : Activity() {
             savedInstanceState?.getString(INFORMATION_QUERY_MODE_KEY),
         )
 
-        adaptiveRoot = FrameLayout(this).apply {
-            id = R.id.adaptive_root
-            setBackgroundColor(Palette.background)
-            addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
-                if (right - left != oldRight - oldLeft) scheduleAdaptiveLayout()
-            }
-        }
-        applySystemInsets(adaptiveRoot)
-        setContentView(adaptiveRoot)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT,
@@ -198,6 +196,19 @@ class MainActivity : Activity() {
                 if (!handleAppBack()) finishAfterTransition()
             }
         }
+        if (privacyConsentStore.hasAcceptedCurrentPolicy) {
+            startApplicationContent()
+        } else {
+            DailyClassroomRefreshScheduler.cancel(this)
+            DailyCourseSummaryScheduler.cancel(this)
+            showPrivacyConsentDialog()
+        }
+    }
+
+    private fun startApplicationContent() {
+        if (applicationContentStarted || isFinishing || isDestroyed) return
+        applicationContentStarted = true
+        installAdaptiveRoot()
         configureSystemBarIcons()
         prewarmPublicDeadlinesIfEnabled()
         calendarDailyInfoRepository.loadImportantEvents()
@@ -214,8 +225,22 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun installAdaptiveRoot() {
+        check(!::adaptiveRoot.isInitialized) { "Application root is already installed." }
+        adaptiveRoot = FrameLayout(this).apply {
+            id = R.id.adaptive_root
+            setBackgroundColor(Palette.background)
+            addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+                if (right - left != oldRight - oldLeft) scheduleAdaptiveLayout()
+            }
+        }
+        applySystemInsets(adaptiveRoot)
+        setContentView(adaptiveRoot)
+    }
+
     override fun onResume() {
         super.onResume()
+        if (!applicationContentStarted) return
         prewarmPublicDeadlinesIfEnabled()
         calendarDailyInfoRepository.loadImportantEvents()
         shuttleBusRepository.load()
@@ -359,13 +384,13 @@ class MainActivity : Activity() {
     }
 
     private fun scheduleAdaptiveLayout() {
-        if (!::adaptiveRoot.isInitialized) return
+        if (!applicationContentStarted || !::adaptiveRoot.isInitialized) return
         adaptiveRoot.removeCallbacks(applyAdaptiveLayout)
         adaptiveRoot.postDelayed(applyAdaptiveLayout, ADAPTIVE_LAYOUT_DEBOUNCE_MILLIS)
     }
 
     private fun updateAdaptiveLayout(force: Boolean = false) {
-        if (!::adaptiveRoot.isInitialized) return
+        if (!applicationContentStarted || !::adaptiveRoot.isInitialized) return
         val windowWidthDp = currentWindowWidthDp()
         if (windowWidthDp <= 0) return
         val spec = resolveAdaptiveLayout(windowWidthDp, navigationRailCollapsed)
@@ -1279,6 +1304,97 @@ class MainActivity : Activity() {
         }
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = flags
+    }
+
+    private fun showPrivacyConsentDialog() {
+        if (privacyConsentDialog?.isShowing == true || isFinishing || isDestroyed) return
+
+        val dialogContent = LinearLayout(this).apply {
+            id = R.id.privacy_consent_dialog_content
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(4), dp(24), dp(4))
+            addView(TextView(this@MainActivity).apply {
+                text = getString(R.string.privacy_consent_summary)
+                textSize = 14f
+                setTextColor(Palette.text)
+                setLineSpacing(0f, 1.15f)
+            })
+            addView(TextView(this@MainActivity).apply {
+                id = R.id.privacy_consent_full_policy
+                text = getString(R.string.view_full_privacy_policy)
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setTextColor(Palette.primaryText)
+                setTypeface(typeface, Typeface.BOLD)
+                background = roundedBackground(
+                    this@MainActivity,
+                    Palette.surface,
+                    Palette.primary,
+                    radius = UiMetrics.controlRadiusDp,
+                )
+                isClickable = true
+                isFocusable = true
+                contentDescription = getString(R.string.view_full_privacy_policy)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(UiMetrics.controlHeightDp),
+                ).apply { topMargin = dp(18) }
+                setOnClickListener { source ->
+                    performControlHaptic(source)
+                    runCatching {
+                        startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse(PrivacyConsentStore.PRIVACY_POLICY_URL),
+                            ),
+                        )
+                    }.onFailure {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.privacy_policy_open_failed),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            })
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.privacy_consent_title)
+            .setView(dialogContent)
+            .setNegativeButton(R.string.privacy_consent_decline, null)
+            .setPositiveButton(R.string.privacy_consent_accept, null)
+            .create()
+            .apply {
+                setCancelable(false)
+                setCanceledOnTouchOutside(false)
+                setOnShowListener {
+                    getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                        performControlHaptic(it)
+                        dismiss()
+                        privacyConsentDialog = null
+                        finishAffinity()
+                    }
+                    getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        performControlHaptic(it)
+                        runCatching(privacyConsentStore::acceptCurrentPolicy)
+                            .onSuccess {
+                                dismiss()
+                                privacyConsentDialog = null
+                                startApplicationContent()
+                            }
+                            .onFailure {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    getString(R.string.privacy_consent_save_failed),
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            }
+                    }
+                }
+            }
+        privacyConsentDialog = dialog
+        dialog.show()
     }
 
     private companion object {

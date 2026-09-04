@@ -378,6 +378,19 @@ class SettingsPage(
             setTextColor(Palette.muted)
             setPadding(0, activity.dp(if (isCompact) 8 else 12), 0, 0)
         })
+        addView(TextView(activity).apply {
+            text = activity.getString(R.string.account_privacy_notice)
+            textSize = 12f
+            setTextColor(Palette.muted)
+            setLineSpacing(0f, 1.1f)
+            setPadding(0, activity.dp(if (isCompact) 8 else 12), 0, activity.dp(8))
+        })
+        addView(settingsLinkButton(activity.getString(R.string.view_full_privacy_policy)) {
+            showPrivacyPolicy()
+        }.apply {
+            id = R.id.account_privacy_policy_button
+            contentDescription = activity.getString(R.string.view_full_privacy_policy)
+        })
     }
 
     private fun semesterSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
@@ -1279,7 +1292,12 @@ class SettingsPage(
                 }
                 setOnClickListener {
                     activity.performControlHaptic(it)
-                    activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL)))
+                    activity.startActivity(
+                        Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse(PrivacyConsentStore.PRIVACY_POLICY_URL),
+                        ),
+                    )
                 }
             })
         }
@@ -1351,7 +1369,6 @@ class SettingsPage(
         const val APP_FILING_LABEL = "APP 备案：琼ICP备2026012322号-2A"
         const val APP_FILING_URL = "https://beian.miit.gov.cn/"
         const val PROJECT_URL = "https://github.com/Nemoyuzx/where_to_study"
-        const val PRIVACY_URL = "https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md"
         const val SEGMENT_ANIMATION_DURATION_MILLIS = 220L
         const val SEGMENT_SELECTION_COMMIT_DELAY_MILLIS = 160L
     }

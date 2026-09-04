@@ -3,6 +3,35 @@ import UIKit
 
 @MainActor
 final class PrimaryNavigationSmokeTests: XCTestCase {
+    func testFirstLaunchRequiresPrivacyConsentBeforeShowingAppContent() {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-privacy-consent"]
+        app.launch()
+        defer { app.terminate() }
+
+        XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-consent"]
+            .waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["screen.planner"].exists)
+
+        let openPolicy = app.buttons["privacy-consent.open-policy"]
+        XCTAssertTrue(openPolicy.waitForExistence(timeout: 5))
+        openPolicy.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"]
+            .waitForExistence(timeout: 5))
+        app.buttons["action.dismiss-privacy-policy"].firstMatch.tap()
+
+        app.buttons["privacy-consent.decline"].tap()
+        XCTAssertTrue(app.staticTexts["未同意隐私政策，无法使用应用"]
+            .waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["screen.planner"].exists)
+
+        app.buttons["privacy-consent.reconsider"].tap()
+        app.buttons["privacy-consent.accept"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["screen.planner"]
+            .waitForExistence(timeout: 5))
+    }
+
     func testPrimaryPagesAreNavigable() {
         continueAfterFailure = false
         let app = configuredApplication()

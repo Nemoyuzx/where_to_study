@@ -5,6 +5,7 @@ enum AppLaunchConfiguration {
     static let uiTestingLiveArgument = "--ui-testing-live"
     static let reviewDemoArgument = "--review-demo"
     static let slowCalendarAnimationArgument = "--ui-test-slow-calendar-animation"
+    static let privacyConsentTestingArgument = "--ui-testing-privacy-consent"
 
     static var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestingArgument)
@@ -21,6 +22,22 @@ enum AppLaunchConfiguration {
 
     static var usesSlowCalendarAnimation: Bool {
         ProcessInfo.processInfo.arguments.contains(slowCalendarAnimationArgument)
+    }
+
+    static var forcesPrivacyConsent: Bool {
+        ProcessInfo.processInfo.arguments.contains(privacyConsentTestingArgument)
+    }
+
+    static var bypassesPrivacyConsent: Bool {
+        (isUITesting || isUITestingLive || isReviewDemo) && !forcesPrivacyConsent
+    }
+
+    static var privacyConsentLanguage: AppLanguage {
+        if let language = ProcessInfo.processInfo.environment["WHERE_TO_STUDY_UI_LANGUAGE"],
+           let appLanguage = AppLanguage(rawValue: language) {
+            return appLanguage
+        }
+        return AppLocalization.persistedLanguage()
     }
 
     static var isXCTestRunning: Bool {

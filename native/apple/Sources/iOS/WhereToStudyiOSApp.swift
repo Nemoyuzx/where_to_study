@@ -14,13 +14,39 @@ final class MobileAppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct WhereToStudyiOSApp: App {
     @UIApplicationDelegateAdaptor(MobileAppDelegate.self) private var appDelegate
-    @StateObject private var model = AppLaunchConfiguration.makeModel()
+    @StateObject private var privacyConsent = PrivacyConsentState(
+        bypassesConsent: AppLaunchConfiguration.bypassesPrivacyConsent,
+        resetsConsent: AppLaunchConfiguration.forcesPrivacyConsent
+    )
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(model)
-                .environment(\.locale, model.appLanguage.locale)
+            Group {
+                if privacyConsent.hasAccepted {
+                    ConsentedApplicationRoot()
+                } else {
+                    PrivacyConsentGate(state: privacyConsent)
+                        .environment(
+                            \.locale,
+                            AppLaunchConfiguration.privacyConsentLanguage.locale
+                        )
+                }
+            }
         }
+    }
+}
+
+@MainActor
+private struct ConsentedApplicationRoot: View {
+    @StateObject private var model: AppModel
+
+    init() {
+        _model = StateObject(wrappedValue: AppLaunchConfiguration.makeModel())
+    }
+
+    var body: some View {
+        RootView()
+            .environmentObject(model)
+            .environment(\.locale, model.appLanguage.locale)
     }
 }

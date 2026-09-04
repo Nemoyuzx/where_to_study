@@ -370,6 +370,25 @@ export struct SettingsView {
         .width('100%')
         .padding({ top: this.isCompact() ? 8 : 12 })
 
+      Blank().height(7)
+      Button(this.model.text('阅读隐私政策'))
+        .type(ButtonType.Normal)
+        .stateEffect(true)
+        .fontSize(14)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.primary())
+        .borderRadius(6)
+        .border({ width: 1, color: AppTheme.primary() })
+        .backgroundColor(AppTheme.surface())
+        .width('100%')
+        .height(36)
+        .id('settings_account_privacy_policy')
+        .accessibilityText(this.model.text('阅读隐私政策'))
+        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+        .onClick(() => {
+          this.setPrivacyPolicyVisible(true);
+        })
+
       if (this.model.statusMessage.length > 0) {
         Text(this.model.text(this.model.statusMessage))
           .fontSize(12)

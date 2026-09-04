@@ -33,6 +33,10 @@ export default function appLocalizationTest() {
         .assertEqual('App filing: 琼ICP备2026012322号-2A');
       expect(AppLocalization.text(AppMeta.appFilingLabel, AppLanguage.simplifiedChinese, 'en-US'))
         .assertEqual('APP 备案：琼ICP备2026012322号-2A');
+      expect(AppLocalization.text('阅读完整隐私政策', AppLanguage.english, 'en-US'))
+        .assertEqual('Read the Full Privacy Policy');
+      expect(AppLocalization.text('同意并继续', AppLanguage.english, 'en-US'))
+        .assertEqual('Accept and Continue');
       expect(AppMeta.appFilingURL).assertEqual('https://beian.miit.gov.cn/');
       expect(AppLocalization.text('系统安全存储操作失败（24000002）。',
         AppLanguage.english, 'en-US'))

@@ -45,6 +45,9 @@ object DailyClassroomRefreshScheduler {
     private val jobIDs = setOf(PRIMARY_JOB_ID, SECONDARY_JOB_ID)
 
     fun ensureScheduled(context: Context): Boolean = synchronized(this) {
+        if (!PrivacyConsentStore(context).hasAcceptedCurrentPolicy) {
+            return@synchronized cancel(context)
+        }
         runCatching {
             val scheduler = context.getSystemService(JobScheduler::class.java)
             when (scheduleAction(context, scheduler, forceReschedule = false)) {
@@ -59,6 +62,9 @@ object DailyClassroomRefreshScheduler {
 
     fun scheduleAfterCompletion(context: Context, completedJobID: Int): Boolean =
         synchronized(this) {
+            if (!PrivacyConsentStore(context).hasAcceptedCurrentPolicy) {
+                return@synchronized cancel(context)
+            }
             runCatching {
                 val scheduler = context.getSystemService(JobScheduler::class.java)
                 when (scheduleAction(context, scheduler, forceReschedule = true)) {
@@ -79,6 +85,9 @@ object DailyClassroomRefreshScheduler {
     fun isManagedJob(jobID: Int): Boolean = jobID in jobIDs
 
     fun hasValidCredentials(context: Context): Boolean = runCatching {
+        if (!PrivacyConsentStore(context).hasAcceptedCurrentPolicy) {
+            return@runCatching false
+        }
         val credentials = loadCredentials(context)
         DailyClassroomRefreshLogic.refreshDecision(
             credentials?.account,
@@ -96,6 +105,9 @@ object DailyClassroomRefreshScheduler {
     }
 
     fun reschedule(context: Context): Boolean = synchronized(this) {
+        if (!PrivacyConsentStore(context).hasAcceptedCurrentPolicy) {
+            return@synchronized cancel(context)
+        }
         runCatching {
             val scheduler = context.getSystemService(JobScheduler::class.java)
             when (scheduleAction(context, scheduler, forceReschedule = true)) {
@@ -190,7 +202,9 @@ class DailyClassroomRefreshJobService : JobService() {
         if (!DailyClassroomRefreshScheduler.isManagedJob(params.jobId) || activeParameters != null) {
             return false
         }
-        if (!DailyClassroomRefreshScheduler.hasValidCredentials(applicationContext)) {
+        if (!PrivacyConsentStore(applicationContext).hasAcceptedCurrentPolicy ||
+            !DailyClassroomRefreshScheduler.hasValidCredentials(applicationContext)
+        ) {
             DailyClassroomRefreshScheduler.cancel(applicationContext)
             return false
         }

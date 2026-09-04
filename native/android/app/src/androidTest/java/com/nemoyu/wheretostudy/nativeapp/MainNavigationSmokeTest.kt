@@ -34,6 +34,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.text.SimpleDateFormat
@@ -44,6 +45,9 @@ import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class MainNavigationSmokeTest {
+    @Before
+    fun acceptPrivacyConsent() = ensurePrivacyConsentForUiTest()
+
     @Test
     fun appTypographyFontScaleAppliesToActivityAndSpText() {
         clearCredentialRecord()
@@ -1817,6 +1821,9 @@ class MainNavigationSmokeTest {
             assertVisible(device, "settings_github_link")
             scenario.onActivity { activity ->
                 val about = activity.findViewById<View>(R.id.settings_about_section)
+                val accountPrivacy = activity.findViewById<TextView>(
+                    R.id.account_privacy_policy_button,
+                )
                 val filing = activity.findViewById<TextView>(R.id.settings_app_filing_link)
                 val language = activity.findViewById<View>(R.id.settings_language_section)
                 val localData = activity.findViewById<View>(R.id.settings_local_data_section)
@@ -1825,6 +1832,10 @@ class MainNavigationSmokeTest {
                 assertTrue(
                     "Privacy entry must remain inside the about section",
                     activity.findViewById<View>(R.id.privacy_policy_button).parent === about,
+                )
+                assertTrue(
+                    "The account area must always expose a prominent privacy-policy entry",
+                    accountPrivacy.isClickable && accountPrivacy.text.isNotBlank(),
                 )
                 assertTrue("APP filing entry must remain inside About", filing.parent === about)
                 assertEquals("APP 备案：琼ICP备2026012322号-2A", filing.text.toString())

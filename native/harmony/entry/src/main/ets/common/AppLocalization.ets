@@ -272,6 +272,21 @@ export class AppLocalization {
     'APP 备案：琼ICP备2026012322号-2A': 'App filing: 琼ICP备2026012322号-2A',
     'GitHub 项目主页': 'GitHub Project',
     '隐私说明': 'Privacy Notice',
+    '隐私政策提示': 'Privacy Policy Notice',
+    '欢迎使用 Where To Study。请在使用前阅读并同意隐私政策，了解教务账号、课表、系统日历、天气及公开活动数据的处理方式。':
+      'Welcome to Where To Study. Before using the app, read and accept the Privacy Policy to understand how school accounts, schedules, calendars, weather, and public-event data are handled.',
+    '阅读完整隐私政策': 'Read the Full Privacy Policy',
+    '阅读隐私政策': 'Read the Privacy Policy',
+    '同意状态仅保存在本机，不会上传。':
+      'Your consent choice is stored only on this device and is never uploaded.',
+    '你已拒绝隐私政策，无法进入应用主功能。你仍可阅读政策并重新选择。':
+      'You declined the Privacy Policy, so the app\'s main features are unavailable. You may still read the policy and reconsider.',
+    '无法在本机保存同意状态，请稍后重试。':
+      'Unable to save your consent on this device. Try again later.',
+    '拒绝': 'Decline',
+    '同意并继续': 'Accept and Continue',
+    '正在保存…': 'Saving…',
+    '正在读取隐私设置…': 'Loading privacy settings…',
     '桌面小组件': 'Home Screen Card',
     '显示课程地点': 'Show Course Location',
     '显示任课教师': 'Show Instructor',
