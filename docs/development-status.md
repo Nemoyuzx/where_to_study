@@ -1,14 +1,23 @@
-# v0.2.8 正式发布检查点（2026-09-05）
+# v0.2.8 正式发布与 iOS 0.2.9 TestFlight 热修检查点（2026-09-05）
 
 ## 当前状态
 
 - 分支：`main`
 - 当前稳定版本：[Where To Study v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；GitHub Release 已转为正式版并更新 `releases/latest`
-- 应用版本：`0.2.8`
-- 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002021`；Tauri Android `versionCode=2011`
+- 应用版本：GitHub 与跨平台源码默认版本 `0.2.8`；最新 iOS TestFlight 热修 `0.2.9 (80)`
+- 当前构建号：Apple 源码默认 `CURRENT_PROJECT_VERSION=79`，最新已上传 iOS 为 build 80、macOS 为 build 77；Android `versionCode=45`；HarmonyOS `versionCode=1002021`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：iOS 与 macOS build 77 均由本地 Xcode 上传，macOS 已收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing；HarmonyOS 1002021 已由 DevEco 上传且云测试通过，只通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；Android APK 已从 `49f23bc` 重新构建并替换，远端下载后与本地签名包逐字节一致，其余 10 个附件未改变。项目按 GPL-3.0-only 开源
+- 发布边界：iOS `0.2.9 (80)` 与 macOS `0.2.8 (77)` 均由本地 Xcode 上传并收到 `EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing；本次只更新 iOS，未重新归档或上传 macOS。HarmonyOS 1002021 已由 DevEco 上传且云测试通过，只通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；Android APK 已从 `49f23bc` 重新构建并替换，远端下载后与本地签名包逐字节一致，其余 10 个附件未改变。项目按 GPL-3.0-only 开源
+
+## iOS 0.2.9 TestFlight 性能热修
+
+- 提交：`bc1dce3`（`perf(ios): decouple navigation from data loading`），已推送至 `origin/main`。
+- 一级栏目选择从全局 `AppModel` 发布链移到 iOS 本地状态，避免一次 tab 切换使四个重页面同时失效重绘；iPad 侧栏与语言往返继续保留当前选择，macOS 仍使用原导航状态。
+- 展开的月视图只保留等高轻量 viewport，不再创建完全不可见的课程、作业、黄历和活动 DDL 卡片树；返回教学日历时不再主动清空有界月/年快照缓存。
+- 班车在 iOS 根层提前异步预热，查询页复用结果；真实与内置示例模式使用独立 Store，旧请求不能跨模式覆盖当前页面。
+- 本地 Xcode 完整结果为 macOS 237 通过、1 项联网门控跳过、0 失败；iOS 267 通过、6 项设备/联网门控跳过、0 失败。最终隔离补丁另有 15 项针对性测试通过、1 项显式联网门控跳过、0 失败。
+- iOS 主应用和 Widget 的正式归档均为 `0.2.9 (80)`；Automatic signing 归档、Apple Distribution 导出校验及上传完成，收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。未打开 App Store Connect 检查 processing，也未修改 GitHub `v0.2.8` Release 或其他平台制品。
 
 ## 本次完成内容
 

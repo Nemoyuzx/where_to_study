@@ -61,7 +61,7 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 | Linux | Tauri 2 + React + Rust | `v0.2.8` 正式版 GUI 来自 [run 33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`），CLI/TUI 来自 [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`） |
 | CLI | Rust（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-cli` 发布 Linux x86_64/arm64 构建，并新增班车/重要事件命令，见 [wts-cli/README.md](./wts-cli/README.md) |
 | 终端 TUI | Rust + ratatui（复用共享核心逻辑） | `v0.2.8` 的 `where-to-study-tui` 发布 Linux x86_64/arm64 构建；主分支已将班车/重要事件改为独立一级“查询”标签，见 [wts-tui/README.md](./wts-tui/README.md) |
-| iOS | SwiftUI 原生 | `0.2.8 (77)` 日历与事件渲染修复构建已上传 TestFlight；不作为 GitHub Release 附件 |
+| iOS | SwiftUI 原生 | `0.2.9 (80)` 导航与月视图性能热修已由本地 Xcode 上传 TestFlight；不作为 GitHub Release 附件 |
 | HarmonyOS | ArkTS + ArkUI（HarmonyOS NEXT 6.1.1 / API 24） | `0.2.8 (1002021)` 的 139 项单元测试、签名 APP/HAP 与 DevEco 云测试已通过；本次同步修复周→月日期条切换时序，并把月视图最高档改为完整网格平移裁剪；安装与测试仅通过 AppGallery Connect 分发，不在 GitHub 上传安装包 |
 
 > Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。
@@ -75,7 +75,7 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 Windows/Linux GUI 分别来自 [run 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`），CLI/TUI 分别来自 [run 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）；已证明这些提交到最终 `main` 的全部运行时代码输入无差异，因此没有重复触发构建。桌面刷新附件来自 main push，Android APK 使用本地固定维护者密钥构建；tag-only attestation 按设计跳过，不声称这些刷新附件具有 tag/Sigstore 来源证明。
 
-GitHub 不上传 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP。本版本新增班车与重要事件查询、滚动增量渲染、完整本地收藏、按开关区分的日程颜色和鸿蒙系统导航条安全区适配；Android 热修还修复了班车页底部遮挡、非首周日期上划后的月格裁剪、查询分段裁切和手机导航尺寸/动画，并在设置中展示 APP 备案号。完整中英文改动见 [0.2.8 发布说明](./docs/release-v0.2.8.md)。iOS 与 macOS `0.2.8 (77)` 均已由本地 Xcode 上传 TestFlight；按约定不检查 App Store Connect processing。GitHub DMG 是未公证的开源预览包，Windows 安装器尚无公众 Authenticode 签名。
+GitHub 不上传 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP。本版本新增班车与重要事件查询、滚动增量渲染、完整本地收藏、按开关区分的日程颜色和鸿蒙系统导航条安全区适配；Android 热修还修复了班车页底部遮挡、非首周日期上划后的月格裁剪、查询分段裁切和手机导航尺寸/动画，并在设置中展示 APP 备案号。完整中英文改动见 [0.2.8 发布说明](./docs/release-v0.2.8.md)。后续 iOS `0.2.9 (80)` 性能热修见 [iOS 0.2.9 TestFlight 说明](./docs/release-v0.2.9.md)；macOS 最新已上传版本仍为 `0.2.8 (77)`。两者均以上传脚本成功为完成边界，按约定不检查 App Store Connect processing。GitHub DMG 是未公证的开源预览包，Windows 安装器尚无公众 Authenticode 签名。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 
