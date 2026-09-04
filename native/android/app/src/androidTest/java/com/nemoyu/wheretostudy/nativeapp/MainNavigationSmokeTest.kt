@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.app.job.JobScheduler
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
@@ -126,7 +127,7 @@ class MainNavigationSmokeTest {
                     activity.findViewById<View?>(R.id.calendar_phone_header),
                 )
                 val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
-                assertTrue((grid.getChildAt(0) as ViewGroup).getChildAt(0).performClick())
+                assertTrue((grid.getChildAt(1) as ViewGroup).getChildAt(3).performClick())
             }
             Thread.sleep(500L)
             instrumentation.waitForIdleSync()
@@ -174,7 +175,7 @@ class MainNavigationSmokeTest {
                 val details = activity.findViewById<ScrollView>(
                     R.id.calendar_month_selected_details,
                 )
-                assertSelectedWeekMonthViewport(activity)
+                assertSelectedWeekMonthViewport(activity, expectedWeekIndex = 1)
                 assertTrue(
                     "Drag distance beyond the third anchor must continue into detail scrolling",
                     details.scrollY > 0,
@@ -210,7 +211,7 @@ class MainNavigationSmokeTest {
                 val details = activity.findViewById<ScrollView>(
                     R.id.calendar_month_selected_details,
                 )
-                assertSelectedWeekMonthViewport(activity)
+                assertSelectedWeekMonthViewport(activity, expectedWeekIndex = 1)
                 assertTrue(
                     "Activity recreation must retain the detail scroll position",
                     details.scrollY > 0,
@@ -265,7 +266,7 @@ class MainNavigationSmokeTest {
                 val details = activity.findViewById<ScrollView>(
                     R.id.calendar_month_selected_details,
                 )
-                assertSelectedWeekMonthViewport(activity)
+                assertSelectedWeekMonthViewport(activity, expectedWeekIndex = 1)
                 assertFalse(
                     "The delegated pull should be allowed to finish at the top",
                     details.canScrollVertically(-1),
@@ -1335,7 +1336,7 @@ class MainNavigationSmokeTest {
                     }
                     val selectedDates = (0 until strip.childCount)
                         .map { index -> strip.getChildAt(index) as TextView }
-                        .filter { date -> date.currentTextColor == Palette.onPrimary }
+                        .filter { date -> gradientFillColor(date) == Palette.selectedDate }
                     assertEquals("Exactly one compact date must be selected", 1, selectedDates.size)
                     assertEquals(
                         "Compact day/week selection must use the independent selected-date token",
@@ -2693,11 +2694,17 @@ class MainNavigationSmokeTest {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
 
-    private fun assertSelectedWeekMonthViewport(activity: MainActivity) {
+    private fun assertSelectedWeekMonthViewport(
+        activity: MainActivity,
+        expectedWeekIndex: Int? = null,
+    ) {
         val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
         val viewport = activity.findViewById<View>(R.id.calendar_month_grid_viewport)
         val collapsedRowHeight = activity.dp(TeachingCalendarLogic.monthCellHeightDp(false))
         val selectedWeekIndex = grid.tag as Int
+        expectedWeekIndex?.let {
+            assertEquals("The tapped non-first week must remain selected", it, selectedWeekIndex)
+        }
         repeat(grid.childCount) { rowIndex ->
             assertEquals(
                 "Raising details must preserve every month row's compact height",
@@ -2705,6 +2712,12 @@ class MainNavigationSmokeTest {
                 grid.getChildAt(rowIndex).height,
             )
         }
+        assertEquals(
+            "The clipped viewport must not constrain the intact month grid's measured height",
+            collapsedRowHeight * grid.childCount,
+            grid.height,
+        )
+        assertEquals(grid.height, grid.measuredHeight)
         assertEquals(
             "The raised-details detent must clip the month to one week",
             collapsedRowHeight,
@@ -2716,6 +2729,33 @@ class MainNavigationSmokeTest {
             grid.translationY,
             1f,
         )
+        val viewportRect = Rect()
+        assertTrue(viewport.getGlobalVisibleRect(viewportRect))
+        repeat(grid.childCount) { rowIndex ->
+            val row = grid.getChildAt(rowIndex)
+            val location = IntArray(2).also(row::getLocationOnScreen)
+            val rowRect = Rect(
+                location[0],
+                location[1],
+                location[0] + row.width,
+                location[1] + row.height,
+            )
+            val intersection = Rect(rowRect)
+            val intersectsViewport = intersection.intersect(viewportRect)
+            if (rowIndex == selectedWeekIndex) {
+                assertTrue(intersectsViewport)
+                assertEquals(
+                    "The selected week must be the row positioned inside the viewport",
+                    viewportRect,
+                    intersection,
+                )
+            } else {
+                assertFalse(
+                    "Only the selected week may intersect the viewport at the highest detent",
+                    intersectsViewport,
+                )
+            }
+        }
     }
 
     private fun assertFullMonthViewport(activity: MainActivity) {

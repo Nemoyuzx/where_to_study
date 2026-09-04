@@ -207,6 +207,15 @@ private class MonthDetailsScrollView(context: Context) : ScrollView(context) {
         isDetailsScrollingEnabled && super.onTouchEvent(event)
 }
 
+private class MonthGridViewport(context: Context) : FrameLayout(context) {
+    override fun dispatchDraw(canvas: Canvas) {
+        val saveCount = canvas.save()
+        canvas.clipRect(0f, 0f, width.toFloat(), height.toFloat())
+        super.dispatchDraw(canvas)
+        canvas.restoreToCount(saveCount)
+    }
+}
+
 object TeachingCalendarLogic {
     const val swipeThresholdDp = 72
     const val expansionVelocityThresholdDpPerSecond = 640f
@@ -449,6 +458,9 @@ object TeachingCalendarLogic {
             .roundToInt()
             .coerceAtLeast(resolvedRowHeight)
     }
+
+    fun monthGridContentHeight(rowCount: Int, rowHeight: Int): Int =
+        rowCount.coerceAtLeast(0) * rowHeight.coerceAtLeast(0)
 
     fun monthGridTranslationY(
         position: Float,
@@ -2387,13 +2399,16 @@ internal class TeachingCalendarPage(
                 ))
             }
         }
-        addView(FrameLayout(activity).apply {
+        addView(MonthGridViewport(activity).apply {
             id = R.id.calendar_month_grid_viewport
             clipChildren = true
             clipToPadding = true
             addView(grid, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+                TeachingCalendarLogic.monthGridContentHeight(
+                    rowCount = grid.childCount,
+                    rowHeight = initialRowHeightPx,
+                ),
             ))
         }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -2811,6 +2826,12 @@ internal class TeachingCalendarPage(
             expandedHeightDp = expandedMonthCellHeightDp,
         )
         val rowHeightPx = activity.dp(rowHeightDp)
+        grid.layoutParams = grid.layoutParams.apply {
+            height = TeachingCalendarLogic.monthGridContentHeight(
+                rowCount = grid.childCount,
+                rowHeight = rowHeightPx,
+            )
+        }
         repeat(grid.childCount) { rowIndex ->
             val row = grid.getChildAt(rowIndex) as ViewGroup
             row.layoutParams = row.layoutParams.apply {
