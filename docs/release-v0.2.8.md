@@ -24,6 +24,7 @@
 - HarmonyOS build 1002017 修复手机月视图动画结束后仍回到旧月份的问题：翻页完成会提交目标月份与选中日期，并继续保留双页横向动画、相邻月预热和三档日程面板手势。对应热修提交为 [`15d4e33`](https://github.com/Nemoyuzx/where_to_study/commit/15d4e33219db0bcad404339890561b5f4d7ca680)。
 - HarmonyOS 的系统安全存储查询现显式使用 `ReturnType.ALL`，确保能读取已保存账号的完整属性，不再把字段缺失误报为“系统安全存储不可用”；隔离 alias 的新增、读取、更新和删除设备回归均通过。
 - HarmonyOS build 1002018 修复真实账号登录后的课表刷新：无请求体 POST 省略空 `extraData`，避免 NetworkKit `401 Parameter error`；默认地址族失败时仅对固定教务主机回退一次 IPv4；DNS、超时和 TLS 错误会显示脱敏错误码，而不再统一伪装成“无网络”。对应修复提交为 [`4266e22`](https://github.com/Nemoyuzx/where_to_study/commit/4266e22)。
+- HarmonyOS build 1002021 修复手机周视图切到月视图时日期条晚于页面切换的问题；月视图从紧凑全月上划到最高档时不再压缩非选中周，而是保持完整六行网格并通过动态视口裁剪、整体平移露出选中周。对应修复提交为 [`809e69f`](https://github.com/Nemoyuzx/where_to_study/commit/809e69f)。
 - 本地课表缓存现正确接受“缓存目录已存在”，不再把 `13900015 File exists` 当成写入失败；三处响应解码同时改用 API 24 的 `TextDecoder.create().decodeToString()`。
 - HarmonyOS 底部导航继续读取系统导航指示条/系统避让区，四个交互控件至少避让物理屏幕底部 28vp；增量事件列表与独立日程颜色保持不变。
 - iPhone 年视图在横竖屏都为悬浮底部导航预留完整净空；12 月最后一日可滚动到导航条上方并点击打开详情。
@@ -43,7 +44,7 @@
 - iOS：`0.2.8 (77)`
 - 原生 macOS：`0.2.8 (77)`
 - Android：`0.2.8 (45)`
-- HarmonyOS：`0.2.8 (1002018)`
+- HarmonyOS：`0.2.8 (1002021)`
 - Tauri Android 兼容元数据：`versionCode=2011`
 - Legacy Tauri iOS：build 47
 
@@ -54,7 +55,7 @@
 - GitHub 不上传 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；AAB 保留给应用商店/内部交付，HarmonyOS 仅通过 AppGallery Connect 分发。
 - iOS 与正式签名 macOS 通过 TestFlight 分发，不上传 iOS 制品；GitHub macOS DMG 是未公证的开源预览包。
 - iOS 与 macOS `0.2.8 (77)` 均由本地 Xcode 完成上传；macOS 流程收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`。Apple 平台以上传脚本成功为完成边界，按约定不继续检查 App Store Connect processing。
-- HarmonyOS `0.2.8 (1002018)` 已由 DevEco 以“测试和正式上架”上传并通过云测试；邀请测试沿用[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)。
+- HarmonyOS `0.2.8 (1002021)` 已由 DevEco 以“测试和正式上架”上传并通过云测试；邀请测试沿用[分享链接（已含邀请码）](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3)。
 - Windows/Linux GUI 分别来自 [main push run 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`）；CLI/TUI 分别来自 [run 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）。已证明这些提交到最终 `main` 的全部运行时代码输入无差异，因此没有重复 dispatch。
 - 上述刷新附件均来自 main push 构建，tag-only attestation 按设计跳过，不声称具有 tag/Sigstore 来源证明。Windows 安装器仍未使用公众 Authenticode 证书。
 - Android Universal APK 已从 `49f23bc` 使用本地固定维护者密钥重新构建并替换，GitHub SHA-256 为 `b9fc08cf0229af709c57f5992e512fd48e087e1194e26e385f01189dff6581d8`；其余 10 个附件保持不变。
@@ -96,6 +97,7 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - HarmonyOS build 1002017 fixes month paging that could animate to the next page and then restore the old month. Completing the transition now commits the destination month and selected date while preserving double-page motion, adjacent-month preheating, and the three-stop details sheet. The hotfix is [`15d4e33`](https://github.com/Nemoyuzx/where_to_study/commit/15d4e33219db0bcad404339890561b5f4d7ca680).
 - HarmonyOS secure-storage queries now explicitly request `ReturnType.ALL`, so saved account attributes are returned in full instead of being misreported as unavailable. Isolated-alias add, load, update, and delete device checks passed.
 - HarmonyOS build 1002018 fixes schedule refresh after a successful real-account login. Bodyless POST requests now omit empty `extraData`, avoiding NetworkKit `401 Parameter error`; a failed default address-family route gets one IPv4 retry for the pinned academic host; and DNS, timeout, and TLS failures expose a redacted error code instead of all being labeled offline. The fix is [`4266e22`](https://github.com/Nemoyuzx/where_to_study/commit/4266e22).
+- HarmonyOS build 1002021 synchronizes the compact date strip with the target mode when moving from Week to Month. Raising Month from the compact full-grid detent now keeps all six rows intact and reveals the selected week through a shrinking clipped viewport plus whole-grid translation instead of squashing the other rows. The fix is [`809e69f`](https://github.com/Nemoyuzx/where_to_study/commit/809e69f).
 - Schedule persistence now treats an existing cache directory as the expected idempotent case instead of failing on `13900015 File exists`. All three response decoders now use the API 24 `TextDecoder.create().decodeToString()` path.
 - HarmonyOS bottom navigation continues to follow the system/navigation-indicator avoid area and keeps all four controls at least 28vp above the physical display bottom; incremental event rendering and independent deadline colors remain intact.
 - The iPhone year view reserves full floating-tab clearance in both orientations; December 31 remains scrollable, visible above the tab bar, and tappable.
@@ -116,7 +118,7 @@ This is the release note for the cross-platform `0.2.8` stable release, focused 
 - GitHub publishes no Android AAB, HarmonyOS APP/HAP, iOS artifact, SHA-256 sidecar, or native macOS ZIP. AAB remains store/internal-only, and HarmonyOS is distributed only through AppGallery Connect.
 - iOS and the distribution-signed macOS build are delivered through TestFlight. No iOS artifact is published on GitHub; the GitHub DMG remains an unnotarized open-source preview.
 - iOS and macOS `0.2.8 (77)` were both uploaded from local Xcode. The macOS flow reported `Validated signed archive`, `EXPORT SUCCEEDED`, and `Upload succeeded`. The upload script is the Apple completion boundary, and App Store Connect processing was intentionally not inspected afterward.
-- HarmonyOS `0.2.8 (1002018)` was uploaded for testing and release through DevEco and passed cloud testing. The [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) remains the public test entry.
+- HarmonyOS `0.2.8 (1002021)` was uploaded for testing and release through DevEco and passed cloud testing. The [invite link with its code](https://appgallery.huawei.com/link/invite-test-wap?taskId=b4f098663ce7375007fb19b098feace9&invitationCode=A0IsJpKIcn3) remains the public test entry.
 - Windows and Linux GUI artifacts came from main-push [runs 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) and [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143) at `04a355c`; CLI/TUI came from [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) and [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633) at `6e92141`. Every runtime code input from those commits through final `main` was proven unchanged, so no duplicate dispatch was needed.
 - These refreshed assets are main-push builds, so the tag-only attestation step was skipped by design. No tag/Sigstore provenance claim is made for them. The Windows installer still lacks a public Authenticode publisher certificate.
 - The Android Universal APK was rebuilt from `49f23bc` with the pinned local maintainer key and replaced in place. Its GitHub SHA-256 is `b9fc08cf0229af709c57f5992e512fd48e087e1194e26e385f01189dff6581d8`; the other ten assets are unchanged.

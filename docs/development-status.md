@@ -1,14 +1,14 @@
-# v0.2.8 正式发布检查点（2026-09-03）
+# v0.2.8 正式发布检查点（2026-09-05）
 
 ## 当前状态
 
 - 分支：`main`
 - 当前稳定版本：[Where To Study v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；GitHub Release 已转为正式版并更新 `releases/latest`
 - 应用版本：`0.2.8`
-- 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002018`；Tauri Android `versionCode=2011`
+- 当前构建号：Apple `CURRENT_PROJECT_VERSION=77`；Android `versionCode=45`；HarmonyOS `versionCode=1002021`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：iOS 与 macOS build 77 均由本地 Xcode 上传，macOS 已收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing；HarmonyOS 1002018 已由 DevEco 上传且云测试通过，只通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；Android APK 已从 `49f23bc` 重新构建并替换，远端下载后与本地签名包逐字节一致，其余 10 个附件未改变。项目按 GPL-3.0-only 开源
+- 发布边界：iOS 与 macOS build 77 均由本地 Xcode 上传，macOS 已收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing；HarmonyOS 1002021 已由 DevEco 上传且云测试通过，只通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；Android APK 已从 `49f23bc` 重新构建并替换，远端下载后与本地签名包逐字节一致，其余 10 个附件未改变。项目按 GPL-3.0-only 开源
 
 ## 本次完成内容
 
@@ -107,7 +107,7 @@
 | Apple | 本地 Xcode 严格构建与完整平台测试通过；基础套件 26 项 UI 中 21 通过、5 项设备/线上门控跳过、0 失败；横竖屏年视图和生产班车 Store/UI 门控另行执行并通过 |
 | TestFlight | iOS 与 macOS `0.2.8 (77)` 均已上传；macOS 收到 `Validated signed archive`、`EXPORT SUCCEEDED` 与 `Upload succeeded`。按约定以上传脚本成功为完成边界，不打开 App Store Connect 检查 processing 或测试组状态 |
 | Android | `0.2.8 (45)` 的 201/201 Release JVM 测试、Lint、固定证书签名 APK/AAB、指纹、ZIP 对齐、版本及 HTTPS-only 校验通过；API 36 手机查询页 5/5、浅色和深色完整导航、非首周月视图滚动交接通过，并对第二周与第五周完成深浅色视觉复核 |
-| HarmonyOS | `0.2.8 (1002018)` 的 136/136 ArkTS 单元测试、签名 HAP/APP、打包版本、发布签名和三项 API 校验通过；Pura 90 完整设备测试 12/12、手机 UI 21/21、真实 SJD 登录/无请求体课表 POST、重复缓存写入及获授权真实账号“保存→课表→重启→ASSET 再读取”均通过；DevEco 已上传 AGC 且云测试为“通过” |
+| HarmonyOS | `0.2.8 (1002021)` 的 139/139 ArkTS 单元测试、签名 HAP/APP、打包版本、发布签名和三项 API 校验通过；周→月日期条使用动画目标模式同步切换，月视图最高档保持完整六行网格并通过视口裁剪/平移显示选中周；DevEco 已上传 AGC 且云测试为“通过”。本机模拟器镜像当前不可用，本次交互视觉验证由逻辑几何回归与 DevEco 云测试覆盖 |
 | GitHub | `v0.2.8` 已发布为正式版并更新 `releases/latest`；Android APK 已从 `49f23bc` 重新构建并替换，SHA-256 为 `b9fc08cf0229af709c57f5992e512fd48e087e1194e26e385f01189dff6581d8`，远端下载后与本地签名包逐字节一致，其余 10 个附件的名称、大小、摘要与资产 ID 未改变。Windows/Linux GUI 为 [runs 33467351916](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467351916) / [33467352143](https://github.com/Nemoyuzx/where_to_study/actions/runs/33467352143)（`04a355c`），CLI/TUI 为 [runs 33378927605](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927605) / [33378927633](https://github.com/Nemoyuzx/where_to_study/actions/runs/33378927633)（`6e92141`）；桌面刷新附件来自 main push，Android APK 使用本地固定维护者密钥构建，tag-only attestation 已跳过，不声明 tag/Sigstore 来源证明 |
 
 完整中英文发布说明见 [`release-v0.2.8.md`](release-v0.2.8.md)。
