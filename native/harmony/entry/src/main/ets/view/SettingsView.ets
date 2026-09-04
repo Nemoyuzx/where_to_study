@@ -82,6 +82,14 @@ export struct SettingsView {
     }
   }
 
+  private openAppFilingPage(): void {
+    try {
+      AppContext.get().openLink(AppMeta.appFilingURL);
+    } catch (e) {
+      // 系统无法打开链接时保持在当前页。
+    }
+  }
+
   @Builder
   settingsContent() {
     Scroll() {
@@ -1048,6 +1056,24 @@ export struct SettingsView {
         .width('100%')
         .padding({ bottom: this.isCompact() ? 8 : 12 })
 
+      Button(this.model.text(AppMeta.appFilingLabel))
+        .type(ButtonType.Normal)
+        .stateEffect(true)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.primary())
+        .borderRadius(6)
+        .border({ width: 1, color: AppTheme.border() })
+        .backgroundColor(AppTheme.surface())
+        .width('100%')
+        .height(36)
+        .id('settings.app_filing')
+        .accessibilityText(this.model.text(AppMeta.appFilingLabel))
+        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+        .onClick(() => {
+          this.openAppFilingPage();
+        })
+      Blank().height(7)
       this.linkButton('GitHub 项目主页', (): void => {
         this.openProjectPage();
       })

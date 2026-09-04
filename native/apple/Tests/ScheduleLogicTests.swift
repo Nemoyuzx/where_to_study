@@ -839,6 +839,15 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertFalse(SettingsLayoutPolicy.leadingColumn.contains(.language))
     }
 
+    func testAppFilingInformationUsesPublishedNumberAndMIITRegistry() {
+        XCTAssertEqual(AppFilingInformation.displayText, "APP 备案：琼ICP备2026012322号-2A")
+        XCTAssertEqual(AppFilingInformation.registryURL.absoluteString, "https://beian.miit.gov.cn/")
+        XCTAssertEqual(
+            AppLocalization.string(AppFilingInformation.displayText, language: .english),
+            "App filing: 琼ICP备2026012322号-2A"
+        )
+    }
+
     func testCompactTabIdentityRoundTripsWithInterfaceLanguage() {
         let chinese = AdaptiveLayoutPolicy.compactTabIdentity(
             languageRawValue: AppLanguage.simplifiedChinese.rawValue

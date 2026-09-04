@@ -624,6 +624,9 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["settings.language"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Interface Language"].exists)
+        let filingButton = app.descendants(matching: .any)["action.open-app-filing"]
+        revealByScrolling(visibleElement: filingButton, in: app)
+        XCTAssertEqual(filingButton.label, "App filing: 琼ICP备2026012322号-2A")
         XCTAssertTrue(app.buttons["English"].exists || app.staticTexts["English"].exists)
         XCTAssertTrue(app.textFields["settings.custom-deadlines-url"].exists)
         XCTAssertTrue(app.buttons["settings.custom-deadlines-save"].exists)
@@ -965,12 +968,29 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         defer { app.terminate() }
 
         navigate(to: "设置", in: app)
+        let filingButton = app.descendants(matching: .any)["action.open-app-filing"]
+        revealByScrolling(visibleElement: filingButton, in: app)
+        XCTAssertTrue(filingButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(filingButton.label, "APP 备案：琼ICP备2026012322号-2A")
         let openButton = app.descendants(matching: .any)["action.open-privacy-policy"]
         revealByScrolling(visibleElement: openButton, in: app)
         openButton.tap()
 
         XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"]
             .waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(
+                    format: "label CONTAINS %@",
+                    "本项目只运营用于整理公开班车与活动数据的固定接口"
+                )
+            ).firstMatch.waitForExistence(timeout: 5)
+        )
+        XCTAssertFalse(
+            app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", "项目不运营应用后端")
+            ).firstMatch.exists
+        )
         XCTAssertTrue(app.descendants(matching: .any)["action.open-privacy-github"]
             .waitForExistence(timeout: 5))
 

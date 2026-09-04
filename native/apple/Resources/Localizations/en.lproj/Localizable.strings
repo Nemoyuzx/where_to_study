@@ -185,6 +185,8 @@
 "内置示例模式已开启，不会连接教务服务或读写真实用户数据。" = "Built-in demo mode is enabled. It does not connect to academic services or access real user data.";
 "返回真实数据" = "Return to Live Data";
 "浏览内置示例数据" = "Browse Demo Data";
+"APP 备案：琼ICP备2026012322号-2A" = "App filing: 琼ICP备2026012322号-2A";
+"在工信部备案管理系统中查询备案信息" = "View the filing record in the MIIT registry";
 "隐私说明" = "Privacy Policy";
 "在应用内查看隐私声明" = "View the privacy policy in the app";
 "个人账户" = "Account";

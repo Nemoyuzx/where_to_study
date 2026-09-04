@@ -2,6 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import {
   AppLanguage, AppLanguageInfo, AppLocalization
 } from '../main/ets/common/AppLocalization';
+import { AppMeta } from '../main/ets/common/AppMeta';
 
 export default function appLocalizationTest() {
   describe('AppLocalizationTest', () => {
@@ -28,6 +29,11 @@ export default function appLocalizationTest() {
       expect(AppLocalization.text('系统安全存储不可用，账号密码未能保存，请稍后重试。',
         AppLanguage.english, 'en-US'))
         .assertEqual('Secure storage is unavailable. Your account and password were not saved. Try again later.');
+      expect(AppLocalization.text(AppMeta.appFilingLabel, AppLanguage.english, 'en-US'))
+        .assertEqual('App filing: 琼ICP备2026012322号-2A');
+      expect(AppLocalization.text(AppMeta.appFilingLabel, AppLanguage.simplifiedChinese, 'en-US'))
+        .assertEqual('APP 备案：琼ICP备2026012322号-2A');
+      expect(AppMeta.appFilingURL).assertEqual('https://beian.miit.gov.cn/');
       expect(AppLocalization.text('系统安全存储操作失败（24000002）。',
         AppLanguage.english, 'en-US'))
         .assertEqual('Secure storage failed (24000002).');

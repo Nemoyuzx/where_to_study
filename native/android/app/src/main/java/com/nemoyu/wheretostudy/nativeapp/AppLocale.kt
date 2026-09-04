@@ -295,7 +295,7 @@ object UiText {
         "清除本地数据" to "Clear Local Data",
         "关于本应用" to "About",
         "APP 备案：琼ICP备2026012322号-2A" to
-            "App filing: Qiong ICP No. 2026012322-2A",
+            "App filing: 琼ICP备2026012322号-2A",
         "隐私说明" to "Privacy",
         "GitHub 项目主页" to "GitHub Project",
         "在 GitHub 查看完整隐私声明" to "View Full Privacy Policy on GitHub",
@@ -502,8 +502,8 @@ object UiText {
             "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Contest DDL and campus notices provide public events. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."
         source.startsWith("日历写入和本地课程通知") ->
             "Calendar writes and local course notifications require your action and permission. The app manages only events marked Where To Study. Course widgets are provided only on supported systems, and their data is not uploaded."
-        source.startsWith("项目不运营应用后端") ->
-            "The project operates no application backend and includes no ads, analytics, or tracking SDKs. It does not collect GPS, contacts, advertising identifiers, diagnostics, or usage behavior. Third parties may process IP addresses and request times under their own policies."
+        source.startsWith("本项目只运营用于整理公开班车与活动数据的固定接口") ->
+            "The project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies."
         source.startsWith("凭据与缓存保留") ->
             "Credentials and caches remain on the device until replaced, cleared, or removed with the app. Clearing local data does not delete records held by the university or third parties."
         source.startsWith("请按 SECURITY.md") ->

@@ -12,6 +12,11 @@ enum SettingsSurfaceID: String, Hashable {
     case localData
 }
 
+enum AppFilingInformation {
+    static let displayText = "APP 备案：琼ICP备2026012322号-2A"
+    static let registryURL = URL(string: "https://beian.miit.gov.cn/")!
+}
+
 private struct FavoriteDeadlineManagementView: View {
     @EnvironmentObject private var model: AppModel
 
@@ -353,6 +358,23 @@ struct SettingsView: View {
                     .accessibilityIdentifier("action.enter-sample-mode")
                 }
                 Divider()
+                #if os(iOS)
+                Link(destination: AppFilingInformation.registryURL) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.seal")
+                        Text(model.localized(AppFilingInformation.displayText))
+                            .font(.callout)
+                            .multilineTextAlignment(.center)
+                    }
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel(Text(model.localized(AppFilingInformation.displayText)))
+                .accessibilityHint(
+                    Text(model.localized("在工信部备案管理系统中查询备案信息"))
+                )
+                .accessibilityIdentifier("action.open-app-filing")
+                #endif
                 Button {
                     AppHaptics.impact()
                     dismissKeyboard()

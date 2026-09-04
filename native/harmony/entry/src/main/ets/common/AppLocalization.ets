@@ -269,6 +269,7 @@ export class AppLocalization {
     '关于本应用': 'About',
     '北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。':
       'An independent unofficial BUPT schedule and empty-room client, not operated by BUPT.',
+    'APP 备案：琼ICP备2026012322号-2A': 'App filing: 琼ICP备2026012322号-2A',
     'GitHub 项目主页': 'GitHub Project',
     '隐私说明': 'Privacy Notice',
     '桌面小组件': 'Home Screen Card',

@@ -353,6 +353,8 @@ export default function primaryNavigationSmokeTest() {
       // 从语言卡片只向下滚动，依次验证 About、Local Data，覆盖真实
       // 虚拟化 Scroll 中的卡片顺序。
       expect(await findTextByScrollingDown(driver, 'About') !== null).assertTrue();
+      expect(await driver.findComponent(ON.id('settings.app_filing')) !== null).assertTrue();
+      expect(await findText(driver, 'App filing: 琼ICP备2026012322号-2A') !== null).assertTrue();
       expect(await findTextByScrollingDown(driver, 'Local Data') !== null).assertTrue();
     });
   });

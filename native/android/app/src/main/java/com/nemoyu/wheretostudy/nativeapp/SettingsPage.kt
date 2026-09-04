@@ -1337,8 +1337,8 @@ class SettingsPage(
             ("日历写入和本地课程通知需要你的操作与权限；应用只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供，相关数据不上传。\n\n" +
                 "Calendar writes and local course notifications require your action and permission, and only marked events are managed. Widgets exist only on supported platforms. This data is not uploaded."),
         "不收集的数据与第三方元数据 / Data not collected and third-party metadata" to
-            ("项目不运营应用后端，不含广告、分析或跟踪 SDK，也不收集 GPS、联系人、广告标识符、诊断或使用行为。第三方可能按各自政策处理 IP 和请求时间。\n\n" +
-                "The project operates no app backend and collects no GPS, contacts, advertising identifiers, diagnostics, or usage behavior. Third parties may process ordinary IP and request-time metadata."),
+            ("本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。\n\n" +
+                "The project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies."),
         "保留与删除 / Retention and deletion" to
             ("凭据与缓存保留在设备上，直到被替换、清除或随卸载移除；清除本地数据不会删除学校或第三方持有的记录。\n\n" +
                 "Credentials and caches stay on your device until replaced, cleared, or removed with the app. Clearing local data does not delete third-party records."),

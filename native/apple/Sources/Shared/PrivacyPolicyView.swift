@@ -53,7 +53,7 @@ struct PrivacyPolicyView: View {
                     )
                     privacySection(
                         title: "不收集的数据与第三方元数据 / Data not collected and third-party metadata",
-                        body: "项目不运营应用后端，不含广告、分析或行为跟踪 SDK，也不收集 GPS、联系人、广告标识符、诊断或使用行为。所连接的第三方服务可能按各自政策处理 IP 和请求时间等普通网络元数据。\n\nThe project operates no app backend and collects no GPS, contacts, advertising identifiers, diagnostics, or usage behavior. Connected third parties may process ordinary network metadata such as IP address and request time under their own policies."
+                        body: "本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。\n\nThe project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies."
                     )
                     privacySection(
                         title: "保留与删除 / Retention and deletion",
