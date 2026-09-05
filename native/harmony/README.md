@@ -32,7 +32,7 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 139 个契约单元测试
+./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 141 个契约单元测试
 ./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 21 项、宽屏 11 项）
 ```
 
@@ -44,6 +44,8 @@
 native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示例模式与日历断言）。
 
 ## 签名与发布
+
+最新 `0.2.8 (1002022)` 已按 [2026-09-05 完整云测试报告](../../docs/harmony-cloud-test-2026-09-05.md) 优化月视图节点刷新、日期缓存、禁用按钮对比度、侧栏图标与普通滚动边界反馈。141 项单元测试、51 项主题/发布检查和 release 签名验证通过，DevEco 上传完成并显示快速云测试通过；Mate 60 性能、Mate X5 UX 评分及平板/2in1 覆盖仍以新完整报告为准。
 
 - **模拟器/调试**：无需配置签名。hdc 可直接安装 debug HAP；DevEco 运行 entry
   时会自动生成本地调试签名。

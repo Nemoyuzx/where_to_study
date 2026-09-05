@@ -27,6 +27,10 @@
 
 本地 `assembleHap`、`assembleApp`、141 项 ArkTS 单元测试、51 项主题/发布契约检查全部通过；独立 `hap-sign-tool verify-app` 验证 release 签名成功，APP 的 `pack.info` 已核对为 `0.2.8 (1002022)`。
 
-候选鸿蒙包为 `0.2.8 (1002022)`。本机 DevEco 设备管理器显示既有模拟器均缺少系统镜像，hdc 没有连接设备，因此本次未把设备视觉回归或新的性能指标报为通过。新包是否达到 Mate 60 的时延/丢帧门槛、Mate X5 的图标评分，以及平板/2in1 覆盖，仍需新的完整云测试验证。
+`0.2.8 (1002022)` 已通过 DevEco“构建 → 上传产品 → 测试和发布”上传 AppGallery Connect，上传流程显示“云测试结果：通过”。已再次核对 DevEco 生成的 `pack.info` 为 versionCode 1002022、versionName 0.2.8（单独 build 字段为 1）；该快速检查不代表上述完整上架性能/UX 报告已达标。
+
+上传产物摘要：APP SHA-256 `25464544658f8927eac39ae23c8f3186862b3c8fcf7d7a2b95afed882988cc6d`；HAP SHA-256 `e89ce189e3de0453725e41de79b4dee5f6f2f65cab470610773d4144b1eedfdd`。鸿蒙安装包只通过 AppGallery 分发，不上传 GitHub 附件。
+
+本机 DevEco 设备管理器显示既有模拟器均缺少系统镜像，hdc 没有连接设备，因此本次未把设备视觉回归或新的性能指标报为通过。新包是否达到 Mate 60 的时延/丢帧门槛、Mate X5 的图标评分，以及平板/2in1 覆盖，仍需新的完整云测试验证。
 
 The original full AGC report failed performance and UX checks despite passing compatibility, stability, and power tests. The fixes preserve month/year page instances, reuse bounded day-data caches, update selected-day content reactively, improve disabled-button contrast and sidebar calendar-symbol rendering, and restore boundary feedback for ordinary scroll views. The month-details gesture handoff remains unchanged. Local compilation and logic checks are distinct from device performance measurements; a new full cloud report is required to confirm the reported thresholds and tablet/2in1 coverage.

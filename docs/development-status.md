@@ -5,10 +5,16 @@
 - 分支：`main`
 - 当前稳定版本：[Where To Study v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；GitHub Release 已转为正式版并更新 `releases/latest`
 - 应用版本：GitHub 与跨平台源码默认版本 `0.2.8`；最新 iOS TestFlight 热修 `0.2.9 (80)`
-- 当前构建号：Apple 源码默认 `CURRENT_PROJECT_VERSION=79`，最新已上传 iOS 为 build 80、macOS 为 build 77；Android `versionCode=45`；HarmonyOS `versionCode=1002021`；Tauri Android `versionCode=2011`
+- 当前构建号：Apple 源码默认 `CURRENT_PROJECT_VERSION=79`，最新已上传 iOS 为 build 80、macOS 为 build 77；Android `versionCode=45`；HarmonyOS `versionCode=1002022`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：iOS `0.2.9 (80)` 与 macOS `0.2.8 (77)` 均由本地 Xcode 上传并收到 `EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing；本次只更新 iOS，未重新归档或上传 macOS。HarmonyOS 1002021 已由 DevEco 上传且云测试通过，只通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；Android APK 已从 `49f23bc` 重新构建并替换，远端下载后与本地签名包逐字节一致，其余 10 个附件未改变。项目按 GPL-3.0-only 开源
+- 发布边界：iOS `0.2.9 (80)` 与 macOS `0.2.8 (77)` 均由本地 Xcode 上传并收到 `EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing。HarmonyOS `0.2.8 (1002022)` 已由 DevEco 上传，快速测试通过；原完整上架报告的性能/UX 问题已对应优化，最终指标待新完整报告确认，见下方记录。鸿蒙仅通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；本次未替换 GitHub 附件。项目按 GPL-3.0-only 开源
+
+## HarmonyOS 1002022 云测试问题修复
+
+- `3dcd534` 根据 AGC 报告 1302805728016945540 的两份真实 trace，稳定月/年页面实例、缓存日期数据，避免月内点选整页重建及拖动时反复筛选排序。
+- 改善设置禁用按钮对比度、侧栏日历图标尺寸和普通列表边界回弹；141 项 ArkTS 单测、51 项主题/发布检查及正式 HAP 签名验证通过。
+- 已通过 DevEco 上传用于测试和发布，快速云测试显示通过；本机模拟器镜像缺失，设备视觉、Mate 60 性能、Mate X5 图标分数及平板/2in1 覆盖须由新完整云测复核。详细证据与分发摘要见 [修复记录](harmony-cloud-test-2026-09-05.md)。
 
 ## iOS 0.2.9 TestFlight 性能热修
 
