@@ -142,6 +142,8 @@ struct CalendarTimelineDay: Identifiable {
     let courses: [Course]
     let holidays: [HolidayItem]
     let allDayEvents: [CalendarAllDayEvent]
+    let coursePlacements: [CalendarCoursePlacement]
+    let courseTrackCount: Int
 
     init(
         date: Date,
@@ -152,6 +154,9 @@ struct CalendarTimelineDay: Identifiable {
         self.date = date
         self.courses = courses
         self.holidays = holidays
+        let placements = CalendarTimelineLogic.placeCourses(courses)
+        coursePlacements = placements
+        courseTrackCount = max(placements.map(\.track).max().map { $0 + 1 } ?? 1, 1)
         self.allDayEvents = allDayEvents ?? holidays.map { holiday in
             CalendarAllDayEvent(
                 id: "holiday-\(holiday.id)",
@@ -162,6 +167,13 @@ struct CalendarTimelineDay: Identifiable {
     }
 
     var id: Date { date }
+}
+
+struct CalendarCoursePlacement: Identifiable, Equatable, Sendable {
+    let course: Course
+    let track: Int
+
+    var id: String { "\(course.id)|\(track)" }
 }
 
 enum CalendarTimelineLogic {
@@ -235,18 +247,30 @@ enum CalendarTimelineLogic {
         return CGFloat(dayCount) * minimumDayWidth
     }
 
-    static var wholeHourMinutes: [Int] {
-        Array(stride(from: startMinute, through: endMinute, by: 60))
-    }
+    static let wholeHourMinutes = Array(stride(from: startMinute, through: endMinute, by: 60))
 
-    static var courseBoundaryMinutes: [Int] {
+    static let courseBoundaryMinutes: [Int] = {
         Array(Set(SlotMetadata.defaults.flatMap { slot in
             [minute(of: slot.start), minute(of: slot.end)].compactMap { $0 }
         })).sorted()
-    }
+    }()
 
-    static var nonHourlyCourseBoundaryMinutes: [Int] {
+    static let nonHourlyCourseBoundaryMinutes: [Int] =
         courseBoundaryMinutes.filter { $0 % 60 != 0 }
+
+    static func placeCourses(_ courses: [Course]) -> [CalendarCoursePlacement] {
+        var trackEnds = [Int]()
+        return courses.sorted {
+            ($0.startSlot, $0.endSlot, $0.name) < ($1.startSlot, $1.endSlot, $1.name)
+        }.map { course in
+            let track = trackEnds.firstIndex(where: { $0 < course.startSlot }) ?? trackEnds.count
+            if track == trackEnds.count {
+                trackEnds.append(course.endSlot)
+            } else {
+                trackEnds[track] = course.endSlot
+            }
+            return CalendarCoursePlacement(course: course, track: track)
+        }
     }
 
     static func courseMetadata(_ course: Course) -> String {
@@ -258,6 +282,7 @@ enum CalendarTimelineLogic {
 
 struct CalendarTimelineView: View {
     @EnvironmentObject private var model: AppModel
+    @StateObject private var dateFormatterCache = CalendarDateFormatterCache()
     let days: [CalendarTimelineDay]
     let selectedDate: Date
     var onSelectDay: ((Date) -> Void)?
@@ -317,17 +342,13 @@ struct CalendarTimelineView: View {
 
     private var timelineContent: some View {
         GeometryReader { proxy in
-            TimelineView(.periodic(from: .now, by: 60)) { timeline in
-                HStack(alignment: .top, spacing: 0) {
-                    axisContent(now: timeline.date)
-                    ScrollView(.horizontal, showsIndicators: days.count > 1) {
-                        dayContent(
-                            width: max(proxy.size.width - contentLeft, minimumDayAreaWidth),
-                            now: timeline.date
-                        )
-                    }
-                    .frame(maxWidth: .infinity)
+            HStack(alignment: .top, spacing: 0) {
+                axisContent
+                ScrollView(.horizontal, showsIndicators: days.count > 1) {
+                    dayContent(width: max(proxy.size.width - contentLeft, minimumDayAreaWidth))
                 }
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("calendar.timeline.horizontal")
             }
         }
         .frame(height: totalHeight)
@@ -342,29 +363,41 @@ struct CalendarTimelineView: View {
     }
     #endif
 
-    private func axisContent(now: Date) -> some View {
+    private var axisContent: some View {
         ZStack(alignment: .topLeading) {
             AppTheme.surface
             axisGrid
             axisHeaders
-            hourLabels(now: now)
             slotLabels
-            currentTimeAxisLabel(now: now)
+            TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                ZStack(alignment: .topLeading) {
+                    hourLabels(now: timeline.date)
+                    currentTimeAxisLabel(now: timeline.date)
+                }
+                .frame(width: contentLeft, height: totalHeight, alignment: .topLeading)
+            }
+            .allowsHitTesting(false)
         }
         .frame(width: contentLeft, height: totalHeight)
         .clipped()
     }
 
-    private func dayContent(width: CGFloat, now: Date) -> some View {
+    private func dayContent(width: CGFloat) -> some View {
         let dayWidth = width / CGFloat(max(days.count, 1))
         return ZStack(alignment: .topLeading) {
             AppTheme.surface
             selectedColumn(dayWidth: dayWidth)
             dayGrid(width: width, dayWidth: dayWidth)
-            dayHeaders(dayWidth: dayWidth, now: now)
             allDayHeaderRows(dayWidth: dayWidth)
             courseBlocks(dayWidth: dayWidth)
-            currentTimeLine(width: width, dayWidth: dayWidth, now: now)
+            TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                ZStack(alignment: .topLeading) {
+                    dayHeaders(dayWidth: dayWidth, now: timeline.date)
+                    currentTimeLine(width: width, dayWidth: dayWidth, now: timeline.date)
+                        .allowsHitTesting(false)
+                }
+                .frame(width: width, height: totalHeight, alignment: .topLeading)
+            }
         }
         .frame(width: width, height: totalHeight)
         .clipped()
@@ -645,14 +678,12 @@ struct CalendarTimelineView: View {
 
     private func courseBlocks(dayWidth: CGFloat) -> some View {
         ForEach(Array(days.enumerated()), id: \.element.id) { dayIndex, day in
-            let placements = placeCourses(day.courses)
-            let trackCount = max(placements.map(\.track).max().map { $0 + 1 } ?? 1, 1)
-            ForEach(placements) { placement in
+            ForEach(day.coursePlacements) { placement in
                 if let start = SlotMetadata.defaults[safe: placement.course.startSlot]
                     .flatMap({ CalendarTimelineLogic.minute(of: $0.start) }),
                    let end = SlotMetadata.defaults[safe: placement.course.endSlot]
                     .flatMap({ CalendarTimelineLogic.minute(of: $0.end) }) {
-                    let trackWidth = dayWidth / CGFloat(trackCount)
+                    let trackWidth = dayWidth / CGFloat(day.courseTrackCount)
                     let x = CGFloat(dayIndex) * dayWidth
                         + CGFloat(placement.track) * trackWidth
                         + 3
@@ -671,7 +702,7 @@ struct CalendarTimelineView: View {
     }
 
     private func courseBlock(
-        placement: CoursePlacement,
+        placement: CalendarCoursePlacement,
         trackWidth: CGFloat,
         x: CGFloat,
         top: CGFloat,
@@ -767,21 +798,6 @@ struct CalendarTimelineView: View {
         headerHeight + timelineHeight * CalendarTimelineLogic.position(minute: minute)
     }
 
-    private func placeCourses(_ courses: [Course]) -> [CoursePlacement] {
-        var trackEnds = [Int]()
-        return courses.sorted {
-            ($0.startSlot, $0.endSlot, $0.name) < ($1.startSlot, $1.endSlot, $1.name)
-        }.map { course in
-            let track = trackEnds.firstIndex(where: { $0 < course.startSlot }) ?? trackEnds.count
-            if track == trackEnds.count {
-                trackEnds.append(course.endSlot)
-            } else {
-                trackEnds[track] = course.endSlot
-            }
-            return CoursePlacement(course: course, track: track)
-        }
-    }
-
     private func headerDetail(for day: CalendarTimelineDay) -> String {
         guard !day.courses.isEmpty else { return model.localized("无课") }
         return model.appLanguage.resolvedResourceName == "en"
@@ -802,13 +818,6 @@ struct CalendarTimelineView: View {
             .joined(separator: "，")
     }
 
-    private struct CoursePlacement: Identifiable {
-        let course: Course
-        let track: Int
-
-        var id: String { "\(course.id)|\(track)" }
-    }
-
     private static let nowRed = AppTheme.danger
     private var dayHeaderFormatter: DateFormatter {
         formatter("M/d E")
@@ -823,11 +832,6 @@ struct CalendarTimelineView: View {
     }
 
     private func formatter(_ format: String) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = model.appLanguage.locale
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        formatter.dateFormat = format
-        return formatter
+        dateFormatterCache.formatter(format: format, locale: model.appLanguage.locale)
     }
 }

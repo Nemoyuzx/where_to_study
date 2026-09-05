@@ -74,10 +74,12 @@ private struct MobileYearSnapshotCollection {
 private final class MobileCalendarSnapshotCache: ObservableObject {
     private var monthStorage = CalendarBoundedCache<String, [MobileMonthDaySnapshot]>(capacity: 6)
     private var yearStorage = CalendarBoundedCache<String, MobileYearSnapshotCollection>(capacity: 24)
-    private var invalidationCancellables = Set<AnyCancellable>()
-    private var boundModelID: ObjectIdentifier?
-    private var boundDeadlineStoreID: ObjectIdentifier?
-    private var hasBoundOnce = false
+    private let timelineStorage = CalendarBoundedCache<String, [CalendarTimelineDay]>(capacity: 6)
+    private let invalidation = CalendarSnapshotInvalidationObserver()
+
+    func timelineValues(for key: String, build: () -> [CalendarTimelineDay]) -> [CalendarTimelineDay] {
+        timelineStorage.value(for: key, build: build)
+    }
 
     func monthValues(
         for key: String,
@@ -96,66 +98,22 @@ private final class MobileCalendarSnapshotCache: ObservableObject {
     }
 
     func invalidate() {
-        guard !monthStorage.isEmpty || !yearStorage.isEmpty else { return }
+        guard !monthStorage.isEmpty || !yearStorage.isEmpty || !timelineStorage.isEmpty else { return }
         objectWillChange.send()
         monthStorage.removeAll()
         yearStorage.removeAll()
+        timelineStorage.removeAll()
     }
 
     func bind(model: AppModel, deadlineStore: CalendarDeadlineStore) {
-        let modelID = ObjectIdentifier(model)
-        let deadlineStoreID = ObjectIdentifier(deadlineStore)
-        guard boundModelID != modelID || boundDeadlineStoreID != deadlineStoreID else { return }
-
-        invalidationCancellables.removeAll()
-        if hasBoundOnce {
-            invalidate()
-        } else {
-            hasBoundOnce = true
+        invalidation.bind(model: model, deadlineStore: deadlineStore) { [weak self] in
+            self?.invalidate()
         }
-        boundModelID = modelID
-        boundDeadlineStoreID = deadlineStoreID
-
-        Publishers.MergeMany([
-            model.$schedule.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$holidaysByYear.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$favoriteDeadlines.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$appLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$competitionDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$schoolContestNoticesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$conferenceDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$summerCampDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$hackathonDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$customDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            deadlineStore.$publicByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            deadlineStore.$customByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            deadlineStore.$assignmentsByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-        ])
-        .sink { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.invalidate()
-            }
-        }
-        .store(in: &invalidationCancellables)
     }
 
 }
 
-final class MobileCalendarDateFormatterCache: ObservableObject {
-    private var storage = CalendarBoundedCache<String, DateFormatter>(capacity: 8)
-
-    func formatter(format: String, locale: Locale) -> DateFormatter {
-        let key = "\(locale.identifier)|\(format)"
-        return storage.value(for: key) {
-            let formatter = DateFormatter()
-            formatter.calendar = .shanghai
-            formatter.locale = locale
-            formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-            formatter.dateFormat = format
-            return formatter
-        }
-    }
-}
+typealias MobileCalendarDateFormatterCache = CalendarDateFormatterCache
 
 private struct MobileWeekAgendaSelection: Identifiable {
     let id = UUID()
@@ -279,6 +237,7 @@ struct MobileTeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     let calendarDeadlines: CalendarDeadlineStore
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var session: TeachingCalendarSessionState
     @StateObject private var snapshotCache = MobileCalendarSnapshotCache()
     @StateObject private var dateFormatterCache = MobileCalendarDateFormatterCache()
@@ -350,14 +309,22 @@ struct MobileTeachingCalendarView: View {
             }
         }
         .onAppear {
-            snapshotCache.bind(model: model, deadlineStore: calendarDeadlines)
             normalizeMonthPositionForLayout()
+        }
+        .task(id: [ObjectIdentifier(model), ObjectIdentifier(calendarDeadlines)]) {
+            snapshotCache.bind(model: model, deadlineStore: calendarDeadlines)
         }
         .onChange(of: selectedDate) { _ in
             resetMonthDetailsScroll()
         }
         .onChange(of: verticalSizeClass) { _ in
             normalizeMonthPositionForLayout()
+        }
+        .transaction { transaction in
+            if reduceMotion {
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
         }
     }
 
@@ -587,7 +554,8 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func timelineContent(days: [Date]) -> some View {
-        let timelineDays = days.map(timelineDay)
+        let key = snapshotCacheKey(for: days, scope: "timeline")
+        let timelineDays = snapshotCache.timelineValues(for: key) { days.map(timelineDay) }
         return VStack(spacing: 0) {
             selectedDateSummary
                 .contentShape(Rectangle())

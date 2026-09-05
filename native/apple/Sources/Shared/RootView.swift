@@ -80,15 +80,29 @@ enum AdaptiveLayoutPolicy {
 }
 
 @MainActor
-private final class CalendarDataServices: ObservableObject {
+final class PrimaryNavigationState: ObservableObject {
+    @Published var selectedSection: AppSection = .planner
+}
+
+@MainActor
+final class CalendarModeDataServices {
     let dailyInfo = DailyInfoStore()
     let deadlines = CalendarDeadlineStore()
-    #if os(iOS)
-    private let liveShuttle = ShuttleBusStore()
-    private let sampleShuttle = ShuttleBusStore()
+    let shuttle = ShuttleBusStore()
+    let importantEvents = ImportantEventQueryStore()
+}
+
+@MainActor
+final class CalendarDataServices: ObservableObject {
+    private let live = CalendarModeDataServices()
+    private let sample = CalendarModeDataServices()
+
+    func services(sampleMode: Bool) -> CalendarModeDataServices {
+        sampleMode ? sample : live
+    }
 
     func shuttleStore(sampleMode: Bool) -> ShuttleBusStore {
-        sampleMode ? sampleShuttle : liveShuttle
+        services(sampleMode: sampleMode).shuttle
     }
 
     func prewarmInformationQueries(sampleMode: Bool) {
@@ -100,11 +114,11 @@ private final class CalendarDataServices: ObservableObject {
             await shuttle.load(sampleMode: sampleMode)
         }
     }
-    #endif
 }
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var navigation: PrimaryNavigationState
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
     @StateObject private var calendarServices = CalendarDataServices()
@@ -114,14 +128,13 @@ struct RootView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isRegularSidebarExpanded = true
-    // Keep primary navigation outside AppModel on iOS. Publishing a tab-only
-    // change through the global model invalidates every heavy tab subtree just
-    // as UIKit is completing the tab transition.
-    @State private var iosSelectedSection: AppSection = .planner
     #endif
 
-    private var dailyInfo: DailyInfoStore { calendarServices.dailyInfo }
-    private var calendarDeadlines: CalendarDeadlineStore { calendarServices.deadlines }
+    private var modeServices: CalendarModeDataServices {
+        calendarServices.services(sampleMode: model.isSampleMode)
+    }
+    private var dailyInfo: DailyInfoStore { modeServices.dailyInfo }
+    private var calendarDeadlines: CalendarDeadlineStore { modeServices.deadlines }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -151,14 +164,15 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .onAppear {
+        .task {
+            await model.awaitInitialLocalData()
+            guard !Task.isCancelled else { return }
             model.refreshScheduleAutomaticallyIfNeeded()
             model.refreshClassroomsIfNeeded()
             #if os(macOS)
             model.startDailyClassroomRefresh()
-            #else
-            calendarServices.prewarmInformationQueries(sampleMode: model.isSampleMode)
             #endif
+            calendarServices.prewarmInformationQueries(sampleMode: model.isSampleMode)
         }
         .task(id: PublicDeadlinePrewarmID(
             publicDeadlinesEnabled: model.hasEnabledBuiltInPublicDeadlines,
@@ -223,6 +237,8 @@ struct RootView: View {
             .year,
             from: teachingCalendarSession.selectedDate
         )) {
+            await model.awaitInitialLocalData()
+            guard !Task.isCancelled else { return }
             let selectedYear = Calendar.shanghai.component(
                 .year,
                 from: teachingCalendarSession.selectedDate
@@ -277,12 +293,10 @@ struct RootView: View {
             calendarDeadlines.clearAssignments()
         }
         .onChange(of: model.isSampleMode) { sampleMode in
-            #if os(iOS)
             // Live and built-in sample data use separate stores so an in-flight
             // live request can never overwrite the sample-mode query page (or
             // vice versa) when the runtime mode changes.
             calendarServices.prewarmInformationQueries(sampleMode: sampleMode)
-            #endif
         }
         .onReceive(NotificationCenter.default.publisher(for: AppKeyboardCommandNotification.name)) {
             notification in
@@ -471,7 +485,7 @@ struct RootView: View {
     }
 
     private var tabNavigation: some View {
-        TabView(selection: $iosSelectedSection) {
+        TabView(selection: $navigation.selectedSection) {
             ForEach(AppSection.allCases) { section in
                 compactTabSectionView(section)
                     .tabItem {
@@ -503,19 +517,11 @@ struct RootView: View {
     #endif
 
     private var selectedSection: AppSection {
-        #if os(iOS)
-        iosSelectedSection
-        #else
-        model.selectedSection
-        #endif
+        navigation.selectedSection
     }
 
     private func selectSection(_ section: AppSection) {
-        #if os(iOS)
-        iosSelectedSection = section
-        #else
-        model.selectedSection = section
-        #endif
+        navigation.selectedSection = section
     }
 
     private var sidebarTitlePadding: CGFloat {
@@ -540,13 +546,10 @@ struct RootView: View {
             TeachingCalendarView(session: teachingCalendarSession)
             #endif
         case .queries:
-            #if os(iOS)
             InformationQueriesView(
-                shuttleStore: calendarServices.shuttleStore(sampleMode: model.isSampleMode)
+                shuttleStore: modeServices.shuttle,
+                eventQueryStore: modeServices.importantEvents
             )
-            #else
-            InformationQueriesView()
-            #endif
         case .settings: SettingsView()
         }
     }

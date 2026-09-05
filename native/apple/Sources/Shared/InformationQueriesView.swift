@@ -14,7 +14,7 @@ enum InformationQueryMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum ImportantEventCategory: String, CaseIterable, Identifiable {
+enum ImportantEventCategory: String, CaseIterable, Identifiable, Sendable {
     case all
     case schoolNotice
     case competition
@@ -247,11 +247,8 @@ enum InformationQueryErrorLocalization {
 struct InformationQueriesView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
-    #if os(iOS)
     @ObservedObject private var shuttleStore: ShuttleBusStore
-    #else
-    @StateObject private var shuttleStore = ShuttleBusStore()
-    #endif
+    @ObservedObject private var eventQueryStore: ImportantEventQueryStore
     @State private var selectedMode: InformationQueryMode = .shuttle
     @State private var searchText = ""
     @State private var selectedCategory: ImportantEventCategory = .all
@@ -259,11 +256,20 @@ struct InformationQueriesView: View {
     @State private var showsEndedEvents = false
     @State private var requestedVisibleEventCount = ImportantEventIncrementalRendering.batchSize
 
-    #if os(iOS)
-    init(shuttleStore: ShuttleBusStore) {
+    init(shuttleStore: ShuttleBusStore, eventQueryStore: ImportantEventQueryStore) {
         self.shuttleStore = shuttleStore
+        self.eventQueryStore = eventQueryStore
     }
-    #endif
+
+    private var eventQueryKey: ImportantEventQueryKey {
+        ImportantEventQueryKey(
+            sampleMode: model.isSampleMode,
+            publicRevision: calendarDeadlines.publicDataRevision,
+            favorites: model.favoriteDeadlines, query: searchText,
+            category: selectedCategory, metadataCategory: selectedMetadataCategory,
+            showsEnded: showsEndedEvents, minute: Int(Date.now.timeIntervalSince1970 / 60)
+        )
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -300,12 +306,15 @@ struct InformationQueriesView: View {
         .background(AppTheme.background)
         .navigationTitle(model.localized("信息查询"))
         .accessibilityIdentifier("screen.information-queries")
-        .task {
+        .task(id: model.isSampleMode) {
             await InformationQueryPreloader.prewarm(
                 shuttleStore: shuttleStore,
                 deadlineStore: calendarDeadlines,
                 sampleMode: model.isSampleMode
             )
+        }
+        .task(id: eventQueryKey) {
+            await eventQueryStore.update(key: eventQueryKey, snapshots: calendarDeadlines.publicByDate)
         }
     }
 
@@ -488,32 +497,11 @@ struct InformationQueriesView: View {
     }
 
     private var importantEventsContent: some View {
-        let liveItems = calendarDeadlines.publicByDate.values.flatMap(\.items)
-        let allItems = ImportantEventQueryLogic.mergedItems(
-            liveItems: liveItems,
-            favoriteItems: model.favoriteDeadlines
-        )
-        let availableCategories = ImportantEventQueryLogic.availableCategories(in: allItems)
-        let effectiveCategory = ImportantEventQueryLogic.normalizedCategory(
-            selectedCategory,
-            availableCategories: availableCategories
-        )
-        let metadataCategories = ImportantEventQueryLogic.metadataCategories(
-            in: allItems,
-            category: effectiveCategory,
-            showsEnded: showsEndedEvents
-        )
-        let effectiveMetadataCategory = ImportantEventQueryLogic.normalizedMetadataCategory(
-            selectedMetadataCategory,
-            availableCategories: metadataCategories
-        )
-        let filtered = ImportantEventQueryLogic.filteredItems(
-            allItems,
-            query: searchText,
-            category: effectiveCategory,
-            metadataCategory: effectiveMetadataCategory,
-            showsEnded: showsEndedEvents
-        )
+        let projection = eventQueryStore.result
+        let availableCategories = projection.categories
+        let effectiveCategory = projection.category
+        let metadataCategories = projection.metadataCategories
+        let filtered = projection.items
         let visibleCount = ImportantEventIncrementalRendering.visibleCount(
             totalCount: filtered.count,
             requestedCount: requestedVisibleEventCount
@@ -623,14 +611,14 @@ struct InformationQueriesView: View {
                 }
             }
 
-            if calendarDeadlines.isLoadingPublicFeed, allItems.isEmpty {
+            if calendarDeadlines.isLoadingPublicFeed, projection.totalCount == 0 {
                 queryMessage(
                     systemImage: "calendar.badge.clock",
                     title: "正在同步重要事件…",
                     detail: "正在读取公开活动与校内竞赛通知。",
                     showsProgress: true
                 )
-            } else if allItems.isEmpty, !calendarDeadlines.publicFeedError.isEmpty {
+            } else if projection.totalCount == 0, !calendarDeadlines.publicFeedError.isEmpty {
                 queryMessage(
                     systemImage: "exclamationmark.triangle",
                     title: "重要事件暂不可用",
@@ -860,27 +848,17 @@ struct InformationQueriesView: View {
 
 struct InformationQueriesPresentation: View {
     @Environment(\.dismiss) private var dismiss
-    #if os(iOS)
     @StateObject private var shuttleStore = ShuttleBusStore()
-    #endif
+    @StateObject private var eventQueryStore = ImportantEventQueryStore()
 
     var body: some View {
         NavigationStack {
-            #if os(iOS)
-            InformationQueriesView(shuttleStore: shuttleStore)
+            InformationQueriesView(shuttleStore: shuttleStore, eventQueryStore: eventQueryStore)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("完成") { dismiss() }
                     }
                 }
-            #else
-            InformationQueriesView()
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("完成") { dismiss() }
-                    }
-                }
-            #endif
         }
         #if os(macOS)
         .frame(minWidth: 680, idealWidth: 860, minHeight: 520, idealHeight: 720)

@@ -47,6 +47,7 @@ private struct ConsentedApplicationRoot: View {
     var body: some View {
         RootView()
             .environmentObject(model)
+            .environmentObject(model.navigation)
             .environment(\.locale, model.appLanguage.locale)
     }
 }

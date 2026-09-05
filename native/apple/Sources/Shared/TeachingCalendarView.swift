@@ -47,6 +47,10 @@ enum TeachingCalendarNavigationMotion {
 }
 
 final class TeachingCalendarSessionState: ObservableObject {
+    // Retain only bounded projections while another section is visible. The
+    // SwiftUI page and its clock/geometry work can still be destroyed normally.
+    @MainActor lazy var renderingCache = TeachingCalendarRenderingCache()
+
     private struct PendingModeTransition {
         let generation: UInt
         let source: String
@@ -323,7 +327,7 @@ private struct CalendarMonthDeadlineEvent: Identifiable {
     }
 }
 
-private struct CalendarMonthDaySnapshot: Identifiable {
+fileprivate struct CalendarMonthDaySnapshot: Identifiable {
     let date: Date
     let dateKey: String
     let dayNumber: Int
@@ -342,7 +346,7 @@ private struct CalendarMonthDaySnapshot: Identifiable {
     var id: Date { date }
 }
 
-private struct CalendarDaySnapshotCollection {
+fileprivate struct CalendarDaySnapshotCollection {
     let days: [CalendarMonthDaySnapshot]
     let byDate: [String: CalendarMonthDaySnapshot]
     let byMonth: [Int: [CalendarMonthDaySnapshot]]
@@ -394,6 +398,92 @@ final class CalendarBoundedCache<Key: Hashable, Value>: ObservableObject {
             accessOrder.remove(at: index)
         }
         accessOrder.append(key)
+    }
+}
+
+final class CalendarDateFormatterCache: ObservableObject {
+    private let storage = CalendarBoundedCache<String, DateFormatter>(capacity: 8)
+
+    func formatter(format: String, locale: Locale) -> DateFormatter {
+        let key = "\(locale.identifier)|\(format)"
+        return storage.value(for: key) {
+            let formatter = DateFormatter()
+            formatter.calendar = .shanghai
+            formatter.locale = locale
+            formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+            formatter.dateFormat = format
+            return formatter
+        }
+    }
+}
+
+@MainActor
+final class CalendarSnapshotInvalidationObserver: ObservableObject {
+    private var cancellable: AnyCancellable?
+    private var boundModelID: ObjectIdentifier?
+    private var boundDeadlineStoreID: ObjectIdentifier?
+
+    func bind(
+        model: AppModel,
+        deadlineStore: CalendarDeadlineStore,
+        invalidate: @escaping @MainActor () -> Void
+    ) {
+        let modelID = ObjectIdentifier(model)
+        let deadlineStoreID = ObjectIdentifier(deadlineStore)
+        guard boundModelID != modelID || boundDeadlineStoreID != deadlineStoreID else { return }
+        // The first body can populate a projection before this task subscribes.
+        // Data published in that interval must not leave an empty cache behind.
+        invalidate()
+        boundModelID = modelID
+        boundDeadlineStoreID = deadlineStoreID
+
+        let scheduleChanges: [AnyPublisher<Void, Never>] = [
+            model.$schedule.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$termID.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$termStartDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$automaticTermDetectionEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$runtimeMode.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+        ]
+        let presentationChanges: [AnyPublisher<Void, Never>] = [
+            model.$holidaysByYear.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$favoriteDeadlines.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$appLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+        ]
+        let sourceChanges: [AnyPublisher<Void, Never>] = [
+            model.$competitionDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$schoolContestNoticesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$conferenceDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$summerCampDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$hackathonDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            model.$customDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+        ]
+        let deadlineChanges: [AnyPublisher<Void, Never>] = [
+            deadlineStore.$publicByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            deadlineStore.$customByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            deadlineStore.$assignmentsByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+        ]
+        cancellable = Publishers.MergeMany(scheduleChanges + presentationChanges + sourceChanges + deadlineChanges)
+        // Published values arrive in willSet. Invalidate after the batch has
+        // committed, once per run loop, so a render never caches an old value.
+        .debounce(for: .zero, scheduler: RunLoop.main)
+        .sink { _ in
+            Task { @MainActor in invalidate() }
+        }
+    }
+}
+
+@MainActor
+final class TeachingCalendarRenderingCache {
+    fileprivate let monthSnapshots = CalendarBoundedCache<String, CalendarDaySnapshotCollection>(capacity: 4)
+    let timelineSnapshots = CalendarBoundedCache<String, [CalendarTimelineDay]>(capacity: 6)
+    let dateFormatters = CalendarDateFormatterCache()
+    private let invalidation = CalendarSnapshotInvalidationObserver()
+
+    func bind(model: AppModel, deadlineStore: CalendarDeadlineStore) {
+        invalidation.bind(model: model, deadlineStore: deadlineStore) { [weak self] in
+            self?.monthSnapshots.removeAll()
+            self?.timelineSnapshots.removeAll()
+        }
     }
 }
 
@@ -989,11 +1079,15 @@ struct TeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var session: TeachingCalendarSessionState
-    @StateObject private var monthSnapshotCache = CalendarBoundedCache<
+    private let renderingCache: TeachingCalendarRenderingCache
+    @StateObject private var dateFormatterCache: CalendarDateFormatterCache
+    @StateObject private var timelineSnapshotCache: CalendarBoundedCache<String, [CalendarTimelineDay]>
+    @StateObject private var monthSnapshotCache: CalendarBoundedCache<
         String,
         CalendarDaySnapshotCollection
-    >(capacity: 4)
+    >
     @State private var yearPopoverDate: Date?
     @State private var yearPopoverLocation: CGPoint?
     @State private var showingDatePicker = false
@@ -1002,6 +1096,15 @@ struct TeachingCalendarView: View {
     @State private var yearPopoverScrollTarget = TeachingCalendarView.yearPopoverTopID
 
     private let calendar = Calendar.shanghai
+
+    init(session: TeachingCalendarSessionState) {
+        self.session = session
+        let cache = session.renderingCache
+        renderingCache = cache
+        _dateFormatterCache = StateObject(wrappedValue: cache.dateFormatters)
+        _timelineSnapshotCache = StateObject(wrappedValue: cache.timelineSnapshots)
+        _monthSnapshotCache = StateObject(wrappedValue: cache.monthSnapshots)
+    }
 
     private var selectedDate: Date {
         get { session.selectedDate }
@@ -1068,31 +1171,18 @@ struct TeachingCalendarView: View {
             showingDatePicker = false
             presentedTimelineAgenda = nil
         }
-        .onReceive(calendarSnapshotContentChanges) { _ in
-            monthSnapshotCache.removeAll()
+        .task(id: [ObjectIdentifier(model), ObjectIdentifier(calendarDeadlines)]) {
+            renderingCache.bind(model: model, deadlineStore: calendarDeadlines)
         }
         .task(id: dailyDetailsLoadID) {
             await loadVisibleDailyDetails()
         }
-    }
-
-    private var calendarSnapshotContentChanges: AnyPublisher<Void, Never> {
-        Publishers.MergeMany([
-            model.$schedule.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$holidaysByYear.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$favoriteDeadlines.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$appLanguage.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$competitionDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$schoolContestNoticesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$conferenceDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$summerCampDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$hackathonDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            model.$customDeadlinesEnabled.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            calendarDeadlines.$publicByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            calendarDeadlines.$customByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            calendarDeadlines.$assignmentsByDate.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-        ])
-        .eraseToAnyPublisher()
+        .transaction { transaction in
+            if reduceMotion {
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
+        }
     }
 
     private var calendarPanelContent: some View {
@@ -1333,7 +1423,7 @@ struct TeachingCalendarView: View {
             .foregroundStyle(AppTheme.secondaryText)
             .accessibilityIdentifier("calendar.regular.day-week-context")
             CalendarTimelineView(
-                days: [timelineDay(selectedDate)],
+                days: cachedTimelineDays(for: [selectedDate]),
                 selectedDate: selectedDate,
                 onSelectAllDayEvent: { date, _ in
                     presentedTimelineAgenda = CalendarAgendaSelection(
@@ -1361,7 +1451,7 @@ struct TeachingCalendarView: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(AppTheme.secondaryText)
             CalendarTimelineView(
-                days: days.map(timelineDay),
+                days: cachedTimelineDays(for: days),
                 selectedDate: selectedDate,
                 onSelectDay: { date in
                     session.prepareTransition(direction: TeachingCalendarNavigationMotion.direction(
@@ -3234,6 +3324,12 @@ struct TeachingCalendarView: View {
         )
     }
 
+    private func cachedTimelineDays(for days: [Date]) -> [CalendarTimelineDay] {
+        let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
+        let key = "\(firstDate)|\(days.count)"
+        return timelineSnapshotCache.value(for: key) { days.map(timelineDay) }
+    }
+
     private func timelineDay(_ date: Date) -> CalendarTimelineDay {
         CalendarTimelineDay(
             date: date,
@@ -3755,15 +3851,6 @@ struct TeachingCalendarView: View {
         let format = model.appLanguage.resolvedResourceName == "en"
             ? englishFormat
             : chineseFormat
-        return Self.dateFormatter(format, locale: model.appLanguage.locale)
-    }
-
-    private static func dateFormatter(_ format: String, locale: Locale) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.calendar = .shanghai
-        formatter.locale = locale
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
-        formatter.dateFormat = format
-        return formatter
+        return dateFormatterCache.formatter(format: format, locale: model.appLanguage.locale)
     }
 }

@@ -19,6 +19,7 @@ struct MacMenuBarLabel: View {
 
 struct MacMenuBarView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var navigation: PrimaryNavigationState
     @Environment(\.openWindow) private var openWindow
 
     private let calendar = Calendar.shanghai
@@ -103,7 +104,7 @@ struct MacMenuBarView: View {
     }
 
     private func showMainWindow(section: AppSection? = nil) {
-        if let section { model.selectedSection = section }
+        if let section { navigation.selectedSection = section }
         openWindow(id: "main")
         NSApplication.shared.activate(ignoringOtherApps: true)
     }

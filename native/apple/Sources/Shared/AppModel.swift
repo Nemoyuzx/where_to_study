@@ -171,7 +171,7 @@ enum HolidayDisplayLogic {
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var selectedSection: AppSection = .planner
+    let navigation = PrimaryNavigationState()
     @Published var account = ""
     @Published var password = ""
     @Published private(set) var hasSavedPassword = false
@@ -227,6 +227,9 @@ final class AppModel: ObservableObject {
     private let now: @Sendable () -> Date
     private let defaults: UserDefaults
     private let supportsRuntimeModeSwitching: Bool
+    private let deferLocalDataLoading: Bool
+    private let localDataPersistence = LocalDataPersistence()
+    private var initialLocalDataTask: Task<Void, Never>?
     private var holidayLoads = HolidayLoadState()
     private var localDataGeneration = 0
     private var scheduleRefreshToken = 0
@@ -253,7 +256,8 @@ final class AppModel: ObservableObject {
         dailyCourseNotificationAuthorizationTimeout: Duration = .seconds(8),
         statusMessageAutoDismissDelay: Duration = .seconds(4),
         now: @escaping @Sendable () -> Date = Date.init,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        deferLocalDataLoading: Bool = false
     ) {
         self.runtimeMode = runtimeMode
         supportsRuntimeModeSwitching = runtimeMode == .live
@@ -270,6 +274,7 @@ final class AppModel: ObservableObject {
         self.statusMessageAutoDismissDelay = statusMessageAutoDismissDelay
         self.now = now
         self.defaults = defaults
+        self.deferLocalDataLoading = deferLocalDataLoading
         appLanguage = AppLocalization.persistedLanguage(defaults: defaults)
         let initialAutomaticTermDetection = defaults.object(
             forKey: Self.automaticTermDetectionKey
@@ -327,13 +332,7 @@ final class AppModel: ObservableObject {
             favoriteDeadlines = Self.loadFavoriteDeadlines(defaults: defaults)
         }
         loadCredentials()
-        loadSchedule()
-        loadClassrooms()
-        synchronizeSelectedSlots()
-        ensureHolidays(for: Calendar.shanghai.component(.year, from: .now))
-        // Always reconcile on a cold launch so a previously scheduled batch is
-        // removed even when the persisted feature switch is already off.
-        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        loadInitialLocalData()
     }
 
     var selectedCampusName: String {
@@ -525,11 +524,7 @@ final class AppModel: ObservableObject {
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         loadCredentials()
-        loadSchedule()
-        loadClassrooms()
-        synchronizeSelectedSlots()
-        ensureHolidays(for: Calendar.shanghai.component(.year, from: .now))
-        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        loadInitialLocalData()
         #if os(macOS)
         startDailyClassroomRefresh()
         #endif
@@ -981,6 +976,15 @@ final class AppModel: ObservableObject {
             return
         }
         guard !isRefreshingSchedule else { return }
+        if let initialLocalDataTask {
+            let generation = localDataGeneration
+            Task {
+                await initialLocalDataTask.value
+                guard generation == localDataGeneration else { return }
+                refreshSchedule()
+            }
+            return
+        }
         let credentials: Credentials
         do {
             credentials = try credentialsForRequest()
@@ -1018,6 +1022,7 @@ final class AppModel: ObservableObject {
             defer {
                 if refreshToken == scheduleRefreshToken { isRefreshingSchedule = false }
             }
+            guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
             do {
                 let fetched = try await scheduleClient.fetch(
                     credentials: credentials,
@@ -1031,7 +1036,11 @@ final class AppModel: ObservableObject {
                     fetchedAt: fetched.fetchedAt,
                     courses: fetched.courses
                 )
-                try scheduleStore.save(resolvedSchedule)
+                let saved = try await localDataPersistence.saveSchedule(
+                    resolvedSchedule, to: scheduleStore, generation: generation
+                )
+                guard saved, generation == localDataGeneration,
+                      refreshToken == scheduleRefreshToken else { return }
                 schedule = resolvedSchedule
                 synchronizeWidgetSchedule()
                 calendarImportStatusMessage = ""
@@ -1193,6 +1202,15 @@ final class AppModel: ObservableObject {
             return
         }
         guard !isRefreshingClassrooms else { return }
+        if let initialLocalDataTask {
+            let generation = localDataGeneration
+            Task {
+                await initialLocalDataTask.value
+                guard generation == localDataGeneration else { return }
+                refreshClassrooms(force: force)
+            }
+            return
+        }
         if !force, classroomsCache?.targetDate == Self.todayString { return }
         let credentials: Credentials
         do {
@@ -1212,13 +1230,18 @@ final class AppModel: ObservableObject {
             defer {
                 if refreshToken == classroomRefreshToken { isRefreshingClassrooms = false }
             }
+            guard generation == localDataGeneration, refreshToken == classroomRefreshToken else { return }
             do {
                 let fetched = try await classroomClient.fetch(
                     credentials: credentials,
                     targetDate: targetDate
                 )
                 guard generation == localDataGeneration, refreshToken == classroomRefreshToken else { return }
-                try classroomStore.save(fetched)
+                let saved = try await localDataPersistence.saveClassrooms(
+                    fetched, to: classroomStore, generation: generation
+                )
+                guard saved, generation == localDataGeneration,
+                      refreshToken == classroomRefreshToken else { return }
                 classroomsCache = fetched
                 selectedBuildings.formIntersection(Set(campusBuildings))
                 classroomStatusMessage = "当天空教室已更新"
@@ -1267,29 +1290,31 @@ final class AppModel: ObservableObject {
             }
             return
         }
-        if holidaysByYear[year] == nil {
-            do {
-                let stored = try holidayStore.load(year: year)
-                if stored.map(HolidayDisplayLogic.isAuthoritativeRestDaySource) ?? true {
-                    holidaysByYear[year] = stored
-                }
-            } catch {
-                holidayStatusByYear[year] = "本地节假日读取失败"
-            }
-        }
         if !force, let cached = holidaysByYear[year], Self.isFreshHolidaySnapshot(cached) {
             return
         }
         guard let loadToken = holidayLoads.begin(year: year) else { return }
-        let cached = holidaysByYear[year]
         let generation = localDataGeneration
 
         Task {
             defer { holidayLoads.finish(year: year, token: loadToken) }
+            guard generation == localDataGeneration else { return }
+            if holidaysByYear[year] == nil {
+                let result = await LocalDataLoading.holidaySnapshot(from: holidayStore, year: year)
+                guard generation == localDataGeneration else { return }
+                applyCachedHolidays(result, year: year)
+            }
+            if !force, let cached = holidaysByYear[year], Self.isFreshHolidaySnapshot(cached) {
+                return
+            }
+            let cached = holidaysByYear[year]
             do {
                 let fetched = try await fetchHolidaySnapshot(year: year)
                 guard generation == localDataGeneration else { return }
-                try holidayStore.save(fetched)
+                let saved = try await localDataPersistence.saveHolidays(
+                    fetched, to: holidayStore, generation: generation
+                )
+                guard saved, generation == localDataGeneration else { return }
                 holidaysByYear[year] = fetched
                 holidayStatusByYear.removeValue(forKey: year)
             } catch {
@@ -1365,6 +1390,9 @@ final class AppModel: ObservableObject {
 
     private func invalidatePendingAccountRequests() {
         localDataGeneration &+= 1
+        localDataPersistence.invalidate(generation: localDataGeneration)
+        initialLocalDataTask?.cancel()
+        initialLocalDataTask = nil
         scheduleRefreshToken &+= 1
         classroomRefreshToken &+= 1
         isRefreshingSchedule = false
@@ -1377,9 +1405,71 @@ final class AppModel: ObservableObject {
         isImportingCalendar = false
     }
 
-    private func loadSchedule() {
+    func awaitInitialLocalData() async {
+        while let task = initialLocalDataTask {
+            await task.value
+        }
+    }
+
+    private func loadInitialLocalData() {
+        let year = Calendar.shanghai.component(.year, from: .now)
+        if !deferLocalDataLoading || isSampleMode {
+            applyCachedSchedule(LocalDataLoading.schedule(from: scheduleStore))
+            applyCachedClassrooms(LocalDataLoading.classrooms(from: classroomStore))
+            if !isSampleMode {
+                applyCachedHolidays(LocalDataLoading.holidays(from: holidayStore, year: year), year: year)
+            }
+            synchronizeSelectedSlots()
+            ensureHolidays(for: year)
+            reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+            return
+        }
+
+        let generation = localDataGeneration
+        let initialTermID = termID
+        let initialTermStartDate = termStartDate
+        let initialAutomaticDetection = automaticTermDetectionEnabled
+        let scheduleStore = scheduleStore
+        let classroomStore = classroomStore
+        initialLocalDataTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            let snapshots = await LocalDataLoading.initialSnapshots(
+                scheduleStore: scheduleStore, classroomStore: classroomStore
+            )
+            guard let self, generation == self.localDataGeneration, !Task.isCancelled else { return }
+            // A settings edit while disk IO is in progress takes precedence over
+            // the launch snapshot, just like edits after a synchronous load.
+            if self.termID == initialTermID,
+               self.termStartDate == initialTermStartDate,
+               self.automaticTermDetectionEnabled == initialAutomaticDetection {
+                self.applyCachedSchedule(snapshots.schedule)
+                self.synchronizeSelectedSlots()
+            }
+            self.applyCachedClassrooms(snapshots.classrooms)
+            self.initialLocalDataTask = nil
+            self.reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        }
+        ensureHolidays(for: year)
+        // Reconcile enabled notifications after their cached courses arrive.
+        // A disabled setting can clear an old batch immediately on launch.
+        if !dailyCourseNotificationsEnabled {
+            reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        }
+    }
+
+    private func applyCachedHolidays(_ result: Result<HolidaysSnapshot?, Error>, year: Int) {
         do {
-            let cachedSchedule = try scheduleStore.load()
+            if let stored = try result.get(), HolidayDisplayLogic.isAuthoritativeRestDaySource(stored) {
+                holidaysByYear[year] = stored
+            }
+        } catch {
+            holidayStatusByYear[year] = "本地节假日读取失败"
+        }
+    }
+
+    private func applyCachedSchedule(_ result: Result<ScheduleSnapshot?, Error>) {
+        do {
+            let cachedSchedule = try result.get()
             if isSampleMode {
                 schedule = cachedSchedule
                 if let cachedSchedule {
@@ -1479,9 +1569,9 @@ final class AppModel: ObservableObject {
     }
     #endif
 
-    private func loadClassrooms() {
+    private func applyCachedClassrooms(_ result: Result<ClassroomsCache?, Error>) {
         do {
-            guard let cached = try classroomStore.load(), cached.targetDate == Self.todayString else {
+            guard let cached = try result.get(), cached.targetDate == Self.todayString else {
                 return
             }
             classroomsCache = cached

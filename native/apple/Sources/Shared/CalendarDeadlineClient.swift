@@ -1437,7 +1437,10 @@ private final class FixedDeadlineRedirectDelegate: NSObject, URLSessionTaskDeleg
 
 @MainActor
 final class CalendarDeadlineStore: ObservableObject {
-    @Published private(set) var publicByDate = [String: PublicDeadlineSnapshot]()
+    @Published private(set) var publicByDate = [String: PublicDeadlineSnapshot]() {
+        didSet { publicDataRevision &+= 1 }
+    }
+    private(set) var publicDataRevision: UInt64 = 0
     @Published private(set) var publicErrors = [String: String]()
     @Published private(set) var loadingPublicDates = Set<String>()
     @Published private(set) var customByDate = [String: PublicDeadlineSnapshot]()
@@ -1508,13 +1511,13 @@ final class CalendarDeadlineStore: ObservableObject {
             let snapshots = try await flight.task.value
             guard publicPrewarmFlight?.id == flight.id else { return }
             if force {
-                publicByDate = snapshots
+                if publicByDate != snapshots { publicByDate = snapshots }
             } else {
                 var updated = publicByDate
                 for (date, snapshot) in snapshots {
                     updated[date] = snapshot
                 }
-                publicByDate = updated
+                if publicByDate != updated { publicByDate = updated }
             }
             publicPrewarmError = nil
             publicFeedError = ""
@@ -1560,7 +1563,9 @@ final class CalendarDeadlineStore: ObservableObject {
            publicPrewarmAttempted,
            publicByDate.isEmpty,
            let publicPrewarmError {
-            dates.forEach { publicErrors[$0] = publicPrewarmError }
+            var updatedErrors = publicErrors
+            dates.forEach { updatedErrors[$0] = publicPrewarmError }
+            if publicErrors != updatedErrors { publicErrors = updatedErrors }
             return
         }
         let requestedDates = Array(Set(dates)).sorted().filter { date in
@@ -1733,7 +1738,9 @@ final class CalendarDeadlineStore: ObservableObject {
         }
         guard let customClient else { return }
         if !force, let prewarmError = customErrors["source"], customByDate.isEmpty {
-            dates.forEach { customErrors[$0] = prewarmError }
+            var updatedErrors = customErrors
+            dates.forEach { updatedErrors[$0] = prewarmError }
+            if customErrors != updatedErrors { customErrors = updatedErrors }
             return
         }
         let requestedDates = Array(Set(dates)).sorted().filter { date in
@@ -1742,7 +1749,9 @@ final class CalendarDeadlineStore: ObservableObject {
         guard !requestedDates.isEmpty else { return }
         let revision = customRevision
         loadingCustomDates.formUnion(requestedDates)
-        requestedDates.forEach { customErrors.removeValue(forKey: $0) }
+        var clearedErrors = customErrors
+        requestedDates.forEach { clearedErrors.removeValue(forKey: $0) }
+        if customErrors != clearedErrors { customErrors = clearedErrors }
         defer {
             if revision == customRevision {
                 loadingCustomDates.subtract(requestedDates)
@@ -1767,7 +1776,9 @@ final class CalendarDeadlineStore: ObservableObject {
             }
         } catch {
             guard revision == customRevision else { return }
-            requestedDates.forEach { customErrors[$0] = error.localizedDescription }
+            var updatedErrors = customErrors
+            requestedDates.forEach { updatedErrors[$0] = error.localizedDescription }
+            customErrors = updatedErrors
         }
     }
 

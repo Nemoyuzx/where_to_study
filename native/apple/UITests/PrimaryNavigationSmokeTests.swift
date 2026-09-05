@@ -776,10 +776,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             XCTAssertTrue(button.waitForExistence(timeout: 5))
             XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(button.frame))
         }
-        let weekContext = app.staticTexts.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Teaching week")
-        ).firstMatch
+        let weekContext = app.staticTexts["calendar.regular.teaching-week"]
         XCTAssertTrue(weekContext.waitForExistence(timeout: 5))
+        XCTAssertTrue(weekContext.label.contains("Calendar Week"))
+        XCTAssertTrue(weekContext.label.contains("Teaching Week"))
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(weekContext.frame))
 
         app.segmentedControls.buttons["Month"].tap()
@@ -806,6 +806,17 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(header.waitForExistence(timeout: 5))
         XCTAssertTrue(header.isHittable)
 
+        // In portrait the last column may have only a few pixels visible.
+        // isHittable alone does not make its 88%-width corner a valid tap point.
+        let horizontal = app.scrollViews["calendar.timeline.horizontal"]
+        XCTAssertTrue(horizontal.exists)
+        for _ in 0..<3 {
+            if header.frame.maxX <= horizontal.frame.maxX { break }
+            horizontal.swipeLeft()
+        }
+        XCTAssertGreaterThanOrEqual(header.frame.minX, horizontal.frame.minX)
+        XCTAssertLessThanOrEqual(header.frame.maxX, horizontal.frame.maxX + 1)
+
         let assignmentLink = app.descendants(matching: .any)[
             "calendar.timeline.all-day.\(dateKey).\(dateKey)-assignment-sample-assignment"
         ].firstMatch
@@ -817,6 +828,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertLessThanOrEqual(assignmentLink.frame.midX, header.frame.maxX)
 
         header.coordinate(withNormalizedOffset: CGVector(dx: 0.88, dy: 0.78)).tap()
+        attachScreenshot(named: "ipad-week-header-corner-selection")
         XCTAssertTrue(waitForSelected(header))
     }
 

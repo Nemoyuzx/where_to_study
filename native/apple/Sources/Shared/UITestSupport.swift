@@ -47,7 +47,9 @@ enum AppLaunchConfiguration {
 
     @MainActor
     static func makeModel() -> AppModel {
-        guard isUITesting || isUITestingLive || isReviewDemo else { return AppModel() }
+        guard isUITesting || isUITestingLive || isReviewDemo else {
+            return AppModel(deferLocalDataLoading: true)
+        }
 
         let suiteName: String
         if isReviewDemo {

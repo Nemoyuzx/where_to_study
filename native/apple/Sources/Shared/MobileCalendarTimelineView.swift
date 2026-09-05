@@ -102,7 +102,12 @@ struct MobileCalendarTimelineView: View {
                 .scrollDisabled(!isScrollEnabled)
                 .background(MobileDirectionalScrollLock())
                 .task(id: scrollRequestID) {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    do {
+                        try await Task.sleep(nanoseconds: 100_000_000)
+                    } catch {
+                        return
+                    }
+                    guard !Task.isCancelled else { return }
                     reader.scrollTo(scrollAnchorID(initialVisibleHour), anchor: .center)
                 }
             }
@@ -179,19 +184,23 @@ struct MobileCalendarTimelineView: View {
         let dayCount = max(days.count, 1)
         let dayWidth = width / CGFloat(dayCount)
 
-        return TimelineView(.periodic(from: .now, by: 60)) { context in
-            ZStack(alignment: .topLeading) {
-                AppTheme.surface
-                selectedColumn(dayWidth: dayWidth)
-                grid(width: width, dayWidth: dayWidth)
-                if !showsWeekColumns {
-                    slotGuides(width: width)
-                }
-                courseBlocks(dayWidth: dayWidth)
-                currentTimeIndicator(width: width, dayWidth: dayWidth, now: context.date)
+        return ZStack(alignment: .topLeading) {
+            AppTheme.surface
+            selectedColumn(dayWidth: dayWidth)
+            grid(width: width, dayWidth: dayWidth)
+            if !showsWeekColumns {
+                slotGuides(width: width)
             }
-            .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight)
+            courseBlocks(dayWidth: dayWidth)
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                ZStack(alignment: .topLeading) {
+                    currentTimeIndicator(width: width, dayWidth: dayWidth, now: context.date)
+                }
+                .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight, alignment: .topLeading)
+            }
+            .allowsHitTesting(false)
         }
+        .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight)
     }
 
     private func grid(width: CGFloat, dayWidth: CGFloat) -> some View {
@@ -267,14 +276,12 @@ struct MobileCalendarTimelineView: View {
 
     private func courseBlocks(dayWidth: CGFloat) -> some View {
         ForEach(Array(days.enumerated()), id: \.element.id) { dayIndex, day in
-            let placements = placeCourses(day.courses)
-            let trackCount = max(placements.map(\.track).max().map { $0 + 1 } ?? 1, 1)
-            ForEach(placements) { placement in
+            ForEach(day.coursePlacements) { placement in
                 if let start = SlotMetadata.defaults[safe: placement.course.startSlot]
                     .flatMap({ CalendarTimelineLogic.minute(of: $0.start) }),
                    let end = SlotMetadata.defaults[safe: placement.course.endSlot]
                     .flatMap({ CalendarTimelineLogic.minute(of: $0.end) }) {
-                    let trackWidth = dayWidth / CGFloat(trackCount)
+                    let trackWidth = dayWidth / CGFloat(day.courseTrackCount)
                     let inset: CGFloat = showsWeekColumns ? 1 : 3
                     let x = CGFloat(dayIndex) * dayWidth
                         + CGFloat(placement.track) * trackWidth
@@ -296,7 +303,7 @@ struct MobileCalendarTimelineView: View {
 
     private func courseBlock(
         date: Date,
-        placement: CoursePlacement,
+        placement: CalendarCoursePlacement,
         width: CGFloat,
         x: CGFloat,
         top: CGFloat,
@@ -396,27 +403,6 @@ struct MobileCalendarTimelineView: View {
         if hour == 8 { return rawY + 8 }
         if hour == 22 { return rawY - 8 }
         return rawY
-    }
-
-    private func placeCourses(_ courses: [Course]) -> [CoursePlacement] {
-        var trackEnds = [Int]()
-        return courses.sorted {
-            ($0.startSlot, $0.endSlot, $0.name) < ($1.startSlot, $1.endSlot, $1.name)
-        }.map { course in
-            let track = trackEnds.firstIndex(where: { $0 < course.startSlot }) ?? trackEnds.count
-            if track == trackEnds.count {
-                trackEnds.append(course.endSlot)
-            } else {
-                trackEnds[track] = course.endSlot
-            }
-            return CoursePlacement(course: course, track: track)
-        }
-    }
-
-    private struct CoursePlacement: Identifiable {
-        let course: Course
-        let track: Int
-        var id: String { "\(course.id)|\(track)" }
     }
 
     private static let timeFormatter: DateFormatter = {

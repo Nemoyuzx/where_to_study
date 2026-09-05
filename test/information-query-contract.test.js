@@ -63,7 +63,9 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(queryHub, /role="tab"[\s\S]*'重要事件'/)
 
   assertOrdered(appleAppModel, ['case planner', 'case calendar', 'case queries', 'case settings'])
-  assert.match(appleRoot, /case \.queries: InformationQueriesView\(\)/)
+  assert.match(appleRoot, /case \.queries:\s+InformationQueriesView\(/)
+  assert.match(appleRoot, /shuttleStore: modeServices\.shuttle/)
+  assert.match(appleRoot, /eventQueryStore: modeServices\.importantEvents/)
   assert.doesNotMatch(appleSettings, /InformationQueriesView|InformationQueriesPresentation/)
   assert.doesNotMatch(appleDesktopCalendar, /InformationQueriesView|InformationQueriesPresentation/)
   assert.doesNotMatch(appleMobileCalendar, /InformationQueriesView|InformationQueriesPresentation/)
