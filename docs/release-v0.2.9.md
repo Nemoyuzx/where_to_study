@@ -1,4 +1,32 @@
-# Where To Study iOS 0.2.9 TestFlight Hotfix
+# Where To Study Apple 0.2.9 TestFlight Hotfix
+
+## 0.2.9 (81) — iOS and macOS loading follow-up
+
+Both platforms were built with local Xcode 26.6 and uploaded on **2026-09-05**, from application-source commit `1ae10f2`. Main application and Widget versions were verified as `0.2.9 (81)` in both archives.
+
+- iOS: Automatic signing, archive validation, local Apple Distribution export validation (including no `get-task-allow`), and upload completed. Xcode reported **`Upload succeeded` at 17:53:06 +0800** and **`EXPORT SUCCEEDED`**. A developer-services TLS warning occurred earlier in the same upload; that process continued and succeeded without resubmitting the build.
+- macOS: Manual App Store profiles and the installed Installer Distribution identity; signed archive validation and upload completed. Xcode reported **`Upload succeeded` at 17:55:43 +0800** and **`EXPORT SUCCEEDED`**.
+- No App Store Connect processing or test-group checks were performed after upload. Upload success is not a claim that Apple has finished processing or that every tester can already install the build.
+- The GitHub stable Release and repository-wide default version remain `0.2.8`. This Apple-only TestFlight update does not replace other platform artifacts or publish an iOS binary on GitHub.
+
+### 中文说明
+
+将正式启动的课表/空教室缓存读取与解析、节假日缓存读取和刷新落盘移出主线程；避免缓存尚未恢复就重复获取数据。使用代际校验防止清除数据、修改账号或切换模式后旧结果回写。iOS/macOS 导航状态独立于全局业务数据，查询服务持久复用并区分真实/示例模式。重要事件在后台建立并复用搜索索引，翻页不重复解析全量截止时间。日历使用有界会话缓存、合并数据失效通知和预计算课程轨道，分钟刷新缩小到时间相关内容；同时修复首次数据早于缓存订阅到达导致全天区空白的竞态。
+
+### Validation / 验证
+
+- macOS: 254 unit tests executed, 1 opt-in network skip, 0 failures.
+- iPhone: 261 unit tests and 28 UI tests executed, 6 combined conditional skips, 0 failures; an additional final four-flow UI run passed 4/4 with an isolated result bundle.
+- iPad: English controls, all-day event/header alignment and corner selection, rotation/sidebar retention, primary navigation — 4/4 passed.
+- Repository contracts: 142/142 passed. Local live-data visual checks and background-worker stack sampling are documented in [the performance audit](apple-performance-v0.2.9.md), including the limitations of those measurements.
+
+### Repeatable upload path / 后续发布路径
+
+Use `scripts/native-apple-app-store.sh upload ios` with `APPLE_IOS_SIGNING_STYLE=Automatic`, then `upload macos` with `APPLE_MACOS_SIGNING_STYLE=Manual`. For this release set `APPLE_MARKETING_VERSION=0.2.9` and `APPLE_BUILD_NUMBER=81`; a later upload must increment the build number. Resolve `APPLE_DEVELOPMENT_TEAM` from the locally installed Apple Distribution identity rather than committing signing configuration. Each `upload` call already archives, validates and uploads: do not separately repeat `archive → export → upload`. Stop at successful upload, not an App Store Connect browser check.
+
+Ignored local evidence: `release-artifacts/apple-performance-029/ios-upload-81.log`, `macos-upload-81.log`, unit/UI logs and isolated `.xcresult` bundles.
+
+## Earlier iOS-only 0.2.9 (80)
 
 `0.2.9 (80)` is an iOS-only performance hotfix built and uploaded from local Xcode on 2026-09-05. The repository-wide default version and the GitHub stable release remain `0.2.8`; macOS, Android, HarmonyOS, Windows, Linux, CLI, and TUI packages were not rebuilt or replaced.
 

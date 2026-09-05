@@ -975,6 +975,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         enterButton.tap()
         XCTAssertTrue(app.descendants(matching: .any)["banner.sample-mode"].waitForExistence(timeout: 5))
 
+        navigate(to: "空教室", in: app)
+        let sampleWeather = app.buttons["weather.toggle"]
+        XCTAssertTrue(sampleWeather.waitForExistence(timeout: 5))
+        let sampleWeatherLoaded = NSPredicate(format: "label CONTAINS %@", "27°")
+        XCTAssertEqual(XCTWaiter.wait(for: [
+            XCTNSPredicateExpectation(predicate: sampleWeatherLoaded, object: sampleWeather)
+        ], timeout: 5), .completed, "Returning to Planner must load the mode-scoped weather store")
+
         navigate(to: "查询", in: app)
         let sampleShuttle = app.descendants(matching: .any)["queries.shuttle.snapshot"].firstMatch
         XCTAssertTrue(sampleShuttle.waitForExistence(timeout: 5))

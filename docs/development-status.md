@@ -1,14 +1,18 @@
-# v0.2.8 正式发布与 iOS 0.2.9 TestFlight 热修检查点（2026-09-05）
+# v0.2.8 正式发布与 Apple 0.2.9 TestFlight 热修检查点（2026-09-05）
 
 ## 当前状态
 
 - 分支：`main`
 - 当前稳定版本：[Where To Study v0.2.8](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.8)；GitHub Release 已转为正式版并更新 `releases/latest`
-- 应用版本：GitHub 与跨平台源码默认版本 `0.2.8`；最新 iOS TestFlight 热修 `0.2.9 (80)`
-- 当前构建号：Apple 源码默认 `CURRENT_PROJECT_VERSION=79`，最新已上传 iOS 为 build 80、macOS 为 build 77；Android `versionCode=45`；HarmonyOS `versionCode=1002022`；Tauri Android `versionCode=2011`
+- 应用版本：GitHub 与跨平台源码默认版本 `0.2.8`；最新 iOS/macOS TestFlight 热修均为 `0.2.9 (81)`
+- 当前构建号：Apple 源码默认 `CURRENT_PROJECT_VERSION=79`，本次通过构建覆盖参数上传 iOS/macOS build 81；Android 源码 `versionCode=46`；HarmonyOS `versionCode=1002022`；Tauri Android `versionCode=2011`
 - 教务数据源：只使用现有移动教务 SJD HTTPS 接口，没有切换或静默回退到其他数据源
 - 本地安装：发布构建不会自动安装到 `/Applications`；Apple UI 验证完成后已关闭测试模拟器，Android 签名打包未启动模拟器
-- 发布边界：iOS `0.2.9 (80)` 与 macOS `0.2.8 (77)` 均由本地 Xcode 上传并收到 `EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing。HarmonyOS `0.2.8 (1002022)` 已由 DevEco 上传，快速测试通过；原完整上架报告的性能/UX 问题已对应优化，最终指标待新完整报告确认，见下方记录。鸿蒙仅通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；本次未替换 GitHub 附件。项目按 GPL-3.0-only 开源
+- 发布边界：iOS/macOS `0.2.9 (81)` 均由本地 Xcode 上传并收到 `EXPORT SUCCEEDED` 与 `Upload succeeded`，按约定不检查 App Store Connect processing。HarmonyOS `0.2.8 (1002022)` 已由 DevEco 上传，快速测试通过；原完整上架报告的性能/UX 问题已对应优化，最终指标待新完整报告确认，见下方记录。鸿蒙仅通过 AppGallery Connect 分发。GitHub 正式版固定为 11 项公开附件，不含 Android AAB、HarmonyOS APP/HAP、iOS、`.sha256` 或原生 macOS ZIP；本次未替换 GitHub 附件。项目按 GPL-3.0-only 开源
+
+## Apple 0.2.9 (81) 加载与渲染优化
+
+`1ae10f2` 将主要缓存读取/解析及刷新落盘移出主线程，并保留账号与学期校验；双平台导航隔离、真实/示例查询缓存隔离、后台事件搜索索引、日历会话缓存和批量失效已落地。macOS 254 单测、iPhone 261 单测与 28 UI 用例均无失败（按门控合计跳过 7 项），额外 iPad 和 iPhone 各 4 项 UI 复测通过。具体性能证据及边界见 [性能审计](apple-performance-v0.2.9.md)，构建号、签名方式和上传回执见 [0.2.9 发布记录](release-v0.2.9.md)。
 
 ## HarmonyOS 1002022 云测试问题修复
 
