@@ -61,6 +61,10 @@
       "value": "#98989D"
     },
     {
+      "name": "app_disabled_text",
+      "value": "#B8B8BD"
+    },
+    {
       "name": "app_border",
       "value": "#38383A"
     },

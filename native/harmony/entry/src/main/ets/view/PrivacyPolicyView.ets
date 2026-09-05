@@ -114,6 +114,8 @@ export struct PrivacyPolicyView {
       .width('100%')
       .backgroundColor(AppTheme.background())
       .align(Alignment.Top)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
     .width('100%')
     .height('100%')

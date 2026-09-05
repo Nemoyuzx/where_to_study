@@ -13,6 +13,27 @@ import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
 import { PublicDeadlineItem, PublicDeadlineKindInfo,
   PublicDeadlineSource } from '../net/CalendarDailyInfoClient';
 
+@Builder
+function disabledSettingsButton(configuration: ButtonConfiguration) {
+  Text(configuration.label)
+    .fontSize(15)
+    .fontWeight(FontWeight.Bold)
+    .fontColor(AppTheme.disabledText())
+    .textAlign(TextAlign.Center)
+    .width('100%')
+    .height('100%')
+    .borderRadius(6)
+    .backgroundColor(AppTheme.surfaceVariant())
+}
+
+// 原生 Button 的 disabled alpha 会再乘 opacity；仅禁用时改用内容定制，
+// 保留 enabled(false) 的交互/无障碍语义，同时由主题完整控制文字与底色。
+class DisabledSettingsButtonContent implements ContentModifier<ButtonConfiguration> {
+  applyContent(): WrappedBuilder<[ButtonConfiguration]> {
+    return wrapBuilder(disabledSettingsButton);
+  }
+}
+
 @ComponentV2
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
@@ -148,6 +169,7 @@ export struct SettingsView {
     }
     .width('100%')
     .height('100%')
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .backgroundColor(AppTheme.background())
     .align(Alignment.Top)
     .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
@@ -325,6 +347,7 @@ export struct SettingsView {
         .width('100%')
         .height(36)
         .enabled(!this.model.isSampleMode())
+        .contentModifier(this.model.isSampleMode() ? new DisabledSettingsButtonContent() : undefined)
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
         .onClick(() => {
           const work: Promise<boolean> = this.model.saveSettings();
@@ -346,11 +369,14 @@ export struct SettingsView {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.primary())
         .borderRadius(6)
-        .border({ width: 1, color: AppTheme.primary() })
+        .border({ width: 1, color: this.model.isRefreshingSchedule || this.model.isSampleMode() ?
+          AppTheme.border() : AppTheme.primary() })
         .backgroundColor(AppTheme.surface())
         .width('100%')
         .height(36)
         .enabled(!this.model.isRefreshingSchedule && !this.model.isSampleMode())
+        .contentModifier(this.model.isRefreshingSchedule || this.model.isSampleMode() ?
+          new DisabledSettingsButtonContent() : undefined)
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
         .onClick(() => {
           const work: Promise<void> = (async (): Promise<void> => {
@@ -903,11 +929,12 @@ export struct SettingsView {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.danger())
         .borderRadius(6)
-        .border({ width: 1, color: AppTheme.danger() })
+        .border({ width: 1, color: this.model.isSampleMode() ? AppTheme.border() : AppTheme.danger() })
         .backgroundColor('#14FF3B30')
         .width('100%')
         .height(36)
         .enabled(!this.model.isSampleMode())
+        .contentModifier(this.model.isSampleMode() ? new DisabledSettingsButtonContent() : undefined)
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
         .onClick(() => {
           this.getUIContext().showAlertDialog({
@@ -999,6 +1026,7 @@ export struct SettingsView {
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       }
     }
     .padding({ left: 20, right: 20, top: 18, bottom: 28 })
@@ -1123,7 +1151,7 @@ export struct SettingsView {
       .width('100%')
       .height(36)
       .enabled(enabled)
-      .opacity(enabled ? 1 : 0.62)
+      .contentModifier(enabled ? undefined : new DisabledSettingsButtonContent())
       .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
       .onClick(() => {
         action();

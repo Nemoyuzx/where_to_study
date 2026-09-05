@@ -53,6 +53,11 @@ export class AppTheme {
     return $r('app.color.app_secondary_text');
   }
 
+  // 禁用操作使用不透明的中性配色，避免系统淡化后文字难以辨认。
+  static disabledText(): Resource {
+    return $r('app.color.app_disabled_text');
+  }
+
   static border(): Resource {
     return $r('app.color.app_border');
   }

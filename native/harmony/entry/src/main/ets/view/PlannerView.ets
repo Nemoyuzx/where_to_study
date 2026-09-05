@@ -176,6 +176,8 @@ export struct PlannerView {
     .height('100%')
     .backgroundColor(AppTheme.background())
     .align(Alignment.Top)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .opacity(this.pageVisible ? 1 : 0)
     .translate({ y: this.pageVisible ? 0 : 6 })
   }

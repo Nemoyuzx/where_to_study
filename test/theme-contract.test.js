@@ -685,6 +685,37 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
   assert.match(harmonySettingsSource, /segmentedOptions\(labels: string\[\]/)
 })
 
+test('Harmony disabled settings actions keep at least 4.5:1 text contrast in both themes', () => {
+  const disabledContent = harmonySettingsSource.match(
+    /function disabledSettingsButton\([^]*?\n\}/,
+  )?.[0] ?? ''
+  const themeTokenFor = (attribute) => {
+    const method = disabledContent.match(new RegExp(`\\.${attribute}\\(AppTheme\\.(\\w+)\\(\\)\\)`))?.[1]
+    assert.ok(method, `disabled content must declare its ${attribute}`)
+    const token = harmonyThemeSource.match(new RegExp(
+      `static ${method}\\(\\): Resource \\{\\s*return \\$r\\('app\\.color\\.(\\w+)'\\)`,
+    ))?.[1]
+    assert.ok(token, `${method} must resolve to a theme color`)
+    return token
+  }
+  const foreground = themeTokenFor('fontColor')
+  const background = themeTokenFor('backgroundColor')
+  for (const source of [harmonyLightColors, harmonyDarkColors]) {
+    const colors = Object.fromEntries(JSON.parse(source).color.map(({ name, value }) => [name, value]))
+    for (const token of [foreground, background]) {
+      assert.match(colors[token], /^#[0-9a-f]{6}$/i, `${token} must be opaque`)
+    }
+    assertContrast(colors, foreground, background)
+    assertContrast(colors, 'app_on_primary', 'app_primary_fill')
+  }
+  // 模拟进入示例模式后仍继承系统 0.4 禁用透明度的旧路径，证明数值校验覆盖本次失败。
+  const light = Object.fromEntries(JSON.parse(harmonyLightColors).color.map(({ name, value }) => [name, value]))
+  const fadedFill = '#' + light.app_primary_fill.slice(1).match(/../g).map((channel) =>
+    Math.round(Number.parseInt(channel, 16) * 0.4 + 255 * 0.6).toString(16).padStart(2, '0'),
+  ).join('')
+  assert.ok(contrastRatio(light.app_on_primary, fadedFill) < 3)
+})
+
 test('Harmony tablet week view follows the macOS header, all-day, and timeline hierarchy', () => {
   assert.match(
     harmonyTimelineSource,

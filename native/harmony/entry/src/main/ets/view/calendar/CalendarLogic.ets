@@ -148,6 +148,19 @@ export class CalendarTimelineLogic {
 }
 
 export class TeachingCalendarLogic {
+  static mobilePageIdentity(mode: CalendarMode, date: DateParts): string {
+    if (mode === CalendarMode.year) {
+      return mode + '.' + date.year.toString();
+    }
+    const dateKey: string = StrictDates.formatDateParts(date);
+    return mode + '.' + (mode === CalendarMode.month ? dateKey.substring(0, 7) : dateKey);
+  }
+
+  static monthWeekIndex(date: DateParts): number {
+    const first: DateParts = new DateParts(date.year, date.month, 1);
+    return Math.floor((StrictDates.weekdayMonday1(first) - 1 + date.day - 1) / 7);
+  }
+
   static readonly pageTransitionDuration: number = 300;
   static readonly swipeThreshold: number = 72;
   static readonly expansionVelocityThreshold: number = 640;

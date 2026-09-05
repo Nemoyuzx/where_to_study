@@ -257,7 +257,7 @@ export struct QueryView {
       .layoutWeight(1)
       .width('100%')
       .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
   }
 
@@ -465,7 +465,7 @@ export struct QueryView {
       .width('100%')
       .scrollable(ScrollDirection.Horizontal)
       .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       if (this.availableEventCategories().length > 0) {
         Scroll() {
           Row({ space: 7 }) {
@@ -506,7 +506,7 @@ export struct QueryView {
         .width('100%')
         .scrollable(ScrollDirection.Horizontal)
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       }
       Row({ space: 8 }) {
         Text(this.model.text('显示已结束或归档事件'))
@@ -556,7 +556,7 @@ export struct QueryView {
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .onScrollIndex((start: number, end: number, center: number) => {
           this.appendEventPage(end);
         })

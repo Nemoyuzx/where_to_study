@@ -36,6 +36,44 @@ class CalendarPreloadProbe implements CalendarViewportPreloadTarget {
 
 export default function teachingCalendarLogicTest() {
   describe('TeachingCalendarLogicTest', () => {
+    it('year_page_identity_preserves_the_grid_when_selecting_another_day', 0, () => {
+      const first: DateParts = new DateParts(2026, 1, 1);
+      const selected: DateParts = new DateParts(2026, 9, 5);
+      expect(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.year, first))
+        .assertEqual(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.year, selected));
+      expect(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.year, selected))
+        .assertEqual(CalendarMode.year + '.2026');
+      expect(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.year,
+        new DateParts(2027, 1, 1))).assertEqual(CalendarMode.year + '.2027');
+      expect(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.month, selected))
+        .assertEqual(CalendarMode.month + '.2026-09');
+      expect(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.month,
+        new DateParts(2026, 9, 30)))
+        .assertEqual(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.month, selected));
+      expect(TeachingCalendarLogic.mobilePageIdentity(CalendarMode.month,
+        new DateParts(2026, 10, 1))).assertEqual(CalendarMode.month + '.2026-10');
+      for (const mode of [CalendarMode.day, CalendarMode.week]) {
+        expect(TeachingCalendarLogic.mobilePageIdentity(mode, selected))
+          .assertEqual(mode + '.2026-09-05');
+      }
+    });
+
+    it('month_week_index_matches_monday_first_grid_including_leap_years', 0, () => {
+      for (const year of [2026, 2028, 2100]) {
+        for (let month: number = 1; month <= 12; month++) {
+          const first: DateParts = new DateParts(year, month, 1);
+          const start: DateParts = StrictDates.addDays(first,
+            1 - StrictDates.weekdayMonday1(first));
+          for (let index: number = 0; index < 42; index++) {
+            const day: DateParts = StrictDates.addDays(start, index);
+            if (day.year === year && day.month === month) {
+              expect(TeachingCalendarLogic.monthWeekIndex(day)).assertEqual(Math.floor(index / 7));
+            }
+          }
+        }
+      }
+    });
+
     it('period_titles_reserve_week_label_for_real_teaching_metadata', 0, () => {
       const date: DateParts = new DateParts(2026, 8, 14);
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.day))

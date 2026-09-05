@@ -254,8 +254,12 @@ export struct RootView {
         ForEach(AppSectionInfo.all, (section: AppSection) => {
           Row({ space: 8 }) {
             SymbolGlyph(AppSectionInfo.symbol(section))
-              .fontSize(14)
+              // 密集日历符号在 14fp 下易出现锯齿，使用独立 vp 尺寸保留轮廓细节。
+              .fontSize(section === AppSection.calendar ? '20vp' : '14vp')
+              .fontWeight(section === AppSection.calendar ? FontWeight.Medium : FontWeight.Regular)
               .fontColor([AppTheme.text()])
+              .width(20)
+              .height(20)
             Text(this.model.text(AppSectionInfo.title(section)))
               .fontSize(13)
               .fontWeight(this.currentSection === section ? FontWeight.Medium : FontWeight.Regular)

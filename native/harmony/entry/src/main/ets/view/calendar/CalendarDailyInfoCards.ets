@@ -93,7 +93,7 @@ export struct CalendarDailyInfoCards {
       if (this.assignments().length > 0) {
         ForEach(this.assignments(), (item: AssignmentDeadlineItem) => {
           this.assignmentRow(item)
-        }, (item: AssignmentDeadlineItem) => 'assignment.' + item.id)
+        }, (item: AssignmentDeadlineItem) => 'assignment.' + this.date() + '.' + item.id)
       } else {
         Text(this.model.text(this.model.assignmentUnavailableByDate.get(this.date()) ??
           '当天暂无课程作业 DDL'))
@@ -166,7 +166,11 @@ export struct CalendarDailyInfoCards {
     Column({ space: 8 }) {
       this.cardTitle('黄历信息')
       if (this.almanac() !== null) {
-        this.almanacContent(this.almanac() as AlmanacInfo)
+        // 卡片随 @Param day 原位更新；仅重建按值捕获 info 的内容，避免切换两个
+        // 已有缓存的日期时继续显示前一天黄历，也无需销毁整组每日信息卡片。
+        ForEach([this.date()], (dateKey: string) => {
+          this.almanacContent(this.almanac() as AlmanacInfo)
+        }, (dateKey: string) => 'almanac-content.' + dateKey)
       } else if (this.model.loadingAlmanacDates.has(this.date())) {
         Text(this.model.text('正在获取黄历与宜忌…'))
           .fontSize(13)
@@ -282,7 +286,8 @@ export struct CalendarDailyInfoCards {
       if (this.enabledDeadlineItems().length > 0) {
         ForEach(this.enabledDeadlineItems(), (item: PublicDeadlineItem) => {
           this.publicDeadlineRow(item)
-        }, (item: PublicDeadlineItem) => 'public-deadline.' + this.model.favoriteDeadlineKey(item))
+        }, (item: PublicDeadlineItem) => 'public-deadline.' + this.date() + '.' +
+          this.model.favoriteDeadlineKey(item))
         if (this.deadlineSnapshot() !== null &&
           (this.deadlineSnapshot() as PublicDeadlineSnapshot).usedBackup) {
           Text(this.model.text('本次使用备用 API'))
