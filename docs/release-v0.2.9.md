@@ -1,5 +1,28 @@
 # Where To Study Apple 0.2.9 TestFlight Hotfix
 
+## 0.2.9 (82) — iOS month paging follow-up
+
+Built with local Xcode 26.6 and uploaded on **2026-09-05**, from application-source commit `c0de962`. The iOS application and Widget archives both report **`0.2.9 (82)`**. Automatic-signing archive validation and local Apple Distribution export validation passed, including the no-`get-task-allow` check. The shipping executable contains no DEBUG month-frame probe label.
+
+Xcode reported **`Upload succeeded` at 21:41:38 +0800** and **`EXPORT SUCCEEDED`**. No App Store Connect processing or test-group inspection was performed after that receipt. This is an iOS-only TestFlight follow-up: no macOS upload, GitHub Release replacement, or Android/HarmonyOS/Windows/Linux artifact rebuild is included.
+
+### 中文说明
+
+针对左右翻月掉帧，改用三个固定循环页面与可复用原生日期控件，后台准备月份快照，离屏页分行预热；避免翻页开头整页重建及收尾集中排版。等待目标页真正完成布局后才开始动画，保留反向连续翻页、跨月选日和折叠交互。修复零尺寸边框导致的图形错误日志，并加强切换账号、清空数据时的缓存隔离。
+
+### Validation / 验证
+
+- Final iOS unit suite: 292 executed, 1 opt-in live-network skip, 0 failures.
+- Seven distinct focused UI flows passed: continuous gesture reversals, unobserved frame replay, out-of-month day selection, month expansion/year jumps, landscape stops/detail scrolling, week-agenda/month-details behavior, and English controls. The final cache-hit recency adjustment received another complete iOS unit run and frame replay.
+- Shared-code macOS suite: 276 executed, 1 opt-in live-network skip, 0 failures. Repository contracts: 142/142 passed.
+- Local screenshots were visually checked. Timing records, intermediate results and the explicit simulator/real-device limitations are in [the month-paging audit](ios-month-paging-performance-v0.2.9.md). The final replay improved first-callback latency and animation-start intervals; residual completion intervals remain, so this is not a zero-hitch or physical-device FPS guarantee.
+
+### Upload receipt / 发布记录
+
+Used the existing single command `scripts/native-apple-app-store.sh upload ios`, with `APPLE_MARKETING_VERSION=0.2.9`, `APPLE_BUILD_NUMBER=82`, and `APPLE_IOS_SIGNING_STYLE=Automatic`. The team was resolved from the locally installed Apple Distribution identity, not committed. The script performs archive, validation, export and upload; these steps were not separately repeated.
+
+Ignored local evidence: `release-artifacts/ios-month-paging-029/ios-upload-82.log`, final unit/UI/replay logs, and screenshot folders. A later TestFlight upload must use a new build number; do not resend build 82 or check App Store Connect after this successful upload.
+
 ## 0.2.9 (81) — iOS and macOS loading follow-up
 
 Both platforms were built with local Xcode 26.6 and uploaded on **2026-09-05**, from application-source commit `1ae10f2`. Main application and Widget versions were verified as `0.2.9 (81)` in both archives.
