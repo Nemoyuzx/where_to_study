@@ -1313,7 +1313,9 @@ final class ScheduleLogicTests: XCTestCase {
 
         XCTAssertEqual(value("month"), 1)
         XCTAssertEqual(value("year"), 2)
-        XCTAssertEqual(value("month"), 1, "A cache hit must refresh LRU recency")
+        XCTAssertEqual(cache.cachedValue(for: "month"), 1, "Prepared-page lookups must refresh LRU recency")
+        XCTAssertNil(cache.cachedValue(for: "absent"))
+        XCTAssertEqual(buildCount, 2, "Looking up a prepared page must never build a snapshot")
         XCTAssertEqual(value("next-month"), 3)
         XCTAssertEqual(value("year"), 4, "The least recently used entry must be evicted")
         XCTAssertEqual(cache.count, 2)

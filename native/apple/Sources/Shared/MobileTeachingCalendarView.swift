@@ -26,7 +26,7 @@ private struct MobileCalendarDetailSelection: Identifiable {
     let content: Content
 }
 
-private struct MobileMonthEvent: Identifiable {
+struct MobileMonthEvent: Identifiable, Equatable {
     let id: String
     let title: String
     let categoryKey: String
@@ -48,7 +48,7 @@ private struct MobileMonthEvent: Identifiable {
     }
 }
 
-private struct MobileMonthDaySnapshot: Identifiable {
+struct MobileMonthDaySnapshot: Identifiable, Equatable {
     let date: Date
     let dateKey: String
     let dayNumberText: String
@@ -76,16 +76,55 @@ private final class MobileCalendarSnapshotCache: ObservableObject {
     private var yearStorage = CalendarBoundedCache<String, MobileYearSnapshotCollection>(capacity: 24)
     private let timelineStorage = CalendarBoundedCache<String, [CalendarTimelineDay]>(capacity: 6)
     private let invalidation = CalendarSnapshotInvalidationObserver()
+    private let monthWorker = MobileMonthProjectionWorker()
+    private(set) var generation: UInt64 = 0
+    private let monthDates = CalendarBoundedCache<Date, [Date]>(capacity: 8)
+
+    func dates(inMonthContaining date: Date) -> [Date] {
+        let calendar = Calendar.shanghai
+        let first = calendar.dateInterval(of: .month, for: date)?.start ?? date
+        return monthDates.value(for: first) {
+            let leading = (calendar.component(.weekday, from: first) + 5) % 7
+            guard let start = calendar.date(byAdding: .day, value: -leading, to: first) else { return [] }
+            return (0..<42).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+        }
+    }
+
+    func preparedMonth(for key: String) -> [MobileMonthDaySnapshot]? {
+        monthStorage.cachedValue(for: key)
+    }
+
+    func prepareMonth(for key: String, input: MobileMonthProjectionInput) async -> Bool {
+        if preparedMonth(for: key) != nil { return true }
+        let requestedGeneration = generation
+        do {
+            let days = try await monthWorker.build(input: input)
+            guard !Task.isCancelled, generation == requestedGeneration else { return false }
+            let mapped = days.map { day in
+                MobileMonthDaySnapshot(
+                    date: day.date, dateKey: day.dateKey, dayNumberText: day.dayNumberText,
+                    accessibilityLabel: day.accessibilityLabel, courses: day.courses,
+                    holiday: day.holiday,
+                    events: day.events.map { event in
+                        MobileMonthEvent(
+                            id: event.id, title: event.title, categoryKey: event.categoryKey,
+                            tint: event.kind.map(CalendarDeadlinePresentation.tint) ?? AppTheme.primary,
+                            deadlineItem: event.deadlineItem
+                        )
+                    },
+                    allDayEvents: day.allDayEvents, deadlineKinds: day.deadlineKinds
+                )
+            }
+            if preparedMonth(for: key) == nil {
+                objectWillChange.send()
+                _ = monthStorage.value(for: key) { mapped }
+            }
+            return true
+        } catch { return false }
+    }
 
     func timelineValues(for key: String, build: () -> [CalendarTimelineDay]) -> [CalendarTimelineDay] {
         timelineStorage.value(for: key, build: build)
-    }
-
-    func monthValues(
-        for key: String,
-        build: () -> [MobileMonthDaySnapshot]
-    ) -> [MobileMonthDaySnapshot] {
-        monthStorage.value(for: key, build: build)
     }
 
     func yearValues(
@@ -98,7 +137,7 @@ private final class MobileCalendarSnapshotCache: ObservableObject {
     }
 
     func invalidate() {
-        guard !monthStorage.isEmpty || !yearStorage.isEmpty || !timelineStorage.isEmpty else { return }
+        generation &+= 1
         objectWillChange.send()
         monthStorage.removeAll()
         yearStorage.removeAll()
@@ -252,7 +291,15 @@ struct MobileTeachingCalendarView: View {
     @State private var monthDetailsScrollResetID = UUID()
     @State private var monthDetailsScrollState = MobileMonthDetailsScrollState()
     @State private var monthDragRoutingSession = MobileMonthDragRoutingSession()
-    @State private var monthPagingState = MobileMonthPagingState()
+    @State private var monthPageWindow: MobileMonthPageWindow?
+    @State private var monthPagingProgress: CGFloat = 0
+    @State private var monthPageTask: Task<Void, Never>?
+    @State private var monthPageReadiness: [Date: String] = [:]
+    @State private var monthLayoutEpoch: UInt64 = 0
+    @State private var frozenMonthPages: [Date: [MobileMonthDaySnapshot]] = [:]
+    @State private var frozenMonthGeneration: UInt64 = 0
+    @State private var frozenMonthDetailsDate: Date?
+    @State private var pendingMonthPosition: TeachingCalendarLogic.MonthPosition?
     @State private var areTimelineCoursesExpanded = true
 
     private let calendar = Calendar.shanghai
@@ -312,14 +359,26 @@ struct MobileTeachingCalendarView: View {
             normalizeMonthPositionForLayout()
         }
         .task(id: [ObjectIdentifier(model), ObjectIdentifier(calendarDeadlines)]) {
+            rebaseMonthPages()
             snapshotCache.bind(model: model, deadlineStore: calendarDeadlines)
         }
-        .onChange(of: selectedDate) { _ in
-            resetMonthDetailsScroll()
+        .onChange(of: model.calendarDataOwnerRevision) { _ in
+            rebaseMonthPages()
+            snapshotCache.invalidate()
         }
+        .onChange(of: selectedDate) { _ in
+            if monthPageWindow?.transition == nil || monthPageWindow?.selectedDate != selectedDate {
+                resetMonthDetailsScroll()
+                if mode == .month, monthPageWindow?.selectedDate != selectedDate { rebaseMonthPages() }
+            }
+        }
+        .onChange(of: mode) { _ in rebaseMonthPages() }
+        .onDisappear { rebaseMonthPages() }
         .onChange(of: verticalSizeClass) { _ in
+            rebaseMonthPages()
             normalizeMonthPositionForLayout()
         }
+        .onChange(of: reduceMotion) { _ in rebaseMonthPages() }
         .transaction { transaction in
             if reduceMotion {
                 transaction.animation = nil
@@ -756,12 +815,8 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var monthView: some View {
-        let first = calendar.dateInterval(of: .month, for: selectedDate)?.start ?? selectedDate
-        let days = monthGridDates(containing: first)
-        let daySnapshots = cachedDaySnapshots(for: days, scope: "month")
-        let selectedDateKey = StrictContractDateParser.string(from: selectedDate)
+        let window = monthPageWindow ?? MobileMonthPageWindow(selectedDate: selectedDate, calendar: calendar)
         let todayKey = StrictContractDateParser.string(from: .now)
-        let monthKey = String(StrictContractDateParser.string(from: first).prefix(7))
 
         return GeometryReader { proxy in
             let bottomInset = MobileCalendarTimelineLayout.contentBottomInset(
@@ -790,11 +845,6 @@ struct MobileTeachingCalendarView: View {
             let fullGridHeight = cellHeight * 6 + rowSpacing * 5
             let visibleGridHeight = fullGridHeight
                 - (fullGridHeight - cellHeight) * detailLiftProgress
-            let selectedWeekIndex = monthWeekIndex(
-                selectedDateKey: selectedDateKey,
-                in: daySnapshots
-            )
-            let gridOffset = -CGFloat(selectedWeekIndex) * (cellHeight + rowSpacing) * detailLiftProgress
             let dayTopInset = TeachingCalendarLogic.monthDayTopInset(
                 collapsedCellHeight: gridLayout.collapsedCellHeight
             )
@@ -810,24 +860,51 @@ struct MobileTeachingCalendarView: View {
                         .frame(width: gridWidth)
                         .padding(.bottom, 8)
                     ZStack(alignment: .top) {
-                        monthDateGrid(
-                            daySnapshots: daySnapshots,
-                            monthKey: monthKey,
-                            selectedDateKey: selectedDateKey,
-                            todayKey: todayKey,
-                            expansionProgress: expansionProgress,
-                            dayCellHeight: cellHeight,
-                            dayTopInset: dayTopInset,
-                            maximumEventRows: maximumEventRows
-                        )
-                        .frame(width: gridWidth, height: fullGridHeight, alignment: .top)
-                        .offset(y: gridOffset)
-                        .id(monthGridIdentity)
-                        .transition(pageTransition)
+                        ForEach(window.pages) { page in
+                            let days = monthGridDates(containing: page.monthStart)
+                            let key = snapshotCacheKey(for: days, scope: "month")
+                            let active = page.monthStart == (window.transition?.targetMonth ?? window.centerMonth)
+                            let snapshots = frozenMonthPages[page.monthStart]
+                                ?? snapshotCache.preparedMonth(for: key)
+                                ?? monthSkeleton(for: days)
+                            let pageDate = preparedSelectionDate(for: page.monthStart, window: window)
+                            let selectedKey = StrictContractDateParser.string(from: pageDate)
+                            let weekIndex = monthWeekIndex(selectedDateKey: selectedKey, in: snapshots)
+                            let offset = -CGFloat(weekIndex) * (cellHeight + rowSpacing) * detailLiftProgress
+                            MobileMonthNativeGrid(
+                                days: snapshots,
+                                monthKey: String(StrictContractDateParser.string(from: page.monthStart).prefix(7)),
+                                selectedDateKey: selectedKey, todayKey: todayKey,
+                                expansionProgress: expansionProgress,
+                                cellHeight: cellHeight, dayTopInset: dayTopInset,
+                                maximumEventRows: maximumEventRows,
+                                active: active, language: model.appLanguage,
+                                onSelect: requestMonthDaySelection
+                            )
+                            .frame(width: gridWidth, height: fullGridHeight, alignment: .top)
+                            .offset(y: offset)
+                            .frame(width: gridWidth, height: visibleGridHeight, alignment: .top)
+                            .clipped()
+                            .background {
+                                if frozenMonthPages[page.monthStart] != nil || snapshotCache.preparedMonth(for: key) != nil {
+                                    MobileMonthPageLayout(
+                                        month: page.monthStart,
+                                        generation: "\(monthLayoutEpoch)|\(frozenMonthPages[page.monthStart] == nil ? snapshotCache.generation : frozenMonthGeneration)|\(selectedKey)|\(active)"
+                                    ) { month, generation in
+                                        if monthPageReadiness[month] != generation {
+                                            monthPageReadiness[month] = generation
+                                        }
+                                    }
+                                }
+                            }
+                            .offset(x: (CGFloat(page.offset) + monthPagingProgress) * gridWidth)
+                            .allowsHitTesting(window.transition == nil && page.monthStart == window.centerMonth)
+                            .accessibilityElement(children: active ? .contain : .ignore)
+                            .accessibilityHidden(!active)
+                        }
                     }
                     .frame(width: gridWidth, height: visibleGridHeight, alignment: .top)
                     .clipped()
-                    .animation(Self.pageAnimation, value: monthGridIdentity)
                     monthExpansionHandle(
                         expansionProgress: expansionProgress,
                         detailLiftProgress: detailLiftProgress
@@ -836,7 +913,7 @@ struct MobileTeachingCalendarView: View {
                 .frame(maxWidth: .infinity)
 
                 monthDetailsViewport(
-                    day: selectedDate,
+                    day: frozenMonthDetailsDate ?? selectedDate,
                     height: summaryHeight,
                     expansionProgress: expansionProgress
                 )
@@ -858,9 +935,53 @@ struct MobileTeachingCalendarView: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("calendar.mobile.month")
             .accessibilityValue(monthAccessibilityValue)
+            #if DEBUG
+            .overlay(alignment: .topLeading) {
+                if ProcessInfo.processInfo.arguments.contains("--ui-test-month-performance") {
+                    MobileMonthFrameProbe(pageID: monthGridIdentity).frame(width: 32, height: 10)
+                        .accessibilityIdentifier("calendar.mobile.month-frame-probe")
+                }
+            }
+            #endif
             .accessibilityAction(named: Text(isMonthExpanded ? "收起月历" : "展开月历")) {
                 settleMonthPosition(to: isMonthExpanded ? .collapsed : .expanded)
             }
+            #if DEBUG
+            .task {
+                guard ProcessInfo.processInfo.arguments.contains("--ui-test-month-autoplay") else { return }
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                    for direction in [1, -1, 1, 1, -1, -1] {
+                        guard !Task.isCancelled else { return }
+                        moveDate(direction)
+                        try await Task.sleep(for: .seconds(1))
+                    }
+                } catch {}
+            }
+            #endif
+            .task(id: monthPreparationID) {
+                guard monthPageWindow?.transition == nil else { return }
+                let currentWindow = monthPageWindow ?? MobileMonthPageWindow(selectedDate: selectedDate, calendar: calendar)
+                if monthPageWindow == nil { monthPageWindow = currentWindow }
+                for page in currentWindow.pages.sorted(by: { abs($0.offset) < abs($1.offset) }) {
+                    guard !Task.isCancelled else { return }
+                    if await prepareMonthData(page.monthStart) {
+                        frozenMonthPages.removeValue(forKey: page.monthStart)
+                    }
+                    await Task.yield()
+                }
+                // Data-only lookahead: the next recycled slot should receive
+                // its final snapshot, not lay out a skeleton and then all text
+                // again in the same animation-completion frame. Views stay at 3.
+                for offset in [-2, 2] {
+                    guard !Task.isCancelled,
+                          let month = calendar.date(byAdding: .month, value: offset, to: currentWindow.centerMonth)
+                    else { return }
+                    _ = await prepareMonthData(month)
+                    await Task.yield()
+                }
+            }
+            .onChange(of: proxy.size) { _ in rebaseMonthPages() }
         }
     }
 
@@ -946,33 +1067,6 @@ struct MobileTeachingCalendarView: View {
         }
     }
 
-    private func monthDateGrid(
-        daySnapshots: [MobileMonthDaySnapshot],
-        monthKey: String,
-        selectedDateKey: String,
-        todayKey: String,
-        expansionProgress: CGFloat,
-        dayCellHeight: CGFloat,
-        dayTopInset: CGFloat,
-        maximumEventRows: Int
-    ) -> some View {
-        let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
-        return LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(daySnapshots) { snapshot in
-                monthDayButton(
-                    snapshot,
-                    monthKey: monthKey,
-                    selectedDateKey: selectedDateKey,
-                    todayKey: todayKey,
-                    expansionProgress: expansionProgress,
-                    cellHeight: dayCellHeight,
-                    dayTopInset: dayTopInset,
-                    maximumEventRows: maximumEventRows
-                )
-            }
-        }
-    }
-
     private func monthExpansionHandle(
         expansionProgress: CGFloat,
         detailLiftProgress: CGFloat
@@ -1000,174 +1094,6 @@ struct MobileTeachingCalendarView: View {
         .accessibilityLabel(isMonthExpanded ? "收起月历" : "展开月历")
         .accessibilityValue(monthAccessibilityValue)
         .accessibilityIdentifier("calendar.mobile.month-state")
-    }
-
-    private func monthDayButton(
-        _ snapshot: MobileMonthDaySnapshot,
-        monthKey: String,
-        selectedDateKey: String,
-        todayKey: String,
-        expansionProgress: CGFloat,
-        cellHeight: CGFloat,
-        dayTopInset: CGFloat,
-        maximumEventRows: Int
-    ) -> some View {
-        let day = snapshot.date
-        let inMonth = snapshot.dateKey.hasPrefix(monthKey)
-        let selected = snapshot.dateKey == selectedDateKey
-        let today = snapshot.dateKey == todayKey
-        let dayCourses = snapshot.courses
-        let holiday = snapshot.holiday
-        let events = snapshot.events
-        let deadlineKinds = snapshot.deadlineKinds
-        let eventLayout = TeachingCalendarLogic.monthEventLayout(
-            totalCount: events.count,
-            maximumRows: maximumEventRows
-        )
-
-        return VStack(spacing: 3) {
-            Button {
-                requestMonthDaySelection(day)
-            } label: {
-                Text(snapshot.dayNumberText)
-                    .font(.subheadline.weight(selected ? .bold : .medium))
-                    .frame(height: 20)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier(
-                "calendar.mobile.month-day-number.\(snapshot.dateKey)"
-            )
-
-            ZStack(alignment: .top) {
-                HStack(spacing: 2) {
-                    if holiday != nil {
-                        Text(model.localized(holiday?.type == "holiday" ? "休" : "班"))
-                            .font(.system(size: 7, weight: .bold))
-                    }
-                    ForEach(0 ..< min(dayCourses.count, 3), id: \.self) { _ in
-                        Circle().frame(width: 3, height: 3)
-                    }
-                }
-                .frame(height: 8)
-                .opacity(1 - expansionProgress)
-                .allowsHitTesting(false)
-
-                VStack(spacing: 2) {
-                    ForEach(Array(events.prefix(eventLayout.visibleEventCount))) { event in
-                        monthEventItem(
-                            event,
-                            tint: selected ? AppTheme.onPrimary : event.tint,
-                            selected: selected
-                        )
-                        .allowsHitTesting(false)
-                    }
-                    if eventLayout.hiddenEventCount > 0 {
-                        Button {
-                            AppHaptics.selection()
-                            requestMonthDaySelection(day)
-                        } label: {
-                            Text("+\(eventLayout.hiddenEventCount)")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.secondaryText)
-                                .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14)
-                                .background(
-                                    selected
-                                        ? Color.black.opacity(0.18)
-                                        : AppTheme.surface.opacity(0.78)
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(
-                            model.localizedFormat("查看其余 %lld 项全天日程", eventLayout.hiddenEventCount)
-                        )
-                        .accessibilityIdentifier(
-                            "calendar.mobile.month-overflow.\(snapshot.dateKey)"
-                        )
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .top)
-                .opacity(expansionProgress)
-                .offset(y: (1 - expansionProgress) * -5)
-                .allowsHitTesting(expansionProgress > 0.95)
-            }
-        }
-        .foregroundStyle(monthForeground(selected: selected, inMonth: inMonth, holiday: holiday))
-        .padding(.horizontal, 2)
-        .padding(.top, dayTopInset)
-        .padding(.bottom, 2)
-        .frame(maxWidth: .infinity)
-        .frame(height: cellHeight, alignment: .top)
-        .clipped()
-        .background {
-            ZStack {
-                monthBackground(selected: selected, courseCount: dayCourses.count)
-                Button {
-                    requestMonthDaySelection(day)
-                } label: {
-                    Color.clear
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityHidden(true)
-            }
-        }
-        .overlay {
-            ZStack {
-                if let outerKind = deadlineKinds.first {
-                    RoundedRectangle(cornerRadius: 9)
-                        .stroke(allDayEventTint(outerKind), lineWidth: 1.75)
-                }
-                if deadlineKinds.count > 1 {
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1.25)
-                        .padding(3)
-                }
-                if today {
-                    Circle()
-                        .fill(AppTheme.danger)
-                        .frame(width: 5, height: 5)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        .padding(3)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 9))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(snapshot.accessibilityLabel)
-        .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier(
-            "calendar.mobile.month-day-cell.\(snapshot.dateKey)"
-        )
-    }
-
-    private func monthEventItem(
-        _ event: MobileMonthEvent,
-        tint: Color,
-        selected: Bool
-    ) -> some View {
-        Text(event.title)
-            .font(.system(size: 9, weight: .semibold))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .foregroundStyle(tint)
-            .padding(.horizontal, 3)
-            .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14, alignment: .center)
-            .background(
-                selected
-                    ? Color.black.opacity(0.18)
-                    : AppTheme.surface.opacity(0.78)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(tint.opacity(0.55), lineWidth: 0.75)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .accessibilityIdentifier("calendar.mobile.month-event.\(event.id)")
-            .accessibilityLabel(event.title)
     }
 
     private func monthDaySnapshots(for days: [Date]) -> [MobileMonthDaySnapshot] {
@@ -1242,16 +1168,6 @@ struct MobileTeachingCalendarView: View {
         }
     }
 
-    private func cachedDaySnapshots(
-        for days: [Date],
-        scope: String
-    ) -> [MobileMonthDaySnapshot] {
-        let key = snapshotCacheKey(for: days, scope: scope)
-        return snapshotCache.monthValues(for: key) {
-            monthDaySnapshots(for: days)
-        }
-    }
-
     private func cachedYearMonthSnapshots(for days: [Date]) -> MobileYearSnapshotCollection {
         let key = snapshotCacheKey(for: days, scope: "year-month")
         return snapshotCache.yearValues(for: key) {
@@ -1262,7 +1178,7 @@ struct MobileTeachingCalendarView: View {
     private func snapshotCacheKey(for days: [Date], scope: String) -> String {
         let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
         let todayKey = StrictContractDateParser.string(from: .now)
-        return "\(scope)|\(firstDate)|\(days.count)|" +
+        return "\(monthDataOwnerKey)|\(scope)|\(firstDate)|\(days.count)|" +
             "\(model.appLanguage.resolvedResourceName)|\(model.appLanguage.locale.identifier)|" +
             todayKey
     }
@@ -2218,10 +2134,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func monthGridDates(containing date: Date) -> [Date] {
-        let first = calendar.dateInterval(of: .month, for: date)?.start ?? date
-        let leading = (calendar.component(.weekday, from: first) + 5) % 7
-        guard let start = calendar.date(byAdding: .day, value: -leading, to: first) else { return [] }
-        return (0 ..< 42).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
+        snapshotCache.dates(inMonthContaining: date)
     }
 
     private func monthWeekIndex(
@@ -2309,23 +2222,181 @@ struct MobileTeachingCalendarView: View {
         direction: Int,
         preservesMonthNavigationAnchor: Bool = false
     ) {
-        var pagingState = monthPagingState
-        let generation = pagingState.prepare(direction: direction)
-        monthPagingState = pagingState
-        session.prepareTransition(direction: pagingState.preparedDirection)
+        var window = monthPageWindow ?? MobileMonthPageWindow(selectedDate: selectedDate, calendar: calendar)
+        let transition = preservesMonthNavigationAnchor
+            ? window.request(direction: direction, animated: !reduceMotion)
+            : window.request(to: date, animated: !reduceMotion)
+        monthPageWindow = window
+        if let transition {
+            beginPreparedMonthTransition(transition)
+        } else if window.transition == nil {
+            session.commitMonthNavigation(to: window.selectedDate, preferredDay: window.preferredDayOfMonth)
+        }
+    }
 
-        // The outgoing grid owns the removal half of its transition. Give
-        // SwiftUI one update cycle to install the new direction on that grid
-        // before changing its identity; otherwise a direction reversal can
-        // reuse the edge from the preceding page insertion.
-        Task { @MainActor in
-            await Task.yield()
-            guard mode == .month, monthPagingState.accepts(generation) else { return }
-            if preservesMonthNavigationAnchor {
-                session.commitMonthNavigation(to: date)
-            } else {
-                selectedDate = date
+    private var monthPreparationID: String {
+        let window = monthPageWindow ?? MobileMonthPageWindow(selectedDate: selectedDate, calendar: calendar)
+        return "\(monthDataOwnerKey)|\(window.centerMonth.timeIntervalSinceReferenceDate)|\(snapshotCache.generation)|\(StrictContractDateParser.string(from: .now))|\(window.transition?.generation.description ?? "idle")"
+    }
+
+    private var monthDataOwnerKey: String {
+        "\(ObjectIdentifier(model))|\(ObjectIdentifier(calendarDeadlines))|\(model.calendarDataOwnerRevision)"
+    }
+
+    private func preparedSelectionDate(for month: Date, window: MobileMonthPageWindow) -> Date {
+        if let transition = window.transition {
+            if month == transition.sourceMonth { return frozenMonthDetailsDate ?? selectedDate }
+            if month == transition.targetMonth { return transition.targetDate }
+        }
+        let lastDay = calendar.range(of: .day, in: .month, for: month)?.count ?? 28
+        return calendar.date(byAdding: .day, value: min(window.preferredDayOfMonth, lastDay) - 1, to: month) ?? month
+    }
+
+    private func monthSkeleton(for days: [Date]) -> [MobileMonthDaySnapshot] {
+        days.map { day in
+            let key = StrictContractDateParser.string(from: day)
+            return MobileMonthDaySnapshot(
+                date: day, dateKey: key, dayNumberText: String(calendar.component(.day, from: day)),
+                accessibilityLabel: key, courses: [], holiday: nil, events: [], allDayEvents: [], deadlineKinds: []
+            )
+        }
+    }
+
+    private func prepareMonthData(_ month: Date) async -> Bool {
+        let days = monthGridDates(containing: month)
+        let key = snapshotCacheKey(for: days, scope: "month")
+        if snapshotCache.preparedMonth(for: key) != nil { return true }
+        let years = Set(days.map { calendar.component(.year, from: $0) })
+        let input = MobileMonthProjectionInput(
+            days: days, schedule: model.schedule,
+            holidays: years.flatMap { model.holidayItems(for: $0) },
+            favorites: model.favoriteDeadlines,
+            publicByDate: calendarDeadlines.publicByDate, customByDate: calendarDeadlines.customByDate,
+            assignmentsByDate: calendarDeadlines.assignmentsByDate,
+            visibility: MobileMonthSourceVisibility(
+                competitionEnabled: model.competitionDeadlinesEnabled,
+                schoolNoticeEnabled: model.schoolContestNoticesEnabled,
+                conferenceEnabled: model.conferenceDeadlinesEnabled,
+                summerCampEnabled: model.summerCampDeadlinesEnabled,
+                hackathonEnabled: model.hackathonDeadlinesEnabled,
+                customEnabled: model.customDeadlinesEnabled
+            ), language: model.appLanguage, today: .now
+        )
+        return await snapshotCache.prepareMonth(for: key, input: input)
+    }
+
+    private func beginPreparedMonthTransition(_ transition: MobileMonthPageWindow.Transition) {
+        monthPageTask?.cancel()
+        frozenMonthDetailsDate = selectedDate
+        let ownerRevision = model.calendarDataOwnerRevision
+        monthPageTask = Task { @MainActor in
+            while !Task.isCancelled {
+                guard mode == .month, let window = monthPageWindow,
+                      model.calendarDataOwnerRevision == ownerRevision,
+                      window.transition?.generation == transition.generation else { return }
+                let generation = snapshotCache.generation
+                var prepared = [Date: [MobileMonthDaySnapshot]]()
+                for page in window.pages {
+                    guard await prepareMonthData(page.monthStart) else { break }
+                    let days = monthGridDates(containing: page.monthStart)
+                    prepared[page.monthStart] = snapshotCache.preparedMonth(for: snapshotCacheKey(for: days, scope: "month"))
+                }
+                guard !Task.isCancelled, model.calendarDataOwnerRevision == ownerRevision else { return }
+                if generation != snapshotCache.generation || prepared.count != window.pages.count {
+                    await Task.yield()
+                    continue
+                }
+                frozenMonthGeneration = generation
+                frozenMonthPages = prepared
+                let targetLayout = "\(monthLayoutEpoch)|\(generation)|\(StrictContractDateParser.string(from: transition.targetDate))|true"
+                let sourceLayout = "\(monthLayoutEpoch)|\(generation)|\(StrictContractDateParser.string(from: frozenMonthDetailsDate ?? selectedDate))|false"
+                // Incoming data and an actual layout acknowledgement are both
+                // required before changing the translation of the mounted pages.
+                for _ in 0..<250 {
+                    if monthPageReadiness[transition.targetMonth] == targetLayout,
+                       monthPageReadiness[transition.sourceMonth] == sourceLayout { break }
+                    do { try await Task.sleep(for: .milliseconds(8)) } catch { return }
+                }
+                guard !Task.isCancelled, mode == .month,
+                      model.calendarDataOwnerRevision == ownerRevision,
+                      monthPageWindow?.transition?.generation == transition.generation else { return }
+                if generation != snapshotCache.generation {
+                    await Task.yield()
+                    continue
+                }
+                session.prepareTransition(direction: transition.direction)
+                session.commitMonthNavigation(to: transition.targetDate, preferredDay: window.preferredDayOfMonth)
+                guard monthPageReadiness[transition.targetMonth] == targetLayout,
+                      monthPageReadiness[transition.sourceMonth] == sourceLayout else {
+                    // An interrupted/offscreen viewport must not start a motion
+                    // against unlaid-out content after the bounded wait.
+                    finishMonthTransition(generation: transition.generation)
+                    return
+                }
+                let duration = AppLaunchConfiguration.usesSlowCalendarAnimation ? 2.0 : 0.24
+                if #available(iOS 17.0, *) {
+                    withAnimation(.easeInOut(duration: duration), completionCriteria: .removed) {
+                        monthPagingProgress = -CGFloat(transition.direction)
+                    } completion: {
+                        finishMonthTransition(generation: transition.generation)
+                    }
+                } else {
+                    withAnimation(.easeInOut(duration: duration)) { monthPagingProgress = -CGFloat(transition.direction) }
+                    do { try await Task.sleep(for: .seconds(duration)) } catch { return }
+                    finishMonthTransition(generation: transition.generation)
+                }
+                return
             }
+        }
+    }
+
+    private func finishMonthTransition(generation: UInt64) {
+        guard var window = monthPageWindow, window.settle(generation: generation) else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            monthPageWindow = window
+            monthPagingProgress = 0
+            monthPageReadiness = monthPageReadiness.filter { entry in window.pages.contains { $0.monthStart == entry.key } }
+            frozenMonthPages = frozenMonthPages.filter { entry in window.pages.contains { $0.monthStart == entry.key } }
+            frozenMonthDetailsDate = nil
+            resetMonthDetailsScroll()
+        }
+        if let pending = pendingMonthPosition {
+            pendingMonthPosition = nil
+            settleMonthPosition(to: pending)
+        }
+        if window.hasPendingNavigation {
+            monthPageTask = Task { @MainActor in
+                await Task.yield()
+                guard mode == .month, var next = monthPageWindow,
+                      next.transition == nil else { return }
+                let transition = next.beginPendingNavigation(animated: !reduceMotion)
+                monthPageWindow = next
+                if let transition {
+                    beginPreparedMonthTransition(transition)
+                } else {
+                    session.commitMonthNavigation(to: next.selectedDate, preferredDay: next.preferredDayOfMonth)
+                }
+            }
+        }
+    }
+
+    private func rebaseMonthPages() {
+        monthPageTask?.cancel()
+        monthPageTask = nil
+        var window = monthPageWindow ?? MobileMonthPageWindow(selectedDate: selectedDate, calendar: calendar)
+        window.rebase(to: selectedDate, preservingMonthDayAnchor: window.selectedDate == selectedDate)
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            monthPageWindow = window
+            monthLayoutEpoch &+= 1
+            monthPagingProgress = 0
+            frozenMonthPages.removeAll()
+            monthPageReadiness.removeAll()
+            frozenMonthDetailsDate = nil
+            pendingMonthPosition = nil
         }
     }
 
@@ -2389,11 +2460,12 @@ struct MobileTeachingCalendarView: View {
                     monthDragRoutingSession.isRoutedToDetails = true
                     return
                 }
-                monthDragAxis = axis
-                suppressesEventSelection = true
+                if axis == .vertical, monthPageWindow?.transition != nil { return }
+                if monthDragAxis != axis { monthDragAxis = axis }
+                if !suppressesEventSelection { suppressesEventSelection = true }
                 switch axis {
                 case .horizontal:
-                    isHorizontalPaging = true
+                    if !isHorizontalPaging { isHorizontalPaging = true }
                 case .vertical:
                     monthDragTranslation = value.translation.height
                 }
@@ -2493,6 +2565,10 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func settleMonthPosition(to target: TeachingCalendarLogic.MonthPosition) {
+        if monthPageWindow?.transition != nil {
+            pendingMonthPosition = target
+            return
+        }
         let normalizedTarget = TeachingCalendarLogic.normalizedMonthPosition(
             target,
             allowsIntermediatePosition: !usesLandscapeMonthStops
@@ -2584,18 +2660,6 @@ struct MobileTeachingCalendarView: View {
     private func dateStripForeground(holiday: HolidayItem?) -> Color {
         guard let holiday else { return AppTheme.text }
         return holiday.type == "holiday" ? AppTheme.danger : AppTheme.primary
-    }
-
-    private func monthForeground(selected: Bool, inMonth: Bool, holiday: HolidayItem?) -> Color {
-        if selected { return AppTheme.onPrimary }
-        if !inMonth { return AppTheme.secondaryText.opacity(0.45) }
-        return dateStripForeground(holiday: holiday)
-    }
-
-    private func monthBackground(selected: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.selectedDate }
-        guard courseCount > 0 else { return Color.clear }
-        return AppTheme.primary.opacity(min(0.08 + Double(courseCount) * 0.08, 0.36))
     }
 
     private func dayAccessibilityLabel(_ day: Date) -> String {

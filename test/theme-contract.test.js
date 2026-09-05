@@ -26,6 +26,10 @@ const appleMobileCalendarSource = readFileSync(
   new URL('../native/apple/Sources/Shared/MobileTeachingCalendarView.swift', import.meta.url),
   'utf8',
 )
+const appleNativeMonthSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/MobileMonthNativeGrid.swift', import.meta.url),
+  'utf8',
+)
 const appleLocalizationSource = readFileSync(
   new URL('../native/apple/Sources/Shared/AppLocalization.swift', import.meta.url),
   'utf8',
@@ -438,10 +442,12 @@ test('native calendars render public deadlines, centered agendas, and shared mon
     appleCalendarSource,
     /if layout\.hiddenEventCount > 0 \{[\s\S]*?Button \{[\s\S]*?selectMonthDay\(day\)/,
   )
-  assert.match(
-    appleMobileCalendarSource,
-    /if eventLayout\.hiddenEventCount > 0 \{[\s\S]*?Button \{[\s\S]*?requestMonthDaySelection\(day\)/,
-  )
+  assert.match(appleMobileCalendarSource, /MobileMonthNativeGrid\([\s\S]*onSelect: requestMonthDaySelection/)
+  assert.match(appleNativeMonthSource, /overflowButton\.isHidden = hiddenEventCount == 0/)
+  assert.match(appleNativeMonthSource, /overflowButton\.addTarget\(self, action: #selector\(selectDay\), for: \.touchUpInside\)/)
+  assert.match(appleNativeMonthSource, /onSelect\?\(day\.date\)/)
+  assert.match(appleNativeMonthSource, /outerBorder\.lineWidth = 1\.75/)
+  assert.match(appleNativeMonthSource, /innerBorder\.lineWidth = 1\.25/)
   assert.match(appleMobileCalendarSource, /calendar\.mobile\.week-agenda-dialog/)
   assert.match(appleMobileCalendarSource, /if deadlineKinds\.count > 1/)
   assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)[\s\S]*AppTheme\.danger/)

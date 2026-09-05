@@ -36,7 +36,9 @@ final class AppModelLoadingTests: XCTestCase {
         let pendingLoad = Task { await model.awaitInitialLocalData() }
         try await waitUntil { fixture.scheduleStore.didStartLoading }
 
+        let previousOwner = model.calendarDataOwnerRevision
         model.clearLocalData()
+        XCTAssertNotEqual(model.calendarDataOwnerRevision, previousOwner)
         fixture.scheduleStore.releaseLoad()
         await pendingLoad.value
 
@@ -56,7 +58,9 @@ final class AppModelLoadingTests: XCTestCase {
 
         model.account = "next-account"
         model.password = "next-password"
+        let previousOwner = model.calendarDataOwnerRevision
         XCTAssertTrue(model.saveSettings())
+        XCTAssertNotEqual(model.calendarDataOwnerRevision, previousOwner)
         fixture.scheduleStore.releaseLoad()
         await pendingLoad.value
 
@@ -74,7 +78,9 @@ final class AppModelLoadingTests: XCTestCase {
         let pendingLoad = Task { await model.awaitInitialLocalData() }
         try await waitUntil { fixture.scheduleStore.didStartLoading }
 
+        let previousOwner = model.calendarDataOwnerRevision
         model.enterReviewDemo()
+        XCTAssertNotEqual(model.calendarDataOwnerRevision, previousOwner)
         let demoSchedule = model.schedule
         let demoClassrooms = model.classroomsCache
         fixture.scheduleStore.releaseLoad()

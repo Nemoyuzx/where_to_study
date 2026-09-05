@@ -232,6 +232,9 @@ final class AppModel: ObservableObject {
     private var initialLocalDataTask: Task<Void, Never>?
     private var holidayLoads = HolidayLoadState()
     private var localDataGeneration = 0
+    // Presentation tasks must discard frozen account data at the same boundary
+    // as disk/network work, even when the selected date has not changed.
+    var calendarDataOwnerRevision: Int { localDataGeneration }
     private var scheduleRefreshToken = 0
     private var classroomRefreshToken = 0
     private var calendarImportToken = 0

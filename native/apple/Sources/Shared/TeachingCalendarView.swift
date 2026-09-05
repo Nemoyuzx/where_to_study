@@ -89,7 +89,8 @@ final class TeachingCalendarSessionState: ObservableObject {
         )
     }
 
-    func commitMonthNavigation(to date: Date) {
+    func commitMonthNavigation(to date: Date, preferredDay: Int? = nil) {
+        if let preferredDay, (1...31).contains(preferredDay) { preferredMonthDay = preferredDay }
         isCommittingAnchoredMonthNavigation = true
         selectedDate = date
         isCommittingAnchoredMonthNavigation = false
@@ -141,7 +142,8 @@ final class TeachingCalendarSessionState: ObservableObject {
     }
 
     func prepareTransition(direction: Int) {
-        transitionDirection = direction < 0 ? -1 : 1
+        let normalized = direction < 0 ? -1 : 1
+        if transitionDirection != normalized { transitionDirection = normalized }
     }
 
     func setMode(_ rawValue: String) {
@@ -370,6 +372,12 @@ final class CalendarBoundedCache<Key: Hashable, Value>: ObservableObject {
     var count: Int { valuesByKey.count }
     var isEmpty: Bool { valuesByKey.isEmpty }
     var keys: [Key] { accessOrder }
+
+    func cachedValue(for key: Key) -> Value? {
+        guard let cached = valuesByKey[key] else { return nil }
+        markRecentlyUsed(key)
+        return cached
+    }
 
     func value(for key: Key, build: () -> Value) -> Value {
         if let cached = valuesByKey[key] {
