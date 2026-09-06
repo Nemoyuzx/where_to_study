@@ -1298,7 +1298,10 @@ struct MobileTeachingCalendarView: View {
             ) { day in
                 guard !suppressesEventSelection, yearPageWindow?.transition == nil else { return }
                 AppHaptics.selection()
-                selectedDate = day
+                // Keep the page window in sync before presenting. A later
+                // selectedDate observer would otherwise rebase it with
+                // disablesAnimations and suppress this sheet's first entrance.
+                prepareYearPageChange(to: day)
                 presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
             }
         }
@@ -1712,6 +1715,13 @@ struct MobileTeachingCalendarView: View {
                 }
             }
         }
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            if ProcessInfo.processInfo.arguments.contains("--ui-test-detail-presentation") {
+                MobileDetailPresentationProbe().frame(width: 48, height: 10)
+            }
+        }
+        #endif
     }
 
     private func fullDayDetail(_ day: Date) -> some View {

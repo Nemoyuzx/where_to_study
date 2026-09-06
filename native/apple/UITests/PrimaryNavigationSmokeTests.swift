@@ -660,6 +660,50 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         ].firstMatch.waitForExistence(timeout: 5))
     }
 
+    func testYearDateDetailsAnimateOnFirstAndSubsequentPresentations() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone sheet presentation")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo", "--ui-test-detail-presentation"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-01-05"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "年"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate(); XCUIDevice.shared.orientation = .portrait }
+
+        navigate(to: "教学日历", in: app)
+        // First select a different date; reopening it and selecting a third
+        // date must behave identically, not depend on an already-warm sheet.
+        for key in ["2026-01-06", "2026-01-06", "2026-01-07"] {
+            let day = app.buttons["calendar.mobile.year-day.\(key)"].firstMatch
+            XCTAssertTrue(day.waitForExistence(timeout: 5))
+            XCTAssertTrue(day.isHittable)
+            day.tap()
+            let probe = app.descendants(matching: .any).matching(NSPredicate(
+                format: "label == %@", "Calendar detail presentation metrics"
+            )).firstMatch
+            XCTAssertTrue(probe.waitForExistence(timeout: 5))
+            let ready = NSPredicate { object, _ in
+                ((object as? XCUIElement)?.value as? String)?.contains("duration") == true
+            }
+            XCTAssertEqual(XCTWaiter.wait(for: [
+                XCTNSPredicateExpectation(predicate: ready, object: probe)
+            ], timeout: 5), .completed)
+            let value = try XCTUnwrap(probe.value as? String)
+            let metrics = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: Any])
+            print("YEAR_DETAIL_PRESENTATION \(key) \(value)")
+            // A newly attached child can receive willAppear(false) before the
+            // hosting sheet is presented. The presentation coordinator and
+            // completed appearance report the actual sheet animation.
+            XCTAssertEqual(metrics["didAppearAnimated"] as? Bool, true)
+            XCTAssertEqual(metrics["coordinatorAnimated"] as? Bool, true)
+            XCTAssertGreaterThan(try XCTUnwrap(metrics["duration"] as? Double), 0)
+            XCTAssertTrue(app.buttons["日视图"].exists)
+            app.buttons["完成"].tap()
+            XCTAssertTrue(probe.waitForNonExistence(timeout: 5))
+        }
+    }
+
     func testMobileYearDeadlineBorderPriorityAndDetailContent() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false

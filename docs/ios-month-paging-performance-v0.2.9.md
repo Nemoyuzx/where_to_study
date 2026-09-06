@@ -95,3 +95,13 @@ This is a simulator main-thread callback sample, not physical-device FPS or a GP
 - Shared macOS suite: 298 executed, 1 opt-in network skip, 0 failures. The macOS year gesture was deliberately not changed.
 - Repository contracts: 142/142 passed. Unsigned generic-device Release compilation succeeded with strict concurrency and warnings-as-errors; the Release executable contains none of the DEBUG fixture/probe labels.
 - The final full-fixture year screenshot was inspected for month alignment, selected/today marks, double DDL borders, vertical position and bottom navigation clearance. It remains an ignored local test artifact and is not added to the README.
+
+## First year-date detail presentation / 年视图首次详情弹窗
+
+A date tap previously updated the session date and sheet selection together, leaving the year window on its old date. The date observer then rebased the window with `disablesAnimations`, suppressing the sheet animation in the same update. Reopening the same date did not require that rebase. The tap now uses the existing year selection path to synchronize the window before presenting the sheet. No artificial delay or separate presentation controller is introduced, and Reduce Motion continues to use the existing policy.
+
+Local Xcode regression evidence: before the fix, the first sheet's UIKit transition coordinator reported `isAnimated=false` and duration `0`. After the fix, first opening, reopening the same date and opening a different date each reported `isAnimated=true`, duration `0.4` seconds and an animated completed appearance. A DEBUG-only, opt-in child controller records these actual UIKit transition values; it is excluded from the release build. The child can receive a nonanimated initial `viewWillAppear` when attached, so that callback alone is not used as the sheet-animation assertion.
+
+Validation: 24 year-window/native-grid unit tests and 3 iPhone UI flows passed, covering the three presentation cases, full DDL/date details and horizontal year paging with retained vertical position. The test log is retained locally as `release-artifacts/ios-calendar-paging-029/year-detail-presentation-regression.log`.
+
+首次点日期时先同步年份窗口和选中日期，再打开详情，避免日历的无动画重置影响弹窗。首次、同日重开和更换日期的系统呈现动画均已通过本地 Xcode 验证。
