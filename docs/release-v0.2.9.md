@@ -1,5 +1,17 @@
 # Where To Study Apple 0.2.9 TestFlight Hotfix
 
+## 0.2.9 (84) — first year-date detail sheet animation
+
+Uploaded from local **Xcode 26.6** on **2026-09-06**, from application-source commit `c25f6e6`. The iOS app and Widget archives both report **`0.2.9 (84)`**. Signed archive and Apple Distribution export validation passed. The Release executable was checked to exclude the detail-presentation test probe.
+
+年视图首次点日期时，先同步年份窗口再打开详情，避免年份页的无动画重置连带取消弹窗动画。本地 Xcode 已复现修复前首次呈现时长为 `0`；修复后首次打开、同日重开和换日打开均记录到 `0.4` 秒的 UIKit 呈现动画。24 项定向单元测试和 3 项 iPhone UI 流程全部通过，详见[性能与动画记录](ios-month-paging-performance-v0.2.9.md)。
+
+Xcode reported **`Upload succeeded` at 10:44:17 +0800** and **`EXPORT SUCCEEDED`**. No App Store Connect processing or test-group checks were performed afterward.
+
+Upload route: one invocation of `scripts/native-apple-app-store.sh upload ios`, with `APPLE_MARKETING_VERSION=0.2.9`, `APPLE_BUILD_NUMBER=84`, `APPLE_IOS_SIGNING_STYLE=Automatic`, and the development team resolved locally from the installed Apple Distribution identity. The script archived, validated, exported and uploaded; none of those stages were separately repeated. A later upload must increment the build number.
+
+Ignored receipt: `release-artifacts/ios-calendar-paging-029/ios-upload-84.log`. This is an iOS-only TestFlight update.
+
 ## 0.2.9 (83) — iOS holiday-transition fix and year paging
 
 Built and uploaded with local **Xcode 26.6** on **2026-09-06**, from application-source commit `2b4df61`. The iOS app and Widget archives both report **`0.2.9 (83)`**. Signed archive validation and Apple Distribution export validation, including the no-`get-task-allow` check, succeeded.
