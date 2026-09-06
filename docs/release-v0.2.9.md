@@ -1,5 +1,19 @@
 # Where To Study Apple 0.2.9 TestFlight Hotfix
 
+## 0.2.9 (83) — iOS holiday-transition fix and year paging
+
+Built and uploaded with local **Xcode 26.6** on **2026-09-06**, from application-source commit `2b4df61`. The iOS app and Widget archives both report **`0.2.9 (83)`**. Signed archive validation and Apple Distribution export validation, including the no-`get-task-allow` check, succeeded.
+
+Xcode reported **`Upload succeeded` at 10:24:01 +0800** and **`EXPORT SUCCEEDED`**. No App Store Connect processing or test-group checks were performed afterward.
+
+月视图在节假日不可用提示出现时继续完成水平动画；手机年视图支持左右切年、反向返回和保持纵向滚动位置，iPad 宽布局同步支持年份滑动。后台全年投影及可复用月份图层减少切换开销。具体性能结果与限制见[日历性能记录](ios-month-paging-performance-v0.2.9.md)。
+
+The already-validated source has 325 iOS unit tests executed with one expected network skip and no failures; focused iPhone holiday-animation/year-navigation/detail flows and 13-inch iPad year navigation passed. Existing validation was reused for this upload rather than repeated.
+
+Upload route: `scripts/native-apple-app-store.sh upload ios`, with `APPLE_MARKETING_VERSION=0.2.9`, `APPLE_BUILD_NUMBER=83`, and `APPLE_IOS_SIGNING_STYLE=Automatic`. The team was resolved locally from the installed Apple Distribution identity. This single invocation archived, validated, exported and uploaded once. The next upload must increment the build number.
+
+Ignored receipt: `release-artifacts/ios-calendar-paging-029/ios-upload-83.log`. This upload is iOS-only; the GitHub stable Release and other platform packages are unchanged.
+
 ## 0.2.9 (82) — iOS month paging follow-up
 
 Built with local Xcode 26.6 and uploaded on **2026-09-05**, from application-source commit `c0de962`. The iOS application and Widget archives both report **`0.2.9 (82)`**. Automatic-signing archive validation and local Apple Distribution export validation passed, including the no-`get-task-allow` check. The shipping executable contains no DEBUG month-frame probe label.
