@@ -3,6 +3,41 @@ import UIKit
 
 @MainActor
 final class MobileMonthPagingPerformanceTests: XCTestCase {
+    func testUnobservedYearPagingFrameSamples() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone frame sampling")
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--review-demo", "--ui-test-year-performance", "--ui-test-year-autoplay"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "zh-Hans"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-09-05"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "年"
+        // Isolate mounted-page rendering. Functional UI tests separately run
+        // with the full locally generated deadline/assignment fixture.
+        app.launchEnvironment["WHERE_TO_STUDY_UI_SKIP_SAMPLE_CALENDAR_EVENTS"] = "1"
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.tabBars.buttons["教学日历"].waitForExistence(timeout: 8))
+        app.tabBars.buttons["教学日历"].tap()
+        Thread.sleep(forTimeInterval: 9)
+        let probe = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label == %@", "Local year frame sample"
+        )).firstMatch
+        let value = try XCTUnwrap(probe.value as? String)
+        let output = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: Any])
+        let history = try XCTUnwrap(output["history"] as? [[String: Any]])
+        XCTAssertEqual(history.count, 7)
+        for record in history.dropFirst() {
+            XCTAssertGreaterThan(try XCTUnwrap(record["frames"] as? Int), 0)
+            let data = try JSONSerialization.data(withJSONObject: record, options: .sortedKeys)
+            print("YEAR_AUTO_FRAME_SAMPLE " + String(decoding: data, as: UTF8.self))
+        }
+        XCTAssertTrue(app.staticTexts["2026年"].exists)
+        XCTAssertTrue(app.buttons["calendar.mobile.year-day.2026-01-01"].exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "preloaded.calendar.mobile.year-day."
+        )).count, 0)
+    }
+
     func testUnobservedMonthPagingFrameSamples() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone frame sampling")
         continueAfterFailure = false

@@ -466,7 +466,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         for mode in ["日", "周", "月"] {
             app.segmentedControls.buttons["年"].tap()
             let yearDay = app.buttons["calendar.mobile.year-day.\(currentShanghaiDateString())"]
-            for _ in 0..<8 where !yearDay.exists {
+            for _ in 0..<8 where !yearDay.exists || !yearDay.isHittable {
                 app.swipeUp()
             }
             XCTAssertTrue(yearDay.waitForExistence(timeout: 3))
@@ -544,6 +544,74 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         ).firstMatch.waitForExistence(timeout: 5))
     }
 
+    func testMonthPagingKeepsItsAnimationWhenHolidayStatusBecomesUnavailable() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo", "--ui-test-slow-calendar-animation"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-11-15"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "月"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_UNAVAILABLE_HOLIDAY_YEAR"] = "2027"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate(); XCUIDevice.shared.orientation = .portrait }
+
+        navigate(to: "教学日历", in: app)
+        XCTAssertTrue(app.staticTexts["2026年11月"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["节假日数据暂不可用"].exists)
+
+        // Read the incoming page twice inside the two-second transition: its x position must
+        // move instead of snapping when the destination status banner appears.
+        horizontalSwipe(in: app, atY: 0.55, toLeft: true)
+        Thread.sleep(forTimeInterval: 0.15)
+        let target = app.buttons["calendar.mobile.month-day-number.2026-12-15"].firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 0.5))
+        let firstX = target.frame.minX
+        Thread.sleep(forTimeInterval: 0.45)
+        let secondX = target.frame.minX
+        XCTAssertLessThan(secondX, firstX - 12, "跨到无节假日数据年份时仍须进行水平位移动画")
+        XCTAssertFalse(app.staticTexts["节假日数据暂不可用"].exists)
+
+        Thread.sleep(forTimeInterval: 1.6)
+        XCTAssertTrue(app.staticTexts["2026年12月"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["节假日数据暂不可用"].waitForExistence(timeout: 3))
+    }
+
+    func testYearPagingPreservesVerticalPositionAndReturnsToTheOriginalYear() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-09-05"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "年"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate(); XCUIDevice.shared.orientation = .portrait }
+
+        navigate(to: "教学日历", in: app)
+        let yearHeader = app.staticTexts["2026年"].firstMatch
+        XCTAssertTrue(yearHeader.waitForExistence(timeout: 5))
+        let september = app.buttons["calendar.mobile.year-month.2026-09"].firstMatch
+        for _ in 0..<8 where !september.exists || !september.isHittable { app.swipeUp() }
+        XCTAssertTrue(september.waitForExistence(timeout: 3))
+        XCTAssertTrue(september.isHittable)
+        let septemberY = september.frame.minY
+
+        horizontalSwipe(in: app, atY: 0.55, toLeft: true)
+        let nextHeader = app.staticTexts["2027年"].firstMatch
+        XCTAssertTrue(nextHeader.waitForExistence(timeout: 5))
+        let nextSeptember = app.buttons["calendar.mobile.year-month.2027-09"].firstMatch
+        XCTAssertTrue(nextSeptember.waitForExistence(timeout: 5))
+        XCTAssertTrue(nextSeptember.isHittable)
+        XCTAssertEqual(nextSeptember.frame.minY, septemberY, accuracy: 4)
+        XCTAssertTrue(app.buttons["calendar.mobile.year-day.2027-09-05"].exists)
+
+        horizontalSwipe(in: app, atY: 0.55, toLeft: false)
+        XCTAssertTrue(app.staticTexts["2026年"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["calendar.mobile.year-month.2026-09"].firstMatch.isHittable)
+        attachScreenshot(named: "calendar-year-after-horizontal-return")
+    }
+
     func testMobileWeekUsesCenteredDialogAndMonthKeepsDetailsInline() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
@@ -605,10 +673,11 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let yearDay = app.buttons[
             "calendar.mobile.year-day.\(currentShanghaiDateString())"
         ].firstMatch
-        for _ in 0..<8 where !yearDay.exists {
+        for _ in 0..<8 where !yearDay.exists || !yearDay.isHittable {
             app.swipeUp()
         }
         XCTAssertTrue(yearDay.waitForExistence(timeout: 5))
+        XCTAssertTrue(yearDay.isHittable)
         XCTAssertEqual(yearDay.value as? String, "assignment,schoolNotice")
         XCTAssertTrue(yearDay.label.contains("今天"))
         yearDay.tap()
@@ -789,6 +858,28 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(monthHeading.waitForExistence(timeout: 5))
         XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(monthHeading.frame))
         XCTAssertTrue(app.buttons["Collapse month"].waitForExistence(timeout: 5))
+    }
+
+    func testExpandedIPadYearSupportsHorizontalPagingWithoutBreakingVerticalLayout() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad-only expanded year test")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-09-05"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "年"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate(); XCUIDevice.shared.orientation = .portrait }
+
+        navigateFromSidebar(to: "教学日历", in: app)
+        let yearGrid = app.descendants(matching: .any)["calendar.regular.year-grid"].firstMatch
+        XCTAssertTrue(yearGrid.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["2026年"].waitForExistence(timeout: 5))
+        yearGrid.swipeLeft()
+        XCTAssertTrue(app.staticTexts["2027年"].waitForExistence(timeout: 5))
+        XCTAssertTrue(yearGrid.exists)
+        yearGrid.swipeRight()
+        XCTAssertTrue(app.staticTexts["2026年"].waitForExistence(timeout: 5))
     }
 
     func testExpandedIPadWeekKeepsAllDayEventsInTheirDateColumnAndSelectsWholeHeader() throws {

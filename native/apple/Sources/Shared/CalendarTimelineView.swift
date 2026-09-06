@@ -78,9 +78,17 @@ enum CalendarDeadlinePresentation {
     static func topTwoDeadlineKinds(
         in events: [CalendarAllDayEvent]
     ) -> [CalendarAllDayEventKind] {
+        topTwoDeadlineKinds(in: events.map(\.kind))
+    }
+
+    /// Compact calendars need only the border kinds, without allocating the
+    /// full all-day event presentations that the agenda uses.
+    static func topTwoDeadlineKinds(
+        in kinds: [CalendarAllDayEventKind]
+    ) -> [CalendarAllDayEventKind] {
         Array(
             deadlinePriority
-                .filter { kind in events.contains(where: { $0.kind == kind }) }
+                .filter { kinds.contains($0) }
                 .prefix(2)
         )
     }

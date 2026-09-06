@@ -62,21 +62,16 @@ struct MobileMonthDaySnapshot: Identifiable, Equatable {
     var id: Date { date }
 }
 
-private struct MobileYearSnapshotCollection {
-    let byDate: [String: MobileMonthDaySnapshot]
-
-    init(days: [MobileMonthDaySnapshot]) {
-        byDate = Dictionary(uniqueKeysWithValues: days.map { ($0.dateKey, $0) })
-    }
-}
-
 @MainActor
 private final class MobileCalendarSnapshotCache: ObservableObject {
     private var monthStorage = CalendarBoundedCache<String, [MobileMonthDaySnapshot]>(capacity: 6)
-    private var yearStorage = CalendarBoundedCache<String, MobileYearSnapshotCollection>(capacity: 24)
+    // Three views remain mounted; two extra data-only years keep the recycled
+    // slot from switching through a ProgressView at animation completion.
+    private let yearStorage = CalendarBoundedCache<String, [MobileYearMonthProjection]>(capacity: 5)
     private let timelineStorage = CalendarBoundedCache<String, [CalendarTimelineDay]>(capacity: 6)
     private let invalidation = CalendarSnapshotInvalidationObserver()
     private let monthWorker = MobileMonthProjectionWorker()
+    private let yearWorker = MobileYearProjectionWorker()
     private(set) var generation: UInt64 = 0
     private let monthDates = CalendarBoundedCache<Date, [Date]>(capacity: 8)
 
@@ -127,13 +122,20 @@ private final class MobileCalendarSnapshotCache: ObservableObject {
         timelineStorage.value(for: key, build: build)
     }
 
-    func yearValues(
-        for key: String,
-        build: () -> [MobileMonthDaySnapshot]
-    ) -> MobileYearSnapshotCollection {
-        yearStorage.value(for: key) {
-            MobileYearSnapshotCollection(days: build())
-        }
+    func preparedYear(for key: String) -> [MobileYearMonthProjection]? { yearStorage.cachedValue(for: key) }
+
+    func prepareYear(for key: String, input: MobileMonthProjectionInput) async -> Bool {
+        if preparedYear(for: key) != nil { return true }
+        let requestedGeneration = generation
+        do {
+            let months = try await yearWorker.build(input: input)
+            guard !Task.isCancelled, generation == requestedGeneration else { return false }
+            if preparedYear(for: key) == nil {
+                objectWillChange.send()
+                _ = yearStorage.value(for: key) { months }
+            }
+            return true
+        } catch { return false }
     }
 
     func invalidate() {
@@ -299,6 +301,16 @@ struct MobileTeachingCalendarView: View {
     @State private var frozenMonthPages: [Date: [MobileMonthDaySnapshot]] = [:]
     @State private var frozenMonthGeneration: UInt64 = 0
     @State private var frozenMonthDetailsDate: Date?
+    @State private var frozenStatusMessages: [String]?
+    @State private var yearPageWindow: MobileYearPageWindow?
+    @State private var yearPagingProgress: CGFloat = 0
+    @State private var yearPageTask: Task<Void, Never>?
+    @State private var yearPageReadiness: [Date: String] = [:]
+    @State private var yearLayoutEpoch: UInt64 = 0
+    @State private var frozenYearPages: [Date: [MobileYearMonthProjection]] = [:]
+    @State private var frozenYearGeneration: UInt64 = 0
+    @State private var frozenYearCacheIdentity = ""
+    @State private var frozenYearSelectedDate: Date?
     @State private var pendingMonthPosition: TeachingCalendarLogic.MonthPosition?
     @State private var areTimelineCoursesExpanded = true
 
@@ -360,10 +372,12 @@ struct MobileTeachingCalendarView: View {
         }
         .task(id: [ObjectIdentifier(model), ObjectIdentifier(calendarDeadlines)]) {
             rebaseMonthPages()
+            rebaseYearPages()
             snapshotCache.bind(model: model, deadlineStore: calendarDeadlines)
         }
         .onChange(of: model.calendarDataOwnerRevision) { _ in
             rebaseMonthPages()
+            rebaseYearPages()
             snapshotCache.invalidate()
         }
         .onChange(of: selectedDate) { _ in
@@ -371,14 +385,16 @@ struct MobileTeachingCalendarView: View {
                 resetMonthDetailsScroll()
                 if mode == .month, monthPageWindow?.selectedDate != selectedDate { rebaseMonthPages() }
             }
+            if mode == .year, yearPageWindow?.selectedDate != selectedDate { rebaseYearPages() }
         }
-        .onChange(of: mode) { _ in rebaseMonthPages() }
-        .onDisappear { rebaseMonthPages() }
+        .onChange(of: mode) { _ in rebaseMonthPages(); rebaseYearPages() }
+        .onDisappear { rebaseMonthPages(); rebaseYearPages() }
         .onChange(of: verticalSizeClass) { _ in
             rebaseMonthPages()
+            rebaseYearPages()
             normalizeMonthPositionForLayout()
         }
-        .onChange(of: reduceMotion) { _ in rebaseMonthPages() }
+        .onChange(of: reduceMotion) { _ in rebaseMonthPages(); rebaseYearPages() }
         .transaction { transaction in
             if reduceMotion {
                 transaction.animation = nil
@@ -575,13 +591,17 @@ struct MobileTeachingCalendarView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    @ViewBuilder
-    private var statusArea: some View {
-        let messages = [holidayStatus, model.statusMessage, model.calendarImportStatusMessage]
+    private var currentStatusMessages: [String] {
+        [holidayStatus, model.statusMessage, model.calendarImportStatusMessage]
             .compactMap { value -> String? in
                 guard let value, !value.isEmpty else { return nil }
                 return value
             }
+    }
+
+    @ViewBuilder
+    private var statusArea: some View {
+        let messages = frozenStatusMessages ?? currentStatusMessages
         if !messages.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(messages, id: \.self) { message in
@@ -595,6 +615,7 @@ struct MobileTeachingCalendarView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(AppTheme.primary.opacity(0.08))
+            .accessibilityIdentifier("calendar.mobile.status")
         }
     }
 
@@ -981,7 +1002,9 @@ struct MobileTeachingCalendarView: View {
                     await Task.yield()
                 }
             }
-            .onChange(of: proxy.size) { _ in rebaseMonthPages() }
+            // Status banners change height when crossing a holiday-data year.
+            // They must not cancel a horizontal transition like rotation does.
+            .onChange(of: proxy.size.width) { _ in rebaseMonthPages() }
         }
     }
 
@@ -1096,84 +1119,6 @@ struct MobileTeachingCalendarView: View {
         .accessibilityIdentifier("calendar.mobile.month-state")
     }
 
-    private func monthDaySnapshots(for days: [Date]) -> [MobileMonthDaySnapshot] {
-        let accessibilityDateFormatter = fullDateFormatter
-        let todayKey = StrictContractDateParser.string(from: .now)
-        let localizedToday = model.localized("今天")
-        let coursesByDate: [String: [Course]]
-        if let schedule = model.schedule,
-           let termStart = StrictContractDateParser.date(from: schedule.termStartDate) {
-            coursesByDate = ScheduleLogic.coursesByDate(
-                for: days,
-                termStart: termStart,
-                courses: schedule.courses,
-                calendar: calendar
-            )
-        } else {
-            coursesByDate = [:]
-        }
-        let years = Set(days.map { calendar.component(.year, from: $0) })
-        let holidaysByDate = Dictionary(
-            grouping: years.flatMap { model.holidayItems(for: $0) },
-            by: \.date
-        )
-        let favoritesByDate = Dictionary(
-            grouping: model.favoriteDeadlines,
-            by: { String($0.deadline.prefix(10)) }
-        )
-
-        return days.map { day in
-            let dateKey = StrictContractDateParser.string(from: day)
-            let courses = coursesByDate[dateKey] ?? []
-            let holidays = holidaysByDate[dateKey] ?? []
-            let assignments = calendarDeadlines.assignmentsByDate[dateKey] ?? []
-            let publicItems = model.visibleDeadlineItems(
-                liveItems: calendarDeadlines.publicItems(for: dateKey),
-                favoriteItems: favoritesByDate[dateKey] ?? []
-            )
-            let schoolNotices = publicItems.filter { $0.source == .schoolNotice }
-            let publicDeadlines = publicItems.filter { $0.source != .schoolNotice }
-            let allDayEvents = calendarAllDayEvents(
-                dateKey: dateKey,
-                holidays: holidays,
-                assignments: assignments,
-                schoolNotices: schoolNotices,
-                publicDeadlines: publicDeadlines
-            )
-            return MobileMonthDaySnapshot(
-                date: day,
-                dateKey: dateKey,
-                dayNumberText: String(calendar.component(.day, from: day)),
-                accessibilityLabel: TeachingCalendarLogic.dayAccessibilityLabel(
-                    todayText: dateKey == todayKey ? localizedToday : "",
-                    formattedDate: accessibilityDateFormatter.string(from: day),
-                    holidayNames: holidays.map(\.name),
-                    courseDescriptions: courses.map { "\($0.timeRange)\($0.name)" }
-                ),
-                courses: courses,
-                holiday: holidays.first,
-                events: monthEvents(
-                    dateKey: dateKey,
-                    holidays: holidays,
-                    assignments: assignments,
-                    schoolNotices: schoolNotices,
-                    publicDeadlines: publicDeadlines,
-                    courses: courses
-                ),
-                allDayEvents: allDayEvents,
-                deadlineKinds: CalendarDeadlinePresentation.topTwoDeadlineKinds(
-                    in: allDayEvents
-                )
-            )
-        }
-    }
-
-    private func cachedYearMonthSnapshots(for days: [Date]) -> MobileYearSnapshotCollection {
-        let key = snapshotCacheKey(for: days, scope: "year-month")
-        return snapshotCache.yearValues(for: key) {
-            monthDaySnapshots(for: days)
-        }
-    }
 
     private func snapshotCacheKey(for days: [Date], scope: String) -> String {
         let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
@@ -1183,201 +1128,179 @@ struct MobileTeachingCalendarView: View {
             todayKey
     }
 
-    private func monthEvents(
-        dateKey: String,
-        holidays: [HolidayItem],
-        assignments: [AssignmentDeadlineItem],
-        schoolNotices: [PublicDeadlineItem],
-        publicDeadlines: [PublicDeadlineItem],
-        courses: [Course]
-    ) -> [MobileMonthEvent] {
-        let holidayEvents = holidays.map { item in
-            MobileMonthEvent(
-                id: "holiday-\(item.id)",
-                title: "\(model.localized(item.type == "holiday" ? "休" : "班")) \(item.name)",
-                categoryKey: item.type == "holiday" ? "法定节假日" : "调休工作日",
-                tint: item.type == "holiday" ? AppTheme.danger : AppTheme.primary
-            )
-        }
-        let assignmentEvents = assignments.map { item in
-            MobileMonthEvent(
-                id: "\(dateKey)-assignment-\(item.id)",
-                title: item.title,
-                categoryKey: "课程作业 DDL",
-                tint: AppTheme.assignment
-            )
-        }
-        let schoolNoticeEvents = schoolNotices.map { item in
-            MobileMonthEvent(
-                id: "\(dateKey)-school-\(item.id)",
-                title: item.name,
-                categoryKey: "校内竞赛通知",
-                tint: AppTheme.schoolNotice,
-                deadlineItem: item
-            )
-        }
-        let publicDeadlineEvents = publicDeadlines.map { item in
-            MobileMonthEvent(
-                id: "\(dateKey)-public-\(item.id)",
-                title: item.name,
-                categoryKey: item.kind.title,
-                tint: CalendarDeadlinePresentation.tint(for: item),
-                deadlineItem: item
-            )
-        }
-        let courseEvents = courses.map { course in
-            MobileMonthEvent(
-                id: "course-\(course.id)",
-                title: course.name,
-                categoryKey: "课程详情",
-                tint: AppTheme.primary
-            )
-        }
-        return holidayEvents + assignmentEvents + schoolNoticeEvents
-            + publicDeadlineEvents + courseEvents
-    }
-
     private var yearView: some View {
-        let year = calendar.component(.year, from: selectedDate)
-        let months = (1 ... 12).compactMap {
-            calendar.date(from: DateComponents(year: year, month: $0, day: 1))
-        }
-        let columns = [GridItem(.adaptive(minimum: 152, maximum: 220), spacing: 16)]
-
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("颜色越深表示当天课程越多")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
-                    ForEach(months, id: \.self) { month in
-                        yearMonth(month)
+        let window = yearPageWindow ?? MobileYearPageWindow(selectedDate: selectedDate, calendar: calendar)
+        return GeometryReader { proxy in
+            ScrollView {
+                ZStack(alignment: .top) {
+                    ForEach(window.pages) { page in
+                        if shouldRenderYearPage(page.yearStart, window: window) {
+                            let active = page.yearStart == (window.transition?.targetYear ?? window.centerYear)
+                            let months = frozenYearPages[page.yearStart]
+                                ?? snapshotCache.preparedYear(for: yearCacheKey(page.yearStart))
+                            let pageDate = yearPageSelectionDate(page.yearStart, window: window)
+                            yearPage(
+                                months: months, active: active,
+                                rendersContent: true, pageDate: pageDate
+                            )
+                                .frame(width: proxy.size.width)
+                                .background {
+                                    if months != nil {
+                                        MobileMonthPageLayout(
+                                            month: page.yearStart,
+                                            generation: yearLayoutToken(for: page.yearStart, active: active)
+                                        ) { year, generation in
+                                            if yearPageReadiness[year] != generation {
+                                                yearPageReadiness[year] = generation
+                                            }
+                                        }
+                                    }
+                                }
+                                .offset(x: (CGFloat(page.offset) + yearPagingProgress) * proxy.size.width)
+                                .allowsHitTesting(active && window.transition == nil)
+                                .accessibilityHidden(!active || window.transition != nil)
+                        }
                     }
                 }
+                .frame(width: proxy.size.width)
             }
-            .padding(16)
-            .padding(
-                .bottom,
-                MobileCalendarYearLayout.contentBottomInset(
-                    isLandscape: usesLandscapeMonthStops
-                )
-            )
+            .scrollIndicators(.hidden)
+            .scrollDisabled(isHorizontalPaging || window.transition != nil)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .clipped()
+            .contentShape(Rectangle())
+            .simultaneousGesture(periodSwipeGesture)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("calendar.mobile.year")
+            #if DEBUG
+            .overlay(alignment: .topLeading) {
+                if ProcessInfo.processInfo.arguments.contains("--ui-test-year-performance") {
+                    MobileMonthFrameProbe(
+                        pageID: "年格-\(calendar.component(.year, from: selectedDate))",
+                        sampleLabel: "Local year frame sample"
+                    )
+                    .frame(width: 32, height: 10)
+                }
+            }
+            .task {
+                guard ProcessInfo.processInfo.arguments.contains("--ui-test-year-autoplay") else { return }
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                    for direction in [1, -1, 1, 1, -1, -1] {
+                        guard !Task.isCancelled else { return }
+                        moveDate(direction)
+                        try await Task.sleep(for: .seconds(1))
+                    }
+                } catch {}
+            }
+            #endif
+            .task(id: yearPreparationID) {
+                guard yearPageWindow?.transition == nil else { return }
+                if yearPageWindow == nil { yearPageWindow = window }
+                let requestedGeneration = snapshotCache.generation
+                var refreshedFrozen = frozenYearPages
+                var preparedEveryPage = true
+                for page in window.pages.sorted(by: { abs($0.offset) < abs($1.offset) }) {
+                    guard !Task.isCancelled else { return }
+                    if await prepareYearData(page.yearStart) {
+                        if refreshedFrozen[page.yearStart] != nil {
+                            refreshedFrozen[page.yearStart] = snapshotCache.preparedYear(
+                                for: yearCacheKey(page.yearStart)
+                            )
+                        }
+                    } else {
+                        preparedEveryPage = false
+                    }
+                    await Task.yield()
+                }
+                for offset in [-2, 2] {
+                    guard !Task.isCancelled,
+                          let year = calendar.date(byAdding: .year, value: offset, to: window.centerYear)
+                    else { return }
+                    _ = await prepareYearData(year)
+                    await Task.yield()
+                }
+                guard !Task.isCancelled, yearPageWindow?.transition == nil,
+                      requestedGeneration == snapshotCache.generation else { return }
+                let currentIdentity = yearProjectionCacheIdentity
+                if preparedEveryPage,
+                   frozenYearGeneration != requestedGeneration
+                    || frozenYearCacheIdentity != currentIdentity {
+                    // The retained reverse page keeps its backing after settle.
+                    // Replace frozen values only for a genuinely newer data
+                    // generation, avoiding an equal-value tree swap every page.
+                    frozenYearPages = refreshedFrozen
+                    frozenYearGeneration = requestedGeneration
+                    frozenYearCacheIdentity = currentIdentity
+                }
+            }
+            .onChange(of: proxy.size.width) { _ in rebaseYearPages() }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("calendar.mobile.year")
     }
 
-    private func yearMonth(_ month: Date) -> some View {
-        let days = monthGridDates(containing: month)
-        let snapshotsByDate = cachedYearMonthSnapshots(for: days).byDate
-        return miniMonth(month, snapshotsByDate: snapshotsByDate)
+    private func yearPage(
+        months: [MobileYearMonthProjection]?, active: Bool,
+        rendersContent: Bool, pageDate: Date
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("颜色越深表示当天课程越多")
+                .font(.caption)
+                .foregroundStyle(AppTheme.secondaryText)
+            if let months {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 152, maximum: 220), spacing: 16)],
+                    alignment: .leading, spacing: 18
+                ) {
+                    // Month numbers are stable when this year slot is recycled.
+                    ForEach(months.indices, id: \.self) { index in
+                        miniMonth(
+                            months[index], active: active, rendersContent: rendersContent,
+                            selectedKey: StrictContractDateParser.string(from: pageDate)
+                        )
+                    }
+                }
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 160)
+            }
+        }
+        .padding(16)
+        .padding(.bottom, MobileCalendarYearLayout.contentBottomInset(isLandscape: usesLandscapeMonthStops))
     }
 
     private func miniMonth(
-        _ month: Date,
-        snapshotsByDate: [String: MobileMonthDaySnapshot]
+        _ month: MobileYearMonthProjection, active: Bool,
+        rendersContent: Bool, selectedKey: String
     ) -> some View {
-        let days = monthGridDates(containing: month)
-        let monthTitle = monthFormatter.string(from: month)
-        let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 1), count: 7)
-        return VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             Button {
-                jumpToMonth(month)
+                guard !suppressesEventSelection, active, yearPageWindow?.transition == nil else { return }
+                jumpToMonth(month.monthStart)
             } label: {
                 HStack {
-                    Text(monthTitle)
-                        .font(.headline)
+                    Text(month.monthTitle).font(.headline)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("查看\(monthTitle)")
-            .accessibilityIdentifier(
-                "calendar.mobile.year-month.\(Self.yearMonthKeyFormatter.string(from: month))"
-            )
-            LazyVGrid(columns: columns, spacing: 2) {
-                ForEach(Self.weekdayLabels, id: \.self) { label in
-                    Text(model.localized(label))
-                        .font(.system(size: 8, weight: .medium))
-                        .foregroundStyle(AppTheme.secondaryText)
-                        .frame(maxWidth: .infinity)
-                }
-                ForEach(days, id: \.self) { day in
-                    yearDayButton(
-                        day,
-                        month: month,
-                        snapshot: snapshotsByDate[StrictContractDateParser.string(from: day)]
-                    )
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func yearDayButton(
-        _ day: Date,
-        month: Date,
-        snapshot: MobileMonthDaySnapshot?
-    ) -> some View {
-        if calendar.isDate(day, equalTo: month, toGranularity: .month) {
-            let count = snapshot?.courses.count ?? 0
-            let today = sameDay(day, .now)
-            let selected = sameDay(day, selectedDate)
-            let deadlineKinds = snapshot?.deadlineKinds ?? []
-            Button {
+            .accessibilityLabel("查看\(month.monthTitle)")
+            .accessibilityIdentifier(active
+                ? "calendar.mobile.year-month.\(month.monthKey)"
+                : "preloaded.calendar.mobile.year-month.\(month.monthKey)")
+            MobileYearNativeMonthGrid(
+                month: month,
+                selectedDateKey: selectedKey.hasPrefix(month.monthKey) ? selectedKey : "",
+                todayKey: StrictContractDateParser.string(from: .now),
+                active: active,
+                rendersContent: rendersContent,
+                language: model.appLanguage
+            ) { day in
+                guard !suppressesEventSelection, yearPageWindow?.transition == nil else { return }
                 AppHaptics.selection()
                 selectedDate = day
                 presentedDetail = MobileCalendarDetailSelection(date: day, content: .day)
-            } label: {
-                Text(snapshot?.dayNumberText ?? String(calendar.component(.day, from: day)))
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
-                    .frame(maxWidth: .infinity, minHeight: 24)
-                    .background(
-                        selected
-                            ? AppTheme.selectedDate
-                            : AppTheme.primary.opacity(
-                                TeachingCalendarLogic.yearCourseOpacity(courseCount: count)
-                            )
-                    )
-                    .overlay {
-                        ZStack {
-                            if let outerKind = deadlineKinds.first {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
-                            } else {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(AppTheme.border, lineWidth: 0.5)
-                            }
-                            if deadlineKinds.count > 1 {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .stroke(allDayEventTint(deadlineKinds[1]), lineWidth: 1)
-                                    .padding(2)
-                            }
-                            if today {
-                                Circle()
-                                    .fill(AppTheme.danger)
-                                    .frame(width: 4, height: 4)
-                                    .frame(
-                                        maxWidth: .infinity,
-                                        maxHeight: .infinity,
-                                        alignment: .topTrailing
-                                    )
-                                    .padding(2)
-                            }
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(snapshot?.accessibilityLabel ?? dayAccessibilityLabel(day))
-            .accessibilityIdentifier(
-                "calendar.mobile.year-day.\(StrictContractDateParser.string(from: day))"
-            )
-            .accessibilityValue(deadlineKinds.map(\.rawValue).joined(separator: ","))
-        } else {
-            Color.clear.frame(height: 24)
         }
     }
 
@@ -2161,7 +2084,14 @@ struct MobileTeachingCalendarView: View {
     }
 
     private var holidayStatus: String? {
-        visibleHolidayYears.compactMap { model.holidayStatusByYear[$0] }.first
+        #if DEBUG
+        // Deterministic UI regression fixture; no real holiday/network state is
+        // modified. Exercises the same banner and viewport-height path.
+        if AppLaunchConfiguration.isReviewDemo,
+           let value = ProcessInfo.processInfo.environment["WHERE_TO_STUDY_UI_UNAVAILABLE_HOLIDAY_YEAR"],
+           let year = Int(value), visibleHolidayYears.contains(year) { return "节假日数据暂不可用" }
+        #endif
+        return visibleHolidayYears.compactMap { model.holidayStatusByYear[$0] }.first
     }
 
     private func ensureVisibleHolidays() {
@@ -2185,6 +2115,8 @@ struct MobileTeachingCalendarView: View {
                     direction: direction,
                     preservesMonthNavigationAnchor: true
                 )
+            } else if mode == .year {
+                prepareYearPageChange(to: date, direction: direction)
             } else {
                 session.prepareTransition(direction: direction)
                 withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
@@ -2209,6 +2141,8 @@ struct MobileTeachingCalendarView: View {
                 session.prepareTransition(direction: direction)
                 selectedDate = date
             }
+        } else if mode == .year {
+            prepareYearPageChange(to: date)
         } else {
             session.prepareTransition(direction: direction)
             withAnimation(TeachingCalendarNavigationMotion.pageAnimation) {
@@ -2266,8 +2200,12 @@ struct MobileTeachingCalendarView: View {
         let days = monthGridDates(containing: month)
         let key = snapshotCacheKey(for: days, scope: "month")
         if snapshotCache.preparedMonth(for: key) != nil { return true }
+        return await snapshotCache.prepareMonth(for: key, input: projectionInput(for: days))
+    }
+
+    private func projectionInput(for days: [Date]) -> MobileMonthProjectionInput {
         let years = Set(days.map { calendar.component(.year, from: $0) })
-        let input = MobileMonthProjectionInput(
+        return MobileMonthProjectionInput(
             days: days, schedule: model.schedule,
             holidays: years.flatMap { model.holidayItems(for: $0) },
             favorites: model.favoriteDeadlines,
@@ -2282,12 +2220,12 @@ struct MobileTeachingCalendarView: View {
                 customEnabled: model.customDeadlinesEnabled
             ), language: model.appLanguage, today: .now
         )
-        return await snapshotCache.prepareMonth(for: key, input: input)
     }
 
     private func beginPreparedMonthTransition(_ transition: MobileMonthPageWindow.Transition) {
         monthPageTask?.cancel()
         frozenMonthDetailsDate = selectedDate
+        frozenStatusMessages = currentStatusMessages
         let ownerRevision = model.calendarDataOwnerRevision
         monthPageTask = Task { @MainActor in
             while !Task.isCancelled {
@@ -2360,6 +2298,7 @@ struct MobileTeachingCalendarView: View {
             monthPageReadiness = monthPageReadiness.filter { entry in window.pages.contains { $0.monthStart == entry.key } }
             frozenMonthPages = frozenMonthPages.filter { entry in window.pages.contains { $0.monthStart == entry.key } }
             frozenMonthDetailsDate = nil
+            frozenStatusMessages = nil
             resetMonthDetailsScroll()
         }
         if let pending = pendingMonthPosition {
@@ -2396,7 +2335,158 @@ struct MobileTeachingCalendarView: View {
             frozenMonthPages.removeAll()
             monthPageReadiness.removeAll()
             frozenMonthDetailsDate = nil
+            frozenStatusMessages = nil
             pendingMonthPosition = nil
+        }
+    }
+
+    private func yearCacheKey(_ date: Date) -> String {
+        "\(yearProjectionCacheIdentity)|year|\(calendar.component(.year, from: date))"
+    }
+
+    private var yearProjectionCacheIdentity: String {
+        "\(monthDataOwnerKey)|\(model.appLanguage.rawValue)|\(model.appLanguage.resolvedResourceName)|\(model.appLanguage.locale.identifier)|\(StrictContractDateParser.string(from: .now))"
+    }
+
+    private func yearPageSelectionDate(_ year: Date, window: MobileYearPageWindow) -> Date {
+        if let transition = window.transition {
+            if year == transition.targetYear { return transition.targetDate }
+            if year == transition.sourceYear { return frozenYearSelectedDate ?? selectedDate }
+        }
+        return window.selectionDate(in: year)
+    }
+
+    private func shouldRenderYearPage(_ year: Date, window: MobileYearPageWindow) -> Bool {
+        if let transition = window.transition {
+            return year == transition.sourceYear || year == transition.targetYear
+        }
+        return year == window.centerYear || frozenYearPages[year] != nil
+    }
+
+    private var yearPreparationID: String {
+        let window = yearPageWindow ?? MobileYearPageWindow(selectedDate: selectedDate, calendar: calendar)
+        return "\(yearCacheKey(window.centerYear))|\(snapshotCache.generation)|\(window.transition?.generation.description ?? "idle")"
+    }
+
+    private func yearLayoutToken(for year: Date, active: Bool) -> String {
+        let generation = frozenYearPages[year] == nil ? snapshotCache.generation : frozenYearGeneration
+        return "\(yearLayoutEpoch)|\(generation)|\(active)"
+    }
+
+    private func prepareYearData(_ year: Date) async -> Bool {
+        let key = yearCacheKey(year)
+        if snapshotCache.preparedYear(for: key) != nil { return true }
+        let days = TeachingCalendarLogic.datesInYear(containing: year, calendar: calendar)
+        return await snapshotCache.prepareYear(for: key, input: projectionInput(for: days))
+    }
+
+    private func prepareYearPageChange(to date: Date, direction: Int? = nil) {
+        var window = yearPageWindow ?? MobileYearPageWindow(selectedDate: selectedDate, calendar: calendar)
+        let transition: MobileYearPageWindow.Transition?
+        if let direction { transition = window.request(direction: direction, animated: !reduceMotion) }
+        else { transition = window.request(to: date, animated: !reduceMotion) }
+        yearPageWindow = window
+        if let transition { beginPreparedYearTransition(transition) }
+        else if window.transition == nil { selectedDate = window.selectedDate }
+    }
+
+    private func beginPreparedYearTransition(_ transition: MobileYearPageWindow.Transition) {
+        yearPageTask?.cancel()
+        frozenStatusMessages = currentStatusMessages
+        frozenYearSelectedDate = selectedDate
+        let ownerRevision = model.calendarDataOwnerRevision
+        yearPageTask = Task { @MainActor in
+            while !Task.isCancelled {
+                guard mode == .year, let window = yearPageWindow,
+                      model.calendarDataOwnerRevision == ownerRevision,
+                      window.transition?.generation == transition.generation else { return }
+                let generation = snapshotCache.generation
+                var prepared = [Date: [MobileYearMonthProjection]]()
+                for page in window.pages {
+                    guard await prepareYearData(page.yearStart) else { break }
+                    prepared[page.yearStart] = snapshotCache.preparedYear(for: yearCacheKey(page.yearStart))
+                }
+                guard !Task.isCancelled, model.calendarDataOwnerRevision == ownerRevision else { return }
+                if generation != snapshotCache.generation || prepared.count != window.pages.count {
+                    await Task.yield()
+                    continue
+                }
+                frozenYearGeneration = generation
+                frozenYearCacheIdentity = yearProjectionCacheIdentity
+                frozenYearPages = prepared
+                let targetToken = yearLayoutToken(for: transition.targetYear, active: true)
+                let sourceToken = yearLayoutToken(for: transition.sourceYear, active: false)
+                for _ in 0..<250 {
+                    if yearPageReadiness[transition.targetYear] == targetToken,
+                       yearPageReadiness[transition.sourceYear] == sourceToken { break }
+                    do { try await Task.sleep(for: .milliseconds(8)) } catch { return }
+                }
+                guard !Task.isCancelled, mode == .year, model.calendarDataOwnerRevision == ownerRevision,
+                      yearPageWindow?.transition?.generation == transition.generation else { return }
+                if generation != snapshotCache.generation { await Task.yield(); continue }
+                session.prepareTransition(direction: transition.direction)
+                selectedDate = transition.targetDate
+                guard yearPageReadiness[transition.targetYear] == targetToken,
+                      yearPageReadiness[transition.sourceYear] == sourceToken else {
+                    finishYearTransition(generation: transition.generation)
+                    return
+                }
+                let duration = AppLaunchConfiguration.usesSlowCalendarAnimation ? 2.0 : 0.24
+                if #available(iOS 17.0, *) {
+                    withAnimation(.easeInOut(duration: duration), completionCriteria: .removed) {
+                        yearPagingProgress = -CGFloat(transition.direction)
+                    } completion: { finishYearTransition(generation: transition.generation) }
+                } else {
+                    withAnimation(.easeInOut(duration: duration)) { yearPagingProgress = -CGFloat(transition.direction) }
+                    do { try await Task.sleep(for: .seconds(duration)) } catch { return }
+                    finishYearTransition(generation: transition.generation)
+                }
+                return
+            }
+        }
+    }
+
+    private func finishYearTransition(generation: UInt64) {
+        guard var window = yearPageWindow else { return }
+        guard window.settle(generation: generation) else { return }
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            yearPageWindow = window
+            yearPagingProgress = 0
+            yearPageReadiness = yearPageReadiness.filter { entry in window.pages.contains { $0.yearStart == entry.key } }
+            frozenYearPages = frozenYearPages.filter { entry in window.pages.contains { $0.yearStart == entry.key } }
+            frozenStatusMessages = nil
+            frozenYearSelectedDate = nil
+        }
+        if window.hasPendingNavigation {
+            yearPageTask = Task { @MainActor in
+                await Task.yield()
+                guard !Task.isCancelled, mode == .year, var next = yearPageWindow, next.transition == nil else { return }
+                let transition = next.beginPendingNavigation(animated: !reduceMotion)
+                yearPageWindow = next
+                if let transition { beginPreparedYearTransition(transition) }
+                else { selectedDate = next.selectedDate }
+            }
+        }
+    }
+
+    private func rebaseYearPages() {
+        yearPageTask?.cancel()
+        yearPageTask = nil
+        var window = yearPageWindow ?? MobileYearPageWindow(selectedDate: selectedDate, calendar: calendar)
+        window.rebase(to: selectedDate, preservingYearDayAnchor: window.selectedDate == selectedDate)
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            yearPageWindow = window
+            yearLayoutEpoch &+= 1
+            yearPagingProgress = 0
+            frozenYearPages.removeAll()
+            frozenYearCacheIdentity = ""
+            yearPageReadiness.removeAll()
+            frozenYearSelectedDate = nil
+            if mode == .year { frozenStatusMessages = nil }
         }
     }
 
@@ -2419,8 +2509,7 @@ struct MobileTeachingCalendarView: View {
             }
             .onEnded { value in
                 defer { finishTrackedDrag() }
-                guard mode != .year,
-                      let direction = TeachingCalendarLogic.swipeDirection(
+                guard let direction = TeachingCalendarLogic.swipeDirection(
                           horizontalTranslation: value.translation.width,
                           verticalTranslation: value.translation.height,
                           predictedHorizontalTranslation: value.predictedEndTranslation.width

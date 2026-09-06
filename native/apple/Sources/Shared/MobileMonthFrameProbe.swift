@@ -6,8 +6,11 @@ import UIKit
 /// state publications; the final record is read by XCTest via accessibility.
 struct MobileMonthFrameProbe: UIViewRepresentable {
     let pageID: String
+    var sampleLabel = "Local month frame sample"
     func makeUIView(context: Context) -> ProbeView { ProbeView() }
-    func updateUIView(_ view: ProbeView, context: Context) { view.record(pageID: pageID) }
+    func updateUIView(_ view: ProbeView, context: Context) {
+        view.record(pageID: pageID, sampleLabel: sampleLabel)
+    }
     static func dismantleUIView(_ view: ProbeView, coordinator: ()) { view.stop() }
 
     final class ProbeView: UILabel {
@@ -41,7 +44,8 @@ struct MobileMonthFrameProbe: UIViewRepresentable {
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
         func stop() { displayLink?.invalidate(); displayLink = nil }
-        func record(pageID: String) {
+        func record(pageID: String, sampleLabel: String) {
+            accessibilityLabel = sampleLabel
             guard self.pageID != pageID else { return }
             self.pageID = pageID
             started = CACurrentMediaTime()

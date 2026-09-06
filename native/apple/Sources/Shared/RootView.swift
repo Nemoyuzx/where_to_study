@@ -271,6 +271,11 @@ struct RootView: View {
             sampleMode: model.isSampleMode
         )) {
             guard model.isSampleMode else { return }
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["WHERE_TO_STUDY_UI_SKIP_SAMPLE_CALENDAR_EVENTS"] == "1" {
+                return
+            }
+            #endif
             let dates = TeachingCalendarLogic.visibleDates(
                 containing: teachingCalendarSession.selectedDate,
                 modeRawValue: teachingCalendarSession.modeRawValue,

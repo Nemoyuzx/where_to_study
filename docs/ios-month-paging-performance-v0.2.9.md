@@ -54,3 +54,44 @@ The initial reusable-native candidate exposed a new 66.97–90.16 ms completion-
 Source-level review also checked queued requests, stale completion rejection, same-month day selection, month-end anchors, Reduce Motion, iOS 16 fallback, account/runtime cancellation and store-replacement isolation.
 
 Ignored local evidence is kept under `release-artifacts/ios-month-paging-029/`; screenshots use built-in sample data and are not added to the README.
+
+## 2026-09-06 follow-up: holiday status and year paging
+
+The month transition now freezes its status-banner messages until horizontal motion settles. A holiday failure or unsupported-year message can therefore change the calendar viewport height only after the page finishes moving. Width changes still cancel/rebase the page window for rotation; status-only height changes do not. A deterministic DEBUG-only UI fixture crosses from November 2026 to a December grid containing 2027 and verifies two distinct intermediate x positions before the unavailable-holiday message appears.
+
+Mobile year view now supports horizontal paging with the same direction and queue/coalescing rules as the month pager. Its implementation deliberately differs from the month grid:
+
+- Project 365/366 real dates once on a worker actor instead of constructing twelve overlapping 42-day rich snapshots on the UI actor.
+- Render each mini month on one reusable UIKit drawing surface, while preserving the existing course-density fill, selected color, two deadline borders, today dot, taps and VoiceOver date actions.
+- Keep a five-year data-only LRU window, but mount at most the current and just-departed rendered year. The incoming year is prepared before motion; the old page remains available for a rapid reversal. This avoids laying out a third complete year when recentering.
+- Keep one outer vertical ScrollView across page slots, so paging from September/October does not jump to January. Inactive pages expose no accessibility elements and dirty backing layers are drawn before they start moving; a valid content/size/theme backing is reused for A-B-A navigation.
+- Owner and cache generations guard every asynchronous result and layout acknowledgement. Mode changes, rotation, Reduce Motion, account changes and local-data clearing cancel stale completions.
+- Review/sample-mode full-year DDL and assignment fixtures are constructed on a utility task rather than in a main-actor loop. Production network clients retain their existing independent cache/service boundary.
+
+The wide iPad layout also accepts horizontal year swipes, while retaining its existing single cached 365/366-day tree and in-place update. macOS gesture behavior is unchanged by this iOS-focused follow-up.
+
+### Year pager simulator sample
+
+The final DEBUG-only replay uses the same six directions as the month test and the same caveats above. Only complete callback intervals whose start and end are inside the probe-relative window are used; a first gap that starts before the probe is excluded. Two measurements are kept distinct: the functional full-fixture run includes locally generated DDL/assignment publication, while the renderer-only run suppresses that DEBUG fixture so it can isolate mounted-page and recentering work. Full-fixture UI behavior is covered separately by the functional tests below.
+
+| Six year changes | Initial full-fixture prototype | Background-built full fixture | Final renderer-only |
+| --- | ---: | ---: | ---: |
+| Longest complete interval in 0–240 ms | 33.34 ms | 32.83 ms | 32.76 ms |
+| Complete intervals over 25 ms in 0–240 ms | 3 | 4 | 1 |
+| Longest complete interval in 70–240 ms | 16.70 ms | 32.83 ms | 17.30 ms |
+| Complete intervals over 25 ms in 70–240 ms | 0 | 1 | 0 |
+| Complete intervals over 25 ms after 240 ms | 15 | 4 | 6 |
+| Longest complete interval after 240 ms | 66.67 ms | 50.27 ms | 34.67 ms |
+
+This is a simulator main-thread callback sample, not physical-device FPS or a GPU-utilization claim. CPU sampling was used to locate synchronous Core Graphics text/border drawing, repeated trait-triggered raster generation, accessibility setup and sample-fixture generation. Year projection and fixture construction now run off the main thread; mini-month backing images are regenerated only for changed data, size or resolved palette. Intermediate regressions and profiling runs are retained locally rather than omitted from the audit. The final isolated run still contains roughly 33–35 ms completion/recentering intervals and is not presented as zero-hitch.
+
+月视图在横移动画期间冻结“节假日数据暂不可用”等状态提示，提示只在动画完成后改变布局。手机年视图新增可反向、可排队的左右切年；全年数据在后台一次生成，月份使用原生绘制面和位图 backing 复用，并保留一个共享纵向滚动位置。最终隔离回放的实际横移动画区间最大完整间隔约 17.30 ms，收尾仍有约 34.67 ms 的模拟器间隔；这比原型的 66.67 ms 峰值低，但不等同于实机帧率保证。
+
+### Follow-up validation / 后续验证
+
+- iPhone unit suite: 325 executed, 1 opt-in network skip, 0 failures.
+- Full-fixture iPhone UI: unavailable-holiday month animation, year paging with preserved vertical position, and year DDL-border/detail behavior passed in separate simulator runs.
+- 13-inch iPad: expanded-layout horizontal year paging and reverse navigation passed.
+- Shared macOS suite: 298 executed, 1 opt-in network skip, 0 failures. The macOS year gesture was deliberately not changed.
+- Repository contracts: 142/142 passed. Unsigned generic-device Release compilation succeeded with strict concurrency and warnings-as-errors; the Release executable contains none of the DEBUG fixture/probe labels.
+- The final full-fixture year screenshot was inspected for month alignment, selected/today marks, double DDL borders, vertical position and bottom navigation clearance. It remains an ignored local test artifact and is not added to the README.

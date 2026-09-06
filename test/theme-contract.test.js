@@ -30,6 +30,10 @@ const appleNativeMonthSource = readFileSync(
   new URL('../native/apple/Sources/Shared/MobileMonthNativeGrid.swift', import.meta.url),
   'utf8',
 )
+const appleNativeYearSource = readFileSync(
+  new URL('../native/apple/Sources/Shared/MobileYearNativeMonthGrid.swift', import.meta.url),
+  'utf8',
+)
 const appleLocalizationSource = readFileSync(
   new URL('../native/apple/Sources/Shared/AppLocalization.swift', import.meta.url),
   'utf8',
@@ -449,8 +453,10 @@ test('native calendars render public deadlines, centered agendas, and shared mon
   assert.match(appleNativeMonthSource, /outerBorder\.lineWidth = 1\.75/)
   assert.match(appleNativeMonthSource, /innerBorder\.lineWidth = 1\.25/)
   assert.match(appleMobileCalendarSource, /calendar\.mobile\.week-agenda-dialog/)
-  assert.match(appleMobileCalendarSource, /if deadlineKinds\.count > 1/)
-  assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)[\s\S]*AppTheme\.danger/)
+  assert.match(appleNativeMonthSource, /day\.deadlineKinds\.count > 1/)
+  assert.match(appleNativeYearSource, /day\.deadlineKinds\.count > 1/)
+  assert.match(appleNativeMonthSource, /todayDot\.backgroundColor = color\(AppTheme\.danger\)/)
+  assert.match(appleNativeYearSource, /context\.fillEllipse/)
 
   assert.match(androidCalendarSource, /DeadlineVisualKind\.COMPETITION/)
   assert.match(androidCalendarSource, /DeadlineVisualLogic\.color/)
@@ -511,9 +517,11 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
   )
   assert.match(appleCalendarSource, /topTwoDeadlineKinds/)
   assert.match(appleCalendarSource, /if deadlineKinds\.count > 1/)
-  assert.match(appleMobileCalendarSource, /if deadlineKinds\.count > 1/)
+  assert.match(appleNativeMonthSource, /day\.deadlineKinds\.count > 1/)
+  assert.match(appleNativeYearSource, /day\.deadlineKinds\.count > 1/)
   assert.match(appleCalendarSource, /if isToday \{[\s\S]*Circle\(\)/)
-  assert.match(appleMobileCalendarSource, /if today \{[\s\S]*Circle\(\)/)
+  assert.match(appleNativeMonthSource, /todayDot\.backgroundColor = color\(AppTheme\.danger\)/)
+  assert.match(appleNativeYearSource, /context\.fillEllipse/)
 
   assert.match(appleSettingsSource, /deadlineLegend\("课程作业 DDL", color: AppTheme\.assignment\)/)
   for (const [title, color] of [

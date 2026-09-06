@@ -1435,6 +1435,54 @@ private final class FixedDeadlineRedirectDelegate: NSObject, URLSessionTaskDeleg
     }
 }
 
+private enum SampleCalendarDeadlineBuilder {
+    static func publicSnapshots(dates: [String]) -> [String: PublicDeadlineSnapshot] {
+        Dictionary(uniqueKeysWithValues: dates.map { date in
+            (date, PublicDeadlineSnapshot(
+                date: date,
+                items: [
+                    PublicDeadlineItem(
+                        id: "sample-competition", name: "全国大学生示例竞赛",
+                        kind: .competition, source: .contestDDL,
+                        deadline: "\(date)T23:59:00+08:00", organizer: "示例组委会", officialURL: nil
+                    ),
+                    PublicDeadlineItem(
+                        id: "sample-school-notice", name: "校内示例竞赛通知",
+                        kind: .competition, source: .schoolNotice,
+                        deadline: "\(date)T18:00:00+08:00", organizer: "学校公开通知页", officialURL: nil
+                    ),
+                    PublicDeadlineItem(
+                        id: "sample-summer-camp", name: "示例高校夏令营",
+                        kind: .summerCamp, source: .contestDDL,
+                        deadline: "\(date)T20:00:00+08:00", organizer: "示例高校", officialURL: nil
+                    ),
+                    PublicDeadlineItem(
+                        id: "sample-hackathon", name: "示例校园黑客松",
+                        kind: .hackathon, source: .contestDDL,
+                        deadline: "\(date)T21:00:00+08:00", organizer: "示例社区", officialURL: nil
+                    ),
+                    PublicDeadlineItem(
+                        id: "sample-conference", name: "示例学术会议",
+                        kind: .conference, source: .contestDDL,
+                        deadline: "\(date)T22:00:00+08:00", organizer: "示例学术组织", officialURL: nil
+                    ),
+                ],
+                source: CalendarDeadlineSources.primary,
+                usedBackup: false
+            ))
+        })
+    }
+
+    static func assignments(dates: [String]) -> [String: [AssignmentDeadlineItem]] {
+        Dictionary(uniqueKeysWithValues: dates.map { date in
+            (date, [AssignmentDeadlineItem(
+                id: "sample-assignment", title: "示例课程作业", courseName: "示例课程",
+                deadline: "\(date) 23:59:00", status: "未提交"
+            )])
+        })
+    }
+}
+
 @MainActor
 final class CalendarDeadlineStore: ObservableObject {
     @Published private(set) var publicByDate = [String: PublicDeadlineSnapshot]() {
@@ -1578,61 +1626,12 @@ final class CalendarDeadlineStore: ObservableObject {
         publicErrors = clearedErrors
         defer { loadingPublicDates.subtract(requestedDates) }
         if sampleMode {
+            let generated = await Task.detached(priority: .utility) {
+                SampleCalendarDeadlineBuilder.publicSnapshots(dates: requestedDates)
+            }.value
+            guard !Task.isCancelled else { return }
             var updated = publicByDate
-            for date in requestedDates {
-                updated[date] = PublicDeadlineSnapshot(
-                    date: date,
-                    items: [
-                        PublicDeadlineItem(
-                            id: "sample-competition",
-                            name: "全国大学生示例竞赛",
-                            kind: .competition,
-                            source: .contestDDL,
-                            deadline: "\(date)T23:59:00+08:00",
-                            organizer: "示例组委会",
-                            officialURL: nil
-                        ),
-                        PublicDeadlineItem(
-                            id: "sample-school-notice",
-                            name: "校内示例竞赛通知",
-                            kind: .competition,
-                            source: .schoolNotice,
-                            deadline: "\(date)T18:00:00+08:00",
-                            organizer: "学校公开通知页",
-                            officialURL: nil
-                        ),
-                        PublicDeadlineItem(
-                            id: "sample-summer-camp",
-                            name: "示例高校夏令营",
-                            kind: .summerCamp,
-                            source: .contestDDL,
-                            deadline: "\(date)T20:00:00+08:00",
-                            organizer: "示例高校",
-                            officialURL: nil
-                        ),
-                        PublicDeadlineItem(
-                            id: "sample-hackathon",
-                            name: "示例校园黑客松",
-                            kind: .hackathon,
-                            source: .contestDDL,
-                            deadline: "\(date)T21:00:00+08:00",
-                            organizer: "示例社区",
-                            officialURL: nil
-                        ),
-                        PublicDeadlineItem(
-                            id: "sample-conference",
-                            name: "示例学术会议",
-                            kind: .conference,
-                            source: .contestDDL,
-                            deadline: "\(date)T22:00:00+08:00",
-                            organizer: "示例学术组织",
-                            officialURL: nil
-                        )
-                    ],
-                    source: CalendarDeadlineSources.primary,
-                    usedBackup: false
-                )
-            }
+            generated.forEach { updated[$0.key] = $0.value }
             publicByDate = updated
             return
         }
@@ -1815,18 +1814,14 @@ final class CalendarDeadlineStore: ObservableObject {
         }
         guard !requestedDates.isEmpty else { return }
         if sampleMode {
+            let generated = await Task.detached(priority: .utility) {
+                SampleCalendarDeadlineBuilder.assignments(dates: requestedDates)
+            }.value
+            guard !Task.isCancelled else { return }
             var updatedAssignments = assignmentsByDate
             var updatedUnavailable = assignmentUnavailableByDate
             for date in requestedDates {
-                updatedAssignments[date] = [
-                    AssignmentDeadlineItem(
-                        id: "sample-assignment",
-                        title: "示例课程作业",
-                        courseName: "示例课程",
-                        deadline: "\(date) 23:59:00",
-                        status: "未提交"
-                    )
-                ]
+                updatedAssignments[date] = generated[date]
                 updatedUnavailable.removeValue(forKey: date)
             }
             assignmentsByDate = updatedAssignments

@@ -47,6 +47,17 @@ enum TeachingCalendarNavigationMotion {
 }
 
 final class TeachingCalendarSessionState: ObservableObject {
+    init() {
+        #if DEBUG
+        if AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isReviewDemo {
+            if let raw = ProcessInfo.processInfo.environment["WHERE_TO_STUDY_UI_CALENDAR_DATE"],
+               let date = StrictContractDateParser.date(from: raw) { selectedDate = date }
+            if let raw = ProcessInfo.processInfo.environment["WHERE_TO_STUDY_UI_CALENDAR_MODE"],
+               ["日", "周", "月", "年"].contains(raw) { modeRawValue = raw }
+        }
+        #endif
+    }
+
     // Retain only bounded projections while another section is visible. The
     // SwiftUI page and its clock/geometry work can still be destroyed normally.
     @MainActor lazy var renderingCache = TeachingCalendarRenderingCache()
@@ -2054,6 +2065,9 @@ struct TeachingCalendarView: View {
                 }
             }
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(expandedYearSwipeGesture)
+        .accessibilityIdentifier("calendar.regular.year-grid")
         #endif
     }
 
@@ -3664,6 +3678,22 @@ struct TeachingCalendarView: View {
                 moveDate(direction)
             }
     }
+
+    #if os(iOS)
+    private var expandedYearSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 18, coordinateSpace: .local)
+            .onEnded { value in
+                guard mode == .year, yearPopoverDate == nil,
+                      let direction = TeachingCalendarLogic.swipeDirection(
+                        horizontalTranslation: value.translation.width,
+                        verticalTranslation: value.translation.height,
+                        predictedHorizontalTranslation: value.predictedEndTranslation.width
+                      )
+                else { return }
+                moveDate(direction)
+            }
+    }
+    #endif
 
     private var modeSelection: Binding<CalendarMode> {
         Binding(
