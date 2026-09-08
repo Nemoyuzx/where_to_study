@@ -1,5 +1,17 @@
 # Where To Study Apple 0.2.9 TestFlight Hotfix
 
+## macOS 0.2.9 (86) — App Review fixes synchronized
+
+2026-09-08 使用已验证的审核修复源码 `e6afd393be989965509dfb8482dee558e87d334e`，在独立 worktree 从 `2ef6941` 重新生成 macOS `0.2.9 (86)`。同步内容包括：安装显示名统一为 `Where To Study`、独立非官方身份及学校名称适用范围说明、应用内离线帮助和直接联系邮箱；主 Bundle ID、模块名及原有服务边界保持不变。详见[审核修复记录](macos-app-review-2026-09-08.md)。
+
+本次只改变上传时的版本和构建号，应用源码、资源和打包脚本与已验证的 build 85 相同，复用此前 301 项通过、1 项按设计跳过的完整 macOS 回归及视觉检查。新的 Universal 主应用与 Widget 均已核对为 `0.2.9 (86)`，`arm64`/`x86_64`、Apple Distribution 签名、App Sandbox、App Group、无 `get-task-allow`、名称和许可证检查通过。
+
+通过现有 `native-apple-app-store.sh upload macos` 单次完成归档、校验和上传；设置 `APPLE_MARKETING_VERSION=0.2.9`、`APPLE_BUILD_NUMBER=86`、`APPLE_MACOS_SIGNING_STYLE=Manual`，团队由本机证书解析且不提交到仓库。Xcode 于 **2026-09-08 22:09:37 +0800** 返回 **`Upload succeeded`**，随后 **`EXPORT SUCCEEDED`**。
+
+本次完成上传，没有修改 0.2.8 (85) 的 App Review 提交、TestFlight 测试群组或 GitHub Release，也没有上传 iOS 构建。上传后未额外检查后台 processing 或测试员可用状态。独立构建目录保留了此前 build 85 的签名归档。
+
+忽略目录下的证据：`release-artifacts/macos-029-review-sync/macos-upload-86.log`、`archive-verification.json` 及对应签名导出记录。
+
 ## 0.2.9 (84) — first year-date detail sheet animation
 
 Uploaded from local **Xcode 26.6** on **2026-09-06**, from application-source commit `c25f6e6`. The iOS app and Widget archives both report **`0.2.9 (84)`**. Signed archive and Apple Distribution export validation passed. The Release executable was checked to exclude the detail-presentation test probe.
