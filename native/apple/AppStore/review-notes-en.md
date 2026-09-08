@@ -1,5 +1,9 @@
 # App Review Notes (English)
 
+## Latest macOS resubmission / 最新 macOS 重新提交
+
+macOS `0.2.8 (85)` 已于 2026-09-08 21:51 +0800 重新提交，状态为“等待审核”。支持页已发布，后台资料、真实主页面截图和审核回复已更新。以下内容仍可作为后续准备指南；本次实际操作和验证以 [审核记录](../../../docs/macos-app-review-2026-09-08.md) 为准。
+
 Before submission, enter the actual version and build selected for each platform. macOS `0.2.8 (77)` was rejected on September 8, 2026 and does not contain the subsequent fixes. See the [macOS review record](../../../docs/macos-app-review-2026-09-08.md). This is a local draft, not a record of a message sent to App Store Connect.
 
 Where To Study is an independent, unofficial schedule and empty-classroom client for students of Beijing University of Posts and Telecommunications. It is not operated by or affiliated with the university. The app has no purchases, subscriptions, advertising, analytics, or tracking SDKs.
