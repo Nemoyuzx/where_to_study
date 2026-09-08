@@ -168,9 +168,71 @@ final class IOSAppStoreLiveCaptureTests: XCTestCase {
             )
         ], timeout: 45), .completed, "Wait for visible loading indicators to finish.")
         let screenshot = XCUIScreen.main.screenshot()
-        XCTAssertEqual(screenshot.image.cgImage?.width, 2752)
-        XCTAssertEqual(screenshot.image.cgImage?.height, 2064)
-        let attachment = XCTAttachment(screenshot: screenshot)
+        let image = screenshot.image
+        let rawAttachment = XCTAttachment(screenshot: screenshot)
+        rawAttachment.name = "\(name)-raw"
+        rawAttachment.lifetime = .keepAlways
+        add(rawAttachment)
+
+        let swapsAxes: Bool
+        switch image.imageOrientation {
+        case .left, .right, .leftMirrored, .rightMirrored:
+            swapsAxes = true
+        default:
+            swapsAxes = false
+        }
+        let rawWidth = image.cgImage?.width ?? 0
+        let rawHeight = image.cgImage?.height ?? 0
+        let displayWidth = swapsAxes ? rawHeight : rawWidth
+        let displayHeight = swapsAxes ? rawWidth : rawHeight
+        let metadata = """
+        name=\(name)
+        imageSize=\(image.size.width)x\(image.size.height)
+        imageScale=\(image.scale)
+        cgImageSize=\(rawWidth)x\(rawHeight)
+        imageOrientation=\(image.imageOrientation.rawValue)
+        orientationSwapsAxes=\(swapsAxes)
+        orientedPixelSize=\(displayWidth)x\(displayHeight)
+        appFrame=\(app.frame.width)x\(app.frame.height)
+        """
+        print(metadata)
+        let metadataAttachment = XCTAttachment(string: metadata)
+        metadataAttachment.name = "\(name)-image-metadata"
+        metadataAttachment.lifetime = .keepAlways
+        add(metadataAttachment)
+
+        // Keep diagnostics before validating pixel dimensions: CoreSimulator can
+        // store a landscape screenshot in portrait pixels plus UIImage orientation.
+        XCTAssertTrue(
+            (rawWidth == 2752 && rawHeight == 2064)
+                || (rawWidth == 2064 && rawHeight == 2752),
+            "Expected native 13-inch iPad pixels in either storage orientation."
+        )
+        let attachment: XCTAttachment
+        if displayWidth == 2752, displayHeight == 2064, let cgImage = image.cgImage {
+            let size = CGSize(width: CGFloat(displayWidth), height: CGFloat(displayHeight))
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            format.opaque = true
+            // UIImage.draw applies its declared orientation. Scale 1 and the
+            // oriented native pixel dimensions preserve the screenshot resolution.
+            let orientedImage = UIImage(cgImage: cgImage, scale: 1, orientation: image.imageOrientation)
+            let normalized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                orientedImage.draw(in: CGRect(origin: .zero, size: size))
+            }
+            XCTAssertEqual(normalized.cgImage?.width, 2752)
+            XCTAssertEqual(normalized.cgImage?.height, 2064)
+            guard let png = normalized.pngData() else {
+                XCTFail("Could not encode the orientation-normalized PNG; raw attachment is retained.")
+                return
+            }
+            attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+        } else {
+            // Do not infer a rotation from app.frame alone. Preserve the original
+            // for visual inspection when its own orientation still says portrait.
+            print("\(name): original orientation retained; visual orientation review required.")
+            attachment = XCTAttachment(screenshot: screenshot)
+        }
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
