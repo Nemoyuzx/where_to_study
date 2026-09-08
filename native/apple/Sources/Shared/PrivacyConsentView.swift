@@ -66,6 +66,13 @@ struct PrivacyConsentGate: View {
                         .foregroundStyle(AppTheme.text)
                         .multilineTextAlignment(.center)
 
+                    Text("Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。")
+                        .font(.callout)
+                        .foregroundStyle(AppTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("privacy-consent.independent-notice")
+
                     Text(LocalizedStringKey(
                         state.hasDeclined
                             ? "您可以重新阅读隐私政策，并在同意后继续使用。"

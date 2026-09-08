@@ -1275,7 +1275,7 @@ struct TeachingCalendarView: View {
 
     private var animatedPageTitle: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("BUPT CLASSROOM PLANNER")
+            Text("WHERE TO STUDY")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(AppTheme.secondaryText)
             ZStack(alignment: .leading) {

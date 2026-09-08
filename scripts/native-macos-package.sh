@@ -22,7 +22,7 @@ TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/where-to-study-native-macos.XXXXXX")"
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
 cleanup() {
-  local derived_app="$DERIVED_DATA/Build/Products/Release/WhereToStudyMac.app"
+  local derived_app="$DERIVED_DATA/Build/Products/Release/Where To Study.app"
 
   if [[ -d "$derived_app" ]]; then
     "$LSREGISTER" -u "$derived_app" >/dev/null 2>&1 || true
@@ -60,14 +60,14 @@ xcodebuild \
   OTHER_SWIFT_FLAGS="-debug-prefix-map $ROOT_DIR=. -file-prefix-map $ROOT_DIR=." \
   build
 
-SOURCE_APP="$DERIVED_DATA/Build/Products/Release/WhereToStudyMac.app"
-PACKAGE_APP="$TEMP_DIR/WhereToStudyMac.app"
+SOURCE_APP="$DERIVED_DATA/Build/Products/Release/Where To Study.app"
+PACKAGE_APP="$TEMP_DIR/Where To Study.app"
 if [[ ! -d "$SOURCE_APP" ]]; then
   echo "Native macOS app bundle was not found: $SOURCE_APP" >&2
   exit 1
 fi
 
-SOURCE_BINARY="$SOURCE_APP/Contents/MacOS/WhereToStudyMac"
+SOURCE_BINARY="$SOURCE_APP/Contents/MacOS/Where To Study"
 SOURCE_EXTENSION="$SOURCE_APP/Contents/PlugIns/WhereToStudyWidget.appex"
 if [[ ! -d "$SOURCE_EXTENSION" ]]; then
   echo "Native macOS app is missing the WidgetKit extension." >&2
@@ -82,13 +82,19 @@ for architecture in arm64 x86_64; do
 done
 
 ditto "$SOURCE_APP" "$PACKAGE_APP"
-PACKAGE_BINARY="$PACKAGE_APP/Contents/MacOS/WhereToStudyMac"
+PACKAGE_BINARY="$PACKAGE_APP/Contents/MacOS/Where To Study"
 strip -S "$PACKAGE_BINARY"
 PACKAGE_EXTENSION="$PACKAGE_APP/Contents/PlugIns/WhereToStudyWidget.appex"
 PACKAGE_EXTENSION_BINARY="$PACKAGE_EXTENSION/Contents/MacOS/WhereToStudyWidget"
 strip -S "$PACKAGE_EXTENSION_BINARY"
 
 INFO_PLIST="$PACKAGE_APP/Contents/Info.plist"
+for name_key in CFBundleName CFBundleDisplayName CFBundleExecutable; do
+  if [[ "$(plutil -extract "$name_key" raw "$INFO_PLIST")" != "Where To Study" ]]; then
+    echo "Native macOS package $name_key must be Where To Study." >&2
+    exit 1
+  fi
+done
 ACTUAL_VERSION="$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")"
 ACTUAL_BUILD="$(plutil -extract CFBundleVersion raw "$INFO_PLIST")"
 if [[ -n "$EXPECTED_VERSION" && "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
@@ -170,7 +176,7 @@ mkdir -p "$OUTPUT_DIR"
 ditto -c -k --sequesterRsrc --keepParent "$PACKAGE_APP" "$ARCHIVE"
 DMG_ROOT="$TEMP_DIR/dmg-root"
 mkdir -p "$DMG_ROOT"
-ditto "$PACKAGE_APP" "$DMG_ROOT/WhereToStudyMac.app"
+ditto "$PACKAGE_APP" "$DMG_ROOT/Where To Study.app"
 ln -s /Applications "$DMG_ROOT/Applications"
 hdiutil create \
   -volname "Where To Study" \

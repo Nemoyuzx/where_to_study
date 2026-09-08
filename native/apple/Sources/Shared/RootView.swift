@@ -350,7 +350,7 @@ struct RootView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("BUPT")
+                Text("独立非官方工具")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.secondaryText)
                 Text("Where To Study")
@@ -423,7 +423,7 @@ struct RootView: View {
 
             if isRegularSidebarExpanded {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("BUPT")
+                    Text("独立非官方工具")
                         .font(.caption.bold())
                         .foregroundStyle(AppTheme.secondaryText)
                     Text("Where To Study")

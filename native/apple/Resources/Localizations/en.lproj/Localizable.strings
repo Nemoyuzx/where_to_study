@@ -343,3 +343,24 @@
 "系统中没有可写入的默认日历。" = "No writable default calendar is available.";
 "系统日历在同步期间发生变化，请重试。" = "The system calendar changed during synchronization. Try again.";
 "收藏日程“%@”的截止时间不正确。" = "The deadline for favorite event “%@” is invalid.";
+
+/* Help, support, and independent-app disclosure */
+"独立非官方工具" = "Independent, unofficial tool";
+"帮助与支持" = "Help & Support";
+"在应用内查看联系方式和常见问题" = "View contact details and frequently asked questions in the app";
+"此页面的联系方式和常见问题可离线查看。" = "Contact details and frequently asked questions on this page are available offline.";
+"联系维护者" = "Contact the Maintainer";
+"项目维护者：Nemoyuzx" = "Project maintainer: Nemoyuzx";
+"通过电子邮件联系" = "Contact by Email";
+"如未配置邮件应用，可复制以上地址到你使用的邮箱。" = "If no mail app is configured, copy the address above into your preferred email service.";
+"在 GitHub 反馈问题" = "Report an Issue on GitHub";
+"反馈时请说明应用版本、系统版本、操作步骤和错误提示。请勿发送密码、令牌或包含个人信息的课表截图。" = "Include your app version, OS version, steps to reproduce, and any error message. Do not send passwords, tokens, or schedule screenshots containing personal information.";
+"常见问题" = "Frequently Asked Questions";
+"个人课表获取失败怎么办？" = "What if my schedule fails to load?";
+"请在设置中核对学号、教务密码和学期设置，再点击“获取/刷新个人课表”。确认网络可用；如果学校教务系统暂不可用，请稍后重试。" = "Check your student ID, academic password, and semester settings in Settings, then select Get/Refresh Personal Schedule. Check your connection; if the university's academic system is unavailable, try again later.";
+"空教室查询失败或结果为空怎么办？" = "What if the empty-room query fails or returns no results?";
+"空教室仅查询当天数据。请确认所选校区、教学楼和节次；使用个人课表参与筛选时，请先刷新课表。教务系统维护或网络异常时，请稍后重试。" = "Empty-room queries cover today only. Check the selected campus, buildings, and periods. Refresh your schedule first if you use it to filter results. Try again later during academic-system maintenance or connection problems.";
+"没有教务账号，可以体验吗？" = "Can I try the app without an academic account?";
+"可以。在“设置 → 关于本应用”点击“浏览内置示例数据”，无需学号或密码即可查看示例课表与空教室。示例模式不会连接教务服务，也不会读写真实用户数据。" = "Yes. In Settings → About, select Browse Demo Data to explore sample schedules and empty rooms without a student ID or password. Demo mode does not connect to academic services or access real user data.";
+"如何清除本地数据？" = "How do I clear local data?";
+"在“设置 → 本地数据”点击“清除本地数据”并确认，会删除本机保存的凭据、课表、缓存与收藏，并恢复本地设置。此操作无法撤销，也不会删除学校或其他服务持有的数据。" = "In Settings → Local Data, select Clear Local Data and confirm to remove credentials, schedules, caches, and favorites from this device and restore local settings. This cannot be undone and does not delete data held by the university or other services.";

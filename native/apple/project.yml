@@ -15,6 +15,7 @@ targets:
   WhereToStudyMac:
     type: application
     platform: macOS
+    productName: Where To Study
     sources:
       - path: Sources/Shared
       - path: Sources/macOS
@@ -35,6 +36,7 @@ targets:
       path: Generated/WhereToStudyMac-Info.plist
       properties:
         CFBundleDisplayName: Where To Study
+        CFBundleName: Where To Study
         CFBundleIconFile: icon.icns
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
@@ -45,7 +47,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos
-        PRODUCT_NAME: WhereToStudyMac
+        PRODUCT_NAME: Where To Study
+        PRODUCT_MODULE_NAME: WhereToStudyMac
         MACOSX_DEPLOYMENT_TARGET: "13.0"
         CODE_SIGN_ENTITLEMENTS: Resources/WhereToStudyMac.entitlements
         ENABLE_APP_SANDBOX: YES

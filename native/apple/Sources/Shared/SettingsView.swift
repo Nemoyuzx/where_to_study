@@ -191,6 +191,7 @@ struct SettingsView: View {
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @State private var showingClearDataConfirmation = false
     @State private var showingPrivacyPolicy = false
+    @State private var showingAppSupport = false
     @State private var showingFavoriteManagement = false
     @State private var widgetPreviewSize: WidgetPreviewSize = .medium
     @State private var customFeedValidationStatus = ""
@@ -270,6 +271,9 @@ struct SettingsView: View {
         .accessibilityIdentifier("screen.settings")
         .sheet(isPresented: $showingPrivacyPolicy) {
             PrivacyPolicyView()
+        }
+        .sheet(isPresented: $showingAppSupport) {
+            AppSupportView()
         }
         #if os(iOS)
         .fullScreenCover(isPresented: $showingFavoriteManagement) {
@@ -378,6 +382,17 @@ struct SettingsView: View {
                 Button {
                     AppHaptics.impact()
                     dismissKeyboard()
+                    showingAppSupport = true
+                } label: {
+                    Label("帮助与支持", systemImage: "questionmark.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityHint("在应用内查看联系方式和常见问题")
+                .accessibilityIdentifier("action.open-app-support")
+                Button {
+                    AppHaptics.impact()
+                    dismissKeyboard()
                     showingPrivacyPolicy = true
                 } label: {
                     Label("隐私说明", systemImage: "hand.raised")
@@ -410,6 +425,11 @@ struct SettingsView: View {
                     #endif
                 }
                 .font(.headline)
+                Text("Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。")
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("settings.account-unofficial-notice")
                 TextField("学号", text: $model.account)
                     .textFieldStyle(.roundedBorder)
                     .disabled(model.isSampleMode)

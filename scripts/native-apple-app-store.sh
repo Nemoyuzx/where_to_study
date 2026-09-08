@@ -233,18 +233,18 @@ archive_path() {
 app_path() {
   case "$1" in
     ios) printf '%s/Products/Applications/WhereToStudyiOS.app\n' "$(archive_path ios)" ;;
-    macos) printf '%s/Products/Applications/WhereToStudyMac.app\n' "$(archive_path macos)" ;;
+    macos) printf '%s/Products/Applications/Where To Study.app\n' "$(archive_path macos)" ;;
   esac
 }
 
 validate_archive() {
-  local platform="$1" archive app executable info resources entitlements signature_details actual_identifier actual_version actual_build signing_style
+  local platform="$1" archive app executable info resources entitlements signature_details actual_identifier actual_version actual_build signing_style name_key
   archive="$(archive_path "$platform")"
   app="$(app_path "$platform")"
   if [[ "$platform" == "macos" ]]; then
     info="$app/Contents/Info.plist"
     resources="$app/Contents/Resources"
-    executable="$app/Contents/MacOS/WhereToStudyMac"
+    executable="$app/Contents/MacOS/Where To Study"
     signing_style="$MACOS_SIGNING_STYLE"
   else
     info="$app/Info.plist"
@@ -256,6 +256,14 @@ validate_archive() {
   if [[ ! -d "$app" ]]; then
     echo "Archive does not contain its application bundle: $app" >&2
     exit 1
+  fi
+  if [[ "$platform" == "macos" ]]; then
+    for name_key in CFBundleName CFBundleDisplayName CFBundleExecutable; do
+      if [[ "$(plutil -extract "$name_key" raw "$info")" != "Where To Study" ]]; then
+        echo "Mac App Store archive $name_key must be Where To Study." >&2
+        exit 1
+      fi
+    done
   fi
   codesign --verify --deep --strict --verbose=2 "$app"
   signature_details="$(codesign -dvv "$app" 2>&1)"

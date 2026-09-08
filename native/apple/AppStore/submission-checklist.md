@@ -16,7 +16,7 @@
 - 应用名称：`Where To Study`
 - 主分类：教育
 - 隐私政策：`https://github.com/Nemoyuzx/where_to_study/blob/main/PRIVACY.md`
-- 支持页面：`https://github.com/Nemoyuzx/where_to_study/issues`
+- 支持页面：`https://github.com/Nemoyuzx/where_to_study/blob/main/SUPPORT.md`；先发布支持页并确认未登录也能看到联系方式，之后再填写此 URL。
 - 营销页面：`https://github.com/Nemoyuzx/where_to_study`
 - 加密出口合规：应用声明 `ITSAppUsesNonExemptEncryption=false`。
 - App Privacy：依据实际数据流回答；当前代码不含广告、分析或跟踪 SDK，项目维护者不接收教务凭据或课程数据。提交人仍需确认 Apple 对学校服务作为第三方接收方的分类要求。
