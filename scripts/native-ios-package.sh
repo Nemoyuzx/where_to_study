@@ -44,11 +44,17 @@ xcodebuild \
   OTHER_SWIFT_FLAGS="-debug-prefix-map $ROOT_DIR=. -file-prefix-map $ROOT_DIR=." \
   archive
 
-APP="$ARCHIVE_PATH/Products/Applications/WhereToStudyiOS.app"
+APP="$ARCHIVE_PATH/Products/Applications/Where To Study.app"
 if [[ ! -d "$APP" ]]; then
-  echo "Native iOS archive does not contain WhereToStudyiOS.app." >&2
+  echo "Native iOS archive does not contain Where To Study.app." >&2
   exit 1
 fi
+for name_key in CFBundleName CFBundleDisplayName CFBundleExecutable; do
+  if [[ "$(plutil -extract "$name_key" raw "$APP/Info.plist")" != "Where To Study" ]]; then
+    echo "Native iOS archive $name_key must be Where To Study." >&2
+    exit 1
+  fi
+done
 WIDGET="$APP/PlugIns/WhereToStudyiOSWidget.appex"
 if [[ ! -d "$WIDGET" ]]; then
   echo "Native iOS archive is missing the WidgetKit extension." >&2
@@ -65,7 +71,7 @@ if [[ "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$WIDGET/Inf
   exit 1
 fi
 
-ARCHITECTURES="$(lipo -archs "$APP/WhereToStudyiOS")"
+ARCHITECTURES="$(lipo -archs "$APP/Where To Study")"
 if [[ " $ARCHITECTURES " != *" arm64 "* ]]; then
   echo "Native iOS archive is missing the arm64 architecture." >&2
   exit 1
@@ -131,7 +137,7 @@ if path_contains_fixed_text "$LEGACY_CONTEST_HOST" "$ARCHIVE_PATH"; then
   exit 1
 fi
 for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
-  if ! path_contains_fixed_text "$endpoint" "$APP/WhereToStudyiOS"; then
+  if ! path_contains_fixed_text "$endpoint" "$APP/Where To Study"; then
     echo "Native iOS executable is missing a required HTTPS public-data endpoint: $endpoint" >&2
     exit 1
   fi

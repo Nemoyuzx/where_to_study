@@ -232,7 +232,7 @@ archive_path() {
 
 app_path() {
   case "$1" in
-    ios) printf '%s/Products/Applications/WhereToStudyiOS.app\n' "$(archive_path ios)" ;;
+    ios) printf '%s/Products/Applications/Where To Study.app\n' "$(archive_path ios)" ;;
     macos) printf '%s/Products/Applications/Where To Study.app\n' "$(archive_path macos)" ;;
   esac
 }
@@ -249,7 +249,7 @@ validate_archive() {
   else
     info="$app/Info.plist"
     resources="$app"
-    executable="$app/WhereToStudyiOS"
+    executable="$app/Where To Study"
     signing_style="$IOS_SIGNING_STYLE"
   fi
 
@@ -257,14 +257,12 @@ validate_archive() {
     echo "Archive does not contain its application bundle: $app" >&2
     exit 1
   fi
-  if [[ "$platform" == "macos" ]]; then
-    for name_key in CFBundleName CFBundleDisplayName CFBundleExecutable; do
-      if [[ "$(plutil -extract "$name_key" raw "$info")" != "Where To Study" ]]; then
-        echo "Mac App Store archive $name_key must be Where To Study." >&2
-        exit 1
-      fi
-    done
-  fi
+  for name_key in CFBundleName CFBundleDisplayName CFBundleExecutable; do
+    if [[ "$(plutil -extract "$name_key" raw "$info")" != "Where To Study" ]]; then
+      echo "App Store archive $name_key must be Where To Study." >&2
+      exit 1
+    fi
+  done
   codesign --verify --deep --strict --verbose=2 "$app"
   signature_details="$(codesign -dvv "$app" 2>&1)"
   if [[ "$signature_details" == *"Signature=adhoc"* ]]; then

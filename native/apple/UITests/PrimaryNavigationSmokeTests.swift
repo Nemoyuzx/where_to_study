@@ -32,6 +32,86 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             .waitForExistence(timeout: 5))
     }
 
+    func testAppReviewDisclosureAndSupportChinese() {
+        assertAppReviewDisclosureAndSupport(language: "zh-Hans")
+    }
+
+    func testAppReviewDisclosureAndSupportEnglish() {
+        assertAppReviewDisclosureAndSupport(language: "en")
+    }
+
+    private func assertAppReviewDisclosureAndSupport(language: String) {
+        continueAfterFailure = false
+        let app = configuredApplication(language: language)
+        // Force the real consent presentation while retaining the isolated
+        // UI-testing model, sample stores, and sample network/system services.
+        app.launchArguments = ["--ui-testing", "--ui-testing-privacy-consent"]
+        app.launch()
+        defer { app.terminate() }
+
+        let english = language == "en"
+        let expectedNotice = english
+            ? "Where To Study is an independently developed, unofficial client. It is not operated by BUPT and does not represent the university."
+            : "Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。"
+        assertScreen("screen.privacy-consent", in: app)
+        let initialNotice = app.staticTexts["privacy-consent.independent-notice"]
+        XCTAssertTrue(initialNotice.waitForExistence(timeout: 5))
+        XCTAssertEqual(initialNotice.label, expectedNotice)
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(initialNotice.frame))
+        XCTAssertFalse(app.descendants(matching: .any)["screen.planner"].exists)
+
+        let accept = app.buttons["privacy-consent.accept"]
+        revealByScrolling(visibleElement: accept, in: app)
+        accept.tap()
+        assertScreen("screen.planner", in: app)
+
+        if app.tabBars.firstMatch.exists {
+            let settingsTab = app.tabBars.buttons[english ? "Settings" : "设置"]
+            XCTAssertTrue(settingsTab.waitForExistence(timeout: 5))
+            settingsTab.tap()
+        } else {
+            // The sidebar identifier is stable across both localizations.
+            navigateFromSidebar(to: "设置", in: app)
+        }
+        assertScreen("screen.settings", in: app)
+
+        let accountNotice = app.staticTexts["settings.account-unofficial-notice"]
+        revealByScrolling(visibleElement: accountNotice, in: app)
+        XCTAssertEqual(accountNotice.label, expectedNotice)
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(accountNotice.frame))
+
+        let openSupport = app.descendants(matching: .any)["action.open-app-support"].firstMatch
+        revealByScrolling(visibleElement: openSupport, in: app)
+        XCTAssertEqual(openSupport.label, english ? "Help & Support" : "帮助与支持")
+        openSupport.tap()
+
+        let supportTitle = app.staticTexts["screen.app-support"]
+        XCTAssertTrue(supportTitle.waitForExistence(timeout: 5))
+        XCTAssertEqual(supportTitle.label, english ? "Help & Support" : "帮助与支持")
+        let emailAddress = app.staticTexts["support.email-address"]
+        revealByScrolling(visibleElement: emailAddress, in: app)
+        XCTAssertEqual(emailAddress.label, "2099905168@qq.com")
+        XCTAssertTrue(app.frame.insetBy(dx: -1, dy: -1).contains(emailAddress.frame))
+
+        let contactLink = app.descendants(matching: .any)["action.contact-support-email"].firstMatch
+        revealByScrolling(visibleElement: contactLink, in: app)
+        XCTAssertEqual(contactLink.label, english ? "Contact by Email" : "通过电子邮件联系")
+        // The selectable address and mail link must be reachable; do not
+        // activate the link or open an external mail application during tests.
+        XCTAssertTrue(contactLink.isEnabled)
+
+        let dismiss = app.buttons["action.dismiss-app-support"].firstMatch
+        XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+        XCTAssertTrue(dismiss.isHittable)
+        dismiss.tap()
+        let dismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: supportTitle
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 5), .completed)
+        assertScreen("screen.settings", in: app)
+    }
+
     func testPrimaryPagesAreNavigable() {
         continueAfterFailure = false
         let app = configuredApplication()
