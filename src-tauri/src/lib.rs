@@ -294,7 +294,40 @@ static LOCAL_DATA: LocalDataCoordinator = LocalDataCoordinator::new();
 #[cfg(not(mobile))]
 static DESKTOP_SCHEDULER_THREAD: Mutex<Option<std::thread::Thread>> = Mutex::new(None);
 #[cfg(not(mobile))]
-static DESKTOP_NOTIFICATIONS_ENABLED: AtomicBool = AtomicBool::new(false);
+static DESKTOP_NOTIFICATION_PREFERENCES: Mutex<DesktopNotificationPreferences> =
+    Mutex::new(DesktopNotificationPreferences {
+        enabled: false,
+        minutes: 450,
+    });
+
+#[cfg(not(mobile))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DesktopNotificationPreferences {
+    enabled: bool,
+    minutes: u16,
+}
+
+#[cfg(not(mobile))]
+fn desktop_notification_preferences() -> DesktopNotificationPreferences {
+    *DESKTOP_NOTIFICATION_PREFERENCES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(not(mobile))]
+fn set_desktop_notification_preferences(enabled: bool, minutes: u16) {
+    *DESKTOP_NOTIFICATION_PREFERENCES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = DesktopNotificationPreferences {
+        enabled,
+        minutes: if minutes < 1440 {
+            minutes
+        } else {
+            models::DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES
+        },
+    };
+    wake_desktop_scheduler();
+}
 
 #[cfg(test)]
 mod local_data_coordination_tests {
@@ -839,15 +872,16 @@ fn save_saved_settings(
     #[cfg(not(mobile))]
     match &result {
         Ok(settings) => {
-            DESKTOP_NOTIFICATIONS_ENABLED.store(
+            set_desktop_notification_preferences(
                 settings.daily_course_notifications_enabled,
-                Ordering::Release,
+                settings.daily_course_notification_minutes,
             );
-            wake_desktop_scheduler();
         }
         Err(error) if error.account_scope_cleared => {
-            DESKTOP_NOTIFICATIONS_ENABLED.store(false, Ordering::Release);
-            wake_desktop_scheduler();
+            set_desktop_notification_preferences(
+                false,
+                models::DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
+            );
         }
         Err(_) => {}
     }
@@ -908,8 +942,10 @@ fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
     let result = finalize_local_data_clear(result, || notify_account_scope_cleared(&app));
     #[cfg(not(mobile))]
     {
-        DESKTOP_NOTIFICATIONS_ENABLED.store(false, Ordering::Release);
-        wake_desktop_scheduler();
+        set_desktop_notification_preferences(
+            false,
+            models::DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
+        );
     }
     result
 }
@@ -1969,13 +2005,19 @@ fn next_desktop_schedule_boundary(
     now: NaiveDateTime,
     state: DesktopScheduleState,
     notifications_enabled: bool,
+    notification_minutes: u16,
 ) -> NaiveDateTime {
     let mut boundaries = vec![
         next_daily_trigger_after(now, 0, 0),
         next_daily_trigger_after(now, 7, 0),
     ];
     if notifications_enabled {
-        boundaries.push(next_daily_trigger_after(now, 7, 30));
+        let minutes = notification_minutes.min(1439);
+        boundaries.push(next_daily_trigger_after(
+            now,
+            u32::from(minutes / 60),
+            u32::from(minutes % 60),
+        ));
     }
     if let Some(retry) = state
         .classroom_retry
@@ -2025,6 +2067,7 @@ enum DesktopScheduledTask {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DesktopTaskOutcome {
     Completed,
+    Superseded,
     PermanentFailure,
     RetryableFailure,
 }
@@ -2171,6 +2214,9 @@ impl DesktopScheduleState {
         completed_at: NaiveDateTime,
         outcome: DesktopTaskOutcome,
     ) {
+        if outcome == DesktopTaskOutcome::Superseded {
+            return;
+        }
         if task != DesktopScheduledTask::RefreshClassroomsAndTray
             || outcome != DesktopTaskOutcome::RetryableFailure
         {
@@ -2201,6 +2247,7 @@ fn due_desktop_tasks(
     now: NaiveDateTime,
     state: DesktopScheduleState,
     notifications_enabled: bool,
+    notification_minutes: u16,
 ) -> Vec<DesktopScheduledTask> {
     let today = now.date();
     let classroom_due = state.classroom_refresh_date != Some(today)
@@ -2208,8 +2255,11 @@ fn due_desktop_tasks(
             Some(retry) => now >= retry.next_attempt_at,
             None => now.time() >= NaiveTime::from_hms_opt(7, 0, 0).expect("valid refresh time"),
         };
+    let minutes = notification_minutes.min(1439);
     let notification_due = notifications_enabled
-        && now.time() >= NaiveTime::from_hms_opt(7, 30, 0).expect("valid notification time")
+        && now.time()
+            >= NaiveTime::from_hms_opt(u32::from(minutes / 60), u32::from(minutes % 60), 0)
+                .expect("valid notification time")
         && state.notification_date != Some(today);
 
     let mut tasks = Vec::with_capacity(2);
@@ -2299,15 +2349,32 @@ fn daily_course_notification_content(
 }
 
 #[cfg(not(mobile))]
-fn send_daily_course_notification(app: &tauri::AppHandle, today: NaiveDate) -> Result<(), String> {
-    if !DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire) {
-        return Ok(());
+fn send_daily_course_notification(
+    app: &tauri::AppHandle,
+    today: NaiveDate,
+    expected_preferences: DesktopNotificationPreferences,
+) -> Result<bool, String> {
+    if !expected_preferences.enabled {
+        return Ok(false);
     }
     let generation = LOCAL_DATA.begin();
     let (title, body) = daily_course_notification_content(app, today, generation)?;
     let notification = app.notification();
     LOCAL_DATA
         .with_current_account(generation, || {
+            // Re-check while holding the same lock used by settings updates, so
+            // work queued before a time/permission change cannot deliver afterward.
+            let current = DESKTOP_NOTIFICATION_PREFERENCES
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if !notification_delivery_is_current(
+                expected_preferences,
+                *current,
+                today,
+                desktop_now(),
+            ) {
+                return Ok(false);
+            }
             notification
                 .builder()
                 .title(title)
@@ -2315,9 +2382,29 @@ fn send_daily_course_notification(app: &tauri::AppHandle, today: NaiveDate) -> R
                 .group("daily-courses")
                 .auto_cancel()
                 .show()
+                .map(|()| true)
                 .map_err(|error| error.to_string())
         })
         .map_err(LocalDataAccessError::message)
+}
+
+#[cfg(not(mobile))]
+fn notification_delivery_is_current(
+    expected: DesktopNotificationPreferences,
+    current: DesktopNotificationPreferences,
+    planned_day: NaiveDate,
+    now: NaiveDateTime,
+) -> bool {
+    current.enabled
+        && current == expected
+        && now.date() == planned_day
+        && now.time()
+            >= NaiveTime::from_hms_opt(
+                u32::from(current.minutes / 60),
+                u32::from(current.minutes % 60),
+                0,
+            )
+            .unwrap_or_default()
 }
 
 #[cfg(not(mobile))]
@@ -2325,6 +2412,7 @@ fn run_desktop_scheduled_task(
     app: &tauri::AppHandle,
     task: DesktopScheduledTask,
     today: NaiveDate,
+    notification_preferences: DesktopNotificationPreferences,
 ) -> DesktopTaskOutcome {
     match task {
         DesktopScheduledTask::RebuildTrayForDate => {
@@ -2337,12 +2425,16 @@ fn run_desktop_scheduled_task(
             outcome
         }
         DesktopScheduledTask::SendCourseNotification => {
-            if let Err(error) = send_daily_course_notification(app, today) {
-                eprintln!("daily course notification failed: {error}");
-                let _ = app.emit(
-                    "schedule:daily-notification-error",
-                    format!("发送今日课程提醒失败：{error}"),
-                );
+            match send_daily_course_notification(app, today, notification_preferences) {
+                Ok(false) => return DesktopTaskOutcome::Superseded,
+                Ok(true) => {}
+                Err(error) => {
+                    eprintln!("daily course notification failed: {error}");
+                    let _ = app.emit(
+                        "schedule:daily-notification-error",
+                        format!("发送今日课程提醒失败：{error}"),
+                    );
+                }
             }
             DesktopTaskOutcome::Completed
         }
@@ -2361,22 +2453,28 @@ fn schedule_desktop_background_tasks(app: tauri::AppHandle) {
 
         loop {
             let now = desktop_now();
-            let notifications_enabled = DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire);
+            let preferences = desktop_notification_preferences();
             let mut completed = false;
-            for task in due_desktop_tasks(now, state, notifications_enabled) {
-                let outcome = run_desktop_scheduled_task(&app, task, now.date());
+            for task in due_desktop_tasks(now, state, preferences.enabled, preferences.minutes) {
+                let outcome = run_desktop_scheduled_task(&app, task, now.date(), preferences);
                 state.record_result(task, now.date(), now, outcome);
-                completed = true;
+                completed |= outcome != DesktopTaskOutcome::Superseded;
             }
             if completed {
                 persist_desktop_task_dates(&app, &state);
             }
             let now = desktop_now();
-            let notifications_enabled = DESKTOP_NOTIFICATIONS_ENABLED.load(Ordering::Acquire);
+            let preferences = desktop_notification_preferences();
+            // A preceding refresh may finish after midnight or a custom trigger.
+            // Re-evaluate due work before choosing a strictly future wake-up.
+            if !due_desktop_tasks(now, state, preferences.enabled, preferences.minutes).is_empty() {
+                continue;
+            }
             sleep_until(next_desktop_schedule_boundary(
                 now,
                 state,
-                notifications_enabled,
+                preferences.enabled,
+                preferences.minutes,
             ));
         }
     });
@@ -2391,6 +2489,149 @@ mod background_schedule_tests {
             .unwrap()
             .and_hms_opt(hour, minute, second)
             .unwrap()
+    }
+
+    #[test]
+    fn custom_time_controls_due_tasks_and_next_wake_without_changing_classroom_time() {
+        let today = date_time(0, 0, 0).date();
+        let state = DesktopScheduleState {
+            tray_date: today,
+            classroom_refresh_date: Some(today),
+            notification_date: None,
+            classroom_retry: None,
+        };
+        assert!(!due_desktop_tasks(date_time(9, 14, 59), state, true, 555)
+            .contains(&DesktopScheduledTask::SendCourseNotification));
+        assert!(due_desktop_tasks(date_time(9, 15, 0), state, true, 555)
+            .contains(&DesktopScheduledTask::SendCourseNotification));
+        assert_eq!(
+            next_desktop_schedule_boundary(date_time(9, 0, 0), state, true, 555),
+            date_time(9, 15, 0)
+        );
+        assert_eq!(
+            next_desktop_schedule_boundary(date_time(9, 0, 0), state, true, 1439),
+            date_time(23, 59, 0)
+        );
+        assert!(due_desktop_tasks(date_time(0, 0, 0), state, true, 0)
+            .contains(&DesktopScheduledTask::SendCourseNotification));
+        assert!(due_desktop_tasks(date_time(23, 59, 0), state, true, 1439)
+            .contains(&DesktopScheduledTask::SendCourseNotification));
+        assert_eq!(
+            next_daily_trigger_after(
+                NaiveDate::from_ymd_opt(2026, 12, 31)
+                    .unwrap()
+                    .and_hms_opt(23, 59, 59)
+                    .unwrap(),
+                0,
+                0
+            ),
+            NaiveDate::from_ymd_opt(2027, 1, 1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn reminder_changes_drop_old_work_without_marking_new_work_as_delivered() {
+        let original = DesktopNotificationPreferences {
+            enabled: true,
+            minutes: 450,
+        };
+        let changed = DesktopNotificationPreferences {
+            enabled: true,
+            minutes: 555,
+        };
+        let disabled = DesktopNotificationPreferences {
+            enabled: false,
+            minutes: 450,
+        };
+        let now = date_time(7, 30, 0);
+        assert!(notification_delivery_is_current(
+            original,
+            original,
+            now.date(),
+            now
+        ));
+        assert!(!notification_delivery_is_current(
+            original,
+            changed,
+            now.date(),
+            now
+        ));
+        assert!(!notification_delivery_is_current(
+            original,
+            disabled,
+            now.date(),
+            now
+        ));
+        assert!(!notification_delivery_is_current(
+            original,
+            original,
+            now.date(),
+            now + ChronoDuration::days(1)
+        ));
+        assert!(!notification_delivery_is_current(
+            changed,
+            changed,
+            now.date(),
+            now
+        ));
+        let mut state = DesktopScheduleState::after_startup(
+            now,
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: Some(now.date()),
+                notification_date: None,
+            },
+        );
+        state.record_result(
+            DesktopScheduledTask::SendCourseNotification,
+            now.date(),
+            now,
+            DesktopTaskOutcome::Superseded,
+        );
+        assert_eq!(state.notification_date, None);
+        assert!(due_desktop_tasks(date_time(9, 15, 0), state, true, 555)
+            .contains(&DesktopScheduledTask::SendCourseNotification));
+        state.mark_completed(DesktopScheduledTask::SendCourseNotification, now.date());
+        assert!(!due_desktop_tasks(date_time(12, 0, 0), state, true, 600)
+            .contains(&DesktopScheduledTask::SendCourseNotification));
+    }
+
+    #[test]
+    fn work_crossing_midnight_rechecks_due_notifications_before_sleeping() {
+        let started = date_time(23, 59, 0);
+        let completed = date_time(0, 0, 1) + ChronoDuration::days(1);
+        let mut state = DesktopScheduleState::after_startup(
+            started,
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: None,
+                notification_date: None,
+            },
+        );
+        state.record_result(
+            DesktopScheduledTask::RefreshClassroomsAndTray,
+            started.date(),
+            completed,
+            DesktopTaskOutcome::Completed,
+        );
+        state.record_result(
+            DesktopScheduledTask::SendCourseNotification,
+            started.date(),
+            completed,
+            DesktopTaskOutcome::Superseded,
+        );
+        let due = due_desktop_tasks(completed, state, true, 0);
+        assert!(due.contains(&DesktopScheduledTask::SendCourseNotification));
+        assert!(due.contains(&DesktopScheduledTask::RebuildTrayForDate));
+        // The scheduler must process these immediately, not sleep until 07:00.
+        assert!(next_desktop_schedule_boundary(completed, state, true, 0) > completed);
+        state.mark_completed(
+            DesktopScheduledTask::SendCourseNotification,
+            completed.date(),
+        );
+        state.mark_completed(DesktopScheduledTask::RebuildTrayForDate, completed.date());
+        assert!(due_desktop_tasks(completed, state, true, 0).is_empty());
     }
 
     #[test]
@@ -2415,15 +2656,15 @@ mod background_schedule_tests {
             },
         );
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(6, 59, 59), state, true),
+            next_desktop_schedule_boundary(date_time(6, 59, 59), state, true, 450),
             date_time(7, 0, 0)
         );
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(7, 0, 0), state, true),
+            next_desktop_schedule_boundary(date_time(7, 0, 0), state, true, 450),
             date_time(7, 30, 0)
         );
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(7, 30, 0), state, true),
+            next_desktop_schedule_boundary(date_time(7, 30, 0), state, true, 450),
             date_time(0, 0, 0) + ChronoDuration::days(1)
         );
     }
@@ -2439,7 +2680,7 @@ mod background_schedule_tests {
         };
 
         assert_eq!(
-            due_desktop_tasks(date_time(0, 0, 1), state, true),
+            due_desktop_tasks(date_time(0, 0, 1), state, true, 450),
             vec![DesktopScheduledTask::RebuildTrayForDate]
         );
     }
@@ -2454,7 +2695,7 @@ mod background_schedule_tests {
             classroom_retry: None,
         };
         let now = date_time(8, 0, 0);
-        let tasks = due_desktop_tasks(now, state, true);
+        let tasks = due_desktop_tasks(now, state, true, 450);
         assert_eq!(
             tasks,
             vec![
@@ -2466,7 +2707,7 @@ mod background_schedule_tests {
         for task in tasks {
             state.record_result(task, now.date(), now, DesktopTaskOutcome::Completed);
         }
-        assert!(due_desktop_tasks(now, state, true).is_empty());
+        assert!(due_desktop_tasks(now, state, true, 450).is_empty());
     }
 
     #[test]
@@ -2479,7 +2720,7 @@ mod background_schedule_tests {
             },
         );
         assert_eq!(
-            due_desktop_tasks(date_time(8, 30, 0), state, true),
+            due_desktop_tasks(date_time(8, 30, 0), state, true, 450),
             vec![
                 DesktopScheduledTask::RefreshClassroomsAndTray,
                 DesktopScheduledTask::SendCourseNotification,
@@ -2497,7 +2738,7 @@ mod background_schedule_tests {
                 notification_date: Some(today),
             },
         );
-        assert!(due_desktop_tasks(date_time(8, 30, 0), state, true).is_empty());
+        assert!(due_desktop_tasks(date_time(8, 30, 0), state, true, 450).is_empty());
     }
 
     #[test]
@@ -2509,9 +2750,9 @@ mod background_schedule_tests {
                 notification_date: None,
             },
         );
-        assert!(due_desktop_tasks(date_time(6, 59, 59), state, true).is_empty());
+        assert!(due_desktop_tasks(date_time(6, 59, 59), state, true, 450).is_empty());
         assert_eq!(
-            due_desktop_tasks(date_time(7, 0, 0), state, true),
+            due_desktop_tasks(date_time(7, 0, 0), state, true, 450),
             vec![DesktopScheduledTask::RefreshClassroomsAndTray]
         );
     }
@@ -2533,13 +2774,13 @@ mod background_schedule_tests {
             date_time(7, 0, 0),
             DesktopTaskOutcome::RetryableFailure,
         );
-        assert!(due_desktop_tasks(date_time(7, 14, 59), state, true).is_empty());
+        assert!(due_desktop_tasks(date_time(7, 14, 59), state, true, 450).is_empty());
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(7, 0, 1), state, true),
+            next_desktop_schedule_boundary(date_time(7, 0, 1), state, true, 450),
             date_time(7, 15, 0)
         );
         assert_eq!(
-            due_desktop_tasks(date_time(7, 15, 0), state, true),
+            due_desktop_tasks(date_time(7, 15, 0), state, true, 450),
             vec![task]
         );
 
@@ -2550,7 +2791,7 @@ mod background_schedule_tests {
             DesktopTaskOutcome::RetryableFailure,
         );
         assert_eq!(state.classroom_retry.unwrap().attempts, 2);
-        assert!(due_desktop_tasks(date_time(7, 29, 59), state, true).is_empty());
+        assert!(due_desktop_tasks(date_time(7, 29, 59), state, true, 450).is_empty());
 
         state.record_result(
             task,
@@ -2583,7 +2824,7 @@ mod background_schedule_tests {
         state.record_result(task, date_time(7, 0, 0).date(), date_time(7, 0, 0), outcome);
 
         assert!(state.classroom_retry.is_none());
-        assert!(!due_desktop_tasks(date_time(8, 0, 0), state, true).contains(&task));
+        assert!(!due_desktop_tasks(date_time(8, 0, 0), state, true, 450).contains(&task));
     }
 
     #[test]
@@ -2596,9 +2837,9 @@ mod background_schedule_tests {
             classroom_retry: None,
         };
 
-        assert!(due_desktop_tasks(date_time(8, 0, 0), state, false).is_empty());
+        assert!(due_desktop_tasks(date_time(8, 0, 0), state, false, 450).is_empty());
         assert_eq!(
-            next_desktop_schedule_boundary(date_time(7, 0, 0), state, false),
+            next_desktop_schedule_boundary(date_time(7, 0, 0), state, false, 450),
             date_time(0, 0, 0) + ChronoDuration::days(1)
         );
     }
@@ -2623,11 +2864,12 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 
     #[cfg(not(mobile))]
     {
-        let notifications_enabled = !account_access_revoked
-            && settings_store::load(app.app_handle())
-                .map(|settings| settings.daily_course_notifications_enabled)
-                .unwrap_or(false);
-        DESKTOP_NOTIFICATIONS_ENABLED.store(notifications_enabled, Ordering::Release);
+        let settings = settings_store::load(app.app_handle())
+            .unwrap_or_else(|_| SavedSettings::with_defaults());
+        set_desktop_notification_preferences(
+            !account_access_revoked && settings.daily_course_notifications_enabled,
+            settings.daily_course_notification_minutes,
+        );
         setup_tray(app)?;
         schedule_desktop_background_tasks(app.app_handle().clone());
     }

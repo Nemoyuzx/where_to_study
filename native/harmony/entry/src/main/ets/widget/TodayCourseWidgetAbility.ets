@@ -1,6 +1,6 @@
 // 今日课程服务卡片（FormExtensionAbility），对应 iOS 端 WidgetKit
 // WhereToStudyWidget。卡片与主应用同沙箱，直接读取归档文件生成绑定数据。
-import { formBindingData, FormExtensionAbility, formProvider } from '@kit.FormKit';
+import { formBindingData, FormExtensionAbility, formProvider, formInfo } from '@kit.FormKit';
 import { Want, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
 import { WidgetSync } from './WidgetSync';
 import { TodayCourseWidgetData, WidgetArchive, WidgetCoursePreferences } from './TodayCourseWidgetData';
@@ -8,11 +8,12 @@ import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
 
 export default class TodayCourseWidgetAbility extends FormExtensionAbility {
   private activeFormIDs: Set<string> = new Set<string>();
+  private dimensions: Map<string, number> = new Map<string, number>();
   private themeDarkMode: boolean | null = null;
   private themedBinding(archive: WidgetArchive | null,
-    preferences: WidgetCoursePreferences): Record<string, Object> {
-    return WidgetSync.themeBinding(TodayCourseWidgetData.binding(archive, preferences,
-      undefined, TodayCourseWidgetData.nowMinute()), WidgetSync.loadThemeSync(this.context.filesDir),
+    preferences: WidgetCoursePreferences, dimension: number): Record<string, Object> {
+    return WidgetSync.themeBinding(TodayCourseWidgetData.bindingAtEpoch(archive, preferences,
+      dimension), WidgetSync.loadThemeSync(this.context.filesDir),
       this.themeDarkMode ?? this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
   }
 
@@ -26,22 +27,13 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
 
   onRemoveForm(formId: string): void {
     this.activeFormIDs.delete(formId);
+    this.dimensions.delete(formId);
   }
 
   private static defaultPreferences(): WidgetCoursePreferences {
     return new WidgetCoursePreferences(true, true, WidgetCoursePreferences.defaultLimit,
       AppLanguageInfo.resolved(AppLanguage.system, AppLanguageInfo.systemLanguage()));
   }
-  // 卡片尺寸 → 行数上限（2*2 两行，其余按偏好上限；未知按偏好上限），BUG-040 修复。
-  private static rowLimitForDimension(dimension: Object | undefined,
-    preferences: WidgetCoursePreferences): number {
-    const value: number = typeof dimension === 'number' ? dimension as number : Number(dimension);
-    if (!Number.isNaN(value) && value === 1) {
-      return Math.min(2, preferences.courseLimit);
-    }
-    return preferences.courseLimit;
-  }
-
   onAddForm(want: Want): formBindingData.FormBindingData {
     const formId: Object | undefined = want.parameters?.['ohos.extra.param.key.form_identity'];
     if (typeof formId === 'string') {
@@ -51,10 +43,16 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
     const archive: WidgetArchive | null = WidgetSync.loadArchiveSync(
       TodayCourseWidgetData.archiveFilePath(this.context.filesDir));
     const dimension: Object | undefined = want.parameters?.['ohos.extra.param.key.form_dimension'];
+    const dimensionValue: number = Number(dimension);
+    if (typeof formId === 'string') {
+      this.dimensions.set(formId, Number.isFinite(dimensionValue) ? dimensionValue :
+        formInfo.FormDimension.Dimension_2_2);
+      this.scheduleMidnightRefresh(formId);
+    }
     const preferences: WidgetCoursePreferences =
       archive?.preferences ?? TodayCourseWidgetAbility.defaultPreferences();
     return formBindingData.createFormBindingData(
-      this.themedBinding(archive, preferences));
+      this.themedBinding(archive, preferences, dimensionValue));
   }
 
   onUpdateForm(formId: string, wantParams?: Record<string, Object>): void {
@@ -67,16 +65,28 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
     const filesDir: string = this.context.filesDir;
     const dimension: Object | undefined = wantParams?.['ohos.extra.param.key.form_dimension'];
     const work: Promise<void> = (async (): Promise<void> => {
+      let dimensionValue: number = Number(dimension);
+      if (!Number.isFinite(dimensionValue)) {
+        dimensionValue = this.dimensions.get(formId) ?? formInfo.FormDimension.Dimension_2_2;
+        try {
+          // 服务进程重启后，周期回调不一定再次携带尺寸。
+          dimensionValue = (await formProvider.getPublishedRunningFormInfoById(formId)).dimension;
+        } catch (e) {
+          // 查询不可用时使用缓存或紧凑容量，避免卡片溢出。
+        }
+      }
+      this.dimensions.set(formId, dimensionValue);
       const archive: WidgetArchive | null = await WidgetSync.loadArchive(
         TodayCourseWidgetData.archiveFilePath(filesDir));
       const preferences: WidgetCoursePreferences =
         archive?.preferences ?? TodayCourseWidgetAbility.defaultPreferences();
       const data: formBindingData.FormBindingData =
         formBindingData.createFormBindingData(
-          this.themedBinding(archive, preferences));
+          this.themedBinding(archive, preferences, dimensionValue));
       if (hasFormId) {
         try {
           await formProvider.updateForm(formId, data);
+          this.scheduleMidnightRefresh(formId);
         } catch (e) {
           // 更新失败保留上次内容。
         }
@@ -85,5 +95,15 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
     work.catch(() => {
       // 卡片读取失败保留上次内容。
     });
+  }
+
+  private scheduleMidnightRefresh(formId: string): void {
+    // 请求北京时间午夜刷新（系统最短间隔5分钟）；实际回调仍由系统刷新预算决定。
+    try {
+      formProvider.setFormNextRefreshTime(formId,
+        Math.max(5, TodayCourseWidgetData.minutesUntilBeijingMidnight())).catch(() => {});
+    } catch (e) {
+      // 卡片尚未注册或系统暂不可用时，保留周期刷新兜底。
+    }
   }
 }

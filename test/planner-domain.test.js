@@ -18,6 +18,10 @@ import {
   calendarWeekOfYear,
   calendarSwipeDirection,
   DEFAULT_SETTINGS,
+  dailyCourseNotificationTime,
+  normalizeDailyCourseNotificationMinutes,
+  parseDailyCourseNotificationTime,
+  reminderSettingsPayload,
   desktopMonthGridMetrics,
   expandedMonthGridMetrics,
   favoriteDeadlineKey,
@@ -51,6 +55,45 @@ import {
   startupSettingsToState,
   yearCourseOpacity,
 } from '../src/planner-domain.js'
+
+test('daily course reminder keeps the 07:30 default and round-trips custom times', () => {
+  assert.equal(DEFAULT_SETTINGS.dailyCourseNotificationMinutes, 450)
+  assert.equal(savedSettingsToState({}).dailyCourseNotificationMinutes, 450)
+  for (const minutes of [0, 1, 450, 555, 720, 1439]) {
+    assert.equal(normalizeDailyCourseNotificationMinutes(minutes), minutes)
+    const text = dailyCourseNotificationTime(minutes)
+    assert.equal(parseDailyCourseNotificationTime(text), minutes)
+    const state = savedSettingsToState({ daily_course_notification_minutes: minutes })
+    assert.equal(settingsToPayload(state).daily_course_notification_minutes, minutes)
+  }
+  assert.equal(dailyCourseNotificationTime(0), '00:00')
+  assert.equal(dailyCourseNotificationTime(1439), '23:59')
+})
+
+test('daily course reminder rejects invalid input and safely defaults bad persisted values', () => {
+  for (const value of [-1, 1440, 12.5, NaN, Infinity, '555', null, undefined]) {
+    assert.equal(normalizeDailyCourseNotificationMinutes(value), 450)
+    assert.equal(savedSettingsToState({ daily_course_notification_minutes: value }).dailyCourseNotificationMinutes, 450)
+  }
+  for (const value of ['', '24:00', '7:30', '07:60', '07:30:00', '09:15 ', null, 450]) {
+    assert.equal(parseDailyCourseNotificationTime(value), null)
+  }
+})
+
+test('reminder-only save preserves saved account and unrelated settings without account drafts', () => {
+  const saved = savedSettingsToState({
+    account: 'saved-account', has_saved_password: true, ui_language: 'en',
+    term_id: '2026-2027-1', term_start_date: '2026-08-31',
+    campus_id: '04', default_min_seats: 15,
+  })
+  const original = settingsToPayload(saved)
+  const payload = reminderSettingsPayload(saved, true, 555)
+  assert.deepEqual(payload, {
+    ...original, daily_course_notifications_enabled: true, daily_course_notification_minutes: 555,
+  })
+  assert.equal(payload.password, null)
+  assert.equal(saved.dailyCourseNotificationsEnabled, false)
+})
 
 test('campus building catalog keeps every original building visible', () => {
   assert.deepEqual(buildingsForCampus('1'), ['教1', '教2', '教3', '教4', '主楼'])

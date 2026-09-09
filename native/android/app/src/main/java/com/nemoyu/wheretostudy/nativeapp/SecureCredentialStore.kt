@@ -99,7 +99,7 @@ class SecureCredentialStore(context: Context) {
 
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER)
         // Deliberately not bound to device unlock: the 07:00 classroom refresh
-        // and 07:30 course summary jobs run while the device is still locked,
+        // and configured course summary jobs can run while the device is locked,
         // and the key is already Keystore-only with backups excluded. Binding
         // to unlock would silently break those background features.
         generator.init(
@@ -194,6 +194,21 @@ class AppPreferences(context: Context) {
                 throw IllegalStateException("无法保存课程摘要通知设置。")
             }
         }
+
+    var dailyCourseNotificationMinutes: Int
+        get() = DailyCourseSummaryLogic.normalizedMinutes(
+            runCatching { preferences.getInt(DAILY_COURSE_NOTIFICATION_MINUTES_KEY, 450) }
+                .getOrDefault(450),
+        )
+        set(value) { save(DAILY_COURSE_NOTIFICATION_MINUTES_KEY, DailyCourseSummaryLogic.normalizedMinutes(value)) }
+
+    internal var dailyCourseNotificationScheduleToken: String
+        get() = preferences.getString("daily_course_notification_schedule_token", "").orEmpty()
+        set(value) { save("daily_course_notification_schedule_token", value) }
+
+    internal var dailyCourseNotificationDeliveredDay: String
+        get() = preferences.getString("daily_course_notification_delivered_day", "").orEmpty()
+        set(value) { save("daily_course_notification_delivered_day", value) }
 
     var weatherEnabled: Boolean
         get() = preferences.getBoolean(WEATHER_ENABLED_KEY, true)
@@ -326,6 +341,7 @@ class AppPreferences(context: Context) {
         const val TERM_ID_KEY = "term_id"
         const val TERM_START_DATE_KEY = "term_start_date"
         const val DAILY_COURSE_NOTIFICATIONS_KEY = "daily_course_notifications_enabled"
+        const val DAILY_COURSE_NOTIFICATION_MINUTES_KEY = "daily_course_notification_minutes"
         const val AUTOMATIC_TERM_DETECTION_KEY = "automatic_term_detection_enabled"
         const val WIDGET_SHOWS_LOCATION_KEY = "widget_shows_location"
         const val WIDGET_SHOWS_TEACHER_KEY = "widget_shows_teacher"

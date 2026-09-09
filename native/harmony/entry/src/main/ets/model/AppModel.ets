@@ -235,6 +235,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
   @Trace isImportingCalendar: boolean = false;
   @Trace holidayStatusByYear: Map<number, string> = new Map<number, string>();
   @Trace dailyCourseNotificationsEnabled: boolean = false;
+  @Trace dailyCourseNotificationMinutes: number = DailyCourseNotificationSettings.defaultMinutes;
   @Trace dailyCourseNotificationStatusMessage: string = '';
   @Trace languageSettingRawValue: string = AppLanguage.system;
   @Trace systemLanguageID: string = AppLanguageInfo.systemLanguage();
@@ -265,6 +266,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private classroomRefreshToken: number = 0;
   private calendarImportToken: number = 0;
   private dailyCourseNotificationRevision: number = 0;
+  private dailyCourseNotificationPreferenceWrite: Promise<void> = Promise.resolve();
   private statusMessageRevision: number = 0;
   private statusMessageDismissTimer: number | null = null;
   private savedCredentialAccount: string | null = null;
@@ -282,6 +284,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private publicDeadlinePreferencesLoaded: boolean = false;
   // 每日课程摘要对账门控（BUG-050 修复）：当日已对账且无变化时不再全量重排提醒。
   private dailyCourseNotificationReconciledDay: string = '';
+  private dailyCourseNotificationReconciledTimezoneOffset: number | null = null;
   private dailyCourseNotificationDirty: boolean = true;
 
   constructor(
@@ -297,7 +300,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     dailyCourseNotificationScheduler: DailyCourseNotificationScheduling = new HarmonyReminderScheduler(),
     preferencesName: string = 'where-to-study',
     weatherClient: WeatherFetching = new UAPIWeatherClient(),
-    assignmentClient: AssignmentDeadlineFetching = new UCloudAssignmentClient()
+    assignmentClient: AssignmentDeadlineFetching = new UCloudAssignmentClient(),
+    preferencesStore: PreferencesStore | null = null
   ) {
     this.runtimeMode = runtimeMode;
     this.supportsRuntimeModeSwitching = !runtimeMode.isSample;
@@ -316,7 +320,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.dailyCourseNotificationAuthorizationTimeoutMs = 8000;
     this.statusMessageAutoDismissMs = 4000;
     this.preferencesName = preferencesName;
-    this.preferences = new PreferencesStore(preferencesName);
+    this.preferences = preferencesStore ?? new PreferencesStore(preferencesName);
     this.colorThemeStore = new ColorThemeStore(this.colorTheme, this.preferences);
   }
 
@@ -344,6 +348,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
     const savedLanguage: string | null = await this.preferences.getString('appLanguage');
     const notificationsEnabled: boolean = await this.preferences.getBool(
       DailyCourseNotificationSettings.enabledKey, false);
+    this.dailyCourseNotificationMinutes = DailyCourseNotificationSettings.normalizeMinutes(
+      await this.preferences.getNumber(DailyCourseNotificationSettings.minutesKey,
+        DailyCourseNotificationSettings.defaultMinutes));
     this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
     this.widgetShowsLocation = await this.preferences.getBool('widgetShowsLocation', true);
     this.widgetShowsTeacher = await this.preferences.getBool('widgetShowsTeacher', true);
@@ -694,6 +701,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private async restorePersistedSettings(): Promise<void> {
     try {
+      await this.dailyCourseNotificationPreferenceWrite.catch(() => {});
       await this.restoreColorTheme();
       const savedTermID: string | null = await this.preferences.getString('termID');
       const savedTermStart: string | null = await this.preferences.getString('termStartDate');
@@ -701,6 +709,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
       const savedLanguage: string | null = await this.preferences.getString('appLanguage');
       const notificationsEnabled: boolean = await this.preferences.getBool(
         DailyCourseNotificationSettings.enabledKey, false);
+      this.dailyCourseNotificationMinutes = DailyCourseNotificationSettings.normalizeMinutes(
+        await this.preferences.getNumber(DailyCourseNotificationSettings.minutesKey,
+          DailyCourseNotificationSettings.defaultMinutes));
       this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
       this.widgetShowsLocation = await this.preferences.getBool('widgetShowsLocation', true);
       this.widgetShowsTeacher = await this.preferences.getBool('widgetShowsTeacher', true);
@@ -1196,6 +1207,33 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   // ---------- 每日课程摘要 ----------
 
+  setDailyCourseNotificationMinutes(value: number): void {
+    if (!Number.isInteger(value) || value < 0 || value > 1439) {
+      return;
+    }
+    const minutes: number = value;
+    if (minutes === this.dailyCourseNotificationMinutes ||
+      (this.isSampleMode() && !this.isReviewDemo())) {
+      return;
+    }
+    this.dailyCourseNotificationMinutes = minutes;
+    if (this.isSampleMode()) {
+      return;
+    }
+    // 先撤销旧时间，不等待偏好写入或权限查询；新 revision 同时阻止旧异步批次继续发布。
+    const cancellation: Promise<void> = this.cancelDailyCourseNotifications();
+    cancellation.catch(() => {
+      // 随后的重排会再次清理；系统错误由重排结果统一反馈。
+    });
+    this.dailyCourseNotificationPreferenceWrite = this.dailyCourseNotificationPreferenceWrite.catch(() => {})
+      .then(async (): Promise<void> => {
+        await this.preferences.setNumber(DailyCourseNotificationSettings.minutesKey, minutes);
+      });
+    this.dailyCourseNotificationPreferenceWrite.catch(() => {});
+    this.dailyCourseNotificationDirty = true;
+    this.reconcileDailyCourseNotifications(false);
+  }
+
   setDailyCourseNotificationsEnabled(enabled: boolean): void {
     if (this.isSampleMode()) {
       if (this.isReviewDemo()) {
@@ -1214,8 +1252,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.dailyCourseNotificationStatusMessage = '正在确认通知权限…';
       this.reconcileDailyCourseNotifications(true);
     } else {
-      const work: Promise<void> = this.preferences.setBool(
-        DailyCourseNotificationSettings.enabledKey, false);
+      const work: Promise<void> = this.persistDailyCourseNotificationEnabled();
       work.catch(() => {
         // 偏好写入失败不影响本次关闭（BUG-016 修复）。
       });
@@ -1231,6 +1268,16 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.reconcileDailyCourseNotifications(false);
   }
 
+  private persistDailyCourseNotificationEnabled(): Promise<void> {
+    this.dailyCourseNotificationPreferenceWrite = this.dailyCourseNotificationPreferenceWrite.catch(() => {})
+      .then(async (): Promise<void> => {
+        // 读取当前开关而非旧授权回调快照；和改时／清除操作共用写入顺序。
+        await this.preferences.setBool(DailyCourseNotificationSettings.enabledKey,
+          this.dailyCourseNotificationsEnabled);
+      });
+    return this.dailyCourseNotificationPreferenceWrite;
+  }
+
   private reconcileDailyCourseNotifications(requestPermissionIfNeeded: boolean): void {
     if (this.isSampleMode()) {
       this.dailyCourseNotificationsEnabled = false;
@@ -1238,16 +1285,23 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
     // 当日已对账且无变化时跳过，避免每次回前台都全量取消并重发提醒（BUG-050 修复）。
     const today: string = StrictDates.formatDateParts(StrictDates.todayParts());
+    const timezoneOffset: number = new Date().getTimezoneOffset();
     if (!requestPermissionIfNeeded && !this.dailyCourseNotificationDirty &&
-      this.dailyCourseNotificationReconciledDay === today) {
+      this.dailyCourseNotificationReconciledDay === today &&
+      this.dailyCourseNotificationReconciledTimezoneOffset === timezoneOffset) {
       return;
     }
     this.dailyCourseNotificationDirty = false;
     this.dailyCourseNotificationReconciledDay = today;
+    this.dailyCourseNotificationReconciledTimezoneOffset = timezoneOffset;
     this.dailyCourseNotificationRevision++;
     const revision: number = this.dailyCourseNotificationRevision;
     if (!this.dailyCourseNotificationsEnabled) {
-      this.dailyCourseNotificationScheduler.cancelPending(revision);
+      this.dailyCourseNotificationScheduler.cancelPending(revision).catch(() => {
+        if (revision === this.dailyCourseNotificationRevision) {
+          this.dailyCourseNotificationDirty = true;
+        }
+      });
       return;
     }
     const coordinator: DailyCourseNotificationCoordinator = new DailyCourseNotificationCoordinator(
@@ -1256,21 +1310,22 @@ export class AppModel implements CalendarViewportPreloadTarget {
     const work: Promise<void> = (async (): Promise<void> => {
       try {
         const result = await coordinator.reconcile(
-          true, requestPermissionIfNeeded, this.hasSavedPassword, this.schedule, revision);
+          true, requestPermissionIfNeeded, this.hasSavedPassword, this.schedule, revision,
+          this.dailyCourseNotificationMinutes);
         if (revision !== this.dailyCourseNotificationRevision) {
           return;
         }
         if (result.outcome === DailyCourseNotificationReconcileOutcome.disabled) {
-          await this.preferences.setBool(DailyCourseNotificationSettings.enabledKey, false);
+          await this.persistDailyCourseNotificationEnabled();
         } else if (result.outcome === DailyCourseNotificationReconcileOutcome.permissionDenied) {
           this.dailyCourseNotificationsEnabled = false;
-          await this.preferences.setBool(DailyCourseNotificationSettings.enabledKey, false);
+          await this.persistDailyCourseNotificationEnabled();
           this.dailyCourseNotificationStatusMessage = '通知权限未开启，未安排课程摘要';
         } else if (result.outcome === DailyCourseNotificationReconcileOutcome.waitingForSchedule) {
-          await this.preferences.setBool(DailyCourseNotificationSettings.enabledKey, true);
+          await this.persistDailyCourseNotificationEnabled();
           this.dailyCourseNotificationStatusMessage = '每日课程摘要已开启，获取课表后自动安排';
         } else {
-          await this.preferences.setBool(DailyCourseNotificationSettings.enabledKey, true);
+          await this.persistDailyCourseNotificationEnabled();
           this.dailyCourseNotificationStatusMessage = result.scheduledCount === 0 ?
             '每日课程摘要已开启，当前课表没有待通知课程' :
             '已安排未来 ' + result.scheduledCount.toString() + ' 个有课日的课程摘要';
@@ -1280,7 +1335,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
           return;
         }
         this.dailyCourseNotificationsEnabled = false;
-        await this.preferences.setBool(DailyCourseNotificationSettings.enabledKey, false);
+        await this.persistDailyCourseNotificationEnabled();
         await this.dailyCourseNotificationScheduler.cancelPending(revision);
         this.dailyCourseNotificationStatusMessage = '课程摘要安排失败：' +
           (e instanceof Error ? e.message : '');
@@ -1305,14 +1360,18 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
     this.invalidatePendingOperations();
     this.dailyCourseNotificationsEnabled = false;
-    await this.preferences.remove(DailyCourseNotificationSettings.enabledKey);
+    this.dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes;
     this.dailyCourseNotificationStatusMessage = '';
+    // 先同步增加提醒 revision，再开始异步偏好清理，防止旧授权回调恢复开启状态。
     // 等待提醒取消完成再清空凭据/课表，避免残留提醒（BUG-060 修复）。
     try {
       await this.cancelDailyCourseNotifications();
     } catch (e) {
       // 取消失败由下次对账兜底。
     }
+    await this.dailyCourseNotificationPreferenceWrite.catch(() => {});
+    await this.preferences.remove(DailyCourseNotificationSettings.minutesKey);
+    await this.preferences.remove(DailyCourseNotificationSettings.enabledKey);
     const failures: string[] = [];
 
     try {

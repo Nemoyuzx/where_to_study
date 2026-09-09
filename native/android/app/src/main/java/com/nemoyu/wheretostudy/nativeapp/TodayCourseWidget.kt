@@ -1,6 +1,7 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import android.app.PendingIntent
+import android.app.AlarmManager
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
@@ -14,6 +15,8 @@ import android.widget.TextView
 import android.widget.ImageView
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.util.SizeF
+import androidx.core.os.BundleCompat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -49,6 +52,7 @@ data class TodayCourseWidgetContent(
     val statusText: String,
     val highlightedCourseID: String?,
     val highlightedCoursePhase: WidgetCoursePhase?,
+    val tomorrowCourses: List<Course> = emptyList(),
 ) {
     val emptyMessage: String
         get() = "今日无课"
@@ -59,6 +63,8 @@ data class TodayCourseWidgetContent(
             .joinToString(" · ")
 }
 
+data class WidgetDisplayRow(val course: Course, val isTomorrow: Boolean = false)
+
 object TodayCourseWidgetLogic {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val weekdays = listOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
@@ -68,12 +74,14 @@ object TodayCourseWidgetLogic {
         val courses = ScheduleLogic.courses(schedule, target)
         val week = ScheduleLogic.weekNumber(schedule, target)
         val highlighted = highlightedCourse(courses, target)
+        val tomorrow = (target.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 1) }
         return TodayCourseWidgetContent(
             courses = courses,
             dateContext = dateContext(target, week),
             statusText = statusText(courses, target),
             highlightedCourseID = highlighted?.first?.id,
             highlightedCoursePhase = highlighted?.second,
+            tomorrowCourses = ScheduleLogic.courses(schedule, tomorrow),
         )
     }
 
@@ -134,7 +142,7 @@ object TodayCourseWidgetLogic {
                     room = "教3-539",
                     sectionText = "8-9节",
                     timeRange = "14:45-16:25",
-                    weekday = weekday,
+                    weekday = weekday % 7 + 1,
                     startSlot = 7,
                     endSlot = 8,
                 ),
@@ -145,7 +153,7 @@ object TodayCourseWidgetLogic {
                     room = "体育馆",
                     sectionText = "10-11节",
                     timeRange = "16:35-18:10",
-                    weekday = weekday,
+                    weekday = weekday % 7 + 1,
                     startSlot = 9,
                     endSlot = 10,
                 ),
@@ -156,7 +164,7 @@ object TodayCourseWidgetLogic {
                     room = "主楼-201",
                     sectionText = "12-13节",
                     timeRange = "18:30-20:05",
-                    weekday = weekday,
+                    weekday = weekday % 7 + 1,
                     startSlot = 11,
                     endSlot = 12,
                 ),
@@ -181,6 +189,25 @@ object TodayCourseWidgetLogic {
         content.highlightedCoursePhase == WidgetCoursePhase.IN_PROGRESS -> "进行中 · ${course.name}"
         content.highlightedCoursePhase == WidgetCoursePhase.UPCOMING -> "下一节 · ${course.name}"
         else -> course.name
+    }
+
+    fun displayRows(content: TodayCourseWidgetContent, capacity: Int, courseLimit: Int = 6): List<WidgetDisplayRow> {
+        val limit = minOf(capacity.coerceIn(1, 6), courseLimit.coerceIn(1, 6))
+        val today = content.courses.take(limit).map { WidgetDisplayRow(it) }
+        return today + content.tomorrowCourses.take(limit - today.size).map { WidgetDisplayRow(it, isTomorrow = true) }
+    }
+
+    fun title(row: WidgetDisplayRow, content: TodayCourseWidgetContent): String =
+        if (row.isTomorrow) "明日 · ${row.course.name}" else title(row.course, content)
+
+    fun nextMidnightAt(nowMillis: Long): Long = Calendar.getInstance(shanghai).run {
+        timeInMillis = nowMillis
+        add(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        timeInMillis
     }
 
     internal fun rowLimit(minimumHeightDp: Int): Int {
@@ -274,7 +301,7 @@ object TodayCourseWidgetLogic {
         teacher = teacher,
         room = room,
         weekText = "1周",
-        weekNumbers = listOf(1),
+        weekNumbers = listOf(1, 2),
         examWeekNumbers = emptyList(),
         weekday = weekday,
         startSlot = startSlot,
@@ -304,6 +331,11 @@ private val widgetThemeMutedIDs = listOf(
     R.id.widget_course_count, R.id.widget_day_context, R.id.widget_empty_text, R.id.widget_more_courses,
 ) + widgetRowIDs.map { it.details }
 
+private fun widgetCountText(context: Context, content: TodayCourseWidgetContent, rows: List<WidgetDisplayRow>): String =
+    if (rows.any { it.isTomorrow }) context.getString(
+        R.string.widget_today_tomorrow_count_format, content.courses.size, content.tomorrowCourses.size,
+    ) else if (content.courses.isEmpty()) "" else context.getString(R.string.widget_course_count_format, content.courses.size)
+
 object TodayCourseWidgetPreviewBinder {
     fun bind(
         root: View,
@@ -322,27 +354,24 @@ object TodayCourseWidgetPreviewBinder {
             widgetThemeTextIDs.forEach { id -> root.findViewById<TextView>(id).setTextColor(colors.text) }
             widgetThemeMutedIDs.forEach { id -> root.findViewById<TextView>(id).setTextColor(colors.muted) }
         }
-        root.findViewById<TextView>(R.id.widget_course_count).text = if (content.courses.isEmpty()) {
-            ""
-        } else {
-            context.getString(R.string.widget_course_count_format, content.courses.size)
-        }
+        val rows = TodayCourseWidgetLogic.displayRows(content, rowLimit)
+        root.findViewById<TextView>(R.id.widget_course_count).text = widgetCountText(context, content, rows)
         root.findViewById<TextView>(R.id.widget_day_context).text =
             UiText.widgetContext(context, content.contextText)
         root.findViewById<TextView>(R.id.widget_empty_text).text = context.uiText(content.emptyMessage)
         root.findViewById<View>(R.id.widget_empty_state).visibility =
-            if (content.courses.isEmpty()) View.VISIBLE else View.GONE
+            if (rows.isEmpty()) View.VISIBLE else View.GONE
         root.findViewById<View>(R.id.widget_courses).visibility =
-            if (content.courses.isEmpty()) View.GONE else View.VISIBLE
+            if (rows.isEmpty()) View.GONE else View.VISIBLE
 
-        val normalizedLimit = rowLimit.coerceIn(1, widgetRowIDs.size)
         widgetRowIDs.forEachIndexed { index, ids ->
-            val course = content.courses.getOrNull(index).takeIf { index < normalizedLimit }
+            val row = rows.getOrNull(index)
+            val course = row?.course
             root.findViewById<View>(ids.container).visibility =
                 if (course == null) View.GONE else View.VISIBLE
             if (course != null) {
                 root.findViewById<TextView>(ids.name).text =
-                    UiText.widgetCourseTitle(context, TodayCourseWidgetLogic.title(course, content))
+                    UiText.widgetCourseTitle(context, TodayCourseWidgetLogic.title(row, content))
                 root.findViewById<TextView>(ids.details).text = TodayCourseWidgetLogic.details(
                     course,
                     showsLocation,
@@ -351,7 +380,7 @@ object TodayCourseWidgetPreviewBinder {
             }
         }
 
-        val hiddenCount = (content.courses.size - normalizedLimit).coerceAtLeast(0)
+        val hiddenCount = (content.courses.size - rows.count { !it.isTomorrow }).coerceAtLeast(0)
         root.findViewById<TextView>(R.id.widget_more_courses).apply {
             visibility = if (hiddenCount > 0) View.VISIBLE else View.GONE
             if (hiddenCount > 0) {
@@ -360,8 +389,10 @@ object TodayCourseWidgetPreviewBinder {
         }
         root.contentDescription = context.getString(
             R.string.widget_preview_accessibility_format,
-            content.contextText,
-            content.courses.size,
+            UiText.widgetContext(context, content.contextText) + "; " + rows.joinToString("; ") {
+                UiText.widgetCourseTitle(context, TodayCourseWidgetLogic.title(it, content))
+            },
+            rows.size,
         )
     }
 }
@@ -375,6 +406,7 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
         appWidgetIds.forEach { appWidgetID ->
             update(context, appWidgetManager, appWidgetID)
         }
+        scheduleMidnightRefresh(context)
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -391,8 +423,15 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
         if (intent.action in refreshActions) refresh(context)
     }
 
+    override fun onDisabled(context: Context) {
+        context.getSystemService(AlarmManager::class.java).cancel(midnightPendingIntent(context))
+    }
+
     companion object {
+        private const val MIDNIGHT_REFRESH = "com.nemoyu.wheretostudy.nativeapp.WIDGET_MIDNIGHT_REFRESH"
         private val refreshActions = setOf(
+            MIDNIGHT_REFRESH,
+            Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_DATE_CHANGED,
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
@@ -406,6 +445,22 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             manager.getAppWidgetIds(provider).forEach { widgetID ->
                 update(appContext, manager, widgetID)
             }
+            scheduleMidnightRefresh(appContext)
+        }
+
+        private fun midnightPendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+            context, 0,
+            Intent(context, TodayCourseWidgetProvider::class.java).setAction(MIDNIGHT_REFRESH),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        private fun scheduleMidnightRefresh(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            if (manager.getAppWidgetIds(ComponentName(context, TodayCourseWidgetProvider::class.java)).isEmpty()) return
+            // Inexact, local-only refresh also handles devices whose system date is not Beijing's date.
+            context.getSystemService(AlarmManager::class.java).set(
+                AlarmManager.RTC, TodayCourseWidgetLogic.nextMidnightAt(System.currentTimeMillis()), midnightPendingIntent(context),
+            )
         }
 
         private fun update(
@@ -416,6 +471,24 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             val preferences = AppPreferences(context)
             val schedule = loadUsableSchedule(context)
             val content = TodayCourseWidgetLogic.content(schedule, System.currentTimeMillis())
+            val options = manager.getAppWidgetOptions(widgetID)
+            val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val sizes = BundleCompat.getParcelableArrayList(options, AppWidgetManager.OPTION_APPWIDGET_SIZES, SizeF::class.java)
+                    ?.filter { it.width > 0 && it.height > 0 }?.distinct()?.take(16)
+                if (!sizes.isNullOrEmpty()) RemoteViews(sizes.associateWith { size ->
+                    createRemoteViews(context, content, preferences, TodayCourseWidgetLogic.rowLimit(size.height.toInt()))
+                }) else legacyRemoteViews(context, content, preferences, options)
+            } else legacyRemoteViews(context, content, preferences, options)
+            manager.updateAppWidget(widgetID, views)
+        }
+
+        private fun legacyRemoteViews(context: Context, content: TodayCourseWidgetContent, preferences: AppPreferences, options: Bundle): RemoteViews =
+            RemoteViews(
+                createRemoteViews(context, content, preferences, TodayCourseWidgetLogic.rowLimit(options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT))),
+                createRemoteViews(context, content, preferences, TodayCourseWidgetLogic.rowLimit(options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT))),
+            )
+
+        internal fun createRemoteViews(context: Context, content: TodayCourseWidgetContent, preferences: AppPreferences, capacity: Int): RemoteViews {
             val localizedContext = AppLocale.wrap(context, preferences.languageCode)
             val views = RemoteViews(context.packageName, R.layout.widget_today_course)
             val colors = widgetThemeColors(context)
@@ -432,21 +505,12 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             widgetThemeAccentIDs.forEach { id -> views.setInt(id, "setBackgroundColor", colors.accent) }
             widgetThemeTextIDs.forEach { id -> views.setTextColor(id, colors.text) }
             widgetThemeMutedIDs.forEach { id -> views.setTextColor(id, colors.muted) }
-            val rowLimit = minOf(
-                TodayCourseWidgetLogic.rowLimit(
-                    manager.getAppWidgetOptions(widgetID)
-                        .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT),
-                ),
-                preferences.widgetCourseLimit,
-            )
+            val rows = TodayCourseWidgetLogic.displayRows(content, capacity, preferences.widgetCourseLimit)
 
             views.setOnClickPendingIntent(R.id.widget_root, launchPendingIntent(context))
             views.setTextViewText(
                 R.id.widget_course_count,
-                if (content.courses.isEmpty()) "" else localizedContext.getString(
-                    R.string.widget_course_count_format,
-                    content.courses.size,
-                ),
+                widgetCountText(localizedContext, content, rows),
             )
             views.setTextViewText(
                 R.id.widget_day_context,
@@ -454,11 +518,11 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             )
             views.setViewVisibility(
                 R.id.widget_empty_state,
-                if (content.courses.isEmpty()) View.VISIBLE else View.GONE,
+                if (rows.isEmpty()) View.VISIBLE else View.GONE,
             )
             views.setViewVisibility(
                 R.id.widget_courses,
-                if (content.courses.isEmpty()) View.GONE else View.VISIBLE,
+                if (rows.isEmpty()) View.GONE else View.VISIBLE,
             )
             views.setTextViewText(
                 R.id.widget_empty_text,
@@ -466,14 +530,15 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             )
 
             widgetRowIDs.forEachIndexed { index, ids ->
-                val course = content.courses.getOrNull(index).takeIf { index < rowLimit }
+                val row = rows.getOrNull(index)
+                val course = row?.course
                 views.setViewVisibility(ids.container, if (course == null) View.GONE else View.VISIBLE)
                 if (course != null) {
                     views.setTextViewText(
                         ids.name,
                         UiText.widgetCourseTitle(
                             localizedContext,
-                            TodayCourseWidgetLogic.title(course, content),
+                            TodayCourseWidgetLogic.title(row, content),
                         ),
                     )
                     views.setTextViewText(
@@ -487,7 +552,7 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            val hiddenCount = (content.courses.size - rowLimit).coerceAtLeast(0)
+            val hiddenCount = (content.courses.size - rows.count { !it.isTomorrow }).coerceAtLeast(0)
             views.setViewVisibility(
                 R.id.widget_more_courses,
                 if (hiddenCount > 0) View.VISIBLE else View.GONE,
@@ -498,7 +563,7 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
                     localizedContext.getString(R.string.widget_more_courses_format, hiddenCount),
                 )
             }
-            manager.updateAppWidget(widgetID, views)
+            return views
         }
 
         private fun launchPendingIntent(context: Context): PendingIntent {

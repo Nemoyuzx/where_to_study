@@ -6,6 +6,7 @@ struct TodayCourseWidgetCard: View {
 
     let date: Date
     let courses: [TodayCourseWidgetData.Course]
+    var tomorrowCourses: [TodayCourseWidgetData.Course] = []
     let preferences: TodayCourseWidgetData.Preferences
     let weekNumber: Int?
     let family: WidgetFamily
@@ -14,29 +15,23 @@ struct TodayCourseWidgetCard: View {
     var colorTheme: ColorThemeConfiguration = .default
 
     var body: some View {
-        VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 7) {
-            header
-            contextLine
-
-            if courses.isEmpty {
-                emptyState
-            } else {
-                VStack(alignment: .leading, spacing: rowSpacing) {
-                    ForEach(Array(courses.prefix(courseLimit))) { course in
-                        courseRow(course)
-                    }
-                    if courses.count > courseLimit {
-                        Text(language.text(
-                            chinese: "另有 \(courses.count - courseLimit) 门课程",
-                            english: "\(courses.count - courseLimit) more courses"
-                        ))
-                            .font(.caption2)
-                            .foregroundStyle(widgetSecondaryText)
-                            .lineLimit(1)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
+        ViewThatFits(in: .vertical) {
+            // Each candidate includes the same full set of today's rows. SwiftUI
+            // measures real text and spacing, including the tomorrow heading.
+            if maximumTomorrowCount >= 6 { content(tomorrowCount: 6).fixedSize(horizontal: false, vertical: true) }
+            if maximumTomorrowCount >= 5 { content(tomorrowCount: 5).fixedSize(horizontal: false, vertical: true) }
+            if maximumTomorrowCount >= 4 { content(tomorrowCount: 4).fixedSize(horizontal: false, vertical: true) }
+            if maximumTomorrowCount >= 3 { content(tomorrowCount: 3).fixedSize(horizontal: false, vertical: true) }
+            if maximumTomorrowCount >= 2 { content(tomorrowCount: 2).fixedSize(horizontal: false, vertical: true) }
+            if maximumTomorrowCount >= 1 { content(tomorrowCount: 1).fixedSize(horizontal: false, vertical: true) }
+            content(tomorrowCount: 0).fixedSize(horizontal: false, vertical: true)
+            // Shorter system allocations can also reduce today's visible rows.
+            // These fallback candidates never spend that space on tomorrow.
+            if courseLimit > 5 { content(todayCount: 5, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true) }
+            if courseLimit > 4 { content(todayCount: 4, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true) }
+            if courseLimit > 3 { content(todayCount: 3, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true) }
+            if courseLimit > 2 { content(todayCount: 2, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true) }
+            content(todayCount: 1, tomorrowCount: 0)
         }
         .padding(family == .systemSmall ? 12 : 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -44,6 +39,45 @@ struct TodayCourseWidgetCard: View {
             background: widgetBackground,
             usesWidgetContainer: usesWidgetContainer
         )
+    }
+
+    private func content(todayCount: Int? = nil, tomorrowCount: Int) -> some View {
+        let visibleTodayCount = min(todayCount ?? courseLimit, courses.count)
+        return VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 7) {
+            header
+            contextLine
+
+            if courses.isEmpty {
+                emptyState
+            } else {
+                VStack(alignment: .leading, spacing: rowSpacing) {
+                    ForEach(Array(courses.prefix(visibleTodayCount))) { course in
+                        courseRow(course, isToday: true)
+                    }
+                    if courses.count > visibleTodayCount {
+                        Text(language.text(
+                            chinese: "另有 \(courses.count - visibleTodayCount) 门课程",
+                            english: "\(courses.count - visibleTodayCount) more courses"
+                        ))
+                            .font(.caption2)
+                            .foregroundStyle(widgetSecondaryText)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            if tomorrowCount > 0 {
+                VStack(alignment: .leading, spacing: rowSpacing) {
+                    Text(language.text(chinese: "明日课程", english: "Tomorrow's Courses"))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(widgetSecondaryText)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("widget.tomorrow-heading")
+                    ForEach(Array(tomorrowCourses.prefix(tomorrowCount))) { course in
+                        courseRow(course, isToday: false)
+                    }
+                }
+            }
+        }
     }
 
     private var header: some View {
@@ -111,9 +145,9 @@ struct TodayCourseWidgetCard: View {
         .padding(.top, family == .systemSmall ? 8 : 12)
     }
 
-    private func courseRow(_ course: TodayCourseWidgetData.Course) -> some View {
-        let phase = TodayCourseWidgetData.coursePhase(course, at: date)
-        let highlighted = course.id == highlightedCourseID
+    private func courseRow(_ course: TodayCourseWidgetData.Course, isToday: Bool) -> some View {
+        let phase = isToday ? TodayCourseWidgetData.coursePhase(course, at: date) : nil
+        let highlighted = isToday && course.id == highlightedCourseID
 
         return HStack(alignment: .center, spacing: 8) {
             RoundedRectangle(cornerRadius: 2)
@@ -150,13 +184,25 @@ struct TodayCourseWidgetCard: View {
             )
     }
 
-    private var courseLimit: Int {
-        let familyLimit = switch family {
+    private var familyCourseLimit: Int {
+        switch family {
         case .systemSmall: 2
         case .systemMedium: 3
         default: TodayCourseWidgetData.maximumCourseLimit
         }
-        return min(familyLimit, preferences.normalized.courseLimit)
+    }
+
+    private var courseLimit: Int {
+        min(familyCourseLimit, preferences.normalized.courseLimit)
+    }
+
+    private var maximumTomorrowCount: Int {
+        TodayCourseWidgetData.maximumTomorrowCourseCount(
+            todayCount: courses.count,
+            tomorrowCount: tomorrowCourses.count,
+            preferences: preferences,
+            familyCourseLimit: familyCourseLimit
+        )
     }
 
     private var rowSpacing: CGFloat {

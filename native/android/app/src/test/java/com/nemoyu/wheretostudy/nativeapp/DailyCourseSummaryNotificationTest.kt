@@ -14,6 +14,65 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class DailyCourseSummaryNotificationTest {
     @Test
+    fun customTimeSupportsMidnightAndEndOfDayAcrossYearBoundary() {
+        assertEquals(millis(2027, 1, 1, 0, 0), DailyCourseSummaryLogic.nextRunAt(millis(2026, 12, 31, 23, 59), 0))
+        assertEquals(millis(2026, 3, 2, 23, 59), DailyCourseSummaryLogic.nextRunAt(millis(2026, 3, 2, 7, 30), 1439))
+        assertEquals(millis(2026, 3, 3, 18, 15), DailyCourseSummaryLogic.nextRunAt(millis(2026, 3, 2, 18, 15), 1095))
+        assertEquals("00:00", DailyCourseSummaryLogic.formattedTime(0))
+        assertEquals("23:59", DailyCourseSummaryLogic.formattedTime(1439))
+    }
+
+    @Test
+    fun invalidMinutesRecoverToDefaultRatherThanClamping() {
+        listOf(-1, 1440, Int.MIN_VALUE, Int.MAX_VALUE).forEach {
+            assertEquals(450, DailyCourseSummaryLogic.normalizedMinutes(it))
+            assertEquals("07:30", DailyCourseSummaryLogic.formattedTime(it))
+        }
+    }
+
+    @Test
+    fun midnightTruncatesLateDeliveryAndOldPlanCannotMatchNewTime() {
+        val late = millis(2026, 12, 31, 23, 59)
+        assertTrue(DailyCourseSummaryLogic.isWithinDeliveryWindow(late + 59_000, 1439, late))
+        assertFalse(DailyCourseSummaryLogic.isWithinDeliveryWindow(millis(2027, 1, 1, 0, 0), 1439, late))
+        assertFalse(DailyCourseSummaryLogic.isWithinDeliveryWindow(millis(2026, 12, 31, 23, 59), 1438, late))
+        assertFalse(DailyCourseSummaryLogic.isWithinDeliveryWindow(millis(2027, 1, 1, 23, 59), 1439, late))
+    }
+
+    @Test
+    fun changingTimeKeepsOncePerBeijingDayDeduplication() {
+        val morning = millis(2026, 3, 2, 7, 30)
+        val evening = millis(2026, 3, 2, 18, 0)
+        val nextEvening = millis(2026, 3, 3, 18, 0)
+        val delivered = DailyCourseSummaryLogic.dayKey(morning)
+        assertFalse(DailyCourseSummaryLogic.canDeliver(evening, 1080, evening, delivered))
+        assertTrue(DailyCourseSummaryLogic.canDeliver(nextEvening, 1080, nextEvening, delivered))
+    }
+
+    @Test
+    fun schedulingUsesBeijingTimeWhenDeviceIsInAnotherTimeZone() {
+        val original = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+            assertEquals(millis(2026, 3, 2, 6, 10), DailyCourseSummaryLogic.nextRunAt(millis(2026, 3, 2, 0, 0), 370))
+            assertEquals("2026-03-02", DailyCourseSummaryLogic.dayKey(millis(2026, 3, 2, 0, 0)))
+        } finally { TimeZone.setDefault(original) }
+    }
+
+    @Test
+    fun timeChangeInvalidatesWorkWithoutRevokingUserAuthorization() {
+        val gate = DailyCourseNotificationExecutionGate()
+        gate.authorize()
+        val old = gate.snapshot()
+        gate.invalidate()
+        assertFalse(gate.isCurrent(old))
+        assertTrue(gate.isCurrent(gate.snapshot()))
+        gate.revoke()
+        gate.invalidate()
+        assertFalse(gate.isCurrent(gate.snapshot()))
+    }
+
+    @Test
     fun nextRunUsesShanghaiSevenThirtyWithoutPolling() {
         assertEquals(
             millis(2026, 3, 2, 7, 30),

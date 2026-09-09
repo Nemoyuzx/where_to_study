@@ -1,5 +1,11 @@
 # Where To Study 0.2.9 — Release preparation and TestFlight updates
 
+## Custom reminder time and tomorrow widgets — 2026-09-09 testing-only follow-up
+
+提交各图形平台自定义每日课程提醒时间，以及 Apple/Android/HarmonyOS 小组件剩余空间的明日课程。保留默认 07:30、北京时间基准、今日优先、权限/账号撤销与用户 Apple 审核支持信息；完整行为、测试与未覆盖范围见[功能记录](reminder-time-and-tomorrow-widget.md)。
+
+本轮准备 Apple `0.2.9 (90)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002026)` **仅测试**上传；不提交任何商店审核，不修改现有待审版本、测试群组或 GitHub Release。Apple 构建号通过环境参数覆盖，不修改用户项目版本配置。成功回执待上传完成后补齐。
+
 ## Coordinated theme surfaces — 2026-09-09 testing-only follow-up
 
 按用户要求提交低饱和预设与背景/卡片/控件联动配色，以及实际染色文字可读性修复；保持默认主题、DDL/今日标识、Apple 审核身份与支持信息。验证范围见[背景主题记录](color-themes.md)。

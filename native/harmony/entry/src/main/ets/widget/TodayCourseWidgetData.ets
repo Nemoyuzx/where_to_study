@@ -65,7 +65,9 @@ export class WidgetCoursePreferences {
     language: string = AppLanguage.simplifiedChinese) {
     this.showsLocation = showsLocation;
     this.showsTeacher = showsTeacher;
-    this.courseLimit = Math.min(Math.max(courseLimit, 1), WidgetCoursePreferences.maximumLimit);
+    this.courseLimit = Number.isInteger(courseLimit) ?
+      Math.min(Math.max(courseLimit, 1), WidgetCoursePreferences.maximumLimit) :
+      WidgetCoursePreferences.defaultLimit;
     this.language = language === AppLanguage.english ? AppLanguage.english :
       AppLanguage.simplifiedChinese;
   }
@@ -284,15 +286,41 @@ export class TodayCourseWidgetData {
     return parts.join(' · ');
   }
 
-  // 卡片绑定数据：日期上下文 + 状态摘要 + 最多 6 行课程（高亮前缀）+ 空态。
-  // courseLimit 来自偏好；today/minute 可注入便于测试。
+  // SDK FormDimension: 2=2×2, 3=2×4, 4=4×4。两种矮卡片等高。
+  // 每行 34vp，预留标题、上下文、明日分组和溢出提示所需高度。
+  static capacityForDimension(dimension: number): number {
+    return dimension === 4 ? 6 : 2;
+  }
+
+  static bindingAtEpoch(archive: WidgetArchive | null, prefs: WidgetCoursePreferences,
+    dimension: number, nowEpochMs: number = Date.now()): Record<string, Object> {
+    const shifted: Date = new Date(nowEpochMs + 8 * 3600000);
+    return TodayCourseWidgetData.binding(archive, prefs,
+      new DateParts(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, shifted.getUTCDate()),
+      shifted.getUTCHours() * 60 + shifted.getUTCMinutes(), dimension);
+  }
+
+  static minutesUntilBeijingMidnight(nowEpochMs: number = Date.now()): number {
+    const shifted: number = nowEpochMs + 8 * 3600000;
+    return Math.ceil((86400000 - ((shifted % 86400000 + 86400000) % 86400000)) / 60000);
+  }
+
+  // 今日优先；明日只补剩余容量，课程数量限制同时约束两日总行数。
   static binding(archive: WidgetArchive | null, prefs: WidgetCoursePreferences,
-    today: DateParts = StrictDates.todayParts(), minute: number = TodayCourseWidgetData.nowMinute()
+    today: DateParts = StrictDates.todayParts(), minute: number = TodayCourseWidgetData.nowMinute(),
+    dimension: number = 4
   ): Record<string, Object> {
     const todayCourses: WidgetArchiveCourse[] = TodayCourseWidgetData.coursesOn(today, archive);
+    const tomorrow: DateParts = StrictDates.addDays(today, 1);
+    const tomorrowCourses: WidgetArchiveCourse[] = TodayCourseWidgetData.coursesOn(tomorrow, archive);
     const week: number | null = archive === null ? null :
       (ScheduleLogic.weekNumber(today, StrictDates.parseDateString(archive.termStartDate) ?? today));
-    const limit: number = Math.max(1, prefs.courseLimit);
+    const limit: number = Math.min(prefs.courseLimit,
+      TodayCourseWidgetData.capacityForDimension(dimension));
+    const shownToday: number = Math.min(todayCourses.length, limit);
+    const shownTomorrow: number = Math.min(tomorrowCourses.length, limit - shownToday);
+    const tomorrowWeek: number | null = archive === null ? null : ScheduleLogic.weekNumber(
+      tomorrow, StrictDates.parseDateString(archive.termStartDate) ?? tomorrow);
     const highlighted: WidgetArchiveCourse | null = TodayCourseWidgetData.highlightedCourse(
       todayCourses, minute);
     const english: boolean = prefs.language === AppLanguage.english;
@@ -302,27 +330,39 @@ export class TodayCourseWidgetData {
       (english ? ' courses' : ' 门');
     out['dateContext'] = TodayCourseWidgetData.dayContext(today, week, english);
     out['statusText'] = TodayCourseWidgetData.statusSummary(todayCourses, minute, english);
+    out['tomorrowTitle'] = shownTomorrow > 0 ? (english ? 'Tomorrow' : '明日') + ' · ' +
+      tomorrow.month.toString() + '/' + tomorrow.day.toString() +
+      (tomorrowWeek === null ? '' : (english ? ' · W' : ' · 第') + tomorrowWeek.toString() +
+        (english ? '' : '周')) +
+      (tomorrowCourses.length > shownTomorrow ? ' · +' +
+        (tomorrowCourses.length - shownTomorrow).toString() : '') : '';
+    out['todayShownCount'] = shownToday;
+    out['tomorrowShownCount'] = shownTomorrow;
     for (let i = 0; i < 6; i++) {
-      const course: WidgetArchiveCourse | undefined = todayCourses[i];
+      const isTomorrow: boolean = i >= shownToday;
+      const course: WidgetArchiveCourse | undefined = isTomorrow ?
+        tomorrowCourses[i - shownToday] : todayCourses[i];
       const key: string = (i + 1).toString();
-      if (course === undefined || i >= limit) {
+      out['course' + key + 'Group'] = i === shownToday && shownTomorrow > 0 ? out['tomorrowTitle'] : '';
+      if (course === undefined || i >= shownToday + shownTomorrow) {
         out['course' + key + 'Name'] = '';
         out['course' + key + 'Details'] = '';
         out['course' + key + 'Highlighted'] = false;
       } else {
-        out['course' + key + 'Name'] = TodayCourseWidgetData.courseTitle(course, minute, english);
+        out['course' + key + 'Name'] = isTomorrow ? course.name :
+          TodayCourseWidgetData.courseTitle(course, minute, english);
         out['course' + key + 'Details'] = TodayCourseWidgetData.courseDetails(course, prefs);
-        out['course' + key + 'Highlighted'] = course.id === (highlighted?.id ?? '');
+        out['course' + key + 'Highlighted'] = !isTomorrow && course.id === (highlighted?.id ?? '');
       }
     }
-    out['moreHint'] = todayCourses.length > limit ?
-      (english ? (todayCourses.length - limit).toString() + ' more courses' :
-        '另有 ' + (todayCourses.length - limit).toString() + ' 门课程') : '';
+    out['moreHint'] = todayCourses.length > shownToday ?
+      (english ? (todayCourses.length - shownToday).toString() + ' more courses today' :
+        '今日另有 ' + (todayCourses.length - shownToday).toString() + ' 门课程') : '';
     if (archive === null) {
       out['emptyGlyph'] = '↻';
       out['emptyText'] = english ? 'Open the app to fetch your schedule' :
         '打开应用获取个人课表';
-    } else if (todayCourses.length === 0) {
+    } else if (todayCourses.length === 0 && shownTomorrow === 0) {
       out['emptyGlyph'] = '✓';
       out['emptyText'] = english ? 'No classes today' : '今日无课';
     } else {
@@ -333,14 +373,21 @@ export class TodayCourseWidgetData {
   }
 
   static nowMinute(): number {
-    const today: DateParts = StrictDates.todayParts();
-    const now: Date = new Date();
-    return now.getHours() * 60 + now.getMinutes();
+    const shifted: Date = new Date(Date.now() + 8 * 3600000);
+    return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+  }
+
+  static previewBinding(prefs: WidgetCoursePreferences, dimension: number,
+    nowEpochMs: number = Date.now()): Record<string, Object> {
+    const shifted: Date = new Date(nowEpochMs + 8 * 3600000);
+    const today: DateParts = new DateParts(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1,
+      shifted.getUTCDate());
+    return TodayCourseWidgetData.bindingAtEpoch(TodayCourseWidgetData.previewArchive(today), prefs,
+      dimension, nowEpochMs);
   }
 
   // 设置页样式预览用示例归档（对应 Android previewContent / Apple previewArchive）。
-  static previewArchive(): WidgetArchive {
-    const today: DateParts = StrictDates.todayParts();
+  static previewArchive(today: DateParts = StrictDates.todayParts()): WidgetArchive {
     const weekday: number = StrictDates.weekdayMonday1(today);
     const courses: WidgetArchiveCourse[] = [];
     const items: [string, string, string, string, string, number, number][] = [
@@ -351,13 +398,15 @@ export class TodayCourseWidgetData {
       ['体育', '示例教师', '体育馆', '10-11节', '16:35-18:10', 9, 10],
       ['学术英语', '示例教师', '主楼-201', '12-13节', '18:30-20:05', 11, 12],
     ];
+    const termStart: DateParts = StrictDates.addDays(today, 1 - weekday);
+    const tomorrow: DateParts = StrictDates.addDays(today, 1);
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+      const day: DateParts = i === 0 ? today : tomorrow;
       courses.push(new WidgetArchiveCourse(
         'preview-' + i.toString(), item[0], item[1], item[2], item[3], item[4],
-        weekday, [1], [], item[5]));
+        StrictDates.weekdayMonday1(day), [ScheduleLogic.weekNumber(day, termStart)], [], item[5]));
     }
-    const termStart: DateParts = StrictDates.addDays(today, 1 - weekday);
     return new WidgetArchive(StrictDates.formatDateParts(termStart),
       'widget-preview', courses);
   }

@@ -23,6 +23,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.TimePicker
 
 class SettingsPage(
     private val activity: MainActivity,
@@ -473,6 +474,7 @@ class SettingsPage(
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "课程提醒"))
         addView(Switch(activity).apply {
+            id = R.id.settings_daily_course_notification_toggle
             text = activity.getString(R.string.daily_course_notification_toggle)
             textSize = 15f
             setThemeTextColor { Palette.text }
@@ -495,6 +497,39 @@ class SettingsPage(
                 }
             }
         })
+        val timeButton = settingsActionButton("", primary = false) { }.apply {
+            id = R.id.settings_daily_course_notification_time
+        }
+        fun updateTimeLabel() {
+            timeButton.text = activity.getString(
+                R.string.daily_course_notification_time_format,
+                DailyCourseSummaryLogic.formattedTime(preferences.dailyCourseNotificationMinutes),
+            )
+        }
+        timeButton.setOnClickListener {
+            activity.performControlHaptic(it)
+            val minutes = preferences.dailyCourseNotificationMinutes
+            val picker = TimePicker(activity).apply {
+                id = R.id.settings_daily_course_notification_time_picker
+                setIs24HourView(true)
+                hour = minutes / 60
+                minute = minutes % 60
+            }
+            AlertDialog.Builder(activity)
+                .setTitle(R.string.daily_course_notification_time_title)
+                .setView(picker)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    picker.clearFocus()
+                    val success = DailyCourseSummaryScheduler.updateTime(activity, picker.hour * 60 + picker.minute)
+                    updateTimeLabel()
+                    if (!success) Toast.makeText(activity,
+                        activity.getString(R.string.daily_course_notification_time_error), Toast.LENGTH_LONG).show()
+                }
+                .showLocalized()
+        }
+        updateTimeLabel()
+        addView(timeButton)
         addView(TextView(activity).apply {
             text = activity.getString(R.string.daily_course_notification_description)
             textSize = 12f
@@ -622,7 +657,7 @@ class SettingsPage(
         updatePreview()
         addView(preview)
         addView(TextView(activity).apply {
-            text = "小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；展开样式最多展示 6 门课程。预览使用虚构示例，不会写入课表。"
+            text = activity.getString(R.string.widget_preview_description)
             textSize = 12f
             setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(8), 0, 0)

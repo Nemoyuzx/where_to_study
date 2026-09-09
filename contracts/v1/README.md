@@ -18,6 +18,7 @@
 - 缓存不得包含账号、密码、token 或 cookie。
 - `saved_settings` 是 Tauri 设置读取响应，只用 `has_saved_password` 表示系统凭据是否存在，绝不包含密码。
 - `save_settings_request.password` 是一次性输入；传 `null` 或空字符串时保留已有密码，只有非空新值才替换系统凭据。
+- `daily_course_notification_minutes` 为北京时间（Asia/Shanghai / UTC+8）零点后的整数分钟，范围 `0...1439`，默认 `450`（07:30）；该字段可缺省以兼容旧设置。读取旧版或损坏的时间值时回退默认，保存非法时间时拒绝请求。它是本地偏好，不随账号或课表上传，也不改变默认关闭的提醒开关。
 - `saved_settings` 与 `save_settings_request` 的 `term_id`、`term_start_date` 可以同时为空；自动模式请求课表时临时按上海日期推断，手动模式保存或请求时必须提供完整值。成功的 `schedule` 响应仍必须包含非空学期号和有效开学日期。
 
 修改契约时必须保持向后兼容，破坏性修改需要新建版本目录。

@@ -39,6 +39,9 @@ import {
 } from 'lucide-react'
 import {
   accountHasSavedPassword,
+  dailyCourseNotificationTime,
+  parseDailyCourseNotificationTime,
+  reminderSettingsPayload,
   addDays,
   buildCalendarDayMap,
   buildMiniMonthDays,
@@ -314,7 +317,11 @@ const EN_TEXT = Object.freeze({
   '当前设置与检测结果不同': 'Current values differ from the detected term',
   '保存学期设置': 'Save term settings',
   '课程提醒': 'Course reminders',
-  '每天 07:30 发送当日课程摘要': 'Send today’s course summary at 07:30',
+  '每日课程摘要': 'Daily course summary',
+  '提醒时间（北京时间）': 'Reminder time (Beijing time)',
+  '保存提醒设置': 'Save reminder settings',
+  '提醒设置已保存': 'Reminder settings saved',
+  '时间按北京时间（UTC+8）计算；保存后生效，应用需在后台运行。': 'Uses Beijing time (UTC+8). Save to apply; keep the app running in the background.',
   '仅在当天有课时发送；课表更新或账号变更后会自动重排。': 'Sent only on days with courses; rescheduled after account or schedule changes.',
   '生活信息与 DDL': 'Daily information and deadlines',
   '在空教室联动查询上方显示默认折叠的今日、明日天气。': 'Show a collapsed today/tomorrow weather card above linked classroom search.',
@@ -606,6 +613,7 @@ function browserPreviewCommand(name, payload = {}) {
       default_min_seats: DEFAULT_SETTINGS.defaultMinSeats,
       ui_language: DEFAULT_SETTINGS.uiLanguage,
       daily_course_notifications_enabled: DEFAULT_SETTINGS.dailyCourseNotificationsEnabled,
+      daily_course_notification_minutes: DEFAULT_SETTINGS.dailyCourseNotificationMinutes,
       automatic_term_detection_enabled: DEFAULT_SETTINGS.automaticTermDetectionEnabled,
       weather_enabled: DEFAULT_SETTINGS.weatherEnabled,
       almanac_enabled: DEFAULT_SETTINGS.almanacEnabled,
@@ -632,6 +640,7 @@ function browserPreviewCommand(name, payload = {}) {
       default_min_seats: Number(payload.default_min_seats) || 0,
       ui_language: payload.ui_language || 'system',
       daily_course_notifications_enabled: Boolean(payload.daily_course_notifications_enabled),
+      daily_course_notification_minutes: payload.daily_course_notification_minutes,
       automatic_term_detection_enabled: Boolean(payload.automatic_term_detection_enabled),
       weather_enabled: Boolean(payload.weather_enabled),
       almanac_enabled: Boolean(payload.almanac_enabled),
@@ -1314,6 +1323,7 @@ async function command(name, payload) {
 }
 
 function App() {
+  const [reminderSettingsStatus, setReminderSettingsStatus] = useState('')
   const colorTheme = useColorTheme()
   const calendarThemePalette = useMemo(() => colorTheme.theme.preset === 'default'
     ? null : resolvedColorTheme(colorTheme.theme, colorTheme.dark), [colorTheme.theme, colorTheme.dark])
@@ -2208,6 +2218,9 @@ function App() {
 
   function updateSetting(field, value) {
     setSettingsSaved(false)
+    if (field === 'dailyCourseNotificationsEnabled' || field === 'dailyCourseNotificationMinutes') {
+      setReminderSettingsStatus('')
+    }
     if (field === 'account' || field === 'password') {
       credentialStateRevision.current += 1
     }
@@ -2219,6 +2232,29 @@ function App() {
       }
       return next
     })
+  }
+
+  async function saveReminderSettings() {
+    if (settingsSaving || !settingsLoaded) return
+    const clearRevision = localDataClearRevision.current
+    const minutes = settings.dailyCourseNotificationMinutes
+    const enabled = settings.dailyCourseNotificationsEnabled
+    setSettingsSaving(true)
+    setReminderSettingsStatus('')
+    setError('')
+    try {
+      // Reuse the settings API with the saved account, not an unrelated draft.
+      // This is local-only and does not reset automatic timetable refresh keys.
+      const saved = savedSettingsToState(await command('load_saved_settings'))
+      if (clearRevision !== localDataClearRevision.current) return
+      await command('save_saved_settings', reminderSettingsPayload(saved, enabled, minutes))
+      if (clearRevision !== localDataClearRevision.current) return
+      setReminderSettingsStatus('提醒设置已保存')
+    } catch (saveError) {
+      setError(normalizeError(saveError))
+    } finally {
+      if (clearRevision === localDataClearRevision.current) setSettingsSaving(false)
+    }
   }
 
   async function saveCurrentSettings() {
@@ -3270,6 +3306,7 @@ function App() {
   }
 
   function clearAccountScopedViewState() {
+    setReminderSettingsStatus('')
     assignmentsRevisionRef.current += 1
     requestedCalendarSupplementRanges.current.clear()
     setCalendarSupplementRevision((current) => current + 1)
@@ -4350,7 +4387,7 @@ function App() {
               <div className="panel-title"><BellRing size={18} /><h2>{t('课程提醒')}</h2></div>
               <div className="settings-switch-row">
                 <div>
-                  <strong>{t('每天 07:30 发送当日课程摘要')}</strong>
+                  <strong>{t('每日课程摘要')}</strong>
                   <span>{t('仅在当天有课时发送；课表更新或账号变更后会自动重排。')}</span>
                 </div>
                 <button
@@ -4358,10 +4395,30 @@ function App() {
                   className="settings-switch"
                   role="switch"
                   aria-checked={settings.dailyCourseNotificationsEnabled}
-                  aria-label={t('每天 07:30 发送当日课程摘要')}
+                  aria-label={t('每日课程摘要')}
+                  disabled={settingsSaving}
                   onClick={() => updateSetting('dailyCourseNotificationsEnabled', !settings.dailyCourseNotificationsEnabled)}
                 ><span aria-hidden="true" /></button>
               </div>
+              <label>
+                {t('提醒时间（北京时间）')}
+                <input
+                  type="time"
+                  step="60"
+                  disabled={settingsSaving}
+                  aria-label={t('提醒时间（北京时间）')}
+                  value={dailyCourseNotificationTime(settings.dailyCourseNotificationMinutes)}
+                  onChange={(event) => {
+                    const minutes = parseDailyCourseNotificationTime(event.target.value)
+                    if (minutes !== null) updateSetting('dailyCourseNotificationMinutes', minutes)
+                  }}
+                />
+              </label>
+              <p className="term-detect-note">{t('时间按北京时间（UTC+8）计算；保存后生效，应用需在后台运行。')}</p>
+              <button type="button" className="secondary settings-full-button" onClick={saveReminderSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
+                <CheckCircle2 size={17} /> {t('保存提醒设置')}
+              </button>
+              {reminderSettingsStatus ? <p className="term-detect-note" role="status">{t(reminderSettingsStatus)}</p> : null}
             </section>
 
             <section className="panel settings-daily-info">

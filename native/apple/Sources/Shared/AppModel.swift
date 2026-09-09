@@ -195,6 +195,7 @@ final class AppModel: ObservableObject {
     @Published var isImportingCalendar = false
     @Published private(set) var holidayStatusByYear = [Int: String]()
     @Published private(set) var dailyCourseNotificationsEnabled = false
+    @Published private(set) var dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes
     @Published private(set) var dailyCourseNotificationStatusMessage = ""
     @Published private(set) var widgetShowsLocation: Bool
     @Published private(set) var widgetShowsTeacher: Bool
@@ -307,6 +308,7 @@ final class AppModel: ObservableObject {
         campusID = savedCampusID
         queryCampusID = savedCampusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
+        dailyCourseNotificationMinutes = DailyCourseNotificationSettings.loadMinutes(defaults: defaults)
         widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
         widgetShowsTeacher = defaults.object(forKey: Self.widgetShowsTeacherKey) as? Bool ?? true
         let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
@@ -495,6 +497,7 @@ final class AppModel: ObservableObject {
         holidaysByYear[year] = SampleData.holidays(year: year)
         dailyCourseNotificationsEnabled = false
         statusMessage = "正在展示内置示例课表，未连接北邮服务"
+        dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes
         classroomStatusMessage = "正在展示内置示例空教室，未连接北邮服务"
         calendarImportStatusMessage = ""
         dailyCourseNotificationStatusMessage = ""
@@ -526,6 +529,7 @@ final class AppModel: ObservableObject {
         campusID = defaults.string(forKey: "campusID") ?? "01"
         queryCampusID = campusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
+        dailyCourseNotificationMinutes = DailyCourseNotificationSettings.loadMinutes(defaults: defaults)
         widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
         widgetShowsTeacher = defaults.object(forKey: Self.widgetShowsTeacherKey) as? Bool ?? true
         let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
@@ -685,6 +689,21 @@ final class AppModel: ObservableObject {
             dailyCourseNotificationStatusMessage = "每日课程摘要已关闭"
             cancelDailyCourseNotifications()
         }
+    }
+
+    @discardableResult
+    func setDailyCourseNotificationMinutes(_ minutes: Int) -> Bool {
+        guard (0 ... 1439).contains(minutes) else { return false }
+        guard !isSampleMode || isReviewDemo else { return false }
+        guard dailyCourseNotificationMinutes != minutes else { return true }
+        dailyCourseNotificationMinutes = minutes
+        guard !isSampleMode else { return true }
+        defaults.set(minutes, forKey: DailyCourseNotificationSettings.minutesKey)
+        // Invalidate old requests before awaiting authorization: they may be
+        // seconds from delivery while the system permission lookup is delayed.
+        cancelDailyCourseNotifications()
+        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        return true
     }
 
     func setAutomaticTermDetectionEnabled(_ enabled: Bool) {
@@ -920,6 +939,8 @@ final class AppModel: ObservableObject {
         dailyClassroomRefreshTask = nil
         dailyCourseNotificationsEnabled = false
         defaults.removeObject(forKey: Self.dailyCourseNotificationsKey)
+        defaults.removeObject(forKey: DailyCourseNotificationSettings.minutesKey)
+        dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes
         dailyCourseNotificationStatusMessage = ""
         cancelDailyCourseNotifications()
         var failures = [String]()
@@ -1655,6 +1676,8 @@ final class AppModel: ObservableObject {
                     requestPermissionIfNeeded: requestPermissionIfNeeded,
                     hasCredentials: hasSavedPassword,
                     schedule: schedule,
+                    dailyCourseNotificationMinutes: dailyCourseNotificationMinutes,
+                    now: now(),
                     revision: revision
                 )
                 guard revision == dailyCourseNotificationRevision else { return }

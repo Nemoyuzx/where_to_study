@@ -4,18 +4,19 @@ import { reminderAgentManager } from '@kit.BackgroundTasksKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { StrictDates, DateParts } from '../common/StrictDates';
 import { AppContext } from '../store/AppContext';
 import {
-  DailyCourseNotificationAuthorization, DailyCourseNotificationPlanner,
-  DailyCourseNotificationRequest, DailyCourseNotificationScheduling
+  DailyCourseNotificationAuthorization,
+  DailyCourseNotificationRequest, DailyCourseNotificationScheduling,
+  DailyCourseReminderOperations, DailyCourseReminderQueue
 } from './DailyCoursePlanning';
 
 // 提醒代理超限（1700002：The number of reminders exceeds the limit）。
 const REMINDER_LIMIT_EXCEEDED: number = 1700002;
 
 export class HarmonyReminderScheduler implements DailyCourseNotificationScheduling {
-  private currentRevision: number = 0;
+  private readonly queue: DailyCourseReminderQueue = new DailyCourseReminderQueue(
+    new HarmonyReminderOperations());
 
   constructor() {
   }
@@ -38,81 +39,18 @@ export class HarmonyReminderScheduler implements DailyCourseNotificationScheduli
   async replacePending(
     requests: DailyCourseNotificationRequest[], revision: number
   ): Promise<void> {
-    const batch: DailyCourseNotificationRequest[] = requests.slice(
-      0, DailyCourseNotificationPlanner.maximumPendingRequestCount);
-    if (!this.prepareRevision(revision)) {
-      return;
-    }
-    // 先清空本应用全部提醒（含历史遗留），再发布新提醒。
-    await HarmonyReminderScheduler.cancelAllQuietly();
-
-    for (const request of batch) {
-      if (!this.isCurrent(revision)) {
-        await HarmonyReminderScheduler.cancelAllQuietly();
-        return;
-      }
-      try {
-        await this.publish(request);
-      } catch (e) {
-        const err: BusinessError = e as BusinessError;
-        if (err.code === REMINDER_LIMIT_EXCEEDED) {
-          // 达到系统上限：保留已安排的提醒，不再继续。
-          break;
-        }
+    try {
+      await this.queue.replace(requests, revision);
+    } catch (e) {
+      const err: BusinessError = e as BusinessError;
+      if (err.code !== REMINDER_LIMIT_EXCEEDED) {
         throw new Error('课程摘要安排失败：' + err.message);
       }
     }
   }
 
   async cancelPending(revision: number): Promise<void> {
-    if (!this.prepareRevision(revision)) {
-      return;
-    }
-    await HarmonyReminderScheduler.cancelAllQuietly();
-  }
-
-  private prepareRevision(revision: number): boolean {
-    if (revision < this.currentRevision) {
-      return false;
-    }
-    this.currentRevision = revision;
-    return true;
-  }
-
-  private isCurrent(revision: number): boolean {
-    return revision === this.currentRevision;
-  }
-
-  private async publish(request: DailyCourseNotificationRequest): Promise<void> {
-    const parts: DateParts | null = StrictDates.parseDateString(
-      request.identifier.substring(DailyCourseNotificationPlanner.identifierPrefix.length));
-    if (parts === null) {
-      throw new Error('课程摘要安排失败：提醒日期不正确。');
-    }
-    const reminder: reminderAgentManager.ReminderRequestCalendar = {
-      reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
-      dateTime: {
-        year: parts.year,
-        month: parts.month,
-        day: parts.day,
-        hour: 7,
-        minute: 30,
-        second: 0
-      },
-      title: request.title,
-      content: request.body,
-      expiredContent: request.body,
-      tapDismissed: true
-    };
-    await reminderAgentManager.publishReminder(reminder);
-  }
-
-  private static async cancelAllQuietly(): Promise<void> {
-    try {
-      await reminderAgentManager.cancelAllReminders();
-    } catch (e) {
-      // 无提醒或代理不可用时忽略；下次替换时再次清理。
-    }
+    await this.queue.replace([], revision);
   }
 
   private static withTimeout<T>(timeoutMs: number, promise: Promise<T>): Promise<T> {
@@ -145,5 +83,35 @@ export class HarmonyReminderScheduler implements DailyCourseNotificationScheduli
         reject(error);
       });
     });
+  }
+}
+
+class HarmonyReminderOperations implements DailyCourseReminderOperations {
+  async cancelAll(): Promise<void> {
+    // 清除失败必须向上报告，避免在旧提醒仍存在时继续叠加新提醒。
+    await reminderAgentManager.cancelAllReminders();
+  }
+
+  async publish(request: DailyCourseNotificationRequest): Promise<void> {
+    await reminderAgentManager.publishReminder(HarmonyReminderSchedulerRequest.calendar(request));
+  }
+}
+
+export class HarmonyReminderSchedulerRequest {
+  static calendar(request: DailyCourseNotificationRequest): reminderAgentManager.ReminderRequestCalendar {
+    const date: Date = new Date(request.fireEpochMs);
+    if (!Number.isFinite(date.getTime())) {
+      throw new Error('课程摘要安排失败：提醒日期不正确。');
+    }
+    // API 接受 LocalDateTime；将规划好的北京时间绝对时刻转换为设备本地日历字段。
+    return {
+      reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
+      dateTime: {
+        year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(),
+        hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds()
+      },
+      title: request.title, content: request.body, expiredContent: request.body,
+      tapDismissed: true
+    };
   }
 }

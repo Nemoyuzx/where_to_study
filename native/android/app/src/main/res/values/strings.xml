@@ -21,8 +21,14 @@
     <string name="privacy_policy_open_failed">无法打开完整隐私政策，请稍后重试。</string>
     <string name="privacy_consent_save_failed">无法保存同意状态，暂不能进入应用。</string>
     <string name="account_privacy_notice">保存教务账号前，请先阅读隐私政策，了解凭据用途、传输对象与本地保存方式。</string>
-    <string name="daily_course_notification_toggle">每天 07:30 发送当日课程摘要</string>
-    <string name="daily_course_notification_description">仅在当天有课时通知；课表更新或账号变更后会自动重排。</string>
+    <string name="daily_course_notification_toggle">每天发送当日课程摘要</string>
+    <string name="daily_course_notification_description">仅在当天有课时通知。按北京时间约在所选时间发送，系统节电可能延迟；修改时间后立即重排，当天最多通知一次。</string>
+    <string name="daily_course_notification_time_format">提醒时间 · %1$s（北京时间）</string>
+    <string name="daily_course_notification_time_title">提醒时间（北京时间）</string>
+    <string name="daily_course_notification_time_error">无法保存或重排提醒，请重新设置。</string>
+    <string name="daily_course_notification_channel_description">每天按所选北京时间显示当天个人课程摘要</string>
+    <string name="widget_preview_description">小组件优先显示今日课程，剩余空间补充标有“明日”的课程，总数受课程上限限制。预览使用虚构示例，不会写入课表。</string>
+    <string name="widget_today_tomorrow_count_format">今日 %1$d · 明日 %2$d</string>
     <string name="widget_today_course_name">今日课程</string>
     <string name="widget_today_course_title">今日课程</string>
     <string name="widget_today_course_description">在桌面查看今天的课程、节次、教室、教师与上课状态。</string>

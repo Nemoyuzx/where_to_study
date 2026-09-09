@@ -80,6 +80,68 @@ final class TodayCourseWidgetDataTests: XCTestCase {
         )
     }
 
+    func testTomorrowCoursesUseFollowingDateAcrossMonthYearAndTeachingWeekBoundaries() throws {
+        for (today, termStart, tomorrowWeekday, week) in [
+            ("2026-03-31", "2026-03-30", 3, 1),
+            ("2025-12-31", "2025-12-29", 4, 1),
+            ("2026-03-08", "2026-03-02", 1, 2),
+            ("2026-03-01", "2026-03-02", 1, 1)
+        ] {
+            let archive = TodayCourseWidgetData.Archive(termStartDate: termStart, fetchedAt: "", courses: [
+                course(id: "tomorrow", name: "明日课程测试", weekday: tomorrowWeekday, weeks: [week], startSlot: 2),
+                course(id: "wrong-week", name: "其他周", weekday: tomorrowWeekday, weeks: [week + 1], startSlot: 1)
+            ])
+            let date = try XCTUnwrap(StrictContractDateParser.date(from: today))
+            XCTAssertEqual(TodayCourseWidgetData.tomorrowCourses(after: date, archive: archive).map(\.id), ["tomorrow"], today)
+        }
+        XCTAssertTrue(TodayCourseWidgetData.tomorrowCourses(after: .now, archive: nil).isEmpty)
+    }
+
+    func testTomorrowCapacityPreservesTodayAndSharedConfiguredCourseLimit() {
+        let preferences = TodayCourseWidgetData.Preferences(showsLocation: true, courseLimit: 4)
+        for familyLimit in [2, 3, 6] {
+            let limit = min(familyLimit, 4)
+            for todayCount in 0 ... 7 {
+                XCTAssertEqual(TodayCourseWidgetData.maximumTomorrowCourseCount(
+                    todayCount: todayCount, tomorrowCount: 6, preferences: preferences,
+                    familyCourseLimit: familyLimit
+                ), max(0, limit - todayCount))
+            }
+        }
+        XCTAssertEqual(TodayCourseWidgetData.maximumTomorrowCourseCount(
+            todayCount: 0, tomorrowCount: 0, preferences: preferences, familyCourseLimit: 6
+        ), 0)
+        XCTAssertEqual(TodayCourseWidgetData.maximumTomorrowCourseCount(
+            todayCount: 1, tomorrowCount: 5,
+            preferences: .init(showsLocation: false, courseLimit: 1), familyCourseLimit: 6
+        ), 0)
+        XCTAssertEqual(TodayCourseWidgetData.maximumTomorrowCourseCount(
+            todayCount: 1, tomorrowCount: 1, preferences: preferences, familyCourseLimit: 6
+        ), 1)
+    }
+
+    func testMidnightTimelineChangesTodayAndTomorrowTogether() throws {
+        let archive = TodayCourseWidgetData.Archive(termStartDate: "2025-12-29", fetchedAt: "", courses: [
+            course(id: "dec31", name: "年末课程", weekday: 3, weeks: [1], startSlot: 2),
+            course(id: "jan1", name: "元旦课程", weekday: 4, weeks: [1], startSlot: 2),
+            course(id: "jan2", name: "次日课程", weekday: 5, weeks: [1], startSlot: 2)
+        ])
+        let date = try XCTUnwrap(StrictContractDateParser.date(from: "2025-12-31")).addingTimeInterval(23 * 3600)
+        let midnight = TodayCourseWidgetData.nextMidnight(after: date)
+        XCTAssertEqual(TodayCourseWidgetData.timelineDates(after: date, archive: archive), [date, midnight])
+        XCTAssertEqual(TodayCourseWidgetData.courses(on: date, archive: archive).map(\.id), ["dec31"])
+        XCTAssertEqual(TodayCourseWidgetData.tomorrowCourses(after: date, archive: archive).map(\.id), ["jan1"])
+        XCTAssertEqual(TodayCourseWidgetData.courses(on: midnight, archive: archive).map(\.id), ["jan1"])
+        XCTAssertEqual(TodayCourseWidgetData.tomorrowCourses(after: midnight, archive: archive).map(\.id), ["jan2"])
+    }
+
+    func testPreviewHasBothDaysAndLeavesSpaceForTomorrow() {
+        XCTAssertEqual(TodayCourseWidgetData.previewTodayCourses().count, 2)
+        XCTAssertEqual(TodayCourseWidgetData.previewTomorrowCourses().count, 3)
+        XCTAssertTrue(Set(TodayCourseWidgetData.previewTodayCourses().map(\.id))
+            .isDisjoint(with: TodayCourseWidgetData.previewTomorrowCourses().map(\.id)))
+    }
+
     func testLegacyWidgetPreferencesDefaultToShowingTeacher() throws {
         let data = try XCTUnwrap(#"{"showsLocation":false,"courseLimit":9}"#.data(using: .utf8))
         let preferences = try JSONDecoder().decode(TodayCourseWidgetData.Preferences.self, from: data)

@@ -317,11 +317,38 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["内置示例模式已开启，不会连接教务服务或读写真实用户数据。"]
             .waitForExistence(timeout: 5))
         attachScreenshot(named: "store-iphone-settings")
-        let reminder = app.switches["每天 07:30 发送当日课程摘要"]
+        let reminder = app.switches["settings.daily-course.enabled"]
         XCTAssertTrue(reminder.waitForExistence(timeout: 5))
         reminder.tap()
         XCTAssertTrue(app.staticTexts["示例模式已模拟开启每日课程摘要，未申请通知权限"]
             .waitForExistence(timeout: 5))
+    }
+
+    func testDailyCourseReminderTimePickerUsesBeijingTimeInBothLanguages() {
+        continueAfterFailure = false
+        for language in ["zh-Hans", "en"] {
+            let app = configuredApplication(language: language)
+            app.launchArguments = ["--review-demo"]
+            app.launch()
+            let settings = app.tabBars.buttons[language == "en" ? "Settings" : "设置"]
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            settings.tap()
+            let picker = app.datePickers["settings.daily-course.time"]
+            revealByScrolling(visibleElement: picker, in: app)
+            XCTAssertTrue(picker.isEnabled)
+            XCTAssertTrue(app.staticTexts[language == "en"
+                ? "Reminder time (Beijing time)" : "提醒时间（北京时间）"].exists)
+            picker.tap()
+            XCTAssertTrue(app.pickerWheels.firstMatch.waitForExistence(timeout: 5))
+            let hours = app.pickerWheels.element(boundBy: 0)
+            let minutes = app.pickerWheels.element(boundBy: 1)
+            hours.adjust(toPickerWheelValue: "10")
+            minutes.adjust(toPickerWheelValue: "15")
+            XCTAssertEqual((hours.value as? String)?.filter(\.isNumber), "10")
+            XCTAssertEqual((minutes.value as? String)?.filter(\.isNumber), "15")
+            attachScreenshot(named: "settings-reminder-time-\(language)")
+            app.terminate()
+        }
     }
 
     func testWeatherCardStartsCollapsedAndExpandsOnDemand() {

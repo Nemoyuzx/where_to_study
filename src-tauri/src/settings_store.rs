@@ -12,11 +12,14 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::credential_store::{self, Credentials};
 use crate::error::{ServiceError, ServiceResult};
-use crate::models::{SaveSettingsRequest, SavedSettings};
+use crate::models::{
+    default_daily_course_notification_minutes, deserialize_daily_course_notification_minutes,
+    SaveSettingsRequest, SavedSettings,
+};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 9;
+const SETTINGS_SCHEMA_VERSION: u32 = 10;
 
 fn default_true() -> bool {
     true
@@ -40,6 +43,11 @@ struct SettingsFile {
     ui_language: String,
     #[serde(default)]
     daily_course_notifications_enabled: bool,
+    #[serde(
+        default = "default_daily_course_notification_minutes",
+        deserialize_with = "deserialize_daily_course_notification_minutes"
+    )]
+    daily_course_notification_minutes: u16,
     #[serde(default = "default_true")]
     automatic_term_detection_enabled: bool,
     #[serde(default = "default_true")]
@@ -71,6 +79,7 @@ struct PersistedSettings<'a> {
     default_min_seats: usize,
     ui_language: &'a str,
     daily_course_notifications_enabled: bool,
+    daily_course_notification_minutes: u16,
     automatic_term_detection_enabled: bool,
     weather_enabled: bool,
     almanac_enabled: bool,
@@ -214,6 +223,7 @@ where
         default_min_seats: file.default_min_seats,
         ui_language: file.ui_language.clone(),
         daily_course_notifications_enabled: file.daily_course_notifications_enabled,
+        daily_course_notification_minutes: file.daily_course_notification_minutes,
         automatic_term_detection_enabled: file.automatic_term_detection_enabled,
         weather_enabled: file.weather_enabled,
         almanac_enabled: file.almanac_enabled,
@@ -258,6 +268,9 @@ where
     L: FnOnce() -> ServiceResult<Option<Credentials>>,
 {
     request.apply_defaults();
+    if request.daily_course_notification_minutes >= 1440 {
+        return Err(ServiceError::new("提醒时间不正确，请选择 00:00 至 23:59。"));
+    }
     if !request.automatic_term_detection_enabled && request.term_id.trim().is_empty() {
         return Err(ServiceError::new("请填写学期编号。"));
     }
@@ -328,6 +341,7 @@ where
         default_min_seats: request.default_min_seats,
         ui_language: request.ui_language.clone(),
         daily_course_notifications_enabled: request.daily_course_notifications_enabled,
+        daily_course_notification_minutes: request.daily_course_notification_minutes,
         automatic_term_detection_enabled: request.automatic_term_detection_enabled,
         weather_enabled: request.weather_enabled,
         almanac_enabled: request.almanac_enabled,
@@ -464,6 +478,7 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         default_min_seats: settings.default_min_seats,
         ui_language: &settings.ui_language,
         daily_course_notifications_enabled: settings.daily_course_notifications_enabled,
+        daily_course_notification_minutes: settings.daily_course_notification_minutes,
         automatic_term_detection_enabled: settings.automatic_term_detection_enabled,
         weather_enabled: settings.weather_enabled,
         almanac_enabled: settings.almanac_enabled,
@@ -625,6 +640,7 @@ mod tests {
             default_min_seats: 20,
             ui_language: "en".to_string(),
             daily_course_notifications_enabled: true,
+            daily_course_notification_minutes: 555,
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,
@@ -648,6 +664,7 @@ mod tests {
             default_min_seats: 20,
             ui_language: "en".to_string(),
             daily_course_notifications_enabled: true,
+            daily_course_notification_minutes: 555,
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,
@@ -673,6 +690,7 @@ mod tests {
         assert_eq!(value["schema_version"], SETTINGS_SCHEMA_VERSION);
         assert_eq!(value["ui_language"], "en");
         assert_eq!(value["daily_course_notifications_enabled"], true);
+        assert_eq!(value["daily_course_notification_minutes"], 555);
         assert_eq!(value["automatic_term_detection_enabled"], true);
         assert_eq!(value["weather_enabled"], true);
         assert_eq!(value["almanac_enabled"], true);
@@ -695,6 +713,66 @@ mod tests {
             fs::metadata(path).unwrap().permissions().mode() & 0o777,
             0o600
         );
+    }
+
+    #[test]
+    fn reminder_time_round_trips_without_touching_credentials() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        for minutes in [0, 450, 555, 1439] {
+            let mut settings = fixture_settings();
+            settings.daily_course_notification_minutes = minutes;
+            write_non_sensitive_settings(&path, &settings).unwrap();
+            let loaded =
+                load_from_path(&path, || Ok(None), |_| panic!("no credential writes")).unwrap();
+            assert_eq!(loaded.daily_course_notification_minutes, minutes);
+        }
+    }
+
+    #[test]
+    fn legacy_or_bad_reminder_time_uses_default_without_losing_other_preferences() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        for value in [
+            serde_json::Value::Null,
+            serde_json::json!(-1),
+            serde_json::json!(1440),
+            serde_json::json!(12.5),
+            serde_json::json!("09:15"),
+        ] {
+            fs::write(
+                &path,
+                serde_json::to_vec(&serde_json::json!({
+                    "daily_course_notification_minutes": value,
+                    "daily_course_notifications_enabled": true,
+                    "ui_language": "en"
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            let loaded =
+                load_from_path(&path, || Ok(None), |_| panic!("no credential writes")).unwrap();
+            assert_eq!(loaded.daily_course_notification_minutes, 450);
+            assert!(loaded.daily_course_notifications_enabled);
+            assert_eq!(loaded.ui_language, "en");
+        }
+        fs::write(&path, b"{}").unwrap();
+        assert_eq!(
+            load_from_path(&path, || Ok(None), |_| Ok(()))
+                .unwrap()
+                .daily_course_notification_minutes,
+            450
+        );
+    }
+
+    #[test]
+    fn invalid_reminder_save_is_rejected_before_credential_access() {
+        let mut request = fixture_request(None);
+        request.daily_course_notification_minutes = 1440;
+        let result = prepare_save_with(request, || {
+            panic!("invalid settings must not access credentials")
+        });
+        assert!(result.is_err());
     }
 
     #[test]
@@ -727,6 +805,7 @@ mod tests {
         assert_eq!(loaded.account, "legacy-user");
         assert!(loaded.has_saved_password);
         assert!(!loaded.daily_course_notifications_enabled);
+        assert_eq!(loaded.daily_course_notification_minutes, 450);
         assert!(loaded.automatic_term_detection_enabled);
     }
 

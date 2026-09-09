@@ -265,6 +265,34 @@ enum TodayCourseWidgetData {
         return (1 ... lastTeachingWeek).contains(week) ? week : nil
     }
 
+    static func tomorrowCourses(
+        after date: Date,
+        archive: Archive?,
+        calendar: Calendar = .shanghai
+    ) -> [Course] {
+        courses(on: nextMidnight(after: date, calendar: calendar), archive: archive, calendar: calendar)
+    }
+
+    // The shared card additionally checks actual rendered height with ViewThatFits.
+    // Course limits cover both days, and today's rows always get first choice.
+    static func maximumTomorrowCourseCount(
+        todayCount: Int,
+        tomorrowCount: Int,
+        preferences: Preferences,
+        familyCourseLimit: Int
+    ) -> Int {
+        let limit = min(preferences.normalized.courseLimit, max(0, familyCourseLimit))
+        return min(max(0, tomorrowCount), max(0, limit - todayCount))
+    }
+
+    static func previewTodayCourses() -> [Course] {
+        Array(previewCourses().prefix(2))
+    }
+
+    static func previewTomorrowCourses() -> [Course] {
+        Array(previewCourses().dropFirst(2).prefix(3))
+    }
+
     static func dayContext(
         on date: Date,
         weekNumber: Int?,

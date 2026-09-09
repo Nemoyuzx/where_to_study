@@ -5,6 +5,26 @@ fn default_true() -> bool {
     true
 }
 
+pub const DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES: u16 = 450;
+
+pub fn default_daily_course_notification_minutes() -> u16 {
+    DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES
+}
+
+pub fn deserialize_daily_course_notification_minutes<'de, D>(
+    deserializer: D,
+) -> Result<u16, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(value
+        .as_u64()
+        .filter(|minutes| *minutes < 1440)
+        .map(|minutes| minutes as u16)
+        .unwrap_or(DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlotMetadata {
     pub index: usize,
@@ -46,6 +66,11 @@ pub struct SavedSettings {
     pub ui_language: String,
     #[serde(default)]
     pub daily_course_notifications_enabled: bool,
+    #[serde(
+        default = "default_daily_course_notification_minutes",
+        deserialize_with = "deserialize_daily_course_notification_minutes"
+    )]
+    pub daily_course_notification_minutes: u16,
     #[serde(default = "default_true")]
     pub automatic_term_detection_enabled: bool,
     #[serde(default = "default_true")]
@@ -79,6 +104,7 @@ impl SavedSettings {
             default_min_seats: 0,
             ui_language: "system".to_string(),
             daily_course_notifications_enabled: false,
+            daily_course_notification_minutes: DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,
@@ -93,6 +119,9 @@ impl SavedSettings {
     }
 
     pub fn apply_defaults(&mut self) {
+        if self.daily_course_notification_minutes >= 1440 {
+            self.daily_course_notification_minutes = DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES;
+        }
         if self.campus_id.trim().is_empty() {
             self.campus_id = crate::config::CAMPUSES[0].id.to_string();
         }
@@ -120,6 +149,8 @@ pub struct SaveSettingsRequest {
     pub ui_language: String,
     #[serde(default)]
     pub daily_course_notifications_enabled: bool,
+    #[serde(default = "default_daily_course_notification_minutes")]
+    pub daily_course_notification_minutes: u16,
     #[serde(default = "default_true")]
     pub automatic_term_detection_enabled: bool,
     #[serde(default = "default_true")]
@@ -173,6 +204,7 @@ mod term_default_tests {
             default_min_seats: 0,
             ui_language: String::new(),
             daily_course_notifications_enabled: false,
+            daily_course_notification_minutes: DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,

@@ -40,7 +40,8 @@
         },
         "campus_id": { "type": "string", "minLength": 1 },
         "default_min_seats": { "type": "integer", "minimum": 0 },
-        "daily_course_notifications_enabled": { "type": "boolean" }
+        "daily_course_notifications_enabled": { "type": "boolean" },
+        "daily_course_notification_minutes": { "type": "integer", "minimum": 0, "maximum": 1439, "default": 450 }
       }
     },
     "save_settings_request": {
@@ -59,7 +60,8 @@
         },
         "campus_id": { "type": "string", "minLength": 1 },
         "default_min_seats": { "type": "integer", "minimum": 0 },
-        "daily_course_notifications_enabled": { "type": "boolean" }
+        "daily_course_notifications_enabled": { "type": "boolean" },
+        "daily_course_notification_minutes": { "type": "integer", "minimum": 0, "maximum": 1439, "default": 450 }
       }
     },
     "course": {

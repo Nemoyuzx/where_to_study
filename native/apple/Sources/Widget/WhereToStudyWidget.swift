@@ -4,6 +4,7 @@ import WidgetKit
 private struct TodayCourseEntry: TimelineEntry {
     let date: Date
     let courses: [TodayCourseWidgetData.Course]
+    let tomorrowCourses: [TodayCourseWidgetData.Course]
     let preferences: TodayCourseWidgetData.Preferences
     let weekNumber: Int?
     let language: TodayCourseWidgetData.Language
@@ -14,7 +15,8 @@ private struct TodayCourseProvider: TimelineProvider {
     func placeholder(in _: Context) -> TodayCourseEntry {
         TodayCourseEntry(
             date: .now,
-            courses: TodayCourseWidgetData.previewCourses(),
+            courses: TodayCourseWidgetData.previewTodayCourses(),
+            tomorrowCourses: TodayCourseWidgetData.previewTomorrowCourses(),
             preferences: .default,
             weekNumber: 8,
             language: TodayCourseWidgetData.loadLanguage(),
@@ -44,6 +46,7 @@ private struct TodayCourseProvider: TimelineProvider {
         TodayCourseEntry(
             date: date,
             courses: TodayCourseWidgetData.courses(on: date, archive: archive),
+            tomorrowCourses: TodayCourseWidgetData.tomorrowCourses(after: date, archive: archive),
             preferences: TodayCourseWidgetData.loadPreferences(),
             weekNumber: TodayCourseWidgetData.weekNumber(on: date, archive: archive),
             language: TodayCourseWidgetData.loadLanguage(),
@@ -60,6 +63,7 @@ private struct TodayCourseWidgetView: View {
         TodayCourseWidgetCard(
             date: entry.date,
             courses: entry.courses,
+            tomorrowCourses: entry.tomorrowCourses,
             preferences: entry.preferences,
             weekNumber: entry.weekNumber,
             family: family,
@@ -84,8 +88,8 @@ struct WhereToStudyWidget: Widget {
             english: "Today's Courses"
         ))
         .description(language.text(
-            chinese: "查看今天的课程、节次、教室、教师与上课状态。",
-            english: "See today's classes, periods, rooms, teachers, and live status."
+            chinese: "查看今日课程与上课状态，空间充足时显示明日课程。",
+            english: "See today's classes and live status, plus tomorrow's courses when space permits."
         ))
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }

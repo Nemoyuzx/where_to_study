@@ -21,8 +21,14 @@
     <string name="privacy_policy_open_failed">Unable to open the full Privacy Policy. Please try again later.</string>
     <string name="privacy_consent_save_failed">Unable to save your consent, so the app cannot continue.</string>
     <string name="account_privacy_notice">Before saving an academic account, read the Privacy Policy to understand how credentials are used, where they are sent, and how they are stored locally.</string>
-    <string name="daily_course_notification_toggle">Send today’s course summary at 07:30</string>
-    <string name="daily_course_notification_description">Only notifies on days with courses; automatically reschedules after schedule or account changes.</string>
+    <string name="daily_course_notification_toggle">Send today’s course summary daily</string>
+    <string name="daily_course_notification_description">Only notifies on days with courses, around the chosen Beijing time. Battery saving may delay delivery. Time changes reschedule immediately; at most one summary per day.</string>
+    <string name="daily_course_notification_time_format">Reminder time · %1$s (Beijing time)</string>
+    <string name="daily_course_notification_time_title">Reminder time (Beijing time)</string>
+    <string name="daily_course_notification_time_error">Could not save or reschedule the reminder. Please try again.</string>
+    <string name="daily_course_notification_channel_description">Shows today’s course summary at the selected Beijing time</string>
+    <string name="widget_preview_description">Today’s courses appear first; spare space shows courses marked “Tomorrow”, within the course limit. This preview uses fictional data and does not change your schedule.</string>
+    <string name="widget_today_tomorrow_count_format">Today %1$d · Tomorrow %2$d</string>
     <string name="widget_today_course_name">Today’s Courses</string>
     <string name="widget_today_course_title">Today’s Courses</string>
     <string name="widget_today_course_description">View today’s courses, periods, rooms, instructors, and status on your home screen.</string>

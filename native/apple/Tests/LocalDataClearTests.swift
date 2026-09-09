@@ -347,7 +347,9 @@ final class LocalDataClearTests: XCTestCase {
 
         model.refreshScheduleAutomaticallyIfNeeded()
         model.refreshScheduleAutomaticallyIfNeeded()
-        for _ in 0 ..< 100 where scheduleStore.savedSchedule == nil {
+        // Saving completes off the main actor before AppModel publishes it.
+        // Wait for both observable effects before checking the refreshed state.
+        for _ in 0 ..< 100 where scheduleStore.savedSchedule == nil || model.schedule == nil {
             try await Task.sleep(for: .milliseconds(10))
         }
 

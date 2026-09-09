@@ -19,21 +19,27 @@ struct TodayCourseCard {
   @LocalStorageProp('course1Name') course1Name: string = '';
   @LocalStorageProp('course1Details') course1Details: string = '';
   @LocalStorageProp('course1Highlighted') course1Highlighted: boolean = false;
+  @LocalStorageProp('course1Group') course1Group: string = '';
   @LocalStorageProp('course2Name') course2Name: string = '';
   @LocalStorageProp('course2Details') course2Details: string = '';
   @LocalStorageProp('course2Highlighted') course2Highlighted: boolean = false;
+  @LocalStorageProp('course2Group') course2Group: string = '';
   @LocalStorageProp('course3Name') course3Name: string = '';
   @LocalStorageProp('course3Details') course3Details: string = '';
   @LocalStorageProp('course3Highlighted') course3Highlighted: boolean = false;
+  @LocalStorageProp('course3Group') course3Group: string = '';
   @LocalStorageProp('course4Name') course4Name: string = '';
   @LocalStorageProp('course4Details') course4Details: string = '';
   @LocalStorageProp('course4Highlighted') course4Highlighted: boolean = false;
+  @LocalStorageProp('course4Group') course4Group: string = '';
   @LocalStorageProp('course5Name') course5Name: string = '';
   @LocalStorageProp('course5Details') course5Details: string = '';
   @LocalStorageProp('course5Highlighted') course5Highlighted: boolean = false;
+  @LocalStorageProp('course5Group') course5Group: string = '';
   @LocalStorageProp('course6Name') course6Name: string = '';
   @LocalStorageProp('course6Details') course6Details: string = '';
   @LocalStorageProp('course6Highlighted') course6Highlighted: boolean = false;
+  @LocalStorageProp('course6Group') course6Group: string = '';
   @LocalStorageProp('moreHint') moreHint: string = '';
   @LocalStorageProp('emptyGlyph') emptyGlyph: string = '';
   @LocalStorageProp('emptyText') emptyText: string = '';
@@ -41,22 +47,22 @@ struct TodayCourseCard {
   private rows(): string[][] {
     const names: string[][] = [];
     if (this.course1Name.length > 0) {
-      names.push([this.course1Name, this.course1Details, this.course1Highlighted ? '1' : '0']);
+      names.push([this.course1Name, this.course1Details, this.course1Highlighted ? '1' : '0', this.course1Group]);
     }
     if (this.course2Name.length > 0) {
-      names.push([this.course2Name, this.course2Details, this.course2Highlighted ? '1' : '0']);
+      names.push([this.course2Name, this.course2Details, this.course2Highlighted ? '1' : '0', this.course2Group]);
     }
     if (this.course3Name.length > 0) {
-      names.push([this.course3Name, this.course3Details, this.course3Highlighted ? '1' : '0']);
+      names.push([this.course3Name, this.course3Details, this.course3Highlighted ? '1' : '0', this.course3Group]);
     }
     if (this.course4Name.length > 0) {
-      names.push([this.course4Name, this.course4Details, this.course4Highlighted ? '1' : '0']);
+      names.push([this.course4Name, this.course4Details, this.course4Highlighted ? '1' : '0', this.course4Group]);
     }
     if (this.course5Name.length > 0) {
-      names.push([this.course5Name, this.course5Details, this.course5Highlighted ? '1' : '0']);
+      names.push([this.course5Name, this.course5Details, this.course5Highlighted ? '1' : '0', this.course5Group]);
     }
     if (this.course6Name.length > 0) {
-      names.push([this.course6Name, this.course6Details, this.course6Highlighted ? '1' : '0']);
+      names.push([this.course6Name, this.course6Details, this.course6Highlighted ? '1' : '0', this.course6Group]);
     }
     return names;
   }
@@ -92,7 +98,7 @@ struct TodayCourseCard {
       .margin({ left: 8 })
     }
     .width('100%')
-    .height(40)
+    .height(34)
     .alignItems(VerticalAlign.Center)
   }
 
@@ -104,14 +110,16 @@ struct TodayCourseCard {
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.themeCustomized ? this.themeText : $r('app.color.widget_text_primary'))
-        Blank()
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(this.todayCountText)
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
       }
       .width('100%')
-      .height(28)
+      .height(26)
       .alignItems(VerticalAlign.Center)
 
       // 日期/状态上下文
@@ -128,7 +136,7 @@ struct TodayCourseCard {
       }
 
       Blank()
-        .height(8)
+        .height(4)
 
       if (this.emptyText.length > 0) {
         Row({ space: 9 }) {
@@ -152,8 +160,18 @@ struct TodayCourseCard {
       } else {
         Column({ space: 0 }) {
           ForEach(this.rows(), (row: string[], index: number) => {
+            if (row[3].length > 0) {
+              Text(row[3])
+                .fontSize(11)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
+                .height(18)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+            }
             this.courseRow(row[0], row[1], row[2] === '1')
-          }, (row: string[], index: number) => 'row.' + row[0] + '.' + index.toString())
+          }, (row: string[], index: number) => 'row.' + row.join('|') + '.' + index.toString())
           if (this.moreHint.length > 0) {
             Text(this.moreHint)
               .fontSize(11)
@@ -167,10 +185,8 @@ struct TodayCourseCard {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
       }
-
-      Blank()
     }
-    .padding(14)
+    .padding(12)
     .width('100%')
     .height('100%')
     .alignItems(HorizontalAlign.Start)

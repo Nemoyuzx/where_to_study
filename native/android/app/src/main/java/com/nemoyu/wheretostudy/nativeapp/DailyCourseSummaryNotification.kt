@@ -17,8 +17,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PersistableBundle
 import java.util.Calendar
+import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -31,42 +34,47 @@ data class DailyCourseSummaryDraft(
 )
 
 object DailyCourseSummaryLogic {
+    const val defaultMinutes = 450
     const val runWindowMillis = 15L * 60L * 1_000L
     const val deliveryWindowMillis = 30L * 60L * 1_000L
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
 
-    fun nextRunAt(afterMillis: Long): Long {
-        val now = Calendar.getInstance(shanghai).apply { timeInMillis = afterMillis }
-        val candidate = Calendar.getInstance(shanghai).apply {
-            clear()
-            set(
-                now.get(Calendar.YEAR),
-                now.get(Calendar.MONTH),
-                now.get(Calendar.DAY_OF_MONTH),
-                7,
-                30,
-                0,
-            )
+    fun normalizedMinutes(value: Int): Int = value.takeIf { it in 0..1439 } ?: defaultMinutes
+
+    fun formattedTime(minutes: Int): String = normalizedMinutes(minutes).let {
+        String.format(Locale.US, "%02d:%02d", it / 60, it % 60)
+    }
+
+    fun dayKey(millis: Long): String = Calendar.getInstance(shanghai).run {
+        timeInMillis = millis
+        String.format(Locale.US, "%04d-%02d-%02d", get(Calendar.YEAR), get(Calendar.MONTH) + 1, get(Calendar.DAY_OF_MONTH))
+    }
+
+    private fun scheduledCalendar(dayMillis: Long, minutes: Int): Calendar =
+        Calendar.getInstance(shanghai).apply {
+            timeInMillis = dayMillis
+            val validMinutes = normalizedMinutes(minutes)
+            set(Calendar.HOUR_OF_DAY, validMinutes / 60)
+            set(Calendar.MINUTE, validMinutes % 60)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
+
+    fun nextRunAt(afterMillis: Long, minutes: Int = defaultMinutes): Long {
+        val candidate = scheduledCalendar(afterMillis, minutes)
         if (candidate.timeInMillis <= afterMillis) candidate.add(Calendar.DAY_OF_MONTH, 1)
         return candidate.timeInMillis
     }
 
-    fun isWithinDeliveryWindow(nowMillis: Long): Boolean {
-        val now = Calendar.getInstance(shanghai).apply { timeInMillis = nowMillis }
-        val scheduled = Calendar.getInstance(shanghai).apply {
-            clear()
-            set(
-                now.get(Calendar.YEAR),
-                now.get(Calendar.MONTH),
-                now.get(Calendar.DAY_OF_MONTH),
-                7,
-                30,
-                0,
-            )
-        }
-        return nowMillis in scheduled.timeInMillis..(scheduled.timeInMillis + deliveryWindowMillis)
-    }
+    fun isWithinDeliveryWindow(
+        nowMillis: Long,
+        minutes: Int = defaultMinutes,
+        scheduledAt: Long = scheduledCalendar(nowMillis, minutes).timeInMillis,
+    ): Boolean = scheduledAt == scheduledCalendar(nowMillis, minutes).timeInMillis &&
+        nowMillis in scheduledAt..(scheduledAt + deliveryWindowMillis)
+
+    fun canDeliver(nowMillis: Long, minutes: Int, scheduledAt: Long, deliveredDay: String): Boolean =
+        isWithinDeliveryWindow(nowMillis, minutes, scheduledAt) && dayKey(nowMillis) != deliveredDay
 
     fun draft(schedule: ScheduleSnapshot?, nowMillis: Long): DailyCourseSummaryDraft? {
         schedule ?: return null
@@ -120,6 +128,8 @@ internal class DailyCourseNotificationExecutionGate {
     }
 
     fun snapshot(): Long = revision.get()
+
+    fun invalidate() { revision.incrementAndGet() }
 
     fun isCurrent(expectedRevision: Long): Boolean =
         !revoked.get() && revision.get() == expectedRevision
@@ -222,6 +232,9 @@ interface DailyCourseSummaryScheduling {
 }
 
 object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
+    internal const val JOB_MINUTES = "minutes"
+    internal const val JOB_SCHEDULED_AT = "scheduled_at"
+    internal const val JOB_TOKEN = "schedule_token"
     private const val PRIMARY_JOB_ID = 0x57545317
     private const val SECONDARY_JOB_ID = 0x57545318
     private val jobIDs = setOf(PRIMARY_JOB_ID, SECONDARY_JOB_ID)
@@ -262,13 +275,15 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
             cancel(appContext)
             return@runCatching true
         }
-        cancelJobs(appContext)
+        invalidateSchedule(appContext)
         schedule(appContext, PRIMARY_JOB_ID)
     }.getOrDefault(false)
 
     override fun cancel(context: Context) {
+        executionGate.invalidate()
         if (DailyCourseNotificationRuntimeMode.isUiTesting) return
         val appContext = context.applicationContext
+        runCatching { AppPreferences(appContext).dailyCourseNotificationScheduleToken = "" }
         runCatching { cancelJobs(appContext) }
         DailyCourseSummaryNotificationRuntime.cancel(appContext)
     }
@@ -329,6 +344,18 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
     fun executionRevision(): Long = executionGate.snapshot()
 
     fun isExecutionCurrent(revision: Long): Boolean = executionGate.isCurrent(revision)
+
+    fun updateTime(context: Context, minutes: Int): Boolean = runCatching {
+        executionGate.invalidate()
+        AppPreferences(context).dailyCourseNotificationMinutes = minutes
+        reconcile(context)
+    }.getOrDefault(false)
+
+    private fun invalidateSchedule(context: Context) {
+        executionGate.invalidate()
+        AppPreferences(context).dailyCourseNotificationScheduleToken = UUID.randomUUID().toString()
+        cancelJobs(context)
+    }
 
     fun scheduleAfterCompletion(context: Context, completedJobID: Int): Boolean = runCatching {
         val appContext = context.applicationContext
@@ -396,7 +423,10 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
         jobID: Int,
         nowMillis: Long = System.currentTimeMillis(),
     ): Boolean {
-        val delay = (DailyCourseSummaryLogic.nextRunAt(nowMillis) - nowMillis).coerceAtLeast(0L)
+        val preferences = AppPreferences(context)
+        val minutes = preferences.dailyCourseNotificationMinutes
+        val scheduledAt = DailyCourseSummaryLogic.nextRunAt(nowMillis, minutes)
+        val delay = (scheduledAt - nowMillis).coerceAtLeast(0L)
         val job = JobInfo.Builder(
             jobID,
             ComponentName(context, DailyCourseSummaryJobService::class.java),
@@ -404,6 +434,11 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
             .setMinimumLatency(delay)
             .setOverrideDeadline(delay + DailyCourseSummaryLogic.runWindowMillis)
             .setPersisted(true)
+            .setExtras(PersistableBundle().apply {
+                putInt(JOB_MINUTES, minutes)
+                putLong(JOB_SCHEDULED_AT, scheduledAt)
+                putString(JOB_TOKEN, preferences.dailyCourseNotificationScheduleToken)
+            })
             .build()
         return context.getSystemService(JobScheduler::class.java).schedule(job) ==
             JobScheduler.RESULT_SUCCESS
@@ -428,6 +463,15 @@ class DailyCourseSummaryJobService : JobService() {
         activeParameters = params
         val generation = LocalDataCoordinator.snapshot()
         val notificationRevision = DailyCourseSummaryScheduler.executionRevision()
+        val minutes = params.extras.getInt(DailyCourseSummaryScheduler.JOB_MINUTES, DailyCourseSummaryLogic.defaultMinutes)
+        val scheduledAt = params.extras.getLong(DailyCourseSummaryScheduler.JOB_SCHEDULED_AT, 0L)
+        val token = params.extras.getString(DailyCourseSummaryScheduler.JOB_TOKEN).orEmpty()
+        fun isCurrentPlan(): Boolean {
+            val preferences = AppPreferences(applicationContext)
+            return token.isNotEmpty() && token == preferences.dailyCourseNotificationScheduleToken &&
+                minutes == preferences.dailyCourseNotificationMinutes &&
+                DailyCourseSummaryScheduler.isExecutionCurrent(notificationRevision)
+        }
         activeWork.submit(worker) {
             if (Thread.currentThread().isInterrupted) return@submit
             val nowMillis = System.currentTimeMillis()
@@ -440,7 +484,9 @@ class DailyCourseSummaryJobService : JobService() {
                     if (!enabled || !authorized || credentials?.account?.isBlank() != false ||
                         credentials.password.isBlank() ||
                         !DailyCourseSummaryNotificationRuntime.hasPermission(context) ||
-                        !DailyCourseSummaryLogic.isWithinDeliveryWindow(nowMillis)
+                        !isCurrentPlan() ||
+                        !DailyCourseSummaryLogic.canDeliver(nowMillis, minutes, scheduledAt,
+                            AppPreferences(context).dailyCourseNotificationDeliveredDay)
                     ) {
                         null
                     } else {
@@ -456,15 +502,29 @@ class DailyCourseSummaryJobService : JobService() {
                 if (activeParameters !== params) return@post
                 activeParameters = null
                 activeWork.complete()
-                val canDeliver = LocalDataCoordinator.isCurrent(generation) &&
-                    DailyCourseSummaryScheduler.isExecutionCurrent(notificationRevision) &&
+                val deliveryMillis = System.currentTimeMillis()
+                val preferences = AppPreferences(applicationContext)
+                val canDeliver = LocalDataCoordinator.isCurrent(generation) && isCurrentPlan() &&
+                    DailyCourseSummaryLogic.canDeliver(deliveryMillis, minutes, scheduledAt,
+                        preferences.dailyCourseNotificationDeliveredDay) &&
                     PrivacyConsentStore(applicationContext).hasAcceptedCurrentPolicy &&
                     AppPreferences(applicationContext).dailyCourseNotificationsEnabled &&
                     DailyCourseNotificationAuthorizationStore(applicationContext).isAuthorized &&
                     DailyCourseSummaryNotificationRuntime.hasPermission(applicationContext)
                 if (canDeliver) {
                     DailyCourseSummaryNotificationRuntime.cancel(applicationContext)
-                    draft?.let { DailyCourseSummaryNotificationRuntime.show(applicationContext, it) }
+                    draft?.let {
+                        // Persist before posting: retries and time edits must not notify twice today.
+                        runCatching {
+                            preferences.dailyCourseNotificationDeliveredDay = DailyCourseSummaryLogic.dayKey(deliveryMillis)
+                            DailyCourseSummaryNotificationRuntime.show(applicationContext, it)
+                        }
+                    }
+                }
+                // A cancelled plan must never replace the job created by a time/account change.
+                if (!isCurrentPlan() || !LocalDataCoordinator.isCurrent(generation)) {
+                    jobFinished(params, false)
+                    return@post
                 }
                 val nextScheduled = DailyCourseSummaryScheduler.scheduleAfterCompletion(
                     applicationContext,
@@ -579,7 +639,7 @@ object DailyCourseSummaryNotificationRuntime {
             context.uiText("每日课程摘要"),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = context.uiText("每天约 07:30 显示当天个人课程摘要")
+            description = context.getString(R.string.daily_course_notification_channel_description)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         })
     }

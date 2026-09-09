@@ -64,7 +64,9 @@ export default function todayCourseWidgetDataTest() {
       // 大学英语（10:10）下一节 -> 前缀
       expect(String(data['course2Name'])).assertEqual('下一节 · 大学英语');
       expect(String(data['course2Details'])).assertEqual('10:10-11:45 · 3-4节 · 教二-202 · 测试教师');
-      expect(String(data['course3Name'])).assertEqual('');
+      expect(String(data['course3Name'])).assertEqual('物理实验');
+      expect(data['course3Highlighted']).assertEqual(false);
+      expect(String(data['course3Group'])).assertEqual('明日 · 3/3 · 第1周');
     });
 
     it('binding_respects_course_limit_and_shows_more_hint', 0, () => {
@@ -74,7 +76,7 @@ export default function todayCourseWidgetDataTest() {
       // 9:00 时大学英语（10:10）为下一节 -> 前缀
       expect(String(data['course2Name'])).assertEqual('下一节 · 大学英语');
       expect(String(data['course3Name'])).assertEqual('');
-      expect(String(data['moreHint'])).assertEqual('另有 1 门课程');
+      expect(String(data['moreHint'])).assertEqual('今日另有 1 门课程');
     });
 
     it('binding_empty_state_without_archive', 0, () => {
@@ -107,6 +109,79 @@ export default function todayCourseWidgetDataTest() {
       const preview: WidgetArchive = TodayCourseWidgetData.previewArchive();
       expect(preview.courses.length).assertEqual(6);
       expect(preview.courses[0].name).assertEqual('高等数学');
+    });
+
+    it('small_dimensions_are_equal_height_and_never_displace_today', 0, () => {
+      for (const dimension of [2, 3]) {
+        const data = TodayCourseWidgetData.binding(archive(), new WidgetCoursePreferences(true, true, 6),
+          new DateParts(2026, 3, 9), 9 * 60, dimension);
+        expect(data['todayShownCount']).assertEqual(2);
+        expect(data['tomorrowShownCount']).assertEqual(0);
+        expect(data['tomorrowTitle']).assertEqual('');
+        expect(data['course3Name']).assertEqual('');
+        expect(data['moreHint']).assertEqual('今日另有 1 门课程');
+      }
+      expect(TodayCourseWidgetData.capacityForDimension(4)).assertEqual(6);
+      expect(TodayCourseWidgetData.capacityForDimension(Number.NaN)).assertEqual(2);
+    });
+
+    it('tomorrow_fills_spare_rows_and_total_respects_user_limit', 0, () => {
+      const data = TodayCourseWidgetData.binding(archive(), new WidgetCoursePreferences(true, true, 3),
+        new DateParts(2026, 3, 2), 14 * 60, 4);
+      expect(data['todayShownCount']).assertEqual(2);
+      expect(data['tomorrowShownCount']).assertEqual(1);
+      expect(data['course3Name']).assertEqual('物理实验');
+      expect(data['course3Highlighted']).assertEqual(false);
+      expect(data['course4Name']).assertEqual('');
+      expect(data['statusText']).assertEqual('今日课程已结束');
+    });
+
+    it('course_free_sunday_shows_monday_of_the_next_teaching_week', 0, () => {
+      const data = TodayCourseWidgetData.binding(archive(), new WidgetCoursePreferences(true, true, 6),
+        new DateParts(2026, 3, 8), 8 * 60 + 30, 2);
+      expect(data['todayShownCount']).assertEqual(0);
+      expect(data['tomorrowShownCount']).assertEqual(2);
+      expect(data['emptyText']).assertEqual('');
+      expect(data['course1Name']).assertEqual('高等数学');
+      expect(data['course1Highlighted']).assertEqual(false);
+      expect(data['course1Group']).assertEqual('明日 · 3/9 · 第2周 · +1');
+      expect(data['statusText']).assertEqual('今天可以自由安排');
+    });
+
+    it('beijing_midnight_rotates_tomorrow_to_today_across_year', 0, () => {
+      const yearArchive = new WidgetArchive('2026-12-28', 'cached', [
+        course('dec', '年末课程', '教一', '08:00-09:35', 4, [1], 0),
+        course('jan', '新年课程', '教二', '08:00-09:35', 5, [1], 0)
+      ]);
+      const midnight: number = Date.UTC(2026, 11, 31, 16);
+      const before = TodayCourseWidgetData.bindingAtEpoch(yearArchive, new WidgetCoursePreferences(), 2,
+        midnight - 1);
+      expect(before['course1Name']).assertEqual('年末课程');
+      expect(before['course2Name']).assertEqual('新年课程');
+      expect(before['course2Group']).assertEqual('明日 · 1/1 · 第1周');
+      expect(before['course2Highlighted']).assertEqual(false);
+      const after = TodayCourseWidgetData.bindingAtEpoch(yearArchive, new WidgetCoursePreferences(), 2,
+        midnight);
+      expect(after['course1Name']).assertEqual('下一节 · 新年课程');
+      expect(after['course2Name']).assertEqual('');
+      expect(after['tomorrowTitle']).assertEqual('');
+      expect(TodayCourseWidgetData.minutesUntilBeijingMidnight(midnight - 1)).assertEqual(1);
+      expect(TodayCourseWidgetData.minutesUntilBeijingMidnight(midnight)).assertEqual(1440);
+    });
+
+    it('preview_and_english_groups_share_real_capacity_and_week_rollover', 0, () => {
+      const sunday = new DateParts(2026, 5, 31);
+      const preview = TodayCourseWidgetData.previewArchive(sunday);
+      for (const dimension of [2, 3, 4]) {
+        const data = TodayCourseWidgetData.binding(preview,
+          new WidgetCoursePreferences(false, false, 6, AppLanguage.english), sunday, 9 * 60, dimension);
+        expect(data['todayShownCount']).assertEqual(1);
+        expect(data['tomorrowShownCount']).assertEqual(dimension === 4 ? 5 : 1);
+        expect(String(data['course2Group']).startsWith('Tomorrow · 6/1 · W2')).assertTrue();
+        expect(data['course2Name']).assertEqual('数据挖掘');
+        expect(data['course2Highlighted']).assertEqual(false);
+        expect(String(data['course2Details']).includes('示例教师')).assertFalse();
+      }
     });
   });
 }

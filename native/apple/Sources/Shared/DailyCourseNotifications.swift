@@ -1,8 +1,24 @@
 import Foundation
+import CoreFoundation
 import UserNotifications
 
 enum DailyCourseNotificationSettings {
     static let enabledKey = "dailyCourseNotificationsEnabled"
+    static let minutesKey = "dailyCourseNotificationMinutes"
+    static let defaultMinutes = 450
+
+    static func normalizedMinutes(_ minutes: Int) -> Int {
+        (0 ... 1439).contains(minutes) ? minutes : defaultMinutes
+    }
+
+    static func loadMinutes(defaults: UserDefaults) -> Int {
+        // Do not use integer(forKey:): a missing value would become midnight.
+        guard let value = defaults.object(forKey: minutesKey) as? NSNumber,
+              CFGetTypeID(value) != CFBooleanGetTypeID(),
+              value.doubleValue == Double(value.intValue)
+        else { return defaultMinutes }
+        return normalizedMinutes(value.intValue)
+    }
 }
 
 enum DailyCourseNotificationAuthorization: Equatable, Sendable {
@@ -89,6 +105,7 @@ enum DailyCourseNotificationPlanner {
     static func requests(
         for schedule: ScheduleSnapshot,
         after now: Date,
+        dailyCourseNotificationMinutes: Int = DailyCourseNotificationSettings.defaultMinutes,
         scanDayLimit: Int? = nil,
         calendar: Calendar = .shanghai
     ) -> [DailyCourseNotificationRequest] {
@@ -103,6 +120,7 @@ enum DailyCourseNotificationPlanner {
                 .max()
         else { return [] }
 
+        let minutes = DailyCourseNotificationSettings.normalizedMinutes(dailyCourseNotificationMinutes)
         let startOfToday = calendar.startOfDay(for: now)
         let boundedLastWeek = min(lastCourseWeek, maximumScheduleWeek)
         guard
@@ -128,7 +146,7 @@ enum DailyCourseNotificationPlanner {
             if requests.count == maximumPendingRequestCount { break }
             guard
                 let day = calendar.date(byAdding: .day, value: dayOffset, to: startOfToday),
-                let fireDate = calendar.date(bySettingHour: 7, minute: 30, second: 0, of: day),
+                let fireDate = calendar.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: day),
                 fireDate > now
             else { continue }
 
@@ -199,6 +217,7 @@ struct DailyCourseNotificationCoordinator: Sendable {
         requestPermissionIfNeeded: Bool,
         hasCredentials: Bool,
         schedule: ScheduleSnapshot?,
+        dailyCourseNotificationMinutes: Int = DailyCourseNotificationSettings.defaultMinutes,
         now: Date = .now,
         revision: UInt64
     ) async throws -> DailyCourseNotificationReconcileOutcome {
@@ -226,7 +245,11 @@ struct DailyCourseNotificationCoordinator: Sendable {
             return .waitingForSchedule
         }
 
-        let requests = DailyCourseNotificationPlanner.requests(for: schedule, after: now)
+        let requests = DailyCourseNotificationPlanner.requests(
+            for: schedule,
+            after: now,
+            dailyCourseNotificationMinutes: dailyCourseNotificationMinutes
+        )
         try await scheduler.replacePending(with: requests, revision: revision)
         return .scheduled(requests.count)
     }

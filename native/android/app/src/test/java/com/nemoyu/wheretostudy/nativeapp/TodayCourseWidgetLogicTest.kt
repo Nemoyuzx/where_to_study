@@ -8,6 +8,79 @@ import org.junit.Test
 
 class TodayCourseWidgetLogicTest {
     @Test
+    fun spareRowsUseTomorrowWithoutDisplacingTodayOrExceedingPreference() {
+        val tomorrow = course("tomorrow", "明日课程", 0, "08:00-09:35").copy(weekday = 2)
+        val content = TodayCourseWidgetLogic.content(schedule().copy(courses = schedule().courses + tomorrow), mondayMorning)
+        assertEquals(listOf("early", "later", "tomorrow"), TodayCourseWidgetLogic.displayRows(content, 6, 4).map { it.course.id })
+        assertEquals(listOf("early", "later"), TodayCourseWidgetLogic.displayRows(content, 6, 2).map { it.course.id })
+        assertEquals(listOf("early"), TodayCourseWidgetLogic.displayRows(content, 1, 6).map { it.course.id })
+        assertEquals("明日 · 明日课程", TodayCourseWidgetLogic.title(TodayCourseWidgetLogic.displayRows(content, 3).last(), content))
+    }
+
+    @Test
+    fun emptyTodayCanUseAllCapacityForTomorrowWithoutCallingItNext() {
+        val course = course("only-tomorrow", "示例课程", 0, "08:00-09:35").copy(weekday = 2)
+        val content = TodayCourseWidgetLogic.content(schedule().copy(courses = listOf(course)), mondayMorning)
+        val rows = TodayCourseWidgetLogic.displayRows(content, 1)
+        assertTrue(content.courses.isEmpty())
+        assertEquals(null, content.highlightedCourseID)
+        assertEquals("今天可以自由安排", content.statusText)
+        assertTrue(rows.single().isTomorrow)
+        assertEquals("明日 · 示例课程", TodayCourseWidgetLogic.title(rows.single(), content))
+    }
+
+    @Test
+    fun finishedTodayStaysFirstAndDuplicateCourseIDsDoNotHighlightTomorrow() {
+        val base = course("same", "重复课程", 0, "08:00-09:35")
+        val fixture = schedule().copy(courses = listOf(base, base.copy(weekday = 2)))
+        val active = TodayCourseWidgetLogic.content(fixture, mondayMorning)
+        assertEquals("明日 · 重复课程", TodayCourseWidgetLogic.title(TodayCourseWidgetLogic.displayRows(active, 2).last(), active))
+        val finished = TodayCourseWidgetLogic.content(fixture, millis(2026, 3, 2, 20, 0))
+        assertEquals("今日课程已结束", finished.statusText)
+        assertEquals(listOf(false, true), TodayCourseWidgetLogic.displayRows(finished, 2).map { it.isTomorrow })
+    }
+
+    @Test
+    fun tomorrowUsesNewTeachingWeekAcrossSundayAndMonthBoundary() {
+        val fixture = schedule().copy(courses = listOf(
+            course("week14", "新一周课程", 0, "08:00-09:35").copy(weekNumbers = listOf(14)),
+            course("week13", "旧一周课程", 2, "09:50-10:35").copy(weekNumbers = listOf(13)),
+        ))
+        val content = TodayCourseWidgetLogic.content(fixture, millis(2026, 5, 31, 12, 0))
+        assertEquals(listOf("week14"), content.tomorrowCourses.map { it.id })
+        assertEquals(millis(2026, 6, 1, 0, 0), TodayCourseWidgetLogic.nextMidnightAt(millis(2026, 5, 31, 12, 0)))
+    }
+
+    @Test
+    fun midnightPromotesTomorrowAcrossYearWithoutSystemTimezoneDependence() {
+        val original = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+            val fixture = schedule().copy(termStartDate = "2026-12-28", courses = listOf(
+                course("new-year", "新年课程", 0, "08:00-09:35").copy(weekday = 5),
+            ))
+            val before = millis(2026, 12, 31, 23, 59)
+            val midnight = TodayCourseWidgetLogic.nextMidnightAt(before)
+            assertEquals(millis(2027, 1, 1, 0, 0), midnight)
+            assertEquals("new-year", TodayCourseWidgetLogic.content(fixture, before).tomorrowCourses.single().id)
+            val after = TodayCourseWidgetLogic.content(fixture, midnight)
+            assertEquals("new-year", after.courses.single().id)
+            assertTrue(after.tomorrowCourses.isEmpty())
+        } finally { TimeZone.setDefault(original) }
+    }
+
+    @Test
+    fun previewHasTomorrowOnSundayAndNoTomorrowLeavesOnlyToday() {
+        val preview = TodayCourseWidgetLogic.previewContent(millis(2026, 3, 8, 12, 0))
+        assertEquals(3, preview.courses.size)
+        assertEquals(3, preview.tomorrowCourses.size)
+        assertEquals(6, TodayCourseWidgetLogic.displayRows(preview, 6).size)
+        val todayOnly = TodayCourseWidgetLogic.content(schedule(), mondayMorning)
+        assertEquals(2, TodayCourseWidgetLogic.displayRows(todayOnly, 6).size)
+        assertTrue(TodayCourseWidgetLogic.displayRows(TodayCourseWidgetLogic.content(null, mondayMorning), 6).isEmpty())
+    }
+
+    @Test
     fun missingScheduleUsesNoCourseState() {
         val content = TodayCourseWidgetLogic.content(null, mondayMorning)
 

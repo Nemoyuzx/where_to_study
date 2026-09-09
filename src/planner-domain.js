@@ -57,6 +57,7 @@ export const DEFAULT_SETTINGS = {
   defaultMinSeats: 0,
   uiLanguage: 'system',
   dailyCourseNotificationsEnabled: false,
+  dailyCourseNotificationMinutes: 450,
   automaticTermDetectionEnabled: true,
   weatherEnabled: true,
   almanacEnabled: true,
@@ -494,6 +495,21 @@ export function normalizeUiLanguage(value) {
   return ['system', 'zh-Hans', 'en'].includes(value) ? value : 'system'
 }
 
+export function normalizeDailyCourseNotificationMinutes(value) {
+  return Number.isInteger(value) && value >= 0 && value < 1440 ? value : 450
+}
+
+export function dailyCourseNotificationTime(value) {
+  const minutes = normalizeDailyCourseNotificationMinutes(value)
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+}
+
+export function parseDailyCourseNotificationTime(value) {
+  if (typeof value !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null
+  const [hour, minute] = value.split(':').map(Number)
+  return hour * 60 + minute
+}
+
 export function resolvedUiLanguage(preference, systemLanguage = '') {
   const normalized = normalizeUiLanguage(preference)
   if (normalized !== 'system') return normalized
@@ -514,6 +530,9 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
       data.daily_course_notifications_enabled
       ?? fallback.dailyCourseNotificationsEnabled
       ?? false,
+    ),
+    dailyCourseNotificationMinutes: normalizeDailyCourseNotificationMinutes(
+      data.daily_course_notification_minutes ?? fallback.dailyCourseNotificationMinutes,
     ),
     automaticTermDetectionEnabled: Boolean(
       data.automatic_term_detection_enabled
@@ -635,6 +654,14 @@ export function accountHasSavedPassword(account, savedCredential) {
     && account.trim() === savedCredential.account
 }
 
+export function reminderSettingsPayload(savedSettings, enabled, minutes) {
+  return settingsToPayload({
+    ...savedSettings,
+    dailyCourseNotificationsEnabled: enabled,
+    dailyCourseNotificationMinutes: minutes,
+  })
+}
+
 export function settingsToPayload(settings) {
   return {
     account: settings.account,
@@ -645,6 +672,7 @@ export function settingsToPayload(settings) {
     default_min_seats: normalizeMinSeats(settings.defaultMinSeats),
     ui_language: normalizeUiLanguage(settings.uiLanguage),
     daily_course_notifications_enabled: Boolean(settings.dailyCourseNotificationsEnabled),
+    daily_course_notification_minutes: normalizeDailyCourseNotificationMinutes(settings.dailyCourseNotificationMinutes),
     automatic_term_detection_enabled: Boolean(settings.automaticTermDetectionEnabled),
     weather_enabled: Boolean(settings.weatherEnabled),
     almanac_enabled: Boolean(settings.almanacEnabled),

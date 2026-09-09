@@ -250,7 +250,8 @@ export class AppLocalization {
     '天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。':
       'Weather, almanac, and deadlines use public third-party services. Campus notices are script-extracted from public notices on an internal school website; each card identifies its source.',
     '课程提醒': 'Course Reminders',
-    '每天 07:30 发送当日课程摘要': 'Send Today\'s Course Summary at 07:30',
+    '每日课程摘要': 'Daily course summary',
+    '提醒时间（北京时间）': 'Reminder time (Beijing time)',
     '仅在当天有课时通知；课表更新或账号变更后会自动重排。':
       'Only notify on class days; reminders are rescheduled after schedule or account changes.',
     '本地数据': 'Local Data',

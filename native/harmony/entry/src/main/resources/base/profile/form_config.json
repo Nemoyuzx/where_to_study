@@ -3,7 +3,7 @@
     {
       "name": "TodayCourseCard",
       "displayName": "今日课程",
-      "description": "查看今天的课程时间与教室。",
+      "description": "查看今日课程，剩余空间显示明日课程。",
       "src": "./ets/widget/pages/TodayCourseCard.ets",
       "uiSyntax": "arkts",
       "window": {
@@ -14,7 +14,7 @@
       "isDynamic": true,
       "isDefault": true,
       "updateEnabled": true,
-      "scheduledUpdateTime": "10:30",
+      "scheduledUpdateTime": "00:00",
       "updateDuration": 1,
       "defaultDimension": "2*2",
       "supportDimensions": [

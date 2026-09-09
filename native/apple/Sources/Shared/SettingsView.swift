@@ -618,7 +618,7 @@ struct SettingsView: View {
                 Label("课程提醒", systemImage: "bell")
                     .font(.headline)
                 Toggle(
-                    "每天 07:30 发送当日课程摘要",
+                    "每天发送当日课程摘要",
                     isOn: Binding(
                         get: { model.dailyCourseNotificationsEnabled },
                         set: { enabled in
@@ -628,7 +628,25 @@ struct SettingsView: View {
                     )
                 )
                 .toggleStyle(.switch)
+                .accessibilityIdentifier("settings.daily-course.enabled")
                 .tint(theme.primary)
+                .disabled(model.isSampleMode && !model.isReviewDemo)
+                DatePicker(
+                    "提醒时间（北京时间）",
+                    selection: Binding(
+                        get: {
+                            Calendar.shanghai.startOfDay(for: .now)
+                                .addingTimeInterval(TimeInterval(model.dailyCourseNotificationMinutes * 60))
+                        },
+                        set: { date in
+                            let parts = Calendar.shanghai.dateComponents([.hour, .minute], from: date)
+                            model.setDailyCourseNotificationMinutes((parts.hour ?? 7) * 60 + (parts.minute ?? 30))
+                        }
+                    ),
+                    displayedComponents: .hourAndMinute
+                )
+                .environment(\.timeZone, Calendar.shanghai.timeZone)
+                .accessibilityIdentifier("settings.daily-course.time")
                 .disabled(model.isSampleMode && !model.isReviewDemo)
                 Text("仅在当天有课时通知；课表更新或账号变更后会自动重排。")
                     .font(.callout)
@@ -931,7 +949,8 @@ struct SettingsView: View {
                 .labelsHidden()
                 TodayCourseWidgetCard(
                     date: .now,
-                    courses: TodayCourseWidgetData.previewCourses(),
+                    courses: TodayCourseWidgetData.previewTodayCourses(),
+                    tomorrowCourses: TodayCourseWidgetData.previewTomorrowCourses(),
                     preferences: TodayCourseWidgetData.Preferences(
                         showsLocation: model.widgetShowsLocation,
                         showsTeacher: model.widgetShowsTeacher,
@@ -952,7 +971,7 @@ struct SettingsView: View {
                 .accessibilityLabel("今日课程小组件\(widgetPreviewSize.title)样式预览")
                 .accessibilityIdentifier("widget.preview")
 
-                Text("小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；大号样式最多展示 6 门课程。设置会同步到 iPhone、iPad 与 Mac。")
+                Text("小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会同步到 iPhone、iPad 与 Mac。")
                     .font(.callout)
                     .foregroundStyle(theme.secondaryText)
             }

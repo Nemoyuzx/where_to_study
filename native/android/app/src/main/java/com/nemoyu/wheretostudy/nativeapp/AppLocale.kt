@@ -106,6 +106,8 @@ object UiText {
         "今日无课" to "No courses today",
         "今天可以自由安排" to "No courses scheduled today",
         "课程进行中" to "Course in progress",
+        "进行中" to "In progress",
+        "下一节" to "Next",
         "还有待上课程" to "More courses later today",
         "今日课程已结束" to "Today's courses are finished",
         "周一" to "Mon",
@@ -540,6 +542,8 @@ object UiText {
                     "Calendar week ${it.groupValues[1]}"
                 } ?: Regex("^教学第(\\d+)周$").matchEntire(part)?.let {
                     "Teaching week ${it.groupValues[1]}"
+                } ?: Regex("^(\\d{2}:\\d{2}) 下课$").matchEntire(part)?.let {
+                    "Ends at ${it.groupValues[1]}"
                 } ?: part
         }
     }
@@ -551,6 +555,8 @@ object UiText {
                 "In progress · ${source.removePrefix("进行中 · ")}"
             source.startsWith("下一节 · ") ->
                 "Next · ${source.removePrefix("下一节 · ")}"
+            source.startsWith("明日 · ") ->
+                "Tomorrow · ${source.removePrefix("明日 · ")}"
             else -> source
         }
     }

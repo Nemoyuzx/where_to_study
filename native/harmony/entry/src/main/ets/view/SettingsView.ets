@@ -11,6 +11,7 @@ import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
 } from '../widget/TodayCourseWidgetData';
 import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
+import { DailyCourseNotificationSettings } from '../notify/DailyCoursePlanning';
 import { PublicDeadlineItem, PublicDeadlineKindInfo,
   PublicDeadlineSource } from '../net/CalendarDailyInfoClient';
 
@@ -44,8 +45,8 @@ export struct SettingsView {
   @Local contentWidth: number = 350;
   @Local showingPrivacyPolicy: boolean = false;
   @Local customDeadlineURLDraft: string = '';
-  // 样式预览容量（紧凑 1 / 标准 3 / 展开 6，对应 Android 预览 Spinner）。
-  @Local previewCapacity: number = 3;
+  // 与系统服务卡片 FormDimension 使用相同尺寸与容量规则。
+  @Local previewDimension: number = 3;
   private statusDismissRevision: number = 0;
 
   private static readonly projectURL: string =
@@ -599,10 +600,10 @@ export struct SettingsView {
         .fontColor(AppTheme.text())
         .width('100%')
       this.segmentedOptions(
-        [this.model.text('紧凑'), this.model.text('标准'), this.model.text('展开')],
-        this.previewCapacity === 1 ? 0 : (this.previewCapacity === 6 ? 2 : 1),
+        ['2×2', '2×4', '4×4'],
+        this.previewDimension - 2,
         (index: number): void => {
-          this.previewCapacity = index === 0 ? 1 : (index === 2 ? 6 : 3);
+          this.previewDimension = index + 2;
         })
 
       this.widgetPreview()
@@ -620,25 +621,12 @@ export struct SettingsView {
     Column() {
       this.widgetPreviewRow(
         this.previewString('todayTitle'), this.previewString('todayCountText'),
-        this.previewString('dateContext'), this.previewString('statusText'),
-        this.previewString('course1Name'), this.previewString('course1Details'),
-        this.previewBoolean('course1Highlighted'),
-        this.previewString('course2Name'), this.previewString('course2Details'),
-        this.previewBoolean('course2Highlighted'),
-        this.previewString('course3Name'), this.previewString('course3Details'),
-        this.previewBoolean('course3Highlighted'),
-        this.previewString('course4Name'), this.previewString('course4Details'),
-        this.previewBoolean('course4Highlighted'),
-        this.previewString('course5Name'), this.previewString('course5Details'),
-        this.previewBoolean('course5Highlighted'),
-        this.previewString('course6Name'), this.previewString('course6Details'),
-        this.previewBoolean('course6Highlighted'))
+        this.previewString('dateContext'), this.previewString('statusText'))
     }
-    .padding(14)
+    .padding(12)
     .margin({ top: 8 })
-    .width('100%')
-    .height(this.previewCapacity === 1 ? 130 :
-      (this.previewCapacity === 6 ? 300 : 205))
+    .width(this.previewDimension === 2 ? 160 : '100%')
+    .height(this.previewDimension === 4 ? 320 : 160)
     .borderRadius(16)
     .backgroundColor(AppTheme.surface())
     .border({ width: 1, color: AppTheme.border() })
@@ -649,10 +637,8 @@ export struct SettingsView {
   private previewData(): Record<string, Object> {
     const prefs: WidgetCoursePreferences = new WidgetCoursePreferences(
       this.model.widgetShowsLocation, this.model.widgetShowsTeacher,
-      Math.min(this.model.widgetCourseLimit, this.previewCapacity), this.model.resolvedLanguage());
-    return TodayCourseWidgetData.binding(
-      TodayCourseWidgetData.previewArchive(), prefs, undefined,
-      TodayCourseWidgetData.nowMinute());
+      this.model.widgetCourseLimit, this.model.resolvedLanguage());
+    return TodayCourseWidgetData.previewBinding(prefs, this.previewDimension);
   }
 
   private previewString(key: string): string {
@@ -664,18 +650,17 @@ export struct SettingsView {
   }
 
   @Builder
-  widgetPreviewRow(title: string, count: string, context: string, status: string,
-    n1: string, d1: string, h1: boolean, n2: string, d2: string, h2: boolean,
-    n3: string, d3: string, h3: boolean, n4: string, d4: string, h4: boolean,
-    n5: string, d5: string, h5: boolean, n6: string, d6: string, h6: boolean) {
+  widgetPreviewRow(title: string, count: string, context: string, status: string) {
     Row() {
       Text(title)
-        .fontSize(15)
+        .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
-      Blank()
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(count)
-        .fontSize(11)
+        .fontSize(12)
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.secondaryText())
     }
@@ -688,26 +673,33 @@ export struct SettingsView {
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .width('100%')
-      .margin({ top: 2 })
-    Blank().height(6)
+      .margin({ top: 3 })
+    Blank().height(4)
     Column({ space: 0 }) {
-      if (n1.length > 0) {
-        this.widgetPreviewRowItem(n1, d1, h1)
-      }
-      if (n2.length > 0) {
-        this.widgetPreviewRowItem(n2, d2, h2)
-      }
-      if (n3.length > 0) {
-        this.widgetPreviewRowItem(n3, d3, h3)
-      }
-      if (n4.length > 0) {
-        this.widgetPreviewRowItem(n4, d4, h4)
-      }
-      if (n5.length > 0) {
-        this.widgetPreviewRowItem(n5, d5, h5)
-      }
-      if (n6.length > 0) {
-        this.widgetPreviewRowItem(n6, d6, h6)
+      ForEach([1, 2, 3, 4, 5, 6], (index: number) => {
+        if (this.previewString('course' + index.toString() + 'Name').length > 0) {
+          if (this.previewString('course' + index.toString() + 'Group').length > 0) {
+            Text(this.previewString('course' + index.toString() + 'Group'))
+              .fontSize(11)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.secondaryText())
+              .height(18)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          }
+          this.widgetPreviewRowItem(this.previewString('course' + index.toString() + 'Name'),
+            this.previewString('course' + index.toString() + 'Details'),
+            this.previewBoolean('course' + index.toString() + 'Highlighted'))
+        }
+      }, (index: number) => index.toString())
+      if (this.previewString('moreHint').length > 0) {
+        Text(this.previewString('moreHint'))
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+          .maxLines(1)
+          .width('100%')
+          .margin({ top: 2 })
       }
     }
     .width('100%')
@@ -719,19 +711,19 @@ export struct SettingsView {
     Row() {
       Column()
         .width(3)
-        .height(26)
+        .height(30)
         .borderRadius(1.5)
         .backgroundColor(highlighted ? AppTheme.primaryFill() : AppTheme.accent())
       Column({ space: 1 }) {
         Text(name)
-          .fontSize(13)
+          .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
         Text(details)
-          .fontSize(10)
+          .fontSize(11)
           .fontColor(AppTheme.secondaryText())
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -876,7 +868,7 @@ export struct SettingsView {
     Column() {
       this.sectionTitle('课程提醒')
       Row({ space: 8 }) {
-        Text(this.model.text('每天 07:30 发送当日课程摘要'))
+        Text(this.model.text('每日课程摘要'))
           .fontSize(15)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
@@ -892,6 +884,34 @@ export struct SettingsView {
       }
       .width('100%')
       .constraintSize({ minHeight: 36 })
+      .alignItems(VerticalAlign.Center)
+
+      Row({ space: 8 }) {
+        Text(this.model.text('提醒时间（北京时间）'))
+          .fontSize(14)
+          .fontColor(AppTheme.secondaryText())
+          .layoutWeight(1)
+        Button(DailyCourseNotificationSettings.timeText(this.model.dailyCourseNotificationMinutes))
+          .id('settings_daily_course_notification_time')
+          .fontSize(16)
+          .fontColor(AppTheme.primary())
+          .backgroundColor(AppTheme.surfaceVariant())
+          .enabled(!this.model.isSampleMode() || this.model.isReviewDemo())
+          .onClick(() => {
+            const selected: Date = new Date();
+            selected.setHours(Math.floor(this.model.dailyCourseNotificationMinutes / 60),
+              this.model.dailyCourseNotificationMinutes % 60, 0, 0);
+            this.getUIContext().showTimePickerDialog({
+              selected: selected,
+              useMilitaryTime: true,
+              onAccept: (value: TimePickerResult): void => {
+                this.model.setDailyCourseNotificationMinutes(value.hour * 60 + value.minute);
+              }
+            });
+          })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 44 })
       .alignItems(VerticalAlign.Center)
 
       Text(this.model.text('仅在当天有课时通知；课表更新或账号变更后会自动重排。'))

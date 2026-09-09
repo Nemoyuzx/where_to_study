@@ -5,10 +5,24 @@
 import { Course, ScheduleSnapshot } from '../common/Models';
 import { ScheduleLogic } from '../common/ScheduleLogic';
 import { StrictDates, DateParts } from '../common/StrictDates';
-import { AppContext } from '../store/AppContext';
 
 export class DailyCourseNotificationSettings {
   static readonly enabledKey: string = 'dailyCourseNotificationsEnabled';
+  static readonly minutesKey: string = 'dailyCourseNotificationMinutes';
+  static readonly defaultMinutes: number = 450;
+
+  static normalizeMinutes(value: number): number {
+    return Number.isInteger(value) && value >= 0 && value <= 1439 ? value :
+      DailyCourseNotificationSettings.defaultMinutes;
+  }
+
+  static timeText(value: number): string {
+    const minutes: number = DailyCourseNotificationSettings.normalizeMinutes(value);
+    const hour: number = Math.floor(minutes / 60);
+    const minute: number = minutes % 60;
+    return (hour < 10 ? '0' : '') + hour.toString() + ':' +
+      (minute < 10 ? '0' : '') + minute.toString();
+  }
 }
 
 export enum DailyCourseNotificationAuthorization {
@@ -40,7 +54,8 @@ export class DailyCourseNotificationPlanner {
 
   static requests(
     schedule: ScheduleSnapshot, nowEpochMs: number, scanDayLimit?: number,
-    english: boolean = false
+    english: boolean = false,
+    reminderMinutes: number = DailyCourseNotificationSettings.defaultMinutes
   ): DailyCourseNotificationRequest[] {
     const termStart: DateParts | null = StrictDates.parseDateString(schedule.termStartDate);
     if (termStart === null) {
@@ -81,8 +96,9 @@ export class DailyCourseNotificationPlanner {
       }
       const day: DateParts = StrictDates.addDays(startOfToday, dayOffset);
       const dayEpoch: number = StrictDates.epochDay(day.year, day.month, day.day);
-      // 上海 07:30 对应的 UTC 毫秒：日界 * 86400000 + 7.5 小时 - 8 小时偏移。
-      const fireEpochMs: number = dayEpoch * 86400000 + (7 * 3600 + 30 * 60) * 1000 - 8 * 3600 * 1000;
+      // 所选北京时间转换为绝对时刻；与设备当前时区无关。
+      const fireEpochMs: number = dayEpoch * 86400000 +
+        DailyCourseNotificationSettings.normalizeMinutes(reminderMinutes) * 60000 - 8 * 3600 * 1000;
       if (fireEpochMs <= nowEpochMs) {
         continue;
       }
@@ -118,6 +134,45 @@ export interface DailyCourseNotificationScheduling {
   cancelPending(revision: number): Promise<void>;
 }
 
+export interface DailyCourseReminderOperations {
+  cancelAll(): Promise<void>;
+  publish(request: DailyCourseNotificationRequest): Promise<void>;
+}
+
+// 系统的 cancelAll / publish 是异步操作；串行执行，旧批次不能清除新批次。
+export class DailyCourseReminderQueue {
+  private revision: number = 0;
+  private pending: Promise<void> = Promise.resolve();
+  private readonly operations: DailyCourseReminderOperations;
+
+  constructor(operations: DailyCourseReminderOperations) {
+    this.operations = operations;
+  }
+
+  replace(requests: DailyCourseNotificationRequest[], revision: number): Promise<void> {
+    if (revision < this.revision) {
+      return Promise.resolve();
+    }
+    this.revision = revision;
+    const batch: DailyCourseNotificationRequest[] = requests.slice(
+      0, DailyCourseNotificationPlanner.maximumPendingRequestCount);
+    const work: Promise<void> = this.pending.catch(() => {}).then(async (): Promise<void> => {
+      if (revision !== this.revision) {
+        return;
+      }
+      await this.operations.cancelAll();
+      for (const request of batch) {
+        if (revision !== this.revision) {
+          return;
+        }
+        await this.operations.publish(request);
+      }
+    });
+    this.pending = work;
+    return work;
+  }
+}
+
 export enum DailyCourseNotificationReconcileOutcome {
   disabled = 0,
   permissionDenied = 1,
@@ -149,7 +204,8 @@ export class DailyCourseNotificationCoordinator {
 
   async reconcile(
     enabled: boolean, requestPermissionIfNeeded: boolean, hasCredentials: boolean,
-    schedule: ScheduleSnapshot | null, revision: number
+    schedule: ScheduleSnapshot | null, revision: number,
+    reminderMinutes: number = DailyCourseNotificationSettings.defaultMinutes
   ): Promise<DailyCourseNotificationReconcileResult> {
     if (!enabled) {
       await this.scheduler.cancelPending(revision);
@@ -177,7 +233,7 @@ export class DailyCourseNotificationCoordinator {
         DailyCourseNotificationReconcileOutcome.waitingForSchedule, 0);
     }
     const requests: DailyCourseNotificationRequest[] =
-      DailyCourseNotificationPlanner.requests(schedule, Date.now(), undefined, this.english);
+      DailyCourseNotificationPlanner.requests(schedule, Date.now(), undefined, this.english, reminderMinutes);
     await this.scheduler.replacePending(requests, revision);
     return new DailyCourseNotificationReconcileResult(
       DailyCourseNotificationReconcileOutcome.scheduled, requests.length);
