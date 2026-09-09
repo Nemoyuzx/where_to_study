@@ -42,7 +42,7 @@
 - 设置/缓存读写与清理 IPC 转后台阻塞工作线程；异步排队的旧设置保存携带 generation，清空后不得重新写回旧凭据。冷启动后台清除自身历史通知后再启动调度器，避免关闭/默认值相同时漏掉历史清理。
 - 新增隔离 D-Bus 协议回归，并接入 Linux CI；只在 `dbus-run-session` 和明确测试变量下运行，不访问用户桌面通知服务。Linux 依赖纳入第三方许可证清单。
 
-本地 Tauri Rust 最终 169 项通过、3 项既有 live 测试忽略；严格 Clippy 通过。新增通知模块按 Windows MSVC 与 Linux GNU 目标条件编译和严格 Clippy 检查通过。首轮 CI 中 Windows 完整测试、NSIS 打包及安装校验通过；Linux 两架构 Rust 162 项、私有 D-Bus 协议各 1 项、严格 Clippy 和初始包构建通过，但原有可变 continuous 工具下载被旧摘要门禁拒绝。已将工具固定到官方 release asset ID，独立下载验证 GitHub API SHA-256/大小/ELF 架构，并增加正确/错误下载和缓存回归；没有放宽摘要校验。更新后的完整 Linux 打包回执见发布记录，不能将条件编译当作安装态或系统通知视觉测试。所有本地日志集中在 `release-artifacts/standards-fix-029-testing/`。
+本地 Tauri Rust 最终 169 项通过、3 项既有 live 测试忽略；严格 Clippy 通过。新增通知模块按 Windows MSVC 与 Linux GNU 目标条件编译和严格 Clippy 检查通过。首轮 CI 中 Windows 完整测试、NSIS 打包及安装校验通过；Linux 两架构 Rust 162 项、私有 D-Bus 协议各 1 项、严格 Clippy 和初始包构建通过，但原有可变 continuous 工具下载被旧摘要门禁拒绝。已将工具固定到官方 release asset ID，独立下载验证 GitHub API SHA-256/大小/ELF 架构，并增加正确/错误下载和缓存回归；没有放宽摘要校验。更新后 Windows 与 Linux 两架构完整 CI、硬化打包和 Ubuntu 24.04 安装验证均通过，回执见发布记录；仍不能将这些检查当作系统通知视觉测试。工具内部运行时下载并未全部固定。所有本地日志集中在 `release-artifacts/standards-fix-029-testing/`。
 
 ## 边界
 

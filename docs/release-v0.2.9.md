@@ -21,7 +21,11 @@ HarmonyOS 使用 DevEco“从磁盘全部重新加载 → 同步和刷新项目 
 
 ### CI / 持续集成
 
-首轮 [Windows CI](https://github.com/Nemoyuzx/where_to_study/actions/runs/34335921285) 已完成 Rust 162 项（3 项既有忽略）、严格 Clippy、NSIS 打包/静默安装及工件上传。[Linux 首轮](https://github.com/Nemoyuzx/where_to_study/actions/runs/34335921220) 两架构 Rust 与隔离 D-Bus 协议、Clippy 均通过；初始包构建通过，但硬化重打包所用 upstream continuous 资产已经更换，固定摘要正确拒绝了新字节。后续使用官方固定资产 ID 并独立核验摘要/大小/架构，保留校验；更新后的完整打包结果待新 CI 完成补充。没有把该失败记为通过。
+首轮 [Windows CI](https://github.com/Nemoyuzx/where_to_study/actions/runs/34335921285) 已完成 Rust 162 项（3 项既有忽略）、严格 Clippy、NSIS 打包/静默安装及工件上传。[Linux 首轮](https://github.com/Nemoyuzx/where_to_study/actions/runs/34335921220) 两架构 Rust 与隔离 D-Bus 协议、Clippy 均通过；初始包构建通过，但硬化重打包所用 upstream continuous 资产已经更换，固定摘要正确拒绝了新字节。没有把该失败记为通过。
+
+后续提交 `4a93a6c15e53b47708024536038d3f1c87f39d6b` 固定官方工具资产 ID，并独立核验摘要/大小/架构，同时补充迁移期 Tauri macOS 的未打包保护；原生 Apple/HarmonyOS 源码不变，未重复上传。该提交的 [Windows CI](https://github.com/Nemoyuzx/where_to_study/actions/runs/34337790532) 已整体成功，包括 Rust、严格 Clippy、NSIS 打包、安装资源校验和工件上传。[Linux 新 CI](https://github.com/Nemoyuzx/where_to_study/actions/runs/34337790471) 也已整体成功：x86_64/ARM64 的 Rust、私有 D-Bus 协议、Clippy、deb/AppImage 构建、硬化重打包、工件上传及 Ubuntu 24.04 安装验证均通过。
+
+Linux 重打包日志确认使用摘要匹配的缓存工具，移除 4 个捆绑 Wayland 库后成功重打包；官方固定 asset ID 的冷下载已在本机独立核验，新增打包工具契约测试 19/19 通过。固定的是重打包工具本体；其内部仍使用官方 type2-runtime/continuous，不能据此声称整个工具链的所有输入都已固定。最终本地网页/契约测试 181 项、Tauri macOS 169 项（3 项既有忽略）、严格 Clippy 通过。CI 工件不等于公开 Release 更新。
 
 Native code from `f66000f` was uploaded as Apple 0.2.9 (91) and HarmonyOS 0.2.9 (1002027), testing only. No review submission or public Release update occurred. Upload/cloud-test success does not imply completed review or every device scenario passing; limitations remain in the linked standards-fix record.
 
