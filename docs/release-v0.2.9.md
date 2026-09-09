@@ -4,7 +4,26 @@
 
 本轮修复隐私清单和打包门禁、鸿蒙卡片读写目录及刷新、Android 任务恢复/语言分包/大字体布局，以及桌面通知实际发送/撤销边界。详细验证与未覆盖范围见[规范修复记录](platform-standards-fixes-v0.2.9.md)。
 
-准备上传 Apple `0.2.9 (91)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002027)` **仅测试**包，不提交商店审核，不修改现有待审版本或测试群组。成功回执待完成后补充。
+原生上传源码提交 `f66000f98418ef4db7760efcddb4eab28a77477b` 已推送 `main`。Apple `0.2.9 (91)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002027)` **仅测试**包均上传成功；不提交商店审核，不修改现有待审版本、测试群组或 GitHub Release。后续 Tauri macOS 未打包进程保护与 Linux 打包工具固定资产修复不改变原生 Apple/HarmonyOS 代码，因此不重复上传相同原生包。
+
+### Success receipts / 成功回执
+
+- iOS/iPadOS：本地 Xcode 于 **2026-09-09 17:42:25 +0800** 返回 `Upload succeeded` 和随后 `EXPORT SUCCEEDED`。主应用与 Widget 均为 `0.2.9 (91)`；Automatic 归档、Distribution 导出及实际两处隐私清单门禁通过。
+- macOS：本地 Xcode 于 **2026-09-09 17:44:53 +0800** 返回 `Upload succeeded` 和随后 `EXPORT SUCCEEDED`。主应用与 Widget 均为 `0.2.9 (91)`，Universal/Manual 签名及实际隐私清单门禁通过。
+- HarmonyOS：**2026-09-09 17:49 +0800** 确认 DevEco 结果页“云测试结果：通过”。明确选择第二项“生成.app包并上传至AppGallery Connect进行测试”。实际 APP/HAP `pack.info` 均为 `0.2.9 (1002027)`，单独 build 字段为 `1`；两份产物签名和摘要复核通过。
+
+Apple 沿用单次 `scripts/native-apple-app-store.sh upload all`，设置 `APPLE_MARKETING_VERSION=0.2.9`、`APPLE_BUILD_NUMBER=91`、iOS Automatic/macOS Manual；团队读取本机现有证书，没有提交签名配置。仅一次依次归档、校验和上传，成功后不检查 App Store Connect processing。新增门禁验证的是归档/导出 `.app/.appex` 内真实 `PrivacyInfo.xcprivacy`，不是只看源码。上传前后 88 个 Apple 源码/配置/隐私清单文件 SHA-256 一致，用户产品名、审核支持和既有主题修改保留。
+
+HarmonyOS 使用 DevEco“从磁盘全部重新加载 → 同步和刷新项目 → 构建 → 上传产品 → 仅测试”。最初列表为空时通过账号工具栏刷新已有登录态，恢复后仅发起一次上传。最终 APP 及同次生成 HAP 副本与上传后产物逐字节一致。忽略目录 `release-artifacts/standards-fix-029-testing/` 保存回执、两端 Apple 归档、源文件前后校验和鸿蒙签名日志：
+
+- APP：1,288,376 bytes；SHA-256 `1325eb99196a07bb02f82fc9dab4a0aab2a588dd8ebcf453758581f522cf5d70`。
+- HAP：1,913,768 bytes；SHA-256 `87c48d587f4b269bd9844130fc40611cdf4c29b60e5b0d4731244e78ac9daca3`。
+
+### CI / 持续集成
+
+首轮 [Windows CI](https://github.com/Nemoyuzx/where_to_study/actions/runs/34335921285) 已完成 Rust 162 项（3 项既有忽略）、严格 Clippy、NSIS 打包/静默安装及工件上传。[Linux 首轮](https://github.com/Nemoyuzx/where_to_study/actions/runs/34335921220) 两架构 Rust 与隔离 D-Bus 协议、Clippy 均通过；初始包构建通过，但硬化重打包所用 upstream continuous 资产已经更换，固定摘要正确拒绝了新字节。后续使用官方固定资产 ID 并独立核验摘要/大小/架构，保留校验；更新后的完整打包结果待新 CI 完成补充。没有把该失败记为通过。
+
+Native code from `f66000f` was uploaded as Apple 0.2.9 (91) and HarmonyOS 0.2.9 (1002027), testing only. No review submission or public Release update occurred. Upload/cloud-test success does not imply completed review or every device scenario passing; limitations remain in the linked standards-fix record.
 
 ## Custom reminder time and tomorrow widgets — 2026-09-09 testing-only follow-up
 

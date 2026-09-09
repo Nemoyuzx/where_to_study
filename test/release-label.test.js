@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -351,6 +352,89 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
   assert.match(hardeningScript, /GIO_MODULE_DIR/);
   assert.match(hardeningScript, /GIO_USE_VFS=local/);
 });
+
+test(
+  "Linux AppImage tools use fixed official asset IDs and reject unverified bytes",
+  { skip: process.platform === "win32" },
+  () => {
+    const script = readFileSync(path.join(root, "scripts", "linux-package.sh"), "utf8");
+    const pins = script.match(/case "\$RELEASE_ARCHITECTURE" in\n[\s\S]+?\nesac/)[0];
+    const start = script.indexOf('\nAPPIMAGE_TOOL="${APPIMAGETOOL_PATH:-}"');
+    const verifiedEnd = script.indexOf('\nchmod +x "$APPIMAGE_TOOL"', start);
+    assert.ok(start >= 0 && verifiedEnd > start);
+    assert.ok(verifiedEnd < script.indexOf('"$APPIMAGE_TOOL" --appdir "$APPDIR"'));
+    const fetchAndVerify = script.slice(start, verifiedEnd);
+    assert.doesNotMatch(fetchAndVerify, /releases\/download\/continuous/);
+
+    const expectedPins = {
+      x86_64: ["538914683", "0441769ab38009504d2678c38cd7e526955388dd30a215b4a20afaa5471652f2"],
+      aarch64: ["538914264", "ce574719bcf9cc1fb12728d60b17e48cc87d9b6c40f6f48b04cff7d273b5eb24"],
+    };
+    const fixture = mkdtempSync(path.join(tmpdir(), "wts-appimage-tool-pin-"));
+    const bin = path.join(fixture, "bin");
+    const download = path.join(fixture, "download.AppImage");
+    const curlArguments = path.join(fixture, "curl-arguments.txt");
+    const validBytes = "verified test fixture; never executed\n";
+    const fixtureDigest = createHash("sha256").update(validBytes).digest("hex");
+    try {
+      mkdirSync(bin);
+      mkdirSync(path.join(fixture, "tools"));
+      mkdirSync(path.join(fixture, "cache", "tauri"), { recursive: true });
+      writeFileSync(path.join(bin, "sha256sum"), `#!/usr/bin/env node
+const { createHash } = require("node:crypto");
+const { readFileSync } = require("node:fs");
+const file = process.argv[2];
+process.stdout.write(createHash("sha256").update(readFileSync(file)).digest("hex") + "  " + file + "\\n");
+`, { mode: 0o755 });
+      writeFileSync(path.join(bin, "curl"), `#!/usr/bin/env bash
+set -eu
+printf '%s\\n' "$@" > "$WTS_TEST_CURL_ARGUMENTS"
+output=""
+while (( $# )); do
+  if [[ "$1" == "--output" ]]; then output="$2"; shift 2; else shift; fi
+done
+cp "$WTS_TEST_DOWNLOAD_SOURCE" "$output"
+`, { mode: 0o755 });
+      const env = {
+        ...process.env,
+        PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+        TEMP_DIR: fixture,
+        XDG_CACHE_HOME: path.join(fixture, "cache"),
+        APPIMAGETOOL_PATH: "",
+        WTS_TEST_DOWNLOAD_SOURCE: download,
+        WTS_TEST_CURL_ARGUMENTS: curlArguments,
+        WTS_TEST_EXPECTED_SHA256: fixtureDigest,
+      };
+      for (const [architecture, [assetID, digest]] of Object.entries(expectedPins)) {
+        const architectureEnv = { ...env, RELEASE_ARCHITECTURE: architecture };
+        const actualPins = execFileSync("bash", ["-c", `${pins}\nprintf '%s\\n' "$APPIMAGE_TOOL_ASSET_ID" "$APPIMAGE_TOOL_SHA256"`],
+          { env: architectureEnv, encoding: "utf8" }).trim().split("\n");
+        assert.deepEqual(actualPins, [assetID, digest]);
+        // Exercise the production verification block with known fixture bytes, without network or executing an AppImage.
+        const harness = `set -euo pipefail\n${pins}\nAPPIMAGE_TOOL_SHA256="$WTS_TEST_EXPECTED_SHA256"\n${fetchAndVerify}`;
+        const run = (overrides = {}) => execFileSync("bash", ["-c", harness],
+          { env: { ...architectureEnv, ...overrides }, encoding: "utf8", stdio: "pipe" });
+        writeFileSync(download, validBytes);
+        assert.doesNotThrow(() => run());
+        const argumentsText = readFileSync(curlArguments, "utf8");
+        assert.ok(argumentsText.includes("Accept: application/octet-stream"));
+        assert.ok(argumentsText.includes(`https://api.github.com/repos/linuxdeploy/linuxdeploy-plugin-appimage/releases/assets/${assetID}`));
+        writeFileSync(download, "unexpected replacement bytes\n");
+        assert.throws(() => run(), (error) => /checksum does not match the pinned digest/.test(error.stderr));
+        writeFileSync(curlArguments, "");
+        assert.throws(() => run({ APPIMAGETOOL_PATH: download }),
+          (error) => /checksum does not match the pinned digest/.test(error.stderr));
+        assert.equal(readFileSync(curlArguments, "utf8"), "", "An explicit unverified tool must not trigger a replacement download");
+        const cached = path.join(fixture, "cache", "tauri", `linuxdeploy-plugin-appimage-${architecture}.AppImage`);
+        writeFileSync(cached, validBytes);
+        assert.doesNotThrow(() => run());
+        assert.equal(readFileSync(curlArguments, "utf8"), "", "A matching verified cache should be reused");
+      }
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  },
+);
 
 test("desktop release packages verify all fixed public-data endpoints", () => {
   const linuxPackaging = readFileSync(

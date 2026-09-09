@@ -1,6 +1,6 @@
 # 平台规范审查修复 / Platform standards follow-up
 
-2026-09-09。对应上一轮 0.2.9 (90) / HarmonyOS 1002026 审查；后续测试上传目标为 Apple 0.2.9 (91)、HarmonyOS 0.2.9 (1002027)，不提交商店审核。上传与 CI 最终回执单独记录在 [0.2.9 发布记录](release-v0.2.9.md)。本记录不是平台审核或法律合规认证。
+2026-09-09。对应上一轮 0.2.9 (90) / HarmonyOS 1002026 审查；Apple 0.2.9 (91)、HarmonyOS 0.2.9 (1002027) 已上传测试，不提交商店审核。上传与 CI 最终回执单独记录在 [0.2.9 发布记录](release-v0.2.9.md)。本记录不是平台审核或法律合规认证。
 
 ## Apple
 
@@ -37,11 +37,12 @@
 
 - 移除会在内部另起任务并吞掉发送结果的通知插件。Windows 直接调用 WinRT `Show/Hide` 并用固定 tag/group 清理本功能历史；Linux 使用有 5 秒方法超时的同步 D-Bus `Notify/CloseNotification`，清理失败保留 ID 并返回错误，绑定 unique owner 防止服务重启后错删。
 - 迁移期 Tauri macOS 改用 `UNUserNotificationCenter`，等待真实完成回调。UUID 防跨重启 ID 复用，超时晚回调仅撤销自己；清理枚举本功能前缀并在 8 秒总预算中复查，不清除其他功能通知。
+- 未打包的 Tauri macOS 开发进程先检查 Bundle ID，避免通知中心抛出 Objective-C 异常；发送返回明确错误，清理和权限请求不访问系统通知中心。该迁移期代码不属于原生 Apple 上传包，单独完成 7 项模块回归。
 - 实际发送与设置/账号撤销处于同一有效性检查范围，不再只保护“入队”。失败采用有上限的分钟级重试，空课表日不发送无用摘要。
 - 设置/缓存读写与清理 IPC 转后台阻塞工作线程；异步排队的旧设置保存携带 generation，清空后不得重新写回旧凭据。冷启动后台清除自身历史通知后再启动调度器，避免关闭/默认值相同时漏掉历史清理。
 - 新增隔离 D-Bus 协议回归，并接入 Linux CI；只在 `dbus-run-session` 和明确测试变量下运行，不访问用户桌面通知服务。Linux 依赖纳入第三方许可证清单。
 
-本地 Tauri Rust 167 项通过、3 项既有 live 测试忽略；严格 Clippy 通过。新增通知模块按 Windows MSVC 与 Linux GNU 目标条件编译检查通过。完整 Windows/Linux CI 与私有 D-Bus 运行结果将随本次源码推送记录；不能将条件编译当作安装态或系统通知视觉测试。所有本地日志集中在 `release-artifacts/standards-fix-029-testing/`。
+本地 Tauri Rust 最终 169 项通过、3 项既有 live 测试忽略；严格 Clippy 通过。新增通知模块按 Windows MSVC 与 Linux GNU 目标条件编译和严格 Clippy 检查通过。首轮 CI 中 Windows 完整测试、NSIS 打包及安装校验通过；Linux 两架构 Rust 162 项、私有 D-Bus 协议各 1 项、严格 Clippy 和初始包构建通过，但原有可变 continuous 工具下载被旧摘要门禁拒绝。已将工具固定到官方 release asset ID，独立下载验证 GitHub API SHA-256/大小/ELF 架构，并增加正确/错误下载和缓存回归；没有放宽摘要校验。更新后的完整 Linux 打包回执见发布记录，不能将条件编译当作安装态或系统通知视觉测试。所有本地日志集中在 `release-artifacts/standards-fix-029-testing/`。
 
 ## 边界
 

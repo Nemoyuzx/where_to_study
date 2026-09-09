@@ -1,5 +1,5 @@
 use block2::RcBlock;
-use objc2_foundation::{NSArray, NSError, NSString, NSUUID};
+use objc2_foundation::{NSArray, NSBundle, NSError, NSString, NSUUID};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
     UNNotificationRequest, UNNotificationSettings, UNUserNotificationCenter,
@@ -18,6 +18,24 @@ const CALLBACK_TIMEOUT: Duration = Duration::from_secs(8);
 const CLEAR_RECHECK_DELAY: Duration = Duration::from_millis(50);
 // This gate covers the native calls and their callbacks, not just bookkeeping.
 static LAST: Mutex<Option<String>> = Mutex::new(None);
+
+fn validate_bundle_identifier(identifier: Option<&str>) -> Result<(), String> {
+    if identifier.is_some_and(|id| !id.trim().is_empty()) {
+        Ok(())
+    } else {
+        Err("macOS 课程通知需要运行已安装的 Where To Study.app；当前为未打包的开发进程。".into())
+    }
+}
+
+fn require_notification_bundle() -> Result<(), String> {
+    // UNUserNotificationCenter raises an Objective-C exception when the main
+    // bundle has no identifier, as with `cargo tauri dev` or this test binary.
+    // Validate before every public entry point can reach that framework.
+    let identifier = NSBundle::mainBundle()
+        .bundleIdentifier()
+        .map(|id| id.to_string());
+    validate_bundle_identifier(identifier.as_deref())
+}
 
 fn remove(identifiers: &[String]) {
     if identifiers.is_empty() {
@@ -134,6 +152,7 @@ impl Submission {
 }
 
 pub fn show(_: &str, title: &str, body: &str) -> Result<(), String> {
+    require_notification_bundle()?;
     let mut last = LAST
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -195,6 +214,10 @@ pub fn show(_: &str, title: &str, body: &str) -> Result<(), String> {
 }
 
 pub fn clear(_: &str) -> Result<(), String> {
+    if require_notification_bundle().is_err() {
+        // An unbundled process has no notification identity or owned history.
+        return Ok(());
+    }
     let mut last = LAST
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -206,6 +229,9 @@ pub fn clear(_: &str) -> Result<(), String> {
 
 // Only called after the user explicitly enables and saves notifications.
 pub fn request_permission() {
+    if require_notification_bundle().is_err() {
+        return;
+    }
     let block = RcBlock::new(|_: objc2::runtime::Bool, _: *mut NSError| {});
     UNUserNotificationCenter::currentNotificationCenter()
         .requestAuthorizationWithOptions_completionHandler(
@@ -218,6 +244,26 @@ pub fn request_permission() {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn notification_bundle_validation_rejects_missing_and_blank_identifiers() {
+        for identifier in [None, Some(""), Some(" \n\t")] {
+            let error = validate_bundle_identifier(identifier).unwrap_err();
+            assert!(error.contains("已安装的 Where To Study.app"));
+        }
+        assert!(validate_bundle_identifier(Some("com.nemoyu.wheretostudy")).is_ok());
+    }
+
+    #[test]
+    fn unbundled_entry_points_never_access_the_notification_center() {
+        // Fail before calling any entry point if this cargo-test binary was
+        // unexpectedly packaged. This test must never request real permission.
+        assert!(require_notification_bundle().is_err());
+        let error = show("com.nemoyu.wheretostudy", "Test", "Test").unwrap_err();
+        assert!(error.contains("未打包的开发进程"));
+        assert_eq!(clear("com.nemoyu.wheretostudy"), Ok(()));
+        request_permission();
+    }
 
     #[test]
     fn clear_finds_previous_process_notifications_without_touching_other_features() {

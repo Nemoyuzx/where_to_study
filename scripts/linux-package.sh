@@ -119,14 +119,18 @@ validate_extracted_bundle() {
 DEB_PATH="${LINUX_DEB_PATH:-$(require_single_artifact "$BUNDLE_DIR/deb" '*.deb' 'Debian package')}"
 APPIMAGE_PATH="${LINUX_APPIMAGE_PATH:-$(require_single_artifact "$BUNDLE_DIR/appimage" '*.AppImage' 'AppImage')}"
 
+# Official release assets verified against GitHub's SHA-256 metadata and downloaded bytes
+# on 2026-09-09. Asset IDs stay fixed when the upstream continuous release is replaced.
 case "$RELEASE_ARCHITECTURE" in
   x86_64)
     APPIMAGE_TOOL_ARCH="x86_64"
-    APPIMAGE_TOOL_SHA256="a45d3e227bc7f397e9cf6bfa4c9507494efa2293357b6e86690a3de2ca992e79"
+    APPIMAGE_TOOL_ASSET_ID="538914683"
+    APPIMAGE_TOOL_SHA256="0441769ab38009504d2678c38cd7e526955388dd30a215b4a20afaa5471652f2"
     ;;
   aarch64)
     APPIMAGE_TOOL_ARCH="aarch64"
-    APPIMAGE_TOOL_SHA256="6fdecf5bf8af4e0db03c6b2a80976acc3c96b6a4d19622fa6c6adfd308378bbc"
+    APPIMAGE_TOOL_ASSET_ID="538914264"
+    APPIMAGE_TOOL_SHA256="ce574719bcf9cc1fb12728d60b17e48cc87d9b6c40f6f48b04cff7d273b5eb24"
     ;;
 esac
 
@@ -192,7 +196,9 @@ fi
 if [[ -z "$APPIMAGE_TOOL" ]]; then
   APPIMAGE_TOOL="$TEMP_DIR/tools/linuxdeploy-plugin-appimage-$APPIMAGE_TOOL_ARCH.AppImage"
   curl --fail --location --retry 3 --output "$APPIMAGE_TOOL" \
-    "https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-$APPIMAGE_TOOL_ARCH.AppImage"
+    --header "Accept: application/octet-stream" \
+    --header "X-GitHub-Api-Version: 2022-11-28" \
+    "https://api.github.com/repos/linuxdeploy/linuxdeploy-plugin-appimage/releases/assets/$APPIMAGE_TOOL_ASSET_ID"
 fi
 if [[ "$(sha256sum "$APPIMAGE_TOOL" | cut -d ' ' -f 1)" != "$APPIMAGE_TOOL_SHA256" ]]; then
   echo "AppImage repack tool checksum does not match the pinned digest." >&2
