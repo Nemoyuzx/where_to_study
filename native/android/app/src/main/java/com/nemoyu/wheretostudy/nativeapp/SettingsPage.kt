@@ -1147,7 +1147,7 @@ class SettingsPage(
         setText(value)
         textSize = 15f
         setThemeTextColor { Palette.text }
-        setHintTextColor(Palette.muted)
+        bindTheme("hint") { setHintTextColor(Palette.muted) }
         isSingleLine = true
         inputType = if (secure) {
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -1159,7 +1159,7 @@ class SettingsPage(
             setAutofillHints(null)
         }
         background = themedRoundedBackground(
-            activity, { Palette.surface }, { Palette.border },
+            activity, { if (Palette.selection.preset == "default") Palette.surface else Palette.surfaceVariant }, { Palette.border },
             radius = 6)
         setPadding(activity.dp(13), 0, activity.dp(13), 0)
         layoutParams = LinearLayout.LayoutParams(

@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.LayerDrawable
+import android.graphics.drawable.ColorDrawable
+import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -44,6 +46,149 @@ class ColorThemeUiTest {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
             .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
         return ActivityScenario.launch(intent)
+    }
+
+    @Test fun surfaceThemesUpdateRealPagesCardsInputsAndWindowWithoutResettingState() {
+        launch().use { scenario -> scenario.onActivity { activity ->
+            val originalWindowBackground = activity.window.decorView.background
+            val night = activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+            val selections = listOf(ColorThemeSelection("ocean"), ColorThemeSelection("rose"),
+                ColorThemeSelection("custom", ThemeSeeds("#FFFFFF", "#000000", "#000000")),
+                ColorThemeSelection("custom", ThemeSeeds("#000000", "#FFFFFF", "#FFFFFF")))
+            listOf(R.id.navigation_planner to R.id.page_planner, R.id.navigation_calendar to R.id.page_calendar,
+                R.id.navigation_query to R.id.page_query, R.id.navigation_settings to R.id.page_settings).forEach { (navigation, pageID) ->
+                activity.findViewById<View>(navigation).performClick()
+                val page = activity.findViewById<View>(pageID)
+                val oldPeriod = activity.findViewById<TextView?>(R.id.calendar_period_label)?.text?.toString()
+                val field = activity.findViewById<EditText?>(R.id.settings_color_theme_primary)
+                field?.setText("unsaved color draft")
+                page.scrollTo(0, 120)
+                val scroll = page.scrollY
+                val preferences = activity.getSharedPreferences("app_preferences_v1", Context.MODE_PRIVATE).all.toMap()
+                selections.forEach { selection ->
+                    assertTrue(activity.applyColorTheme(selection))
+                    val colors = ColorThemeLogic.palette(selection, night)
+                    assertSame(page, activity.findViewById(pageID))
+                    assertEquals(scroll, page.scrollY)
+                    assertEquals(colors.background, (page.background as ColorDrawable).color)
+                    assertEquals(colors.background, (activity.window.decorView.background as ColorDrawable).color)
+                    assertEquals(oldPeriod, activity.findViewById<TextView?>(R.id.calendar_period_label)?.text?.toString())
+                    assertEquals(preferences, activity.getSharedPreferences("app_preferences_v1", Context.MODE_PRIVATE).all)
+                    if (field != null) {
+                        assertSame(field, activity.findViewById(R.id.settings_color_theme_primary))
+                        assertEquals("unsaved color draft", field.text.toString())
+                        assertEquals(colors.surfaceVariant, (field.background as GradientDrawable).color!!.defaultColor)
+                        assertEquals(colors.surface, (activity.findViewById<View>(R.id.settings_color_theme_section).background as GradientDrawable).color!!.defaultColor)
+                        assertEquals(colors.background, (activity.findViewById<View>(R.id.settings_color_theme_preview).background as GradientDrawable).color!!.defaultColor)
+                        assertEquals(colors.surface, (activity.findViewById<View>(R.id.settings_color_theme_preview_card).background as GradientDrawable).color!!.defaultColor)
+                        assertEquals(colors.elevated, (activity.findViewById<View>(R.id.settings_color_theme_preview_elevated).background as GradientDrawable).color!!.defaultColor)
+                        assertTrue(ColorThemeLogic.contrast(field.currentTextColor, field.themeSurfaceColor()) >= 4.5)
+                    }
+                }
+            }
+            assertTrue(activity.applyColorTheme(ColorThemeSelection()))
+            assertSame(originalWindowBackground, activity.window.decorView.background)
+            assertEquals(ThemePalettes.forConfiguration(activity.resources.configuration).background,
+                (activity.findViewById<View>(R.id.page_settings).background as ColorDrawable).color)
+        } }
+    }
+
+    @Test fun tintedSemanticLabelsAndOpenDialogsStayReadable() {
+        launch().use { scenario -> scenario.onActivity { activity ->
+            assertTrue(activity.applyColorTheme(ColorThemeSelection("custom", ThemeSeeds("#FFFFFF"))))
+            val newControl = TextView(activity).apply {
+                setThemeTextColor { Palette.onPrimary }
+                background = themedRoundedBackground(activity, { Palette.primaryFill })
+            }
+            val attachedParent = activity.findViewById<ViewGroup>(android.R.id.content)
+            attachedParent.addView(newControl)
+            assertEquals(Palette.onPrimary, newControl.currentTextColor)
+            attachedParent.removeView(newControl)
+            val label = TextView(activity).apply {
+                background = themedRoundedBackground(activity, { Palette.surfaceVariant })
+                setThemeTextColor { Palette.publicDeadline }
+            }
+            label.refreshColorTheme()
+            assertTrue(ColorThemeLogic.contrast(label.currentTextColor, label.themeSurfaceColor()) >= 4.5)
+            listOf(Palette.selectionSurface, 0x28FFFFFF).forEach { tint ->
+                val host = android.widget.LinearLayout(activity).apply {
+                    background = themedRoundedBackground(activity, { Palette.surface })
+                }
+                val secondary = TextView(activity).apply {
+                    background = themedRoundedBackground(activity, { tint })
+                    setThemeTextColor { Palette.muted }
+                }
+                host.addView(secondary)
+                host.refreshColorTheme()
+                assertTrue("Muted label contrast on composite tint",
+                    ColorThemeLogic.contrast(secondary.currentTextColor, secondary.themeSurfaceColor()) >= 4.5)
+                if (activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES) {
+                    assertNotEquals("Dark white-seed tint must brighten secondary ink", Palette.muted, secondary.currentTextColor)
+                }
+            }
+            val dialog = android.app.AlertDialog.Builder(activity).setMessage("A themed surface")
+                .setPositiveButton("Done", null).showLocalized()
+            try {
+                assertEquals(Palette.elevated, (dialog.window!!.decorView.background as GradientDrawable).color!!.defaultColor)
+                assertTrue(activity.applyColorTheme(ColorThemeSelection("amber")))
+                assertTrue(dialog.isShowing)
+                assertEquals(Palette.elevated, (dialog.window!!.decorView.background as GradientDrawable).color!!.defaultColor)
+                assertTrue(ColorThemeLogic.contrast(dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).currentTextColor, Palette.elevated) >= 4.5)
+            } finally { dialog.dismiss() }
+        } }
+    }
+
+    @Test fun realSettingsSurfaceScreenshots() {
+        launch().use { scenario ->
+            scenario.onActivity { it.findViewById<View>(R.id.navigation_settings).performClick() }
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            listOf(ColorThemeSelection("ocean"), ColorThemeSelection("rose"),
+                ColorThemeSelection("custom", ThemeSeeds("#EBC7A5", "#9E9574", "#685573"))).forEach { selection ->
+                scenario.onActivity { activity ->
+                    if (selection.preset == "custom") {
+                        activity.findViewById<EditText>(R.id.settings_color_theme_primary).setText(selection.custom.primary)
+                        activity.findViewById<EditText>(R.id.settings_color_theme_accent).setText(selection.custom.accent)
+                        activity.findViewById<EditText>(R.id.settings_color_theme_selected_date).setText(selection.custom.selectedDate)
+                        activity.findViewById<View>(R.id.settings_color_theme_apply).performClick()
+                    } else {
+                        activity.findViewById<View>(R.id.page_settings).findViewWithTag<View>("color_theme_${selection.preset}").performClick()
+                    }
+                    assertEquals(selection.preset, Palette.selection.preset)
+                    val page = activity.findViewById<ScrollView>(R.id.page_settings)
+                    val section = activity.findViewById<View>(R.id.settings_color_theme_section)
+                    val bounds = Rect()
+                    section.getDrawingRect(bounds)
+                    (page.getChildAt(0) as ViewGroup).offsetDescendantRectToMyCoords(section, bounds)
+                    page.scrollTo(0, bounds.top.coerceAtLeast(0))
+                }
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val view = activity.window.decorView
+                    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                    view.draw(Canvas(bitmap))
+                    val night = activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+                    java.io.File(activity.cacheDir, "color-surfaces-${selection.preset}-${if (night) "dark" else "light"}.png").outputStream().use {
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    bitmap.recycle()
+                    val preview = activity.findViewById<View>(R.id.settings_color_theme_preview)
+                    val inset = activity.dp(16)
+                    val detail = Bitmap.createBitmap(preview.width + inset * 2, preview.height + inset * 2, Bitmap.Config.ARGB_8888)
+                    Canvas(detail).apply {
+                        drawColor(Palette.background)
+                        translate(inset.toFloat(), inset.toFloat())
+                        preview.draw(this)
+                    }
+                    java.io.File(activity.cacheDir, "color-surfaces-preview-${selection.preset}-${if (night) "dark" else "light"}.png").outputStream().use {
+                        detail.compress(Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    detail.recycle()
+                }
+            }
+        }
     }
 
     @Test fun persistenceIsLocalValidatesAndRecoversCorruptOrLegacyFields() {

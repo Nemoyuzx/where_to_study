@@ -432,7 +432,7 @@ export struct QueryView {
         .fontSize(14)
         .fontColor(AppTheme.text())
         .placeholderColor(AppTheme.secondaryText())
-        .backgroundColor(AppTheme.surface())
+        .backgroundColor(AppTheme.inputSurface())
         .border({ width: 1, color: AppTheme.border() })
         .borderRadius(8)
         .height(38)

@@ -444,7 +444,7 @@ export struct SettingsView {
       .fontSize(15)
       .fontColor(AppTheme.text())
       .placeholderColor(AppTheme.secondaryText())
-      .backgroundColor(AppTheme.surface())
+      .backgroundColor(AppTheme.inputSurface())
       .borderRadius(6)
       .border({ width: 1, color: AppTheme.border() })
       .padding({ left: 13, right: 13 })

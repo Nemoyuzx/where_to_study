@@ -558,6 +558,7 @@ object UiText {
     fun localizeDialog(dialog: Dialog) {
         dialog.window?.decorView?.let(::localizeTree)
         if (dialog is AlertDialog) {
+            dialog.window?.let { bindWindowColorTheme(it, modal = true) }
             listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
                 .mapNotNull(dialog::getButton).forEach { button ->
                     val defaultColors = button.textColors

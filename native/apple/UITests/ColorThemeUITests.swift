@@ -3,6 +3,30 @@ import UIKit
 
 @MainActor
 final class ColorThemeUITests: XCTestCase {
+    func testThemeSurfacesAcrossMainPages() {
+        continueAfterFailure = false
+        let app = application(language: "zh-Hans")
+        app.launch()
+        defer { app.terminate() }
+        for preset in ["ocean", "rose"] {
+            navigate("settings", title: "设置", app: app)
+            let button = app.buttons["theme.preset.\(preset)"]
+            reveal(button, app: app)
+            button.tap()
+            XCTAssertTrue(button.isSelected)
+            attach(app, name: "surfaces-settings-\(preset)")
+            navigate("planner", title: "空教室", app: app)
+            XCTAssertTrue(app.descendants(matching: .any)["screen.planner"].waitForExistence(timeout: 5))
+            attach(app, name: "surfaces-planner-\(preset)")
+            navigate("calendar", title: "教学日历", app: app)
+            let month = app.segmentedControls.buttons["月"]
+            XCTAssertTrue(month.waitForExistence(timeout: 5))
+            month.tap()
+            XCTAssertTrue(month.isSelected)
+            attach(app, name: "surfaces-calendar-\(preset)")
+        }
+    }
+
     func testPresetsCustomValidationRestoreAndCalendarState() {
         continueAfterFailure = false
         let app = application(language: "zh-Hans")

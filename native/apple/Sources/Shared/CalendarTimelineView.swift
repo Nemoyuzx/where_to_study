@@ -374,7 +374,7 @@ struct CalendarTimelineView: View {
 
     private var axisContent: some View {
         ZStack(alignment: .topLeading) {
-            AppTheme.surface
+            theme.surface
             axisGrid
             axisHeaders
             slotLabels
@@ -394,7 +394,7 @@ struct CalendarTimelineView: View {
     private func dayContent(width: CGFloat) -> some View {
         let dayWidth = width / CGFloat(max(days.count, 1))
         return ZStack(alignment: .topLeading) {
-            AppTheme.surface
+            theme.surface
             selectedColumn(dayWidth: dayWidth)
             dayGrid(width: width, dayWidth: dayWidth)
             allDayHeaderRows(dayWidth: dayWidth)
@@ -429,7 +429,7 @@ struct CalendarTimelineView: View {
         Canvas { context, _ in
             context.fill(
                 Path(CGRect(x: 0, y: 0, width: contentLeft, height: headerHeight)),
-                with: .color(AppTheme.background)
+                with: .color(theme.background)
             )
             var structure = Path()
             structure.move(to: CGPoint(x: 0, y: headerHeight))
@@ -438,7 +438,7 @@ struct CalendarTimelineView: View {
             structure.addLine(to: CGPoint(x: hourAxisWidth, y: totalHeight))
             structure.move(to: CGPoint(x: contentLeft, y: 0))
             structure.addLine(to: CGPoint(x: contentLeft, y: totalHeight))
-            context.stroke(structure, with: .color(AppTheme.border), lineWidth: 1)
+            context.stroke(structure, with: .color(theme.border), lineWidth: 1)
 
             var hourLines = Path()
             for minute in CalendarTimelineLogic.wholeHourMinutes {
@@ -446,7 +446,7 @@ struct CalendarTimelineView: View {
                 hourLines.move(to: CGPoint(x: 0, y: y))
                 hourLines.addLine(to: CGPoint(x: contentLeft, y: y))
             }
-            context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
+            context.stroke(hourLines, with: .color(theme.border), lineWidth: 1)
 
             var slotLines = Path()
             for minute in CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes {
@@ -456,7 +456,7 @@ struct CalendarTimelineView: View {
             }
             context.stroke(
                 slotLines,
-                with: .color(AppTheme.secondaryText.opacity(0.30)),
+                with: .color(theme.secondaryText.opacity(0.30)),
                 style: StrokeStyle(lineWidth: 0.7, dash: [4, 4])
             )
         }
@@ -466,7 +466,7 @@ struct CalendarTimelineView: View {
         Canvas { context, _ in
             context.fill(
                 Path(CGRect(x: 0, y: 0, width: width, height: headerHeight)),
-                with: .color(AppTheme.background)
+                with: .color(theme.background)
             )
             var structure = Path()
             structure.move(to: CGPoint(x: 0, y: headerHeight))
@@ -476,7 +476,7 @@ struct CalendarTimelineView: View {
                 structure.move(to: CGPoint(x: x, y: 0))
                 structure.addLine(to: CGPoint(x: x, y: totalHeight))
             }
-            context.stroke(structure, with: .color(AppTheme.border), lineWidth: 1)
+            context.stroke(structure, with: .color(theme.border), lineWidth: 1)
 
             var hourLines = Path()
             for minute in CalendarTimelineLogic.wholeHourMinutes {
@@ -484,7 +484,7 @@ struct CalendarTimelineView: View {
                 hourLines.move(to: CGPoint(x: 0, y: y))
                 hourLines.addLine(to: CGPoint(x: width, y: y))
             }
-            context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
+            context.stroke(hourLines, with: .color(theme.border), lineWidth: 1)
 
             var slotLines = Path()
             for minute in CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes {
@@ -494,7 +494,7 @@ struct CalendarTimelineView: View {
             }
             context.stroke(
                 slotLines,
-                with: .color(AppTheme.secondaryText.opacity(0.30)),
+                with: .color(theme.secondaryText.opacity(0.30)),
                 style: StrokeStyle(lineWidth: 0.7, dash: [4, 4])
             )
         }
@@ -521,7 +521,7 @@ struct CalendarTimelineView: View {
                     )
             }
         }
-        .foregroundStyle(AppTheme.text)
+        .foregroundStyle(theme.text)
     }
 
     private func hourLabels(now: Date) -> some View {
@@ -538,7 +538,7 @@ struct CalendarTimelineView: View {
             }) != true {
                 Text(String(format: "%02d:00", hour))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .frame(width: hourAxisWidth - 4)
                     .position(x: hourAxisWidth / 2, y: y)
             }
@@ -554,7 +554,7 @@ struct CalendarTimelineView: View {
                     Text("\(slot.start)-\(slot.end)")
                         .font(.system(size: 9, design: .monospaced))
                 }
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .frame(width: slotAxisWidth - 4)
                 .position(
                     x: hourAxisWidth + slotAxisWidth / 2,
@@ -574,7 +574,7 @@ struct CalendarTimelineView: View {
                 VStack(spacing: 5) {
                     Text(dayHeaderFormatter.string(from: day.date))
                         .font(.caption.bold())
-                        .foregroundStyle(isSelected ? theme.onPrimary : AppTheme.text)
+                        .foregroundStyle(isSelected ? theme.onPrimary : theme.text)
                     Text(headerDetail(for: day))
                         .font(.system(size: 10))
                         .foregroundStyle(isSelected ? theme.onPrimary : headerDetailColor(for: day))
@@ -631,7 +631,7 @@ struct CalendarTimelineView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 }
             }
             .frame(
@@ -821,7 +821,7 @@ struct CalendarTimelineView: View {
 
     private func headerDetailColor(for day: CalendarTimelineDay) -> Color {
         if !day.courses.isEmpty { return theme.primary }
-        return AppTheme.secondaryText
+        return theme.secondaryText
     }
 
     private func dayAccessibilityLabel(_ day: CalendarTimelineDay) -> String {

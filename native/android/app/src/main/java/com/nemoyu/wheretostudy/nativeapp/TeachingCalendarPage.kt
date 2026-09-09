@@ -3181,7 +3181,7 @@ internal class TeachingCalendarPage(
             orientation = LinearLayout.VERTICAL
             this.contentDescription = contentDescription
             background = themedRoundedBackground(
-                activity, { Palette.surface }, { Palette.border },
+                activity, { Palette.elevated }, { Palette.border },
                 radius = 14)
             setPadding(activity.dp(20), activity.dp(18), activity.dp(20), activity.dp(14))
             addView(TextView(activity).apply {
@@ -3282,7 +3282,7 @@ internal class TeachingCalendarPage(
         val maximumHeight = (visibleFrame.height() - activity.dp(32)).coerceAtLeast(activity.dp(112))
         val panel = ScrollView(activity).apply {
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 6)
+            background = themedRoundedBackground(activity, { Palette.elevated }, { Palette.border }, radius = 6)
             setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -3914,7 +3914,7 @@ internal class TeachingCalendarPage(
         }
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 10)
+            background = themedRoundedBackground(activity, { Palette.elevated }, { Palette.border }, radius = 10)
             setPadding(activity.dp(18), activity.dp(18), activity.dp(18), activity.dp(14))
         }
         card.addView(LinearLayout(activity).apply {

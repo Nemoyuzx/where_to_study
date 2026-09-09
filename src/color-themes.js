@@ -95,15 +95,37 @@ export function colorThemeSeeds(settings) {
 
 export function resolvedColorTheme(settings, dark = false) {
   const seeds = colorThemeSeeds(settings)
+  const surfaces = colorThemeSurfaces(settings, dark)
   const fill = readableColor(seeds.primary, '#FFFFFF', '#000000')
   const selected = readableColor(seeds.selectedDate, '#FFFFFF', '#000000')
   return {
     primaryFill: fill,
-    primaryText: dark ? readableColor(seeds.primary, '#282828', '#FFFFFF') : fill,
+    primaryText: readableColor(seeds.primary, surfaces.worstSurface, dark ? '#FFFFFF' : '#000000'),
     accent: seeds.accent,
-    accentText: readableColor(seeds.accent, dark ? '#282828' : '#FFFFFF', dark ? '#FFFFFF' : '#000000'),
+    accentText: readableColor(seeds.accent, surfaces.worstSurface, dark ? '#FFFFFF' : '#000000'),
     selectedDate: selected,
-    selectedOutline: dark ? readableColor(seeds.selectedDate, '#282828', '#FFFFFF') : selected,
+    selectedOutline: readableColor(seeds.selectedDate, surfaces.worstSurface, dark ? '#FFFFFF' : '#000000'),
+    surfaces,
+  }
+}
+
+export function colorThemeSurfaces(settings, dark = false) {
+  const recipe = contract.surfaces[dark ? 'dark' : 'light']
+  const seed = colorThemeSeeds(settings).primary
+  const surfaces = Object.fromEntries(
+    ['background', 'surface', 'elevated', 'surfaceVariant', 'border'].map((role) => (
+      [role, mixColor(recipe[role].base, seed, recipe[role].primaryAmount)]
+    )),
+  )
+  const candidates = ['background', 'surface', 'elevated', 'surfaceVariant'].map((key) => surfaces[key])
+  const worstSurface = candidates.reduce((worst, value) => (
+    (dark ? colorLuminance(value) > colorLuminance(worst) : colorLuminance(value) < colorLuminance(worst))
+      ? value : worst
+  ))
+  return {
+    ...surfaces, worstSurface,
+    text: readableColor(recipe.text, worstSurface, dark ? '#FFFFFF' : '#000000'),
+    secondaryText: readableColor(recipe.secondaryText, worstSurface, dark ? '#FFFFFF' : '#000000'),
   }
 }
 
@@ -111,14 +133,56 @@ export function colorThemeVariables(settings, dark = false) {
   // No overrides for default: preserve the exact pre-existing CSS palette.
   if (normalizeColorTheme(settings).preset === 'default') return {}
   const theme = resolvedColorTheme(settings, dark)
-  const surface = dark ? '#1E1E1E' : '#FFFFFF'
+  const { surfaces } = theme
+  const surface = surfaces.surface
+  const seed = colorThemeSeeds(settings).primary
   const tinted = (color, opacity) => mixColor(surface, color, opacity)
   const rgba = (color, opacity) => 'rgba(' + rgbComponents(color).join(', ') + ', ' + opacity + ')'
   const accentSurface = tinted(theme.accent, 0.20)
   const accentText = readableColor(theme.accentText, accentSurface, dark ? '#FFFFFF' : '#000000')
-  const selectedSurface = tinted(theme.primaryText, 0.22)
+  const selectedSurface = tinted(seed, dark ? 0.20 : 0.14)
   const primaryText = readableColor(theme.primaryText, selectedSurface, dark ? '#FFFFFF' : '#000000')
+  const selectedLane = tinted(theme.selectedOutline, 0.14)
+  const inkBackdrops = [surfaces.worstSurface, selectedSurface, accentSurface, selectedLane]
+  const worstInkBackdrop = inkBackdrops.reduce((worst, value) => (
+    (dark ? colorLuminance(value) > colorLuminance(worst) : colorLuminance(value) < colorLuminance(worst))
+      ? value : worst
+  ))
+  const text = readableColor(surfaces.text, worstInkBackdrop, dark ? '#FFFFFF' : '#000000')
+  const secondaryText = readableColor(surfaces.secondaryText, worstInkBackdrop, dark ? '#FFFFFF' : '#000000')
   return {
+    '--app-background': surfaces.background,
+    '--background': surfaces.background,
+    '--surface': surfaces.surface,
+    '--surface-subtle': surfaces.elevated,
+    '--surface-muted': surfaces.surfaceVariant,
+    '--surface-cool': surfaces.surfaceVariant,
+    '--segmented-selection': surfaces.elevated,
+    '--text-primary': text,
+    '--text-strong': text,
+    '--text-heading': text,
+    '--text-control': text,
+    '--text-panel': text,
+    '--text-secondary': secondaryText,
+    '--text-secondary-strong': secondaryText,
+    '--text-muted': secondaryText,
+    '--text-soft': secondaryText,
+    '--text-disabled': secondaryText,
+    '--border': surfaces.border,
+    '--border-subtle': mixColor(surface, surfaces.border, 0.65),
+    '--divider': mixColor(surface, surfaces.border, 0.65),
+    '--input-border': surfaces.border,
+    '--slot-text': text,
+    '--status-text': secondaryText,
+    '--eyebrow-text': secondaryText,
+    '--secondary-alt': secondaryText,
+    '--control-text-blue': text,
+    '--empty-surface': surfaces.surfaceVariant,
+    '--empty-border': surfaces.border,
+    '--empty-text': secondaryText,
+    '--switch-track': surfaces.surfaceVariant,
+    '--switch-border': surfaces.border,
+    '--mobile-nav-background': rgba(surfaces.elevated, 0.96),
     '--primary': theme.primaryFill,
     '--primary-rgb': rgbComponents(theme.primaryFill).join(' '),
     '--primary-fill': theme.primaryFill,
@@ -128,19 +192,19 @@ export function colorThemeVariables(settings, dark = false) {
     '--primary-pressed': mixColor(theme.primaryFill, '#000000', 0.10),
     '--primary-text': primaryText,
     '--primary-text-strong': primaryText,
-    '--primary-surface': tinted(theme.primaryText, 0.12),
-    '--primary-surface-soft': tinted(theme.primaryText, 0.08),
-    '--primary-surface-selected': tinted(theme.primaryText, 0.16),
+    '--primary-surface': tinted(seed, 0.10),
+    '--primary-surface-soft': tinted(seed, 0.06),
+    '--primary-surface-selected': tinted(seed, dark ? 0.16 : 0.10),
     '--primary-surface-selected-strong': selectedSurface,
-    '--primary-surface-lane': tinted(theme.primaryText, 0.04),
-    '--primary-surface-calendar': tinted(theme.primaryText, 0.08),
-    '--primary-surface-holiday': tinted(theme.primaryText, 0.06),
-    '--primary-surface-holiday-badge': tinted(theme.primaryText, 0.18),
+    '--primary-surface-lane': tinted(seed, 0.03),
+    '--primary-surface-calendar': tinted(seed, 0.06),
+    '--primary-surface-holiday': tinted(seed, 0.04),
+    '--primary-surface-holiday-badge': tinted(seed, 0.12),
     '--primary-border': tinted(theme.primaryText, 0.40),
     '--primary-border-soft': tinted(theme.primaryText, 0.30),
     '--primary-outline': theme.primaryText,
     '--selected-date-fill': theme.selectedDate,
-    '--selected-date-lane': tinted(theme.selectedOutline, 0.14),
+    '--selected-date-lane': selectedLane,
     '--selected-date-outline': theme.selectedOutline,
     '--selected-date-text': '#FFFFFF',
     '--gold': theme.accent,
@@ -152,11 +216,21 @@ export function colorThemeVariables(settings, dark = false) {
     '--gold-text-muted': accentText,
     '--gold-outline': theme.accentText,
     '--focus-ring': rgba(theme.primaryText, 0.28),
-    '--mobile-active-start': rgba(theme.primaryText, 0.14),
-    '--mobile-active-end': rgba(theme.primaryText, 0.22),
-    '--mobile-active-border': rgba(theme.primaryText, 0.16),
+    '--mobile-active-start': rgba(seed, 0.10),
+    '--mobile-active-end': rgba(seed, 0.16),
+    '--mobile-active-border': rgba(seed, 0.16),
     '--mobile-active-shadow': '0 8px 20px ' + rgba(theme.primaryFill, 0.12),
   }
+}
+
+// Year cells use an explicit composite background so the computed ink matches
+// the actual paint even when the year grid is transparent over the page canvas.
+export function colorThemeHeatmap(palette, opacity) {
+  const amount = Number.isFinite(opacity) ? Math.max(0, Math.min(1, opacity)) : 0
+  const background = mixColor(palette.surfaces.background, palette.primaryFill, amount)
+  const target = colorContrast('#000000', background) >= colorContrast('#FFFFFF', background)
+    ? '#000000' : '#FFFFFF'
+  return { background, text: readableColor(palette.surfaces.text, background, target) }
 }
 
 const THEME_VARIABLE_KEYS = Object.keys(colorThemeVariables({ preset: 'ocean' }))

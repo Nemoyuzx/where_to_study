@@ -23,10 +23,10 @@ struct ColorThemeSettingsSurface: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label(text("颜色主题", "Color Theme"), systemImage: "paintpalette")
                     .font(.headline)
-                Text(text("选择预设或自定义三种颜色，浅色与深色外观仍跟随系统。",
-                          "Choose a preset or customize three colors. Light and dark appearance follows the system."))
+                Text(text("选择柔和配色，页面背景与卡片会随主色协调变化，浅深外观仍跟随系统。",
+                          "Choose a softer palette. Backgrounds and cards follow your primary color; light and dark appearance follows the system."))
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
                     ForEach(ColorThemePreset.allCases) { preset in
                         presetButton(preset)
@@ -39,11 +39,18 @@ struct ColorThemeSettingsSurface: View {
                 colorField(text("强调色", "Accent"), id: "accent", value: $accent)
                 colorField(text("选中日期", "Selected Date"), id: "selected-date", value: $selectedDate)
                 if hasEdited && draft == nil {
-                    Text(text("请输入六位十六进制颜色，例如 #166B5D。已保存的主题未更改。",
-                              "Enter six hexadecimal digits, such as #166B5D. Your saved theme is unchanged."))
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.danger)
-                        .accessibilityIdentifier("theme.validation-error")
+                    HStack(alignment: .top, spacing: 6) {
+                        if theme.configuration.preset != .default {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundStyle(AppTheme.danger)
+                                .accessibilityHidden(true)
+                        }
+                        Text(text("请输入六位十六进制颜色，例如 #166B5D。已保存的主题未更改。",
+                                  "Enter six hexadecimal digits, such as #166B5D. Your saved theme is unchanged."))
+                            .foregroundStyle(theme.configuration.preset == .default ? AppTheme.danger : theme.text)
+                            .accessibilityIdentifier("theme.validation-error")
+                    }
+                    .font(.caption)
                 }
                 Button(text("应用自定义颜色", "Apply Custom Colors")) {
                     hasEdited = true
@@ -67,7 +74,7 @@ struct ColorThemeSettingsSurface: View {
                     Text(text("示例模式下仅预览，不修改真实设置或小组件。",
                               "Demo changes are temporary and do not modify your saved settings or widgets."))
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
             }
         }
@@ -79,6 +86,7 @@ struct ColorThemeSettingsSurface: View {
 
     private func presetButton(_ preset: ColorThemePreset) -> some View {
         let configuration = model.colorTheme.selecting(preset)
+        let presetTheme = AppTheme(configuration: configuration)
         let isSelected = model.colorTheme.preset == preset
         return Button {
             model.selectColorTheme(preset)
@@ -92,22 +100,22 @@ struct ColorThemeSettingsSurface: View {
                         let colors = [configuration.seeds.primary, configuration.seeds.accent, configuration.seeds.selectedDate]
                         Circle().fill(AppThemeColor(colors[index]).color)
                             .frame(width: 17, height: 17)
-                            .overlay(Circle().stroke(AppTheme.border, lineWidth: 0.5))
+                            .overlay(Circle().stroke(theme.border, lineWidth: 0.5))
                     }
                     Spacer(minLength: 0)
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isSelected ? theme.primary : AppTheme.secondaryText)
+                        .foregroundStyle(isSelected ? theme.primary : theme.secondaryText)
                 }
                 Text(preset.title(english: english))
                     .font(.callout.weight(isSelected ? .semibold : .regular))
-                    .foregroundStyle(AppTheme.text)
+                    .foregroundStyle(presetTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? theme.primary.opacity(0.10) : AppTheme.background,
+            .background(preset == .default && isSelected ? theme.primary.opacity(0.10) : presetTheme.background,
                         in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? theme.primary : AppTheme.border))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? theme.primary : theme.border))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(preset.title(english: english))
@@ -119,16 +127,16 @@ struct ColorThemeSettingsSurface: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(label).font(.callout.weight(.medium))
             HStack(spacing: 10) {
-                Circle().fill(ThemeRGB(hex: value.wrappedValue).map { AppThemeColor($0).color } ?? AppTheme.secondaryText)
+                Circle().fill(ThemeRGB(hex: value.wrappedValue).map { AppThemeColor($0).color } ?? theme.secondaryText)
                     .frame(width: 24, height: 24)
-                    .overlay(Circle().stroke(AppTheme.border))
+                    .overlay(Circle().stroke(theme.border))
                     .accessibilityHidden(true)
                 TextField("#RRGGBB", text: Binding(get: { value.wrappedValue }, set: {
                     value.wrappedValue = $0
                     hasEdited = true
                 }))
                 .font(.body.monospaced())
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(ThemeTextFieldStyle())
                 .autocorrectionDisabled()
                 .focused($focusedField, equals: id)
                 .accessibilityLabel(label)
@@ -147,30 +155,10 @@ struct ColorThemeSettingsSurface: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(text("实时预览", "Live Preview"))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryText)
-            Label(text("今日课程", "Today's Courses"), systemImage: "calendar")
-                .font(.headline)
-                .foregroundStyle(previewTheme.primary)
-            HStack(alignment: .top, spacing: 10) {
-                Text("08").font(.headline)
-                    .padding(10)
-                    .foregroundStyle(previewTheme.onPrimary)
-                    .background(previewTheme.selectedDate, in: RoundedRectangle(cornerRadius: 8))
-                Text(text("示例课程 · 08:00", "Sample Course · 08:00"))
-                    .font(.callout.weight(.semibold))
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .foregroundStyle(previewTheme.onPrimary)
-                    .background(previewTheme.primaryFill, in: RoundedRectangle(cornerRadius: 8))
-            }
-            Label(text("收藏日程", "Favorite Event"), systemImage: "star.fill")
-                .font(.callout)
-                .foregroundStyle(previewTheme.accentText)
+                .foregroundStyle(theme.secondaryText)
+            ThemeSurfacePreview(theme: previewTheme, english: english)
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border))
         .accessibilityIdentifier("theme.preview")
     }
 
@@ -179,5 +167,52 @@ struct ColorThemeSettingsSurface: View {
         accent = model.colorTheme.custom.accent.hex
         selectedDate = model.colorTheme.custom.selectedDate.hex
         hasEdited = false
+    }
+}
+
+struct ThemeSurfacePreview: View {
+    let theme: AppTheme
+    let english: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(english ? "Today's Courses" : "今日课程", systemImage: "calendar")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(theme.primary)
+                Spacer(minLength: 0)
+                Image(systemName: "star.fill").foregroundStyle(theme.accentText)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Text("08").font(.headline.monospacedDigit())
+                        .padding(10)
+                        .foregroundStyle(theme.onPrimary)
+                        .background(theme.selectedDate, in: RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.selectedDateOutline))
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(english ? "Sample Course" : "示例课程")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(theme.text)
+                        Text("08:00 – 09:35")
+                            .font(.caption)
+                            .foregroundStyle(theme.secondaryText)
+                    }
+                }
+                Text(english ? "View Schedule" : "查看课表")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(theme.onPrimary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(theme.primaryFill, in: Capsule())
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.surface, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border))
+        }
+        .padding(14)
+        .background(theme.background, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(theme.border))
     }
 }

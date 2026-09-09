@@ -2710,8 +2710,8 @@ button:disabled {
 }
 
 .mini-month-grid button.has-course {
-  background: rgb(var(--primary-rgb) / var(--course-load-opacity, 0.12));
-  color: var(--text-primary);
+  background: var(--course-load-background, rgb(var(--primary-rgb) / var(--course-load-opacity, 0.12)));
+  color: var(--course-load-text, var(--text-primary));
 }
 
 .mini-month-grid button.today {

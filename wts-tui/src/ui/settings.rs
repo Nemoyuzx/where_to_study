@@ -1,6 +1,6 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::text::Line;
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
+use ratatui::widgets::{Borders, List, ListItem, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::App;
@@ -21,12 +21,16 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     let account_style = if focus == 0 && app.settings_editing {
         theme.primary_selected()
     } else {
-        theme.strong_text()
+        theme
+            .layer_style(theme.surface_variant)
+            .patch(theme.strong_text())
     };
     let password_style = if focus == 1 && app.settings_editing {
         theme.primary_selected()
     } else {
-        theme.strong_text()
+        theme
+            .layer_style(theme.surface_variant)
+            .patch(theme.strong_text())
     };
     let account_display = if app.login_account.is_empty() {
         "（空）".to_string()
@@ -53,7 +57,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
             "Enter/e 输入 · l 登录 · o 退出登录 · t 颜色主题 / Color Theme"
         }),
     ])
-    .block(Block::default().borders(Borders::ALL).title("账号设置"))
+    .block(theme.card_block().borders(Borders::ALL).title("账号设置"))
     .wrap(Wrap { trim: false });
 
     frame.render_widget(form, chunks[0]);
@@ -108,7 +112,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         )),
     ];
     let status_list =
-        List::new(status_items).block(Block::default().borders(Borders::ALL).title("数据状态"));
+        List::new(status_items).block(theme.card_block().borders(Borders::ALL).title("数据状态"));
 
     frame.render_widget(status_list, chunks[1]);
 
@@ -117,7 +121,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         "Where To Study TUI · 数据源：北邮移动教务 HTTPS 接口\n版本 {} · GPL-3.0",
         env!("CARGO_PKG_VERSION")
     ))
-    .block(Block::default().borders(Borders::ALL).title("关于"))
+    .block(theme.card_block().borders(Borders::ALL).title("关于"))
     .style(theme.muted_text());
 
     frame.render_widget(about, chunks[2]);

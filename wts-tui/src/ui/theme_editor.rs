@@ -13,7 +13,8 @@ pub fn draw(frame: &mut Frame, area: Rect, editor: &ThemeEditor, theme: &Theme) 
         area,
     );
     let areas = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).split(area);
-    let block = Block::default()
+    let block = theme
+        .elevated_block()
         .borders(Borders::ALL)
         .title("颜色主题 / Color Theme");
     let inner = block.inner(areas[0]);
@@ -43,11 +44,18 @@ pub fn draw(frame: &mut Frame, area: Rect, editor: &ThemeEditor, theme: &Theme) 
         lines.push(Line::from(format!("  {value}")).style(if focused {
             theme.primary_selected()
         } else {
-            theme.strong_text()
+            theme
+                .layer_style(theme.surface_variant)
+                .patch(theme.strong_text())
         }));
     }
     lines.push(Line::from(""));
     lines.push(Line::from("预览 / Preview"));
+    lines.push(Line::from(vec![
+        Span::styled(" Canvas ", theme.layer_style(theme.background)),
+        Span::styled(" Card ", theme.layer_style(theme.surface)),
+        Span::styled(" Controls ", theme.layer_style(theme.surface_variant)),
+    ]));
     lines.push(Line::from(vec![
         Span::styled(" Course 08:00 ", theme.primary_selected()),
         Span::raw(" "),
@@ -127,6 +135,14 @@ mod tests {
             .draw(|frame| crate::ui::draw(frame, &mut app, &theme))
             .unwrap();
         let cells = terminal.backend().buffer().content();
+        for layer in [
+            theme.background,
+            theme.surface,
+            theme.surface_variant,
+            theme.elevated,
+        ] {
+            assert!(cells.iter().any(|cell| cell.bg == layer));
+        }
         let text: String = cells.iter().map(|cell| cell.symbol()).collect();
         for label in [
             "Color Theme",
@@ -150,7 +166,7 @@ mod tests {
             && cell.fg == theme.on_selected_date));
         assert!(cells
             .iter()
-            .any(|cell| cell.symbol() == "█" && cell.fg == color(rgb("#D08A2E"))));
+            .any(|cell| cell.symbol() == "█" && cell.fg == color(rgb("#A08AAB"))));
     }
 
     #[test]

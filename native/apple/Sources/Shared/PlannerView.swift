@@ -107,7 +107,7 @@ struct PlannerView: View {
                 #endif
             }
         }
-        .background(AppTheme.background)
+        .background(theme.background)
         .accessibilityIdentifier("screen.planner")
         .task(id: "\(model.queryCampusID)-\(model.weatherEnabled)") {
             guard model.weatherEnabled else { return }
@@ -125,7 +125,7 @@ struct PlannerView: View {
     private var todayLabel: some View {
         Label(Self.todayLabel, systemImage: "clock")
             .font(.subheadline.monospacedDigit())
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
             .fixedSize()
     }
 
@@ -148,12 +148,12 @@ struct PlannerView: View {
                         if let weather {
                             Text("\(weather.campusName) · \(weather.district) · \(weather.currentWeather) \(weather.currentTemperature)°")
                                 .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                                .foregroundStyle(theme.secondaryText)
                                 .lineLimit(1)
                         }
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .rotationEffect(.degrees(isWeatherExpanded ? 90 : 0))
                     }
                     .contentShape(Rectangle())
@@ -172,7 +172,7 @@ struct PlannerView: View {
                                 Text("正在更新今日与明日天气…")
                             }
                             .font(.callout)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .frame(maxWidth: .infinity, minHeight: 54)
                         } else if let error, weather == nil {
                             Button {
@@ -208,7 +208,7 @@ struct PlannerView: View {
                                 Link("数据：UAPI", destination: URL(string: "https://uapis.cn/docs/api-reference/get-misc-weather")!)
                             }
                             .font(.caption2)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         }
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -231,7 +231,7 @@ struct PlannerView: View {
                     .font(.subheadline.weight(.semibold))
                 Text(day.weatherDay == day.weatherNight ? day.weatherDay : "\(day.weatherDay)转\(day.weatherNight)")
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 3) {
@@ -240,14 +240,14 @@ struct PlannerView: View {
                 if let probability = day.precipitationProbability {
                     Text("降水 \(probability)%")
                         .font(.caption2)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity)
-        .background(AppTheme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+        .background(theme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.border, lineWidth: 1))
     }
 
     private func weatherSymbol(_ text: String) -> String {
@@ -285,6 +285,7 @@ struct PlannerView: View {
                     Text("沙河").tag("04")
                 }
                 .pickerStyle(.segmented)
+                .background(ThemeSegmentedSurface())
                 .frame(maxWidth: .infinity)
 
                 Button {
@@ -309,13 +310,13 @@ struct PlannerView: View {
                 if !model.classroomStatusMessage.isEmpty {
                     Text(model.localized(model.classroomStatusMessage))
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 } else if let cache = model.classroomsCache {
                     Text(model.isSampleMode
                         ? "数据源：内置示例数据 · \(cache.targetDate)"
                         : "数据源：移动教务实时接口 · \(cache.targetDate)")
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
             }
         }
@@ -375,13 +376,13 @@ struct PlannerView: View {
                     .font(.caption.monospacedDigit())
             }
             .frame(maxWidth: .infinity, minHeight: 54)
-            .foregroundStyle(selected ? theme.onPrimary : AppTheme.text)
+            .foregroundStyle(selected ? theme.onPrimary : theme.text)
             .background(
-                selected ? theme.primaryFill : (busy ? theme.accent.opacity(0.45) : AppTheme.background)
+                selected ? theme.primaryFill : (busy ? theme.accent.opacity(0.45) : theme.background)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(selected ? theme.primaryFill : AppTheme.border, lineWidth: 1)
+                    .stroke(selected ? theme.primaryFill : theme.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
@@ -413,12 +414,12 @@ struct PlannerView: View {
                 Text(course.name).font(.headline)
                 Text(course.room.isEmpty ? model.localized("地点未标注") : course.room)
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
             Spacer(minLength: 8)
             Text(course.timeRange)
                 .font(.subheadline.monospacedDigit())
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .fixedSize()
         }
         .padding(.vertical, 2)
@@ -444,11 +445,11 @@ struct PlannerView: View {
                                     .lineLimit(2)
                                     .multilineTextAlignment(.center)
                                     .frame(maxWidth: .infinity, minHeight: 46)
-                                    .foregroundStyle(selected ? theme.onPrimary : AppTheme.text)
-                                    .background(selected ? theme.primaryFill : AppTheme.background)
+                                    .foregroundStyle(selected ? theme.onPrimary : theme.text)
+                                    .background(selected ? theme.primaryFill : theme.background)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6)
-                                            .stroke(selected ? theme.primaryFill : AppTheme.border, lineWidth: 1)
+                                            .stroke(selected ? theme.primaryFill : theme.border, lineWidth: 1)
                                     )
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
@@ -489,12 +490,12 @@ struct PlannerView: View {
                                     .padding(10)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(
-                                        AppTheme.background,
+                                        theme.background,
                                         in: RoundedRectangle(cornerRadius: 8)
                                     )
                                     .overlay {
                                         RoundedRectangle(cornerRadius: 8)
-                                            .stroke(AppTheme.border, lineWidth: 1)
+                                            .stroke(theme.border, lineWidth: 1)
                                     }
                             }
                         }
@@ -523,7 +524,7 @@ struct PlannerView: View {
             Spacer(minLength: 8)
             Text(room.size.map { "\($0) \(model.localized("座"))" } ?? model.localized("座位未知"))
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .fixedSize()
         }
         .padding(.vertical, 2)
@@ -554,12 +555,12 @@ struct PlannerView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(model.localized(item.0))
                             .font(.subheadline)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .accessibilityIdentifier("planner.summary.label.\(index)")
                         Spacer(minLength: 12)
                         Text("\(item.1)")
                             .font(.title2.bold().monospacedDigit())
-                            .foregroundStyle(AppTheme.text)
+                            .foregroundStyle(theme.text)
                     }
                     .padding(.vertical, 10)
                     if index < values.count - 1 { Divider() }
@@ -571,14 +572,14 @@ struct PlannerView: View {
                     VStack(spacing: 4) {
                         Text(model.localized(item.0))
                             .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                             .frame(maxWidth: .infinity, minHeight: 30, alignment: .top)
                             .accessibilityIdentifier("planner.summary.label.\(index)")
                         Text("\(item.1)")
                             .font(.title2.bold().monospacedDigit())
-                            .foregroundStyle(AppTheme.text)
+                            .foregroundStyle(theme.text)
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
@@ -596,7 +597,7 @@ struct PlannerView: View {
     private func emptyMessage(_ message: String) -> some View {
         Text(model.localized(message))
             .font(.subheadline)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
             .frame(maxWidth: .infinity, minHeight: 72)
     }
 

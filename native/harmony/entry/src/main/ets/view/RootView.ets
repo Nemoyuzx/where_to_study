@@ -281,7 +281,7 @@ export struct RootView {
     .width(this.sidebarWidth())
     .height('100%')
     .padding({ top: 16 })
-    .backgroundColor(AppTheme.surface())
+    .backgroundColor(AppTheme.inputSurface())
     .alignItems(HorizontalAlign.Start)
   }
 

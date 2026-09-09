@@ -55,10 +55,10 @@ export default function colorThemesTest() {
     it('presets_have_the_shared_identifiers_and_seeds', 0, () => {
       expect(ColorThemes.presets.map((seed: ColorThemeSeed) => seed.id).join(','))
         .assertEqual('default,ocean,violet,amber,rose');
-      expect(ColorThemes.seeds(new ColorThemeSelection('ocean')).selectedDate).assertEqual('#7C3AED');
-      expect(ColorThemes.seeds(new ColorThemeSelection('violet')).selectedDate).assertEqual('#00796B');
-      expect(ColorThemes.seeds(new ColorThemeSelection('amber')).primary).assertEqual('#A65300');
-      expect(ColorThemes.seeds(new ColorThemeSelection('rose')).accent).assertEqual('#8C6A35');
+      expect(ColorThemes.seeds(new ColorThemeSelection('ocean')).selectedDate).assertEqual('#3354A2');
+      expect(ColorThemes.seeds(new ColorThemeSelection('violet')).selectedDate).assertEqual('#504AA0');
+      expect(ColorThemes.seeds(new ColorThemeSelection('amber')).primary).assertEqual('#92603A');
+      expect(ColorThemes.seeds(new ColorThemeSelection('rose')).accent).assertEqual('#B3909A');
     });
 
     it('corrupt_persistence_recovers_each_field_independently', 0, () => {
@@ -87,6 +87,18 @@ export default function colorThemesTest() {
         resourceEqual(AppTheme.selection(), $r('app.color.app_selection'));
         resourceEqual(AppTheme.selectionSurface(), $r('app.color.app_selection_surface'));
         resourceEqual(AppTheme.segmentedSelection(), $r('app.color.app_segmented_selection'));
+        resourceEqual(AppTheme.background(), $r('app.color.app_background'));
+        resourceEqual(AppTheme.surface(), $r('app.color.app_surface'));
+        resourceEqual(AppTheme.elevated(), $r('app.color.app_surface'));
+        resourceEqual(AppTheme.inputSurface(), $r('app.color.app_surface'));
+        resourceEqual(AppTheme.surfaceVariant(), $r('app.color.app_surface_variant'));
+        resourceEqual(AppTheme.border(), $r('app.color.app_border'));
+        resourceEqual(AppTheme.text(), $r('app.color.app_text'));
+        resourceEqual(AppTheme.secondaryText(), $r('app.color.app_secondary_text'));
+        resourceEqual(AppTheme.disabledText(), $r('app.color.app_disabled_text'));
+        resourceEqual(AppTheme.textOnPrimaryBlend(0.36, dark), $r('app.color.app_text'));
+        resourceEqual(AppTheme.textOnPrimaryBlend(0.36, dark, true), $r('app.color.app_secondary_text'));
+        resourceEqual(AppTheme.textOnSelectionBlend(0.36, dark), $r('app.color.app_primary'));
       }
       expect(AppTheme.primaryWithAlpha(1, false)).assertEqual('#166B5D');
       expect(AppTheme.primaryWithAlpha(1, true)).assertEqual('#5AD2B8');
@@ -116,10 +128,10 @@ export default function colorThemesTest() {
       AppTheme.state.selection = new ColorThemeSelection('violet');
       expect(AppTheme.primaryWithAlpha(0.4, false) !== original).assertTrue();
       expect(AppTheme.colorKey() !== key).assertTrue();
-      expect(AppTheme.selectedDate()).assertEqual('#00796B');
-      expect(AppTheme.selectedDateSurface()).assertEqual('#1A00796B');
+      expect(AppTheme.selectedDate()).assertEqual('#504AA0');
+      expect(AppTheme.selectedDateSurface()).assertEqual('#1A504AA0');
       AppTheme.state.dark = true;
-      expect(AppTheme.selectedDateSurface()).assertEqual('#4000796B');
+      expect(AppTheme.selectedDateSurface()).assertEqual('#40504AA0');
       resourceEqual(AppTheme.assignment(), $r('app.color.app_assignment'));
       resourceEqual(AppTheme.schoolNotice(), $r('app.color.app_school_notice'));
       resourceEqual(AppTheme.competitionDeadline(), $r('app.color.app_competition_deadline'));
@@ -187,8 +199,8 @@ export default function colorThemesTest() {
       expect(defaults['themeCustomized']).assertFalse();
       const themed = WidgetSync.themeBinding({}, new ColorThemeSelection('ocean'), false);
       expect(themed['themeCustomized']).assertTrue();
-      expect(themed['themePrimaryFill']).assertEqual('#1565C0');
-      expect(themed['themeAccent']).assertEqual('#26A69A');
+      expect(themed['themePrimaryFill']).assertEqual('#356A8A');
+      expect(themed['themeAccent']).assertEqual('#75939A');
       const dark = WidgetSync.themeBinding({}, new ColorThemeSelection('ocean'), true);
       expect(ColorThemes.contrast(dark['themePrimary'] as string, '#282828') >= 4.5).assertTrue();
     });
@@ -248,6 +260,91 @@ export default function colorThemesTest() {
       expect(AppTheme.shouldOutlineSelectedDate(true, true)).assertFalse();
       resourceEqual(AppTheme.nowIndicator(), $r('app.color.app_now_indicator'));
       resourceEqual(AppTheme.assignment(), $r('app.color.app_assignment'));
+    });
+
+    it('surface_recipe_layers_use_unadjusted_seed_and_immediately_follow_selection', 0, () => {
+      AppTheme.state.selection = new ColorThemeSelection('ocean');
+      expect(AppTheme.background()).assertEqual('#EBEEF0');
+      expect(AppTheme.surface()).assertEqual('#FDFDFE');
+      expect(AppTheme.elevated()).assertEqual('#FEFEFE');
+      expect(AppTheme.inputSurface()).assertEqual('#E4E9ED');
+      expect(AppTheme.border()).assertEqual('#BCC8D2');
+      AppTheme.state.dark = true;
+      expect(AppTheme.background()).assertEqual('#182129');
+      expect(AppTheme.surface()).assertEqual('#242D36');
+      expect(AppTheme.elevated()).assertEqual('#2B343F');
+      expect(AppTheme.inputSurface()).assertEqual('#2E3945');
+      expect(AppTheme.border()).assertEqual('#435567');
+      AppTheme.state.selection = new ColorThemeSelection('violet');
+      expect(AppTheme.background()).assertEqual('#1F1E2A');
+      AppTheme.state.selection = new ColorThemeSelection('custom', '#FFFFFF');
+      expect(AppTheme.background()).assertEqual(ColorThemes.blend('#14171C', '#FFFFFF', 0.12));
+      expect(ColorThemes.encode(AppTheme.state.selection).includes('background')).assertFalse();
+    });
+
+    it('surface_inks_and_primary_labels_pass_every_layer_for_extreme_custom_colors', 0, () => {
+      for (const seed of ['#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#777777']) {
+        AppTheme.state.selection = new ColorThemeSelection('custom', seed, '#FFFFFF', '#000000');
+        for (const dark of [false, true]) {
+          AppTheme.state.dark = dark;
+          const palette = ColorThemes.surfaces(AppTheme.state.selection, dark);
+          for (const surface of [palette.background, palette.surface, palette.elevated, palette.surfaceVariant]) {
+            for (const ink of [AppTheme.text(), AppTheme.secondaryText(), AppTheme.primary()]) {
+              expect(ColorThemes.contrast(ink as string, surface) >= 4.5).assertTrue();
+            }
+            expect(ColorThemes.contrast(AppTheme.selectedDateOutline() as string, surface) >= 3).assertTrue();
+          }
+          expect(ColorThemes.contrast(AppTheme.text() as string, AppTheme.selectionSurface() as string) >= 4.5)
+            .assertTrue();
+        }
+      }
+    });
+
+    it('widget_binding_uses_the_real_theme_card_surface_and_readable_inks', 0, () => {
+      for (const dark of [false, true]) {
+        const selection = new ColorThemeSelection('rose');
+        const palette = ColorThemes.surfaces(selection, dark);
+        const binding = WidgetSync.themeBinding({}, selection, dark);
+        expect(binding['themeBackground']).assertEqual(palette.surface);
+        expect(binding['themeText']).assertEqual(palette.text);
+        expect(binding['themeSecondaryText']).assertEqual(palette.secondaryText);
+        expect(ColorThemes.contrast(binding['themeText'] as string, binding['themeBackground'] as string) >= 4.5)
+          .assertTrue();
+        expect(ColorThemes.contrast(binding['themeSecondaryText'] as string, binding['themeBackground'] as string) >= 4.5)
+          .assertTrue();
+      }
+    });
+
+    it('month_labels_and_course_chips_pass_against_their_actual_layered_background', 0, () => {
+      AppTheme.state.selection = new ColorThemeSelection('custom', '#FFFFFF');
+      for (const dark of [false, true]) {
+        AppTheme.state.dark = dark;
+        const background: string = AppTheme.primaryWithAlpha(0.36, dark);
+        const chip: string = ColorThemes.blend(background, ColorThemes.fill('#FFFFFF'), dark ? 77 / 255 : 26 / 255);
+        expect(ColorThemes.contrast(AppTheme.textOnPrimaryBlend(0.36, dark, true) as string, background) >= 4.5)
+          .assertTrue();
+        expect(ColorThemes.contrast(AppTheme.textOnSelectionBlend(0.36, dark) as string, chip) >= 4.5).assertTrue();
+      }
+    });
+
+    it('secondary_labels_are_readable_on_tints_beyond_the_base_surface_palette', 0, () => {
+      resourceEqual(AppTheme.secondaryTextOnTint(), $r('app.color.app_secondary_text'));
+      AppTheme.state.selection = new ColorThemeSelection('custom', '#FFFFFF');
+      for (const dark of [false, true]) {
+        AppTheme.state.dark = dark;
+        const surfaces = ColorThemes.surfaces(AppTheme.state.selection, dark);
+        const primaryTint: string = ColorThemes.blend(surfaces.elevated, ColorThemes.fill('#FFFFFF'),
+          dark ? 77 / 255 : 26 / 255);
+        const assignmentTint: string = ColorThemes.blend(surfaces.elevated,
+          dark ? '#FFC14D' : '#9A6500', dark ? 51 / 255 : 26 / 255);
+        for (const surface of [AppTheme.selectionSurface() as string, primaryTint, assignmentTint]) {
+          expect(ColorThemes.contrast(AppTheme.secondaryTextOnTint() as string, surface) >= 4.5).assertTrue();
+        }
+        for (const alpha of [0.08, 0.16, 0.24, 0.32, 0.36]) {
+          expect(ColorThemes.contrast(AppTheme.textOnPrimaryBlend(alpha, dark, true) as string,
+            AppTheme.primaryWithAlpha(alpha, dark)) >= 4.5).assertTrue();
+        }
+      }
     });
   });
 }

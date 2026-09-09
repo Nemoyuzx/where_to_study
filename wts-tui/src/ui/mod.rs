@@ -61,7 +61,8 @@ pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
                 .add_modifier(Modifier::BOLD),
         )
         .block(
-            Block::default()
+            theme
+                .control_block()
                 .borders(Borders::ALL)
                 .title("Where To Study"),
         );
@@ -126,5 +127,85 @@ fn status_line(app: &App) -> String {
         "就绪".to_string()
     } else {
         parts.join("  ·  ")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color_theme::{channels, contrast, ColorTheme};
+    use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn all_real_pages_render_themed_canvas_cards_navigation_and_borders() {
+        for dark in [false, true] {
+            for preset in ["ocean", "violet", "amber", "rose", "custom"] {
+                for page in 0..6 {
+                    let mut app = App::new(dark);
+                    app.selected_tab_index = page;
+                    app.color_theme = ColorTheme {
+                        preset: preset.into(),
+                        primary: "#FFFFFF".into(),
+                        ..ColorTheme::default()
+                    };
+                    let theme = crate::current_theme(&app);
+                    let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+                    terminal
+                        .draw(|frame| draw(frame, &mut app, &theme))
+                        .unwrap();
+                    let cells = terminal.backend().buffer().content();
+                    for surface in [theme.background, theme.surface, theme.surface_variant] {
+                        assert!(
+                            cells.iter().any(|cell| cell.bg == surface),
+                            "missing {surface:?} on page {page}, {preset}, dark={dark}"
+                        );
+                    }
+                    assert!(cells
+                        .iter()
+                        .any(|cell| cell.symbol() == "┌" && cell.fg == theme.border));
+                    for cell in cells.iter().filter(|cell| {
+                        cell.fg == theme.text
+                            || cell.fg == theme.text_muted
+                            || cell.fg == theme.primary
+                    }) {
+                        if [
+                            theme.background,
+                            theme.surface,
+                            theme.surface_variant,
+                            theme.elevated,
+                        ]
+                        .contains(&cell.bg)
+                        {
+                            assert!(contrast(channels(cell.fg), channels(cell.bg)) >= 4.5);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn default_keeps_terminal_surface_behavior_and_unfocused_inputs_use_theme_controls() {
+        for custom in [false, true] {
+            let mut app = App::new(false);
+            app.selected_tab_index = 5;
+            app.login_account = "theme-input".into();
+            if custom {
+                app.color_theme.preset = "rose".into();
+            }
+            let theme = crate::current_theme(&app);
+            let mut terminal = Terminal::new(TestBackend::new(100, 30)).unwrap();
+            terminal
+                .draw(|frame| draw(frame, &mut app, &theme))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            if custom {
+                assert_eq!(buffer[(14, 4)].bg, theme.surface_variant);
+                assert_eq!(buffer[(0, 0)].bg, theme.surface_variant);
+            } else {
+                assert_eq!(buffer[(0, 0)].bg, ratatui::style::Color::Reset);
+                assert_eq!(buffer[(14, 4)].bg, ratatui::style::Color::Reset);
+            }
+        }
     }
 }

@@ -22,6 +22,7 @@
             android:tint="@color/widget_primary" />
 
         <TextView
+            android:id="@+id/widget_theme_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="7dp"

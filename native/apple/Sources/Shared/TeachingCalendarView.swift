@@ -1179,7 +1179,7 @@ struct TeachingCalendarView: View {
                 )
             }
         }
-        .background(AppTheme.background)
+        .background(theme.background)
         .accessibilityIdentifier("screen.calendar")
         .coordinateSpace(name: Self.calendarCoordinateSpace)
         .onChange(of: mode) { _ in
@@ -1211,17 +1211,17 @@ struct TeachingCalendarView: View {
             if let status = holidayStatus {
                 Text(status)
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
             if !model.statusMessage.isEmpty {
                 Text(model.localized(model.statusMessage))
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
             if !model.calendarImportStatusMessage.isEmpty {
                 Text(model.localized(model.calendarImportStatusMessage))
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
             Divider()
             #if os(macOS)
@@ -1278,7 +1278,7 @@ struct TeachingCalendarView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("WHERE TO STUDY")
                 .font(.caption.weight(.bold))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             ZStack(alignment: .leading) {
                 Text(periodTitle)
                     .id(periodTitle)
@@ -1287,7 +1287,7 @@ struct TeachingCalendarView: View {
                         includesOpacity: true
                     ))
                     .font(.largeTitle.bold())
-                    .foregroundStyle(AppTheme.text)
+                    .foregroundStyle(theme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
@@ -1304,6 +1304,7 @@ struct TeachingCalendarView: View {
             }
         }
         .pickerStyle(.segmented)
+        .background(ThemeSegmentedSurface())
     }
 
     @ViewBuilder
@@ -1333,12 +1334,12 @@ struct TeachingCalendarView: View {
                         .monospacedDigit()
                 }
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
                 .frame(width: 148, height: 32)
-                .background(AppTheme.background)
+                .background(theme.background)
                 .overlay {
                     RoundedRectangle(cornerRadius: 7)
-                        .stroke(AppTheme.border, lineWidth: 1)
+                        .stroke(theme.border, lineWidth: 1)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 7))
             }
@@ -1440,7 +1441,7 @@ struct TeachingCalendarView: View {
                 Image(systemName: "graduationcap")
             }
             .font(.caption.weight(.semibold))
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
             .accessibilityIdentifier("calendar.regular.day-week-context")
             CalendarTimelineView(
                 days: cachedTimelineDays(for: [selectedDate]),
@@ -1469,7 +1470,7 @@ struct TeachingCalendarView: View {
                 Image(systemName: "graduationcap")
             }
             .font(.caption.weight(.semibold))
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
             CalendarTimelineView(
                 days: cachedTimelineDays(for: days),
                 selectedDate: selectedDate,
@@ -1524,7 +1525,7 @@ struct TeachingCalendarView: View {
                     ForEach(Self.weekdayLabels, id: \.self) { label in
                         Text(model.localized(label))
                             .font(.caption.bold())
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .frame(maxWidth: .infinity)
                     }
                     ForEach(daySnapshots) { snapshot in
@@ -1571,11 +1572,11 @@ struct TeachingCalendarView: View {
                                 ForEach(Self.weekdayLabels, id: \.self) { label in
                                     Text(model.localized("周") + model.localized(label))
                                         .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(AppTheme.secondaryText)
+                                        .foregroundStyle(theme.secondaryText)
                                         .frame(maxWidth: .infinity, minHeight: weekdayHeight)
                                         .overlay(alignment: .bottom) {
                                             Rectangle()
-                                                .fill(AppTheme.border)
+                                                .fill(theme.border)
                                                 .frame(height: 0.5)
                                         }
                                 }
@@ -1594,7 +1595,7 @@ struct TeachingCalendarView: View {
                         .animation(Self.pageAnimation, value: monthGridIdentity)
                         .overlay {
                             Rectangle()
-                                .stroke(AppTheme.border, lineWidth: 0.5)
+                                .stroke(theme.border, lineWidth: 0.5)
                                 .allowsHitTesting(false)
                         }
                     }
@@ -1640,7 +1641,7 @@ struct TeachingCalendarView: View {
                 if snapshot.weekday == 2 {
                     Text(monthWeekContextText(date: day))
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.68)
                         .accessibilityIdentifier("calendar.desktop.month-week-context.\(snapshot.dateKey)")
@@ -1665,7 +1666,7 @@ struct TeachingCalendarView: View {
                 } label: {
                     Text("+\(layout.hiddenEventCount) 项")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .padding(.horizontal, 6)
                         .frame(height: 15)
                 }
@@ -1691,12 +1692,12 @@ struct TeachingCalendarView: View {
         .background(
             isSelected
                 ? theme.selectedDate.opacity(0.14)
-                : (inMonth ? Color.clear : AppTheme.surface.opacity(0.28))
+                : (inMonth ? Color.clear : theme.surface.opacity(0.28))
         )
         .overlay {
             ZStack {
                 Rectangle()
-                    .stroke(AppTheme.border, lineWidth: 0.5)
+                    .stroke(theme.border, lineWidth: 0.5)
                 if let outerKind = deadlineKinds.first {
                     Rectangle()
                         .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
@@ -1732,7 +1733,7 @@ struct TeachingCalendarView: View {
             .foregroundStyle(
                 isSelected || isToday
                     ? theme.onPrimary
-                    : (inMonth ? AppTheme.text : AppTheme.secondaryText.opacity(0.55))
+                    : (inMonth ? theme.text : theme.secondaryText.opacity(0.55))
             )
             .frame(minWidth: 22, minHeight: 22)
             .background {
@@ -1773,7 +1774,7 @@ struct TeachingCalendarView: View {
             }
         }
         .font(.system(size: 9, weight: .semibold))
-        .foregroundStyle(usesCustomBrandTint ? AppTheme.text : tint)
+        .foregroundStyle(usesCustomBrandTint ? theme.text : tint)
         .padding(.horizontal, 5)
         .frame(maxWidth: .infinity, minHeight: 15, maxHeight: 15, alignment: .leading)
         .background(tint.opacity(0.15))
@@ -1970,7 +1971,7 @@ struct TeachingCalendarView: View {
                                 Text("+\(deadlineEvents.count - 3)")
                                     .font(.system(size: 9, weight: .semibold))
                                     .foregroundStyle(
-                                        isSelected ? theme.onPrimary : AppTheme.secondaryText
+                                        isSelected ? theme.onPrimary : theme.secondaryText
                                     )
                             }
                             .buttonStyle(.plain)
@@ -2016,7 +2017,7 @@ struct TeachingCalendarView: View {
                         .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
                 } else {
                     RoundedRectangle(cornerRadius: 5)
-                        .stroke(AppTheme.border, lineWidth: 1)
+                        .stroke(theme.border, lineWidth: 1)
                 }
                 if deadlineKinds.count > 1 {
                     RoundedRectangle(cornerRadius: 2)
@@ -2136,7 +2137,7 @@ struct TeachingCalendarView: View {
                     ForEach(Self.weekdayLabels, id: \.self) { label in
                         Text(model.localized(label))
                             .font(.system(size: layout.weekdayFontSize, weight: .semibold))
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .frame(
                                 maxWidth: .infinity,
                                 minHeight: layout.weekdayHeight,
@@ -2202,7 +2203,7 @@ struct TeachingCalendarView: View {
         let baseColor = dayCourses.isEmpty
             ? Color.clear
             : theme.primary.opacity(
-                TeachingCalendarLogic.yearCourseOpacity(courseCount: dayCourses.count)
+                theme.courseOpacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: dayCourses.count))
             )
 
         let cell = VStack(spacing: 0) {
@@ -2220,7 +2221,7 @@ struct TeachingCalendarView: View {
         .foregroundStyle(
             isSelected || isToday
                 ? theme.onPrimary
-                : (dayCourses.isEmpty ? AppTheme.text : theme.onPrimary)
+                : (dayCourses.isEmpty || theme.configuration.preset != .default ? theme.text : theme.onPrimary)
         )
         .frame(
             maxWidth: .infinity,
@@ -2341,7 +2342,7 @@ struct TeachingCalendarView: View {
             ForEach(Self.weekdayLabels, id: \.self) { label in
                     Text(model.localized(label))
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .frame(maxWidth: .infinity)
                 }
                 ForEach(days, id: \.self) { day in
@@ -2375,7 +2376,7 @@ struct TeachingCalendarView: View {
                 }
             }
             .font(.system(size: 9, weight: isSelected && theme.configuration.preset != .default ? .bold : .medium))
-            .foregroundStyle(isSelected ? theme.onPrimary : AppTheme.text)
+            .foregroundStyle(isSelected ? theme.onPrimary : theme.text)
             .frame(maxWidth: .infinity, minHeight: 30)
             .background(yearCellColor(selected: isSelected, courseCount: dayCourses.count))
             .overlay {
@@ -2385,7 +2386,7 @@ struct TeachingCalendarView: View {
                             .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
                     } else {
                         RoundedRectangle(cornerRadius: 3)
-                            .stroke(isSelected && theme.configuration.preset != .default ? theme.selectedDateOutline : AppTheme.border,
+                            .stroke(isSelected && theme.configuration.preset != .default ? theme.selectedDateOutline : theme.border,
                                     lineWidth: 1)
                     }
                     if deadlineKinds.count > 1 {
@@ -2496,10 +2497,10 @@ struct TeachingCalendarView: View {
                         alignment: .topLeading
                     )
                     .padding(16)
-                    .background(AppTheme.surface)
+                    .background(theme.surface)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(AppTheme.border, lineWidth: 1)
+                            .stroke(theme.border, lineWidth: 1)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
@@ -2525,7 +2526,7 @@ struct TeachingCalendarView: View {
                 HStack(spacing: 8) {
                     Text("日期详情")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     Spacer(minLength: 8)
                     Text(
                         yearPopoverScrollTarget == Self.yearPopoverBottomID
@@ -2533,7 +2534,7 @@ struct TeachingCalendarView: View {
                             : "顶部"
                     )
                     .font(.caption2)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .accessibilityIdentifier("calendar.desktop.year-popover-position")
                     Button {
                         yearPopoverScrollTarget = Self.yearPopoverTopID
@@ -2590,10 +2591,10 @@ struct TeachingCalendarView: View {
             }
         }
         .frame(width: width, height: height)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(AppTheme.border, lineWidth: 1)
+                .stroke(theme.border, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
@@ -2618,7 +2619,7 @@ struct TeachingCalendarView: View {
                     .foregroundStyle(holidayColor(item))
             }
             if dayCourses.isEmpty {
-                Text("暂无课程").foregroundStyle(AppTheme.secondaryText)
+                Text("暂无课程").foregroundStyle(theme.secondaryText)
             } else {
                 ForEach(dayCourses) { course in
                     VStack(alignment: .leading, spacing: 2) {
@@ -2629,7 +2630,7 @@ struct TeachingCalendarView: View {
                                 .joined(separator: "  ·  ")
                         )
                             .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                 }
             }
@@ -2669,7 +2670,7 @@ struct TeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text(fullDateFormatter.string(from: day)).font(.headline)
             if dayCourses.isEmpty {
-                Text("暂无课程").foregroundStyle(AppTheme.secondaryText)
+                Text("暂无课程").foregroundStyle(theme.secondaryText)
             } else {
                 ForEach(dayCourses) { course in
                     VStack(alignment: .leading, spacing: 2) {
@@ -2682,7 +2683,7 @@ struct TeachingCalendarView: View {
                         if !metadata.isEmpty {
                             Text(metadata)
                                 .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                                .foregroundStyle(theme.secondaryText)
                         }
                     }
                 }
@@ -2705,7 +2706,7 @@ struct TeachingCalendarView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Text(deadlineTime(item.deadline))
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                     .contentShape(Rectangle())
                 }
@@ -2734,7 +2735,7 @@ struct TeachingCalendarView: View {
                     }
                     Text(deadlineTime(item.deadline))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     favoriteButton(item)
                 }
             }
@@ -2757,7 +2758,7 @@ struct TeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Label("公开活动 DDL", systemImage: "flag.checkered")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
             ForEach(items) { item in
                 HStack(alignment: .top, spacing: 8) {
                     if let destination = item.officialURL {
@@ -2770,13 +2771,13 @@ struct TeachingCalendarView: View {
                     }
                     Text(deadlineTime(item.deadline))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     favoriteButton(item)
                 }
             }
         }
         .padding(9)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 7))
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 7))
         .overlay {
             ZStack {
                 if let first = kinds.first {
@@ -2799,7 +2800,7 @@ struct TeachingCalendarView: View {
                 .font(.subheadline.weight(.semibold))
             Text(deadlineCategoryTitle(item))
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -2816,7 +2817,7 @@ struct TeachingCalendarView: View {
                     ProgressView().controlSize(.small)
                     Text("正在查询…")
                 }
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             } else if let error = dailyInfo.almanacErrors[date], dailyInfo.almanacByDate[date] == nil {
                 Button {
                     Task {
@@ -2866,10 +2867,10 @@ struct TeachingCalendarView: View {
                 }
             }
             .font(.caption2)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
             Text("校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。")
                 .font(.caption2)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
         }
     }
 
@@ -2877,17 +2878,17 @@ struct TeachingCalendarView: View {
         HStack(alignment: .top, spacing: 8) {
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(color)
+                .foregroundStyle(theme.configuration.preset == .default ? color : theme.text)
                 .frame(width: 20, height: 20)
                 .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
             Text(value)
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(10)
-        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+        .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.border, lineWidth: 1))
     }
 
     @ViewBuilder
@@ -2901,11 +2902,11 @@ struct TeachingCalendarView: View {
                 if let reason = calendarDeadlines.assignmentUnavailableByDate[date] {
                     Text(reason)
                         .font(.callout)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 } else {
                     Text("当天没有课程作业截止事项")
                         .font(.callout)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
             } else {
                 ForEach(items) { item in
@@ -2921,15 +2922,15 @@ struct TeachingCalendarView: View {
                                     .joined(separator: " · ")
                             )
                             .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         }
                         Spacer(minLength: 8)
                         Text(deadlineTime(item.deadline))
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                     .padding(10)
-                    .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+                    .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
                 }
             }
             HStack {
@@ -2938,7 +2939,7 @@ struct TeachingCalendarView: View {
                 Link("打开作业列表", destination: CalendarDeadlineSources.assignments)
             }
             .font(.caption2)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
         }
     }
 
@@ -2962,7 +2963,7 @@ struct TeachingCalendarView: View {
                     ProgressView().controlSize(.small)
                     Text("正在同步竞赛、夏令营与黑客松…")
                 }
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             } else if let error, builtInSnapshot == nil, customSnapshot == nil, items.isEmpty {
                 Button {
                     Task {
@@ -2988,7 +2989,7 @@ struct TeachingCalendarView: View {
             } else if items.isEmpty {
                 Text("当天没有已收录的活动截止事项")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             } else {
                 ForEach(items) { item in
                     publicDeadlineRow(item)
@@ -3012,7 +3013,7 @@ struct TeachingCalendarView: View {
                 }
             }
             .font(.caption2)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
             if let customItem = items.first(where: { $0.source == .custom }) {
                 if let homepage = customItem.sourceHomepage {
                     Link(
@@ -3052,17 +3053,17 @@ struct TeachingCalendarView: View {
                     .multilineTextAlignment(.leading)
                 Text([deadlineCategoryTitle(item), item.organizer].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
             Spacer(minLength: 8)
             Text(deadlineTime(item.deadline))
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+        .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.border, lineWidth: 1))
     }
 
     private func favoriteButton(_ item: PublicDeadlineItem) -> some View {
@@ -3073,7 +3074,7 @@ struct TeachingCalendarView: View {
         } label: {
             Image(systemName: isFavorite ? "star.fill" : "star")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isFavorite ? theme.accent : AppTheme.secondaryText)
+                .foregroundStyle(isFavorite ? theme.accent : theme.secondaryText)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
@@ -3100,10 +3101,10 @@ struct TeachingCalendarView: View {
             .compactMap { $0 }
             .joined(separator: " · ")
         return VStack(alignment: .leading, spacing: 4) {
-            Text(info.weekday).font(.caption).foregroundStyle(AppTheme.secondaryText)
+            Text(info.weekday).font(.caption).foregroundStyle(theme.secondaryOnSoftSurface)
             Text("农历 \(info.lunarDate)").font(.subheadline.weight(.semibold))
             if !festival.isEmpty {
-                Text(festival).font(.caption2).foregroundStyle(AppTheme.secondaryText)
+                Text(festival).font(.caption2).foregroundStyle(theme.secondaryOnSoftSurface)
             }
         }
         .padding(10)
@@ -3113,13 +3114,13 @@ struct TeachingCalendarView: View {
 
     private func almanacPill(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.caption2).foregroundStyle(AppTheme.secondaryText)
+            Text(title).font(.caption2).foregroundStyle(theme.secondaryText)
             Text(value).font(.caption.weight(.semibold)).lineLimit(1)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(AppTheme.border, lineWidth: 1))
+        .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.border, lineWidth: 1))
     }
 
     private func calendarAgendaKind(for item: PublicDeadlineItem) -> CalendarAgendaItemKind {
@@ -3255,7 +3256,7 @@ struct TeachingCalendarView: View {
                                 .font(.headline)
                             Text(fullDateFormatter.string(from: selection.date))
                                 .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                                .foregroundStyle(theme.secondaryText)
                         }
                         Spacer(minLength: 8)
                         Button(action: dismiss) {
@@ -3304,10 +3305,10 @@ struct TeachingCalendarView: View {
                 }
                 .padding(16)
                 .frame(maxWidth: 400)
-                .background(AppTheme.surface)
+                .background(theme.surface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(AppTheme.border, lineWidth: 1)
+                        .stroke(theme.border, lineWidth: 1)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .shadow(color: Color.black.opacity(0.22), radius: 20, y: 8)
@@ -3334,7 +3335,7 @@ struct TeachingCalendarView: View {
                 Text(model.localized(event.categoryKey))
             }
             .font(.caption)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -3835,22 +3836,22 @@ struct TeachingCalendarView: View {
 
     private func monthCellColor(selected: Bool, inMonth: Bool, courseCount: Int) -> Color {
         if selected { return theme.selectedDate }
-        if !inMonth { return AppTheme.surface }
-        guard courseCount > 0 else { return AppTheme.background }
-        return theme.primary.opacity(min(0.08 + Double(courseCount) * 0.10, 0.48))
+        if !inMonth { return theme.surface }
+        guard courseCount > 0 else { return theme.background }
+        return theme.primary.opacity(theme.courseOpacity(min(0.08 + Double(courseCount) * 0.10, 0.48)))
     }
 
     private func monthTextColor(selected: Bool, inMonth: Bool, holidays: [HolidayItem]) -> Color {
         if selected { return theme.onPrimary }
-        if !inMonth { return AppTheme.secondaryText.opacity(0.55) }
+        if !inMonth { return theme.secondaryText.opacity(0.55) }
         if let holiday = holidays.first { return holidayColor(holiday) }
-        return AppTheme.text
+        return theme.text
     }
 
     private func yearCellColor(selected: Bool, courseCount: Int) -> Color {
         if selected { return theme.selectedDate }
-        guard courseCount > 0 else { return AppTheme.background }
-        return theme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount))
+        guard courseCount > 0 else { return theme.background }
+        return theme.primary.opacity(theme.courseOpacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount)))
     }
 
     private func dayAccessibilityLabel(

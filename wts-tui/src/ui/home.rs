@@ -1,6 +1,6 @@
 use chrono::Datelike;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Borders, Paragraph, Wrap};
 use ratatui::Frame;
 use where_to_study_lib::config::today_in_app_tz;
 
@@ -29,7 +29,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         _ => "未获取课表".to_string(),
     };
     let title = Paragraph::new(format!("{} · {}", today_date_label(), week_text))
-        .block(Block::default().borders(Borders::ALL).title("概览"))
+        .block(theme.card_block().borders(Borders::ALL).title("概览"))
         .style(theme.strong_text());
 
     frame.render_widget(title, chunks[0]);
@@ -54,7 +54,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         lines.push("  （今天没有课程）".to_string());
     }
     let courses_para = Paragraph::new(lines.join("\n"))
-        .block(Block::default().borders(Borders::ALL).title("今天课程"))
+        .block(theme.card_block().borders(Borders::ALL).title("今天课程"))
         .wrap(Wrap { trim: false });
 
     frame.render_widget(courses_para, chunks[1]);
@@ -63,7 +63,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let help = Paragraph::new(
         "快捷键：Tab/数字键 切换页面 · q 退出 · r 刷新当前页 · ↑↓ 导航 · Enter 选择",
     )
-    .block(Block::default().borders(Borders::ALL).title("帮助"))
+    .block(theme.card_block().borders(Borders::ALL).title("帮助"))
     .style(theme.muted_text());
 
     frame.render_widget(help, chunks[2]);
@@ -76,7 +76,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         None => "今天无节假日安排".to_string(),
     };
     let holiday_para = Paragraph::new(holiday_text)
-        .block(Block::default().borders(Borders::ALL).title("节假日"))
+        .block(theme.card_block().borders(Borders::ALL).title("节假日"))
         .style(if holiday_kind == Some("休") {
             theme.danger_text()
         } else if holiday_kind == Some("班") {

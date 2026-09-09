@@ -45,7 +45,8 @@ export default function ColorThemeSettings({ controller, language }) {
   const [draft, setDraft] = useState(theme)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
-  useEffect(() => { setDraft(theme) }, [theme])
+  const [editingCustom, setEditingCustom] = useState(false)
+  useEffect(() => { setDraft(theme); setEditingCustom(false) }, [theme])
   const fields = [
     ['customPrimary', text('主色', 'Primary color')],
     ['customAccent', text('强调色', 'Accent color')],
@@ -65,7 +66,7 @@ export default function ColorThemeSettings({ controller, language }) {
   return (
     <section className="panel settings-color-theme" aria-labelledby="color-theme-title">
       <div className="panel-title"><Palette size={18} /><h2 id="color-theme-title">{text('颜色主题', 'Color theme')}</h2></div>
-      <p className="theme-description">{text('本机自动保存，默认保持原配色；DDL 分类色不随主题改变。', 'Saved on this device. Default keeps the original palette; DDL category colors stay unchanged.')}</p>
+      <p className="theme-description">{text('背景、卡片与控件协调换色；默认配色及 DDL 分类色保留。', 'Backgrounds, cards and controls change together. Default and DDL category colors stay unchanged.')}</p>
       <div className="theme-presets" role="group" aria-label={text('预设主题', 'Theme presets')}>
         {COLOR_THEME_PRESETS.map((preset) => (
           <button type="button" key={preset.id} aria-pressed={theme.preset === preset.id}
@@ -92,24 +93,27 @@ export default function ColorThemeSettings({ controller, language }) {
             <span className="theme-color-inputs">
               <input type="color" aria-label={label + text('取色器', ' picker')}
                 value={normalizeHexColor(draft[key]) || DEFAULT_COLOR_THEME[key]}
-                onChange={(event) => { setDraft({ ...draft, [key]: event.target.value }); setSaved(false) }} />
+                onChange={(event) => { setDraft({ ...draft, [key]: event.target.value }); setSaved(false); setEditingCustom(true) }} />
               <input type="text" value={draft[key]} spellCheck={false} autoComplete="off" maxLength={32}
                 aria-label={label + ' HEX'} aria-invalid={!normalizeHexColor(draft[key])}
                 aria-describedby="theme-color-hint"
-                onChange={(event) => { setDraft({ ...draft, [key]: event.target.value }); setSaved(false) }}
+                onChange={(event) => { setDraft({ ...draft, [key]: event.target.value }); setSaved(false); setEditingCustom(true) }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && valid) { event.preventDefault(); commit({ ...draft, preset: 'custom' }) }
                 }} />
             </span>
           </label>
         ))}
-        <p id="theme-color-hint" className="theme-description">{text('输入 #RRGGBB；过浅或过深的颜色会自动调整文字对比度。', 'Enter #RRGGBB. Very light or dark colors are adjusted for readable text contrast.')}</p>
+        <p id="theme-color-hint" className="theme-description">{text('输入 #RRGGBB；主色自动生成柔和背景，文字对比度自动调整。', 'Enter #RRGGBB. Your primary color creates soft backgrounds, with readable text contrast.')}</p>
       </fieldset>
-      <div className="theme-preview" style={colorThemeVariables(valid ? { ...draft, preset: 'custom' } : theme, dark)}
-        aria-label={text('自定义主题预览', 'Custom theme preview')}>
-        <span className="theme-preview-primary">{text('课程', 'Course')}</span>
-        <span className="theme-preview-accent">{text('强调', 'Accent')}</span>
-        <span className="theme-preview-selected">{text('选中日期', 'Selected date')}</span>
+      <div className="theme-preview" style={colorThemeVariables(editingCustom && valid ? { ...draft, preset: 'custom' } : theme, dark)}
+        aria-label={text('完整主题预览', 'Full theme preview')}>
+        <div className="theme-preview-toolbar"><strong>Where To Study</strong><span>{text('主题预览', 'Theme preview')}</span></div>
+        <div className="theme-preview-card">
+          <div className="theme-preview-heading"><strong>{text('教学日历', 'Teaching Calendar')}</strong><span className="theme-preview-selected">18</span></div>
+          <div className="theme-preview-course"><i aria-hidden="true" /><div><strong>{text('今日课程', "Today's course")}</strong><small>08:00–09:35</small></div></div>
+          <div className="theme-preview-controls"><span className="theme-preview-primary">{text('查询', 'Query')}</span><span className="theme-preview-accent">{text('已收藏', 'Saved')}</span></div>
+        </div>
       </div>
       <div className="theme-actions">
         <button type="button" className="primary" disabled={!valid} onClick={() => commit({ ...draft, preset: 'custom' })}>{text('应用自定义配色', 'Apply custom colors')}</button>

@@ -1,8 +1,10 @@
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::Block;
 
 /// Application colour palette (mirrors the desktop app's green/gold scheme).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
+    pub customized: bool,
     pub background: Color,
     pub primary: Color,
     pub primary_fill: Color,
@@ -14,22 +16,25 @@ pub struct Theme {
     pub text: Color,
     pub text_muted: Color,
     pub danger: Color,
-    #[allow(dead_code)] // reserved for future detail styling
     pub surface: Color,
+    pub elevated: Color,
+    pub surface_variant: Color,
     #[allow(dead_code)]
     pub primary_soft: Color,
     pub gold: Color,
     #[allow(dead_code)]
     pub gold_soft: Color,
-    #[allow(dead_code)]
     pub border: Color,
     #[allow(dead_code)]
     pub focus: Color,
 }
 
 pub const LIGHT: Theme = Theme {
+    customized: false,
     background: Color::Rgb(245, 246, 243),
     surface: Color::Rgb(255, 255, 255),
+    elevated: Color::Rgb(255, 255, 255),
+    surface_variant: Color::Rgb(255, 255, 255),
     primary: Color::Rgb(22, 107, 93),
     primary_fill: Color::Rgb(22, 107, 93),
     on_primary: Color::Rgb(245, 246, 243),
@@ -48,8 +53,11 @@ pub const LIGHT: Theme = Theme {
 };
 
 pub const DARK: Theme = Theme {
+    customized: false,
     background: Color::Rgb(16, 20, 18),
     surface: Color::Rgb(26, 32, 29),
+    elevated: Color::Rgb(26, 32, 29),
+    surface_variant: Color::Rgb(26, 32, 29),
     primary: Color::Rgb(36, 125, 107),
     primary_fill: Color::Rgb(36, 125, 107),
     on_primary: Color::Rgb(16, 20, 18),
@@ -68,6 +76,34 @@ pub const DARK: Theme = Theme {
 };
 
 impl Theme {
+    pub fn layer_style(&self, background: Color) -> Style {
+        if self.customized {
+            Style::default().fg(self.text).bg(background)
+        } else {
+            Style::default()
+        }
+    }
+
+    fn layer_block(&self, background: Color) -> Block<'static> {
+        if self.customized {
+            Block::default()
+                .style(self.layer_style(background))
+                .border_style(Style::default().fg(self.border))
+        } else {
+            Block::default()
+        }
+    }
+
+    pub fn card_block(&self) -> Block<'static> {
+        self.layer_block(self.surface)
+    }
+    pub fn control_block(&self) -> Block<'static> {
+        self.layer_block(self.surface_variant)
+    }
+    pub fn elevated_block(&self) -> Block<'static> {
+        self.layer_block(self.elevated)
+    }
+
     pub fn primary_text(&self) -> Style {
         Style::default().fg(self.primary)
     }

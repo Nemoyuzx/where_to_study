@@ -688,10 +688,12 @@ internal class InformationQueryPage(
         UiText.preserveRawText(this)
         textSize = 14f
         setThemeTextColor { Palette.text }
-        setHintTextColor(Palette.muted)
+        bindTheme("hint") { setHintTextColor(Palette.muted) }
         isSingleLine = true
         inputType = InputType.TYPE_CLASS_TEXT
-        background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 8)
+        background = themedRoundedBackground(activity, {
+            if (Palette.selection.preset == "default") Palette.surface else Palette.surfaceVariant
+        }, { Palette.border }, radius = 8)
         setPadding(activity.dp(12), 0, activity.dp(12), 0)
         minHeight = activity.dp(42)
         addTextChangedListener(object : TextWatcher {

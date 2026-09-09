@@ -138,6 +138,7 @@ class MainActivity : Activity() {
         DailyCourseNotificationRuntimeMode.activateFrom(intent)
         super.onCreate(savedInstanceState)
         Palette.configure(this)
+        bindWindowColorTheme(window)
         calendarPermissionRequestPending = savedInstanceState
             ?.getBoolean(CALENDAR_PERMISSION_PENDING_KEY, false)
             ?: false
@@ -678,9 +679,9 @@ class MainActivity : Activity() {
             val animatePhoneSelection = currentLayoutSpec?.usesBottomNavigation == true &&
                 previousDestination != destination && wasSelected != selected
             if (animatePhoneSelection) {
-                val sourceBackgroundColor = if (wasSelected) Palette.background else Color.TRANSPARENT
+                fun sourceBackgroundColor() = if (wasSelected) Palette.background else Color.TRANSPARENT
                 view.background = TransitionDrawable(arrayOf(
-                    themedRoundedBackground(this, { sourceBackgroundColor }, radius = selectionRadius),
+                    themedRoundedBackground(this, { sourceBackgroundColor() }, radius = selectionRadius),
                     targetBackground,
                 )).apply {
                     isCrossFadeEnabled = true

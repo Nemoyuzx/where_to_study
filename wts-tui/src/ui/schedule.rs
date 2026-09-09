@@ -1,7 +1,7 @@
 use chrono::{Datelike, Duration};
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 use where_to_study_lib::config::{today_in_app_tz, SLOT_TIMES};
 
@@ -11,7 +11,7 @@ use crate::theme::Theme;
 pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let Some(schedule) = &app.schedule else {
         let msg = Paragraph::new("尚未获取课表。请在设置页登录并刷新，或按 r 获取。")
-            .block(Block::default().borders(Borders::ALL).title("周课表"))
+            .block(theme.card_block().borders(Borders::ALL).title("周课表"))
             .style(theme.muted_text());
         frame.render_widget(msg, area);
         return;
@@ -89,7 +89,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         Constraint::Length(10),
     ];
     let table =
-        Table::new(rows, widths).block(Block::default().borders(Borders::ALL).title(format!(
+        Table::new(rows, widths).block(theme.card_block().borders(Borders::ALL).title(format!(
             "本周课表 · 公历第 {} 周 · 教学第 {week} 周",
             today_in_app_tz().iso_week().week()
         )));

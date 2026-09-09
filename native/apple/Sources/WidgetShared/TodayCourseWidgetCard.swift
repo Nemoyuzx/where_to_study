@@ -31,7 +31,7 @@ struct TodayCourseWidgetCard: View {
                             english: "\(courses.count - courseLimit) more courses"
                         ))
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(widgetSecondaryText)
                             .lineLimit(1)
                     }
                 }
@@ -52,14 +52,14 @@ struct TodayCourseWidgetCard: View {
                 .foregroundStyle(primary)
             Text(language.text(chinese: "今日课程", english: "Today's Courses"))
                 .font(family == .systemSmall ? .subheadline.weight(.bold) : .headline)
-                .foregroundStyle(.primary)
+                .foregroundStyle(widgetText)
             Spacer(minLength: 4)
             Text(courses.isEmpty ? "" : language.text(
                 chinese: "\(courses.count) 门",
                 english: "\(courses.count) courses"
             ))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(widgetSecondaryText)
         }
     }
 
@@ -85,7 +85,7 @@ struct TodayCourseWidgetCard: View {
             }
         }
         .font(.caption2.weight(.medium))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(widgetSecondaryText)
     }
 
     private var emptyState: some View {
@@ -96,14 +96,14 @@ struct TodayCourseWidgetCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(TodayCourseWidgetData.emptyMessage(language: language))
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(widgetText)
                 if family != .systemSmall {
                     Text(language.text(
                         chinese: "今天可以自由安排",
                         english: "Your day is free"
                     ))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(widgetSecondaryText)
                 }
             }
         }
@@ -123,7 +123,7 @@ struct TodayCourseWidgetCard: View {
                 HStack(spacing: 5) {
                     Text(course.name)
                         .font(courseNameFont)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(widgetText)
                         .lineLimit(1)
                     Spacer(minLength: 2)
                     if highlighted, let phase, phase != .finished {
@@ -132,7 +132,7 @@ struct TodayCourseWidgetCard: View {
                 }
                 Text(courseDetails(course))
                     .font(family == .systemSmall ? .caption2 : .caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(widgetSecondaryText)
                     .lineLimit(1)
             }
         }
@@ -141,7 +141,7 @@ struct TodayCourseWidgetCard: View {
     private func phaseBadge(_ phase: TodayCourseWidgetData.CoursePhase) -> some View {
         Text(phase.badgeText(language: language))
             .font(.caption2.weight(.bold))
-            .foregroundStyle(phase == .inProgress ? primary : Color.primary)
+            .foregroundStyle(badgeTextColor(phase))
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(
@@ -181,6 +181,24 @@ struct TodayCourseWidgetCard: View {
 
     private var primary: Color { theme.primary.color }
     private var widgetBackground: Color { theme.background.color }
+    private var surfaces: ThemeSurfacePalette {
+        .resolved(primary: colorTheme.seeds.primary, dark: colorScheme == .dark)
+    }
+    private var widgetText: Color {
+        colorTheme.preset == .default ? .primary : WidgetThemeColor(surfaces.text).color
+    }
+    private var widgetSecondaryText: Color {
+        colorTheme.preset == .default ? .secondary : WidgetThemeColor(surfaces.secondaryText).color
+    }
+    private func badgeTextColor(_ phase: TodayCourseWidgetData.CoursePhase) -> Color {
+        guard colorTheme.preset != .default else { return phase == .inProgress ? primary : .primary }
+        let primaryRGB = surfaces.readable(colorTheme.seeds.primary.readableText(dark: colorScheme == .dark))
+        let background = surfaces.surface.blended(toward: phase == .inProgress ? primaryRGB : colorTheme.seeds.accent,
+                                                  amount: phase == .inProgress ? 0.14 : 0.24)
+        let ink = (phase == .inProgress ? primaryRGB : surfaces.text)
+            .adjusted(against: background, toward: colorScheme == .dark ? .white : .black)
+        return WidgetThemeColor(ink).color
+    }
 
     private func courseDetails(_ course: TodayCourseWidgetData.Course) -> String {
         var values = [course.timeRange]

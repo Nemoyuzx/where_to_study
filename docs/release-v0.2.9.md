@@ -1,5 +1,11 @@
 # Where To Study 0.2.9 — Release preparation and TestFlight updates
 
+## Coordinated theme surfaces — 2026-09-09 testing-only follow-up
+
+按用户要求提交低饱和预设与背景/卡片/控件联动配色，以及实际染色文字可读性修复；保持默认主题、DDL/今日标识、Apple 审核身份与支持信息。验证范围见[背景主题记录](color-themes.md)。
+
+本轮准备 Apple `0.2.9 (89)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002025)` **仅测试**上传；不提交审核、不修改待审版本或 GitHub Release。Apple 版本继续通过构建参数覆盖，不修改用户项目版本配置。成功回执待上传后补充。
+
 ## Color themes — 2026-09-09 testing-only uploads
 
 本轮源码提交为 `d46844aa7445ac1b3fc49c32d6851b81ab518c93`，已推送 GitHub `main`。提交各平台颜色主题与鸿蒙 PC 字号修复的当前源码，保留 `c2ccb7b` 及其之前的 Apple 身份、产品显示名、离线帮助和支持邮箱修复，也原样保留上传前工作区的 Apple 修改，不还原旧版本。上传前后 Apple 源文件 SHA-256 全部一致。

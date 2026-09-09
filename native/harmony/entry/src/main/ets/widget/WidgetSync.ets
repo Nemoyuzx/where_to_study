@@ -39,10 +39,14 @@ export class WidgetSync {
   static themeBinding(data: Record<string, Object>, selection: ColorThemeSelection,
     dark: boolean): Record<string, Object> {
     const seed = ColorThemes.seeds(selection);
+    const surfaces = ColorThemes.surfaces(selection, dark);
     data['themeCustomized'] = selection.preset !== 'default';
-    data['themePrimary'] = ColorThemes.text(seed.primary, dark);
+    data['themePrimary'] = ColorThemes.primary(selection, dark);
     data['themePrimaryFill'] = ColorThemes.fill(seed.primary);
     data['themeAccent'] = seed.accent;
+    data['themeBackground'] = surfaces.surface;
+    data['themeText'] = surfaces.text;
+    data['themeSecondaryText'] = surfaces.secondaryText;
     return data;
   }
 

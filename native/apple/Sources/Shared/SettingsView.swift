@@ -29,12 +29,12 @@ private struct FavoriteDeadlineManagementView: View {
                     VStack(spacing: 10) {
                         Image(systemName: "star")
                             .font(.system(size: 30))
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         Text("暂无收藏日程")
                             .font(.headline)
                         Text("在教学日历的 DDL 详情右侧点击星标后，会在这里保存完整快照。")
                             .font(.callout)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
@@ -46,12 +46,12 @@ private struct FavoriteDeadlineManagementView: View {
                 }
                 Text("收藏仅保存在本机，不会上传或跨设备同步；清除本地数据会一并删除。")
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(16)
         }
-        .background(AppTheme.background)
+        .background(theme.background)
         .navigationTitle("收藏管理")
         .accessibilityIdentifier("favorites.page")
     }
@@ -74,7 +74,7 @@ private struct FavoriteDeadlineManagementView: View {
                     .joined(separator: " · ")
                 )
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             }
             Spacer(minLength: 8)
             Button {
@@ -92,8 +92,8 @@ private struct FavoriteDeadlineManagementView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border, lineWidth: 1))
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
     }
 }
 
@@ -271,8 +271,9 @@ struct SettingsView: View {
             #endif
             #endif
             }
+            .background(theme.configuration.preset == .default ? Color.clear : theme.background)
         }
-        .background(AppTheme.background)
+        .background(theme.background)
         .accessibilityIdentifier("screen.settings")
         .sheet(isPresented: $showingPrivacyPolicy) {
             PrivacyPolicyView()
@@ -340,7 +341,7 @@ struct SettingsView: View {
                     .font(.headline)
                 Text("Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 if model.isSampleMode {
                     Label("内置示例模式已开启，不会连接教务服务或读写真实用户数据。", systemImage: "eye")
                         .font(.callout.weight(.semibold))
@@ -434,11 +435,11 @@ struct SettingsView: View {
                 .font(.headline)
                 Text("Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("settings.account-unofficial-notice")
                 TextField("学号", text: $model.account)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(ThemeTextFieldStyle())
                     .disabled(model.isSampleMode)
                     .focused($focusedAccountField, equals: .account)
                     .submitLabel(.next)
@@ -454,7 +455,7 @@ struct SettingsView: View {
                     ),
                     text: $model.password
                 )
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(ThemeTextFieldStyle())
                     .disabled(model.isSampleMode)
                     .focused($focusedAccountField, equals: .password)
                     .submitLabel(.done)
@@ -465,7 +466,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("保存账号前请阅读并同意隐私政策。")
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     Button {
                         AppHaptics.impact()
                         dismissKeyboard()
@@ -491,6 +492,7 @@ struct SettingsView: View {
                     Text("沙河").tag("04")
                 }
                 .pickerStyle(.segmented)
+                .background(ThemeSegmentedSurface())
                 .disabled(model.isSampleMode)
                 Button {
                     AppHaptics.impact()
@@ -520,7 +522,7 @@ struct SettingsView: View {
                 if !model.statusMessage.isEmpty {
                     Text(model.localized(model.statusMessage))
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
             }
         }
@@ -547,9 +549,10 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .background(ThemeSegmentedSurface())
                 Text("API 、课程与竞赛返回的原始内容不会自动翻译。")
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -575,14 +578,14 @@ struct SettingsView: View {
                 .tint(theme.primary)
                 .disabled(model.isSampleMode)
                 TextField("学期编号", text: $model.termID)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(ThemeTextFieldStyle())
                     .disabled(model.isSampleMode || model.automaticTermDetectionEnabled)
                     .focused($focusedAccountField, equals: .termID)
                     .submitLabel(.next)
                     .onSubmit { focusedAccountField = .termStartDate }
                     .accessibilityIdentifier("field.term-id")
                 TextField("第一周周一（YYYY-MM-DD）", text: $model.termStartDate)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(ThemeTextFieldStyle())
                     .disabled(model.isSampleMode || model.automaticTermDetectionEnabled)
                     .focused($focusedAccountField, equals: .termStartDate)
                     .submitLabel(.done)
@@ -594,7 +597,7 @@ struct SettingsView: View {
                         : "已关闭自动检测，将使用上方手动填写的学期信息。"
                 )
                 .font(.callout)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 Button {
                     AppHaptics.impact()
                     model.saveSettings()
@@ -629,11 +632,11 @@ struct SettingsView: View {
                 .disabled(model.isSampleMode && !model.isReviewDemo)
                 Text("仅在当天有课时通知；课表更新或账号变更后会自动重排。")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 if !model.dailyCourseNotificationStatusMessage.isEmpty {
                     Text(model.localized(model.dailyCourseNotificationStatusMessage))
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
             }
         }
@@ -711,7 +714,7 @@ struct SettingsView: View {
                 .disabled(model.isSampleMode)
                 .accessibilityIdentifier("settings.custom-deadlines-enabled")
                 TextField("自定义日程 HTTPS 地址", text: $model.customDeadlinesURL)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(ThemeTextFieldStyle())
                     .disabled(model.isSampleMode)
                     .focused($focusedAccountField, equals: .customURL)
                     .onSubmit { validateAndSaveCustomFeed() }
@@ -736,12 +739,12 @@ struct SettingsView: View {
                 if !customFeedValidationStatus.isEmpty {
                     Text(model.localized(customFeedValidationStatus))
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .accessibilityIdentifier("settings.custom-deadlines-status")
                 }
                 Text("自定义源只发送不带凭据的 HTTPS GET；普通条目随开关隐藏，收藏快照始终保留在本机。")
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 Group {
                     #if os(iOS)
                     Button {
@@ -763,7 +766,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.favorite-management")
                 Text("天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。")
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -772,10 +775,10 @@ struct SettingsView: View {
     private var referenceNotice: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(theme.primary)
+                .foregroundStyle(theme.primaryOnSoftSurface)
             Text("显示数据仅供参考，请以实际情况为准。\nDisplayed data is for reference only; please rely on the actual official information.")
                 .font(.callout)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryOnSoftSurface)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -889,7 +892,7 @@ struct SettingsView: View {
 
                 Text("最多显示课程")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 Picker(
                     "最多显示课程",
                     selection: Binding(
@@ -905,6 +908,7 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .background(ThemeSegmentedSurface())
                 .labelsHidden()
                 .disabled(model.isSampleMode)
 
@@ -915,7 +919,7 @@ struct SettingsView: View {
                     Spacer()
                     Text("示例内容")
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
                 Picker("预览尺寸", selection: $widgetPreviewSize) {
                     ForEach(WidgetPreviewSize.allCases) { size in
@@ -923,6 +927,7 @@ struct SettingsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .background(ThemeSegmentedSurface())
                 .labelsHidden()
                 TodayCourseWidgetCard(
                     date: .now,
@@ -949,7 +954,7 @@ struct SettingsView: View {
 
                 Text("小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；大号样式最多展示 6 门课程。设置会同步到 iPhone、iPad 与 Mac。")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -962,7 +967,7 @@ struct SettingsView: View {
                     .font(.headline)
                 Text("清除已保存的教务账户与密码、个人课表、空教室、节假日缓存、自定义日程设置与收藏，并恢复本地设置。")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 Button(role: .destructive) {
                     AppHaptics.impact()
                     showingClearDataConfirmation = true
@@ -990,7 +995,7 @@ struct SettingsView: View {
                   SemesterLogic.isValidTermStartDate(model.termStartDate) {
             Label("当前设置与检测结果不同", systemImage: "exclamationmark.triangle")
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
         }
     }
 

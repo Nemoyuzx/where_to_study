@@ -1,7 +1,7 @@
 use chrono::{Datelike, Duration, NaiveDate};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 use where_to_study_lib::config::today_in_app_tz;
 
@@ -108,7 +108,8 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
 
     let widths = [Constraint::Percentage(14); 7];
     let table = Table::new(rows, widths).block(
-        Block::default()
+        theme
+            .card_block()
             .borders(Borders::ALL)
             .title("月历（休=红 班=金 数字=课程数 会=会议 事=重要事件）"),
     );

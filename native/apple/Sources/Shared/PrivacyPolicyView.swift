@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PrivacyPolicyView: View {
+    @Environment(\.appTheme) private var theme
     @Environment(\.dismiss) private var dismiss
 
     private static let githubURL = URL(
@@ -14,18 +15,18 @@ struct PrivacyPolicyView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("WHERE TO STUDY")
                             .font(.caption.bold())
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         Text("隐私声明 / Privacy Policy")
                             .font(.largeTitle.bold())
-                            .foregroundStyle(AppTheme.text)
+                            .foregroundStyle(theme.text)
                             .accessibilityIdentifier("screen.privacy-policy")
                         Text("生效日期 / Effective date: 2026-08-31")
                             .font(.callout)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
 
                     Text("Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由学校运营，也不代表学校官方立场。\n\nWhere To Study is an independent, unofficial client for BUPT schedules, empty classrooms, and related study information. It is not operated by or affiliated with BUPT.")
-                        .foregroundStyle(AppTheme.text)
+                        .foregroundStyle(theme.text)
 
                     privacySection(
                         title: "账户与教务请求 / Account and academic requests",
@@ -75,7 +76,7 @@ struct PrivacyPolicyView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity, alignment: .top)
             }
-            .background(AppTheme.background)
+            .background(theme.configuration.preset == .default ? theme.background : theme.elevated)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
@@ -95,10 +96,10 @@ struct PrivacyPolicyView: View {
             Divider()
             Text(title)
                 .font(.headline)
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
             Text(body)
                 .font(.callout)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

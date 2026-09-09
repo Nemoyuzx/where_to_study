@@ -28,6 +28,78 @@ final class ColorThemeTests: XCTestCase {
         XCTAssertEqual(AppThemePalette.resolved(.default, dark: true), .dark)
         XCTAssertEqual(WidgetThemePalette.resolved(.default, dark: false), .light)
         XCTAssertEqual(WidgetThemePalette.resolved(.default, dark: true), .dark)
+        XCTAssertEqual(AppTheme().background, AppTheme.background)
+        XCTAssertEqual(AppTheme().surface, AppTheme.surface)
+        XCTAssertEqual(AppTheme().text, AppTheme.text)
+        XCTAssertEqual(AppTheme().secondaryText, AppTheme.secondaryText)
+        XCTAssertEqual(AppTheme().border, AppTheme.border)
+    }
+
+    func testSurfaceRecipesMatchTheContractAndUseTheOriginalPrimarySeed() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: root.appendingPathComponent("contracts/v1/color-themes.json"))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let recipes = try XCTUnwrap(object["surfaces"] as? [String: [String: Any]])
+        for primary in [ThemeRGB.white, .black] + ColorThemePreset.allCases.map({ $0.seeds.primary }) {
+            for dark in [false, true] {
+                let palette = ThemeSurfacePalette.resolved(primary: primary, dark: dark)
+                let recipe = try XCTUnwrap(recipes[dark ? "dark" : "light"])
+                let actual = ["background": palette.background, "surface": palette.surface,
+                              "elevated": palette.elevated, "surfaceVariant": palette.surfaceVariant, "border": palette.border]
+                for (key, color) in actual {
+                    let rule = try XCTUnwrap(recipe[key] as? [String: Any])
+                    let base = try XCTUnwrap((rule["base"] as? String).flatMap(ThemeRGB.init(hex:)))
+                    let amount = try XCTUnwrap(rule["primaryAmount"] as? Double)
+                    XCTAssertEqual(color, base.blended(toward: primary, amount: amount), key)
+                }
+                for surface in palette.surfaces {
+                    XCTAssertGreaterThanOrEqual(palette.text.contrast(against: surface), 4.5)
+                    XCTAssertGreaterThanOrEqual(palette.secondaryText.contrast(against: surface), 4.5)
+                    XCTAssertGreaterThanOrEqual(palette.readable(primary.readableText(dark: dark)).contrast(against: surface), 4.5)
+                }
+            }
+        }
+        let ocean = ColorThemePreset.ocean.seeds.primary
+        XCTAssertEqual(ThemeSurfacePalette.resolved(primary: ocean, dark: false).background.hex, "#EBEEF0")
+        XCTAssertEqual(ThemeSurfacePalette.resolved(primary: ocean, dark: true).background.hex, "#182129")
+        XCTAssertNotEqual(ThemeSurfacePalette.resolved(primary: .white, dark: false).background,
+                          ThemeSurfacePalette.resolved(primary: ThemeRGB.white.accessibleFill(), dark: false).background)
+    }
+
+    func testEveryNonDefaultPresetAndCustomHasDistinctSurfaceLayersAndReadableInks() throws {
+        var configurations = ColorThemePreset.allCases.filter { $0 != .default }.map { ColorThemeConfiguration.default.selecting($0) }
+        for color in ["#FFFFFF", "#000000", "#FFFF00", "#FF00FF", "#00FFFF", "#00FF00", "#FF0000", "#0000FF"] {
+            configurations.append(try XCTUnwrap(ColorThemeConfiguration.default.editing(primary: color, accent: color, selectedDate: color)))
+        }
+        for configuration in configurations {
+            for dark in [false, true] {
+                let surfaces = ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: dark)
+                let palette = AppThemePalette.resolved(configuration, dark: dark)
+                // A white custom seed intentionally leaves both white-based
+                // card layers white after rounding, while canvas/input differ.
+                XCTAssertGreaterThanOrEqual(Set(surfaces.surfaces.map(\.hex)).count, 3)
+                XCTAssertNotEqual(surfaces.background, surfaces.surface)
+                XCTAssertNotEqual(surfaces.surfaceVariant, surfaces.surface)
+                for background in surfaces.surfaces {
+                    XCTAssertGreaterThanOrEqual(rgb(palette.primary).contrast(against: background), 4.5)
+                    XCTAssertGreaterThanOrEqual(surfaces.readable(configuration.seeds.accent.readableText(dark: dark)).contrast(against: background), 4.5)
+                    XCTAssertGreaterThanOrEqual(surfaces.text.contrast(against: background), 4.5)
+                    XCTAssertGreaterThanOrEqual(surfaces.secondaryText.contrast(against: background), 4.5)
+                    for tint in [ThemeRGB.white, .black, configuration.seeds.primary, configuration.seeds.accent,
+                                 rgb(palette.primary), rgb(palette.selectedDate)] {
+                        for opacity in [0.08, 0.12, 0.15, 0.16] {
+                            let composite = background.blended(toward: tint, amount: opacity)
+                            XCTAssertGreaterThanOrEqual(surfaces.readableOnSoftSurface(surfaces.secondaryText).contrast(against: composite), 4.5)
+                        }
+                    }
+                }
+            }
+        }
+        let ocean = AppTheme(configuration: .default.selecting(.ocean))
+        let rose = AppTheme(configuration: .default.selecting(.rose))
+        XCTAssertNotEqual(ocean.background, rose.background)
+        XCTAssertNotEqual(ocean.surface, rose.surface)
     }
 
     func testHexValidationNormalizesOnlyCompleteRGBColors() {
@@ -63,7 +135,7 @@ final class ColorThemeTests: XCTestCase {
                 XCTAssertEqual(palette.hackathonDeadline, original.hackathonDeadline)
                 XCTAssertEqual(palette.customDeadline, original.customDeadline)
                 XCTAssertEqual(WidgetThemePalette.resolved(configuration, dark: dark).background,
-                               dark ? WidgetThemePalette.dark.background : WidgetThemePalette.light.background)
+                               WidgetThemeColor(ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: dark).surface))
             }
         }
         // The contract rounds each original-seed blend, never the last result.

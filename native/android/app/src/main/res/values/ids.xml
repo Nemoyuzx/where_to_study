@@ -123,6 +123,9 @@
     <item name="color_theme_native_tints" type="id" />
     <item name="settings_color_theme_section" type="id" />
     <item name="settings_color_theme_preview" type="id" />
+    <item name="settings_color_theme_preview_card" type="id" />
+    <item name="settings_color_theme_preview_elevated" type="id" />
+    <item name="settings_color_theme_preview_control" type="id" />
     <item name="settings_color_theme_primary" type="id" />
     <item name="settings_color_theme_accent" type="id" />
     <item name="settings_color_theme_selected_date" type="id" />

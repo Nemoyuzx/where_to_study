@@ -110,6 +110,7 @@ import {
 } from './planner-domain.js'
 import QueryHub from './QueryHub.jsx'
 import ColorThemeSettings, { useColorTheme } from './ColorThemeSettings.jsx'
+import { colorThemeHeatmap, resolvedColorTheme } from './color-themes.js'
 import './App.css'
 
 const NAV_ITEMS = [
@@ -1314,6 +1315,8 @@ async function command(name, payload) {
 
 function App() {
   const colorTheme = useColorTheme()
+  const calendarThemePalette = useMemo(() => colorTheme.theme.preset === 'default'
+    ? null : resolvedColorTheme(colorTheme.theme, colorTheme.dark), [colorTheme.theme, colorTheme.dark])
   const [activePage, setActivePage] = useState('planner')
   const [metadata, setMetadata] = useState({
     campuses: [],
@@ -4095,6 +4098,8 @@ function App() {
                             const currentMonth = date.getMonth() === month.monthIndex
                             const courseCount = currentMonth ? state.dayCourses.length : 0
                             const courseOpacity = yearCourseOpacity(courseCount)
+                            const heatmap = calendarThemePalette && courseCount
+                              ? colorThemeHeatmap(calendarThemePalette, courseOpacity) : null
                             const calendarItems = currentMonth ? calendarItemsFor(dateString) : []
                             const supplementalEntries = currentMonth ? supplementalEntriesFor(dateString) : []
                             const hasHoliday = hasCalendarItemType(calendarItems, 'holiday')
@@ -4110,7 +4115,11 @@ function App() {
                                 key={dateString}
                                 type="button"
                                 className={`year-day-button ${currentMonth ? '' : 'muted-day'} ${courseCount ? 'has-course' : ''} ${hasHoliday ? 'has-holiday' : ''} ${hasWorkday ? 'has-workday' : ''} ${hasAssignment ? 'has-assignment' : ''} ${hasSchoolNotice ? 'has-school-notice' : ''} ${hasPublicDeadline ? 'has-public-deadline' : ''} ${deadlineBorderPriority ? `deadline-border-${deadlineBorderPriority}` : ''} ${deadlineBorderSecondary ? `deadline-border-inner-${deadlineBorderSecondary}` : ''} ${currentMonth && dateString === calendarDate ? 'selected' : ''} ${currentMonth && dateString === todayDate ? 'today' : ''}`}
-                                style={courseCount ? { '--course-load-opacity': courseOpacity } : null}
+                                style={courseCount ? {
+                                  '--course-load-opacity': courseOpacity,
+                                  '--course-load-background': heatmap?.background,
+                                  '--course-load-text': heatmap?.text,
+                                } : null}
                                 title={[
                                   ...calendarItems.map((item) => `${t(item.type === 'holiday' ? '休' : '班')} ${item.name}`),
                                   ...supplementalEntries.map((item) => `${supplementalEntryKind(item, uiLanguage, t)} ${item.label}`),

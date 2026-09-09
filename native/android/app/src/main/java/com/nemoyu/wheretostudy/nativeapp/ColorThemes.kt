@@ -28,10 +28,10 @@ data class ColorThemeSelection(val preset: String = "default", val custom: Theme
 object ColorThemeLogic {
     val presets = listOf(
         ColorThemePreset("default", "默认青绿", "Classic Teal", ThemeSeeds()),
-        ColorThemePreset("ocean", "海洋蓝", "Ocean Blue", ThemeSeeds("#1565C0", "#26A69A", "#7C3AED")),
-        ColorThemePreset("violet", "鸢尾紫", "Iris Violet", ThemeSeeds("#7C3AED", "#D08A2E", "#00796B")),
-        ColorThemePreset("amber", "暖琥珀", "Warm Amber", ThemeSeeds("#A65300", "#2E7D6F", "#2563EB")),
-        ColorThemePreset("rose", "玫瑰", "Rose", ThemeSeeds("#B42368", "#8C6A35", "#2563EB")),
+        ColorThemePreset("ocean", "海洋蓝", "Ocean Blue", ThemeSeeds("#356A8A", "#75939A", "#3354A2")),
+        ColorThemePreset("violet", "鸢尾紫", "Iris Violet", ThemeSeeds("#70558F", "#A08AAB", "#504AA0")),
+        ColorThemePreset("amber", "暖琥珀", "Warm Amber", ThemeSeeds("#92603A", "#A9946E", "#78533F")),
+        ColorThemePreset("rose", "玫瑰", "Rose", ThemeSeeds("#A4556D", "#B3909A", "#803F68")),
     )
     private val rgbPattern = Regex("^#?[0-9A-Fa-f]{6}$")
 
@@ -87,7 +87,18 @@ object ColorThemeLogic {
         val primary = color(seeds.primary)
         val accent = color(seeds.accent)
         val selected = color(seeds.selectedDate)
-        val primaryText = text(primary, dark)
+        fun surface(base: String, amount: Double) = mix(color(base), primary, amount)
+        val background = if (dark) surface("#14171C", 0.12) else surface("#F4F4F5", 0.045)
+        val card = if (dark) surface("#22262D", 0.10) else surface("#FFFFFF", 0.012)
+        val elevated = if (dark) surface("#2A2F38", 0.08) else surface("#FFFFFF", 0.006)
+        val variant = if (dark) surface("#2D333D", 0.10) else surface("#EEF0F3", 0.055)
+        val border = if (dark) surface("#46505F", 0.18) else surface("#D6DAE0", 0.16)
+        val surfaces = listOf(background, card, elevated, variant)
+        val mostDemandingSurface = if (dark) surfaces.maxBy(::luminance) else surfaces.minBy(::luminance)
+        val textTarget = if (dark) -1 else 0xFF000000.toInt()
+        val body = accessible(color(if (dark) "#EEF2F6" else "#263240"), mostDemandingSurface, textTarget)
+        val secondary = accessible(color(if (dark) "#B0BCCB" else "#4F5E6E"), mostDemandingSurface, textTarget)
+        val primaryText = accessible(text(primary, dark), mostDemandingSurface, textTarget)
         return original.copy(
             primary = primaryText,
             primaryFill = fill(primary),
@@ -96,7 +107,16 @@ object ColorThemeLogic {
             selectedDate = fill(selected),
             accent = accent,
             onAccent = if (contrast(accent, -1) >= 4.5) -1 else 0xFF000000.toInt(),
-            selectionSurface = mix(primary, original.surface, if (dark) 0.78 else 0.86),
+            background = background,
+            surface = card,
+            elevated = elevated,
+            surfaceVariant = variant,
+            border = border,
+            text = body,
+            muted = secondary,
+            outOfMonth = secondary,
+            segmentedSelection = elevated,
+            selectionSurface = mix(primary, card, if (dark) 0.86 else 0.92),
         )
     }
 }

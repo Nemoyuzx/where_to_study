@@ -113,7 +113,7 @@ struct MobileCalendarTimelineView: View {
                 }
             }
         }
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .accessibilityElement(children: .contain)
     }
 
@@ -148,12 +148,12 @@ struct MobileCalendarTimelineView: View {
 
     private var hourAxis: some View {
         ZStack(alignment: .topLeading) {
-            AppTheme.surface
+            theme.surface
             ForEach(8 ... 22, id: \.self) { hour in
                 let y = MobileCalendarTimelineLayout.yPosition(minute: hour * 60)
                 Text(String(format: "%02d:00", hour))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .accessibilityIdentifier(String(format: "calendar.mobile.hour.%02d", hour))
                     .frame(width: MobileCalendarTimelineLayout.axisWidth - 8, alignment: .trailing)
                     .position(
@@ -186,7 +186,7 @@ struct MobileCalendarTimelineView: View {
         let dayWidth = width / CGFloat(dayCount)
 
         return ZStack(alignment: .topLeading) {
-            AppTheme.surface
+            theme.surface
             selectedColumn(dayWidth: dayWidth)
             grid(width: width, dayWidth: dayWidth)
             if !showsWeekColumns {
@@ -212,7 +212,7 @@ struct MobileCalendarTimelineView: View {
                 hourLines.move(to: CGPoint(x: 0, y: y))
                 hourLines.addLine(to: CGPoint(x: width, y: y))
             }
-            context.stroke(hourLines, with: .color(AppTheme.border), lineWidth: 1)
+            context.stroke(hourLines, with: .color(theme.border), lineWidth: 1)
 
             var slotLines = Path()
             for minute in CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes {
@@ -222,7 +222,7 @@ struct MobileCalendarTimelineView: View {
             }
             context.stroke(
                 slotLines,
-                with: .color(AppTheme.secondaryText.opacity(0.24)),
+                with: .color(theme.secondaryText.opacity(0.24)),
                 style: StrokeStyle(lineWidth: 0.7, dash: [4, 4])
             )
 
@@ -233,7 +233,7 @@ struct MobileCalendarTimelineView: View {
                 columns.move(to: CGPoint(x: x, y: 0))
                 columns.addLine(to: CGPoint(x: x, y: MobileCalendarTimelineLayout.timelineHeight))
             }
-            context.stroke(columns, with: .color(AppTheme.border.opacity(0.7)), lineWidth: 1)
+            context.stroke(columns, with: .color(theme.border.opacity(0.7)), lineWidth: 1)
         }
     }
 
@@ -262,11 +262,11 @@ struct MobileCalendarTimelineView: View {
                         .monospacedDigit()
                 }
                 .font(.system(size: 9))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(AppTheme.surface.opacity(0.92), in: Capsule())
-                .overlay { Capsule().stroke(AppTheme.border.opacity(0.7), lineWidth: 0.5) }
+                .background(theme.surface.opacity(0.92), in: Capsule())
+                .overlay { Capsule().stroke(theme.border.opacity(0.7), lineWidth: 0.5) }
                 .fixedSize()
                 .position(x: 66, y: y)
                 .accessibilityLabel("第\(slot.label)节，\(slot.start)到\(slot.end)")

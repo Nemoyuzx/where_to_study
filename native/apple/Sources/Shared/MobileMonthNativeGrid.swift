@@ -350,18 +350,18 @@ final class MobileMonthDayControl: UIControl {
         needsTextDisplay = true
         func color(_ value: Color) -> UIColor { UIColor(value).resolvedColor(with: traitCollection) }
         let foreground: UIColor = dayIsSelected ? color(AppTheme.onPrimary)
-            : !inMonth ? color(AppTheme.secondaryText).withAlphaComponent(0.45)
-            : day.holiday.map { color($0.type == "holiday" ? AppTheme.danger : theme.primary) } ?? color(AppTheme.text)
+            : !inMonth ? color(theme.secondaryText).withAlphaComponent(0.45)
+            : day.holiday.map { color($0.type == "holiday" ? AppTheme.danger : theme.primary) } ?? color(theme.text)
         backgroundColor = dayIsSelected ? color(theme.selectedDate)
-            : day.courses.isEmpty ? .clear : color(theme.primary).withAlphaComponent(CGFloat(min(0.08 + Double(day.courses.count) * 0.08, 0.36)))
+            : day.courses.isEmpty ? .clear : color(theme.primary).withAlphaComponent(CGFloat(theme.courseOpacity(min(0.08 + Double(day.courses.count) * 0.08, 0.36))))
         numberButton.titleLabel?.font = .systemFont(ofSize: dateFontPointSize, weight: dayIsSelected ? .bold : .medium)
         numberButton.setTitleColor(foreground, for: .normal)
         holidayLabel.textColor = foreground
         dots.forEach { $0.backgroundColor = foreground }
         todayDot.backgroundColor = color(AppTheme.danger)
-        let eventBackground = dayIsSelected ? UIColor.black.withAlphaComponent(0.18) : color(AppTheme.surface).withAlphaComponent(0.78)
+        let eventBackground = dayIsSelected ? UIColor.black.withAlphaComponent(0.18) : color(theme.surface).withAlphaComponent(0.78)
         overflowButton.backgroundColor = eventBackground
-        overflowButton.setTitleColor(color(dayIsSelected ? AppTheme.onPrimary : AppTheme.secondaryText), for: .normal)
+        overflowButton.setTitleColor(color(dayIsSelected ? AppTheme.onPrimary : theme.secondaryText), for: .normal)
         for index in 0..<visibleEventCount {
             // Course colors are presentation state, so cached event snapshots
             // remain reusable when the user changes their theme.

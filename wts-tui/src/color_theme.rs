@@ -27,7 +27,39 @@ pub struct Preset {
 #[derive(Deserialize)]
 struct Contract {
     presets: Vec<Preset>,
+    surfaces: SurfaceRecipes,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SurfaceRecipe {
+    base: String,
+    primary_amount: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SurfacePaletteRecipe {
+    background: SurfaceRecipe,
+    surface: SurfaceRecipe,
+    elevated: SurfaceRecipe,
+    surface_variant: SurfaceRecipe,
+    border: SurfaceRecipe,
+    text: String,
+    secondary_text: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceRecipes {
+    light: SurfacePaletteRecipe,
+    dark: SurfacePaletteRecipe,
+}
+
+static SURFACES: LazyLock<SurfaceRecipes> = LazyLock::new(|| {
+    serde_json::from_str::<Contract>(include_str!("../../contracts/v1/color-themes.json"))
+        .expect("valid bundled surface recipes")
+        .surfaces
+});
 
 pub static PRESETS: LazyLock<Vec<Preset>> = LazyLock::new(|| {
     serde_json::from_str::<Contract>(include_str!("../../contracts/v1/color-themes.json"))
@@ -98,12 +130,34 @@ impl ColorTheme {
             return palette;
         }
         let seeds = self.seeds().map(rgb);
+        let recipe = if dark {
+            &SURFACES.dark
+        } else {
+            &SURFACES.light
+        };
+        let layer = |recipe: &SurfaceRecipe| {
+            color(blend(rgb(&recipe.base), seeds[0], recipe.primary_amount))
+        };
+        palette.customized = true;
+        palette.background = layer(&recipe.background);
+        palette.surface = layer(&recipe.surface);
+        palette.elevated = layer(&recipe.elevated);
+        palette.surface_variant = layer(&recipe.surface_variant);
+        palette.border = layer(&recipe.border);
+        let surfaces = [
+            palette.background,
+            palette.surface,
+            palette.elevated,
+            palette.surface_variant,
+        ];
+        // White contrast is smallest on the lightest surface, black contrast on
+        // the darkest. Testing all four also covers saturated custom RGB seeds.
+        let ink = |seed: [u8; 3]| readable_on_surfaces(seed, &surfaces, dark);
+        palette.text = color(ink(rgb(&recipe.text)));
+        palette.text_muted = color(ink(rgb(&recipe.secondary_text)));
         palette.primary_fill = color(fill(seeds[0]));
         palette.primary = color(readable(seeds[0], if dark { [40; 3] } else { [255; 3] }));
-        palette.primary = color(readable(
-            channels(palette.primary),
-            channels(palette.background),
-        ));
+        palette.primary = color(ink(channels(palette.primary)));
         palette.on_primary = color([255; 3]);
         palette.selected_date = color(fill(seeds[2]));
         palette.on_selected_date = color([255; 3]);
@@ -112,7 +166,7 @@ impl ColorTheme {
             seeds[0],
             if dark { 0.18 } else { 0.1 },
         ));
-        palette.gold = color(readable(seeds[1], channels(palette.background)));
+        palette.gold = color(ink(seeds[1]));
         palette.gold_soft = color(blend(channels(palette.surface), seeds[1], 0.2));
         palette.focus = palette.primary;
         palette
@@ -178,6 +232,18 @@ pub fn readable(seed: [u8; 3], background: [u8; 3]) -> [u8; 3] {
 
 pub fn fill(seed: [u8; 3]) -> [u8; 3] {
     readable(seed, [255; 3])
+}
+
+fn readable_on_surfaces(seed: [u8; 3], surfaces: &[Color], dark: bool) -> [u8; 3] {
+    let target = if dark { [255; 3] } else { [0; 3] };
+    (0..=50)
+        .map(|step| blend(seed, target, step as f64 * 0.02))
+        .find(|candidate| {
+            surfaces
+                .iter()
+                .all(|surface| contrast(*candidate, channels(*surface)) >= 4.5)
+        })
+        .unwrap_or(target)
 }
 
 pub fn config_path() -> Option<PathBuf> {
@@ -395,8 +461,8 @@ pub(crate) mod tests {
         assert_eq!(ColorTheme::default().palette(true), DARK);
         assert_eq!(LIGHT.selected_date, LIGHT.primary);
         assert_eq!(DARK.selected_date, DARK.primary);
-        assert_eq!(PRESETS[1].primary, "#1565C0");
-        assert_eq!(PRESETS[2].selected_date, "#00796B");
+        assert_eq!(PRESETS[1].primary, "#356A8A");
+        assert_eq!(PRESETS[2].selected_date, "#504AA0");
     }
 
     #[test]
@@ -421,7 +487,9 @@ pub(crate) mod tests {
                     assert_eq!(palette.danger, original.danger);
                     assert_eq!(palette.event, original.event);
                     assert_eq!(palette.workday, original.workday);
-                    assert_eq!(palette.background, original.background);
+                    if preset == "default" {
+                        assert_eq!(palette, original);
+                    }
                     if preset != "default" {
                         assert!(
                             contrast(channels(palette.primary_fill), channels(palette.on_primary))
@@ -443,10 +511,57 @@ pub(crate) mod tests {
                         if dark {
                             assert!(contrast(channels(palette.primary), [40; 3]) >= 4.5);
                         }
+                        for surface in [
+                            palette.background,
+                            palette.surface,
+                            palette.elevated,
+                            palette.surface_variant,
+                        ] {
+                            for ink in [
+                                palette.text,
+                                palette.text_muted,
+                                palette.primary,
+                                palette.gold,
+                            ] {
+                                assert!(contrast(channels(ink), channels(surface)) >= 4.5);
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    #[test]
+    fn surface_layers_match_shared_recipes_without_persisting_more_custom_fields() {
+        let ocean = ColorTheme {
+            preset: "ocean".into(),
+            ..ColorTheme::default()
+        };
+        let light = ocean.palette(false);
+        assert_eq!(light.background, color(rgb("#EBEEF0")));
+        assert_eq!(light.surface, color(rgb("#FDFDFE")));
+        assert_eq!(light.elevated, color(rgb("#FEFEFE")));
+        assert_eq!(light.surface_variant, color(rgb("#E4E9ED")));
+        assert_eq!(light.border, color(rgb("#BCC8D2")));
+        let dark = ocean.palette(true);
+        assert_eq!(dark.background, color(rgb("#182129")));
+        assert_eq!(dark.surface, color(rgb("#242D36")));
+        assert_eq!(dark.elevated, color(rgb("#2B343F")));
+        assert_eq!(dark.surface_variant, color(rgb("#2E3945")));
+        assert_eq!(dark.border, color(rgb("#435567")));
+        let custom = ColorTheme {
+            preset: "custom".into(),
+            primary: "#FFFFFF".into(),
+            ..ColorTheme::default()
+        };
+        assert_eq!(
+            custom.palette(true).background,
+            color(blend(rgb("#14171C"), [255; 3], 0.12))
+        );
+        assert!(!serde_json::to_string(&custom)
+            .unwrap()
+            .contains("background"));
     }
 
     #[test]

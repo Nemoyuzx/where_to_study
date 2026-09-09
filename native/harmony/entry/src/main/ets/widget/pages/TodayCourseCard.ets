@@ -9,6 +9,9 @@ struct TodayCourseCard {
   @LocalStorageProp('themePrimary') themePrimary: string = '#166B5D';
   @LocalStorageProp('themePrimaryFill') themePrimaryFill: string = '#166B5D';
   @LocalStorageProp('themeAccent') themeAccent: string = '#E2BC62';
+  @LocalStorageProp('themeBackground') themeBackground: string = '#FFFFFF';
+  @LocalStorageProp('themeText') themeText: string = '#263240';
+  @LocalStorageProp('themeSecondaryText') themeSecondaryText: string = '#4F5E6E';
   @LocalStorageProp('todayTitle') todayTitle: string = '今日课程';
   @LocalStorageProp('todayCountText') todayCountText: string = '';
   @LocalStorageProp('dateContext') dateContext: string = '';
@@ -73,13 +76,13 @@ struct TodayCourseCard {
         Text(name)
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.widget_text_primary'))
+          .fontColor(this.themeCustomized ? this.themeText : $r('app.color.widget_text_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
         Text(details)
           .fontSize(11)
-          .fontColor($r('app.color.widget_text_secondary'))
+          .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
@@ -100,12 +103,12 @@ struct TodayCourseCard {
         Text(this.todayTitle)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.widget_text_primary'))
+          .fontColor(this.themeCustomized ? this.themeText : $r('app.color.widget_text_primary'))
         Blank()
         Text(this.todayCountText)
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.widget_text_secondary'))
+          .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
       }
       .width('100%')
       .height(28)
@@ -117,7 +120,7 @@ struct TodayCourseCard {
           this.dateContext + ' · ' + this.statusText : this.dateContext)
           .fontSize(11)
           .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.widget_text_secondary'))
+          .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
@@ -136,10 +139,10 @@ struct TodayCourseCard {
             Text(this.emptyText)
               .fontSize(14)
               .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.widget_text_primary'))
+              .fontColor(this.themeCustomized ? this.themeText : $r('app.color.widget_text_primary'))
             Text(this.statusText)
               .fontSize(11)
-              .fontColor($r('app.color.widget_text_secondary'))
+              .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
           }
           .alignItems(HorizontalAlign.Start)
         }
@@ -154,7 +157,7 @@ struct TodayCourseCard {
           if (this.moreHint.length > 0) {
             Text(this.moreHint)
               .fontSize(11)
-              .fontColor($r('app.color.widget_text_secondary'))
+              .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
               .maxLines(1)
               .width('100%')
               .margin({ top: 2 })
@@ -172,6 +175,6 @@ struct TodayCourseCard {
     .height('100%')
     .alignItems(HorizontalAlign.Start)
     .borderRadius(16)
-    .backgroundColor($r('app.color.widget_background'))
+    .backgroundColor(this.themeCustomized ? this.themeBackground : $r('app.color.widget_background'))
   }
 }

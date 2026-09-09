@@ -3,6 +3,7 @@ package com.nemoyu.wheretostudy.nativeapp
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.math.roundToInt
 
 class ColorThemeLogicTest {
     @Test
@@ -65,7 +66,43 @@ class ColorThemeLogicTest {
                 assertEquals(legacy.customDeadline, colors.customDeadline)
                 assertEquals(legacy.nowIndicator, colors.nowIndicator)
                 assertEquals(legacy.danger, colors.danger)
-                assertEquals(legacy.background, colors.background)
+                if (selection.preset == "default") assertEquals(legacy.background, colors.background)
+                else assertNotEquals(legacy.background, colors.background)
+            }
+        }
+    }
+
+    @Test
+    fun generatedSurfacesMatchSharedRecipeForActualPrimarySeeds() {
+        val contract = javaClass.classLoader!!.getResourceAsStream("color-themes.json")!!
+            .bufferedReader().use { JSONObject(it.readText()) }.getJSONObject("surfaces")
+        val selections = ColorThemeLogic.presets.drop(1).map { ColorThemeSelection(it.id) } +
+            listOf("#000000", "#FFFFFF", "#FF0000", "#00FF00", "#0000FF", "#EBC7A5")
+                .map { ColorThemeSelection("custom", ThemeSeeds(primary = it)) }
+        selections.forEach { selection ->
+            val seed = ColorThemeLogic.color(selection.seeds.primary)
+            listOf(false, true).forEach { dark ->
+                val colors = ColorThemeLogic.palette(selection, dark)
+                val recipe = contract.getJSONObject(if (dark) "dark" else "light")
+                mapOf("background" to colors.background, "surface" to colors.surface,
+                    "elevated" to colors.elevated, "surfaceVariant" to colors.surfaceVariant,
+                    "border" to colors.border).forEach { (name, actual) ->
+                    val rule = recipe.getJSONObject(name)
+                    val base = ColorThemeLogic.color(rule.getString("base"))
+                    val amount = rule.getDouble("primaryAmount")
+                    val expected = listOf(16, 8, 0).fold(0xFF000000.toInt()) { value, shift ->
+                        value or ((((base ushr shift) and 255) * (1 - amount) +
+                            ((seed ushr shift) and 255) * amount).roundToInt() shl shift)
+                    }
+                    assertEquals("${selection.seeds.primary}/$dark/$name", expected, actual)
+                }
+                assertEquals(colors.elevated, colors.segmentedSelection)
+                listOf(colors.background, colors.surface, colors.elevated, colors.surfaceVariant).forEach { surface ->
+                    listOf(colors.text, colors.muted, colors.outOfMonth, colors.primaryText).forEach { ink ->
+                        assertTrue("${selection.seeds.primary}/$dark contrast=${ColorThemeLogic.contrast(ink, surface)}",
+                            ColorThemeLogic.contrast(ink, surface) >= 4.5)
+                    }
+                }
             }
         }
     }
@@ -79,6 +116,23 @@ class ColorThemeLogicTest {
                 assertTrue(ColorThemeLogic.contrast(text, colors.selectionSurface) >= 4.5)
             }
         }
+    }
+
+    @Test
+    fun yearHeatmapTextRemainsReadableAtHighCourseDensity() {
+        listOf(false, true).forEach { dark ->
+            listOf("#000000", "#FFFFFF", "#FF0000").forEach { primary ->
+                val colors = ColorThemeLogic.palette(ColorThemeSelection("custom", ThemeSeeds(primary = primary)), dark)
+                listOf(0, 1, 6, 20).forEach { count ->
+                    val fill = ColorThemeLogic.mix(colors.background, colors.primary,
+                        TeachingCalendarLogic.yearCourseOpacity(count).toDouble())
+                    val ink = YearCalendarLogic.dayNumberColor(false, true, colors.text, colors.onPrimary, fill)
+                    assertTrue(ColorThemeLogic.contrast(ink, fill) >= 4.5)
+                }
+            }
+        }
+        assertEquals(ThemePalettes.dark.text,
+            YearCalendarLogic.dayNumberColor(false, false, ThemePalettes.dark.text, -1, -1))
     }
 
     @Test

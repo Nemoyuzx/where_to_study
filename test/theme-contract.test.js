@@ -552,7 +552,7 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
 
   assert.match(
     appleTimelineSource,
-    /for minute in CalendarTimelineLogic\.wholeHourMinutes[\s\S]*context\.stroke\(hourLines, with: \.color\(AppTheme\.border\), lineWidth: 1\)/,
+    /for minute in CalendarTimelineLogic\.wholeHourMinutes[\s\S]*context\.stroke\(hourLines, with: \.color\(theme\.border\), lineWidth: 1\)/,
   )
   assert.match(
     appleTimelineSource,
@@ -707,10 +707,13 @@ test('Harmony disabled settings actions keep at least 4.5:1 text contrast in bot
   const themeTokenFor = (attribute) => {
     const method = disabledContent.match(new RegExp(`\\.${attribute}\\(AppTheme\\.(\\w+)\\(\\)\\)`))?.[1]
     assert.ok(method, `disabled content must declare its ${attribute}`)
-    const token = harmonyThemeSource.match(new RegExp(
-      `static ${method}\\(\\): Resource \\{\\s*return \\$r\\('app\\.color\\.(\\w+)'\\)`,
-    ))?.[1]
+    const body = harmonyThemeSource.match(new RegExp(
+      `static ${method}\\(\\): Resource(?:Color)? \\{([^]*?)\\n  \\}`,
+    ))?.[1] || ''
+    assert.match(body, /selection\.preset === 'default'/)
+    const token = body.match(/\? \$r\('app\.color\.(\w+)'\)/)?.[1]
     assert.ok(token, `${method} must resolve to a theme color`)
+    assert.match(body, /AppTheme\.surfaces\(\)\./, 'non-default disabled controls must use generated surfaces')
     return token
   }
   const foreground = themeTokenFor('fontColor')

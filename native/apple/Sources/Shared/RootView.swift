@@ -323,6 +323,14 @@ struct RootView: View {
         .environmentObject(calendarDeadlines)
         .environment(\.appTheme, theme)
         .tint(theme.configuration.preset == .default ? nil : theme.primary)
+        .foregroundStyle(theme.text)
+        .background(theme.background.ignoresSafeArea())
+        #if os(iOS)
+        .toolbarBackground(theme.configuration.preset == .default ? AnyShapeStyle(.bar) : AnyShapeStyle(theme.surfaceVariant),
+                           for: .navigationBar, .tabBar)
+        .toolbarBackground(theme.configuration.preset == .default ? .automatic : .visible,
+                           for: .navigationBar, .tabBar)
+        #endif
     }
 
     private var sampleModeBanner: some View {
@@ -355,10 +363,10 @@ struct RootView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("独立非官方工具")
                     .font(.caption.bold())
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 Text("Where To Study")
                     .font(.headline)
-                    .foregroundStyle(AppTheme.text)
+                    .foregroundStyle(theme.text)
             }
             .padding(.horizontal, sidebarTitlePadding)
 
@@ -370,7 +378,7 @@ struct RootView: View {
                 } label: {
                     Label(model.localized(section.titleKey), systemImage: section.systemImage)
                         .font(.body.weight(selectedSection == section ? .semibold : .regular))
-                        .foregroundStyle(AppTheme.text)
+                        .foregroundStyle(theme.text)
                         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                         .contentShape(Rectangle())
                 }
@@ -388,7 +396,7 @@ struct RootView: View {
         }
         .padding(.top, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(AppTheme.surface.ignoresSafeArea())
+        .background((theme.configuration.preset == .default ? theme.surface : theme.surfaceVariant).ignoresSafeArea())
         .accessibilityIdentifier("layout.regular-sidebar")
     }
 
@@ -404,7 +412,7 @@ struct RootView: View {
             sectionView(selectedSection)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(AppTheme.background)
+        .background(theme.background)
     }
 
     private var regularSidebar: some View {
@@ -428,10 +436,10 @@ struct RootView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("独立非官方工具")
                         .font(.caption.bold())
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     Text("Where To Study")
                         .font(.headline)
-                        .foregroundStyle(AppTheme.text)
+                        .foregroundStyle(theme.text)
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 8)
@@ -455,7 +463,7 @@ struct RootView: View {
                                 .transition(.opacity)
                         }
                     }
-                    .foregroundStyle(selectedSection == section ? theme.primary : AppTheme.text)
+                    .foregroundStyle(selectedSection == section ? theme.primaryOnSoftSurface : theme.text)
                     .frame(
                         maxWidth: isRegularSidebarExpanded ? .infinity : nil,
                         minHeight: 42,
@@ -487,7 +495,7 @@ struct RootView: View {
         .padding(.horizontal, isRegularSidebarExpanded ? 12 : 10)
         .padding(.top, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(AppTheme.surface.ignoresSafeArea())
+        .background((theme.configuration.preset == .default ? theme.surface : theme.surfaceVariant).ignoresSafeArea())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("layout.regular-sidebar")
     }

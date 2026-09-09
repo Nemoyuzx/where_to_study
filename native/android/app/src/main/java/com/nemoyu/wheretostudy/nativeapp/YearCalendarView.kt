@@ -34,6 +34,9 @@ object YearCalendarLogic {
 
     fun todayBorderWidthDp(): Float = 1.2f
 
+    fun dayNumberColor(selected: Boolean, customTheme: Boolean, text: Int, onSelected: Int, fill: Int): Int =
+        if (selected) onSelected else if (customTheme) ColorThemeLogic.readableText(text, fill) else text
+
     fun columns(screenWidthDp: Int): Int = when {
         screenWidthDp >= 1100 -> 4
         screenWidthDp >= 700 -> 3
@@ -286,7 +289,7 @@ class YearCalendarView(
         val selected = selectedDate?.let { sameDay(it, day.date) } == true
         val today = sameDay(day.date, Calendar.getInstance(shanghai))
         val borderKinds = YearCalendarLogic.borderKinds(day.supplementaryKinds)
-        fillPaint.color = when {
+        val dayFill = when {
             selected -> Palette.selectedDate
             day.courseCount <= 0 -> Palette.background
             else -> blend(
@@ -295,6 +298,7 @@ class YearCalendarView(
                 amount = TeachingCalendarLogic.yearCourseOpacity(day.courseCount),
             )
         }
+        fillPaint.color = dayFill
         canvas.drawRoundRect(rect, dp(4).toFloat(), dp(4).toFloat(), fillPaint)
 
         if (borderKinds.isNotEmpty()) {
@@ -338,7 +342,9 @@ class YearCalendarView(
         }
 
         textPaint.textAlign = Paint.Align.CENTER
-        textPaint.color = if (selected) Palette.onPrimary else Palette.text
+        textPaint.color = YearCalendarLogic.dayNumberColor(
+            selected, Palette.selection.preset != "default", Palette.text, Palette.onPrimary, dayFill,
+        )
         textPaint.textSize = sp(8f)
         textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         drawCenteredText(

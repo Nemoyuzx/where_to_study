@@ -62,6 +62,28 @@ export struct ColorThemeSettingsCard {
     return this.editingCustom && this.draftSelection() !== null ? this.preview().accent : AppTheme.accent();
   }
 
+  private previewLayer(role: string): ResourceColor {
+    const selection: ColorThemeSelection = this.editingCustom ?
+      this.draftSelection() ?? this.model.colorTheme.selection : this.model.colorTheme.selection;
+    if (selection.preset === 'default') {
+      if (role === 'background') { return AppTheme.background(); }
+      if (role === 'surface') { return AppTheme.surface(); }
+      if (role === 'elevated') { return AppTheme.elevated(); }
+      if (role === 'surfaceVariant') { return AppTheme.surfaceVariant(); }
+      if (role === 'border') { return AppTheme.border(); }
+      if (role === 'secondaryText') { return AppTheme.secondaryText(); }
+      return AppTheme.text();
+    }
+    const surfaces = ColorThemes.surfaces(selection, this.model.colorTheme.dark);
+    if (role === 'background') { return surfaces.background; }
+    if (role === 'surface') { return surfaces.surface; }
+    if (role === 'elevated') { return surfaces.elevated; }
+    if (role === 'surfaceVariant') { return surfaces.surfaceVariant; }
+    if (role === 'border') { return surfaces.border; }
+    if (role === 'secondaryText') { return surfaces.secondaryText; }
+    return surfaces.text;
+  }
+
   private choosePreset(id: string): void {
     this.saveFailed = false;
     this.model.selectColorTheme(id).then((saved: boolean) => { this.saveFailed = !saved; });
@@ -95,7 +117,8 @@ export struct ColorThemeSettingsCard {
         .fontSize(16)
         .fontFamily('monospace')
         .fontColor(AppTheme.text())
-        .backgroundColor(AppTheme.background())
+        .backgroundColor(this.model.colorTheme.selection.preset === 'default' ?
+          AppTheme.background() : AppTheme.inputSurface())
         .borderRadius(8)
         .constraintSize({ minHeight: 44 })
         .width('100%')
@@ -174,25 +197,42 @@ export struct ColorThemeSettingsCard {
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.text())
       Column({ space: 8 }) {
-        Text(this.text('课程 · 08:00–09:35', 'Course · 08:00–09:35'))
-          .fontSize(14)
-          .fontColor('#FFFFFF')
-          .padding(10)
-          .width('100%')
+        Text(this.text('页面背景', 'Page Canvas')).fontSize(12)
+          .fontColor(this.previewLayer('secondaryText'))
+        Column({ space: 8 }) {
+          Text(this.text('课程卡片', 'Course Card')).fontSize(14)
+            .fontWeight(FontWeight.Medium).fontColor(this.previewLayer('text'))
+          Text(this.text('课程 · 08:00–09:35', 'Course · 08:00–09:35'))
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+            .padding(10)
+            .width('100%')
+            .borderRadius(8)
+            .backgroundColor(this.previewPrimary())
+          Row({ space: 12 }) {
+            Text('12').fontSize(15).fontColor('#FFFFFF').padding(10).borderRadius(8)
+              .backgroundColor(this.previewSelectedDate())
+            this.swatch(this.previewAccent())
+            Text(this.text('选中日期', 'Selected Date')).fontSize(13)
+              .fontColor(this.previewLayer('text')).layoutWeight(1)
+          }
+          .padding(8)
           .borderRadius(8)
-          .backgroundColor(this.previewPrimary())
-        Row({ space: 12 }) {
-          Text('12').fontSize(15).fontColor('#FFFFFF').padding(10).borderRadius(8)
-            .backgroundColor(this.previewSelectedDate())
-          this.swatch(this.previewAccent())
-          Text(this.text('选中日期', 'Selected Date')).fontSize(13).fontColor(AppTheme.text())
-            .layoutWeight(1)
+          .backgroundColor(this.previewLayer('surfaceVariant'))
+          .border({ width: 1, color: this.previewLayer('border') })
+          .width('100%')
+          Text(this.text('日程详情浮层', 'Event Details Panel')).fontSize(12)
+            .fontColor(this.previewLayer('secondaryText')).padding(8).width('100%')
+            .backgroundColor(this.previewLayer('elevated')).borderRadius(6)
         }
+        .padding(10)
+        .borderRadius(8)
+        .backgroundColor(this.previewLayer('surface'))
         .width('100%')
       }
       .padding(12)
       .borderRadius(8)
-      .backgroundColor(AppTheme.background())
+      .backgroundColor(this.previewLayer('background'))
       .width('100%')
       Button({ type: ButtonType.Normal }) {
         Text(this.text('应用自定义颜色', 'Apply Custom Colors'))

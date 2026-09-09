@@ -76,8 +76,9 @@ struct AppThemePalette: Equatable, Sendable {
         let original = dark ? Self.dark : Self.light
         guard configuration.preset != .default else { return original }
         let seeds = configuration.seeds
+        let surfaces = ThemeSurfacePalette.resolved(primary: seeds.primary, dark: dark)
         return AppThemePalette(
-            primary: AppThemeColor(seeds.primary.readableText(dark: dark)),
+            primary: AppThemeColor(surfaces.readable(seeds.primary.readableText(dark: dark))),
             primaryFill: AppThemeColor(seeds.primary.accessibleFill()),
             accent: AppThemeColor(seeds.accent),
             onPrimary: original.onPrimary,
@@ -102,13 +103,11 @@ struct AppTheme: Equatable, Sendable {
     var selectedDate: Color { Self.adaptiveColor(\.selectedDate, configuration: configuration) }
     var selectedDateOutline: Color {
         guard configuration.preset != .default else { return selectedDate }
-        return Self.adaptiveValue(light: configuration.seeds.selectedDate.accessibleFill(),
-                                  dark: configuration.seeds.selectedDate.readableText(dark: true))
+        return readableBrand(configuration.seeds.selectedDate)
     }
     var accentText: Color {
         guard configuration.preset != .default else { return Self.accent }
-        return Self.adaptiveValue(light: configuration.seeds.accent.readableText(dark: false),
-                                  dark: configuration.seeds.accent.readableText(dark: true))
+        return readableBrand(configuration.seeds.accent)
     }
     var onAccent: Color {
         guard configuration.preset != .default else { return Self.text }
@@ -117,6 +116,51 @@ struct AppTheme: Equatable, Sendable {
 
     func deadlineTint(for kind: CalendarAllDayEventKind) -> Color {
         kind == .workday ? primary : CalendarDeadlinePresentation.tint(for: kind)
+    }
+
+    var background: Color { surfaceColor(\.background, fallback: Self.background) }
+    var surface: Color { surfaceColor(\.surface, fallback: Self.surface) }
+    var elevated: Color { surfaceColor(\.elevated, fallback: Self.surface) }
+    var surfaceVariant: Color { surfaceColor(\.surfaceVariant, fallback: Self.background) }
+    var text: Color { surfaceColor(\.text, fallback: Self.text) }
+    var secondaryText: Color { surfaceColor(\.secondaryText, fallback: Self.secondaryText) }
+    var border: Color { surfaceColor(\.border, fallback: Self.border) }
+
+    var secondaryOnSoftSurface: Color {
+        guard configuration.preset != .default else { return secondaryText }
+        func ink(dark: Bool) -> ThemeRGB {
+            let surfaces = ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: dark)
+            return surfaces.readableOnSoftSurface(surfaces.secondaryText)
+        }
+        return Self.adaptiveValue(light: ink(dark: false), dark: ink(dark: true))
+    }
+
+    func courseOpacity(_ original: Double) -> Double {
+        configuration.preset == .default ? original : min(original, 0.16)
+    }
+
+    var primaryOnSoftSurface: Color {
+        guard configuration.preset != .default else { return primary }
+        func ink(dark: Bool) -> ThemeRGB {
+            let surfaces = ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: dark)
+            let primary = surfaces.readable(configuration.seeds.primary.readableText(dark: dark))
+            return primary.adjusted(against: surfaces.contrastSurface.blended(toward: primary, amount: 0.16),
+                                    toward: dark ? .white : .black)
+        }
+        return Self.adaptiveValue(light: ink(dark: false), dark: ink(dark: true))
+    }
+
+    private func readableBrand(_ seed: ThemeRGB) -> Color {
+        Self.adaptiveValue(
+            light: ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: false).readable(seed.readableText(dark: false)),
+            dark: ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: true).readable(seed.readableText(dark: true)))
+    }
+
+    private func surfaceColor(_ keyPath: KeyPath<ThemeSurfacePalette, ThemeRGB>, fallback: Color) -> Color {
+        guard configuration.preset != .default else { return fallback }
+        return Self.adaptiveValue(
+            light: ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: false)[keyPath: keyPath],
+            dark: ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: true)[keyPath: keyPath])
     }
 
     static let primary = adaptiveColor(\.primary)
@@ -259,6 +303,7 @@ enum MobilePageLayoutPolicy {
 }
 
 struct PageTitle: View {
+    @Environment(\.appTheme) private var theme
     let eyebrow: String
     let title: String
     let compact: Bool
@@ -273,26 +318,27 @@ struct PageTitle: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(eyebrow.uppercased())
                 .font(.caption.weight(.bold))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             Text(title)
                 .font(compact ? .title2.bold() : .largeTitle.bold())
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 struct Surface<Content: View>: View {
+    @Environment(\.appTheme) private var theme
     @ViewBuilder let content: Content
 
     var body: some View {
         content
             .padding(16)
-            .foregroundStyle(AppTheme.text)
-            .background(AppTheme.surface)
+            .foregroundStyle(theme.text)
+            .background(theme.surface)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(AppTheme.border, lineWidth: 1)
+                    .stroke(theme.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
     }

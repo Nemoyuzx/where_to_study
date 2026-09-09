@@ -36,7 +36,8 @@ struct WidgetThemePalette: Equatable, Sendable {
     static func resolved(_ configuration: ColorThemeConfiguration, dark: Bool) -> WidgetThemePalette {
         let original = dark ? Self.dark : Self.light
         guard configuration.preset != .default else { return original }
-        return WidgetThemePalette(primary: WidgetThemeColor(configuration.seeds.primary.readableText(dark: dark)),
-                                  accent: WidgetThemeColor(configuration.seeds.accent), background: original.background)
+        let surfaces = ThemeSurfacePalette.resolved(primary: configuration.seeds.primary, dark: dark)
+        return WidgetThemePalette(primary: WidgetThemeColor(surfaces.readable(configuration.seeds.primary.readableText(dark: dark))),
+                                  accent: WidgetThemeColor(configuration.seeds.accent), background: WidgetThemeColor(surfaces.surface))
     }
 }

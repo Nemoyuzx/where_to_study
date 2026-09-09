@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { transformSync } from 'esbuild'
-import { COLOR_THEME_PRESETS, readableColor } from '../src/color-themes.js'
+import { COLOR_THEME_PRESETS, colorThemeSurfaces, readableColor } from '../src/color-themes.js'
 
 const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf8')
 const harmony = read('native/harmony/entry/src/main/ets/common/ColorThemes.ets')
@@ -11,7 +11,7 @@ const apple = read('native/apple/Sources/WidgetShared/ColorThemeConfiguration.sw
 // Color derivation is pure; exclude ArkUI's runtime-only observable state.
 const pureHarmony = harmony.slice(0, harmony.indexOf('@ObservedV2'))
 const { code } = transformSync(pureHarmony, { loader: 'ts', format: 'esm' })
-const { ColorThemes } = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'))
+const { ColorThemes, ColorThemeSelection } = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'))
 
 test('native preset seed triples match the web shared contract', () => {
   for (const preset of COLOR_THEME_PRESETS) {
@@ -42,5 +42,23 @@ test('ArkTS and JavaScript use the same sRGB derivation for presets and extreme 
     assert.equal(ColorThemes.fill(seed), readableColor(seed, '#FFFFFF', '#000000'), seed)
     assert.equal(ColorThemes.text(seed, true), readableColor(seed, '#282828', '#FFFFFF'), seed)
     assert.equal(ColorThemes.normalizeHex(seed.toLowerCase()), seed)
+  }
+})
+
+test('ArkTS surface recipes match shared web values for all families and extreme custom seeds', () => {
+  const themes = COLOR_THEME_PRESETS.slice(1).map((preset) => ({ preset: preset.id }))
+  for (const seed of ['#FFFFFF', '#000000', '#FF0000', '#00FF00', '#0000FF']) {
+    themes.push({ preset: 'custom', customPrimary: seed })
+  }
+  for (const settings of themes) {
+    for (const dark of [false, true]) {
+      const expected = colorThemeSurfaces(settings, dark)
+      const actual = ColorThemes.surfaces(
+        new ColorThemeSelection(settings.preset, settings.customPrimary || '#166B5D'), dark,
+      )
+      for (const role of ['background', 'surface', 'elevated', 'surfaceVariant', 'border', 'text', 'secondaryText']) {
+        assert.equal(actual[role], expected[role], settings.preset + ' ' + dark + ' ' + role)
+      }
+    }
   }
 })

@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Tabs, Wrap};
+use ratatui::widgets::{Borders, Paragraph, Tabs, Wrap};
 use ratatui::Frame;
 
 use crate::app::{App, QuerySection};
@@ -26,7 +26,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         .select(selected)
         .highlight_style(theme.primary_selected().add_modifier(Modifier::BOLD))
         .divider("  ")
-        .block(Block::default().borders(Borders::ALL).title("查询"));
+        .block(theme.control_block().borders(Borders::ALL).title("查询"));
     frame.render_widget(tabs, chunks[0]);
 
     match app.query_section {
@@ -48,7 +48,7 @@ fn draw_shuttle(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
     frame.render_widget(
         Paragraph::new(summary)
             .style(theme.strong_text())
-            .block(Block::default().borders(Borders::ALL).title("今日状态")),
+            .block(theme.card_block().borders(Borders::ALL).title("今日状态")),
         chunks[1],
     );
 
@@ -99,7 +99,8 @@ fn draw_shuttle(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
     frame.render_widget(
         Paragraph::new(lines)
             .block(
-                Block::default()
+                theme
+                    .card_block()
                     .borders(Borders::ALL)
                     .title("当前生效时刻表（↑↓ / PgUp PgDn 滚动）"),
             )
@@ -128,7 +129,7 @@ fn draw_shuttle(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
     frame.render_widget(
         Paragraph::new(source)
             .style(theme.muted_text())
-            .block(Block::default().borders(Borders::ALL).title("来源声明"))
+            .block(theme.card_block().borders(Borders::ALL).title("来源声明"))
             .wrap(Wrap { trim: false }),
         chunks[3],
     );
@@ -165,7 +166,8 @@ fn draw_events(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
     frame.render_widget(
         Paragraph::new(filters)
             .block(
-                Block::default()
+                theme
+                    .control_block()
                     .borders(Borders::ALL)
                     .title("/ 搜索 · x 清空 · t 类型 · c 真实分类 · p 来源 · e 已结束 · v 仅收藏"),
             )
@@ -217,7 +219,7 @@ fn draw_events(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
         } else {
             lines
         })
-        .block(Block::default().borders(Borders::ALL).title(title)),
+        .block(theme.card_block().borders(Borders::ALL).title(title)),
         chunks[2],
     );
 
@@ -258,7 +260,12 @@ fn draw_events(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
     frame.render_widget(
         Paragraph::new(detail)
             .style(theme.muted_text())
-            .block(Block::default().borders(Borders::ALL).title("详情与来源"))
+            .block(
+                theme
+                    .elevated_block()
+                    .borders(Borders::ALL)
+                    .title("详情与来源"),
+            )
             .wrap(Wrap { trim: false }),
         chunks[3],
     );

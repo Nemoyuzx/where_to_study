@@ -1,5 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
+use ratatui::widgets::{Borders, List, ListItem, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::App;
@@ -33,7 +33,8 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         )),
     ];
     let campus_list = List::new(campus_items).block(
-        Block::default()
+        theme
+            .card_block()
             .borders(Borders::ALL)
             .title("校区（←→切换）"),
     );
@@ -74,7 +75,8 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
             .collect()
     };
     let building_list = List::new(building_items).block(
-        Block::default()
+        theme
+            .card_block()
             .borders(Borders::ALL)
             .title("教学楼（↑↓移动 · 空格切换）"),
     );
@@ -96,7 +98,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         "{slots_text}
 [1-9,0,-,=,[,]] 第1-14节 · [a] 全选 · [c] 清空"
     ))
-    .block(Block::default().borders(Borders::ALL).title("节次筛选"))
+    .block(theme.card_block().borders(Borders::ALL).title("节次筛选"))
     .wrap(Wrap { trim: false });
 
     frame.render_widget(slots_para, filter_chunks[2]);
@@ -144,7 +146,8 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         app.room_scroll = max_scroll;
     }
     let results_list = List::new(items.into_iter().skip(app.room_scroll)).block(
-        Block::default()
+        theme
+            .card_block()
             .borders(Borders::ALL)
             .title(format!("空教室结果（{room_count} 间 · PgUp/PgDn 滚动）")),
     );

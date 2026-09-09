@@ -49,7 +49,7 @@ struct PrivacyConsentGate: View {
 
     var body: some View {
         ZStack {
-            AppTheme.background.ignoresSafeArea()
+            theme.background.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 22) {
@@ -64,12 +64,12 @@ struct PrivacyConsentGate: View {
                             : "欢迎使用 Where To Study"
                     ))
                         .font(.title2.bold())
-                        .foregroundStyle(AppTheme.text)
+                        .foregroundStyle(theme.text)
                         .multilineTextAlignment(.center)
 
                     Text("Where To Study 是独立开发的非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。")
                         .font(.callout)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("privacy-consent.independent-notice")
@@ -80,7 +80,7 @@ struct PrivacyConsentGate: View {
                             : "首次使用前，请先阅读并同意《隐私政策》。应用会处理您主动提供的账号信息；保存有效账号后，还可能按已启用的设置自动刷新课表、空教室与公开数据。具体内容以完整政策为准。"
                     ))
                     .font(.body)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -120,7 +120,7 @@ struct PrivacyConsentGate: View {
                             state.decline()
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .accessibilityIdentifier("privacy-consent.decline")
                     }
                 }

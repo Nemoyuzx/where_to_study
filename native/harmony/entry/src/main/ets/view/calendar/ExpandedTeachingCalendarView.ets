@@ -913,7 +913,8 @@ export struct ExpandedTeachingCalendarView {
         Text(this.monthWeekLabel(day))
           .fontSize(CalendarTypography.fontSize(8, this.isPc))
           .fontWeight(FontWeight.Medium)
-          .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : AppTheme.secondaryText())
+          .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : AppTheme.textOnPrimaryBlend(
+            Math.min(0.08 + this.coursesOn(day).length * 0.08, 0.36), this.isDarkMode, true))
           .maxLines(1)
           .position({ x: 4, y: 4 })
           .zIndex(2)
@@ -925,7 +926,8 @@ export struct ExpandedTeachingCalendarView {
             .fontSize(CalendarTypography.fontSize(8, this.isPc))
             .fontWeight(FontWeight.Medium)
             .fontColor(day.equals(this.selectedDate()) ?
-              AppTheme.onPrimary() : AppTheme.secondaryText())
+              AppTheme.onPrimary() : AppTheme.textOnPrimaryBlend(
+                Math.min(0.08 + this.coursesOn(day).length * 0.08, 0.36), this.isDarkMode, true))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
@@ -956,7 +958,9 @@ export struct ExpandedTeachingCalendarView {
             Text(event.title)
               .fontSize(10)
               .fontWeight(FontWeight.Medium)
-              .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : event.tint)
+              .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() :
+                (event.id.startsWith('course-') && this.model.colorTheme.selection.preset !== 'default' ? AppTheme.textOnPrimaryBlend(
+                  Math.min(0.08 + this.coursesOn(day).length * 0.08, 0.36), this.isDarkMode) : event.tint))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .padding({ left: 3, right: 3 })
@@ -971,7 +975,8 @@ export struct ExpandedTeachingCalendarView {
             Text('+' + (this.monthEvents(day).length - 2).toString())
               .fontSize(10)
               .fontWeight(FontWeight.Medium)
-              .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : AppTheme.secondaryText())
+              .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() : AppTheme.textOnPrimaryBlend(
+                Math.min(0.08 + this.coursesOn(day).length * 0.08, 0.36), this.isDarkMode, true))
               .width('100%')
               .height(13)
               .textAlign(TextAlign.Start)
@@ -1044,11 +1049,11 @@ export struct ExpandedTeachingCalendarView {
       return AppTheme.onPrimary();
     }
     if (day.month !== this.selectedDate().month) {
-      return AppTheme.secondaryText();
+      return AppTheme.textOnPrimaryBlend(Math.min(0.08 + this.coursesOn(day).length * 0.08, 0.36), this.isDarkMode, true);
     }
     const items: HolidayItem[] = this.holidayItemsOn(day);
     if (items.length === 0) {
-      return AppTheme.text();
+      return AppTheme.textOnPrimaryBlend(Math.min(0.08 + this.coursesOn(day).length * 0.08, 0.36), this.isDarkMode);
     }
     return items[0].type === 'holiday' ? AppTheme.holiday() : AppTheme.primary();
   }
@@ -1281,7 +1286,7 @@ export struct ExpandedTeachingCalendarView {
                   Column({ space: 2 }) {
                     Text(item.timeLabel)
                       .fontSize(10)
-                      .fontColor(AppTheme.secondaryText())
+                      .fontColor(AppTheme.secondaryTextOnTint())
                     Text(item.title)
                       .fontSize(13)
                       .fontWeight(FontWeight.Medium)
@@ -1336,7 +1341,7 @@ export struct ExpandedTeachingCalendarView {
       .constraintSize({ maxHeight: 440 })
       .borderRadius(10)
       .border({ width: 1, color: AppTheme.border() })
-      .backgroundColor(AppTheme.surface())
+      .backgroundColor(AppTheme.elevated())
       .shadow({ radius: 18, color: '#33000000', offsetX: 0, offsetY: 8 })
       .position({ x: '50%', y: '50%' })
       .translate({ x: '-50%', y: '-50%' })
@@ -1397,7 +1402,7 @@ export struct ExpandedTeachingCalendarView {
       .width(320)
       .height(this.yearDetailPanelHeight())
       .borderRadius(10)
-      .backgroundColor(AppTheme.surface())
+      .backgroundColor(AppTheme.elevated())
       .position({ x: this.yearDetailPosition().x, y: this.yearDetailPosition().y })
       .alignItems(HorizontalAlign.Start)
     }

@@ -287,6 +287,7 @@ struct InformationQueriesView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .background(ThemeSegmentedSurface())
                     .accessibilityIdentifier("queries.mode")
 
                     switch selectedMode {
@@ -304,7 +305,7 @@ struct InformationQueriesView: View {
             .scrollDismissesKeyboard(.interactively)
             #endif
         }
-        .background(AppTheme.background)
+        .background(theme.background)
         .navigationTitle(model.localized("信息查询"))
         .accessibilityIdentifier("screen.information-queries")
         .task(id: model.isSampleMode) {
@@ -365,7 +366,7 @@ struct InformationQueriesView: View {
                                 .accessibilityIdentifier("queries.shuttle.status")
                             Text(model.localizedFormat("今日共 %lld 个方向、%lld 个计划班次", routes.count, departureCount))
                                 .font(.callout)
-                                .foregroundStyle(AppTheme.secondaryText)
+                                .foregroundStyle(theme.secondaryText)
                         }
                         Spacer(minLength: 8)
                         Button {
@@ -391,7 +392,7 @@ struct InformationQueriesView: View {
                                     .font(.subheadline.weight(.semibold))
                                 Text(model.localizedFormat("后勤部通知 · %@", notice.publishedAt))
                                     .font(.caption)
-                                    .foregroundStyle(AppTheme.secondaryText)
+                                    .foregroundStyle(theme.secondaryText)
                             }
                             Spacer(minLength: 8)
                             if let url = notice.sourceURL {
@@ -456,13 +457,13 @@ struct InformationQueriesView: View {
                             .font(.headline)
                         Text(periodText)
                             .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                 }
                 if departures.isEmpty {
                     Text("今天该方向暂无班次")
                         .font(.callout)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 } else {
                     LazyVGrid(
                         columns: [GridItem(.adaptive(minimum: 86), spacing: 8)],
@@ -480,14 +481,14 @@ struct InformationQueriesView: View {
                                 }
                                 Text("\(departure.service.vehicle) × \(departure.service.count)")
                                     .font(.caption2)
-                                    .foregroundStyle(AppTheme.secondaryText)
+                                    .foregroundStyle(theme.secondaryText)
                             }
                             .padding(.vertical, 7)
                             .frame(maxWidth: .infinity)
                             .background(
                                 departure.departureTime == nextDeparture
                                     ? theme.primary.opacity(0.12)
-                                    : AppTheme.background,
+                                    : theme.background,
                                 in: RoundedRectangle(cornerRadius: 8)
                             )
                         }
@@ -514,7 +515,7 @@ struct InformationQueriesView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         TextField("搜索名称、主办方或来源", text: $searchText)
                             .textFieldStyle(.plain)
                             #if os(iOS)
@@ -532,12 +533,12 @@ struct InformationQueriesView: View {
                         }
                     }
                     .padding(10)
-                    .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 9))
-                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(AppTheme.border, lineWidth: 1))
+                    .background(theme.background, in: RoundedRectangle(cornerRadius: 9))
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(theme.border, lineWidth: 1))
 
                     Text("事件类型")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     ScrollView(.horizontal) {
                         HStack(spacing: 8) {
                             ForEach(availableCategories) { category in
@@ -553,14 +554,14 @@ struct InformationQueriesView: View {
                                         .foregroundStyle(
                                             effectiveCategory == category
                                                 ? theme.onPrimary
-                                                : AppTheme.text
+                                                : theme.text
                                         )
                                         .padding(.horizontal, 11)
                                         .padding(.vertical, 7)
                                         .background(
                                             effectiveCategory == category
                                                 ? theme.primaryFill
-                                                : AppTheme.background,
+                                                : theme.background,
                                             in: Capsule()
                                         )
                                 }
@@ -574,7 +575,7 @@ struct InformationQueriesView: View {
                     if !metadataCategories.isEmpty {
                         Text("活动分类")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         ScrollView(.horizontal) {
                             HStack(spacing: 8) {
                                 metadataCategoryButton(title: "全部分类", value: "")
@@ -594,7 +595,7 @@ struct InformationQueriesView: View {
                     HStack {
                         Text(model.localizedFormat("按 DDL 升序 · %lld 项", filtered.count))
                             .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         Spacer()
                         Button {
                             Task {
@@ -725,7 +726,7 @@ struct InformationQueriesView: View {
                         item.metadataSource?.name,
                     ].compactMap { $0 }.joined(separator: " · "))
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     let metadata = [
                         item.categories.joined(separator: " / "),
                         item.level,
@@ -737,7 +738,7 @@ struct InformationQueriesView: View {
                     if !metadata.isEmpty {
                         Text(metadata)
                             .font(.caption2)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .lineLimit(2)
                     }
                 }
@@ -748,7 +749,7 @@ struct InformationQueriesView: View {
                         model.setFavorite(item, isFavorite: !isFavorite)
                     } label: {
                         Image(systemName: isFavorite ? "star.fill" : "star")
-                            .foregroundStyle(isFavorite ? theme.accent : AppTheme.secondaryText)
+                            .foregroundStyle(isFavorite ? theme.accent : theme.secondaryText)
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(.plain)
@@ -780,7 +781,7 @@ struct InformationQueriesView: View {
                 } else {
                     Image(systemName: systemImage)
                         .font(.title2)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
                 Text(model.localized(title))
                     .font(.headline)
@@ -790,7 +791,7 @@ struct InformationQueriesView: View {
                         language: model.appLanguage
                     ))
                         .font(.callout)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .multilineTextAlignment(.center)
                 }
                 if let retry {
@@ -806,10 +807,10 @@ struct InformationQueriesView: View {
     private func sourceNotice(text: String, url: URL) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "info.circle")
-                .foregroundStyle(theme.primary)
+                .foregroundStyle(theme.primaryOnSoftSurface)
             Text(model.localized(text))
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryOnSoftSurface)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
             Link(destination: url) {
@@ -829,10 +830,10 @@ struct InformationQueriesView: View {
         } label: {
             Text(model.localized(title))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(selected ? theme.onPrimary : AppTheme.text)
+                .foregroundStyle(selected ? theme.onPrimary : theme.text)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 7)
-                .background(selected ? theme.primaryFill : AppTheme.background, in: Capsule())
+                .background(selected ? theme.primaryFill : theme.background, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("queries.events.category.\(value.isEmpty ? "all" : value)")

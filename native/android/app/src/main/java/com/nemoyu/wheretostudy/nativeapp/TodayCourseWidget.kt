@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.TextView
@@ -29,12 +30,17 @@ private val widgetThemeAccentIDs = listOf(
 )
 private val widgetThemeIconIDs = listOf(R.id.widget_theme_calendar_icon, R.id.widget_theme_empty_icon)
 
-private fun widgetThemeColors(context: Context): Pair<Int, Int> {
+private fun widgetThemeColors(context: Context): ThemeColors {
     val selection = ColorThemePreferences(context).load()
-    if (selection.preset == "default") return context.getColor(R.color.widget_primary) to context.getColor(R.color.widget_accent)
     val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
     val colors = ColorThemeLogic.palette(selection, dark)
-    return colors.primaryText to colors.accent
+    return if (selection.preset == "default") colors.copy(
+        primaryText = context.getColor(R.color.widget_primary),
+        accent = context.getColor(R.color.widget_accent),
+        surface = context.getColor(R.color.widget_background),
+        text = context.getColor(R.color.widget_text_primary),
+        muted = context.getColor(R.color.widget_text_secondary),
+    ) else colors
 }
 
 data class TodayCourseWidgetContent(
@@ -293,6 +299,11 @@ private val widgetRowIDs = listOf(
     WidgetRowIDs(R.id.widget_course_6, R.id.widget_course_name_6, R.id.widget_course_details_6),
 )
 
+private val widgetThemeTextIDs = listOf(R.id.widget_theme_title) + widgetRowIDs.map { it.name }
+private val widgetThemeMutedIDs = listOf(
+    R.id.widget_course_count, R.id.widget_day_context, R.id.widget_empty_text, R.id.widget_more_courses,
+) + widgetRowIDs.map { it.details }
+
 object TodayCourseWidgetPreviewBinder {
     fun bind(
         root: View,
@@ -303,9 +314,13 @@ object TodayCourseWidgetPreviewBinder {
     ) {
         val context = root.context
         root.bindTheme("widgetColors") {
-            val (primary, accent) = widgetThemeColors(context)
-            widgetThemeIconIDs.forEach { id -> root.findViewById<ImageView>(id).imageTintList = ColorStateList.valueOf(primary) }
-            widgetThemeAccentIDs.forEach { id -> root.findViewById<View>(id).setBackgroundColor(accent) }
+            val colors = widgetThemeColors(context)
+            root.backgroundTintList = if (ColorThemePreferences(context).load().preset == "default") null
+                else ColorStateList.valueOf(colors.surface)
+            widgetThemeIconIDs.forEach { id -> root.findViewById<ImageView>(id).imageTintList = ColorStateList.valueOf(colors.primaryText) }
+            widgetThemeAccentIDs.forEach { id -> root.findViewById<View>(id).setBackgroundColor(colors.accent) }
+            widgetThemeTextIDs.forEach { id -> root.findViewById<TextView>(id).setTextColor(colors.text) }
+            widgetThemeMutedIDs.forEach { id -> root.findViewById<TextView>(id).setTextColor(colors.muted) }
         }
         root.findViewById<TextView>(R.id.widget_course_count).text = if (content.courses.isEmpty()) {
             ""
@@ -403,9 +418,20 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             val content = TodayCourseWidgetLogic.content(schedule, System.currentTimeMillis())
             val localizedContext = AppLocale.wrap(context, preferences.languageCode)
             val views = RemoteViews(context.packageName, R.layout.widget_today_course)
-            val (primary, accent) = widgetThemeColors(context)
-            widgetThemeIconIDs.forEach { id -> views.setInt(id, "setColorFilter", primary) }
-            widgetThemeAccentIDs.forEach { id -> views.setInt(id, "setBackgroundColor", accent) }
+            val colors = widgetThemeColors(context)
+            val legacyTheme = ColorThemePreferences(context).load().preset == "default"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                views.setColorStateList(R.id.widget_root, "setBackgroundTintList",
+                    if (legacyTheme) null else ColorStateList.valueOf(colors.surface))
+            } else if (legacyTheme) {
+                views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_background)
+            } else {
+                views.setInt(R.id.widget_root, "setBackgroundColor", colors.surface)
+            }
+            widgetThemeIconIDs.forEach { id -> views.setInt(id, "setColorFilter", colors.primaryText) }
+            widgetThemeAccentIDs.forEach { id -> views.setInt(id, "setBackgroundColor", colors.accent) }
+            widgetThemeTextIDs.forEach { id -> views.setTextColor(id, colors.text) }
+            widgetThemeMutedIDs.forEach { id -> views.setTextColor(id, colors.muted) }
             val rowLimit = minOf(
                 TodayCourseWidgetLogic.rowLimit(
                     manager.getAppWidgetOptions(widgetID)

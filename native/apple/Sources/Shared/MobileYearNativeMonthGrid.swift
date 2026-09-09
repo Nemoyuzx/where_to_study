@@ -250,8 +250,8 @@ final class MobileYearMonthGridUIView: UIView {
 
     private func resolvedPaletteSignature() -> [UInt32] {
         let colors: [Color] = [
-            theme.primary, theme.selectedDate, theme.selectedDateOutline, AppTheme.text, AppTheme.onPrimary,
-            AppTheme.secondaryText, AppTheme.border, AppTheme.danger,
+            theme.primary, theme.selectedDate, theme.selectedDateOutline, theme.text, AppTheme.onPrimary,
+            theme.secondaryText, theme.border, AppTheme.danger,
             AppTheme.assignment, AppTheme.schoolNotice, AppTheme.competitionDeadline,
             AppTheme.conferenceDeadline, AppTheme.summerCampDeadline,
             AppTheme.hackathonDeadline, AppTheme.customDeadline,
@@ -307,10 +307,10 @@ final class MobileYearMonthGridUIView: UIView {
         let primary = color(theme.primary)
         let selectedFill = color(theme.selectedDate)
         let selectionOutline = color(theme.selectedDateOutline)
-        let text = color(AppTheme.text)
+        let text = color(theme.text)
         let selectedText = color(AppTheme.onPrimary)
-        let secondaryText = color(AppTheme.secondaryText)
-        let border = color(AppTheme.border)
+        let secondaryText = color(theme.secondaryText)
+        let border = color(theme.border)
         let today = color(AppTheme.danger)
         let width = (bounds.width - 6 * Self.columnSpacing) / 7
         for (index, label) in weekdayLabels.enumerated() {
@@ -328,7 +328,7 @@ final class MobileYearMonthGridUIView: UIView {
             context.addPath(outline)
             context.clip()
             let fill = selected ? selectedFill : primary.withAlphaComponent(
-                CGFloat(TeachingCalendarLogic.yearCourseOpacity(courseCount: day.courseCount))
+                CGFloat(theme.courseOpacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: day.courseCount)))
             )
             context.setFillColor(fill.cgColor)
             context.fill(frame)

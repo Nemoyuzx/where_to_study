@@ -4,9 +4,29 @@
   "customPreset": "custom",
   "presets": [
     { "id": "default", "nameZh": "默认青绿", "nameEn": "Classic Teal", "primary": "#166B5D", "accent": "#E2BC62", "selectedDate": "#2563EB" },
-    { "id": "ocean", "nameZh": "海洋蓝", "nameEn": "Ocean Blue", "primary": "#1565C0", "accent": "#26A69A", "selectedDate": "#7C3AED" },
-    { "id": "violet", "nameZh": "鸢尾紫", "nameEn": "Iris Violet", "primary": "#7C3AED", "accent": "#D08A2E", "selectedDate": "#00796B" },
-    { "id": "amber", "nameZh": "暖琥珀", "nameEn": "Warm Amber", "primary": "#A65300", "accent": "#2E7D6F", "selectedDate": "#2563EB" },
-    { "id": "rose", "nameZh": "玫瑰", "nameEn": "Rose", "primary": "#B42368", "accent": "#8C6A35", "selectedDate": "#2563EB" }
-  ]
+    { "id": "ocean", "nameZh": "海洋蓝", "nameEn": "Ocean Blue", "primary": "#356A8A", "accent": "#75939A", "selectedDate": "#3354A2" },
+    { "id": "violet", "nameZh": "鸢尾紫", "nameEn": "Iris Violet", "primary": "#70558F", "accent": "#A08AAB", "selectedDate": "#504AA0" },
+    { "id": "amber", "nameZh": "暖琥珀", "nameEn": "Warm Amber", "primary": "#92603A", "accent": "#A9946E", "selectedDate": "#78533F" },
+    { "id": "rose", "nameZh": "玫瑰", "nameEn": "Rose", "primary": "#A4556D", "accent": "#B3909A", "selectedDate": "#803F68" }
+  ],
+  "surfaces": {
+    "light": {
+      "background": { "base": "#F4F4F5", "primaryAmount": 0.045 },
+      "surface": { "base": "#FFFFFF", "primaryAmount": 0.012 },
+      "elevated": { "base": "#FFFFFF", "primaryAmount": 0.006 },
+      "surfaceVariant": { "base": "#EEF0F3", "primaryAmount": 0.055 },
+      "border": { "base": "#D6DAE0", "primaryAmount": 0.16 },
+      "text": "#263240",
+      "secondaryText": "#4F5E6E"
+    },
+    "dark": {
+      "background": { "base": "#14171C", "primaryAmount": 0.12 },
+      "surface": { "base": "#22262D", "primaryAmount": 0.10 },
+      "elevated": { "base": "#2A2F38", "primaryAmount": 0.08 },
+      "surfaceVariant": { "base": "#2D333D", "primaryAmount": 0.10 },
+      "border": { "base": "#46505F", "primaryAmount": 0.18 },
+      "text": "#EEF2F6",
+      "secondaryText": "#B0BCCB"
+    }
+  }
 }

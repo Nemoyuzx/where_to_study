@@ -354,7 +354,7 @@ struct MobileTeachingCalendarView: View {
                 }
                 .clipped()
             }
-            .background(AppTheme.background)
+            .background(theme.background)
             .ignoresSafeArea(.container, edges: .bottom)
             .accessibilityIdentifier("screen.calendar")
             .navigationBarHidden(true)
@@ -413,7 +413,7 @@ struct MobileTeachingCalendarView: View {
                             .id(periodTitle)
                             .transition(pageTransition)
                             .font(.title2.bold())
-                            .foregroundStyle(AppTheme.text)
+                            .foregroundStyle(theme.text)
                             .lineLimit(1)
                             .minimumScaleFactor(0.78)
                     }
@@ -454,6 +454,7 @@ struct MobileTeachingCalendarView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .background(ThemeSegmentedSurface())
             .animation(TeachingCalendarNavigationMotion.pageAnimation, value: mode)
             .accessibilityIdentifier("calendar.mobile.mode")
 
@@ -466,7 +467,7 @@ struct MobileTeachingCalendarView: View {
                     Image(systemName: "graduationcap")
                 }
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("calendar.mobile.teaching-week")
@@ -479,7 +480,7 @@ struct MobileTeachingCalendarView: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, mode == .day || mode == .week ? 8 : 6)
-        .background(AppTheme.surface)
+        .background(theme.surface)
     }
 
     private var actionMenu: some View {
@@ -536,7 +537,7 @@ struct MobileTeachingCalendarView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
                 }
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .frame(width: MobileCalendarTimelineLayout.axisWidth, height: 56)
                 .accessibilityLabel(weekContextText)
             }
@@ -610,7 +611,7 @@ struct MobileTeachingCalendarView: View {
                 ForEach(messages, id: \.self) { message in
                     Text(message)
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryOnSoftSurface)
                         .lineLimit(2)
                 }
             }
@@ -682,10 +683,10 @@ struct MobileTeachingCalendarView: View {
                     Spacer(minLength: 8)
                     Text(dayCourses.isEmpty ? "暂无课程" : "\(dayCourses.count) 门课")
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                         .rotationEffect(.degrees(areTimelineCoursesExpanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -709,7 +710,7 @@ struct MobileTeachingCalendarView: View {
                                     .joined(separator: " · ")
                             )
                             .font(.caption2)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                         }
@@ -721,7 +722,7 @@ struct MobileTeachingCalendarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(AppTheme.surface)
+        .background(theme.surface)
     }
 
     @ViewBuilder
@@ -734,7 +735,7 @@ struct MobileTeachingCalendarView: View {
                 HStack(spacing: 8) {
                     Text("全天")
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                     ForEach(Array(day.allDayEvents.prefix(3))) { item in
                         Button {
                             present(.day, on: day.date)
@@ -761,7 +762,7 @@ struct MobileTeachingCalendarView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
-            .background(AppTheme.surface)
+            .background(theme.surface)
             .overlay(alignment: .bottom) { Divider() }
         }
     }
@@ -776,7 +777,7 @@ struct MobileTeachingCalendarView: View {
             HStack(spacing: 0) {
                 Text("全天")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .frame(
                         width: MobileCalendarTimelineLayout.axisWidth,
                         height: MobileCalendarAllDayLayout.height
@@ -829,7 +830,7 @@ struct MobileTeachingCalendarView: View {
             .frame(width: proxy.size.width, height: MobileCalendarAllDayLayout.height)
         }
         .frame(height: MobileCalendarAllDayLayout.height)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .overlay(alignment: .bottom) { Divider() }
         .accessibilityIdentifier("calendar.mobile.all-day.week")
     }
@@ -1086,7 +1087,7 @@ struct MobileTeachingCalendarView: View {
             ForEach(Self.weekdayLabels, id: \.self) { label in
                 Text(model.localized(label))
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 18)
                     .accessibilityIdentifier("calendar.mobile.month-weekday.\(label)")
             }
@@ -1102,12 +1103,12 @@ struct MobileTeachingCalendarView: View {
         } label: {
             ZStack {
                 Capsule()
-                    .fill(AppTheme.secondaryText.opacity(0.55))
+                    .fill(theme.secondaryText.opacity(0.55))
                     .frame(width: 21, height: 4)
                     .rotationEffect(.degrees(-24 * expansionProgress))
                     .offset(x: -9, y: 2 * expansionProgress - detailLiftProgress)
                 Capsule()
-                    .fill(AppTheme.secondaryText.opacity(0.55))
+                    .fill(theme.secondaryText.opacity(0.55))
                     .frame(width: 21, height: 4)
                     .rotationEffect(.degrees(24 * expansionProgress))
                     .offset(x: 9, y: 2 * expansionProgress - detailLiftProgress)
@@ -1248,7 +1249,7 @@ struct MobileTeachingCalendarView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("颜色越深表示当天课程越多")
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             if let months {
                 LazyVGrid(
                     columns: [GridItem(.adaptive(minimum: 152, maximum: 220), spacing: 16)],
@@ -1317,7 +1318,7 @@ struct MobileTeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text("当日日程")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             ZStack(alignment: .leading) {
                 Text(fullDateFormatter.string(from: day))
                     .id(dateKey)
@@ -1332,7 +1333,7 @@ struct MobileTeachingCalendarView: View {
             }
             if dayCourses.isEmpty {
                 Text("暂无课程")
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             } else {
                 ForEach(dayCourses) { course in
                     Button {
@@ -1350,7 +1351,7 @@ struct MobileTeachingCalendarView: View {
                                         .joined(separator: " · ")
                                 )
                                 .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                                .foregroundStyle(theme.secondaryText)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1362,7 +1363,7 @@ struct MobileTeachingCalendarView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.month-day-summary-card")
         .accessibilityValue(StrictContractDateParser.string(from: day))
@@ -1377,14 +1378,14 @@ struct MobileTeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Label("课程作业 DDL", systemImage: "checklist")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             if items.isEmpty {
                 Text(
                     deadlineStore.assignmentUnavailableByDate[date]
                         ?? "当天没有课程作业截止事项"
                 )
                 .font(.callout)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             } else {
                 ForEach(items) { item in
                     HStack(alignment: .top, spacing: 9) {
@@ -1394,12 +1395,12 @@ struct MobileTeachingCalendarView: View {
                             Text(item.title).font(.subheadline.weight(.semibold))
                             Text([item.courseName, item.status].compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                                .foregroundStyle(theme.secondaryText)
                         }
                         Spacer(minLength: 8)
                         Text(deadlineTime(item.deadline))
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                 }
             }
@@ -1409,12 +1410,12 @@ struct MobileTeachingCalendarView: View {
                 Link("打开作业列表", destination: CalendarDeadlineSources.assignments)
             }
             .font(.caption2)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.assignments")
     }
@@ -1436,14 +1437,14 @@ struct MobileTeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Label("活动 DDL", systemImage: "flag.checkered")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .accessibilityIdentifier("calendar.mobile.deadlines.header")
             if isLoading, builtInSnapshot == nil, customSnapshot == nil, items.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("正在同步活动截止信息…")
                 }
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             } else if let error, builtInSnapshot == nil, customSnapshot == nil, items.isEmpty {
                 Button {
                     Task {
@@ -1470,7 +1471,7 @@ struct MobileTeachingCalendarView: View {
             } else if items.isEmpty {
                 Text("当天没有已收录的活动截止事项")
                     .font(.callout)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             } else {
                 ForEach(items) { item in
                     mobileDeadlineRow(item)
@@ -1493,7 +1494,7 @@ struct MobileTeachingCalendarView: View {
                 }
             }
             .font(.caption2)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
             Group {
                 if let customItem = items.first(where: { $0.source == .custom }) {
                     if let homepage = customItem.sourceHomepage {
@@ -1507,12 +1508,12 @@ struct MobileTeachingCalendarView: View {
                 }
             }
             .font(.caption2)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("calendar.mobile.deadlines")
@@ -1542,16 +1543,16 @@ struct MobileTeachingCalendarView: View {
                     .multilineTextAlignment(.leading)
                 Text([deadlineCategoryTitle(item), item.organizer].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
             }
             Spacer(minLength: 8)
             Text(deadlineTime(item.deadline))
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+        .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func favoriteButton(_ item: PublicDeadlineItem) -> some View {
@@ -1562,7 +1563,7 @@ struct MobileTeachingCalendarView: View {
         } label: {
             Image(systemName: isFavorite ? "star.fill" : "star")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isFavorite ? theme.accent : AppTheme.secondaryText)
+                .foregroundStyle(isFavorite ? theme.accent : theme.secondaryText)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
@@ -1622,7 +1623,7 @@ struct MobileTeachingCalendarView: View {
                             .font(.headline)
                         Text(fullDateFormatter.string(from: date))
                             .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                     Spacer(minLength: 8)
                     Button(action: dismiss) {
@@ -1645,10 +1646,10 @@ struct MobileTeachingCalendarView: View {
             }
             .padding(16)
             .frame(maxWidth: 380)
-            .background(AppTheme.surface)
+            .background(theme.surface)
             .overlay {
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(AppTheme.border, lineWidth: 1)
+                    .stroke(theme.border, lineWidth: 1)
             }
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: Color.black.opacity(0.24), radius: 20, y: 8)
@@ -1678,7 +1679,7 @@ struct MobileTeachingCalendarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(model.localized(categoryKey))
                     .font(.caption)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryOnSoftSurface)
             }
             if let deadlineItem {
                 favoriteButton(deadlineItem)
@@ -1709,7 +1710,7 @@ struct MobileTeachingCalendarView: View {
                 }
                 .padding(16)
             }
-            .background(AppTheme.background)
+            .background(theme.background)
             .navigationTitle(detailTitle(selection))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1757,7 +1758,7 @@ struct MobileTeachingCalendarView: View {
                schoolNotices.isEmpty,
                publicDeadlines.isEmpty {
                 Text("暂无日程")
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -1776,19 +1777,19 @@ struct MobileTeachingCalendarView: View {
                         if let courseName = item.courseName {
                             Text(courseName)
                                 .font(.caption)
-                                .foregroundStyle(AppTheme.secondaryText)
+                                .foregroundStyle(theme.secondaryText)
                         }
                     }
                     Spacer(minLength: 8)
                     Text(deadlineTime(item.deadline))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.assignment.opacity(0.5)) }
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.day-detail.assignments")
@@ -1805,7 +1806,7 @@ struct MobileTeachingCalendarView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.schoolNotice.opacity(0.5)) }
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.day-detail.school-notices")
@@ -1824,14 +1825,14 @@ struct MobileTeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: 9) {
             Label("公开活动 DDL", systemImage: "flag.checkered")
                 .font(.headline)
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
             ForEach(items) { item in
                 mobileDeadlineRow(item)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .overlay {
             ZStack {
                 if let first = kinds.first {
@@ -1853,7 +1854,7 @@ struct MobileTeachingCalendarView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(course.name, systemImage: "book.closed")
                 .font(.headline)
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
             detailRow("日期", fullDateFormatter.string(from: day))
             detailRow("时间", course.timeRange)
             detailRow("节次", course.sectionText)
@@ -1863,8 +1864,8 @@ struct MobileTeachingCalendarView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(AppTheme.surface)
-        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border, lineWidth: 1) }
+        .background(theme.surface)
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1) }
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -1881,8 +1882,8 @@ struct MobileTeachingCalendarView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .background(AppTheme.surface)
-        .overlay { RoundedRectangle(cornerRadius: 10).stroke(AppTheme.border, lineWidth: 1) }
+        .background(theme.surface)
+        .overlay { RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1) }
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
@@ -1890,11 +1891,11 @@ struct MobileTeachingCalendarView: View {
         HStack(alignment: .top, spacing: 10) {
             Text(model.localized(label))
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .frame(width: 52, alignment: .leading)
             Text(value.isEmpty ? "未标注" : value)
                 .font(.subheadline)
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -2760,7 +2761,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func dateStripForeground(holiday: HolidayItem?) -> Color {
-        guard let holiday else { return AppTheme.text }
+        guard let holiday else { return theme.text }
         return holiday.type == "holiday" ? AppTheme.danger : theme.primary
     }
 
@@ -2845,13 +2846,13 @@ private struct MobileAlmanacCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Label("黄历信息", systemImage: "calendar.badge.clock")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             if dailyInfo.loadingAlmanacDates.contains(date), dailyInfo.almanacByDate[date] == nil {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("正在查询…")
                 }
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
             } else if let error = dailyInfo.almanacErrors[date], dailyInfo.almanacByDate[date] == nil {
                 Button {
                     Task {
@@ -2871,14 +2872,14 @@ private struct MobileAlmanacCard: View {
                     .font(.headline)
                 Text("\(info.ganzhiYear)年 · \(info.ganzhiMonth)月 · \(info.ganzhiDay)日 · 肖\(info.zodiac)")
                     .font(.subheadline)
-                    .foregroundStyle(AppTheme.secondaryText)
+                    .foregroundStyle(theme.secondaryText)
                 let festival = [info.solarTerm, info.lunarFestival, info.solarFestival]
                     .compactMap { $0 }
                     .joined(separator: " · ")
                 if !festival.isEmpty {
                     Text(festival)
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondaryText)
+                        .foregroundStyle(theme.secondaryText)
                 }
                 if let yi = info.yi {
                     adviceRow("宜", value: yi, color: theme.primary)
@@ -2903,12 +2904,12 @@ private struct MobileAlmanacCard: View {
                 }
             }
             .font(.caption2)
-            .foregroundStyle(AppTheme.secondaryText)
+            .foregroundStyle(theme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(AppTheme.surface)
+        .background(theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("calendar.mobile.almanac")
     }
@@ -2917,16 +2918,16 @@ private struct MobileAlmanacCard: View {
         HStack(alignment: .top, spacing: 8) {
             Text(title)
                 .font(.caption.weight(.bold))
-                .foregroundStyle(color)
+                .foregroundStyle(theme.configuration.preset == .default ? color : theme.text)
                 .frame(width: 20, height: 20)
                 .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
             Text(value)
                 .font(.caption)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(9)
-        .background(AppTheme.background, in: RoundedRectangle(cornerRadius: 8))
+        .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

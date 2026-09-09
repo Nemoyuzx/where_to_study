@@ -43,6 +43,7 @@ data class ThemeColors(
     val outOfMonth: Int,
     val selectionSurface: Int,
     val segmentedSelection: Int,
+    val elevated: Int = surface,
 )
 
 object ThemePalettes {
@@ -92,6 +93,7 @@ object ThemePalettes {
 
 object Palette {
     private var colors = ThemePalettes.light
+    private var darkAppearance = false
     var selection: ColorThemeSelection = ColorThemeSelection()
         private set
     var revision: Long = 0
@@ -104,14 +106,15 @@ object Palette {
     val onPrimary get() = colors.onPrimary
     val selectedDate get() = colors.selectedDate
     val selectedDateOutline get() = if (selection.preset == "default") colors.selectedDate else
-        ColorThemeLogic.text(
-            ColorThemeLogic.color(selection.seeds.selectedDate),
-            colors.background == ThemePalettes.dark.background,
+        ColorThemeLogic.readableText(
+            ColorThemeLogic.text(ColorThemeLogic.color(selection.seeds.selectedDate), darkAppearance),
+            colors.surfaceVariant,
         )
     val accent get() = colors.accent
     val onAccent get() = colors.onAccent
     val background get() = colors.background
     val surface get() = colors.surface
+    val elevated get() = colors.elevated
     val surfaceVariant get() = colors.surfaceVariant
     val text get() = colors.text
     val muted get() = colors.muted
@@ -136,6 +139,7 @@ object Palette {
         selection = ColorThemePreferences(context).load()
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
             Configuration.UI_MODE_NIGHT_YES
+        darkAppearance = dark
         colors = ColorThemeLogic.palette(selection, dark)
         revision++
     }

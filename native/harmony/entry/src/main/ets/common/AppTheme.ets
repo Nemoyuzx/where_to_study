@@ -3,10 +3,14 @@
 // resources/dark/element/color.json（深色）中，引用后自动随系统深色模式切换，
 // 核心品牌调色板与 Android light / dark 对齐；日程分类色复用鸿蒙日历现有语义。
 
-import { ColorThemes, ColorThemeState } from './ColorThemes';
+import { ColorThemes, ColorThemeState, ColorThemeSurfaces } from './ColorThemes';
 
 export class AppTheme {
   static readonly state: ColorThemeState = new ColorThemeState();
+
+  private static surfaces(): ColorThemeSurfaces {
+    return ColorThemes.surfaces(AppTheme.state.selection, AppTheme.state.dark);
+  }
 
   // 仅供缓存了颜色值的 ForEach 条目使用，保留外层视图/Scroller 的身份。
   static colorKey(): string {
@@ -44,7 +48,8 @@ export class AppTheme {
   // 黑色自定义选中色在深色背景中仍须有清晰轮廓；不改用户请求的填色。
   static selectedDateOutline(): ResourceColor {
     return AppTheme.state.selection.preset === 'default' ? AppTheme.selectedDateStrong() :
-      ColorThemes.text(ColorThemes.seeds(AppTheme.state.selection).selectedDate, AppTheme.state.dark);
+      ColorThemes.textOn(ColorThemes.text(ColorThemes.seeds(AppTheme.state.selection).selectedDate,
+        AppTheme.state.dark), AppTheme.surfaces().worstSurface);
   }
 
   static shouldOutlineSelectedDate(selected: boolean, hasSemanticBorder: boolean): boolean {
@@ -58,7 +63,7 @@ export class AppTheme {
 
   static accentSurface(): ResourceColor {
     return AppTheme.state.selection.preset === 'default' ? '#73E2BC62' :
-      '#73' + ColorThemes.seeds(AppTheme.state.selection).accent.substring(1);
+      ColorThemes.blend(AppTheme.surfaces().surface, ColorThemes.seeds(AppTheme.state.selection).accent, 0.10);
   }
 
   static onAccent(): ResourceColor {
@@ -74,9 +79,20 @@ export class AppTheme {
     return ColorThemes.primaryWithAlpha(AppTheme.state.selection, alpha, dark);
   }
 
-  static textOnPrimaryBlend(alpha: number, dark: boolean): ResourceColor {
-    return AppTheme.state.selection.preset === 'default' ? AppTheme.text() :
-      ColorThemes.textOn(dark ? '#FFFFFF' : '#111111', AppTheme.primaryWithAlpha(alpha, dark));
+  static textOnPrimaryBlend(alpha: number, dark: boolean, secondary: boolean = false): ResourceColor {
+    if (AppTheme.state.selection.preset === 'default') {
+      return secondary ? AppTheme.secondaryText() : AppTheme.text();
+    }
+    const surfaces = ColorThemes.surfaces(AppTheme.state.selection, dark);
+    return ColorThemes.textOn(secondary ? surfaces.secondaryText : surfaces.text,
+      AppTheme.primaryWithAlpha(alpha, dark));
+  }
+
+  static textOnSelectionBlend(alpha: number, dark: boolean): ResourceColor {
+    if (AppTheme.state.selection.preset === 'default') { return AppTheme.primary(); }
+    const background: string = ColorThemes.blend(AppTheme.primaryWithAlpha(alpha, dark),
+      ColorThemes.fill(ColorThemes.seeds(AppTheme.state.selection).primary), dark ? 77 / 255 : 26 / 255);
+    return ColorThemes.textOn(ColorThemes.surfaces(AppTheme.state.selection, dark).text, background);
   }
 
   static selectionText(): ResourceColor {
@@ -87,33 +103,53 @@ export class AppTheme {
     return $r('app.color.app_on_primary');
   }
 
-  static background(): Resource {
-    return $r('app.color.app_background');
+  static background(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_background') :
+      AppTheme.surfaces().background;
   }
 
-  static surface(): Resource {
-    return $r('app.color.app_surface');
+  static surface(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_surface') :
+      AppTheme.surfaces().surface;
   }
 
-  static surfaceVariant(): Resource {
-    return $r('app.color.app_surface_variant');
+  static elevated(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_surface') :
+      AppTheme.surfaces().elevated;
   }
 
-  static text(): Resource {
-    return $r('app.color.app_text');
+  static inputSurface(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_surface') :
+      AppTheme.surfaces().surfaceVariant;
   }
 
-  static secondaryText(): Resource {
-    return $r('app.color.app_secondary_text');
+  static surfaceVariant(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_surface_variant') :
+      AppTheme.surfaces().surfaceVariant;
+  }
+
+  static text(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_text') : AppTheme.surfaces().text;
+  }
+
+  static secondaryText(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_secondary_text') :
+      AppTheme.surfaces().secondaryText;
+  }
+
+  // 轻度染色条目上的次要说明保留字号，用正文墨色补足合成底色的对比度。
+  static secondaryTextOnTint(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? AppTheme.secondaryText() : AppTheme.text();
   }
 
   // 禁用操作使用不透明的中性配色，避免系统淡化后文字难以辨认。
-  static disabledText(): Resource {
-    return $r('app.color.app_disabled_text');
+  static disabledText(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_disabled_text') :
+      AppTheme.surfaces().secondaryText;
   }
 
-  static border(): Resource {
-    return $r('app.color.app_border');
+  static border(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_border') : AppTheme.surfaces().border;
   }
 
   static danger(): Resource {
@@ -210,11 +246,12 @@ export class AppTheme {
 
   static selectionSurface(): ResourceColor {
     return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_selection_surface') :
-      ColorThemes.blend(AppTheme.state.dark ? '#1C1C1E' : '#FFFFFF',
-        ColorThemes.primary(AppTheme.state.selection, AppTheme.state.dark), AppTheme.state.dark ? 0.18 : 0.15);
+      ColorThemes.blend(AppTheme.surfaces().surface, ColorThemes.seeds(AppTheme.state.selection).primary,
+        AppTheme.state.dark ? 0.16 : 0.12);
   }
 
-  static segmentedSelection(): Resource {
-    return $r('app.color.app_segmented_selection');
+  static segmentedSelection(): ResourceColor {
+    return AppTheme.state.selection.preset === 'default' ? $r('app.color.app_segmented_selection') :
+      AppTheme.surfaces().elevated;
   }
 }

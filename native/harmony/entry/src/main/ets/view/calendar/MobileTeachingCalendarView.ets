@@ -1491,7 +1491,8 @@ export struct MobileTeachingCalendarView {
       .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
       .fontWeight(FontWeight.Medium)
       .fontColor(day.equals(this.renderedMonthDate(renderDate, interactive)) ?
-        AppTheme.onPrimary() : event.tint)
+        AppTheme.onPrimary() : (event.id.startsWith('course-') ?
+          AppTheme.textOnSelectionBlend(Math.min(0.08 + this.markerCount(day) * 0.08, 0.36), this.isDarkMode) : event.tint))
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .padding({ left: 3, right: 3 })
@@ -1579,11 +1580,11 @@ export struct MobileTeachingCalendarView {
       return AppTheme.onPrimary();
     }
     if (day.month !== renderDate.month) {
-      return AppTheme.secondaryText();
+      return AppTheme.textOnPrimaryBlend(Math.min(0.08 + this.markerCount(day) * 0.08, 0.36), this.isDarkMode, true);
     }
     const holiday: HolidayItem | null = this.firstHoliday(day);
     if (holiday === null) {
-      return AppTheme.text();
+      return AppTheme.textOnPrimaryBlend(Math.min(0.08 + this.markerCount(day) * 0.08, 0.36), this.isDarkMode);
     }
     return holiday.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary();
   }
@@ -1893,7 +1894,7 @@ export struct MobileTeachingCalendarView {
       .constraintSize({ maxHeight: Math.max(this.rootHeight - 48, 220) })
       .borderRadius(12)
       .border({ width: 1, color: AppTheme.border() })
-      .backgroundColor(AppTheme.surface())
+      .backgroundColor(AppTheme.elevated())
       .shadow({ radius: 18, color: '#33000000', offsetX: 0, offsetY: 8 })
       .position({ x: '50%', y: '50%' })
       .translate({ x: '-50%', y: '-50%' })
@@ -1954,7 +1955,7 @@ export struct MobileTeachingCalendarView {
       .height(this.dayDetailHeight(this.presentedDay as DateParts))
       .borderRadius(8)
       .border({ width: 1, color: AppTheme.border() })
-      .backgroundColor(AppTheme.surface())
+      .backgroundColor(AppTheme.elevated())
       .shadow({ radius: 18, color: '#33000000', offsetX: 0, offsetY: 8 })
       .alignItems(HorizontalAlign.Start)
       .position({
@@ -2157,7 +2158,7 @@ export struct MobileTeachingCalendarView {
       .padding(8)
       .width(230)
       .borderRadius(10)
-      .backgroundColor(AppTheme.surface())
+      .backgroundColor(AppTheme.elevated())
       .margin({ top: 44, right: 12 })
       .alignItems(HorizontalAlign.Start)
     }

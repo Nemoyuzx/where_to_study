@@ -30,7 +30,7 @@ internal class ColorThemeSettingsView(private val activity: MainActivity) : Line
         setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16))
         addView(sectionTitle(activity, label("颜色主题", "Color Theme")))
         addView(TextView(activity).apply {
-            text = label("配色保存在本机，浅色与深色外观仍跟随系统。", "Colors are saved on this device. Light and dark appearance still follows your system.")
+            text = label("主色会同时调整页面、卡片和控件的底色。浅色与深色外观仍跟随系统。", "The primary color also shapes page, card and control backgrounds. Light and dark appearance still follows your system.")
             textSize = 13f
             setThemeTextColor { Palette.muted }
         })
@@ -92,9 +92,45 @@ internal class ColorThemeSettingsView(private val activity: MainActivity) : Line
         addView(LinearLayout(activity).apply {
             id = R.id.settings_color_theme_preview
             orientation = VERTICAL
-            addView(previewLabel(label("课程 · 主色", "Course · Primary"), { previewColors.primaryFill }, { previewColors.onPrimary }))
-            addView(previewLabel(label("强调色", "Accent"), { previewColors.accent }, { previewColors.onAccent }))
-            addView(previewLabel(label("选中日期 · 18", "Selected Date · 18"), { previewColors.selectedDate }, { previewColors.onPrimary }))
+            setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
+            background = themedRoundedBackground(activity, { previewColors.background }, { previewColors.border }, radius = 12)
+            addView(TextView(activity).apply {
+                text = label("配色预览", "Theme Preview")
+                textSize = 12f
+                setThemeTextColor { previewColors.muted }
+                setPadding(0, 0, 0, activity.dp(10))
+            })
+            addView(LinearLayout(activity).apply {
+                id = R.id.settings_color_theme_preview_card
+                orientation = VERTICAL
+                setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+                background = themedRoundedBackground(activity, { previewColors.surface }, { previewColors.border }, radius = 10)
+                addView(TextView(activity).apply {
+                    text = label("今天的日程", "Today's Schedule")
+                    textSize = 16f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setThemeTextColor { previewColors.text }
+                    setPadding(0, 0, 0, activity.dp(8))
+                })
+                addView(previewLabel(label("18 日 · 示例课程", "18 · Sample Course"), { previewColors.elevated }, { previewColors.text }).apply {
+                    id = R.id.settings_color_theme_preview_elevated
+                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                    background = themedRoundedBackground(activity, { previewColors.elevated }, { previewColors.border })
+                    setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_nav_calendar, 0, 0, 0)
+                    compoundDrawablePadding = activity.dp(6)
+                    bindTheme("iconTint") { compoundDrawableTintList = android.content.res.ColorStateList.valueOf(previewColors.primaryText) }
+                })
+                addView(previewLabel(label("强调信息", "Highlighted Note"), {
+                    ColorThemeLogic.mix(previewColors.accent, previewColors.surface, 0.88)
+                }, {
+                    ColorThemeLogic.readableText(previewColors.accent,
+                        ColorThemeLogic.mix(previewColors.accent, previewColors.surface, 0.88))
+                }))
+                addView(previewLabel(label("已选日期 · 18", "Selected Date · 18"), { previewColors.selectedDate }, { previewColors.onPrimary }))
+                addView(previewLabel(label("查看课表", "View Schedule"), { previewColors.primaryFill }, { previewColors.onPrimary }).apply {
+                    id = R.id.settings_color_theme_preview_control
+                })
+            })
         })
         addView(action(label("应用自定义颜色", "Apply Custom Colors"), R.id.settings_color_theme_apply) {
             val custom = editedSeeds() ?: return@action
@@ -142,7 +178,9 @@ internal class ColorThemeSettingsView(private val activity: MainActivity) : Line
             minHeight = activity.dp(48)
             setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
             setThemeTextColor { Palette.text }
-            background = themedRoundedBackground(activity, { Palette.background }, { Palette.border })
+            background = themedRoundedBackground(activity, {
+                if (Palette.selection.preset == "default") Palette.background else Palette.surfaceVariant
+            }, { Palette.border })
         }
         fields += field
         addView(field, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))

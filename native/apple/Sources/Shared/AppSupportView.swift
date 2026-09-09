@@ -15,14 +15,14 @@ struct AppSupportView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("WHERE TO STUDY")
                             .font(.caption.bold())
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         Text("帮助与支持")
                             .font(.largeTitle.bold())
-                            .foregroundStyle(AppTheme.text)
+                            .foregroundStyle(theme.text)
                             .accessibilityIdentifier("screen.app-support")
                         Text("此页面的联系方式和常见问题可离线查看。")
                             .font(.callout)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
@@ -42,7 +42,7 @@ struct AppSupportView: View {
                         .accessibilityIdentifier("action.contact-support-email")
                         Text("如未配置邮件应用，可复制以上地址到你使用的邮箱。")
                             .font(.caption)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                         Link(destination: Self.issuesURL) {
                             Label("在 GitHub 反馈问题", systemImage: "arrow.up.right.square")
                                 .frame(maxWidth: .infinity)
@@ -51,14 +51,14 @@ struct AppSupportView: View {
                         .accessibilityIdentifier("action.open-support-github")
                         Text("反馈时请说明应用版本、系统版本、操作步骤和错误提示。请勿发送密码、令牌或包含个人信息的课表截图。")
                             .font(.callout)
-                            .foregroundStyle(AppTheme.secondaryText)
+                            .foregroundStyle(theme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .foregroundStyle(AppTheme.text)
+                    .foregroundStyle(theme.text)
 
                     Text("常见问题")
                         .font(.title2.bold())
-                        .foregroundStyle(AppTheme.text)
+                        .foregroundStyle(theme.text)
 
                     supportSection(
                         title: "个人课表获取失败怎么办？",
@@ -81,7 +81,7 @@ struct AppSupportView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity, alignment: .top)
             }
-            .background(AppTheme.background)
+            .background(theme.configuration.preset == .default ? theme.background : theme.elevated)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
@@ -100,10 +100,10 @@ struct AppSupportView: View {
             Divider()
             Text(title)
                 .font(.headline)
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(theme.text)
             Text(body)
                 .font(.callout)
-                .foregroundStyle(AppTheme.secondaryText)
+                .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

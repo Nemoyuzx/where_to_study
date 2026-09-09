@@ -3,7 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import {
   applyColorTheme, COLOR_THEME_PRESETS, COLOR_THEME_STORAGE_KEY, colorContrast,
-  colorThemeSeeds, colorThemeVariables, DEFAULT_COLOR_THEME, loadColorTheme,
+  colorThemeHeatmap, colorThemeSeeds, colorThemeSurfaces, colorThemeVariables, DEFAULT_COLOR_THEME, loadColorTheme,
   normalizeColorTheme, normalizeHexColor, resolvedColorTheme, saveColorTheme,
 } from '../src/color-themes.js'
 
@@ -94,7 +94,7 @@ test('default theme retains the original CSS; switching back removes only theme 
   assert.deepEqual(colorThemeVariables(DEFAULT_COLOR_THEME, true), {})
   applyColorTheme(root, { preset: 'violet' }, false)
   assert.equal(root.dataset.colorTheme, 'violet')
-  assert.equal(values.get('--primary-fill'), '#7C3AED')
+  assert.equal(values.get('--primary-fill'), resolvedColorTheme({ preset: 'violet' }).primaryFill)
   applyColorTheme(root, DEFAULT_COLOR_THEME, true)
   assert.equal(root.dataset.colorTheme, 'default')
   assert.deepEqual([...values], [['--unrelated', 'preserve-me']])
@@ -102,7 +102,7 @@ test('default theme retains the original CSS; switching back removes only theme 
 
 test('custom colors are independent of selected presets', () => {
   const custom = { ...DEFAULT_COLOR_THEME, customPrimary: '#123456', customAccent: '#FF7700', customSelectedDate: '#663399' }
-  assert.equal(colorThemeSeeds({ ...custom, preset: 'ocean' }).primary, '#1565C0')
+  assert.equal(colorThemeSeeds({ ...custom, preset: 'ocean' }).primary, COLOR_THEME_PRESETS.find((item) => item.id === 'ocean').primary)
   assert.equal(colorThemeSeeds({ ...custom, preset: 'custom' }).primary, '#123456')
 })
 
@@ -114,4 +114,64 @@ test('pressed fills and selected-date outlines are consumed by real controls', (
   assert.match(themeCss, /\.desktop-month-view \.month-cell\.selected:not\(\.today\):not\(\[class\*="deadline-border-"\]\) \.month-cell-date-button/)
   assert.match(themeCss, /\.mini-month-grid button\.selected:not\(\.today\):not\(\[class\*="deadline-border-"\]\)/)
   assert.match(themeCss, /box-shadow: inset 0 0 0 1\.5px var\(--selected-date-outline\)/)
+})
+
+test('non-default themes coordinate real canvas, cards, controls and navigation backgrounds', () => {
+  const backgrounds = new Set()
+  for (const preset of COLOR_THEME_PRESETS.filter((item) => item.id !== 'default')) {
+    for (const dark of [false, true]) {
+      const values = colorThemeVariables({ preset: preset.id }, dark)
+      const surfaces = colorThemeSurfaces({ preset: preset.id }, dark)
+      assert.equal(values['--background'], surfaces.background)
+      assert.equal(values['--app-background'], surfaces.background)
+      assert.equal(values['--surface'], surfaces.surface)
+      assert.equal(values['--surface-muted'], surfaces.surfaceVariant)
+      assert.equal(values['--input-border'], surfaces.border)
+      assert.equal(values['--segmented-selection'], surfaces.elevated)
+      assert.notEqual(surfaces.surface, surfaces.background)
+      assert.notEqual(surfaces.surface, surfaces.surfaceVariant)
+      assert.ok(values['--mobile-nav-background'].startsWith('rgba('))
+      backgrounds.add(surfaces.background)
+    }
+  }
+  assert.equal(backgrounds.size, 8)
+})
+
+test('custom backgrounds preserve readable primary and secondary text on every surface', () => {
+  for (const customPrimary of ['#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#808080']) {
+    for (const dark of [false, true]) {
+      const setting = { ...DEFAULT_COLOR_THEME, preset: 'custom', customPrimary }
+      const surfaces = colorThemeSurfaces(setting, dark)
+      const values = colorThemeVariables(setting, dark)
+      for (const key of ['background', 'surface', 'elevated', 'surfaceVariant']) {
+        assert.ok(colorContrast(surfaces.text, surfaces[key]) >= 4.5, customPrimary + ' ' + key)
+        assert.ok(colorContrast(surfaces.secondaryText, surfaces[key]) >= 4.5, customPrimary + ' ' + key)
+        assert.ok(colorContrast(values['--primary-text'], surfaces[key]) >= 4.5, customPrimary + ' primary ' + key)
+      }
+      assert.ok(colorContrast(values['--primary-text'], values['--primary-surface-selected-strong']) >= 4.5)
+    }
+  }
+})
+
+test('secondary ink remains readable on actual selected and accent-tinted containers', () => {
+  for (const seed of ['#FFFFFF', '#000000', '#FFFF00', '#00FFFF', '#FF00FF']) {
+    for (const dark of [false, true]) {
+      const values = colorThemeVariables({ ...DEFAULT_COLOR_THEME, preset: 'custom', customPrimary: seed, customAccent: seed }, dark)
+      for (const role of ['--primary-surface', '--primary-surface-selected', '--primary-surface-selected-strong', '--gold-surface', '--selected-date-lane']) {
+        assert.ok(colorContrast(values['--text-secondary'], values[role]) >= 4.5, seed + ' ' + role)
+      }
+    }
+  }
+})
+
+test('year heatmap ink follows the actual composite at every course density', () => {
+  for (const seed of ['#FFFFFF', '#000000', '#808080', '#FFFF00', '#00FF00', '#0000FF']) {
+    for (const dark of [false, true]) {
+      const palette = resolvedColorTheme({ ...DEFAULT_COLOR_THEME, preset: 'custom', customPrimary: seed }, dark)
+      for (const opacity of [0, 0.12, 0.32, 0.48, 0.64, 0.72, 1]) {
+        const cell = colorThemeHeatmap(palette, opacity)
+        assert.ok(colorContrast(cell.text, cell.background) >= 4.5, seed + ' ' + opacity)
+      }
+    }
+  }
 })
