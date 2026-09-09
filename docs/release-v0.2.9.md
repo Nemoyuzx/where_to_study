@@ -2,11 +2,23 @@
 
 ## Color themes — 2026-09-09 testing-only uploads
 
-本轮提交各平台颜色主题与鸿蒙 PC 字号修复的当前源码，保留 `c2ccb7b` 及其之前的 Apple 身份、产品显示名、离线帮助和支持邮箱修复，也保留当前工作区的 Apple 修改，不还原旧版本。
+本轮源码提交为 `d46844aa7445ac1b3fc49c32d6851b81ab518c93`，已推送 GitHub `main`。提交各平台颜色主题与鸿蒙 PC 字号修复的当前源码，保留 `c2ccb7b` 及其之前的 Apple 身份、产品显示名、离线帮助和支持邮箱修复，也原样保留上传前工作区的 Apple 修改，不还原旧版本。上传前后 Apple 源文件 SHA-256 全部一致。
 
-计划上传 Apple `0.2.9 (88)`（iOS/iPadOS、macOS）到 TestFlight，以及 HarmonyOS `0.2.9 (1002024)` 到 AppGallery Connect **仅测试**通道。Apple 继续通过构建参数覆盖版本，避免改动用户的项目配置。所有上传均不提交 App Store/AppGallery 上架审核，不修改现有待审版本、测试群组或 GitHub Release。
+已完成 Apple `0.2.9 (88)`（iOS/iPadOS、macOS）TestFlight 上传，以及 HarmonyOS `0.2.9 (1002024)` 的 AppGallery Connect **仅测试**上传。Apple 通过构建参数覆盖版本，没有改动用户的项目配置。未提交 App Store/AppGallery 上架审核，未修改现有待审版本、测试群组或 GitHub Release。
 
-之前的主题验证范围与限制见[颜色主题测试说明](color-themes.md)。本轮上传前另核对用户新增 Apple 修改和支持页测试。上传结果将在收到各工具的成功回执后补充，当前段落不是已上传声明。
+之前的主题验证范围与限制见[颜色主题测试说明](color-themes.md)。本轮上传前另执行 `AppStorePresentationTests`、`ColorThemeTests`、`AppModelLoadingTests` 共 19 项检查，全部通过；验证宿主实际名称、非官方声明、离线支持、邮箱/反馈和用户修改均保留。仓库 156 项测试通过。没有将此前未覆盖的设备视觉回归补记为通过。
+
+### Success receipts / 成功回执
+
+- iOS/iPadOS：Xcode 于 **2026-09-09 08:35:03 +0800** 返回 `Upload succeeded`，随后 `EXPORT SUCCEEDED`；主应用与 Widget 均为 `0.2.9 (88)`，Automatic 归档及 Apple Distribution 导出校验通过。
+- macOS：Xcode 于 **2026-09-09 08:37:42 +0800** 返回 `Upload succeeded`，随后 `EXPORT SUCCEEDED`；Universal 主应用与 Widget 均为 `0.2.9 (88)`，Manual 签名归档校验通过，产品名称保持 `Where To Study`。
+- HarmonyOS：2026-09-09 08:36 +0800 DevEco 结果页显示 **“云测试结果：通过”**。上传前明确选择第二项“生成.app包并上传至AppGallery Connect进行测试”，不是“测试和发布”。最终 APP/HAP 的 `pack.info` 均为 `0.2.9 (1002024)`，单独 build 字段仍为 `1`；两份实际上传产物签名复核通过。
+
+Apple 使用一次 `native-apple-app-store.sh upload all`，设置 `APPLE_MARKETING_VERSION=0.2.9`、`APPLE_BUILD_NUMBER=88`、iOS Automatic/macOS Manual。团队从本机现有证书读取，不提交签名配置。脚本内部依次完成两端归档、校验和上传，没有另行重复归档，也没有在成功后检查 App Store Connect processing。HarmonyOS 沿用 DevEco“从磁盘全部重新加载 → 同步和刷新项目 → 构建 → 上传产品”，但本次按用户要求选 **仅测试**；没有重复上传。
+
+忽略目录 `release-artifacts/color-themes-029-testing/` 保留上传日志、Apple 源文件前后校验、初始差异快照和鸿蒙实际上传包。Harmony APP SHA-256 为 `d43d2e7c327f9e45cf1661380343c10c747735dd1398e5655e9e49cf24bbc91c`，HAP 为 `39219bbd70bfc3424186301339e38007b6f51c374b0d91f865e86fd10862a417`。后续上传必须使用新的构建号；不能复用 88/1002024。
+
+Source commit d46844a preserves the user's Apple review/support changes. Apple 0.2.9 (88) and HarmonyOS 0.2.9 (1002024) were uploaded for testing only. No store review submission, existing review replacement, test-group change or GitHub Release publication was performed. Upload success and the quick Harmony cloud test do not imply completed store review or real-device visual coverage.
 
 ## macOS 0.2.9 (86) — App Review fixes synchronized
 

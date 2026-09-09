@@ -43,6 +43,6 @@ Android 两项已有导航测试仍失败，并已在未修改的 HEAD 基线 AP
 
 本次没有 Windows/Ubuntu 安装态真机回归、鸿蒙设备截图或真实桌面 Widget 固定后的系统刷新调度验证；浏览器共用前端测试、原生离屏渲染与单元测试不能替代这些覆盖。纯文本 CLI 输出不增加颜色设置，已有彩色终端 UI 由 TUI 实现主题功能。
 
-本轮未发布、上传或递增任何平台版本。此前已上传的鸿蒙 0.2.9 (1002023) 仅包含 PC 字号修复，不含此功能；后续发布必须递增各平台构建号，不得复用旧上传包。截图和本地日志保持在忽略目录，不放进 README。
+主题实现当日（2026-09-08）未上传。随后按用户要求，于 2026-09-09 从提交 `d46844a` 上传了 Apple 0.2.9 (88) TestFlight 与鸿蒙 0.2.9 (1002024) **仅测试**包，均收到成功回执；用户新增的 Apple 审核/支持修复原样保留，未提交任何商店审核。详见[测试上传记录](release-v0.2.9.md)。此前鸿蒙 0.2.9 (1002023) 仅包含 PC 字号修复，不含此功能。后续上传必须递增构建号。截图和本地日志保持在忽略目录，不放进 README。
 
-Color themes are implemented in the shared Windows/Linux frontend, native Apple/Android/HarmonyOS clients and the TUI. All clients preserve their exact original default palette and semantic deadline colors. Validation includes local builds, pure color/persistence tests, native UI tests where available, and browser responsive checks. The two Android baseline failures and device-level coverage gaps above remain explicitly disclosed. These changes have not been published.
+Color themes are implemented in the shared Windows/Linux frontend, native Apple/Android/HarmonyOS clients and the TUI. All clients preserve their exact original default palette and semantic deadline colors. Validation includes local builds, pure color/persistence tests, native UI tests where available, and browser responsive checks. The two Android baseline failures and device-level coverage gaps above remain explicitly disclosed. Apple 0.2.9 (88) and HarmonyOS 0.2.9 (1002024) were uploaded for testing on September 9, 2026; no store review or public release was submitted.
