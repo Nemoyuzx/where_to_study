@@ -88,6 +88,7 @@ jobs:
           sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update
           sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install --no-install-recommends -y \
             build-essential \
+            dbus \
             curl \
             file \
             libayatana-appindicator3-dev \
@@ -114,6 +115,12 @@ jobs:
 
       - name: Test Rust core
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+
+      - name: Test notification delivery on an isolated D-Bus session
+        run: >-
+          dbus-run-session -- env WTS_PRIVATE_NOTIFICATION_BUS=1
+          cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+          private_dbus_notification_delivery_and_failed_close_round_trip -- --ignored
 
       - name: Run strict Clippy checks
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings

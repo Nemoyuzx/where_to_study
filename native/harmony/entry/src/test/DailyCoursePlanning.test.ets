@@ -6,7 +6,8 @@ import {
   DailyCourseNotificationAuthorization, DailyCourseNotificationCoordinator,
   DailyCourseNotificationPlanner, DailyCourseNotificationReconcileOutcome,
   DailyCourseNotificationRequest, DailyCourseNotificationScheduling,
-  DailyCourseNotificationSettings, DailyCourseReminderOperations, DailyCourseReminderQueue
+  DailyCourseNotificationSettings, DailyCourseReminderOperations, DailyCourseReminderQueue,
+  DailyCourseReminderLimitError
 } from '../main/ets/notify/DailyCoursePlanning';
 import { HarmonyReminderSchedulerRequest } from '../main/ets/notify/DailyCourseNotifications';
 import { AppModel } from '../main/ets/model/AppModel';
@@ -26,7 +27,7 @@ class RetimingPreferences extends PreferencesStore {
 class RecordingReminderOperations implements DailyCourseReminderOperations {
   requests: DailyCourseNotificationRequest[] = [];
   async cancelAll(): Promise<void> { this.requests = []; }
-  async publish(request: DailyCourseNotificationRequest): Promise<void> { this.requests.push(request); }
+  async publish(request: DailyCourseNotificationRequest): Promise<boolean> { this.requests.push(request); return true; }
 }
 
 class SlowAuthorizationScheduler implements DailyCourseNotificationScheduling {
@@ -62,10 +63,11 @@ class SlowAuthorizationScheduler implements DailyCourseNotificationScheduling {
     await this.queue.replace([], revision);
     this.didCancel();
   }
-  async replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<void> {
+  async replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<number> {
     this.events.push('replace');
-    await this.queue.replace(requests, revision);
+    const count: number = await this.queue.replace(requests, revision);
     this.didPublish();
+    return count;
   }
 }
 
@@ -84,13 +86,14 @@ class BlockingReminderOperations implements DailyCourseReminderOperations {
 
   release(): void { this.unblock(); }
   async cancelAll(): Promise<void> { this.requests = []; }
-  async publish(request: DailyCourseNotificationRequest): Promise<void> {
+  async publish(request: DailyCourseNotificationRequest): Promise<boolean> {
     if (this.first) {
       this.first = false;
       this.didStart();
       await this.hold;
     }
     this.requests.push(request);
+    return true;
   }
 }
 
@@ -109,12 +112,37 @@ class StubScheduler implements DailyCourseNotificationScheduling {
     return this.requestResult;
   }
 
-  async replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<void> {
+  async replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<number> {
     this.replaced = requests;
+    return requests.length;
   }
 
   async cancelPending(revision: number): Promise<void> {
     this.cancelled = true;
+  }
+}
+
+class BoundaryReminderOperations extends RecordingReminderOperations {
+  now: number = 100;
+  cancelled: Promise<void>;
+  private didCancel: () => void = () => {};
+  private releaseCancel: () => void = () => {};
+  private gate: Promise<void>;
+  constructor() {
+    super();
+    this.cancelled = new Promise<void>((resolve) => { this.didCancel = resolve; });
+    this.gate = new Promise<void>((resolve) => { this.releaseCancel = resolve; });
+  }
+  async cancelAll(): Promise<void> {
+    this.didCancel();
+    await this.gate;
+    await super.cancelAll();
+  }
+  resume(): void { this.releaseCancel(); }
+  async publish(request: DailyCourseNotificationRequest): Promise<boolean> {
+    if (request.identifier === 'expired-in-native') { return false; }
+    if (request.identifier === 'limit') { throw new DailyCourseReminderLimitError('limit'); }
+    return await super.publish(request);
   }
 }
 
@@ -129,6 +157,36 @@ function demoSchedule(): ScheduleSnapshot {
 
 export default function dailyCoursePlanningTest() {
   describe('DailyCoursePlanningTest', () => {
+    it('slow_cancel_skips_requests_at_or_before_publish_time_and_counts_only_success', 0, async () => {
+      const operations = new BoundaryReminderOperations();
+      const queue = new DailyCourseReminderQueue(operations, () => operations.now);
+      const work = queue.replace([
+        new DailyCourseNotificationRequest('elapsed', 150, '', ''),
+        new DailyCourseNotificationRequest('boundary', 200, '', ''),
+        new DailyCourseNotificationRequest('expired-in-native', 250, '', ''),
+        new DailyCourseNotificationRequest('future', 300, '', '')
+      ], 1);
+      await operations.cancelled;
+      operations.now = 200;
+      operations.resume();
+      expect(await work).assertEqual(1);
+      expect(operations.requests.length).assertEqual(1);
+      expect(operations.requests[0].identifier).assertEqual('future');
+    });
+
+    it('quota_limit_keeps_successful_reminders_and_reports_actual_count', 0, async () => {
+      const operations = new BoundaryReminderOperations();
+      operations.resume();
+      const queue = new DailyCourseReminderQueue(operations, () => 0);
+      const count = await queue.replace([
+        new DailyCourseNotificationRequest('first', 100, '', ''),
+        new DailyCourseNotificationRequest('limit', 200, '', ''),
+        new DailyCourseNotificationRequest('not-published', 300, '', '')
+      ], 1);
+      expect(count).assertEqual(1);
+      expect(operations.requests.length).assertEqual(1);
+    });
+
     it('model_rejects_invalid_time_edits_without_changing_current_value_or_scheduling', 0, () => {
       const scheduler = new SlowAuthorizationScheduler();
       const preferences = new RetimingPreferences();
@@ -224,7 +282,7 @@ export default function dailyCoursePlanningTest() {
 
     it('latest_time_wins_when_previous_system_publish_is_in_flight', 0, async () => {
       const operations = new BlockingReminderOperations();
-      const queue = new DailyCourseReminderQueue(operations);
+      const queue = new DailyCourseReminderQueue(operations, () => 0);
       const old = new DailyCourseNotificationRequest('old', 450 * 60000, '', '');
       const updated = new DailyCourseNotificationRequest('new', 900 * 60000, '', '');
       const first = queue.replace([old, old], 1);
@@ -241,8 +299,8 @@ export default function dailyCoursePlanningTest() {
 
     it('disable_clears_an_in_flight_old_publish_and_blocks_stale_replacement', 0, async () => {
       const operations = new BlockingReminderOperations();
-      const queue = new DailyCourseReminderQueue(operations);
-      const request = new DailyCourseNotificationRequest('old', 0, '', '');
+      const queue = new DailyCourseReminderQueue(operations, () => 0);
+      const request = new DailyCourseNotificationRequest('old', 1, '', '');
       const first = queue.replace([request], 1);
       await operations.started;
       const cancellation = queue.replace([], 3);

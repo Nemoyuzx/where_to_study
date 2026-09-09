@@ -21,6 +21,11 @@ if [[ -z "${TARGET}" ]]; then
   exit 1
 fi
 BUNDLE="com.nemoyu.wheretostudy"
+# Release 构建明确忽略测试同意参数；冒烟套件必须运行在测试用 Debug HAP 上。
+if ! "${HDC}" -t "${TARGET}" shell bm dump -n "${BUNDLE}" | grep -Eq '"debug"[[:space:]]*:[[:space:]]*true'; then
+  echo "UI 冒烟需要先安装 Debug HAP；Release 不允许通过测试参数绕过隐私同意。" >&2
+  exit 1
+fi
 HELPER="${ROOT_DIR}/scripts/harmony-ui-helper.py"
 LAYOUT_DEV="/data/local/tmp/wts_smoke_layout.json"
 LAYOUT_HOST="/tmp/wts_smoke_layout.json"
@@ -328,7 +333,9 @@ launch_app() {
   # launch_app <flag>  flag: uiTesting | reviewDemo
   "${HDC}" -t "${TARGET}" shell aa force-stop "${BUNDLE}" >/dev/null 2>&1 || true
   sleep 1
-  "${HDC}" -t "${TARGET}" shell aa start -b "${BUNDLE}" -a EntryAbility "--pb" "$1" true >/dev/null 2>&1
+  # 只在 DEBUG 构建且显式 UI 测试模式中生效，不修改真实同意记录。
+  "${HDC}" -t "${TARGET}" shell aa start -b "${BUNDLE}" -a EntryAbility \
+    "--pb" "$1" true --pb privacyConsentAcceptedForTesting true >/dev/null 2>&1
   sleep 4
 }
 

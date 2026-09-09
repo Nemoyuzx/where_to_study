@@ -8,7 +8,7 @@ import { AppContext } from '../store/AppContext';
 import {
   DailyCourseNotificationAuthorization,
   DailyCourseNotificationRequest, DailyCourseNotificationScheduling,
-  DailyCourseReminderOperations, DailyCourseReminderQueue
+  DailyCourseReminderOperations, DailyCourseReminderQueue, DailyCourseReminderLimitError
 } from './DailyCoursePlanning';
 
 // 提醒代理超限（1700002：The number of reminders exceeds the limit）。
@@ -38,14 +38,12 @@ export class HarmonyReminderScheduler implements DailyCourseNotificationScheduli
 
   async replacePending(
     requests: DailyCourseNotificationRequest[], revision: number
-  ): Promise<void> {
+  ): Promise<number> {
     try {
-      await this.queue.replace(requests, revision);
+      return await this.queue.replace(requests, revision);
     } catch (e) {
       const err: BusinessError = e as BusinessError;
-      if (err.code !== REMINDER_LIMIT_EXCEEDED) {
-        throw new Error('课程摘要安排失败：' + err.message);
-      }
+      throw new Error('课程摘要安排失败：' + err.message);
     }
   }
 
@@ -92,8 +90,24 @@ class HarmonyReminderOperations implements DailyCourseReminderOperations {
     await reminderAgentManager.cancelAllReminders();
   }
 
-  async publish(request: DailyCourseNotificationRequest): Promise<void> {
-    await reminderAgentManager.publishReminder(HarmonyReminderSchedulerRequest.calendar(request));
+  async publish(request: DailyCourseNotificationRequest): Promise<boolean> {
+    if (request.fireEpochMs <= Date.now()) {
+      return false;
+    }
+    try {
+      await reminderAgentManager.publishReminder(HarmonyReminderSchedulerRequest.calendar(request));
+      return true;
+    } catch (e) {
+      const error: BusinessError = e as BusinessError;
+      if (error.code === 401 && request.fireEpochMs <= Date.now()) {
+        // 跨过原生接口的时间校验边界时，仅跳过这一条，不关闭整个提醒功能。
+        return false;
+      }
+      if (error.code === REMINDER_LIMIT_EXCEEDED) {
+        throw new DailyCourseReminderLimitError('系统提醒数量已达上限');
+      }
+      throw new Error(error.message);
+    }
   }
 }
 

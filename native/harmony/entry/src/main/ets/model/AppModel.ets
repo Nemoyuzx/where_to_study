@@ -1384,7 +1384,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.updateSavedCredentialState(null);
 
     this.schedule = null;
-    this.synchronizeWidgetSchedule();
+    try {
+      await WidgetSync.clear();
+    } catch (e) {
+      failures.push('卡片课表');
+    }
     this.calendarImportStatusMessage = '';
     try {
       await this.schedulePersistence.clear();
@@ -2306,7 +2310,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
     let failed: boolean = false;
     this.schedule = null;
-    this.synchronizeWidgetSchedule();
+    try {
+      await WidgetSync.clear();
+    } catch (e) {
+      failed = true;
+    }
     this.calendarImportStatusMessage = '';
     try {
       await this.schedulePersistence.clear();
@@ -2433,6 +2441,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   // 对应 iOS 端 synchronizeWidgetSchedule：课表变化后同步“今日课程”卡片。
   private synchronizeWidgetSchedule(): void {
+    // 示例状态只用于页面预览，不覆盖桌面卡片中的真实账号归档。
+    if (this.isSampleMode()) {
+      return;
+    }
     WidgetSync.refresh(this.schedule, new WidgetCoursePreferences(
     this.widgetShowsLocation, this.widgetShowsTeacher, this.widgetCourseLimit,
     this.resolvedLanguage()));

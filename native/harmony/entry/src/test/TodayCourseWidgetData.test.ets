@@ -27,6 +27,23 @@ function archive(): WidgetArchive {
 
 export default function todayCourseWidgetDataTest() {
   describe('TodayCourseWidgetDataTest', () => {
+    it('next_refresh_keeps_daytime_updates_and_stays_within_daily_quota', 0, () => {
+      const midnight: number = Date.UTC(2026, 8, 8, 16);
+      expect(TodayCourseWidgetData.nextRefreshMinutes(midnight)).assertEqual(30);
+      expect(TodayCourseWidgetData.nextRefreshMinutes(midnight - 7 * 60000)).assertEqual(7);
+      expect(TodayCourseWidgetData.nextRefreshMinutes(midnight - 1)).assertEqual(5);
+      for (const initialMinute of [0, 1, 4, 15, 29]) {
+        let now: number = midnight + initialMinute * 60000;
+        let updates: number = 0;
+        while (now < midnight + 86400000) {
+          const minutes: number = TodayCourseWidgetData.nextRefreshMinutes(now);
+          expect(minutes >= 5 && minutes <= 30).assertTrue();
+          now += minutes * 60000;
+          updates++;
+        }
+        expect(updates <= 49).assertTrue();
+      }
+    });
     it('courses_on_filters_by_weekday_and_week', 0, () => {
       // 2026-03-02 是周一（第一周）。
       const mondayWeek1: DateParts = new DateParts(2026, 3, 2);

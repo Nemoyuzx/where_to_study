@@ -47,7 +47,7 @@ export class DailyCourseNotificationRequest {
 
 export class DailyCourseNotificationPlanner {
   static readonly identifierPrefix: string = 'daily-course-summary.';
-  // 鸿蒙提醒代理全局上限 30 条；与 iOS 的 63 条对应但受平台能力约束。
+  // API 24 普通应用最多30条有效提醒（并非整个系统的全局上限）。
   static readonly maximumPendingRequestCount: number = 30;
   static readonly maximumScheduleWeek: number = 53;
   static readonly maximumScanDayCount: number = 400;
@@ -129,44 +129,63 @@ export interface DailyCourseNotificationScheduling {
 
   requestAuthorization(timeoutMs: number): Promise<boolean>;
 
-  replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<void>;
+  replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<number>;
 
   cancelPending(revision: number): Promise<void>;
 }
 
 export interface DailyCourseReminderOperations {
   cancelAll(): Promise<void>;
-  publish(request: DailyCourseNotificationRequest): Promise<void>;
+  publish(request: DailyCourseNotificationRequest): Promise<boolean>;
 }
+
+export class DailyCourseReminderLimitError extends Error {}
 
 // 系统的 cancelAll / publish 是异步操作；串行执行，旧批次不能清除新批次。
 export class DailyCourseReminderQueue {
   private revision: number = 0;
-  private pending: Promise<void> = Promise.resolve();
+  private pending: Promise<number> = Promise.resolve(0);
   private readonly operations: DailyCourseReminderOperations;
+  private readonly now: () => number;
 
-  constructor(operations: DailyCourseReminderOperations) {
+  constructor(operations: DailyCourseReminderOperations, now: () => number = () => Date.now()) {
     this.operations = operations;
+    this.now = now;
   }
 
-  replace(requests: DailyCourseNotificationRequest[], revision: number): Promise<void> {
+  replace(requests: DailyCourseNotificationRequest[], revision: number): Promise<number> {
     if (revision < this.revision) {
-      return Promise.resolve();
+      return Promise.resolve(0);
     }
     this.revision = revision;
     const batch: DailyCourseNotificationRequest[] = requests.slice(
       0, DailyCourseNotificationPlanner.maximumPendingRequestCount);
-    const work: Promise<void> = this.pending.catch(() => {}).then(async (): Promise<void> => {
+    const work: Promise<number> = this.pending.catch(() => 0).then(async (): Promise<number> => {
       if (revision !== this.revision) {
-        return;
+        return 0;
       }
       await this.operations.cancelAll();
+      let published: number = 0;
       for (const request of batch) {
         if (revision !== this.revision) {
-          return;
+          return 0;
         }
-        await this.operations.publish(request);
+        // 入队前规划出的未来时刻可能在等待旧任务或系统取消时过期。
+        if (request.fireEpochMs <= this.now()) {
+          continue;
+        }
+        try {
+          if (await this.operations.publish(request)) {
+            published++;
+          }
+        } catch (error) {
+          if (error instanceof DailyCourseReminderLimitError) {
+            break;
+          }
+          throw error as Error;
+        }
       }
+      return published;
     });
     this.pending = work;
     return work;
@@ -234,8 +253,8 @@ export class DailyCourseNotificationCoordinator {
     }
     const requests: DailyCourseNotificationRequest[] =
       DailyCourseNotificationPlanner.requests(schedule, Date.now(), undefined, this.english, reminderMinutes);
-    await this.scheduler.replacePending(requests, revision);
+    const published: number = await this.scheduler.replacePending(requests, revision);
     return new DailyCourseNotificationReconcileResult(
-      DailyCourseNotificationReconcileOutcome.scheduled, requests.length);
+      DailyCourseNotificationReconcileOutcome.scheduled, published);
   }
 }

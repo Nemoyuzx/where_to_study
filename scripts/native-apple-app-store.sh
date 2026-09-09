@@ -154,6 +154,7 @@ static_preflight() {
   npm --prefix "$ROOT_DIR" run licenses:check
   plutil -lint \
     "$APPLE_DIR/Resources/PrivacyInfo.xcprivacy" \
+    "$APPLE_DIR/Resources/Widget/PrivacyInfo.xcprivacy" \
     "$APPLE_DIR/Resources/WhereToStudyMac.entitlements" \
     "$APPLE_DIR/Resources/WhereToStudyWidget.entitlements" \
     "$APPLE_DIR/Resources/WhereToStudyiOS.entitlements" \
@@ -284,10 +285,7 @@ validate_archive() {
     echo "Archive does not declare ITSAppUsesNonExemptEncryption=false." >&2
     exit 1
   fi
-  if [[ ! -f "$resources/PrivacyInfo.xcprivacy" ]]; then
-    echo "Archive is missing PrivacyInfo.xcprivacy." >&2
-    exit 1
-  fi
+  bash "$APPLE_DIR/scripts/validate-privacy-bundles.sh" "$platform" "$app"
   plutil -lint "$info" "$resources/PrivacyInfo.xcprivacy" >/dev/null
   if ! cmp -s "$ROOT_DIR/LICENSE" "$resources/LICENSE"; then
     echo "Archive is missing the exact GPL-3.0-only license." >&2
@@ -492,6 +490,10 @@ validate_exported_ios_package() {
     /usr/bin/find "$temporary_dir" -depth -delete
     return 1
   fi
+  if ! bash "$APPLE_DIR/scripts/validate-privacy-bundles.sh" ios "$app"; then
+    /usr/bin/find "$temporary_dir" -depth -delete
+    return 1
+  fi
   codesign --verify --deep --strict --verbose=2 "$app"
   for signed_bundle in "$app" "$widget"; do
     signature_details="$(codesign -dvv "$signed_bundle" 2>&1)"
@@ -516,6 +518,8 @@ validate_exported_ios_package() {
 export_or_upload_platform() {
   local platform="$1" destination="$2" archive export_options export_dir extension package_name package_path
   archive="$(archive_path "$platform")"
+  # Fail before export/upload if a packaged executable lost its declaration.
+  bash "$APPLE_DIR/scripts/validate-privacy-bundles.sh" "$platform" "$(app_path "$platform")"
   export_options="$(mktemp "${TMPDIR:-/tmp}/where-to-study-export.plist.XXXXXX")"
   export_dir="$OUTPUT_ROOT/$VERSION-$BUILD_NUMBER/$platform"
   rm -rf "$export_dir"

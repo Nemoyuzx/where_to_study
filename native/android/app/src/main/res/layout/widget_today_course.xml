@@ -8,8 +8,10 @@
     android:padding="12dp">
 
     <LinearLayout
+        android:id="@+id/widget_header"
         android:layout_width="match_parent"
-        android:layout_height="24dp"
+        android:layout_height="wrap_content"
+        android:minHeight="24dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -23,12 +25,14 @@
 
         <TextView
             android:id="@+id/widget_theme_title"
+            android:fontFamily="sans"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="7dp"
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
+            android:includeFontPadding="false"
             android:text="@string/widget_today_course_title"
             android:textColor="@color/widget_text_primary"
             android:textSize="14sp"
@@ -36,9 +40,11 @@
 
         <TextView
             android:id="@+id/widget_course_count"
+            android:fontFamily="sans"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:maxLines="1"
+            android:includeFontPadding="false"
             android:textColor="@color/widget_text_secondary"
             android:textSize="11sp"
             android:textStyle="bold" />
@@ -46,11 +52,13 @@
 
     <TextView
         android:id="@+id/widget_day_context"
+        android:fontFamily="sans"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:ellipsize="end"
         android:maxLines="1"
+        android:includeFontPadding="false"
         android:textColor="@color/widget_text_secondary"
         android:textSize="10sp" />
 
@@ -72,6 +80,7 @@
 
         <TextView
             android:id="@+id/widget_empty_text"
+            android:fontFamily="sans"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="9dp"
@@ -216,10 +225,12 @@
 
         <TextView
             android:id="@+id/widget_more_courses"
+            android:fontFamily="sans"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
+            android:includeFontPadding="false"
             android:paddingTop="2dp"
             android:textColor="@color/widget_text_secondary"
             android:textSize="10sp" />

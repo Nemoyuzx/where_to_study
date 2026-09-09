@@ -18,7 +18,7 @@ Where To Study is an independent, unofficial schedule and empty-classroom client
 6. Select Import to System Calendar. The app displays a simulated result without requesting Calendar access or writing events.
 7. In Settings, review the bilingual reference notice and the separate Competition and School Notice switches, then toggle the daily course summary and choose a reminder time (Beijing time; default 07:30). Sample mode requests no Notification access.
 8. Favorite an event with the star at the right side of its details, then open the independent Favorite Management page in Settings and remove it. Favorites stay only on the device.
-9. On iOS or macOS, add the Today’s Courses widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path.
+9. On iOS or macOS, add the Today’s Courses widget from the system widget gallery. Sample mode writes only its fictional schedule to the App Group for this review path. Widget settings apply on this device and do not sync across devices; course content respects the system’s sensitive-content redaction settings.
 10. Open the primary Query destination between Teaching Calendar and Settings. Switch the top segment; the sample shuttle is offline, and Important Events supports search, categories, conference favorites, and excludes assignments.
 11. Return to Settings and select Return to Live Data to leave sample mode.
 12. Open Settings → About This App → Help and Support to see the maintainer's email and common questions. Help is available offline; the email action opens the user's mail app only when selected.

@@ -7,12 +7,23 @@ import { ScheduleSnapshot } from '../common/Models';
 import { JsonFile } from '../store/JsonFile';
 import { AppContext } from '../store/AppContext';
 import { ColorThemes, ColorThemeSelection } from '../common/ColorThemes';
+import { WidgetFileOperations, WidgetFileQueue } from './WidgetFileQueue';
 import {
   TodayCourseWidgetData, WidgetArchive, WidgetArchiveCourse, WidgetCoursePreferences
 } from './TodayCourseWidgetData';
 
 export class WidgetSync {
-  private static themeWrite: Promise<void> = Promise.resolve();
+  private static archiveWrites: Map<string, WidgetFileQueue> = new Map<string, WidgetFileQueue>();
+  private static themeWrites: Map<string, WidgetFileQueue> = new Map<string, WidgetFileQueue>();
+
+  private static queue(queues: Map<string, WidgetFileQueue>, filesDir: string): WidgetFileQueue {
+    let queue: WidgetFileQueue | undefined = queues.get(filesDir);
+    if (queue === undefined) {
+      queue = new WidgetFileQueue(new NativeWidgetFileOperations());
+      queues.set(filesDir, queue);
+    }
+    return queue;
+  }
 
   static themePath(filesDir: string): string {
     return filesDir + '/WhereToStudyNative/widget-color-theme.json';
@@ -20,12 +31,17 @@ export class WidgetSync {
 
   // 外观单独归档，未获取课表时的空卡片也能共享主题；不重载课表或网络。
   static refreshTheme(selection: ColorThemeSelection): void {
-    const serialized: string = ColorThemes.encode(selection);
-    WidgetSync.themeWrite = WidgetSync.themeWrite.catch(() => {}).then(async (): Promise<void> => {
-      await JsonFile.writeTextAtomic(WidgetSync.themePath(AppContext.filesRoot()), serialized);
-      await WidgetSync.reloadAllForms();
+    const work = WidgetSync.writeTheme(AppContext.get().filesDir, selection).then(async (current: boolean) => {
+      if (current) {
+        await WidgetSync.reloadAllForms();
+      }
     });
-    WidgetSync.themeWrite.catch(() => {});
+    work.catch(() => {});
+  }
+
+  static writeTheme(filesDir: string, selection: ColorThemeSelection): Promise<boolean> {
+    return WidgetSync.queue(WidgetSync.themeWrites, filesDir).replace(WidgetSync.themePath(filesDir),
+      WidgetSync.themePath(filesDir + '/WhereToStudyNative'), ColorThemes.encode(selection));
   }
 
   static loadThemeSync(filesDir: string): ColorThemeSelection {
@@ -55,16 +71,9 @@ export class WidgetSync {
     preferences: WidgetCoursePreferences = new WidgetCoursePreferences()): void {
     const work: Promise<void> = (async (): Promise<void> => {
       try {
-        const path: string = TodayCourseWidgetData.archiveFilePath(AppContext.filesRoot());
-        if (schedule === null) {
-          await JsonFile.removeFile(path);
-        } else {
-          const archive: WidgetArchive = TodayCourseWidgetData.scheduleToArchive(
-            schedule, preferences);
-          const text: string = JSON.stringify(WidgetSync.archiveToJson(archive));
-          await JsonFile.writeTextAtomic(path, text);
+        if (await WidgetSync.writeArchive(AppContext.get().filesDir, schedule, preferences)) {
+          await WidgetSync.reloadAllForms();
         }
-        await WidgetSync.reloadAllForms();
       } catch (e) {
         // 卡片刷新失败不影响应用主流程。
       }
@@ -72,6 +81,22 @@ export class WidgetSync {
     work.catch(() => {
       // 已在内部处理。
     });
+  }
+
+  // filesDir 始终是平台 Context.filesDir，主应用与 FormExtensionAbility 使用同一语义。
+  static writeArchive(filesDir: string, schedule: ScheduleSnapshot | null,
+    preferences: WidgetCoursePreferences = new WidgetCoursePreferences()): Promise<boolean> {
+    const text: string | null = schedule === null ? null : JSON.stringify(
+      WidgetSync.archiveToJson(TodayCourseWidgetData.scheduleToArchive(schedule, preferences)));
+    return WidgetSync.queue(WidgetSync.archiveWrites, filesDir).replace(
+      TodayCourseWidgetData.archiveFilePath(filesDir),
+      TodayCourseWidgetData.archiveFilePath(filesDir + '/WhereToStudyNative'), text);
+  }
+
+  static async clear(): Promise<void> {
+    if (await WidgetSync.writeArchive(AppContext.get().filesDir, null)) {
+      await WidgetSync.reloadAllForms();
+    }
   }
 
   // 通知系统重载本应用全部“今日课程”卡片（等价于 iOS 的
@@ -99,6 +124,10 @@ export class WidgetSync {
         e instanceof Error ? e.message : 'unknown');
       return null;
     }
+  }
+
+  static loadArchiveFromFilesSync(filesDir: string): WidgetArchive | null {
+    return WidgetSync.loadArchiveSync(TodayCourseWidgetData.archiveFilePath(filesDir));
   }
 
   // FormExtensionAbility.onAddForm 必须同步返回绑定数据，因此提供同步读取。
@@ -196,4 +225,9 @@ export class WidgetSync {
     out['preferences'] = archive.preferences.toJson();
     return out;
   }
+}
+
+class NativeWidgetFileOperations implements WidgetFileOperations {
+  async write(path: string, text: string): Promise<void> { await JsonFile.writeTextAtomic(path, text); }
+  async remove(path: string): Promise<void> { await JsonFile.removeFile(path); }
 }

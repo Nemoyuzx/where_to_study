@@ -7,6 +7,8 @@ pub mod config;
 pub mod credential_store;
 pub mod daily_info;
 pub mod deadlines;
+#[cfg(not(mobile))]
+mod desktop_notifications;
 pub mod error;
 pub mod holidays;
 pub mod models;
@@ -41,8 +43,6 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(not(mobile))]
 use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
-#[cfg(not(mobile))]
-use tauri_plugin_notification::NotificationExt;
 
 use crate::models::{
     AlmanacRequest, AlmanacResponse, AssignmentCalendarResponse, AssignmentsRequest,
@@ -198,8 +198,31 @@ impl LocalDataCoordinator {
         self.account_access_revoked.load(Ordering::Acquire)
     }
 
+    #[cfg(test)]
     fn update_account_scope<P, T>(
         &self,
+        prepare: impl FnOnce() -> Result<P, String>,
+        scope_state: impl FnOnce(&P) -> (bool, bool),
+        persist_revocation: impl FnOnce() -> Result<(), String>,
+        revoke_existing_account: impl FnOnce() -> Result<(), String>,
+        clear_account_scope: impl FnOnce() -> Result<(), String>,
+        commit: impl FnOnce(P) -> Result<T, String>,
+    ) -> Result<(T, bool), AccountScopeUpdateError> {
+        self.update_account_scope_at(
+            self.begin(),
+            prepare,
+            scope_state,
+            persist_revocation,
+            revoke_existing_account,
+            clear_account_scope,
+            commit,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn update_account_scope_at<P, T>(
+        &self,
+        expected: LocalDataGeneration,
         prepare: impl FnOnce() -> Result<P, String>,
         scope_state: impl FnOnce(&P) -> (bool, bool),
         persist_revocation: impl FnOnce() -> Result<(), String>,
@@ -211,6 +234,12 @@ impl LocalDataCoordinator {
             .io_lock
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.generation.load(Ordering::Acquire) != expected.0 {
+            return Err(AccountScopeUpdateError::new(
+                STALE_LOCAL_DATA_MESSAGE.to_string(),
+                true,
+            ));
+        }
         let plan = prepare().map_err(|message| AccountScopeUpdateError::new(message, false))?;
         let (changed, account_available) = scope_state(&plan);
         if changed {
@@ -315,10 +344,15 @@ fn desktop_notification_preferences() -> DesktopNotificationPreferences {
 }
 
 #[cfg(not(mobile))]
-fn set_desktop_notification_preferences(enabled: bool, minutes: u16) {
-    *DESKTOP_NOTIFICATION_PREFERENCES
+fn set_desktop_notification_preferences(
+    app: &tauri::AppHandle,
+    enabled: bool,
+    minutes: u16,
+) -> bool {
+    let mut current = DESKTOP_NOTIFICATION_PREFERENCES
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = DesktopNotificationPreferences {
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let next = DesktopNotificationPreferences {
         enabled,
         minutes: if minutes < 1440 {
             minutes
@@ -326,7 +360,18 @@ fn set_desktop_notification_preferences(enabled: bool, minutes: u16) {
             models::DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES
         },
     };
+    let became_enabled = enabled && !current.enabled;
+    if *current != next {
+        *current = next;
+        if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
+            let _ = app.emit(
+                "schedule:daily-notification-error",
+                format!("旧课程通知清理失败：{error}"),
+            );
+        }
+    }
     wake_desktop_scheduler();
+    became_enabled
 }
 
 #[cfg(test)]
@@ -336,6 +381,25 @@ mod local_data_coordination_tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::{mpsc, Arc};
     use std::thread;
+
+    #[test]
+    fn queued_settings_save_cannot_restore_credentials_after_clear() {
+        let coordinator = LocalDataCoordinator::new();
+        let queued_generation = coordinator.begin();
+        coordinator.revoke_and_clear(|| Ok(()), || Ok(())).unwrap();
+        let result: Result<((), bool), AccountScopeUpdateError> = coordinator
+            .update_account_scope_at(
+                queued_generation,
+                || -> Result<(), String> { panic!("stale save read or wrote credentials") },
+                |_| (false, true),
+                || Ok(()),
+                || Ok(()),
+                || Ok(()),
+                |_| Ok(()),
+            );
+        assert!(result.unwrap_err().account_scope_cleared);
+        assert!(coordinator.account_access_revoked());
+    }
 
     fn write_account_caches(
         directory: &std::path::Path,
@@ -833,8 +897,17 @@ fn get_metadata() -> MetadataResponse {
 }
 
 #[tauri::command]
-fn load_saved_settings(app: tauri::AppHandle) -> Result<SavedSettings, String> {
+async fn load_saved_settings(app: tauri::AppHandle) -> Result<SavedSettings, String> {
     let generation = LOCAL_DATA.begin();
+    tauri::async_runtime::spawn_blocking(move || load_saved_settings_sync(app, generation))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn load_saved_settings_sync(
+    app: tauri::AppHandle,
+    generation: LocalDataGeneration,
+) -> Result<SavedSettings, String> {
     LOCAL_DATA
         .with_current(generation, || {
             if LOCAL_DATA.account_access_revoked()
@@ -848,11 +921,23 @@ fn load_saved_settings(app: tauri::AppHandle) -> Result<SavedSettings, String> {
 }
 
 #[tauri::command]
-fn save_saved_settings(
+async fn save_saved_settings(
     app: tauri::AppHandle,
     payload: SaveSettingsRequest,
 ) -> Result<SavedSettings, AccountScopeUpdateError> {
-    let update = LOCAL_DATA.update_account_scope(
+    let generation = LOCAL_DATA.begin();
+    tauri::async_runtime::spawn_blocking(move || save_saved_settings_sync(app, payload, generation))
+        .await
+        .map_err(|e| AccountScopeUpdateError::new(e.to_string(), false))?
+}
+
+fn save_saved_settings_sync(
+    app: tauri::AppHandle,
+    payload: SaveSettingsRequest,
+    generation: LocalDataGeneration,
+) -> Result<SavedSettings, AccountScopeUpdateError> {
+    let update = LOCAL_DATA.update_account_scope_at(
+        generation,
         || settings_store::prepare_save(payload).map_err(|error| error.message),
         |plan| (plan.account_changed(), plan.has_account()),
         || settings_store::mark_account_access_revoked(&app).map_err(|error| error.message),
@@ -872,13 +957,17 @@ fn save_saved_settings(
     #[cfg(not(mobile))]
     match &result {
         Ok(settings) => {
-            set_desktop_notification_preferences(
+            if set_desktop_notification_preferences(
+                &app,
                 settings.daily_course_notifications_enabled,
                 settings.daily_course_notification_minutes,
-            );
+            ) {
+                desktop_notifications::request_permission();
+            }
         }
         Err(error) if error.account_scope_cleared => {
             set_desktop_notification_preferences(
+                &app,
                 false,
                 models::DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
             );
@@ -890,6 +979,10 @@ fn save_saved_settings(
 
 fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
     let mut errors = Vec::new();
+    #[cfg(not(mobile))]
+    if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
+        errors.push(format!("课程通知清理失败：{error}"));
+    }
     assignments::clear_cache();
     if let Err(error) = schedule_store::clear(app) {
         errors.push(error.message);
@@ -912,11 +1005,21 @@ fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
+async fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || clear_local_data_sync(app))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn clear_local_data_sync(app: tauri::AppHandle) -> Result<bool, String> {
     let result = LOCAL_DATA.revoke_and_clear(
         || settings_store::mark_account_access_revoked(&app).map_err(|error| error.message),
         || {
             let mut errors = Vec::new();
+            #[cfg(not(mobile))]
+            if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
+                errors.push(format!("课程通知清理失败：{error}"));
+            }
             assignments::clear_cache();
             if let Err(error) = credential_store::save(&credential_store::Credentials::default()) {
                 errors.push(error.message);
@@ -943,6 +1046,7 @@ fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
     #[cfg(not(mobile))]
     {
         set_desktop_notification_preferences(
+            &app,
             false,
             models::DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
         );
@@ -951,19 +1055,40 @@ fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn load_saved_schedule(app: tauri::AppHandle) -> Result<Option<ScheduleResponse>, String> {
+async fn load_saved_schedule(app: tauri::AppHandle) -> Result<Option<ScheduleResponse>, String> {
     let generation = LOCAL_DATA.begin();
+    tauri::async_runtime::spawn_blocking(move || load_saved_schedule_sync(app, generation))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn load_saved_schedule_sync(
+    app: tauri::AppHandle,
+    generation: LocalDataGeneration,
+) -> Result<Option<ScheduleResponse>, String> {
     LOCAL_DATA
         .with_current_account(generation, || load_current_schedule(&app))
         .map_err(LocalDataAccessError::message)
 }
 
 #[tauri::command]
-fn load_saved_schedule_for_scope(
+async fn load_saved_schedule_for_scope(
     app: tauri::AppHandle,
     payload: AccountScopeRequest,
 ) -> Result<Option<ScheduleResponse>, String> {
     let generation = LOCAL_DATA.begin();
+    tauri::async_runtime::spawn_blocking(move || {
+        load_saved_schedule_for_scope_sync(app, payload, generation)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn load_saved_schedule_for_scope_sync(
+    app: tauri::AppHandle,
+    payload: AccountScopeRequest,
+    generation: LocalDataGeneration,
+) -> Result<Option<ScheduleResponse>, String> {
     LOCAL_DATA
         .with_current_account(generation, || {
             let current_scope = require_saved_account_scope()?;
@@ -974,19 +1099,42 @@ fn load_saved_schedule_for_scope(
 }
 
 #[tauri::command]
-fn load_saved_classrooms(app: tauri::AppHandle) -> Result<Option<ClassroomsCacheResponse>, String> {
+async fn load_saved_classrooms(
+    app: tauri::AppHandle,
+) -> Result<Option<ClassroomsCacheResponse>, String> {
     let generation = LOCAL_DATA.begin();
+    tauri::async_runtime::spawn_blocking(move || load_saved_classrooms_sync(app, generation))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn load_saved_classrooms_sync(
+    app: tauri::AppHandle,
+    generation: LocalDataGeneration,
+) -> Result<Option<ClassroomsCacheResponse>, String> {
     LOCAL_DATA
         .with_current_account(generation, || load_current_classrooms(&app))
         .map_err(LocalDataAccessError::message)
 }
 
 #[tauri::command]
-fn load_saved_classrooms_for_scope(
+async fn load_saved_classrooms_for_scope(
     app: tauri::AppHandle,
     payload: AccountScopeRequest,
 ) -> Result<Option<ClassroomsCacheResponse>, String> {
     let generation = LOCAL_DATA.begin();
+    tauri::async_runtime::spawn_blocking(move || {
+        load_saved_classrooms_for_scope_sync(app, payload, generation)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn load_saved_classrooms_for_scope_sync(
+    app: tauri::AppHandle,
+    payload: AccountScopeRequest,
+    generation: LocalDataGeneration,
+) -> Result<Option<ClassroomsCacheResponse>, String> {
     LOCAL_DATA
         .with_current_account(generation, || {
             let current_scope = require_saved_account_scope()?;
@@ -1999,6 +2147,10 @@ fn desktop_now() -> NaiveDateTime {
 const CLASSROOM_REFRESH_RETRY_DELAY: ChronoDuration = ChronoDuration::minutes(15);
 #[cfg(not(mobile))]
 const MAX_CLASSROOM_REFRESH_RETRIES: u8 = 2;
+#[cfg(not(mobile))]
+const NOTIFICATION_RETRY_DELAY: ChronoDuration = ChronoDuration::minutes(1);
+#[cfg(not(mobile))]
+const MAX_NOTIFICATION_RETRIES: u8 = 2;
 
 #[cfg(not(mobile))]
 fn next_desktop_schedule_boundary(
@@ -2024,6 +2176,14 @@ fn next_desktop_schedule_boundary(
         .filter(|retry| retry.next_attempt_at > now)
     {
         boundaries.push(retry.next_attempt_at);
+    }
+    if notifications_enabled {
+        if let Some(retry) = state
+            .notification_retry
+            .filter(|retry| retry.next_attempt_at > now)
+        {
+            boundaries.push(retry.next_attempt_at);
+        }
     }
     boundaries
         .into_iter()
@@ -2178,6 +2338,7 @@ struct DesktopScheduleState {
     classroom_refresh_date: Option<NaiveDate>,
     notification_date: Option<NaiveDate>,
     classroom_retry: Option<DesktopTaskRetry>,
+    notification_retry: Option<DesktopTaskRetry>,
 }
 
 #[cfg(not(mobile))]
@@ -2190,6 +2351,7 @@ impl DesktopScheduleState {
                 .then_some(today),
             notification_date: (persisted.notification_date == Some(today)).then_some(today),
             classroom_retry: None,
+            notification_retry: None,
         }
     }
 
@@ -2203,6 +2365,7 @@ impl DesktopScheduleState {
             }
             DesktopScheduledTask::SendCourseNotification => {
                 self.notification_date = Some(date);
+                self.notification_retry = None;
             }
         }
     }
@@ -2215,6 +2378,24 @@ impl DesktopScheduleState {
         outcome: DesktopTaskOutcome,
     ) {
         if outcome == DesktopTaskOutcome::Superseded {
+            return;
+        }
+        if task == DesktopScheduledTask::SendCourseNotification
+            && outcome == DesktopTaskOutcome::RetryableFailure
+        {
+            let attempts = self
+                .notification_retry
+                .filter(|retry| retry.date == date)
+                .map_or(1, |retry| retry.attempts.saturating_add(1));
+            if attempts > MAX_NOTIFICATION_RETRIES {
+                self.mark_completed(task, date);
+            } else {
+                self.notification_retry = Some(DesktopTaskRetry {
+                    date,
+                    attempts,
+                    next_attempt_at: completed_at + NOTIFICATION_RETRY_DELAY,
+                });
+            }
             return;
         }
         if task != DesktopScheduledTask::RefreshClassroomsAndTray
@@ -2260,7 +2441,11 @@ fn due_desktop_tasks(
         && now.time()
             >= NaiveTime::from_hms_opt(u32::from(minutes / 60), u32::from(minutes % 60), 0)
                 .expect("valid notification time")
-        && state.notification_date != Some(today);
+        && state.notification_date != Some(today)
+        && state
+            .notification_retry
+            .filter(|retry| retry.date == today)
+            .is_none_or(|retry| now >= retry.next_attempt_at);
 
     let mut tasks = Vec::with_capacity(2);
     if classroom_due {
@@ -2295,7 +2480,7 @@ fn daily_course_notification_content(
     app: &tauri::AppHandle,
     today: NaiveDate,
     generation: LocalDataGeneration,
-) -> Result<(String, String), String> {
+) -> Result<Option<(String, String)>, String> {
     let Some(schedule) =
         (match LOCAL_DATA.with_current_account(generation, || load_current_schedule(app)) {
             Ok(schedule) => schedule,
@@ -2304,30 +2489,21 @@ fn daily_course_notification_content(
                 return Err("本地账号访问已撤销。".to_string());
             }
             Err(LocalDataAccessError::Operation(message)) => {
-                return Ok(("今日课程提醒".to_string(), message));
+                return Err(message);
             }
         })
     else {
-        return Ok((
-            "今日课程提醒".to_string(),
-            "还没有保存课表，打开应用刷新个人课表后会在这里提醒。".to_string(),
-        ));
+        return Ok(None);
     };
     let term_start_date = match NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d") {
         Ok(date) => date,
         Err(_) => {
-            return Ok((
-                "今日课程提醒".to_string(),
-                "第一周周一日期格式不正确，请在设置里修正。".to_string(),
-            ));
+            return Err("第一周周一日期格式不正确，请在设置里修正。".to_string());
         }
     };
     let state = recommender::date_state(&schedule.courses, today, term_start_date);
     if state.courses.is_empty() {
-        return Ok((
-            "今日暂无课程".to_string(),
-            format!("{} · 第 {} 周", today, state.week_number),
-        ));
+        return Ok(None);
     }
 
     let mut lines: Vec<String> = state
@@ -2342,10 +2518,10 @@ fn daily_course_notification_content(
             state.courses.len() - lines.len()
         ));
     }
-    Ok((
+    Ok(Some((
         format!("今日有 {} 门课", state.courses.len()),
         lines.join("\n"),
-    ))
+    )))
 }
 
 #[cfg(not(mobile))]
@@ -2358,34 +2534,40 @@ fn send_daily_course_notification(
         return Ok(false);
     }
     let generation = LOCAL_DATA.begin();
-    let (title, body) = daily_course_notification_content(app, today, generation)?;
-    let notification = app.notification();
+    let Some((title, body)) = daily_course_notification_content(app, today, generation)? else {
+        // No course day is completed silently, not sent as a noisy empty summary.
+        return Ok(true);
+    };
     LOCAL_DATA
         .with_current_account(generation, || {
-            // Re-check while holding the same lock used by settings updates, so
-            // work queued before a time/permission change cannot deliver afterward.
-            let current = DESKTOP_NOTIFICATION_PREFERENCES
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if !notification_delivery_is_current(
+            deliver_with_current_preferences(
+                &DESKTOP_NOTIFICATION_PREFERENCES,
                 expected_preferences,
-                *current,
                 today,
-                desktop_now(),
-            ) {
-                return Ok(false);
-            }
-            notification
-                .builder()
-                .title(title)
-                .body(body)
-                .group("daily-courses")
-                .auto_cancel()
-                .show()
-                .map(|()| true)
-                .map_err(|error| error.to_string())
+                desktop_now,
+                || desktop_notifications::show(&app.config().identifier, &title, &body),
+            )
+            .map(|result| result.is_some())
         })
         .map_err(LocalDataAccessError::message)
+}
+
+#[cfg(not(mobile))]
+fn deliver_with_current_preferences<T>(
+    preferences: &Mutex<DesktopNotificationPreferences>,
+    expected: DesktopNotificationPreferences,
+    planned_day: NaiveDate,
+    now: impl FnOnce() -> NaiveDateTime,
+    native_delivery: impl FnOnce() -> Result<T, String>,
+) -> Result<Option<T>, String> {
+    let current = preferences
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if !notification_delivery_is_current(expected, *current, planned_day, now()) {
+        return Ok(None);
+    }
+    // native_delivery must finish its actual platform call, not detach a task.
+    native_delivery().map(Some)
 }
 
 #[cfg(not(mobile))]
@@ -2434,6 +2616,7 @@ fn run_desktop_scheduled_task(
                         "schedule:daily-notification-error",
                         format!("发送今日课程提醒失败：{error}"),
                     );
+                    return DesktopTaskOutcome::RetryableFailure;
                 }
             }
             DesktopTaskOutcome::Completed
@@ -2450,14 +2633,26 @@ fn schedule_desktop_background_tasks(app: tauri::AppHandle) {
         let started_at = desktop_now();
         let persisted = load_persisted_desktop_task_dates(&app);
         let mut state = DesktopScheduleState::after_startup(started_at, persisted);
+        let mut last_preferences = desktop_notification_preferences();
+        let mut last_generation = LOCAL_DATA.begin();
 
         loop {
             let now = desktop_now();
             let preferences = desktop_notification_preferences();
+            let generation = LOCAL_DATA.begin();
+            if generation != last_generation {
+                state.notification_date = None;
+                state.notification_retry = None;
+                last_generation = generation;
+            }
+            if preferences != last_preferences {
+                state.notification_retry = None;
+                last_preferences = preferences;
+            }
             let mut completed = false;
             for task in due_desktop_tasks(now, state, preferences.enabled, preferences.minutes) {
                 let outcome = run_desktop_scheduled_task(&app, task, now.date(), preferences);
-                state.record_result(task, now.date(), now, outcome);
+                state.record_result(task, now.date(), desktop_now(), outcome);
                 completed |= outcome != DesktopTaskOutcome::Superseded;
             }
             if completed {
@@ -2492,6 +2687,171 @@ mod background_schedule_tests {
     }
 
     #[test]
+    fn cancellation_waits_for_native_delivery_and_rejects_work_prepared_before_it() {
+        use std::sync::{mpsc, Arc};
+        use std::thread;
+        let expected = DesktopNotificationPreferences {
+            enabled: true,
+            minutes: 450,
+        };
+        let preferences = Arc::new(Mutex::new(expected));
+        let events = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (finish_tx, finish_rx) = mpsc::channel();
+        let send_preferences = preferences.clone();
+        let send_events = events.clone();
+        let sender = thread::spawn(move || {
+            deliver_with_current_preferences(
+                &send_preferences,
+                expected,
+                date_time(7, 30, 0).date(),
+                || date_time(7, 30, 0),
+                || {
+                    entered_tx.send(()).unwrap();
+                    finish_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+                    send_events.lock().unwrap().push("native delivery finished");
+                    Ok(())
+                },
+            )
+            .unwrap()
+        });
+        entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let cancel_preferences = preferences.clone();
+        let cancel_events = events.clone();
+        let canceller = thread::spawn(move || {
+            let mut current = cancel_preferences.lock().unwrap();
+            current.enabled = false;
+            // Production invokes platform clear here while holding the same lock.
+            cancel_events
+                .lock()
+                .unwrap()
+                .push("native notification removed");
+        });
+        finish_tx.send(()).unwrap();
+        assert_eq!(sender.join().unwrap(), Some(()));
+        canceller.join().unwrap();
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec!["native delivery finished", "native notification removed"]
+        );
+        assert_eq!(
+            deliver_with_current_preferences(
+                &preferences,
+                expected,
+                date_time(7, 30, 0).date(),
+                || date_time(7, 31, 0),
+                || -> Result<(), String> { panic!("stale send reached native API") }
+            )
+            .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn native_error_is_not_treated_as_success_and_retry_is_bounded() {
+        let expected = DesktopNotificationPreferences {
+            enabled: true,
+            minutes: 450,
+        };
+        let preferences = Mutex::new(expected);
+        let now = date_time(7, 30, 0);
+        assert_eq!(
+            deliver_with_current_preferences(
+                &preferences,
+                expected,
+                now.date(),
+                || now,
+                || -> Result<(), String> { Err("native failure".into()) }
+            )
+            .unwrap_err(),
+            "native failure"
+        );
+        let mut state = DesktopScheduleState::after_startup(
+            now,
+            PersistedDesktopTaskDates {
+                classroom_refresh_date: Some(now.date()),
+                notification_date: None,
+            },
+        );
+        state.record_result(
+            DesktopScheduledTask::SendCourseNotification,
+            now.date(),
+            now,
+            DesktopTaskOutcome::RetryableFailure,
+        );
+        assert_eq!(state.notification_date, None);
+        assert!(due_desktop_tasks(now, state, true, 450).is_empty());
+        assert_eq!(
+            next_desktop_schedule_boundary(now, state, true, 450),
+            now + NOTIFICATION_RETRY_DELAY
+        );
+        for attempt in 1..=MAX_NOTIFICATION_RETRIES {
+            let time = now + NOTIFICATION_RETRY_DELAY * i32::from(attempt);
+            assert!(due_desktop_tasks(time, state, true, 450)
+                .contains(&DesktopScheduledTask::SendCourseNotification));
+            state.record_result(
+                DesktopScheduledTask::SendCourseNotification,
+                now.date(),
+                time,
+                DesktopTaskOutcome::RetryableFailure,
+            );
+        }
+        assert_eq!(state.notification_date, Some(now.date()));
+        assert!(state.notification_retry.is_none());
+        assert!(due_desktop_tasks(date_time(8, 0, 0), state, true, 450).is_empty());
+    }
+
+    #[test]
+    fn account_clear_cannot_complete_before_in_flight_native_delivery_is_removed() {
+        use std::sync::{mpsc, Arc};
+        use std::thread;
+        let coordinator = Arc::new(LocalDataCoordinator::new());
+        let generation = coordinator.begin();
+        let events = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (finish_tx, finish_rx) = mpsc::channel();
+        let send_coordinator = coordinator.clone();
+        let send_events = events.clone();
+        let sender = thread::spawn(move || {
+            send_coordinator.with_current_account(generation, || {
+                entered_tx.send(()).unwrap();
+                finish_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+                send_events.lock().unwrap().push("native delivery");
+                Ok(())
+            })
+        });
+        entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let clear_coordinator = coordinator.clone();
+        let clear_events = events.clone();
+        let clearer = thread::spawn(move || {
+            clear_coordinator.revoke_and_clear(
+                || Ok(()),
+                || {
+                    clear_events
+                        .lock()
+                        .unwrap()
+                        .push("remove native notification and private data");
+                    Ok(())
+                },
+            )
+        });
+        finish_tx.send(()).unwrap();
+        sender.join().unwrap().unwrap();
+        clearer.join().unwrap().unwrap();
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec![
+                "native delivery",
+                "remove native notification and private data"
+            ]
+        );
+        assert_eq!(
+            coordinator.with_current_account(generation, || Ok(())),
+            Err(LocalDataAccessError::Stale)
+        );
+    }
+
+    #[test]
     fn custom_time_controls_due_tasks_and_next_wake_without_changing_classroom_time() {
         let today = date_time(0, 0, 0).date();
         let state = DesktopScheduleState {
@@ -2499,6 +2859,7 @@ mod background_schedule_tests {
             classroom_refresh_date: Some(today),
             notification_date: None,
             classroom_retry: None,
+            notification_retry: None,
         };
         assert!(!due_desktop_tasks(date_time(9, 14, 59), state, true, 555)
             .contains(&DesktopScheduledTask::SendCourseNotification));
@@ -2677,6 +3038,7 @@ mod background_schedule_tests {
             classroom_refresh_date: Some(yesterday),
             notification_date: Some(yesterday),
             classroom_retry: None,
+            notification_retry: None,
         };
 
         assert_eq!(
@@ -2693,6 +3055,7 @@ mod background_schedule_tests {
             classroom_refresh_date: Some(yesterday),
             notification_date: Some(yesterday),
             classroom_retry: None,
+            notification_retry: None,
         };
         let now = date_time(8, 0, 0);
         let tasks = due_desktop_tasks(now, state, true, 450);
@@ -2835,6 +3198,7 @@ mod background_schedule_tests {
             classroom_refresh_date: Some(date_time(8, 0, 0).date()),
             notification_date: Some(yesterday),
             classroom_retry: None,
+            notification_retry: None,
         };
 
         assert!(due_desktop_tasks(date_time(8, 0, 0), state, false, 450).is_empty());
@@ -2866,12 +3230,25 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
     {
         let settings = settings_store::load(app.app_handle())
             .unwrap_or_else(|_| SavedSettings::with_defaults());
-        set_desktop_notification_preferences(
-            !account_access_revoked && settings.daily_course_notifications_enabled,
-            settings.daily_course_notification_minutes,
-        );
+        *DESKTOP_NOTIFICATION_PREFERENCES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = DesktopNotificationPreferences {
+            enabled: !account_access_revoked && settings.daily_course_notifications_enabled,
+            minutes: settings.daily_course_notification_minutes,
+        };
         setup_tray(app)?;
-        schedule_desktop_background_tasks(app.app_handle().clone());
+        let handle = app.app_handle().clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            // Clear our own historical notifications even when saved preferences
+            // equal the disabled/default in-memory state after a cold start.
+            if let Err(error) = desktop_notifications::clear(&handle.config().identifier) {
+                let _ = handle.emit(
+                    "schedule:daily-notification-error",
+                    format!("旧课程通知清理失败：{error}"),
+                );
+            }
+            schedule_desktop_background_tasks(handle);
+        });
     }
 
     #[cfg(mobile)]
@@ -2884,17 +3261,13 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(not(mobile))]
-    let builder = builder
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
-        // Windows toast clicks activate the app by default (appUserModelId);
-        // macOS notification clicks activate the app as well.
-        .plugin(tauri_plugin_notification::init());
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }));
 
     builder
         .setup(|app| {

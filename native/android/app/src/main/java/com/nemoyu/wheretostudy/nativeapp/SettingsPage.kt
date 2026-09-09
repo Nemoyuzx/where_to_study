@@ -558,14 +558,6 @@ class SettingsPage(
         }
         var previewCapacity = 3
         fun updatePreview() {
-            TodayCourseWidgetPreviewBinder.bind(
-                root = preview,
-                content = previewContent,
-                showsLocation = preferences.widgetShowsLocation,
-                showsTeacher = preferences.widgetShowsTeacher,
-                rowLimit = minOf(previewCapacity, preferences.widgetCourseLimit),
-            )
-            UiText.localizeTree(preview)
             val height = when (previewCapacity) {
                 1 -> 122
                 3 -> 205
@@ -575,7 +567,18 @@ class SettingsPage(
                 this.height = activity.dp(height)
                 topMargin = activity.dp(8)
             }
+            TodayCourseWidgetPreviewBinder.bind(
+                root = preview,
+                content = previewContent,
+                showsLocation = preferences.widgetShowsLocation,
+                showsTeacher = preferences.widgetShowsTeacher,
+                rowLimit = minOf(previewCapacity, preferences.widgetCourseLimit),
+            )
+            UiText.localizeTree(preview)
             preview.requestLayout()
+        }
+        preview.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) updatePreview()
         }
 
         addView(Switch(activity).apply {

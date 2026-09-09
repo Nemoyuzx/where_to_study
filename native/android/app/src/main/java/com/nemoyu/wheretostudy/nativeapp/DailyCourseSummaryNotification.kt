@@ -76,6 +76,34 @@ object DailyCourseSummaryLogic {
     fun canDeliver(nowMillis: Long, minutes: Int, scheduledAt: Long, deliveredDay: String): Boolean =
         isWithinDeliveryWindow(nowMillis, minutes, scheduledAt) && dayKey(nowMillis) != deliveredDay
 
+    fun reconciliationRunAt(nowMillis: Long, minutes: Int, deliveredDay: String): Long {
+        val today = scheduledCalendar(nowMillis, minutes).timeInMillis
+        return if (canDeliver(nowMillis, minutes, today, deliveredDay)) today else nextRunAt(nowMillis, minutes)
+    }
+
+    fun deliveryEndAt(scheduledAt: Long): Long {
+        val midnight = Calendar.getInstance(shanghai).apply {
+            timeInMillis = scheduledAt
+            add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        return minOf(scheduledAt + deliveryWindowMillis, midnight - 1)
+    }
+
+    fun matchesPlan(token: String, expectedToken: String, minutes: Int, expectedMinutes: Int,
+        scheduledAt: Long, expectedAt: Long): Boolean = token.isNotEmpty() && token == expectedToken &&
+        minutes == expectedMinutes && scheduledAt == expectedAt
+
+    fun stoppedAction(currentPlan: Boolean, authorized: Boolean, userStopped: Boolean,
+        nowMillis: Long, minutes: Int, scheduledAt: Long, deliveredDay: String): DailyCourseStoppedAction = when {
+        !currentPlan || !authorized || userStopped -> DailyCourseStoppedAction.END
+        canDeliver(nowMillis, minutes, scheduledAt, deliveredDay) -> DailyCourseStoppedAction.RETRY
+        else -> DailyCourseStoppedAction.SCHEDULE_NEXT
+    }
+
     fun draft(schedule: ScheduleSnapshot?, nowMillis: Long): DailyCourseSummaryDraft? {
         schedule ?: return null
         val target = Calendar.getInstance(shanghai).apply { timeInMillis = nowMillis }
@@ -92,6 +120,8 @@ object DailyCourseSummaryLogic {
     }
 
 }
+
+enum class DailyCourseStoppedAction { END, RETRY, SCHEDULE_NEXT }
 
 enum class DailyCourseSummaryScheduleAction {
     CLEAR,
@@ -240,8 +270,13 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
     private val jobIDs = setOf(PRIMARY_JOB_ID, SECONDARY_JOB_ID)
     private val executionGate = DailyCourseNotificationExecutionGate()
 
-    override fun reconcile(context: Context): Boolean = runCatching {
+    override fun reconcile(context: Context): Boolean = reconcileAt(context)
+
+    @Synchronized
+    internal fun reconcileAt(context: Context, nowMillis: Long = System.currentTimeMillis(),
+        forceReschedule: Boolean = false, isActive: () -> Boolean = { !Thread.currentThread().isInterrupted }): Boolean = runCatching {
         if (DailyCourseNotificationRuntimeMode.isUiTesting) return@runCatching true
+        if (!isActive()) return@runCatching false
         val appContext = context.applicationContext
         if (!PrivacyConsentStore(appContext).hasAcceptedCurrentPolicy) {
             cancel(appContext)
@@ -256,6 +291,7 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
         }
         val credentials = SecureCredentialStore(appContext).load()
         val schedule = loadUsableSchedule(appContext)
+        if (!isActive()) return@runCatching false
         if (preferences.dailyCourseNotificationsEnabled &&
             (!authorization.isAuthorized || !isJobServiceExplicitlyEnabled(appContext) ||
                 credentials?.account?.isNotBlank() != true ||
@@ -275,10 +311,22 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
             cancel(appContext)
             return@runCatching true
         }
+        val minutes = preferences.dailyCourseNotificationMinutes
+        val scheduledAt = DailyCourseSummaryLogic.reconciliationRunAt(nowMillis, minutes,
+            preferences.dailyCourseNotificationDeliveredDay)
+        val pending = appContext.getSystemService(JobScheduler::class.java).allPendingJobs
+            .filter { isManagedJob(it.id) }
+        if (!forceReschedule && pending.any { job ->
+            DailyCourseSummaryLogic.matchesPlan(job.extras.getString(JOB_TOKEN).orEmpty(),
+                preferences.dailyCourseNotificationScheduleToken, job.extras.getInt(JOB_MINUTES, -1),
+                minutes, job.extras.getLong(JOB_SCHEDULED_AT, 0L), scheduledAt)
+        }) return@runCatching true
         invalidateSchedule(appContext)
-        schedule(appContext, PRIMARY_JOB_ID)
+        if (!isActive()) return@runCatching false
+        schedule(appContext, PRIMARY_JOB_ID, nowMillis, scheduledAt)
     }.getOrDefault(false)
 
+    @Synchronized
     override fun cancel(context: Context) {
         executionGate.invalidate()
         if (DailyCourseNotificationRuntimeMode.isUiTesting) return
@@ -288,6 +336,7 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
         DailyCourseSummaryNotificationRuntime.cancel(appContext)
     }
 
+    @Synchronized
     fun authorize(context: Context): Boolean {
         if (DailyCourseNotificationRuntimeMode.isUiTesting) return false
         val appContext = context.applicationContext
@@ -306,6 +355,7 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
         }
     }
 
+    @Synchronized
     fun revoke(context: Context): Boolean {
         val appContext = context.applicationContext
         executionGate.revoke()
@@ -345,7 +395,11 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
 
     fun isExecutionCurrent(revision: Long): Boolean = executionGate.isCurrent(revision)
 
+    @Synchronized
     fun updateTime(context: Context, minutes: Int): Boolean = runCatching {
+        if (AppPreferences(context).dailyCourseNotificationMinutes == DailyCourseSummaryLogic.normalizedMinutes(minutes)) {
+            return@runCatching reconcile(context)
+        }
         executionGate.invalidate()
         AppPreferences(context).dailyCourseNotificationMinutes = minutes
         reconcile(context)
@@ -357,9 +411,14 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
         cancelJobs(context)
     }
 
-    fun scheduleAfterCompletion(context: Context, completedJobID: Int): Boolean = runCatching {
+    @Synchronized
+    fun scheduleAfterCompletion(context: Context, completedJobID: Int,
+        expectedToken: String? = null, expectedRevision: Long? = null, expectedGeneration: Long? = null): Boolean = runCatching {
         val appContext = context.applicationContext
         val preferences = AppPreferences(appContext)
+        if ((expectedToken != null && expectedToken != preferences.dailyCourseNotificationScheduleToken) ||
+            (expectedRevision != null && !isExecutionCurrent(expectedRevision)) ||
+            (expectedGeneration != null && !LocalDataCoordinator.isCurrent(expectedGeneration))) return@runCatching true
         if (preferences.dailyCourseNotificationsEnabled &&
             (!DailyCourseSummaryNotificationRuntime.hasPermission(appContext) ||
                 !DailyCourseNotificationAuthorizationStore(appContext).isAuthorized ||
@@ -378,6 +437,37 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
             true
         } else {
             schedule(appContext, nextJobID)
+        }
+    }.getOrDefault(false)
+
+    @Synchronized
+    internal fun withCurrentExecution(context: Context, token: String, revision: Long, generation: Long,
+        operation: () -> Unit) {
+        if (token.isNotEmpty() && token == AppPreferences(context).dailyCourseNotificationScheduleToken &&
+            isExecutionCurrent(revision) && LocalDataCoordinator.isCurrent(generation)) operation()
+    }
+
+    @Synchronized
+    internal fun retryAfterStop(context: Context, jobID: Int, minutes: Int, scheduledAt: Long,
+        token: String, revision: Long, generation: Long, userStopped: Boolean,
+        nowMillis: Long = System.currentTimeMillis()): Boolean = runCatching {
+        val preferences = AppPreferences(context)
+        val current = token.isNotEmpty() && token == preferences.dailyCourseNotificationScheduleToken &&
+            minutes == preferences.dailyCourseNotificationMinutes && isExecutionCurrent(revision) &&
+            LocalDataCoordinator.isCurrent(generation)
+        val authorized = preferences.dailyCourseNotificationsEnabled &&
+            DailyCourseNotificationAuthorizationStore(context).isAuthorized &&
+            isJobServiceExplicitlyEnabled(context) && PrivacyConsentStore(context).hasAcceptedCurrentPolicy &&
+            DailyCourseSummaryNotificationRuntime.hasPermission(context)
+        when (DailyCourseSummaryLogic.stoppedAction(current, authorized, userStopped, nowMillis,
+            minutes, scheduledAt, preferences.dailyCourseNotificationDeliveredDay)) {
+            DailyCourseStoppedAction.END -> false
+            DailyCourseStoppedAction.RETRY -> true
+            DailyCourseStoppedAction.SCHEDULE_NEXT -> {
+                // Use the other ID: the system is still finishing removal of the stopped ID.
+                val nextID = if (jobID == PRIMARY_JOB_ID) SECONDARY_JOB_ID else PRIMARY_JOB_ID
+                !schedule(context, nextID, nowMillis)
+            }
         }
     }.getOrDefault(false)
 
@@ -422,17 +512,19 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
         context: Context,
         jobID: Int,
         nowMillis: Long = System.currentTimeMillis(),
+        scheduledAt: Long = DailyCourseSummaryLogic.nextRunAt(nowMillis, AppPreferences(context).dailyCourseNotificationMinutes),
     ): Boolean {
         val preferences = AppPreferences(context)
         val minutes = preferences.dailyCourseNotificationMinutes
-        val scheduledAt = DailyCourseSummaryLogic.nextRunAt(nowMillis, minutes)
         val delay = (scheduledAt - nowMillis).coerceAtLeast(0L)
+        val deadline = minOf(scheduledAt + DailyCourseSummaryLogic.runWindowMillis,
+            DailyCourseSummaryLogic.deliveryEndAt(scheduledAt)) - nowMillis
         val job = JobInfo.Builder(
             jobID,
             ComponentName(context, DailyCourseSummaryJobService::class.java),
         )
             .setMinimumLatency(delay)
-            .setOverrideDeadline(delay + DailyCourseSummaryLogic.runWindowMillis)
+            .setOverrideDeadline(deadline.coerceAtLeast(0L))
             .setPersisted(true)
             .setExtras(PersistableBundle().apply {
                 putInt(JOB_MINUTES, minutes)
@@ -451,6 +543,8 @@ class DailyCourseSummaryJobService : JobService() {
     private val activeWork = CancellableDailyCourseNotificationWork()
     @Volatile
     private var activeParameters: JobParameters? = null
+    private var activeGeneration = 0L
+    private var activeRevision = 0L
 
     override fun onStartJob(params: JobParameters): Boolean {
         if (!DailyCourseSummaryScheduler.isManagedJob(params.jobId) || activeParameters != null) {
@@ -463,6 +557,8 @@ class DailyCourseSummaryJobService : JobService() {
         activeParameters = params
         val generation = LocalDataCoordinator.snapshot()
         val notificationRevision = DailyCourseSummaryScheduler.executionRevision()
+        activeGeneration = generation
+        activeRevision = notificationRevision
         val minutes = params.extras.getInt(DailyCourseSummaryScheduler.JOB_MINUTES, DailyCourseSummaryLogic.defaultMinutes)
         val scheduledAt = params.extras.getLong(DailyCourseSummaryScheduler.JOB_SCHEDULED_AT, 0L)
         val token = params.extras.getString(DailyCourseSummaryScheduler.JOB_TOKEN).orEmpty()
@@ -502,22 +598,24 @@ class DailyCourseSummaryJobService : JobService() {
                 if (activeParameters !== params) return@post
                 activeParameters = null
                 activeWork.complete()
-                val deliveryMillis = System.currentTimeMillis()
-                val preferences = AppPreferences(applicationContext)
-                val canDeliver = LocalDataCoordinator.isCurrent(generation) && isCurrentPlan() &&
-                    DailyCourseSummaryLogic.canDeliver(deliveryMillis, minutes, scheduledAt,
-                        preferences.dailyCourseNotificationDeliveredDay) &&
-                    PrivacyConsentStore(applicationContext).hasAcceptedCurrentPolicy &&
-                    AppPreferences(applicationContext).dailyCourseNotificationsEnabled &&
-                    DailyCourseNotificationAuthorizationStore(applicationContext).isAuthorized &&
-                    DailyCourseSummaryNotificationRuntime.hasPermission(applicationContext)
-                if (canDeliver) {
-                    DailyCourseSummaryNotificationRuntime.cancel(applicationContext)
-                    draft?.let {
-                        // Persist before posting: retries and time edits must not notify twice today.
-                        runCatching {
-                            preferences.dailyCourseNotificationDeliveredDay = DailyCourseSummaryLogic.dayKey(deliveryMillis)
-                            DailyCourseSummaryNotificationRuntime.show(applicationContext, it)
+                DailyCourseSummaryScheduler.withCurrentExecution(applicationContext, token, notificationRevision, generation) {
+                    val deliveryMillis = System.currentTimeMillis()
+                    val preferences = AppPreferences(applicationContext)
+                    val canDeliver = isCurrentPlan() &&
+                        DailyCourseSummaryLogic.canDeliver(deliveryMillis, minutes, scheduledAt,
+                            preferences.dailyCourseNotificationDeliveredDay) &&
+                        PrivacyConsentStore(applicationContext).hasAcceptedCurrentPolicy &&
+                        AppPreferences(applicationContext).dailyCourseNotificationsEnabled &&
+                        DailyCourseNotificationAuthorizationStore(applicationContext).isAuthorized &&
+                        DailyCourseSummaryNotificationRuntime.hasPermission(applicationContext)
+                    if (canDeliver) {
+                        DailyCourseSummaryNotificationRuntime.cancel(applicationContext)
+                        draft?.let {
+                            // Persist before posting: retries and time edits must not notify twice today.
+                            runCatching {
+                                preferences.dailyCourseNotificationDeliveredDay = DailyCourseSummaryLogic.dayKey(deliveryMillis)
+                                DailyCourseSummaryNotificationRuntime.show(applicationContext, it)
+                            }
                         }
                     }
                 }
@@ -529,6 +627,7 @@ class DailyCourseSummaryJobService : JobService() {
                 val nextScheduled = DailyCourseSummaryScheduler.scheduleAfterCompletion(
                     applicationContext,
                     params.jobId,
+                    token, notificationRevision, generation,
                 )
                 jobFinished(params, !nextScheduled)
             }
@@ -540,7 +639,13 @@ class DailyCourseSummaryJobService : JobService() {
         if (activeParameters !== params) return false
         activeParameters = null
         activeWork.cancel()
-        return false
+        val userStopped = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            params.stopReason in setOf(JobParameters.STOP_REASON_CANCELLED_BY_APP, JobParameters.STOP_REASON_USER)
+        return DailyCourseSummaryScheduler.retryAfterStop(applicationContext, params.jobId,
+            params.extras.getInt(DailyCourseSummaryScheduler.JOB_MINUTES, -1),
+            params.extras.getLong(DailyCourseSummaryScheduler.JOB_SCHEDULED_AT, 0L),
+            params.extras.getString(DailyCourseSummaryScheduler.JOB_TOKEN).orEmpty(),
+            activeRevision, activeGeneration, userStopped)
     }
 
     override fun onDestroy() {
@@ -555,7 +660,11 @@ class DailyCourseSummaryJobService : JobService() {
 class DailyCourseSummaryRescheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action in supportedActions) {
-            DailyCourseSummaryScheduler.reconcile(context.applicationContext)
+            val appContext = context.applicationContext
+            val timeChanged = intent?.action == Intent.ACTION_TIME_CHANGED
+            LocalBroadcastWork.submit(goAsync()) { isActive ->
+                DailyCourseSummaryScheduler.reconcileAt(appContext, forceReschedule = timeChanged, isActive = isActive)
+            }
         }
     }
 

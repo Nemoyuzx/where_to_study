@@ -14,6 +14,44 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class DailyCourseSummaryNotificationTest {
     @Test
+    fun reconciliationRecoversUnsentMidnightAndLateNightWithoutCrossDayDelivery() {
+        val midnight = millis(2027, 1, 1, 0, 0)
+        assertEquals(midnight, DailyCourseSummaryLogic.reconciliationRunAt(midnight, 0, ""))
+        assertEquals(midnight, DailyCourseSummaryLogic.reconciliationRunAt(midnight + 20 * 60_000, 0, ""))
+        assertEquals(midnight + 24 * 60 * 60_000, DailyCourseSummaryLogic.reconciliationRunAt(midnight + 31 * 60_000, 0, ""))
+        assertEquals(midnight + 24 * 60 * 60_000, DailyCourseSummaryLogic.reconciliationRunAt(midnight, 0, "2027-01-01"))
+        val late = midnight - 60_000
+        assertEquals(late, DailyCourseSummaryLogic.reconciliationRunAt(late + 59_000, 1439, ""))
+        assertEquals(midnight - 1, DailyCourseSummaryLogic.deliveryEndAt(late))
+        assertEquals(midnight + 23 * 60 * 60_000 + 59 * 60_000,
+            DailyCourseSummaryLogic.reconciliationRunAt(midnight, 1439, ""))
+    }
+
+    @Test
+    fun onlyAnUnchangedTokenTimeAndScheduledDayMayBePreserved() {
+        val midnight = millis(2027, 1, 1, 0, 0)
+        assertTrue(DailyCourseSummaryLogic.matchesPlan("new", "new", 0, 0, midnight, midnight))
+        assertFalse(DailyCourseSummaryLogic.matchesPlan("old", "new", 0, 0, midnight, midnight))
+        assertFalse(DailyCourseSummaryLogic.matchesPlan("", "", 0, 0, midnight, midnight))
+        assertFalse(DailyCourseSummaryLogic.matchesPlan("new", "new", 1439, 0, midnight, midnight))
+        assertFalse(DailyCourseSummaryLogic.matchesPlan("new", "new", 0, 0, midnight - 86_400_000, midnight))
+    }
+
+    @Test
+    fun systemStopRetriesInWindowAndContinuesNextDayAfterExpiry() {
+        val midnight = millis(2027, 1, 1, 0, 0)
+        fun action(now: Long, current: Boolean = true, authorized: Boolean = true, user: Boolean = false) =
+            DailyCourseSummaryLogic.stoppedAction(current, authorized, user, now, 0, midnight, "")
+        assertEquals(DailyCourseStoppedAction.RETRY, action(midnight + 60_000))
+        assertEquals(DailyCourseStoppedAction.SCHEDULE_NEXT, action(midnight + 31 * 60_000))
+        assertEquals(DailyCourseStoppedAction.END, action(midnight, current = false))
+        assertEquals(DailyCourseStoppedAction.END, action(midnight, authorized = false))
+        assertEquals(DailyCourseStoppedAction.END, action(midnight, user = true))
+        assertEquals(DailyCourseStoppedAction.SCHEDULE_NEXT,
+            DailyCourseSummaryLogic.stoppedAction(true, true, false, midnight, 1439, midnight - 60_000, ""))
+    }
+
+    @Test
     fun customTimeSupportsMidnightAndEndOfDayAcrossYearBoundary() {
         assertEquals(millis(2027, 1, 1, 0, 0), DailyCourseSummaryLogic.nextRunAt(millis(2026, 12, 31, 23, 59), 0))
         assertEquals(millis(2026, 3, 2, 23, 59), DailyCourseSummaryLogic.nextRunAt(millis(2026, 3, 2, 7, 30), 1439))

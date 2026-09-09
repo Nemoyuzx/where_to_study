@@ -2,6 +2,8 @@
 
 2026-09-09 源码变更已以 `8ffbef8` 提交并推送；Apple 0.2.9 (90) TestFlight 与鸿蒙 0.2.9 (1002026) 仅测试包均上传成功，未提交商店审核。成功回执见[发布记录](release-v0.2.9.md)。
 
+随后平台规范审查发现的隐私清单、卡片缓存路径、任务续排及刷新边界问题，已另行修复并追加验证；详见[规范修复记录](platform-standards-fixes-v0.2.9.md)。下面保留首轮功能验证的历史范围，不把历史测试当作已经覆盖这些问题。
+
 ## 提醒时间 / Reminder time
 
 - Windows/Linux Tauri、iOS/iPadOS/macOS、Android、HarmonyOS 的已有每日课程摘要均提供时分选择。默认仍为 **07:30**，开关默认关闭。

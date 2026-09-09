@@ -52,6 +52,9 @@ xcodebuild \
   "${STRICT_SWIFT_SETTINGS[@]}" \
   build
 
+bash "$APPLE_DIR/scripts/validate-privacy-bundles.sh" macos \
+  "$DERIVED_DATA/macOS/Build/Products/Debug/Where To Study.app"
+
 xcodebuild \
   -project "$PROJECT" \
   -scheme WhereToStudyMac \
@@ -63,6 +66,9 @@ xcodebuild \
   "${STRICT_SWIFT_SETTINGS[@]}" \
   test
 
+bash "$APPLE_DIR/scripts/validate-privacy-bundles.sh" macos \
+  "$DERIVED_DATA/tests/Build/Products/Debug/Where To Study.app"
+
 xcodebuild \
   -project "$PROJECT" \
   -scheme WhereToStudyiOS \
@@ -73,3 +79,6 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   "${STRICT_SWIFT_SETTINGS[@]}" \
   test
+
+bash "$APPLE_DIR/scripts/validate-privacy-bundles.sh" ios \
+  "$DERIVED_DATA/iOS/Build/Products/Debug-iphonesimulator/Where To Study.app"

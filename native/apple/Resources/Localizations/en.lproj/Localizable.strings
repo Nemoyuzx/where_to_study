@@ -204,7 +204,7 @@
 "课程提醒" = "Course Notifications";
 "每天发送当日课程摘要" = "Send today's course summary every day";
 "提醒时间（北京时间）" = "Reminder time (Beijing time)";
-"小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会同步到 iPhone、iPad 与 Mac。" = "Widgets show today's courses first, adding tomorrow's courses when space permits. Both days share the course limit, up to 6 in the large widget. Settings sync to iPhone, iPad, and Mac.";
+"小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会应用到本机小组件。" = "Widgets show today's courses first, adding tomorrow's courses when space permits. Both days share the course limit, up to 6 in the large widget. Settings apply to widgets on this device.";
 "仅在当天有课时通知；课表更新或账号变更后会自动重排。" = "Notifications are sent only on days with classes and are rescheduled after schedule or account changes.";
 "日期详情与生活信息" = "Date Details and Campus Life";
 "黄历与宜忌" = "Almanac and Advice";

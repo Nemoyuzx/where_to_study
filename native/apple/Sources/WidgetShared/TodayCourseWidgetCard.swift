@@ -31,14 +31,59 @@ struct TodayCourseWidgetCard: View {
             if courseLimit > 4 { content(todayCount: 4, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true) }
             if courseLimit > 3 { content(todayCount: 3, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true) }
             if courseLimit > 2 { content(todayCount: 2, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true) }
-            content(todayCount: 1, tomorrowCount: 0)
+            content(todayCount: 1, tomorrowCount: 0).fixedSize(horizontal: false, vertical: true)
+            compactContent
         }
-        .padding(family == .systemSmall ? 12 : 14)
+        // The system controls when privacy redaction applies (for example, on
+        // a locked device). Course counts and status also reveal the schedule.
+        .privacySensitive()
+        .padding(contentPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .widgetCardSurface(
             background: widgetBackground,
             usesWidgetContainer: usesWidgetContainer
         )
+    }
+
+    private var contentPadding: CGFloat {
+        // Modern WidgetKit hosts already inset content. Previews and older
+        // systems still need the card's own padding.
+        if usesWidgetContainer {
+            if #available(iOS 17.0, macOS 14.0, *) { return 0 }
+        }
+        return family == .systemSmall ? 12 : 14
+    }
+
+    private var compactContent: some View {
+        // At accessibility sizes, a fixed-size widget cannot always hold its
+        // normal header and context. Keep the first today's course and its
+        // complete time range visible before spending space on any other data.
+        VStack(alignment: .leading, spacing: 3) {
+            Text(language.text(chinese: "今日课程", english: "Today"))
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(widgetSecondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            if let course = courses.first {
+                Text(course.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(widgetText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text(course.timeRange)
+                    .font(.caption2)
+                    .foregroundStyle(widgetSecondaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            } else {
+                Text(TodayCourseWidgetData.emptyMessage(language: language))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(widgetText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func content(todayCount: Int? = nil, tomorrowCount: Int) -> some View {
@@ -84,16 +129,18 @@ struct TodayCourseWidgetCard: View {
         HStack(spacing: 6) {
             Image(systemName: "calendar.badge.clock")
                 .foregroundStyle(primary)
-            Text(language.text(chinese: "今日课程", english: "Today's Courses"))
+            Text(language.text(chinese: "今日课程", english: family == .systemSmall ? "Today" : "Today's Courses"))
                 .font(family == .systemSmall ? .subheadline.weight(.bold) : .headline)
                 .foregroundStyle(widgetText)
+                .lineLimit(1)
             Spacer(minLength: 4)
             Text(courses.isEmpty ? "" : language.text(
                 chinese: "\(courses.count) 门",
-                english: "\(courses.count) courses"
+                english: family == .systemSmall ? "\(courses.count)" : "\(courses.count) courses"
             ))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(widgetSecondaryText)
+                .lineLimit(1)
         }
     }
 

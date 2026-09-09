@@ -971,7 +971,7 @@ struct SettingsView: View {
                 .accessibilityLabel("今日课程小组件\(widgetPreviewSize.title)样式预览")
                 .accessibilityIdentifier("widget.preview")
 
-                Text("小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会同步到 iPhone、iPad 与 Mac。")
+                Text("小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会应用到本机小组件。")
                     .font(.callout)
                     .foregroundStyle(theme.secondaryText)
             }

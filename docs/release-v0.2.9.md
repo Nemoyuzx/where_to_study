@@ -1,5 +1,11 @@
 # Where To Study 0.2.9 — Release preparation and TestFlight updates
 
+## Platform standards fixes — 2026-09-09 testing-only follow-up
+
+本轮修复隐私清单和打包门禁、鸿蒙卡片读写目录及刷新、Android 任务恢复/语言分包/大字体布局，以及桌面通知实际发送/撤销边界。详细验证与未覆盖范围见[规范修复记录](platform-standards-fixes-v0.2.9.md)。
+
+准备上传 Apple `0.2.9 (91)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002027)` **仅测试**包，不提交商店审核，不修改现有待审版本或测试群组。成功回执待完成后补充。
+
 ## Custom reminder time and tomorrow widgets — 2026-09-09 testing-only follow-up
 
 提交各图形平台自定义每日课程提醒时间，以及 Apple/Android/HarmonyOS 小组件剩余空间的明日课程。保留默认 07:30、北京时间基准、今日优先、权限/账号撤销与用户 Apple 审核支持信息；完整行为、测试与未覆盖范围见[功能记录](reminder-time-and-tomorrow-widget.md)。

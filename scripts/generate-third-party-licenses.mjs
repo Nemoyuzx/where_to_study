@@ -14,6 +14,7 @@ const CARGO_PLATFORMS = [
   'aarch64-apple-darwin',
   'x86_64-apple-darwin',
   'x86_64-pc-windows-msvc',
+  'x86_64-unknown-linux-gnu',
 ]
 const LICENSE_FILE_PATTERN = /^(license|licence|copying|copyright|notice|unlicense)([._-].*)?$/i
 const MAX_LICENSE_FILE_BYTES = 2 * 1024 * 1024

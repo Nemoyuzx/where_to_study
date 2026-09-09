@@ -305,6 +305,11 @@ export class TodayCourseWidgetData {
     return Math.ceil((86400000 - ((shifted % 86400000 + 86400000) % 86400000)) / 60000);
   }
 
+  static nextRefreshMinutes(nowEpochMs: number = Date.now()): number {
+    // 常规每天48次，跨日额外对齐最多1次，低于系统每日50次的定时刷新配额。
+    return Math.max(5, Math.min(30, TodayCourseWidgetData.minutesUntilBeijingMidnight(nowEpochMs)));
+  }
+
   // 今日优先；明日只补剩余容量，课程数量限制同时约束两日总行数。
   static binding(archive: WidgetArchive | null, prefs: WidgetCoursePreferences,
     today: DateParts = StrictDates.todayParts(), minute: number = TodayCourseWidgetData.nowMinute(),

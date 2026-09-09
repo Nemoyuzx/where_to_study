@@ -20,6 +20,8 @@ import {
 import { SampleData } from './SampleData';
 import { AppModel } from './AppModel';
 import { AppRuntimeMode } from './AppRuntimeMode';
+import { DEBUG } from 'BuildProfile';
+import { PrivacyConsentInfo } from '../store/PrivacyConsentStore';
 
 export { AppRuntimeMode };
 
@@ -69,7 +71,9 @@ export class AppLaunchConfiguration {
   }
 
   static hasAcceptedPrivacyConsentForTesting(): boolean {
-    return AppLaunchConfiguration.privacyConsentAcceptedForTesting;
+    return PrivacyConsentInfo.allowsTestingBypass(DEBUG,
+      AppLaunchConfiguration.uiTesting || AppLaunchConfiguration.uiTestingLive || AppLaunchConfiguration.reviewDemo,
+      AppLaunchConfiguration.privacyConsentAcceptedForTesting);
   }
 
   static makeModel(): AppModel {
@@ -217,7 +221,8 @@ class SampleDailyCourseNotificationScheduler implements DailyCourseNotificationS
     return false;
   }
 
-  async replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<void> {
+  async replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<number> {
+    return 0;
   }
 
   async cancelPending(revision: number): Promise<void> {

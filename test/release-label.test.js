@@ -101,7 +101,7 @@ test("client versions preserve stable 0.2.8 and the prepared HarmonyOS 0.2.9 upd
   assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.8"/);
   assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "79"/);
   assert.match(nativeHarmony, /"versionName": "0\.2\.9"/);
-  assert.match(nativeHarmony, /"versionCode": 1002026/);
+  assert.match(nativeHarmony, /"versionCode": 1002027/);
   assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.2\.9'/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.8/);
   assert.match(tauriApple, /CFBundleVersion: "47"/);

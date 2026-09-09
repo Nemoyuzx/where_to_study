@@ -9,6 +9,10 @@ export class PrivacyConsentInfo {
   static isAccepted(storedVersion: number): boolean {
     return storedVersion >= PrivacyConsentInfo.currentVersion;
   }
+
+  static allowsTestingBypass(debugBuild: boolean, explicitTestMode: boolean, requested: boolean): boolean {
+    return debugBuild && explicitTestMode && requested;
+  }
 }
 
 export class PrivacyConsentStore {

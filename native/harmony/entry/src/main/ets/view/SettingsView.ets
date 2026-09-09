@@ -257,19 +257,19 @@ export struct SettingsView {
   }
 
   @Builder
-  segmentedOptions(labels: string[], selectedIndex: number,
+  segmentedOptions(labels: string[], selectedIndex: () => number,
     onSelect: (index: number) => void, compactText: boolean = false) {
     Row() {
       ForEach(labels, (label: string, index: number) => {
         Text(label)
           .fontSize(compactText ? 11 : 13.5)
-          .fontWeight(selectedIndex === index ? FontWeight.Bold : FontWeight.Regular)
+          .fontWeight(selectedIndex() === index ? FontWeight.Bold : FontWeight.Regular)
           .fontColor(AppTheme.text())
           .textAlign(TextAlign.Center)
           .maxLines(1)
           .layoutWeight(1)
           .height(32)
-          .backgroundColor(selectedIndex === index ?
+          .backgroundColor(selectedIndex() === index ?
             AppTheme.segmentedSelection() : Color.Transparent)
           .borderRadius(6)
           .animation({ duration: 160, curve: Curve.EaseOut })
@@ -278,6 +278,7 @@ export struct SettingsView {
               onSelect(index);
             });
           })
+      // 通过读取当前状态的回调更新选中样式，避免 Builder 的按值参数停留在首次构建。
       }, (label: string, index: number) => 'segment.' + label + '.' + index.toString())
     }
     .width('100%')
@@ -295,7 +296,7 @@ export struct SettingsView {
         AppLanguageInfo.label(AppLanguage.system, this.model.resolvedLanguage()),
         AppLanguageInfo.label(AppLanguage.simplifiedChinese, this.model.resolvedLanguage()),
         AppLanguageInfo.label(AppLanguage.english, this.model.resolvedLanguage())
-      ], AppLanguageInfo.all.indexOf(this.model.languageSetting()), (index: number): void => {
+      ], () => AppLanguageInfo.all.indexOf(this.model.languageSetting()), (index: number): void => {
           const target: AppLanguage = AppLanguageInfo.all[Math.min(Math.max(index, 0), 2)];
           this.model.setLanguageSetting(target);
         }, true)
@@ -334,7 +335,7 @@ export struct SettingsView {
         .padding({ top: this.isCompact() ? 10 : 16, bottom: this.isCompact() ? 5 : 7 })
       this.segmentedOptions(
         [this.model.text('西土城'), this.model.text('沙河')],
-        this.model.campusID === '04' ? 1 : 0,
+        () => this.model.campusID === '04' ? 1 : 0,
         (index: number): void => {
           this.model.campusID = index === 1 ? '04' : '01';
         })
@@ -585,7 +586,7 @@ export struct SettingsView {
         .width('100%')
         .padding({ top: this.isCompact() ? 10 : 14, bottom: 5 })
       this.segmentedOptions(['1', '2', '3', '4', '5', '6'],
-        this.model.widgetCourseLimit - 1, (index: number): void => {
+        () => this.model.widgetCourseLimit - 1, (index: number): void => {
           this.model.setWidgetCourseLimit(index + 1);
         }, true)
 
@@ -601,7 +602,7 @@ export struct SettingsView {
         .width('100%')
       this.segmentedOptions(
         ['2×2', '2×4', '4×4'],
-        this.previewDimension - 2,
+        () => this.previewDimension - 2,
         (index: number): void => {
           this.previewDimension = index + 2;
         })

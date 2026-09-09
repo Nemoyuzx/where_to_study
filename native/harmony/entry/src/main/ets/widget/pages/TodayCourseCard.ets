@@ -148,10 +148,17 @@ struct TodayCourseCard {
               .fontSize(14)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.themeCustomized ? this.themeText : $r('app.color.widget_text_primary'))
+              .maxLines(3)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
             Text(this.statusText)
               .fontSize(11)
               .fontColor(this.themeCustomized ? this.themeSecondaryText : $r('app.color.widget_text_secondary'))
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
           }
+          .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
         }
         .width('100%')

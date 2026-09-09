@@ -76,6 +76,9 @@ android {
         buildConfig = true
     }
 
+    // The in-app language picker must work without downloading a language split.
+    bundle { language { enableSplit = false } }
+
     sourceSets {
         getByName("main").assets.srcDir(generatedLicenseAssets)
         getByName("test").resources.srcDir(rootProject.file("../../contracts/v1/fixtures"))

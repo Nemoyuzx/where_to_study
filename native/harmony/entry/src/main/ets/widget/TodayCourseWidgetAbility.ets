@@ -5,6 +5,8 @@ import { Want, Configuration, ConfigurationConstant } from '@kit.AbilityKit';
 import { WidgetSync } from './WidgetSync';
 import { TodayCourseWidgetData, WidgetArchive, WidgetCoursePreferences } from './TodayCourseWidgetData';
 import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 export default class TodayCourseWidgetAbility extends FormExtensionAbility {
   private activeFormIDs: Set<string> = new Set<string>();
@@ -40,14 +42,14 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
       this.activeFormIDs.add(formId as string);
     }
     // 同步读取归档生成初始绑定（等价于 iOS TimelineProvider 的 entry）。
-    const archive: WidgetArchive | null = WidgetSync.loadArchiveSync(
-      TodayCourseWidgetData.archiveFilePath(this.context.filesDir));
+    const archive: WidgetArchive | null = WidgetSync.loadArchiveFromFilesSync(this.context.filesDir);
     const dimension: Object | undefined = want.parameters?.['ohos.extra.param.key.form_dimension'];
     const dimensionValue: number = Number(dimension);
     if (typeof formId === 'string') {
       this.dimensions.set(formId, Number.isFinite(dimensionValue) ? dimensionValue :
         formInfo.FormDimension.Dimension_2_2);
-      this.scheduleMidnightRefresh(formId);
+      // onAddForm 返回前实例可能尚未注册；初次更新由配置中的30分钟周期触发。
+      // 后续在 onUpdateForm 成功提交数据后设置下一次刷新。
     }
     const preferences: WidgetCoursePreferences =
       archive?.preferences ?? TodayCourseWidgetAbility.defaultPreferences();
@@ -86,7 +88,7 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
       if (hasFormId) {
         try {
           await formProvider.updateForm(formId, data);
-          this.scheduleMidnightRefresh(formId);
+          this.scheduleNextRefresh(formId);
         } catch (e) {
           // 更新失败保留上次内容。
         }
@@ -97,13 +99,15 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
     });
   }
 
-  private scheduleMidnightRefresh(formId: string): void {
-    // 请求北京时间午夜刷新（系统最短间隔5分钟）；实际回调仍由系统刷新预算决定。
+  private scheduleNextRefresh(formId: string): void {
+    // 下次刷新可能压过周期刷新，因此白天也不能预约到30分钟之外。
     try {
-      formProvider.setFormNextRefreshTime(formId,
-        Math.max(5, TodayCourseWidgetData.minutesUntilBeijingMidnight())).catch(() => {});
+      formProvider.setFormNextRefreshTime(formId, TodayCourseWidgetData.nextRefreshMinutes())
+        .catch((error: BusinessError) => {
+          hilog.warn(0x0000, 'TodayCourseWidget', '下次刷新安排失败: %{public}d', error.code);
+        });
     } catch (e) {
-      // 卡片尚未注册或系统暂不可用时，保留周期刷新兜底。
+      hilog.warn(0x0000, 'TodayCourseWidget', '下次刷新接口不可用，保留周期刷新');
     }
   }
 }

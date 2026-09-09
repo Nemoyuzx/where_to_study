@@ -28,7 +28,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha1 = "0.10"
 tauri = { version = "2", features = ["image-png", "tray-icon"] }
-tauri-plugin-notification = "2"
 tempfile = "3"
 zeroize = { version = "1", features = ["derive"] }
 
@@ -45,6 +44,14 @@ keyring-core = "1.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+windows = { version = "0.61.3", features = ["Data_Xml_Dom", "Foundation", "UI_Notifications", "Win32_System_WinRT"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"
+objc2 = "0.6.4"
+objc2-foundation = "0.3.2"
+objc2-user-notifications = { version = "0.3.2", features = ["block2", "UNNotificationContent", "UNNotificationRequest", "UNNotificationSettings", "UNNotificationTrigger", "UNUserNotificationCenter"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3.6", features = ["linux-native-sync-persistent", "crypto-rust"] }
+zbus = "5.19.0"

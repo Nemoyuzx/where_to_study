@@ -71,6 +71,8 @@ targets:
       - path: Sources/WidgetShared
       - path: Sources/Widget
       - path: Sources/Shared/Models.swift
+      - path: Resources/Widget/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: Generated/WhereToStudyWidget-Info.plist
       properties:
@@ -160,6 +162,8 @@ targets:
       - path: Sources/WidgetShared
       - path: Sources/Widget
       - path: Sources/Shared/Models.swift
+      - path: Resources/Widget/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: Generated/WhereToStudyiOSWidget-Info.plist
       properties:

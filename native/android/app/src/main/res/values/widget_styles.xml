@@ -2,7 +2,8 @@
 <resources>
     <style name="WidgetCourseRow">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">40dp</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:orientation">horizontal</item>
     </style>
@@ -22,20 +23,24 @@
     </style>
 
     <style name="WidgetCourseName">
+        <item name="android:fontFamily">sans</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
+        <item name="android:includeFontPadding">false</item>
         <item name="android:textColor">@color/widget_text_primary</item>
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
     <style name="WidgetCourseDetails">
+        <item name="android:fontFamily">sans</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:ellipsize">end</item>
         <item name="android:maxLines">1</item>
+        <item name="android:includeFontPadding">false</item>
         <item name="android:textColor">@color/widget_text_secondary</item>
         <item name="android:textSize">10sp</item>
     </style>
