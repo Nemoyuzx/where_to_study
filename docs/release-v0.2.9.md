@@ -4,7 +4,24 @@
 
 提交各图形平台自定义每日课程提醒时间，以及 Apple/Android/HarmonyOS 小组件剩余空间的明日课程。保留默认 07:30、北京时间基准、今日优先、权限/账号撤销与用户 Apple 审核支持信息；完整行为、测试与未覆盖范围见[功能记录](reminder-time-and-tomorrow-widget.md)。
 
-本轮准备 Apple `0.2.9 (90)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002026)` **仅测试**上传；不提交任何商店审核，不修改现有待审版本、测试群组或 GitHub Release。Apple 构建号通过环境参数覆盖，不修改用户项目版本配置。成功回执待上传完成后补齐。
+源码提交 `8ffbef8b2f75a96ead963e8cdc3a18ea92ef6500` 已推送 GitHub `main`。Apple `0.2.9 (90)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002026)` **仅测试**上传均已完成。不提交任何商店审核，不修改现有待审版本、测试群组或 GitHub Release；未上传 Android/vivo 包。Apple 构建号通过环境参数覆盖，没有改动用户项目版本配置、产品名或审核支持内容。
+
+### Success receipts / 成功回执
+
+- iOS/iPadOS：本地 Xcode 于 **2026-09-09 15:58:17 +0800** 返回 `Upload succeeded`，随后 `EXPORT SUCCEEDED`。主应用与 Widget 为 `0.2.9 (90)`；Automatic 归档及 Distribution 导出验证通过，无 `get-task-allow`。
+- macOS：本地 Xcode 于 **2026-09-09 16:00:41 +0800** 返回 `Upload succeeded`，随后 `EXPORT SUCCEEDED`。主应用与 Widget 为 `0.2.9 (90)`；Manual Distribution 签名验证通过，二者均为 arm64/x86_64 Universal，宿主名称与可执行文件保持 `Where To Study`。
+- HarmonyOS：**2026-09-09 15:58 +0800** 确认 DevEco 结果页 **“云测试结果：通过”**。上传时明确选择第二项“生成.app包并上传至AppGallery Connect进行测试”，未选择“测试和发布”。最终 APP 及同次生成的 HAP 的 `pack.info` 均为 `0.2.9 (1002026)`，单独 build 字段仍为 `1`；两者签名/摘要校验通过，保存副本与上传后产物逐字节一致。
+
+Apple 仅运行一次 `scripts/native-apple-app-store.sh upload all`，设置 `APPLE_MARKETING_VERSION=0.2.9`、`APPLE_BUILD_NUMBER=90`、iOS Automatic/macOS Manual；团队来自本机现有 Distribution 证书，没有提交签名配置。脚本依次完成归档、校验和上传，没有另行重复这些步骤，成功后未检查 App Store Connect processing 或测试员可用状态。HarmonyOS 使用 DevEco“打开已保存的 harmony 工程 → 从磁盘全部重新加载 → 同步和刷新项目 → 构建 → 上传产品 → 仅测试”，仅发起一次上传，没有重新提交商店审核。
+
+复用[功能回归与限制](reminder-time-and-tomorrow-widget.md)，提交前另外执行仓库测试 **164/164 通过**、`git diff --check` 与 Apple 保留内容审查。上传前后 **86** 个 Apple 源码/配置文件 SHA-256 全部一致，四个宿主/Widget bundle 的严格签名校验通过。快速鸿蒙云测试和 Apple 上传回执不代表商店审核通过或补齐尚未覆盖的真机测试。
+
+忽略目录 `release-artifacts/reminder-widget-029-testing/` 保存上传日志、build 90 两端归档、Apple 前后校验/初始差异，以及最终鸿蒙产物与签名日志：
+
+- APP：1,285,324 bytes，SHA-256 `a3a39498369393bbd4552a4f28d65b07b8dbac5277a374853d4f8b6b779ceadd`。
+- HAP：1,903,609 bytes，SHA-256 `345b7f1080cc8045d18c41b23db69d5f7be45986a467ec8dfcf44f7154a601d3`。
+
+Source commit `8ffbef8` was uploaded as Apple 0.2.9 (90) and HarmonyOS 0.2.9 (1002026) for testing only. Store review submissions, test groups and public GitHub Release assets were not changed. Later uploads must increment these build numbers; do not repeat the successful uploads recorded here.
 
 ## Coordinated theme surfaces — 2026-09-09 testing-only follow-up
 
