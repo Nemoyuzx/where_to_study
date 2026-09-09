@@ -79,6 +79,7 @@ android {
     sourceSets {
         getByName("main").assets.srcDir(generatedLicenseAssets)
         getByName("test").resources.srcDir(rootProject.file("../../contracts/v1/fixtures"))
+        getByName("test").resources.srcDir(rootProject.file("../../contracts/v1"))
     }
 }
 

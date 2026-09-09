@@ -6,6 +6,53 @@ import XCTest
 
 @MainActor
 final class MobileYearNativeMonthGridTests: XCTestCase {
+    func testBlackSelectedDateHasReadableOutlineInDarkAppearanceWithoutReplacingDeadlineBorders() throws {
+        let month = projection()
+        let view = MobileYearMonthGridUIView()
+        view.overrideUserInterfaceStyle = .dark
+        view.frame = CGRect(x: 0, y: 0, width: 146, height: MobileYearNativeMonthGrid.height)
+        let theme = try XCTUnwrap(ColorThemeConfiguration.default.editing(primary: "#000000", accent: "#FFFFFF", selectedDate: "#000000"))
+        view.update(MobileYearNativeMonthGrid(month: month, selectedDateKey: "2026-08-03", todayKey: "2026-08-01",
+                    active: true, rendersContent: true, language: .english, onSelect: { _ in }), theme: theme)
+        let image = draw(view, size: view.bounds.size)
+        let selected = try XCTUnwrap(view.dayRect(at: 2))
+        assertPixel(image, at: CGPoint(x: selected.midX, y: selected.minY + 0.25),
+                    matches: AppTheme(configuration: theme).selectedDateOutline, traits: view.traitCollection)
+        assertPixel(image, at: CGPoint(x: selected.minX + 6, y: selected.minY + 6),
+                    matches: .black, traits: view.traitCollection)
+        let semantic = try XCTUnwrap(view.dayRect(at: 0))
+        assertPixel(image, at: CGPoint(x: semantic.midX, y: semantic.minY + 0.25),
+                    matches: AppTheme.assignment, traits: view.traitCollection)
+        assertPixel(image, at: CGPoint(x: semantic.midX, y: semantic.minY + 2),
+                    matches: AppTheme.conferenceDeadline, traits: view.traitCollection)
+    }
+
+    func testThemeChangeRepaintsRetainedYearBackingWithoutReplacingDatesOrCallbacks() throws {
+        let month = projection()
+        var selected: Date?
+        let grid = configuration(month: month, onSelect: { selected = $0 })
+        let view = makeView(month: month)
+        view.overrideUserInterfaceStyle = .light
+        view.update(grid)
+        let identities = view.dayAccessibilityElements.map(ObjectIdentifier.init)
+        let frames = view.dayAccessibilityElements.map(\.accessibilityFrameInContainerSpace)
+        for preset in [ColorThemePreset.ocean, .violet, .rose, .default] {
+            let theme = ColorThemeConfiguration.default.selecting(preset)
+            let count = view.completedDisplayCount
+            view.update(grid, theme: theme)
+            XCTAssertEqual(view.completedDisplayCount, count + 1)
+            view.update(grid, theme: theme)
+            XCTAssertEqual(view.completedDisplayCount, count + 1, "Unchanged themes keep the cached image")
+            let rect = try XCTUnwrap(view.dayRect(at: 0))
+            assertPixel(draw(view, size: view.bounds.size), at: CGPoint(x: rect.minX + 6, y: rect.minY + 6),
+                        matches: AppTheme(configuration: theme).selectedDate, traits: view.traitCollection)
+            XCTAssertEqual(view.dayAccessibilityElements.map(ObjectIdentifier.init), identities)
+            XCTAssertEqual(view.dayAccessibilityElements.map(\.accessibilityFrameInContainerSpace), frames)
+            XCTAssertTrue(view.selectDay(at: 0))
+            XCTAssertEqual(selected, month.days[0].date)
+        }
+    }
+
     func testOneDrawingViewHasOnlyRealDatesAndSixFixedHeightRows() throws {
         let month = projection()
         let view = makeView(month: month)

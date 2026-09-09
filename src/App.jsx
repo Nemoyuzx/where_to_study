@@ -109,6 +109,7 @@ import {
   yearCourseOpacity,
 } from './planner-domain.js'
 import QueryHub from './QueryHub.jsx'
+import ColorThemeSettings, { useColorTheme } from './ColorThemeSettings.jsx'
 import './App.css'
 
 const NAV_ITEMS = [
@@ -338,6 +339,7 @@ const EN_TEXT = Object.freeze({
   '隐私说明': 'Privacy policy',
   'GitHub 项目': 'GitHub project',
   '界面语言': 'Interface language',
+  '无法清除本地主题设置，请重试。': 'Could not clear local theme settings. Please try again.',
   '跟随系统': 'System default',
   '简体中文': 'Simplified Chinese',
   'English': 'English',
@@ -1311,6 +1313,7 @@ async function command(name, payload) {
 }
 
 function App() {
+  const colorTheme = useColorTheme()
   const [activePage, setActivePage] = useState('planner')
   const [metadata, setMetadata] = useState({
     campuses: [],
@@ -3248,6 +3251,12 @@ function App() {
         // hardened/private WebViews, so keep the in-memory reset authoritative.
       }
       setFavoriteDeadlines([])
+      try {
+        colorTheme.clear()
+      } catch {
+        // Keep a storage failure visible; do not silently claim theme deletion.
+        setError(t('无法清除本地主题设置，请重试。'))
+      }
       setCustomDeadlinesByDate({})
       setCustomDeadlinesErrorByDate({})
       setCustomDeadlinesLoadingDate('')
@@ -4405,6 +4414,8 @@ function App() {
               </button>
               <p className="settings-source-note">{t('天气、黄历、班车与 DDL 会标明第三方来源；学科竞赛、学术会议和脚本提取的校内通知由独立开关控制。')}</p>
             </section>
+
+          <ColorThemeSettings controller={colorTheme} language={uiLanguage} />
 
           <section className="panel settings-language">
             <div className="panel-title"><Settings size={18} /><h2>{t('界面语言')}</h2></div>

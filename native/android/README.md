@@ -3,6 +3,8 @@
 该目录是唯一的 Android 客户端源码，使用 Kotlin + Android Framework Views，
 不依赖 Tauri、WebView 或 Compose。应用包名为 `com.nemoyu.wheretostudy.nativeapp`。
 
+设置页提供默认、海洋蓝、鸢尾紫、暖琥珀、玫瑰和自定义颜色主题。自定义主色、强调色和选中日期支持严格的六位 RGB 输入、即时预览及本地保存；切换预设或恢复默认会保留上次有效自定义颜色。主题独立存储在 `color_theme_preferences`，不触发账号保存或网络刷新。原生控件、日历画布和桌面小组件会即时换色，默认浅色/深色色板和 DDL 语义颜色保持原值。共享规则见 `docs/color-themes.md` 与 `contracts/v1/color-themes.json`。
+
 构建、单元测试和 Lint：
 
 ```bash

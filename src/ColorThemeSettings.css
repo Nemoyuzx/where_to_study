@@ -1,0 +1,39 @@
+.settings-color-theme { min-width: 0; grid-column: 1 / -1; }
+.theme-description { color: var(--text-secondary); font-size: 13px; line-height: 1.6; margin: 8px 0; }
+.theme-presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr)); gap: 8px; margin: 14px 0; }
+.theme-preset { display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; min-height: 46px; padding: 8px 10px; white-space: normal; text-align: start; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; transition: background-color 160ms, border-color 160ms; }
+.theme-preset.active { border-color: var(--primary-outline); background: var(--primary-surface-selected); }
+.theme-preset > span:not(.theme-preset-dots) { flex: 1; }
+.theme-preset svg { flex-shrink: 0; }
+.theme-preset-dots { display: inline-flex; flex-shrink: 0; }
+.theme-preset-dots i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); margin-right: -3px; }
+.theme-custom-fields { min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 12px; margin: 14px 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.theme-custom-fields legend { padding: 0 6px; font-weight: 600; }
+.theme-color-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.theme-color-inputs { display: flex; align-items: center; gap: 8px; }
+.theme-color-inputs input[type=color] { width: 40px; min-width: 40px; height: 36px; padding: 3px; cursor: pointer; }
+.theme-color-inputs input[type=text] { width: 100%; min-width: 0; font-family: ui-monospace, monospace; }
+.theme-color-inputs input[aria-invalid=true] { border-color: var(--error-text); }
+.theme-custom-fields > p { grid-column: 1 / -1; margin: 0; }
+.theme-preview { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; }
+.theme-preview > span { padding: 8px 14px; border-radius: 8px; }
+.theme-preview-primary { color: var(--on-primary); background: var(--primary-fill); }
+.theme-preview-accent { color: var(--gold-text); background: var(--gold-surface); border-left: 3px solid var(--gold); }
+.theme-preview-selected { color: var(--selected-date-text); background: var(--selected-date-fill); }
+.theme-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.theme-actions button { white-space: normal; min-height: 40px; }
+.theme-actions .primary { color: var(--on-primary); background: var(--primary-fill); border: 1px solid var(--primary-fill); border-radius: 8px; padding: 9px 14px; }
+.theme-actions .secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 14px; }
+.theme-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
+:root:not([data-color-theme=default]) .settings-privacy-link:hover,
+:root:not([data-color-theme=default]) .privacy-dialog-footer a:hover,
+:root:not([data-color-theme=default]) .weather-strip-toggle > svg:first-child,
+:root:not([data-color-theme=default]) .weather-days article > svg,
+:root:not([data-color-theme=default]) .app-nav button.active { color: var(--primary-text); }
+.theme-error { color: var(--error-text); font-size: 13px; line-height: 1.5; }
+:root[data-color-theme]:not([data-color-theme=default]) .desktop-month-view .month-cell.selected:not(.today):not([class*="deadline-border-"]) .month-cell-date-button,
+:root[data-color-theme]:not([data-color-theme=default]) .mini-month-grid button.selected:not(.today):not([class*="deadline-border-"]) {
+  box-shadow: inset 0 0 0 1.5px var(--selected-date-outline);
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) { .theme-preset { transition: none; } }

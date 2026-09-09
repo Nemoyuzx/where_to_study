@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::color_theme::{ColorTheme, ThemeEditor};
 use chrono::{Datelike, NaiveDate};
 use where_to_study_lib::config::today_in_app_tz;
 use where_to_study_lib::models::{
@@ -37,6 +38,9 @@ pub struct App {
     pub error_message: Option<String>,
     pub loading: bool,
     pub theme_dark: bool,
+    pub color_theme: ColorTheme,
+    pub theme_editor: Option<ThemeEditor>,
+    pub theme_path: Option<std::path::PathBuf>,
     pub campus_id: String,
     pub selected_buildings: Vec<String>,
     pub available_buildings: Vec<String>,
@@ -85,6 +89,9 @@ impl App {
             error_message: None,
             loading: false,
             theme_dark,
+            color_theme: ColorTheme::default(),
+            theme_editor: None,
+            theme_path: crate::color_theme::config_path(),
             campus_id: "01".to_string(),
             selected_buildings: Vec::new(),
             available_buildings: Vec::new(),

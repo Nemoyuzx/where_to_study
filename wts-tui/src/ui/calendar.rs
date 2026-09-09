@@ -82,14 +82,16 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         }
         let style = if is_today {
             Style::default()
-                .fg(theme.background)
-                .bg(theme.primary)
+                .fg(theme.on_selected_date)
+                .bg(theme.selected_date)
                 .add_modifier(Modifier::BOLD)
         } else if holiday.as_ref().is_some_and(|(kind, _)| *kind == "休") {
             theme.danger_text()
         } else if holiday.as_ref().is_some_and(|(kind, _)| *kind == "班") {
-            theme.gold_text()
-        } else if conference_count > 0 || other_event_count > 0 || !courses.is_empty() {
+            theme.workday_text()
+        } else if conference_count > 0 || other_event_count > 0 {
+            Style::default().fg(theme.event)
+        } else if !courses.is_empty() {
             theme.primary_text()
         } else {
             theme.muted_text()
@@ -131,6 +133,33 @@ mod tests {
     use where_to_study_lib::models::{ImportantEventItem, ImportantEventsResponse};
 
     use super::*;
+
+    #[test]
+    fn selected_date_uses_the_custom_date_fill_and_preserves_default_primary() {
+        let app = App::new(false);
+        for dark in [false, true] {
+            let default = crate::color_theme::ColorTheme::default().palette(dark);
+            assert_eq!(default.selected_date, default.primary);
+            let config = crate::color_theme::ColorTheme {
+                preset: "custom".into(),
+                primary: "#123456".into(),
+                accent: "#ABCDEF".into(),
+                selected_date: "#00796B".into(),
+            };
+            let theme = config.palette(dark);
+            let mut terminal = Terminal::new(TestBackend::new(100, 18)).unwrap();
+            terminal
+                .draw(|frame| draw(frame, frame.area(), &app, &theme))
+                .unwrap();
+            assert!(terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .any(|cell| cell.bg == theme.selected_date && cell.fg == theme.on_selected_date));
+            assert_ne!(theme.selected_date, theme.primary_fill);
+        }
+    }
 
     fn event(id: &str, event_type: &str) -> ImportantEventItem {
         ImportantEventItem {

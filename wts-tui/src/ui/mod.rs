@@ -4,6 +4,7 @@ pub mod planner;
 pub mod query;
 pub mod schedule;
 pub mod settings;
+pub mod theme_editor;
 
 use chrono::Datelike;
 use ratatui::layout::{Constraint, Direction, Layout};
@@ -19,6 +20,16 @@ use crate::theme::Theme;
 
 pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
     let area = frame.area();
+    if let Some(editor) = &app.theme_editor {
+        theme_editor::draw(frame, area, editor, theme);
+        return;
+    }
+    if app.color_theme.preset != "default" {
+        frame.render_widget(
+            Block::default().style(Style::default().bg(theme.background).fg(theme.text)),
+            area,
+        );
+    }
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)

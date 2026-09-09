@@ -280,7 +280,7 @@ export struct QueryView {
           this.model.text('缓存数据'))
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.primary())
+          .fontColor(AppTheme.selectionText())
           .padding({ left: 9, right: 9, top: 4, bottom: 4 })
           .borderRadius(11)
           .backgroundColor(AppTheme.selection())

@@ -32,7 +32,7 @@
 3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 141 个契约单元测试
+./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 144 个契约单元测试
 ./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 21 项、宽屏 11 项）
 ```
 
@@ -45,7 +45,9 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 
 ## 签名与发布
 
-最新 `0.2.8 (1002022)` 已按 [2026-09-05 完整云测试报告](../../docs/harmony-cloud-test-2026-09-05.md) 优化月视图节点刷新、日期缓存、禁用按钮对比度、侧栏图标与普通滚动边界反馈。141 项单元测试、51 项主题/发布检查和 release 签名验证通过，DevEco 上传完成并显示快速云测试通过；Mate 60 性能、Mate X5 UX 评分及平板/2in1 覆盖仍以新完整报告为准。
+`0.2.9 (1002023)` 已于 2026-09-08 通过 DevEco“上传产品 → 测试和发布”上传 AppGallery Connect，快速云测试显示通过：按上架后审核报告统一 PC/2in1 日历的最小字号至 10fp，包含默认、最大化和紧凑窗口；月周标签单独占行，手机/平板原字号不变。144 项本地单元测试、146 项仓库测试、HAP/APP 构建与 release 签名验证通过；设备视觉回归与新完整审核仍待验证，未再次提交上架审核。实际上传产物摘要见[修复与上传记录](../../docs/harmony-pc-typography-v0.2.9.md)。
+
+此前 `0.2.8 (1002022)` 已按 [2026-09-05 完整云测试报告](../../docs/harmony-cloud-test-2026-09-05.md) 优化月视图节点刷新、日期缓存、禁用按钮对比度、侧栏图标与普通滚动边界反馈。141 项单元测试、51 项主题/发布检查和 release 签名验证通过，DevEco 上传完成并显示快速云测试通过；Mate 60 性能、Mate X5 UX 评分及平板/2in1 覆盖仍以新完整报告为准。
 
 - **模拟器/调试**：无需配置签名。hdc 可直接安装 debug HAP；DevEco 运行 entry
   时会自动生成本地调试签名。

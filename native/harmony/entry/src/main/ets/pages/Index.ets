@@ -5,6 +5,7 @@ import { AppTheme } from '../common/AppTheme';
 import { PrivacyConsentStore } from '../store/PrivacyConsentStore';
 import { PrivacyConsentView } from '../view/PrivacyConsentView';
 import { PrivacyPolicyView } from '../view/PrivacyPolicyView';
+import { DarkModeProbe } from '../view/calendar/CalendarLogic';
 
 enum PrivacyConsentPhase {
   loading = 'loading',
@@ -24,9 +25,17 @@ struct Index {
   @Local privacyConsentPersistenceFailed: boolean = false;
   @Local acceptingPrivacyConsent: boolean = false;
   private readonly privacyConsentStore: PrivacyConsentStore = new PrivacyConsentStore();
+  private readonly themeModeProbe: DarkModeProbe = new DarkModeProbe();
 
   aboutToAppear(): void {
+    this.themeModeProbe.register((dark: boolean) => {
+      AppTheme.state.dark = dark;
+    });
     this.restorePrivacyConsent();
+  }
+
+  aboutToDisappear(): void {
+    this.themeModeProbe.unregister();
   }
 
   private restorePrivacyConsent(): void {

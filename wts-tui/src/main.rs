@@ -1,4 +1,5 @@
 mod app;
+mod color_theme;
 mod file_credentials;
 mod theme;
 mod ui;
@@ -116,6 +117,14 @@ fn main() -> io::Result<()> {
 
     let theme_dark = theme::prefers_dark();
     let mut app = App::new(theme_dark);
+    if let Some(path) = &app.theme_path {
+        match color_theme::load(path) {
+            Ok(selection) => app.color_theme = selection,
+            Err(error) => app.set_error(format!(
+                "无法读取颜色主题 / Unable to load color theme: {error}"
+            )),
+        }
+    }
     match file_credentials::load() {
         Ok(Some(credentials)) => {
             app.credentials_saved =
@@ -305,14 +314,38 @@ fn run(
 }
 
 fn current_theme(app: &App) -> Theme {
-    if app.theme_dark {
-        theme::DARK
-    } else {
-        theme::LIGHT
-    }
+    app.theme_editor
+        .as_ref()
+        .map(|editor| &editor.selection)
+        .unwrap_or(&app.color_theme)
+        .palette(app.theme_dark)
 }
 
 fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool {
+    if let Some(editor) = &mut app.theme_editor {
+        match editor.handle_key(key) {
+            color_theme::EditorAction::None => {}
+            color_theme::EditorAction::Cancel => app.theme_editor = None,
+            color_theme::EditorAction::Save(selection) => {
+                let result = app
+                    .theme_path
+                    .as_deref()
+                    .ok_or_else(|| {
+                        io::Error::other("无法确定设置目录 / Settings directory unavailable")
+                    })
+                    .and_then(|path| color_theme::save(path, &selection));
+                match result {
+                    Ok(()) => {
+                        app.color_theme = selection;
+                        app.theme_editor = None;
+                        app.set_status("颜色主题已保存 / Color theme saved".into());
+                    }
+                    Err(error) => editor.error = Some(format!("无法保存 / Save failed: {error}")),
+                }
+            }
+        }
+        return false;
+    }
     if app.selected_tab_index == 5 && app.settings_editing {
         return handle_settings_input(app, key, tx);
     }
@@ -339,6 +372,9 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
     }
 
     match key.code {
+        KeyCode::Char('t') if app.selected_tab_index == 5 => {
+            app.theme_editor = Some(color_theme::ThemeEditor::new(&app.color_theme));
+        }
         KeyCode::Char('r') if key.modifiers.is_empty() => {
             app.clear_error();
             match app.selected_tab_index {
@@ -784,6 +820,102 @@ mod tests {
         assert_eq!(app.login_account, "q");
         assert!(!handle_key(&mut app, key(KeyCode::Char('o')), &tx));
         assert_eq!(app.login_account, "qo");
+    }
+
+    #[test]
+    fn theme_input_preview_save_restore_and_relaunch_are_isolated_from_account_and_network() {
+        let directory = color_theme::tests::TestDirectory::new();
+        let credentials_path = directory.0.join("credentials.json");
+        std::fs::write(&credentials_path, "unrelated-local-data").unwrap();
+        let (tx, rx) = mpsc::channel();
+        let mut app = App::new(false);
+        app.theme_path = Some(directory.path());
+        switch_tab(&mut app, 5);
+        app.login_account = "unchanged-account".into();
+        app.room_scroll = 12;
+        app.query_search = "unchanged-filter".into();
+        let month = app.calendar_month;
+        handle_key(&mut app, key(KeyCode::Char('t')), &tx);
+        assert!(app.theme_editor.is_some());
+        handle_key(&mut app, key(KeyCode::Right), &tx);
+        assert_eq!(app.theme_editor.as_ref().unwrap().selection.preset, "ocean");
+        assert_eq!(app.color_theme.preset, "default");
+        assert_ne!(current_theme(&app), theme::LIGHT);
+        for ch in ['q', 'l', 'o', 'r', '6'] {
+            assert!(!handle_key(&mut app, key(KeyCode::Char(ch)), &tx));
+        }
+        handle_key(&mut app, key(KeyCode::Tab), &tx);
+        handle_key(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+            &tx,
+        );
+        for ch in "123456".chars() {
+            handle_key(&mut app, key(KeyCode::Char(ch)), &tx);
+        }
+        handle_key(&mut app, key(KeyCode::Enter), &tx);
+        assert!(app.theme_editor.is_none());
+        assert_eq!(app.color_theme.preset, "custom");
+        assert_eq!(app.color_theme.primary, "#123456");
+        assert_eq!(
+            color_theme::load(&directory.path()).unwrap(),
+            app.color_theme
+        );
+        handle_key(&mut app, key(KeyCode::Char('t')), &tx);
+        handle_key(&mut app, key(KeyCode::F(2)), &tx);
+        handle_key(&mut app, key(KeyCode::Enter), &tx);
+        let reloaded = color_theme::load(&directory.path()).unwrap();
+        assert_eq!(reloaded.preset, "default");
+        assert_eq!(reloaded.primary, "#123456");
+        assert_eq!(current_theme(&app), theme::LIGHT);
+        assert_eq!(app.selected_tab_index, 5);
+        assert_eq!(app.calendar_month, month);
+        assert_eq!(app.room_scroll, 12);
+        assert_eq!(app.query_search, "unchanged-filter");
+        assert_eq!(app.login_account, "unchanged-account");
+        assert!(!app.loading);
+        assert_eq!(
+            std::fs::read_to_string(credentials_path).unwrap(),
+            "unrelated-local-data"
+        );
+        assert!(matches!(rx.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn theme_cancel_and_failed_save_preserve_saved_selection() {
+        let directory = color_theme::tests::TestDirectory::new();
+        let (tx, _rx) = mpsc::channel();
+        let mut app = App::new(false);
+        app.theme_path = Some(directory.0.clone()); // A directory cannot be replaced by theme.json.
+        switch_tab(&mut app, 5);
+        handle_key(&mut app, key(KeyCode::Char('t')), &tx);
+        handle_key(&mut app, key(KeyCode::Right), &tx);
+        handle_key(&mut app, key(KeyCode::Enter), &tx);
+        assert!(app
+            .theme_editor
+            .as_ref()
+            .unwrap()
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("Save failed"));
+        assert_eq!(app.color_theme.preset, "default");
+        handle_key(&mut app, key(KeyCode::Esc), &tx);
+        assert!(app.theme_editor.is_none());
+        assert_eq!(current_theme(&app), theme::LIGHT);
+        assert_eq!(app.selected_tab_index, 5);
+        assert_eq!(std::fs::read_dir(&directory.0).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn typing_t_in_the_account_field_does_not_open_the_theme_panel() {
+        let (tx, _rx) = mpsc::channel();
+        let mut app = App::new(false);
+        switch_tab(&mut app, 5);
+        app.settings_editing = true;
+        handle_key(&mut app, key(KeyCode::Char('t')), &tx);
+        assert_eq!(app.login_account, "t");
+        assert!(app.theme_editor.is_none());
     }
 
     #[test]

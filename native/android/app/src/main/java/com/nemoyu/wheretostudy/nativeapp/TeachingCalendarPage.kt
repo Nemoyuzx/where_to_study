@@ -848,7 +848,7 @@ internal fun buildAlmanacAdviceRow(
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.TOP
     isBaselineAligned = false
-    background = roundedBackground(context, Palette.background, Palette.border, radius = 7)
+    background = themedRoundedBackground(context, { Palette.background }, { Palette.border }, radius = 7)
     setPadding(context.dp(9), context.dp(8), context.dp(9), context.dp(8))
     layoutParams = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -859,7 +859,7 @@ internal fun buildAlmanacAdviceRow(
         text = label
         textSize = 12f
         gravity = Gravity.CENTER
-        setTextColor(color)
+        setThemeTextColor { color }
         setTypeface(typeface, Typeface.BOLD)
     }, LinearLayout.LayoutParams(context.dp(24), context.dp(24)).apply {
         marginEnd = context.dp(7)
@@ -868,7 +868,7 @@ internal fun buildAlmanacAdviceRow(
         id = R.id.calendar_almanac_advice_text
         text = value
         textSize = 12f
-        setTextColor(Palette.muted)
+        setThemeTextColor { Palette.muted }
         includeFontPadding = true
         setLineSpacing(
             context.dp(TeachingCalendarLogic.almanacAdviceLineExtraDp).toFloat(),
@@ -1117,7 +1117,7 @@ internal class TeachingCalendarPage(
         val scrollView = ScrollView(activity).apply {
             isFillViewport = true
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
         }
         val root = verticalPage(activity)
         scrollView.addView(root)
@@ -1167,7 +1167,7 @@ internal class TeachingCalendarPage(
                 content.addView(TextView(activity).apply {
                     text = message
                     textSize = 13f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     setPadding(activity.dp(4), 0, activity.dp(4), activity.dp(10))
                 })
             }
@@ -1264,22 +1264,22 @@ internal class TeachingCalendarPage(
     private fun phoneBuild(): LinearLayout {
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
         }
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
         }
         val pageSurface = CalendarSwipeContainer(activity).apply {
             id = R.id.calendar_swipe_surface
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
         }
         val tabs = mutableMapOf<Mode, TextView>()
         val periodLabel = TextView(activity).apply {
             id = R.id.calendar_period_label
             textSize = 22f
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
             maxLines = 1
@@ -1353,7 +1353,7 @@ internal class TeachingCalendarPage(
                         addView(TextView(activity).apply {
                             text = message
                             textSize = 12f
-                            setTextColor(Palette.muted)
+                            setThemeTextColor { Palette.muted }
                             setPadding(activity.dp(4), 0, activity.dp(4), activity.dp(8))
                         })
                     }
@@ -1449,7 +1449,7 @@ internal class TeachingCalendarPage(
             id = R.id.calendar_mode_switch
             orientation = LinearLayout.HORIZONTAL
             setPadding(activity.dp(3), activity.dp(3), activity.dp(3), activity.dp(3))
-            background = roundedBackground(activity, Palette.surfaceVariant, radius = 10)
+            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 10)
             Mode.entries.forEach { mode ->
                 val tab = fixedTab(activity, mode.label) {
                     if (selectedMode == mode) return@fixedTab
@@ -1524,23 +1524,19 @@ internal class TeachingCalendarPage(
             if (previous != null && (mode == previous || selected)) {
                 val fromSelected = mode == previous
                 val transition = TransitionDrawable(arrayOf(
-                    roundedBackground(
-                        activity,
-                        if (fromSelected) Palette.segmentedSelection else Color.TRANSPARENT,
-                        radius = UiMetrics.controlRadiusDp,
-                    ),
-                    roundedBackground(
-                        activity,
-                        if (selected) Palette.segmentedSelection else Color.TRANSPARENT,
-                        radius = UiMetrics.controlRadiusDp,
-                    ),
+                    themedRoundedBackground(
+                        activity, { if (fromSelected) Palette.segmentedSelection else Color.TRANSPARENT },
+                        radius = UiMetrics.controlRadiusDp),
+                    themedRoundedBackground(
+                        activity, { if (selected) Palette.segmentedSelection else Color.TRANSPARENT },
+                        radius = UiMetrics.controlRadiusDp),
                 )).apply { isCrossFadeEnabled = true }
                 view.background = transition
                 view.setTypeface(
                     view.typeface,
                     if (selected) Typeface.BOLD else Typeface.NORMAL,
                 )
-                view.setTextColor(Palette.text)
+                view.setThemeTextColor { Palette.text }
                 transition.startTransition(TeachingCalendarLogic.pageAnimationDurationMillis.toInt())
             } else {
                 view.setCompactSelectedStyle(activity, selected)
@@ -1647,13 +1643,13 @@ internal class TeachingCalendarPage(
         LinearLayout(activity).apply {
             id = R.id.calendar_page_body
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.surface)
+            setThemeBackgroundColor { Palette.surface }
             setPadding(0, activity.dp(6), 0, 0)
             holidayStatus()?.let { message ->
                 addView(TextView(activity).apply {
                     text = message
                     textSize = 12f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     setPadding(activity.dp(16), activity.dp(4), activity.dp(16), activity.dp(4))
                 })
                 addView(spacer(activity, 4))
@@ -1707,7 +1703,7 @@ internal class TeachingCalendarPage(
         val section = LinearLayout(activity).apply {
             id = R.id.calendar_day_week_agenda
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.surface)
+            setThemeBackgroundColor { Palette.surface }
         }
         val selectedDay = days.firstOrNull { sameDay(it.date, selectedDate) }
             ?: days.firstOrNull()
@@ -1730,7 +1726,7 @@ internal class TeachingCalendarPage(
         val indicator = ImageView(activity).apply {
             id = R.id.calendar_day_week_agenda_indicator
             setImageResource(R.drawable.ic_chevron_down)
-            imageTintList = ColorStateList.valueOf(Palette.muted)
+            bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(Palette.muted) }
             rotation = if (sessionState.dayWeekAgendaExpanded) 180f else 0f
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             scaleType = ImageView.ScaleType.CENTER
@@ -1750,7 +1746,7 @@ internal class TeachingCalendarPage(
             addView(TextView(activity).apply {
                 text = if (compact) displayMonthDayWithWeekday(selectedDay.date) else "当日课程"
                 textSize = if (compact) 12f else 13f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
                 includeFontPadding = false
                 maxLines = 1
@@ -1759,7 +1755,7 @@ internal class TeachingCalendarPage(
             addView(TextView(activity).apply {
                 text = if (courses.isEmpty()) "暂无课程" else "${courses.size} 门课"
                 textSize = if (compact) 10f else 11f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 includeFontPadding = false
                 gravity = Gravity.END or Gravity.CENTER_VERTICAL
                 maxLines = 1
@@ -1848,7 +1844,7 @@ internal class TeachingCalendarPage(
                 text = course.name
                 UiText.preserveRawText(this)
                 textSize = 12f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
@@ -1861,7 +1857,7 @@ internal class TeachingCalendarPage(
                     course.teacher.takeIf(String::isNotEmpty)?.let { "教师：$it" }.orEmpty(),
                 ).filter(String::isNotEmpty).joinToString(" · ")
                 textSize = 10f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
                 includeFontPadding = false
@@ -1876,15 +1872,13 @@ internal class TeachingCalendarPage(
         text = defaultLabel
         textSize = if (compact) 12f else 15f
         gravity = Gravity.CENTER
-        setTextColor(if (compact) Palette.text else Palette.onPrimary)
+        setThemeTextColor { if (compact) Palette.text else Palette.onPrimary }
         setTypeface(typeface, Typeface.BOLD)
         includeFontPadding = false
         if (compact) letterSpacing = 0.08f
-        background = roundedBackground(
-            activity,
-            if (compact) Color.TRANSPARENT else Palette.primaryFill,
-            radius = UiMetrics.controlRadiusDp,
-        )
+        background = themedRoundedBackground(
+            activity, { if (compact) Color.TRANSPARENT else Palette.primaryFill },
+            radius = UiMetrics.controlRadiusDp)
         isClickable = true
         isFocusable = true
         contentDescription = if (compact) "更多日历操作" else "导入手机日历"
@@ -1980,15 +1974,12 @@ internal class TeachingCalendarPage(
         text = activity.uiText("导入已收藏日程")
         textSize = 15f
         gravity = Gravity.CENTER
-        setTextColor(Palette.text)
+        setThemeTextColor { Palette.text }
         setTypeface(typeface, Typeface.BOLD)
         includeFontPadding = false
-        background = roundedBackground(
-            activity,
-            Palette.surface,
-            Palette.border,
-            radius = UiMetrics.controlRadiusDp,
-        )
+        background = themedRoundedBackground(
+            activity, { Palette.surface }, { Palette.border },
+            radius = UiMetrics.controlRadiusDp)
         isClickable = true
         isFocusable = true
         contentDescription = text
@@ -2032,11 +2023,11 @@ internal class TeachingCalendarPage(
         text = label
         textSize = if (label.length == 1) 23f else 13f
         gravity = Gravity.CENTER
-        setTextColor(if (label == "今天") Palette.primaryText else Palette.text)
+        setThemeTextColor { if (label == "今天") Palette.primaryText else Palette.text }
         setTypeface(typeface, if (label == "今天") Typeface.BOLD else Typeface.NORMAL)
         isClickable = true
         isFocusable = true
-        background = roundedBackground(activity, Color.TRANSPARENT, radius = UiMetrics.controlRadiusDp)
+        background = themedRoundedBackground(activity, { Color.TRANSPARENT }, radius = UiMetrics.controlRadiusDp)
         layoutParams = LinearLayout.LayoutParams(
             activity.dp(width),
             activity.dp(TeachingCalendarLogic.phoneNavigationHeightDp),
@@ -2056,7 +2047,10 @@ internal class TeachingCalendarPage(
             selectedDate.get(Calendar.YEAR),
             selectedDate.get(Calendar.MONTH),
             selectedDate.get(Calendar.DAY_OF_MONTH),
-        ).show()
+        ).apply {
+            show()
+            UiText.localizeDialog(this)
+        }
     }
 
     private fun periodTitle(): String {
@@ -2096,7 +2090,7 @@ internal class TeachingCalendarPage(
                     text = TeachingCalendarLogic.weekAxisLabel(calendarWeek, teachingWeek, english)
                     textSize = 9.5f
                     gravity = Gravity.CENTER
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     includeFontPadding = false
                     maxLines = 2
                     contentDescription = TeachingCalendarLogic.weekAccessibilityLabel(
@@ -2125,24 +2119,21 @@ internal class TeachingCalendarPage(
                     maxLines = 2
                     includeFontPadding = false
                     setPadding(0, activity.dp(2), 0, activity.dp(2))
-                    setTextColor(when {
+                    setThemeTextColor { when {
                         selected -> Palette.onPrimary
                         holidays.any { it.type == "holiday" } -> Palette.holiday
                         else -> Palette.text
-                    })
+                    } }
                     setTypeface(typeface, if (selected || isToday) Typeface.BOLD else Typeface.NORMAL)
-                    background = roundedBackground(
-                        activity,
-                        if (selected) Palette.selectedDate else Color.TRANSPARENT,
-                        when {
+                    background = themedRoundedBackground(
+                        activity, { if (selected) Palette.selectedDate else Color.TRANSPARENT }, { when {
                             isToday -> Palette.nowIndicator
-                            selected -> Palette.selectedDate
+                            selected -> Palette.selectedDateOutline
                             else -> Color.TRANSPARENT
-                        },
+                        } },
                         radius = 10,
-                    ).apply {
-                        if (isToday) setStroke(activity.dp(2), Palette.nowIndicator)
-                    }
+                        borderWidthDp = if (isToday) 2f else 1f,
+                    )
                     isClickable = true
                     isFocusable = true
                     contentDescription = displayMonthDayWithWeekday(day)
@@ -2172,7 +2163,7 @@ internal class TeachingCalendarPage(
             text = formatter.format(selectedDate.time)
             textSize = 14f
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
         }, LinearLayout.LayoutParams(0, activity.dp(26), 1f))
@@ -2181,7 +2172,7 @@ internal class TeachingCalendarPage(
             text = if (courses.isEmpty()) "暂无课程" else "${courses.size} 门课"
             textSize = 11f
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             includeFontPadding = false
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, activity.dp(26)))
     }
@@ -2192,7 +2183,7 @@ internal class TeachingCalendarPage(
     ): LinearLayout = LinearLayout(activity).apply {
         id = R.id.calendar_timeline
         orientation = LinearLayout.VERTICAL
-        setBackgroundColor(Palette.surface)
+        setThemeBackgroundColor { Palette.surface }
         addView(
             CalendarTimelineView(
                 context = activity,
@@ -2223,8 +2214,8 @@ internal class TeachingCalendarPage(
             text = contractDate().format(selectedDate.time)
             textSize = 16f
             gravity = Gravity.CENTER
-            setTextColor(Palette.text)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            setThemeTextColor { Palette.text }
+            background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 6)
             isClickable = true
             isFocusable = true
             setOnClickListener {
@@ -2238,7 +2229,10 @@ internal class TeachingCalendarPage(
                     selectedDate.get(Calendar.YEAR),
                     selectedDate.get(Calendar.MONTH),
                     selectedDate.get(Calendar.DAY_OF_MONTH),
-                ).show()
+                ).apply {
+                    show()
+                    UiText.localizeDialog(this)
+                }
             }
             layoutParams = LinearLayout.LayoutParams(0, activity.dp(44), 1f).apply {
                 marginStart = activity.dp(6)
@@ -2264,8 +2258,8 @@ internal class TeachingCalendarPage(
             text = label
             textSize = if (label.length == 1) 24f else 14f
             gravity = Gravity.CENTER
-            setTextColor(Palette.text)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            setThemeTextColor { Palette.text }
+            background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 6)
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
@@ -2277,7 +2271,7 @@ internal class TeachingCalendarPage(
         addView(TextView(activity).apply {
             text = formatter.format(selectedDate.time)
             textSize = 20f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
         })
         val courses = coursesOn(selectedDate)
@@ -2288,7 +2282,7 @@ internal class TeachingCalendarPage(
                 holidays.forEach { add("${if (it.type == "holiday") "休" else "班"} ${it.name}") }
             }.joinToString("  ·  ")
             textSize = 14f
-            setTextColor(if (holidays.any { it.type == "holiday" }) Palette.holiday else Palette.muted)
+            setThemeTextColor { if (holidays.any { it.type == "holiday" }) Palette.holiday else Palette.muted }
             setPadding(0, activity.dp(5), 0, 0)
         })
     }
@@ -2349,7 +2343,7 @@ internal class TeachingCalendarPage(
         clipToPadding = false
         val compactMonth = availableWidthDp < TeachingCalendarLogic.compactCalendarBreakpointDp
         if (compactMonth) {
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
             val horizontalPadding = TeachingCalendarLogic.monthHorizontalPaddingDp(
                 usesBottomNavigation,
             )
@@ -2430,11 +2424,9 @@ internal class TeachingCalendarPage(
             isNestedScrollingEnabled = true
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            background = roundedBackground(
-                activity,
-                Palette.background,
-                radius = UiMetrics.surfaceRadiusDp,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.background },
+                radius = UiMetrics.surfaceRadiusDp)
             outlineProvider = ViewOutlineProvider.BACKGROUND
             clipToOutline = true
             clipChildren = true
@@ -2533,7 +2525,7 @@ internal class TeachingCalendarPage(
                 text = label
                 textSize = 12f
                 gravity = Gravity.CENTER
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setTypeface(typeface, Typeface.BOLD)
                 layoutParams = LinearLayout.LayoutParams(0, activity.dp(18), 1f)
             })
@@ -2648,15 +2640,15 @@ internal class TeachingCalendarPage(
         cell.findViewById<TextView>(R.id.calendar_month_day_label).apply {
             val showsTodayBadge = today && supplementaryKinds.isNotEmpty()
             setTypeface(typeface, if (selected || today) Typeface.BOLD else Typeface.NORMAL)
-            setTextColor(when {
+            setThemeTextColor { when {
                 showsTodayBadge -> Palette.onPrimary
                 selected -> Palette.onPrimary
                 !inMonth -> Palette.outOfMonth
                 holidays.any { it.type == "holiday" } -> Palette.holiday
                 else -> Palette.text
-            })
+            } }
             background = if (showsTodayBadge) {
-                roundedBackground(activity, Palette.nowIndicator, radius = 999)
+                themedRoundedBackground(activity, { Palette.nowIndicator }, radius = 999)
             } else {
                 null
             }
@@ -2711,12 +2703,12 @@ internal class TeachingCalendarPage(
                     append("  ${activity.uiText("公")}${publicDeadlines.size}")
                 }
             }
-            setTextColor(when {
+            setThemeTextColor { when {
                 selected -> Palette.onPrimary
                 supplementaryKinds.isNotEmpty() ->
                     DeadlineVisualLogic.color(supplementaryKinds.first())
                 else -> Palette.muted
-            })
+            } }
         }
         val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(sheetPosition)
         val initialCellHeightDp = measuredCellHeightDp
@@ -2936,30 +2928,36 @@ internal class TeachingCalendarPage(
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
         setPadding(activity.dp(3), 0, activity.dp(3), 0)
-        val accent = monthEntryAccent(entry.kind)
-        setTextColor(if (selected) Palette.onPrimary else accent)
-        background = roundedBackground(
-            activity,
-            if (selected) {
-                blend(accent, Palette.selectedDate, 0.52f)
-            } else {
-                blend(accent, Palette.surface, 0.14f)
-            },
-            blend(accent, Palette.border, 0.42f),
+        fun accent() = monthEntryAccent(entry.kind)
+        fun fill(): Int {
+            val result = if (selected) blend(accent(), Palette.selectedDate, 0.52f)
+                else blend(accent(), Palette.surface, 0.14f)
+            return if (selected && Palette.selection.preset != "default") ColorThemeLogic.fill(result) else result
+        }
+        setThemeTextColor {
+            when {
+                selected -> Palette.onPrimary
+                Palette.selection.preset != "default" &&
+                    entry.kind in listOf(MonthCalendarEntryKind.COURSE, MonthCalendarEntryKind.OVERFLOW) ->
+                    ColorThemeLogic.readableText(accent(), fill())
+                else -> accent()
+            }
+        }
+        background = themedRoundedBackground(
+            activity, { fill() }, { blend(accent(), Palette.border, 0.42f) },
             radius = 4,
-            borderWidthDp = 0.75f,
-        )
+            borderWidthDp = 0.75f)
         disableMonthGridEntryInteraction()
     }
 
     private fun yearView(onDateChanged: () -> Unit): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
-        setBackgroundColor(Palette.background)
+        setThemeBackgroundColor { Palette.background }
         val year = selectedDate.get(Calendar.YEAR)
         addView(TextView(activity).apply {
             text = "颜色越深表示当天课程越多，彩色边框表示作业与 DDL"
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             includeFontPadding = false
             setPadding(0, 0, 0, activity.dp(12))
         })
@@ -3009,13 +3007,13 @@ internal class TeachingCalendarPage(
             id = R.id.calendar_all_day_strip
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Palette.surface)
+            setThemeBackgroundColor { Palette.surface }
             val showCourseSlots = !compact || days.size == 1
             addView(TextView(activity).apply {
             text = "全天"
             textSize = if (compact) 11f else 12f
             gravity = Gravity.CENTER
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
             }, LinearLayout.LayoutParams(
@@ -3048,15 +3046,12 @@ internal class TeachingCalendarPage(
                     ellipsize = TextUtils.TruncateAt.END
                     includeFontPadding = false
                     setPadding(activity.dp(3), 0, activity.dp(3), 0)
-                    setTextColor(accent)
+                    setThemeTextColor { accent }
                     background = if (items.isNotEmpty()) {
-                        roundedBackground(
-                            activity,
-                            blend(accent, Palette.surface, 0.13f),
-                            blend(accent, Palette.border, 0.35f),
+                        themedRoundedBackground(
+                            activity, { blend(accent, Palette.surface, 0.13f) }, { blend(accent, Palette.border, 0.35f) },
                             radius = 4,
-                            borderWidthDp = 0.75f,
-                        )
+                            borderWidthDp = 0.75f)
                     } else {
                         null
                     }
@@ -3088,7 +3083,7 @@ internal class TeachingCalendarPage(
         id = R.id.calendar_all_day_strip
         isHorizontalScrollBarEnabled = false
         overScrollMode = View.OVER_SCROLL_NEVER
-        setBackgroundColor(Palette.surface)
+        setThemeBackgroundColor { Palette.surface }
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -3096,7 +3091,7 @@ internal class TeachingCalendarPage(
             addView(TextView(activity).apply {
                 text = "全天"
                 textSize = 12f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 includeFontPadding = false
                 gravity = Gravity.CENTER_VERTICAL
             })
@@ -3106,19 +3101,16 @@ internal class TeachingCalendarPage(
                 addView(TextView(activity).apply {
                     text = "${displayMonthDay(day.date)} · ${item.title}"
                     textSize = 11f
-                    setTextColor(accent)
+                    setThemeTextColor { accent }
                     setTypeface(typeface, Typeface.BOLD)
                     includeFontPadding = false
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
-                    background = roundedBackground(
-                        activity,
-                        blend(accent, Palette.surface, 0.13f),
-                        blend(accent, Palette.border, 0.35f),
+                    background = themedRoundedBackground(
+                        activity, { blend(accent, Palette.surface, 0.13f) }, { blend(accent, Palette.border, 0.35f) },
                         radius = 12,
-                        borderWidthDp = 0.75f,
-                    )
+                        borderWidthDp = 0.75f)
                     setPadding(activity.dp(10), activity.dp(5), activity.dp(10), activity.dp(5))
                     isClickable = true
                     isFocusable = true
@@ -3136,16 +3128,13 @@ internal class TeachingCalendarPage(
                 addView(TextView(activity).apply {
                     text = "+$hiddenCount"
                     textSize = 11f
-                    setTextColor(Palette.primaryText)
+                    setThemeTextColor { Palette.primaryText }
                     setTypeface(typeface, Typeface.BOLD)
                     includeFontPadding = false
                     gravity = Gravity.CENTER
-                    background = roundedBackground(
-                        activity,
-                        Palette.surfaceVariant,
-                        Palette.border,
-                        radius = 7,
-                    )
+                    background = themedRoundedBackground(
+                        activity, { Palette.surfaceVariant }, { Palette.border },
+                        radius = 7)
                     setPadding(activity.dp(9), activity.dp(5), activity.dp(9), activity.dp(5))
                     isClickable = true
                     isFocusable = true
@@ -3191,17 +3180,14 @@ internal class TeachingCalendarPage(
         val panel = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             this.contentDescription = contentDescription
-            background = roundedBackground(
-                activity,
-                Palette.surface,
-                Palette.border,
-                radius = 14,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.surface }, { Palette.border },
+                radius = 14)
             setPadding(activity.dp(20), activity.dp(18), activity.dp(20), activity.dp(14))
             addView(TextView(activity).apply {
                 text = title
                 textSize = 18f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
                 includeFontPadding = false
                 setPadding(0, 0, 0, activity.dp(12))
@@ -3229,15 +3215,13 @@ internal class TeachingCalendarPage(
                 text = activity.uiText("完成")
                 textSize = 15f
                 gravity = Gravity.CENTER
-                setTextColor(Palette.primaryText)
+                setThemeTextColor { Palette.primaryText }
                 setTypeface(typeface, Typeface.BOLD)
                 isClickable = true
                 isFocusable = true
-                background = roundedBackground(
-                    activity,
-                    Palette.surfaceVariant,
-                    radius = 8,
-                )
+                background = themedRoundedBackground(
+                    activity, { Palette.surfaceVariant },
+                    radius = 8)
                 setOnClickListener { dialog.dismiss() }
             }, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -3298,7 +3282,7 @@ internal class TeachingCalendarPage(
         val maximumHeight = (visibleFrame.height() - activity.dp(32)).coerceAtLeast(activity.dp(112))
         val panel = ScrollView(activity).apply {
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 6)
             setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -3312,7 +3296,7 @@ internal class TeachingCalendarPage(
                 addView(TextView(activity).apply {
                     text = "跳转到"
                     textSize = 12f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     setPadding(0, 0, 0, activity.dp(6))
                 })
                 addView(LinearLayout(activity).apply {
@@ -3410,21 +3394,21 @@ internal class TeachingCalendarPage(
                                 text = item.title
                                 UiText.preserveRawText(this)
                                 textSize = 14f
-                                setTextColor(Palette.text)
+                                setThemeTextColor { Palette.text }
                                 setTypeface(typeface, Typeface.BOLD)
                             })
                             addView(TextView(activity).apply {
                                 text = listOfNotNull(item.courseName, item.status).joinToString(" · ")
                                     .ifEmpty { "课程名称未标注" }
                                 textSize = 12f
-                                setTextColor(Palette.muted)
+                                setThemeTextColor { Palette.muted }
                                 setPadding(0, activity.dp(2), 0, 0)
                             })
                         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                         addView(TextView(activity).apply {
                             text = item.deadline.substringAfter(' ').take(5)
                             textSize = 13f
-                            setTextColor(Palette.primaryText)
+                            setThemeTextColor { Palette.primaryText }
                             setTypeface(typeface, Typeface.BOLD)
                         })
                     })
@@ -3434,7 +3418,7 @@ internal class TeachingCalendarPage(
                 dailyInfoRepository.assignmentError(date) != null -> addView(TextView(activity).apply {
                     text = "${dailyInfoRepository.assignmentError(date)}，点击重试"
                     textSize = 13f
-                    setTextColor(Palette.danger)
+                    setThemeTextColor { Palette.danger }
                     setPadding(0, activity.dp(6), 0, activity.dp(6))
                     setOnClickListener {
                         activity.performControlHaptic(this)
@@ -3457,14 +3441,14 @@ internal class TeachingCalendarPage(
                 addView(TextView(activity).apply {
                     text = "农历 ${info.lunarDate} · ${info.weekday}"
                     textSize = 16f
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, Typeface.BOLD)
                 })
                 addView(TextView(activity).apply {
                     text = "${info.ganzhiYear}年 · ${info.ganzhiMonth}月 · " +
                         "${info.ganzhiDay}日 · 肖${info.zodiac}"
                     textSize = 13f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     setPadding(0, activity.dp(4), 0, 0)
                 })
                 listOfNotNull(info.solarTerm, info.lunarFestival, info.solarFestival)
@@ -3473,7 +3457,7 @@ internal class TeachingCalendarPage(
                         addView(TextView(activity).apply {
                             text = festivals.joinToString(" · ")
                             textSize = 12f
-                            setTextColor(Palette.muted)
+                            setThemeTextColor { Palette.muted }
                             setPadding(0, activity.dp(4), 0, 0)
                         })
                     }
@@ -3484,7 +3468,7 @@ internal class TeachingCalendarPage(
             dailyInfoRepository.almanacError(date) != null -> addView(TextView(activity).apply {
                 text = "${dailyInfoRepository.almanacError(date)}，点击重试"
                 textSize = 13f
-                setTextColor(Palette.danger)
+                setThemeTextColor { Palette.danger }
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -3513,7 +3497,7 @@ internal class TeachingCalendarPage(
             dailyInfoRepository.deadlineError(date) != null -> addView(TextView(activity).apply {
                 text = "${dailyInfoRepository.deadlineError(date)}，点击重试"
                 textSize = 13f
-                setTextColor(Palette.danger)
+                setThemeTextColor { Palette.danger }
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -3546,12 +3530,12 @@ internal class TeachingCalendarPage(
     private fun dailyDetailCard(title: String): LinearLayout =
         surface(activity, showsBorder = false).apply {
             orientation = LinearLayout.VERTICAL
-            background = roundedBackground(activity, Palette.surface, radius = 10)
+            background = themedRoundedBackground(activity, { Palette.surface }, radius = 10)
             setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(12))
             addView(TextView(activity).apply {
                 text = title
                 textSize = 14f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
                 includeFontPadding = false
                 setPadding(0, 0, 0, activity.dp(8))
@@ -3561,18 +3545,22 @@ internal class TeachingCalendarPage(
     private fun statusText(value: String): TextView = TextView(activity).apply {
         text = value
         textSize = 13f
-        setTextColor(Palette.muted)
+        setThemeTextColor { Palette.muted }
     }
 
     private fun almanacAdviceRow(label: String, value: String, color: Int): LinearLayout =
-        buildAlmanacAdviceRow(activity, label, value, color)
+        buildAlmanacAdviceRow(activity, label, value, color).apply {
+            findViewById<TextView>(R.id.calendar_almanac_advice_label).setThemeTextColor {
+                if (label == "宜") Palette.primaryText else Palette.danger
+            }
+        }
 
     private fun publicDeadlineRow(item: PublicDeadlineItem): LinearLayout =
         LinearLayout(activity).apply {
             val accent = DeadlineVisualLogic.color(item)
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = roundedBackground(activity, Palette.background, accent, radius = 7)
+            background = themedRoundedBackground(activity, { Palette.background }, { accent }, radius = 7)
             setPadding(activity.dp(10), activity.dp(7), activity.dp(5), activity.dp(7))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -3587,7 +3575,7 @@ internal class TeachingCalendarPage(
                         text = item.name
                         UiText.preserveRawText(this)
                         textSize = 13f
-                        setTextColor(Palette.text)
+                        setThemeTextColor { Palette.text }
                         setTypeface(typeface, Typeface.BOLD)
                         maxLines = 2
                         ellipsize = TextUtils.TruncateAt.END
@@ -3596,14 +3584,14 @@ internal class TeachingCalendarPage(
                         text = listOfNotNull(deadlineCategoryTitle(item), item.organizer)
                             .joinToString(" · ")
                         textSize = 11f
-                        setTextColor(accent)
+                        setThemeTextColor { accent }
                         setPadding(0, activity.dp(2), 0, 0)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(TextView(activity).apply {
                     text = deadlineTime(item.deadline)
                     textSize = 11f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     setPadding(activity.dp(8), 0, 0, 0)
                 })
                 item.officialURL?.let { url ->
@@ -3625,7 +3613,7 @@ internal class TeachingCalendarPage(
             scaleType = ImageView.ScaleType.CENTER
             isClickable = true
             isFocusable = true
-            background = roundedBackground(activity, Color.TRANSPARENT, radius = 8)
+            background = themedRoundedBackground(activity, { Color.TRANSPARENT }, radius = 8)
             tag = item.favoriteID
             setTag(R.id.favorite_deadline_item_key, item.favoriteID)
             fun bind() {
@@ -3633,9 +3621,9 @@ internal class TeachingCalendarPage(
                 setImageResource(
                     if (favorite) R.drawable.ic_star_filled else R.drawable.ic_star_outline,
                 )
-                imageTintList = ColorStateList.valueOf(
+                bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(
                     if (favorite) Palette.accent else Palette.muted,
-                )
+                ) }
                 contentDescription = activity.uiText(if (favorite) "取消收藏" else "收藏日程")
             }
             bind()
@@ -3655,7 +3643,7 @@ internal class TeachingCalendarPage(
         addView(TextView(activity).apply {
             text = label
             textSize = 10.5f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
         })
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -3663,7 +3651,7 @@ internal class TeachingCalendarPage(
                 addView(TextView(activity).apply {
                     text = title
                     textSize = 10.5f
-                    setTextColor(Palette.primaryText)
+                    setThemeTextColor { Palette.primaryText }
                     isClickable = true
                     isFocusable = true
                     setPadding(0, activity.dp(3), activity.dp(if (index == links.lastIndex) 0 else 12), 0)
@@ -3719,17 +3707,15 @@ internal class TeachingCalendarPage(
     ): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         if (asCard) {
-            background = roundedBackground(
-                activity,
-                Palette.surface,
+            background = themedRoundedBackground(
+                activity, { Palette.surface },
                 radius = 10,
-                borderWidthDp = TeachingCalendarLogic.monthDetailsBorderWidthDp(),
-            )
+                borderWidthDp = TeachingCalendarLogic.monthDetailsBorderWidthDp())
             setPadding(activity.dp(14), activity.dp(14), activity.dp(14), activity.dp(14))
             addView(TextView(activity).apply {
                 text = "当日日程"
                 textSize = 11f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setTypeface(typeface, Typeface.BOLD)
                 includeFontPadding = false
                 setPadding(0, 0, 0, activity.dp(4))
@@ -3739,7 +3725,7 @@ internal class TeachingCalendarPage(
         addView(TextView(activity).apply {
             text = formatter.format(day.time)
             textSize = 16f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, activity.dp(8))
         })
@@ -3753,7 +3739,7 @@ internal class TeachingCalendarPage(
                     item.name,
                 )
                 textSize = 13f
-                setTextColor(if (item.type == "holiday") Palette.holiday else Palette.primaryText)
+                setThemeTextColor { if (item.type == "holiday") Palette.holiday else Palette.primaryText }
                 setPadding(0, 0, 0, activity.dp(5))
                 isClickable = true
                 isFocusable = true
@@ -3800,7 +3786,7 @@ internal class TeachingCalendarPage(
                 addView(TextView(activity).apply {
                     text = "正在同步作业与活动 DDL…"
                     textSize = 12f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     setPadding(0, activity.dp(3), 0, activity.dp(3))
                 })
             }
@@ -3810,7 +3796,7 @@ internal class TeachingCalendarPage(
             addView(TextView(activity).apply {
                 text = "暂无课程"
                 textSize = 13f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
             })
         } else {
             courses.forEach { course ->
@@ -3833,13 +3819,11 @@ internal class TeachingCalendarPage(
             text = label
             textSize = 11f
             gravity = Gravity.CENTER
-            setTextColor(accent)
+            setThemeTextColor { accent }
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(
-                activity,
-                blend(accent, Palette.surface, 0.14f),
-                radius = 5,
-            )
+            background = themedRoundedBackground(
+                activity, { blend(accent, Palette.surface, 0.14f) },
+                radius = 5)
         }, LinearLayout.LayoutParams(activity.dp(30), activity.dp(30)).apply {
             marginEnd = activity.dp(9)
         })
@@ -3849,14 +3833,14 @@ internal class TeachingCalendarPage(
                 text = title
                 UiText.preserveRawText(this)
                 textSize = 13f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
                 text = subtitle
                 UiText.preserveRawText(this)
                 textSize = 11f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(2), 0, 0)
             })
             deadlineItem?.officialURL?.let { url ->
@@ -3880,7 +3864,7 @@ internal class TeachingCalendarPage(
             gravity = Gravity.TOP
             isClickable = true
             isFocusable = true
-            background = roundedBackground(activity, Color.TRANSPARENT, radius = 6)
+            background = themedRoundedBackground(activity, { Color.TRANSPARENT }, radius = 6)
             contentDescription = listOf(
                 course.name,
                 course.timeRange,
@@ -3889,7 +3873,7 @@ internal class TeachingCalendarPage(
             ).filter(String::isNotEmpty).joinToString("，")
             setPadding(0, activity.dp(4), 0, activity.dp(4))
             addView(View(activity).apply {
-                background = roundedBackground(activity, Palette.primary, radius = 2)
+                background = themedRoundedBackground(activity, { Palette.primary }, radius = 2)
             }, LinearLayout.LayoutParams(activity.dp(4), activity.dp(38)).apply {
                 marginEnd = activity.dp(10)
             })
@@ -3899,7 +3883,7 @@ internal class TeachingCalendarPage(
                     text = course.name
                     UiText.preserveRawText(this)
                     textSize = 13f
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, Typeface.BOLD)
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -3912,7 +3896,7 @@ internal class TeachingCalendarPage(
                         course.teacher.takeIf(String::isNotEmpty)?.let { "教师：$it" }.orEmpty(),
                     ).filter(String::isNotEmpty).joinToString(" · ")
                     textSize = 11f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     maxLines = 2
                     ellipsize = TextUtils.TruncateAt.END
                     includeFontPadding = false
@@ -3930,14 +3914,14 @@ internal class TeachingCalendarPage(
         }
         val card = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 10)
+            background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 10)
             setPadding(activity.dp(18), activity.dp(18), activity.dp(18), activity.dp(14))
         }
         card.addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
             addView(View(activity).apply {
-                background = roundedBackground(activity, Palette.accent, radius = 2)
+                background = themedRoundedBackground(activity, { Palette.accent }, radius = 2)
             }, LinearLayout.LayoutParams(activity.dp(4), activity.dp(44)).apply {
                 marginEnd = activity.dp(12)
             })
@@ -3947,7 +3931,7 @@ internal class TeachingCalendarPage(
                     text = course.name
                     UiText.preserveRawText(this)
                     textSize = 18f
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, Typeface.BOLD)
                     maxLines = 2
                     ellipsize = TextUtils.TruncateAt.END
@@ -3956,7 +3940,7 @@ internal class TeachingCalendarPage(
                 addView(TextView(activity).apply {
                     text = "课程详情"
                     textSize = 11f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     includeFontPadding = false
                     setPadding(0, activity.dp(3), 0, 0)
                 })
@@ -3965,12 +3949,12 @@ internal class TeachingCalendarPage(
                 text = "×"
                 textSize = 24f
                 gravity = Gravity.CENTER
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 includeFontPadding = false
                 isClickable = true
                 isFocusable = true
                 contentDescription = "关闭"
-                background = roundedBackground(activity, Palette.surfaceVariant, radius = 8)
+                background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 8)
                 setOnClickListener { dialog.dismiss() }
             }, LinearLayout.LayoutParams(activity.dp(36), activity.dp(36)).apply {
                 marginStart = activity.dp(8)
@@ -3999,12 +3983,12 @@ internal class TeachingCalendarPage(
             text = "完成"
             textSize = 14f
             gravity = Gravity.CENTER
-            setTextColor(Palette.onPrimary)
+            setThemeTextColor { Palette.onPrimary }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
             isClickable = true
             isFocusable = true
-            background = roundedBackground(activity, Palette.primaryFill, radius = 8)
+            background = themedRoundedBackground(activity, { Palette.primaryFill }, radius = 8)
             setOnClickListener { dialog.dismiss() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(42)).apply {
             topMargin = activity.dp(18)
@@ -4038,13 +4022,13 @@ internal class TeachingCalendarPage(
             addView(TextView(activity).apply {
                 text = label
                 textSize = 11f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 includeFontPadding = false
             }, LinearLayout.LayoutParams(activity.dp(54), ViewGroup.LayoutParams.WRAP_CONTENT))
             addView(TextView(activity).apply {
                 text = value
                 textSize = 14f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 includeFontPadding = false
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
@@ -4106,7 +4090,7 @@ internal class TeachingCalendarPage(
         muted: Boolean,
         supplementaryKinds: List<DeadlineVisualKind> = emptyList(),
     ): Drawable {
-        val fill = when {
+        fun fill() = when {
             selected -> Palette.selectedDate
             muted -> Color.TRANSPARENT
             courseCount <= 0 -> Color.TRANSPARENT
@@ -4134,18 +4118,16 @@ internal class TeachingCalendarPage(
             outerKind,
             today,
         )
-        val outer = roundedBackground(
-            activity,
-            fill,
-            borderColor,
+        val outer = themedRoundedBackground(
+            activity, { fill() }, {
+                if (selected && !today && outerKind == null && Palette.selection.preset != "default")
+                    Palette.selectedDateOutline else borderColor
+            },
             radius = 9,
-            borderWidthDp = borderWidthDp,
-        )
+            borderWidthDp = borderWidthDp)
         val innerKind = borderKinds.getOrNull(1) ?: return outer
-        val inner = roundedBackground(
-            activity,
-            Color.TRANSPARENT,
-            TeachingCalendarLogic.monthCellBorderColor(
+        val inner = themedRoundedBackground(
+            activity, { Color.TRANSPARENT }, { TeachingCalendarLogic.monthCellBorderColor(
                 supplementaryKind = innerKind,
                 today = false,
                 assignmentColor = Palette.assignment,
@@ -4156,10 +4138,9 @@ internal class TeachingCalendarPage(
                 summerCampDeadlineColor = Palette.summerCampDeadline,
                 hackathonDeadlineColor = Palette.hackathonDeadline,
                 customDeadlineColor = Palette.customDeadline,
-            ),
+            ) },
             radius = 7,
-            borderWidthDp = TeachingCalendarLogic.monthCellInnerBorderWidthDp(),
-        )
+            borderWidthDp = TeachingCalendarLogic.monthCellInnerBorderWidthDp())
         val inset = (
             TeachingCalendarLogic.monthCellInnerBorderInsetDp() *
                 activity.resources.displayMetrics.density

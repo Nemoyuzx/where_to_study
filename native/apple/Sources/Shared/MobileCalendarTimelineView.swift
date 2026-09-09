@@ -69,6 +69,7 @@ enum MobileCalendarAllDayLayout {
 }
 
 struct MobileCalendarTimelineView: View {
+    @Environment(\.appTheme) private var theme
     let days: [CalendarTimelineDay]
     let selectedDate: Date
     let showsWeekColumns: Bool
@@ -241,7 +242,7 @@ struct MobileCalendarTimelineView: View {
         if showsWeekColumns,
            let index = days.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: selectedDate) }) {
             Rectangle()
-                .fill(AppTheme.selectedDate.opacity(0.10))
+                .fill(theme.selectedDate.opacity(0.10))
                 .frame(width: dayWidth, height: MobileCalendarTimelineLayout.timelineHeight)
                 .offset(x: CGFloat(index) * dayWidth)
                 .allowsHitTesting(false)
@@ -341,13 +342,13 @@ struct MobileCalendarTimelineView: View {
                         .minimumScaleFactor(0.75)
                 }
             }
-            .foregroundStyle(AppTheme.onPrimary)
+            .foregroundStyle(theme.onPrimary)
             .padding(showsWeekColumns ? 5 : 6)
             .frame(width: width, height: height, alignment: .topLeading)
-            .background(AppTheme.primaryFill)
+            .background(theme.primaryFill)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(alignment: .leading) {
-                Rectangle().fill(AppTheme.accent).frame(width: 3)
+                Rectangle().fill(theme.accent).frame(width: 3)
             }
         }
         .buttonStyle(.plain)
@@ -383,7 +384,7 @@ struct MobileCalendarTimelineView: View {
             if !showsWeekColumns {
                 Text(Self.timeFormatter.string(from: now))
                     .font(.caption2.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(AppTheme.onPrimary)
+                    .foregroundStyle(theme.onPrimary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(AppTheme.danger, in: Capsule())

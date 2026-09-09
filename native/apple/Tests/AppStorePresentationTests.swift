@@ -44,6 +44,7 @@ final class AppStorePresentationTests: XCTestCase {
     func testSupportPresentationInBothLanguages() async throws {
         for language in [AppLanguage.simplifiedChinese, .english] {
             let support = AppSupportView()
+                .environment(\.appTheme, AppTheme())
                 .environment(\.locale, language.locale)
 
             try await attach(support, name: "mac-app-review-support-\(language.rawValue)")
@@ -57,6 +58,7 @@ final class AppStorePresentationTests: XCTestCase {
             defer { defaults.removePersistentDomain(forName: suite) }
             let state = PrivacyConsentState(defaults: defaults)
             let consent = PrivacyConsentGate(state: state)
+                .environment(\.appTheme, AppTheme())
                 .environment(\.locale, language.locale)
 
             try await attach(consent, name: "mac-app-review-first-launch-\(language.rawValue)")
@@ -71,7 +73,9 @@ final class AppStorePresentationTests: XCTestCase {
             credentialStore: AppReviewCredentialStore(),
             scheduleStore: AppReviewScheduleStore(),
             classroomStore: AppReviewClassroomStore(),
-            defaults: defaults
+            defaults: defaults,
+            themeWidgetDefaults: nil,
+            reloadWidgetTheme: {}
         )
     }
 

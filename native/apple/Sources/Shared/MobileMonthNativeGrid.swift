@@ -16,6 +16,7 @@ struct MobileMonthNativeGrid: View, @MainActor Animatable {
     let onSelect: (Date) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.sizeCategory) private var sizeCategory
+    @Environment(\.appTheme) private var theme
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(expansionProgress, cellHeight) }
@@ -23,7 +24,8 @@ struct MobileMonthNativeGrid: View, @MainActor Animatable {
     }
 
     var body: some View {
-        NativeMonthRepresentable(grid: self, colorScheme: colorScheme, sizeCategory: sizeCategory)
+        NativeMonthRepresentable(grid: self, colorScheme: colorScheme, sizeCategory: sizeCategory,
+                                 theme: theme.configuration)
     }
 }
 
@@ -31,11 +33,12 @@ private struct NativeMonthRepresentable: UIViewRepresentable {
     let grid: MobileMonthNativeGrid
     let colorScheme: ColorScheme
     let sizeCategory: ContentSizeCategory
+    let theme: ColorThemeConfiguration
 
     func makeUIView(context: Context) -> MobileMonthGridUIView { MobileMonthGridUIView() }
     func updateUIView(_ view: MobileMonthGridUIView, context: Context) {
         view.overrideUserInterfaceStyle = colorScheme == .dark ? .dark : .light
-        view.update(grid, contentSizeCategory: sizeCategory.uiCategory)
+        view.update(grid, contentSizeCategory: sizeCategory.uiCategory, theme: theme)
     }
     static func dismantleUIView(_ view: MobileMonthGridUIView, coordinator: ()) { view.dismantle() }
 }
@@ -47,6 +50,7 @@ final class MobileMonthGridUIView: UIView {
     private var dateFontPointSize: CGFloat = 15
     private var warmingGeneration: UInt64 = 0
     private var nextWarmCell: Int?
+    private var colorTheme: ColorThemeConfiguration = .default
 
     init() {
         super.init(frame: .zero)
@@ -66,7 +70,10 @@ final class MobileMonthGridUIView: UIView {
         cells.forEach { $0.onSelect = nil; $0.setActive(false) }
     }
 
-    func update(_ value: MobileMonthNativeGrid, contentSizeCategory: UIContentSizeCategory? = nil) {
+    func update(_ value: MobileMonthNativeGrid, contentSizeCategory: UIContentSizeCategory? = nil,
+                theme: ColorThemeConfiguration = .default) {
+        let themeChanged = colorTheme != theme
+        colorTheme = theme
         let previous = configuration
         let category = contentSizeCategory ?? traitCollection.preferredContentSizeCategory
         let fontChanged = fontCategory != category
@@ -100,6 +107,7 @@ final class MobileMonthGridUIView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for (index, cell) in cells.enumerated() {
+            cell.theme = AppTheme(configuration: theme)
             cell.onSelect = value.onSelect
             cell.dateFontPointSize = dateFontPointSize
             if warmIncrementally {
@@ -112,14 +120,15 @@ final class MobileMonthGridUIView: UIView {
                 if !cell.isHidden {
                     cell.configure(value.days[index], grid: value)
                 }
-            } else if fontChanged { cell.refreshAppearance() }
+            }
+            if fontChanged || themeChanged { cell.refreshAppearance() }
             if contentChanged || activationChanged || finishWarmupNow { cell.setActive(value.active) }
             if contentChanged || geometryChanged {
                 cell.setGeometry(progress: value.expansionProgress, topInset: value.dayTopInset)
             }
         }
         if contentChanged || activationChanged || accessibilityChanged || finishWarmupNow { refreshAccessibility() }
-        if contentChanged || geometryChanged || fontChanged || finishWarmupNow {
+        if contentChanged || geometryChanged || fontChanged || themeChanged || finishWarmupNow {
             setNeedsLayout()
             if bounds.width.isFinite, bounds.width > 24,
                bounds.height.isFinite, bounds.height > 0,
@@ -179,6 +188,7 @@ final class MobileMonthGridUIView: UIView {
 }
 
 final class MobileMonthDayControl: UIControl {
+    var theme = AppTheme()
     let numberButton = UIButton(type: .custom)
     let overflowButton = UIButton(type: .custom)
     private(set) var eventLabels = [MobileMonthEventLabel]()
@@ -341,9 +351,9 @@ final class MobileMonthDayControl: UIControl {
         func color(_ value: Color) -> UIColor { UIColor(value).resolvedColor(with: traitCollection) }
         let foreground: UIColor = dayIsSelected ? color(AppTheme.onPrimary)
             : !inMonth ? color(AppTheme.secondaryText).withAlphaComponent(0.45)
-            : day.holiday.map { color($0.type == "holiday" ? AppTheme.danger : AppTheme.primary) } ?? color(AppTheme.text)
-        backgroundColor = dayIsSelected ? color(AppTheme.selectedDate)
-            : day.courses.isEmpty ? .clear : color(AppTheme.primary).withAlphaComponent(CGFloat(min(0.08 + Double(day.courses.count) * 0.08, 0.36)))
+            : day.holiday.map { color($0.type == "holiday" ? AppTheme.danger : theme.primary) } ?? color(AppTheme.text)
+        backgroundColor = dayIsSelected ? color(theme.selectedDate)
+            : day.courses.isEmpty ? .clear : color(theme.primary).withAlphaComponent(CGFloat(min(0.08 + Double(day.courses.count) * 0.08, 0.36)))
         numberButton.titleLabel?.font = .systemFont(ofSize: dateFontPointSize, weight: dayIsSelected ? .bold : .medium)
         numberButton.setTitleColor(foreground, for: .normal)
         holidayLabel.textColor = foreground
@@ -353,15 +363,24 @@ final class MobileMonthDayControl: UIControl {
         overflowButton.backgroundColor = eventBackground
         overflowButton.setTitleColor(color(dayIsSelected ? AppTheme.onPrimary : AppTheme.secondaryText), for: .normal)
         for index in 0..<visibleEventCount {
-            let tint = color(dayIsSelected ? AppTheme.onPrimary : day.events[index].tint)
+            // Course colors are presentation state, so cached event snapshots
+            // remain reusable when the user changes their theme.
+            let event = day.events[index]
+            let eventTint = event.categoryKey == "课程详情" || event.categoryKey == "调休工作日" ? theme.primary : event.tint
+            let tint = color(dayIsSelected ? AppTheme.onPrimary : eventTint)
             eventLabels[index].textColor = tint
             eventLabels[index].backgroundColor = eventBackground
             eventLabels[index].layer.borderColor = tint.withAlphaComponent(0.55).cgColor
         }
-        outerBorder.isHidden = day.deadlineKinds.isEmpty
+        let showsSelectionOutline = dayIsSelected && theme.configuration.preset != .default
+        outerBorder.isHidden = day.deadlineKinds.isEmpty && !showsSelectionOutline
         innerBorder.isHidden = day.deadlineKinds.count < 2
-        if let first = day.deadlineKinds.first { outerBorder.strokeColor = color(CalendarDeadlinePresentation.tint(for: first)).cgColor }
-        if day.deadlineKinds.count > 1 { innerBorder.strokeColor = color(CalendarDeadlinePresentation.tint(for: day.deadlineKinds[1])).cgColor }
+        if let first = day.deadlineKinds.first {
+            outerBorder.strokeColor = color(theme.deadlineTint(for: first)).cgColor
+        } else if showsSelectionOutline {
+            outerBorder.strokeColor = color(theme.selectedDateOutline).cgColor
+        }
+        if day.deadlineKinds.count > 1 { innerBorder.strokeColor = color(theme.deadlineTint(for: day.deadlineKinds[1])).cgColor }
         setNeedsLayout()
     }
 

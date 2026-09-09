@@ -69,7 +69,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
                     .collect::<Vec<_>>()
                     .join(",");
                 cells.push(Cell::from(name).style(if is_today {
-                    Style::default().fg(theme.background).bg(theme.primary)
+                    theme.primary_selected()
                 } else {
                     Style::default().fg(theme.primary)
                 }));

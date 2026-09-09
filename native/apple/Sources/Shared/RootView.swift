@@ -117,6 +117,7 @@ final class CalendarDataServices: ObservableObject {
 }
 
 struct RootView: View {
+    private var theme: AppTheme { AppTheme(configuration: model.colorTheme) }
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var navigation: PrimaryNavigationState
     @Environment(\.scenePhase) private var scenePhase
@@ -320,6 +321,8 @@ struct RootView: View {
         }
         .environmentObject(dailyInfo)
         .environmentObject(calendarDeadlines)
+        .environment(\.appTheme, theme)
+        .tint(theme.configuration.preset == .default ? nil : theme.primary)
     }
 
     private var sampleModeBanner: some View {
@@ -328,10 +331,10 @@ struct RootView: View {
             Text("示例数据 · 不连接北邮教务服务")
                 .font(.caption.weight(.semibold))
         }
-        .foregroundStyle(AppTheme.text)
+        .foregroundStyle(theme.onAccent)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(AppTheme.accent)
+        .background(theme.accent)
         .accessibilityIdentifier("banner.sample-mode")
     }
 
@@ -374,7 +377,7 @@ struct RootView: View {
                 .buttonStyle(.plain)
                 .listRowBackground(
                     selectedSection == section
-                        ? AppTheme.primary.opacity(0.14)
+                        ? theme.primary.opacity(0.14)
                         : Color.clear
                 )
                 .accessibilityIdentifier(section.accessibilityIdentifier)
@@ -417,7 +420,7 @@ struct RootView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(AppTheme.primary)
+            .foregroundStyle(theme.primary)
             .accessibilityLabel(isRegularSidebarExpanded ? "收起侧栏" : "展开侧栏")
             .accessibilityIdentifier("navigation.sidebar-toggle")
 
@@ -452,7 +455,7 @@ struct RootView: View {
                                 .transition(.opacity)
                         }
                     }
-                    .foregroundStyle(selectedSection == section ? AppTheme.primary : AppTheme.text)
+                    .foregroundStyle(selectedSection == section ? theme.primary : AppTheme.text)
                     .frame(
                         maxWidth: isRegularSidebarExpanded ? .infinity : nil,
                         minHeight: 42,
@@ -466,7 +469,7 @@ struct RootView: View {
                     .padding(.horizontal, isRegularSidebarExpanded ? 12 : 0)
                     .background(
                         selectedSection == section
-                            ? AppTheme.primary.opacity(0.14)
+                            ? theme.primary.opacity(0.14)
                             : Color.clear,
                         in: RoundedRectangle(cornerRadius: 8)
                     )
@@ -500,7 +503,7 @@ struct RootView: View {
                     .tag(section)
             }
         }
-        .tint(AppTheme.primary)
+        .tint(theme.primary)
         // UIKit can retain the intrinsic widths of translated tab items. A
         // language-scoped identity rebuilds the compact tab bar so switching
         // English -> Chinese (or back again) recenters the native capsule.

@@ -2,8 +2,9 @@
 // 通知开关/UI 测试隔离域等）。数据无敏感信息，凭据一律走 ASSET 安全存储。
 import { preferences } from '@kit.ArkData';
 import { AppContext } from './AppContext';
+import { ColorThemePreferences } from './ColorThemeStore';
 
-export class PreferencesStore {
+export class PreferencesStore implements ColorThemePreferences {
   private readonly name: string;
 
   constructor(name: string = 'where-to-study') {

@@ -21,7 +21,7 @@ internal class FavoriteDeadlinesPage(
         isFillViewport = true
         clipToPadding = false
         scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-        setBackgroundColor(Palette.background)
+        setThemeBackgroundColor { Palette.background }
         addView(verticalPage(activity).apply {
             if (availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP) {
                 setPadding(
@@ -40,15 +40,13 @@ internal class FavoriteDeadlinesPage(
                     textSize = 28f
                     gravity = Gravity.CENTER
                     includeFontPadding = false
-                    setTextColor(Palette.primaryText)
+                    setThemeTextColor { Palette.primaryText }
                     contentDescription = activity.uiText("返回设置")
                     isClickable = true
                     isFocusable = true
-                    background = roundedBackground(
-                        activity,
-                        Palette.surfaceVariant,
-                        radius = UiMetrics.controlRadiusDp,
-                    )
+                    background = themedRoundedBackground(
+                        activity, { Palette.surfaceVariant },
+                        radius = UiMetrics.controlRadiusDp)
                     setOnClickListener {
                         activity.performControlHaptic(it)
                         activity.closeFavoriteManagement()
@@ -72,7 +70,7 @@ internal class FavoriteDeadlinesPage(
                         text = "暂无收藏日程"
                         textSize = 14f
                         gravity = Gravity.CENTER
-                        setTextColor(Palette.muted)
+                        setThemeTextColor { Palette.muted }
                         setPadding(0, activity.dp(28), 0, activity.dp(28))
                     })
                 } else {
@@ -86,7 +84,7 @@ internal class FavoriteDeadlinesPage(
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = roundedBackground(activity, Palette.background, Palette.border, radius = 8)
+            background = themedRoundedBackground(activity, { Palette.background }, { Palette.border }, radius = 8)
             setPadding(activity.dp(12), activity.dp(10), activity.dp(6), activity.dp(10))
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -98,7 +96,7 @@ internal class FavoriteDeadlinesPage(
                     text = item.name
                     UiText.preserveRawText(this)
                     textSize = 14f
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, Typeface.BOLD)
                     maxLines = 2
                     ellipsize = TextUtils.TruncateAt.END
@@ -111,7 +109,7 @@ internal class FavoriteDeadlinesPage(
                     }.joinToString(" · ")
                     UiText.preserveRawText(this)
                     textSize = 11f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     maxLines = 2
                     ellipsize = TextUtils.TruncateAt.END
                     setPadding(0, activity.dp(3), 0, 0)
@@ -119,14 +117,14 @@ internal class FavoriteDeadlinesPage(
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(ImageView(activity).apply {
                 setImageResource(R.drawable.ic_star_filled)
-                imageTintList = ColorStateList.valueOf(Palette.accent)
+                bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(Palette.accent) }
                 scaleType = ImageView.ScaleType.CENTER
                 isClickable = true
                 isFocusable = true
                 contentDescription = activity.uiText("取消收藏")
                 tag = item.favoriteID
                 setTag(R.id.favorite_deadline_item_key, item.favoriteID)
-                background = roundedBackground(activity, Palette.surfaceVariant, radius = 8)
+                background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 8)
                 setOnClickListener {
                     activity.performControlHaptic(it)
                     preferences.setFavorite(item, favorite = false)

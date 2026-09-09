@@ -43,6 +43,7 @@ final class PrivacyConsentState: ObservableObject {
 }
 
 struct PrivacyConsentGate: View {
+    @Environment(\.appTheme) private var theme
     @ObservedObject var state: PrivacyConsentState
     @State private var showingPrivacyPolicy = false
 
@@ -54,7 +55,7 @@ struct PrivacyConsentGate: View {
                 VStack(spacing: 22) {
                     Image(systemName: state.hasDeclined ? "hand.raised.slash" : "hand.raised.fill")
                         .font(.system(size: 46, weight: .semibold))
-                        .foregroundStyle(AppTheme.primary)
+                        .foregroundStyle(theme.primary)
                         .accessibilityHidden(true)
 
                     Text(LocalizedStringKey(

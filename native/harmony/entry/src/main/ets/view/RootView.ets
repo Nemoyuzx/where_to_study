@@ -182,11 +182,11 @@ export struct RootView {
     Row({ space: 8 }) {
       SymbolGlyph($r('sys.symbol.eye'))
         .fontSize(14)
-        .fontColor([AppTheme.text()])
+        .fontColor([AppTheme.onAccent()])
       Text(this.model.text('示例数据 · 不连接北邮教务服务'))
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
-        .fontColor(AppTheme.text())
+        .fontColor(AppTheme.onAccent())
     }
     .width('100%')
     .padding({ top: 8, bottom: 8 })

@@ -289,6 +289,7 @@ enum CalendarTimelineLogic {
 }
 
 struct CalendarTimelineView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
     @StateObject private var dateFormatterCache = CalendarDateFormatterCache()
     let days: [CalendarTimelineDay]
@@ -417,7 +418,7 @@ struct CalendarTimelineView: View {
             calendar.isDate($0.date, inSameDayAs: selectedDate)
         }) {
             Rectangle()
-                .fill(AppTheme.selectedDate.opacity(0.10))
+                .fill(theme.selectedDate.opacity(0.10))
                 .frame(width: dayWidth, height: totalHeight)
                 .offset(x: CGFloat(index) * dayWidth)
                 .allowsHitTesting(false)
@@ -573,16 +574,21 @@ struct CalendarTimelineView: View {
                 VStack(spacing: 5) {
                     Text(dayHeaderFormatter.string(from: day.date))
                         .font(.caption.bold())
-                        .foregroundStyle(isSelected ? AppTheme.onPrimary : AppTheme.text)
+                        .foregroundStyle(isSelected ? theme.onPrimary : AppTheme.text)
                     Text(headerDetail(for: day))
                         .font(.system(size: 10))
-                        .foregroundStyle(isSelected ? AppTheme.onPrimary : headerDetailColor(for: day))
+                        .foregroundStyle(isSelected ? theme.onPrimary : headerDetailColor(for: day))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                 }
                 .padding(.horizontal, 4)
                 .frame(width: dayWidth, height: baseHeaderHeight)
-                .background(isSelected ? AppTheme.selectedDate : Color.clear)
+                .background(isSelected ? theme.selectedDate : Color.clear)
+                .overlay {
+                    if isSelected && theme.configuration.preset != .default {
+                        Rectangle().strokeBorder(theme.selectedDateOutline, lineWidth: 1)
+                    }
+                }
                 .contentShape(Rectangle())
                 .overlay(alignment: .bottom) {
                     if isToday {
@@ -681,7 +687,7 @@ struct CalendarTimelineView: View {
     }
 
     private func allDayTint(_ kind: CalendarAllDayEventKind) -> Color {
-        CalendarDeadlinePresentation.tint(for: kind)
+        theme.deadlineTint(for: kind)
     }
 
     private func courseBlocks(dayWidth: CGFloat) -> some View {
@@ -721,8 +727,8 @@ struct CalendarTimelineView: View {
         let isSingleDay = days.count == 1
         let metadata = CalendarTimelineLogic.courseMetadata(placement.course)
         let background = placement.track == 0
-            ? AppTheme.primaryFill
-            : AppTheme.primaryFill.opacity(0.86)
+            ? theme.primaryFill
+            : theme.primaryFill.opacity(0.86)
 
         return VStack(alignment: .leading, spacing: 1) {
             Text(placement.course.name)
@@ -742,7 +748,7 @@ struct CalendarTimelineView: View {
                     .minimumScaleFactor(0.65)
             }
         }
-        .foregroundStyle(AppTheme.onPrimary)
+        .foregroundStyle(theme.onPrimary)
         .padding(isSingleDay ? 5 : 4)
         .frame(width: blockWidth, height: blockHeight, alignment: .topLeading)
         .background(background)
@@ -780,7 +786,7 @@ struct CalendarTimelineView: View {
         if let minute = currentMinuteIfVisible(now) {
             Text(timeFormatter.string(from: now))
                 .font(.caption2.monospacedDigit())
-                .foregroundStyle(AppTheme.onPrimary)
+                .foregroundStyle(theme.onPrimary)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Self.nowRed))
@@ -814,7 +820,7 @@ struct CalendarTimelineView: View {
     }
 
     private func headerDetailColor(for day: CalendarTimelineDay) -> Color {
-        if !day.courses.isEmpty { return AppTheme.primary }
+        if !day.courses.isEmpty { return theme.primary }
         return AppTheme.secondaryText
     }
 

@@ -80,7 +80,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         .style(if holiday_kind == Some("休") {
             theme.danger_text()
         } else if holiday_kind == Some("班") {
-            theme.gold_text()
+            theme.workday_text()
         } else {
             theme.muted_text()
         });

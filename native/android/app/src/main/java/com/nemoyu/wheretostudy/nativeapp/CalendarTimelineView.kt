@@ -131,7 +131,7 @@ class CalendarTimelineView(
     init {
         orientation = HORIZONTAL
         isBaselineAligned = false
-        setBackgroundColor(Palette.surface)
+        setThemeBackgroundColor { Palette.surface }
 
         val totalHeight = context.dp(CalendarTimelineLogic.totalHeightDp(compact, showDayHeader))
         val showCourseSlots = !compact || days.size == 1
@@ -292,6 +292,12 @@ private class CalendarTimelineCanvas(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        // Paint instances are cached across draws; resolve their theme colors every frame.
+        linePaint.color = Palette.border
+        slotLinePaint.color = CalendarTimelineLogic.courseSlotLineColor(Palette.muted)
+        slotLabelStrokePaint.color = Palette.border
+        textPaint.color = Palette.muted
+        boldPaint.color = Palette.text
         canvas.drawColor(Palette.surface)
         when (layer) {
             TimelineLayer.AXIS -> drawAxis(canvas)
@@ -514,6 +520,8 @@ private class CalendarTimelineCanvas(
                     surfaceColor = Palette.surface,
                 )
                 canvas.drawRect(left, 0f, right, headerHeight, fillPaint)
+                linePaint.color = if (selected && Palette.selection.preset != "default")
+                    Palette.selectedDateOutline else Palette.border
                 canvas.drawLine(left, 0f, left, headerHeight, linePaint)
                 canvas.drawLine(right, 0f, right, headerHeight, linePaint)
                 canvas.drawLine(left, headerHeight, right, headerHeight, linePaint)

@@ -92,6 +92,10 @@ object ThemePalettes {
 
 object Palette {
     private var colors = ThemePalettes.light
+    var selection: ColorThemeSelection = ColorThemeSelection()
+        private set
+    var revision: Long = 0
+        private set
 
     val primary get() = colors.primary
     val primaryFill get() = colors.primaryFill
@@ -99,6 +103,11 @@ object Palette {
     val primaryText get() = colors.primaryText
     val onPrimary get() = colors.onPrimary
     val selectedDate get() = colors.selectedDate
+    val selectedDateOutline get() = if (selection.preset == "default") colors.selectedDate else
+        ColorThemeLogic.text(
+            ColorThemeLogic.color(selection.seeds.selectedDate),
+            colors.background == ThemePalettes.dark.background,
+        )
     val accent get() = colors.accent
     val onAccent get() = colors.onAccent
     val background get() = colors.background
@@ -124,7 +133,11 @@ object Palette {
     val segmentedSelection get() = colors.segmentedSelection
 
     fun configure(context: Context) {
-        colors = ThemePalettes.forConfiguration(context.resources.configuration)
+        selection = ColorThemePreferences(context).load()
+        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+            Configuration.UI_MODE_NIGHT_YES
+        colors = ColorThemeLogic.palette(selection, dark)
+        revision++
     }
 }
 
@@ -234,13 +247,13 @@ fun pageTitle(
         addView(TextView(context).apply {
             text = context.getString(R.string.planner_eyebrow)
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setTypeface(typeface, Typeface.BOLD)
         })
         addView(TextView(context).apply {
             text = title
             textSize = titleSizeSp
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
             setPadding(0, context.dp(4), 0, 0)
@@ -249,7 +262,7 @@ fun pageTitle(
             addView(TextView(context).apply {
                 text = subtitle
                 textSize = 14f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setPadding(0, context.dp(5), 0, 0)
                 if (subtitleIconResource != 0) {
                     setCompoundDrawablesRelativeWithIntrinsicBounds(
@@ -259,7 +272,7 @@ fun pageTitle(
                         0,
                     )
                     compoundDrawablePadding = context.dp(7)
-                    compoundDrawableTintList = ColorStateList.valueOf(Palette.muted)
+                    bindTheme("compoundDrawableTintList") { compoundDrawableTintList = ColorStateList.valueOf(Palette.muted) }
                 }
             })
         }
@@ -272,7 +285,7 @@ fun sectionTitle(
 ): TextView = TextView(context).apply {
     text = title
     textSize = 17f
-    setTextColor(Palette.text)
+    setThemeTextColor { Palette.text }
     setTypeface(typeface, Typeface.BOLD)
     includeFontPadding = false
     gravity = Gravity.CENTER_VERTICAL
@@ -284,7 +297,7 @@ fun sectionTitle(
         }
         setCompoundDrawablesRelative(icon, null, null, null)
         compoundDrawablePadding = context.dp(6)
-        compoundDrawableTintList = ColorStateList.valueOf(Palette.text)
+        bindTheme("compoundDrawableTintList") { compoundDrawableTintList = ColorStateList.valueOf(Palette.text) }
     }
 }
 
@@ -293,12 +306,9 @@ fun surface(
     showsBorder: Boolean = true,
 ): LinearLayout = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
-    background = roundedBackground(
-        context,
-        Palette.surface,
-        if (showsBorder) Palette.border else Color.TRANSPARENT,
-        radius = UiMetrics.surfaceRadiusDp,
-    )
+    background = themedRoundedBackground(
+        context, { Palette.surface }, { if (showsBorder) Palette.border else Color.TRANSPARENT },
+        radius = UiMetrics.surfaceRadiusDp)
     setPadding(
         context.dp(UiMetrics.surfacePaddingDp),
         context.dp(UiMetrics.surfacePaddingDp),
@@ -312,7 +322,7 @@ fun fixedTab(context: Context, label: String, onClick: () -> Unit): TextView =
         text = label
         textSize = 15f
         gravity = Gravity.CENTER
-        setTextColor(Palette.text)
+        setThemeTextColor { Palette.text }
         isClickable = true
         isFocusable = true
         minHeight = context.dp(UiMetrics.controlHeightDp)
@@ -320,23 +330,18 @@ fun fixedTab(context: Context, label: String, onClick: () -> Unit): TextView =
     }
 
 fun TextView.setSelectedStyle(context: Context, selected: Boolean) {
-    setTextColor(if (selected) Palette.onPrimary else Palette.text)
-    background = roundedBackground(
-        context,
-        if (selected) Palette.primaryFill else Palette.surface,
-        if (selected) Palette.primaryFill else Palette.border,
-        radius = UiMetrics.controlRadiusDp,
-    )
+    setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
+    background = themedRoundedBackground(
+        context, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
+        radius = UiMetrics.controlRadiusDp)
     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
 }
 
 fun TextView.setCompactSelectedStyle(context: Context, selected: Boolean) {
-    setTextColor(Palette.text)
-    background = roundedBackground(
-        context,
-        if (selected) Palette.segmentedSelection else Color.TRANSPARENT,
-        radius = UiMetrics.controlRadiusDp,
-    )
+    setThemeTextColor { Palette.text }
+    background = themedRoundedBackground(
+        context, { if (selected) Palette.segmentedSelection else Color.TRANSPARENT },
+        radius = UiMetrics.controlRadiusDp)
     setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
 }
 

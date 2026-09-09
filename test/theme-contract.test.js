@@ -502,9 +502,10 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
   assert.match(appleThemeSource, /selectedDate: AppThemeColor\(red: 29, green: 78, blue: 216\)/)
   assert.match(appleThemeSource, /static let selectedDate = adaptiveColor\(\\\.selectedDate\)/)
   for (const source of [appleCalendarSource, appleMobileCalendarSource, appleTimelineSource]) {
-    assert.match(source, /AppTheme\.selectedDate/)
+    assert.match(source, /@Environment\(\\\.appTheme\)/)
+    assert.match(source, /theme\.selectedDate/)
   }
-  assert.match(appleMobileTimelineSource, /AppTheme\.selectedDate\.opacity\(0\.10\)/)
+  assert.match(appleMobileTimelineSource, /theme\.selectedDate\.opacity\(0\.10\)/)
   assert.ok(
     appleTimelineSource.indexOf('selectedColumn(dayWidth: dayWidth)') <
       appleTimelineSource.indexOf('dayGrid(width: width, dayWidth: dayWidth)'),
@@ -638,7 +639,7 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   assert.match(harmonyMobileCalendarSource, /allDayItemsOn\(renderDate\)\.slice\(0, 3\)/)
   assert.match(
     harmonyMobileCalendarSource,
-    /weekAllDayItems\(renderDate:[\s\S]*ForEach\(this\.weekDates\(renderDate\)[\s\S]*\.fontSize\(9\.5\)[\s\S]*\.height\(40\)/,
+    /weekAllDayItems\(renderDate:[\s\S]*ForEach\(this\.weekDates\(renderDate\)[\s\S]*\.fontSize\(CalendarTypography\.fontSize\(9\.5, this\.isPc\)\)[\s\S]*\.height\(40\)/,
   )
   assert.match(harmonyMobileCalendarSource, /this\.presentAllDayDialog\(day, CalendarMode\.week\)/)
   assert.match(
@@ -671,8 +672,8 @@ test('Harmony selected dates, deadline legends, switches, and timeline lines sta
     /backgroundColor\(day\.equals\(this\.selectedDate\(\)\) \?\s*AppTheme\.selectedDate\(\)/,
   )
   assert.match(harmonyMobileCalendarSource, /DeadlineVisual\.borderKinds/)
-  assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 10, 7, 6\)/)
-  assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 4, 2, 4\)/)
+  assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 10, 7, 6,\s*day\.equals\(this\.renderedMonthDate\(renderDate, interactive\)\)\)/)
+  assert.match(harmonyMobileCalendarSource, /deadlineBorderLayers\(day, 4, 2, 4, day\.equals\(this\.selectedDate\(\)\)\)/)
   assert.match(harmonyExpandedCalendarSource, /deadlineBorderLayers\(day/)
   assert.match(harmonyMobileCalendarSource, /width: index === 0 \? 1\.5 : 1/)
   assert.match(harmonyExpandedCalendarSource, /width: index === 0 \? 1\.5 : 1/)
@@ -895,8 +896,8 @@ test('native Android compact surfaces and timeline keep the iOS density contract
   )
   assert.doesNotMatch(androidPlannerSource, /surface\(activity\)\.apply/)
   assert.doesNotMatch(androidSettingsSource, /surface\(activity\)\.apply/)
-  assert.match(androidPlannerSource, /roundedBackground\([\s\S]*Palette\.border/)
-  assert.match(androidSettingsSource, /roundedBackground\([\s\S]*Palette\.border/)
+  assert.match(androidPlannerSource, /themedRoundedBackground\([\s\S]*\{ Palette\.border \}/)
+  assert.match(androidSettingsSource, /themedRoundedBackground\([\s\S]*\{ Palette\.border \}/)
   assert.match(androidPlannerSource, /text = "联动查询"[\s\S]*textSize = 28f/)
   assert.match(androidSettingsSource, /text = "设置"[\s\S]*textSize = 28f/)
   assert.doesNotMatch(androidPlannerSource, /setImageResource\(R\.drawable\.ic_refresh\)/)
@@ -912,7 +913,7 @@ test('native Android compact surfaces and timeline keep the iOS density contract
   assert.match(androidSettingsSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
   assert.match(androidCalendarSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
   assert.match(androidTimelineSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
-  assert.match(androidTimelineSource, /setBackgroundColor\(Palette\.surface\)/)
+  assert.match(androidTimelineSource, /setThemeBackgroundColor\s*\{ Palette\.surface \}/)
   assert.match(androidTimelineSource, /canvas\.drawColor\(Palette\.surface\)/)
   assert.match(androidTimelineSource, /showCourseSlots = true/)
   assert.match(androidTimelineSource, /DashPathEffect/)
@@ -1107,7 +1108,8 @@ test('collapsed Android foldable rail centers icons inside selection frames', ()
     /setCompoundDrawablesRelativeWithIntrinsicBounds\(\s*0,\s*destination\.iconResource/,
   )
   assert.match(presentation, /view\.gravity = if \(navigationRailCollapsed\) Gravity\.CENTER/)
-  assert.match(androidMainActivitySource, /view\.foregroundTintList = ColorStateList\.valueOf\(contentColor\)/)
+  assert.match(androidMainActivitySource, /view\.bindTheme\("navigationTint"\)[\s\S]*val color = ColorStateList\.valueOf\(if \(selected\) Palette\.primaryText else Palette\.muted\)/)
+  assert.match(androidMainActivitySource, /view\.foregroundTintList = color/)
 })
 
 test('light and dark text combinations meet WCAG AA contrast', () => {

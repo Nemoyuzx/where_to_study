@@ -275,6 +275,7 @@ final class MobileMonthDetailsScrollState {
 }
 
 struct MobileTeachingCalendarView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
     let calendarDeadlines: CalendarDeadlineStore
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -429,7 +430,7 @@ struct MobileTeachingCalendarView: View {
                     navigate(to: .now)
                 }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.primary)
+                    .foregroundStyle(theme.primary)
                     .accessibilityIdentifier("calendar.mobile.today")
 
                 Button { moveDate(-1) } label: {
@@ -576,12 +577,14 @@ struct MobileTeachingCalendarView: View {
                 }
                 .frame(height: 8)
             }
-            .foregroundStyle(selected ? AppTheme.onPrimary : dateStripForeground(holiday: holiday))
+            .foregroundStyle(selected ? theme.onPrimary : dateStripForeground(holiday: holiday))
             .frame(maxWidth: .infinity, minHeight: 56)
-            .background(selected ? AppTheme.selectedDate : Color.clear)
+            .background(selected ? theme.selectedDate : Color.clear)
             .overlay {
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(today ? AppTheme.danger : Color.clear, lineWidth: 2)
+                    .stroke(today ? AppTheme.danger
+                            : selected && theme.configuration.preset != .default ? theme.selectedDateOutline : Color.clear,
+                            lineWidth: 2)
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .contentShape(Rectangle())
@@ -614,7 +617,7 @@ struct MobileTeachingCalendarView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(AppTheme.primary.opacity(0.08))
+            .background(theme.primary.opacity(0.08))
             .accessibilityIdentifier("calendar.mobile.status")
         }
     }
@@ -832,7 +835,7 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func allDayEventTint(_ kind: CalendarAllDayEventKind) -> Color {
-        CalendarDeadlinePresentation.tint(for: kind)
+        theme.deadlineTint(for: kind)
     }
 
     private var monthView: some View {
@@ -1325,7 +1328,7 @@ struct MobileTeachingCalendarView: View {
             ForEach(holidays) { item in
                 Label(item.name, systemImage: item.type == "holiday" ? "calendar.badge.exclamationmark" : "briefcase")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(item.type == "holiday" ? AppTheme.danger : AppTheme.primary)
+                    .foregroundStyle(item.type == "holiday" ? AppTheme.danger : theme.primary)
             }
             if dayCourses.isEmpty {
                 Text("暂无课程")
@@ -1337,7 +1340,7 @@ struct MobileTeachingCalendarView: View {
                     } label: {
                         HStack(alignment: .top, spacing: 10) {
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(AppTheme.primary)
+                                .fill(theme.primary)
                                 .frame(width: 4, height: 38)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(course.name).font(.subheadline.weight(.semibold))
@@ -1386,7 +1389,7 @@ struct MobileTeachingCalendarView: View {
                 ForEach(items) { item in
                     HStack(alignment: .top, spacing: 9) {
                         Image(systemName: "doc.text")
-                            .foregroundStyle(AppTheme.primary)
+                            .foregroundStyle(theme.primary)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.title).font(.subheadline.weight(.semibold))
                             Text([item.courseName, item.status].compactMap { $0 }.joined(separator: " · "))
@@ -1559,7 +1562,7 @@ struct MobileTeachingCalendarView: View {
         } label: {
             Image(systemName: isFavorite ? "star.fill" : "star")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isFavorite ? AppTheme.accent : AppTheme.secondaryText)
+                .foregroundStyle(isFavorite ? theme.accent : AppTheme.secondaryText)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
@@ -1872,7 +1875,7 @@ struct MobileTeachingCalendarView: View {
                 systemImage: holiday.type == "holiday" ? "calendar.badge.exclamationmark" : "briefcase"
             )
             .font(.headline)
-            .foregroundStyle(holiday.type == "holiday" ? AppTheme.danger : AppTheme.primary)
+            .foregroundStyle(holiday.type == "holiday" ? AppTheme.danger : theme.primary)
             detailRow("日期", fullDateFormatter.string(from: day))
             detailRow("类型", holiday.type == "holiday" ? "法定节假日" : "调休工作日")
         }
@@ -2758,7 +2761,7 @@ struct MobileTeachingCalendarView: View {
 
     private func dateStripForeground(holiday: HolidayItem?) -> Color {
         guard let holiday else { return AppTheme.text }
-        return holiday.type == "holiday" ? AppTheme.danger : AppTheme.primary
+        return holiday.type == "holiday" ? AppTheme.danger : theme.primary
     }
 
     private func dayAccessibilityLabel(_ day: Date) -> String {
@@ -2832,6 +2835,7 @@ private struct MobileDeadlineStoreContent<Content: View>: View {
 }
 
 private struct MobileAlmanacCard: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     let day: Date
@@ -2877,7 +2881,7 @@ private struct MobileAlmanacCard: View {
                         .foregroundStyle(AppTheme.secondaryText)
                 }
                 if let yi = info.yi {
-                    adviceRow("宜", value: yi, color: AppTheme.primary)
+                    adviceRow("宜", value: yi, color: theme.primary)
                 }
                 if let ji = info.ji {
                     adviceRow("忌", value: ji, color: AppTheme.danger)

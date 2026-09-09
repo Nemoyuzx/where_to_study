@@ -13,11 +13,12 @@ struct MobileYearNativeMonthGrid: View {
     let language: AppLanguage
     let onSelect: (Date) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appTheme) private var theme
 
     static var height: CGFloat { MobileYearMonthGridUIView.contentHeight }
 
     var body: some View {
-        NativeYearMonthRepresentable(grid: self, colorScheme: colorScheme)
+        NativeYearMonthRepresentable(grid: self, colorScheme: colorScheme, theme: theme.configuration)
             .frame(height: Self.height)
     }
 }
@@ -25,13 +26,14 @@ struct MobileYearNativeMonthGrid: View {
 private struct NativeYearMonthRepresentable: UIViewRepresentable {
     let grid: MobileYearNativeMonthGrid
     let colorScheme: ColorScheme
+    let theme: ColorThemeConfiguration
 
     func makeUIView(context: Context) -> MobileYearMonthGridUIView { MobileYearMonthGridUIView() }
 
     func updateUIView(_ view: MobileYearMonthGridUIView, context: Context) {
         let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
         if view.overrideUserInterfaceStyle != style { view.overrideUserInterfaceStyle = style }
-        view.update(grid)
+        view.update(grid, theme: theme)
     }
 
     static func dismantleUIView(_ view: MobileYearMonthGridUIView, coordinator: ()) { view.dismantle() }
@@ -61,6 +63,7 @@ final class MobileYearMonthGridUIView: UIView {
     private var renderedPalette = [UInt32]()
     private var renderedScale: CGFloat = 0
     private var renderedSize = CGSize.zero
+    private var theme = AppTheme()
     private(set) var completedDisplayCount = 0
     private(set) var weekdayLabels = [String]()
     private(set) var dayAccessibilityElements = [MobileYearDayAccessibilityElement]()
@@ -81,7 +84,9 @@ final class MobileYearMonthGridUIView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func update(_ grid: MobileYearNativeMonthGrid) {
+    func update(_ grid: MobileYearNativeMonthGrid, theme configuration: ColorThemeConfiguration = .default) {
+        let themeChanged = theme.configuration != configuration
+        theme = AppTheme(configuration: configuration)
         let next = Content(
             month: grid.month,
             selectedDateKey: grid.selectedDateKey,
@@ -112,7 +117,7 @@ final class MobileYearMonthGridUIView: UIView {
                 dayAccessibilityElements.forEach { $0.isAccessibilityElement = false }
             }
         }
-        let paletteIsStale = (contentChanged || activationChanged || renderedPalette.isEmpty)
+        let paletteIsStale = (contentChanged || activationChanged || themeChanged || renderedPalette.isEmpty)
             && renderedPalette != resolvedPaletteSignature()
         let displayIsStale = renderedContent != next || paletteIsStale
             || renderedScale != currentDisplayScale
@@ -245,7 +250,7 @@ final class MobileYearMonthGridUIView: UIView {
 
     private func resolvedPaletteSignature() -> [UInt32] {
         let colors: [Color] = [
-            AppTheme.primary, AppTheme.selectedDate, AppTheme.text, AppTheme.onPrimary,
+            theme.primary, theme.selectedDate, theme.selectedDateOutline, AppTheme.text, AppTheme.onPrimary,
             AppTheme.secondaryText, AppTheme.border, AppTheme.danger,
             AppTheme.assignment, AppTheme.schoolNotice, AppTheme.competitionDeadline,
             AppTheme.conferenceDeadline, AppTheme.summerCampDeadline,
@@ -299,8 +304,9 @@ final class MobileYearMonthGridUIView: UIView {
 
     private func drawContent(in context: CGContext, rect: CGRect, content: Content) {
         func color(_ value: Color) -> UIColor { UIColor(value).resolvedColor(with: traitCollection) }
-        let primary = color(AppTheme.primary)
-        let selectedFill = color(AppTheme.selectedDate)
+        let primary = color(theme.primary)
+        let selectedFill = color(theme.selectedDate)
+        let selectionOutline = color(theme.selectedDateOutline)
         let text = color(AppTheme.text)
         let selectedText = color(AppTheme.onPrimary)
         let secondaryText = color(AppTheme.secondaryText)
@@ -326,15 +332,17 @@ final class MobileYearMonthGridUIView: UIView {
             )
             context.setFillColor(fill.cgColor)
             context.fill(frame)
-            drawText(day.dayNumberText, in: frame, color: selected ? selectedText : text)
+            let showsSelectionOutline = selected && theme.configuration.preset != .default
+            drawText(day.dayNumberText, in: frame, color: selected ? selectedText : text, bold: showsSelectionOutline)
             context.addPath(outline)
-            context.setStrokeColor(day.deadlineKinds.first.map { color(CalendarDeadlinePresentation.tint(for: $0)) }?.cgColor ?? border.cgColor)
-            context.setLineWidth(day.deadlineKinds.isEmpty ? 0.5 : 1.5)
+            context.setStrokeColor(day.deadlineKinds.first.map { color(theme.deadlineTint(for: $0)) }?.cgColor
+                ?? (showsSelectionOutline ? selectionOutline : border).cgColor)
+            context.setLineWidth(day.deadlineKinds.isEmpty && !showsSelectionOutline ? 0.5 : 1.5)
             context.strokePath()
             let innerFrame = frame.insetBy(dx: 2, dy: 2)
             if day.deadlineKinds.count > 1, innerFrame.width > 0, innerFrame.height > 0 {
                 context.addPath(UIBezierPath(roundedRect: innerFrame, cornerRadius: 2).cgPath)
-                context.setStrokeColor(color(CalendarDeadlinePresentation.tint(for: day.deadlineKinds[1])).cgColor)
+                context.setStrokeColor(color(theme.deadlineTint(for: day.deadlineKinds[1])).cgColor)
                 context.setLineWidth(1)
                 context.strokePath()
             }
@@ -346,8 +354,9 @@ final class MobileYearMonthGridUIView: UIView {
         }
     }
 
-    private func drawText(_ value: String, in rect: CGRect, color: UIColor) {
-        let attributes: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: color]
+    private func drawText(_ value: String, in rect: CGRect, color: UIColor, bold: Bool = false) {
+        let font = bold ? UIFont.systemFont(ofSize: 8, weight: .bold) : Self.font
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         let string = value as NSString
         let size = string.size(withAttributes: attributes)
         string.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: attributes)

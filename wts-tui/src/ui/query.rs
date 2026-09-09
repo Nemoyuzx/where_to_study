@@ -1,5 +1,5 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Tabs, Wrap};
 use ratatui::Frame;
@@ -24,12 +24,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     };
     let tabs = Tabs::new(["班车查询", "重要事件查询"])
         .select(selected)
-        .highlight_style(
-            Style::default()
-                .fg(theme.background)
-                .bg(theme.primary)
-                .add_modifier(Modifier::BOLD),
-        )
+        .highlight_style(theme.primary_selected().add_modifier(Modifier::BOLD))
         .divider("  ")
         .block(Block::default().borders(Borders::ALL).title("查询"));
     frame.render_widget(tabs, chunks[0]);
@@ -202,12 +197,7 @@ fn draw_events(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
                 item.name
             );
             if selected {
-                Line::from(content).style(
-                    Style::default()
-                        .fg(theme.background)
-                        .bg(theme.primary)
-                        .add_modifier(Modifier::BOLD),
-                )
+                Line::from(content).style(theme.primary_selected().add_modifier(Modifier::BOLD))
             } else {
                 Line::from(content)
             }

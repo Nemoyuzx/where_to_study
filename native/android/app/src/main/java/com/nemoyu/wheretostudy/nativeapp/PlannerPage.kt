@@ -84,7 +84,7 @@ class PlannerPage(
         return ScrollView(activity).apply {
             isFillViewport = true
             clipToPadding = false
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
             isVerticalScrollBarEnabled = true
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
             addView(verticalPage(activity).apply {
@@ -151,7 +151,7 @@ class PlannerPage(
             }
             addView(ImageView(activity).apply {
                 setImageResource(R.drawable.ic_section_weather)
-                imageTintList = ColorStateList.valueOf(Palette.primaryText)
+                bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(Palette.primaryText) }
                 layoutParams = LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
                     marginEnd = activity.dp(10)
                 }
@@ -161,7 +161,7 @@ class PlannerPage(
                 addView(TextView(activity).apply {
                     text = "校区天气"
                     textSize = if (isCompact) 15f else 17f
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, Typeface.BOLD)
                     includeFontPadding = false
                 })
@@ -170,7 +170,7 @@ class PlannerPage(
                         "${it.campusName} · ${it.district} · ${it.currentWeather} ${it.currentTemperature}°"
                     } ?: "今日与明日"
                     textSize = 12f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
                     includeFontPadding = false
@@ -179,7 +179,7 @@ class PlannerPage(
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(ImageView(activity).apply {
                 setImageResource(R.drawable.ic_chevron_down)
-                imageTintList = ColorStateList.valueOf(Palette.muted)
+                bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(Palette.muted) }
                 rotation = if (queryState.weatherExpanded) 180f else 0f
                 layoutParams = LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
                     marginStart = activity.dp(8)
@@ -198,7 +198,7 @@ class PlannerPage(
 
         if (queryState.weatherExpanded) {
             addView(View(activity).apply {
-                setBackgroundColor(Palette.border)
+                setThemeBackgroundColor { Palette.border }
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     activity.dp(1),
@@ -224,16 +224,13 @@ class PlannerPage(
                         text = "${weatherRepository.error(campusID)}，点击重试"
                         textSize = if (isCompact) 12.5f else 14f
                         gravity = Gravity.CENTER
-                        setTextColor(Palette.danger)
+                        setThemeTextColor { Palette.danger }
                         isClickable = true
                         isFocusable = true
                         minHeight = activity.dp(if (isCompact) 48 else 56)
-                        background = roundedBackground(
-                            activity,
-                            Palette.dangerSurface,
-                            Palette.dangerBorder,
-                            radius = 7,
-                        )
+                        background = themedRoundedBackground(
+                            activity, { Palette.dangerSurface }, { Palette.dangerBorder },
+                            radius = 7)
                         setOnClickListener {
                             activity.performControlHaptic(it)
                             weatherRepository.load(campusID, force = true) {
@@ -275,12 +272,12 @@ class PlannerPage(
                             text = weather.reportTime
                             UiText.preserveRawText(this)
                             textSize = 11f
-                            setTextColor(Palette.muted)
+                            setThemeTextColor { Palette.muted }
                         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                         addView(TextView(activity).apply {
                             text = "数据：UAPI"
                             textSize = 11f
-                            setTextColor(Palette.muted)
+                            setThemeTextColor { Palette.muted }
                         })
                     })
                 }
@@ -293,15 +290,12 @@ class PlannerPage(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(activity.dp(10), activity.dp(9), activity.dp(10), activity.dp(9))
-            background = roundedBackground(
-                activity,
-                Palette.surfaceVariant,
-                Palette.border,
-                radius = 7,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.surfaceVariant }, { Palette.border },
+                radius = 7)
             addView(ImageView(activity).apply {
                 setImageResource(R.drawable.ic_section_weather)
-                imageTintList = ColorStateList.valueOf(Palette.primaryText)
+                bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(Palette.primaryText) }
                 layoutParams = LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
                     marginEnd = activity.dp(8)
                 }
@@ -311,7 +305,7 @@ class PlannerPage(
                 addView(TextView(activity).apply {
                     text = "${activity.uiText(label)} · ${shortWeatherDate(day.date)}"
                     textSize = 13f
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, Typeface.BOLD)
                 })
                 addView(TextView(activity).apply {
@@ -322,7 +316,7 @@ class PlannerPage(
                     }
                     UiText.preserveRawText(this)
                     textSize = 12f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(LinearLayout(activity).apply {
@@ -331,7 +325,7 @@ class PlannerPage(
                 addView(TextView(activity).apply {
                     text = "${day.temperatureMinimum}° / ${day.temperatureMaximum}°"
                     textSize = 13f
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, Typeface.BOLD)
                     gravity = Gravity.END
                 })
@@ -339,7 +333,7 @@ class PlannerPage(
                     addView(TextView(activity).apply {
                         text = "降水 $probability%"
                         textSize = 11f
-                        setTextColor(Palette.muted)
+                        setThemeTextColor { Palette.muted }
                         gravity = Gravity.END
                     })
                 }
@@ -372,7 +366,7 @@ class PlannerPage(
             addView(TextView(activity).apply {
                 text = activity.getString(R.string.classroom_source_format, cache.targetDate)
                 textSize = 12f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(4), 0, 0)
             })
         }
@@ -383,11 +377,9 @@ class PlannerPage(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(activity.dp(2), activity.dp(2), activity.dp(2), activity.dp(2))
-            background = roundedBackground(
-                activity,
-                Palette.surfaceVariant,
-                radius = UiMetrics.controlRadiusDp,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.surfaceVariant },
+                radius = UiMetrics.controlRadiusDp)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(32),
@@ -415,13 +407,11 @@ class PlannerPage(
         }
         tabs.forEach { (campus, view) ->
             val selected = campus.id == queryState.campusID
-            view.setTextColor(Palette.text)
+            view.setThemeTextColor { Palette.text }
             view.setTypeface(view.typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
-            view.background = roundedBackground(
-                activity,
-                if (selected) Palette.segmentedSelection else Color.TRANSPARENT,
-                radius = UiMetrics.controlRadiusDp - 2,
-            )
+            view.background = themedRoundedBackground(
+                activity, { if (selected) Palette.segmentedSelection else Color.TRANSPARENT },
+                radius = UiMetrics.controlRadiusDp - 2)
         }
         return row
     }
@@ -430,7 +420,7 @@ class PlannerPage(
         id = R.id.planner_fetch_button
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
-        background = roundedBackground(activity, Palette.primaryFill, radius = 8)
+        background = themedRoundedBackground(activity, { Palette.primaryFill }, radius = 8)
         isClickable = !classroomRepository.isRefreshing
         isFocusable = true
         isEnabled = !classroomRepository.isRefreshing
@@ -450,7 +440,7 @@ class PlannerPage(
                 "获取空教室信息"
             }
             textSize = 14f
-            setTextColor(Palette.onPrimary)
+            setThemeTextColor { Palette.onPrimary }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
         }
@@ -492,7 +482,7 @@ class PlannerPage(
         val personalToggle = Switch(activity).apply {
             text = "使用个人课表排除已有课程"
             textSize = if (isCompact) 14f else 17f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             gravity = Gravity.CENTER_VERTICAL
             isClickable = true
             isFocusable = true
@@ -501,14 +491,14 @@ class PlannerPage(
                 intArrayOf(android.R.attr.state_checked),
                 intArrayOf(),
             )
-            trackTintList = ColorStateList(
+            bindTheme("trackTintList") { trackTintList = ColorStateList(
                 states,
                 intArrayOf(Palette.primaryFill, Palette.surfaceVariant),
-            )
-            thumbTintList = ColorStateList(
+            ) }
+            bindTheme("thumbTintList") { thumbTintList = ColorStateList(
                 states,
                 intArrayOf(Palette.onPrimary, Palette.muted),
-            )
+            ) }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(if (isCompact) 32 else UiMetrics.compactControlHeightDp),
@@ -526,23 +516,18 @@ class PlannerPage(
                 val busy = usePersonalSchedule && index in personalBusySlots
                 val selected = index in selectedSlots
                 cell.isEnabled = !busy
-                cell.setTextColor(
-                    when {
+                cell.setThemeTextColor { when {
                         selected -> Palette.onPrimary
                         busy -> Palette.onAccent
                         else -> Palette.text
-                    },
-                )
-                cell.background = roundedBackground(
-                    activity,
-                    when {
+                    } }
+                cell.background = themedRoundedBackground(
+                    activity, { when {
                         selected -> Palette.primaryFill
                         busy -> Palette.accent
                         else -> Palette.surface
-                    },
-                    if (selected) Palette.primaryFill else Palette.border,
-                    radius = 6,
-                )
+                    } }, { if (selected) Palette.primaryFill else Palette.border },
+                    radius = 6)
                 cell.setTypeface(Typeface.DEFAULT, Typeface.NORMAL)
             }
         }
@@ -562,7 +547,7 @@ class PlannerPage(
                 bottomMargin = activity.dp(6)
             }
             setPadding(activity.dp(if (isCompact) 10 else 12), 0, activity.dp(if (isCompact) 10 else 12), 0)
-            background = roundedBackground(activity, Palette.surface, Palette.border, radius = 6)
+            background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 6)
         }
 
         actions.addView(action("选中空闲") {
@@ -669,7 +654,7 @@ class PlannerPage(
                 addView(courseRow(course))
                 if (index < courses.lastIndex) {
                     addView(View(activity).apply {
-                        setBackgroundColor(Palette.border)
+                        setThemeBackgroundColor { Palette.border }
                         layoutParams = LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             activity.dp(1),
@@ -699,16 +684,13 @@ class PlannerPage(
             buttons.forEach { (building, views) ->
                 val (button, icon, label) = views
                 val selected = building in selectedBuildings
-                button.background = roundedBackground(
-                    activity,
-                    if (selected) Palette.primaryFill else Palette.surface,
-                    if (selected) Palette.primaryFill else Palette.border,
-                    radius = 6,
-                )
-                icon.imageTintList = ColorStateList.valueOf(
+                button.background = themedRoundedBackground(
+                    activity, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
+                    radius = 6)
+                icon.bindTheme("imageTintList") { icon.imageTintList = ColorStateList.valueOf(
                     if (selected) Palette.onPrimary else Palette.text,
-                )
-                label.setTextColor(if (selected) Palette.onPrimary else Palette.text)
+                ) }
+                label.setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
                 label.setTypeface(label.typeface, Typeface.BOLD)
             }
         }
@@ -833,7 +815,7 @@ class PlannerPage(
                         )
                         if (columnIndex == 0) {
                             addView(View(activity).apply {
-                                setBackgroundColor(Palette.border)
+                                setThemeBackgroundColor { Palette.border }
                             }, LinearLayout.LayoutParams(activity.dp(1), ViewGroup.LayoutParams.MATCH_PARENT))
                         }
                     }
@@ -846,7 +828,7 @@ class PlannerPage(
             }
             if (rowIndex < resultRows.lastIndex) {
                 resultsContainer.addView(View(activity).apply {
-                    setBackgroundColor(Palette.border)
+                    setThemeBackgroundColor { Palette.border }
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         activity.dp(1),
@@ -881,19 +863,19 @@ class PlannerPage(
                 text = label
                 textSize = 11.5f
                 gravity = Gravity.CENTER_HORIZONTAL
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 maxLines = 1
             })
             addView(TextView(activity).apply {
                 text = value.toString()
                 textSize = 22f
                 gravity = Gravity.CENTER_HORIZONTAL
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
         }
         fun separator(horizontal: Boolean): android.view.View = android.view.View(activity).apply {
-            setBackgroundColor(Palette.border)
+            setThemeBackgroundColor { Palette.border }
             layoutParams = if (horizontal) {
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1))
             } else {
@@ -964,7 +946,7 @@ class PlannerPage(
         text = message
         textSize = if (isCompact) 12.5f else 14f
         gravity = Gravity.CENTER
-        setTextColor(Palette.muted)
+        setThemeTextColor { Palette.muted }
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(if (isCompact) 56 else 72),
@@ -977,7 +959,7 @@ class PlannerPage(
         addView(TextView(activity).apply {
             text = activity.getString(R.string.planner_eyebrow)
             textSize = 11f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
         })
@@ -988,7 +970,7 @@ class PlannerPage(
             addView(TextView(activity).apply {
                 text = "联动查询"
                 textSize = 28f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
                 includeFontPadding = false
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -996,7 +978,7 @@ class PlannerPage(
                 text = date
                 textSize = 13f
                 gravity = Gravity.CENTER_VERTICAL
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 includeFontPadding = false
                 setCompoundDrawablesRelativeWithIntrinsicBounds(
                     R.drawable.ic_section_clock,
@@ -1005,7 +987,7 @@ class PlannerPage(
                     0,
                 )
                 compoundDrawablePadding = activity.dp(5)
-                compoundDrawableTintList = ColorStateList.valueOf(Palette.muted)
+                bindTheme("compoundDrawableTintList") { compoundDrawableTintList = ColorStateList.valueOf(Palette.muted) }
             })
         })
     }
@@ -1024,20 +1006,20 @@ class PlannerPage(
                 text = course.name
                 UiText.preserveRawText(this)
                 textSize = if (isCompact) 14f else 15f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
                 text = course.room.ifEmpty { activity.uiText("地点未标注") }
                 UiText.preserveRawText(this)
                 textSize = 12f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
             })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(TextView(activity).apply {
             text = course.timeRange
             textSize = 13f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             gravity = Gravity.END
         })
     }
@@ -1052,19 +1034,19 @@ class PlannerPage(
                 text = room.name
                 UiText.preserveRawText(this)
                 textSize = if (isCompact) 13.5f else 15f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(TextView(activity).apply {
                 text = room.size?.let { "$it 座" } ?: "座位未知"
                 textSize = if (isCompact) 11f else 12f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
             })
         })
         addView(TextView(activity).apply {
             text = selectedRanges()
             textSize = if (isCompact) 11f else 12f
-            setTextColor(Palette.primaryText)
+            setThemeTextColor { Palette.primaryText }
             setPadding(0, activity.dp(3), 0, 0)
         })
     }

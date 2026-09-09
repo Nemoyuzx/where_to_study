@@ -391,7 +391,7 @@ h2 {
 }
 
 .planner-refresh-button:active {
-  background: var(--primary-focus);
+  background: var(--primary-pressed, var(--primary-focus));
 }
 
 .planner-source-note {
@@ -498,7 +498,7 @@ button:disabled {
 }
 
 .action-panel .primary:active {
-  background: var(--primary-focus);
+  background: var(--primary-pressed, var(--primary-focus));
 }
 
 .settings-actions {
@@ -697,7 +697,7 @@ button:disabled {
 }
 
 .settings-actions button.primary:active {
-  background: var(--primary-focus);
+  background: var(--primary-pressed, var(--primary-focus));
 }
 
 .settings-actions button.secondary {
@@ -2186,7 +2186,7 @@ button:disabled {
 }
 
 .time-course-block:active {
-  background: var(--primary-focus);
+  background: var(--primary-pressed, var(--primary-focus));
   transform: scale(0.99);
 }
 

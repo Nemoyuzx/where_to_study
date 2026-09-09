@@ -119,4 +119,13 @@
     <item name="calendar_month_drag_handle" type="id" />
     <item name="calendar_month_drag_indicator" type="id" />
     <item name="calendar_month_selected_details" type="id" />
+    <item name="color_theme_bindings" type="id" />
+    <item name="color_theme_native_tints" type="id" />
+    <item name="settings_color_theme_section" type="id" />
+    <item name="settings_color_theme_preview" type="id" />
+    <item name="settings_color_theme_primary" type="id" />
+    <item name="settings_color_theme_accent" type="id" />
+    <item name="settings_color_theme_selected_date" type="id" />
+    <item name="settings_color_theme_apply" type="id" />
+    <item name="settings_color_theme_restore" type="id" />
 </resources>

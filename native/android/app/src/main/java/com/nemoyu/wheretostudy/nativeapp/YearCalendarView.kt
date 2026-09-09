@@ -312,9 +312,16 @@ class YearCalendarView(
                 canvas.drawRoundRect(innerRect, dp(3).toFloat(), dp(3).toFloat(), borderPaint)
             }
         } else {
-            borderPaint.color = if (today) Palette.nowIndicator else Palette.border
+            val customSelected = selected && Palette.selection.preset != "default"
+            borderPaint.color = when {
+                today -> Palette.nowIndicator
+                customSelected -> Palette.selectedDateOutline
+                else -> Palette.border
+            }
             borderPaint.strokeWidth = resources.displayMetrics.density * if (today) {
                 YearCalendarLogic.todayBorderWidthDp()
+            } else if (customSelected) {
+                1.2f
             } else {
                 0.32f
             }

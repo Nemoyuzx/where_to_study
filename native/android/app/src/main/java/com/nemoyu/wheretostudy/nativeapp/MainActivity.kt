@@ -229,7 +229,7 @@ class MainActivity : Activity() {
         check(!::adaptiveRoot.isInitialized) { "Application root is already installed." }
         adaptiveRoot = FrameLayout(this).apply {
             id = R.id.adaptive_root
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
             addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
                 if (right - left != oldRight - oldLeft) scheduleAdaptiveLayout()
             }
@@ -274,7 +274,7 @@ class MainActivity : Activity() {
     }
 
     private fun phoneLayout(): FrameLayout = FrameLayout(this).apply {
-        setBackgroundColor(Palette.background)
+        setThemeBackgroundColor { Palette.background }
         content = FrameLayout(this@MainActivity).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -288,11 +288,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(dp(10), dp(3), dp(10), dp(3))
             clipToOutline = false
-            background = roundedBackground(
-                this@MainActivity,
-                Palette.surfaceVariant,
-                radius = PhoneNavigationLayoutLogic.HEIGHT_DP / 2,
-            )
+            background = themedRoundedBackground(
+                this@MainActivity, { Palette.surfaceVariant },
+                radius = PhoneNavigationLayoutLogic.HEIGHT_DP / 2)
             elevation = dp(8).toFloat()
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = true))
@@ -311,11 +309,11 @@ class MainActivity : Activity() {
     private fun sideNavigationLayout(spec: AdaptiveLayoutSpec): LinearLayout =
         LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        setBackgroundColor(Palette.background)
+        setThemeBackgroundColor { Palette.background }
         val rail = LinearLayout(this@MainActivity).apply {
             id = R.id.tablet_navigation
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.surface)
+            setThemeBackgroundColor { Palette.surface }
             addView(LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -325,13 +323,13 @@ class MainActivity : Activity() {
                     addView(TextView(this@MainActivity).apply {
                         text = getString(R.string.brand_eyebrow)
                         textSize = 12f
-                        setTextColor(Palette.muted)
+                        setThemeTextColor { Palette.muted }
                         setTypeface(typeface, Typeface.BOLD)
                     })
                     addView(TextView(this@MainActivity).apply {
                         text = getString(R.string.brand_name)
                         textSize = 17f
-                        setTextColor(Palette.text)
+                        setThemeTextColor { Palette.text }
                         setTypeface(typeface, Typeface.BOLD)
                         setPadding(0, dp(4), 0, 0)
                     })
@@ -346,14 +344,12 @@ class MainActivity : Activity() {
                     textSize = 28f
                     gravity = Gravity.CENTER
                     includeFontPadding = false
-                    setTextColor(Palette.primaryText)
+                    setThemeTextColor { Palette.primaryText }
                     isClickable = true
                     isFocusable = true
-                    background = roundedBackground(
-                        this@MainActivity,
-                        Palette.surfaceVariant,
-                        radius = UiMetrics.controlRadiusDp,
-                    )
+                    background = themedRoundedBackground(
+                        this@MainActivity, { Palette.surfaceVariant },
+                        radius = UiMetrics.controlRadiusDp)
                     setOnClickListener { toggleNavigationRail(it) }
                 }
                 navigationRailToggle = toggle
@@ -368,7 +364,7 @@ class MainActivity : Activity() {
         if (spec.hingeSpacerDp > 0) {
             val spacer = View(this@MainActivity).apply {
                 id = R.id.folding_feature_spacer
-                setBackgroundColor(Palette.background)
+                setThemeBackgroundColor { Palette.background }
             }
             foldingFeatureSpacer = spacer
             addView(
@@ -377,7 +373,7 @@ class MainActivity : Activity() {
             )
         }
         content = FrameLayout(this@MainActivity).apply {
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
         }
         addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         updateNavigationRailPresentation()
@@ -651,33 +647,40 @@ class MainActivity : Activity() {
         navigationViews.forEach { (item, view) ->
             val selected = item == destination
             val wasSelected = item == previousDestination
-            val contentColor = if (selected) Palette.primaryText else Palette.muted
-            view.setTextColor(contentColor)
-            view.compoundDrawableTintList = ColorStateList.valueOf(contentColor)
-            view.foregroundTintList = ColorStateList.valueOf(contentColor)
+            view.setThemeTextColor {
+                if (!selected) Palette.muted
+                else if (Palette.selection.preset == "default") Palette.primaryText
+                else ColorThemeLogic.readableText(
+                    Palette.primaryText,
+                    if (currentLayoutSpec?.usesBottomNavigation == true) Palette.background else Palette.selectionSurface,
+                )
+            }
+            view.bindTheme("navigationTint") {
+                val color = ColorStateList.valueOf(if (selected) Palette.primaryText else Palette.muted)
+                view.compoundDrawableTintList = color
+                view.foregroundTintList = color
+            }
             view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
             val selectionRadius = if (currentLayoutSpec?.usesBottomNavigation == true) {
                 PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP / 2
             } else {
                 UiMetrics.controlRadiusDp
             }
-            val targetBackgroundColor = when {
+            fun targetBackgroundColor() = when {
                 currentLayoutSpec?.usesBottomNavigation == true && selected -> Palette.background
                 currentLayoutSpec?.usesBottomNavigation == true -> Color.TRANSPARENT
                 selected -> Palette.selectionSurface
                 else -> Color.TRANSPARENT
             }
-            val targetBackground = roundedBackground(
-                this,
-                targetBackgroundColor,
-                radius = selectionRadius,
-            )
+            val targetBackground = themedRoundedBackground(
+                this, { targetBackgroundColor() },
+                radius = selectionRadius)
             val animatePhoneSelection = currentLayoutSpec?.usesBottomNavigation == true &&
                 previousDestination != destination && wasSelected != selected
             if (animatePhoneSelection) {
                 val sourceBackgroundColor = if (wasSelected) Palette.background else Color.TRANSPARENT
                 view.background = TransitionDrawable(arrayOf(
-                    roundedBackground(this, sourceBackgroundColor, radius = selectionRadius),
+                    themedRoundedBackground(this, { sourceBackgroundColor }, radius = selectionRadius),
                     targetBackground,
                 )).apply {
                     isCrossFadeEnabled = true
@@ -728,7 +731,7 @@ class MainActivity : Activity() {
                 currentLayoutSpec?.usesBottomNavigation == true,
             ).build()
             Destination.QUERY -> FrameLayout(this).apply {
-                setBackgroundColor(Palette.background)
+                setThemeBackgroundColor { Palette.background }
                 addView(
                     InformationQueryPage(
                         activity = this@MainActivity,
@@ -758,6 +761,7 @@ class MainActivity : Activity() {
         }
         page.id = destination.pageViewID
         UiText.localizeTree(page)
+        page.refreshColorTheme()
         content.removeAllViews()
         content.addView(
             page,
@@ -774,6 +778,15 @@ class MainActivity : Activity() {
             return
         }
         navigate(selectedDestination)
+    }
+
+    /** UI-only appearance update. Existing pages, input fields and scroll state stay mounted. */
+    fun applyColorTheme(selection: ColorThemeSelection): Boolean {
+        if (!ColorThemePreferences(this).save(selection)) return false
+        Palette.configure(this)
+        ThemeBindings.refreshAll(window.decorView)
+        TodayCourseWidgetProvider.refresh(this)
+        return true
     }
 
     fun openFavoriteManagement() {
@@ -1091,6 +1104,7 @@ class MainActivity : Activity() {
             calendarDailyInfoRepository.clearAssignments()
             clearItem("账号和密码") { credentialStore.clear() }
             clearItem("应用设置") { preferences.clear() }
+            clearItem("颜色主题") { ColorThemePreferences(this).clear() }
             clearItem("后台刷新状态") { DailyClassroomRetryStore(this).clear() }
             clearItem("个人课表") { scheduleRepository.clearLocalDataCoordinated() }
             clearItem("空教室缓存") { classroomRepository.clearLocalDataCoordinated() }
@@ -1104,6 +1118,11 @@ class MainActivity : Activity() {
         }
         if (!DailyClassroomRefreshScheduler.cancel(this)) {
             failures += "空教室后台刷新"
+        }
+        clearItem("颜色主题界面") {
+            Palette.configure(this)
+            ThemeBindings.refreshAll(window.decorView)
+            TodayCourseWidgetProvider.refresh(this)
         }
         runCatching(::refreshCurrentPage)
         return LocalDataClearResult(failures)
@@ -1316,7 +1335,7 @@ class MainActivity : Activity() {
             addView(TextView(this@MainActivity).apply {
                 text = getString(R.string.privacy_consent_summary)
                 textSize = 14f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setLineSpacing(0f, 1.15f)
             })
             addView(TextView(this@MainActivity).apply {
@@ -1324,14 +1343,11 @@ class MainActivity : Activity() {
                 text = getString(R.string.view_full_privacy_policy)
                 textSize = 15f
                 gravity = Gravity.CENTER
-                setTextColor(Palette.primaryText)
+                setThemeTextColor { Palette.primaryText }
                 setTypeface(typeface, Typeface.BOLD)
-                background = roundedBackground(
-                    this@MainActivity,
-                    Palette.surface,
-                    Palette.primary,
-                    radius = UiMetrics.controlRadiusDp,
-                )
+                background = themedRoundedBackground(
+                    this@MainActivity, { Palette.surface }, { Palette.primary },
+                    radius = UiMetrics.controlRadiusDp)
                 isClickable = true
                 isFocusable = true
                 contentDescription = getString(R.string.view_full_privacy_policy)
@@ -1395,6 +1411,7 @@ class MainActivity : Activity() {
             }
         privacyConsentDialog = dialog
         dialog.show()
+        UiText.localizeDialog(dialog)
     }
 
     private companion object {

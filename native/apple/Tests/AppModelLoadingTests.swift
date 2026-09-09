@@ -7,6 +7,101 @@ import XCTest
 
 final class AppModelLoadingTests: XCTestCase {
     @MainActor
+    func testClearLocalDataResetsThemeAndWidgetPreferencesIncludingCustomSeeds() async throws {
+        let fixture = try LoadingFixture()
+        defer { fixture.cleanUp() }
+        let widgetSuite = "ClearWidgetThemeTests.\(UUID().uuidString)"
+        let widgetDefaults = try XCTUnwrap(UserDefaults(suiteName: widgetSuite))
+        defer { widgetDefaults.removePersistentDomain(forName: widgetSuite) }
+        var reloadCount = 0
+        let model = fixture.makeModel(widgetDefaults: widgetDefaults, reloadWidgetTheme: { reloadCount += 1 })
+        fixture.scheduleStore.releaseLoad()
+        await model.awaitInitialLocalData()
+        XCTAssertTrue(model.setCustomColorTheme(primary: "#ABCDEF", accent: "#112233", selectedDate: "#000000"))
+        let savedTheme = model.colorTheme
+        model.enterReviewDemo()
+        model.selectColorTheme(.rose)
+        let reloadsBeforeDemoClear = reloadCount
+        model.clearLocalData()
+        XCTAssertEqual(model.colorTheme.preset, .rose)
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: fixture.defaults), savedTheme)
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: widgetDefaults), savedTheme)
+        XCTAssertEqual(reloadCount, reloadsBeforeDemoClear)
+        model.exitReviewDemo()
+        fixture.scheduleStore.releaseLoad()
+        await model.awaitInitialLocalData()
+
+        let reloadsBeforeClear = reloadCount
+        model.clearLocalData()
+        XCTAssertEqual(model.colorTheme, .default)
+        XCTAssertNil(fixture.defaults.object(forKey: ColorThemeConfiguration.defaultsKey))
+        XCTAssertNil(widgetDefaults.object(forKey: ColorThemeConfiguration.defaultsKey))
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: widgetDefaults), .default)
+        XCTAssertEqual(reloadCount, reloadsBeforeClear + 1)
+        let relaunched = fixture.makeModel()
+        fixture.scheduleStore.releaseLoad()
+        await relaunched.awaitInitialLocalData()
+        XCTAssertEqual(relaunched.colorTheme, .default)
+        relaunched.selectColorTheme(.custom)
+        XCTAssertEqual(relaunched.colorTheme.custom, ColorThemePreset.default.seeds)
+    }
+
+    @MainActor
+    func testColorThemeChangesPersistAndSyncWidgetsWithoutInvalidatingDataOrNavigation() async throws {
+        let fixture = try LoadingFixture()
+        defer { fixture.cleanUp() }
+        let widgetSuite = "WidgetThemeTests.\(UUID().uuidString)"
+        let widgetDefaults = try XCTUnwrap(UserDefaults(suiteName: widgetSuite))
+        defer { widgetDefaults.removePersistentDomain(forName: widgetSuite) }
+        var reloadCount = 0
+        let model = fixture.makeModel(widgetDefaults: widgetDefaults, reloadWidgetTheme: { reloadCount += 1 })
+        fixture.scheduleStore.releaseLoad()
+        await model.awaitInitialLocalData()
+        model.navigation.selectedSection = .calendar
+        let ownerRevision = model.calendarDataOwnerRevision
+        let snapshot = model.schedule
+        model.selectColorTheme(.ocean)
+        XCTAssertEqual(model.colorTheme.preset, .ocean)
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: fixture.defaults), model.colorTheme)
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: widgetDefaults), model.colorTheme)
+        XCTAssertEqual(reloadCount, 1)
+        XCTAssertFalse(model.setCustomColorTheme(primary: "#wrong", accent: "#000000", selectedDate: "#FFFFFF"))
+        XCTAssertEqual(model.colorTheme.preset, .ocean)
+        XCTAssertEqual(reloadCount, 1)
+        XCTAssertTrue(model.setCustomColorTheme(primary: "ffffff", accent: "aabbcc", selectedDate: "000000"))
+        let custom = model.colorTheme.custom
+        model.restoreDefaultColorTheme()
+        XCTAssertEqual(model.colorTheme.preset, .default)
+        XCTAssertEqual(model.colorTheme.custom, custom)
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: widgetDefaults), model.colorTheme)
+        XCTAssertEqual(model.calendarDataOwnerRevision, ownerRevision)
+        XCTAssertEqual(model.navigation.selectedSection, .calendar)
+        XCTAssertEqual(model.schedule, snapshot)
+        XCTAssertFalse(model.isRefreshingSchedule)
+        XCTAssertFalse(model.isRefreshingClassrooms)
+        XCTAssertEqual(fixture.scheduleClient.callCount, 0)
+        XCTAssertEqual(fixture.classroomClient.callCount, 0)
+
+        model.enterReviewDemo()
+        XCTAssertEqual(model.colorTheme, .default)
+        let savedLiveTheme = ColorThemeConfiguration.load(defaults: fixture.defaults)
+        let reloadCountBeforeDemoEdit = reloadCount
+        model.selectColorTheme(.rose)
+        XCTAssertEqual(model.colorTheme.preset, .rose)
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: fixture.defaults), savedLiveTheme)
+        XCTAssertEqual(ColorThemeConfiguration.load(defaults: widgetDefaults), savedLiveTheme)
+        XCTAssertEqual(reloadCount, reloadCountBeforeDemoEdit)
+        model.exitReviewDemo()
+        fixture.scheduleStore.releaseLoad()
+        await model.awaitInitialLocalData()
+        XCTAssertEqual(model.colorTheme, savedLiveTheme)
+        let relaunched = fixture.makeModel()
+        fixture.scheduleStore.releaseLoad()
+        await relaunched.awaitInitialLocalData()
+        XCTAssertEqual(relaunched.colorTheme, savedLiveTheme)
+    }
+
+    @MainActor
     func testDeferredLaunchLeavesMainActorAvailableAndLoadsCachesOffMainThread() async throws {
         let fixture = try LoadingFixture()
         defer { fixture.cleanUp() }
@@ -195,7 +290,7 @@ private struct LoadingFixture {
         classroomClient = LoadingClassroomClient(snapshot: try XCTUnwrap(classroomStore.cache))
     }
 
-    func makeModel() -> AppModel {
+    func makeModel(widgetDefaults: UserDefaults? = nil, reloadWidgetTheme: @escaping @MainActor () -> Void = {}) -> AppModel {
         AppModel(
             credentialStore: LoadingCredentialStore(),
             scheduleStore: scheduleStore,
@@ -207,6 +302,8 @@ private struct LoadingFixture {
             dailyCourseNotificationScheduler: LoadingNotificationScheduler(),
             now: { Date(timeIntervalSince1970: 1_788_595_200) },
             defaults: defaults,
+            themeWidgetDefaults: widgetDefaults,
+            reloadWidgetTheme: reloadWidgetTheme,
             deferLocalDataLoading: true
         )
     }

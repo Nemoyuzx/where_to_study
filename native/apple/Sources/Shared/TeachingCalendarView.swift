@@ -1095,6 +1095,7 @@ enum TeachingCalendarLogic {
 }
 
 struct TeachingCalendarView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
@@ -1689,7 +1690,7 @@ struct TeachingCalendarView: View {
         )
         .background(
             isSelected
-                ? AppTheme.selectedDate.opacity(0.14)
+                ? theme.selectedDate.opacity(0.14)
                 : (inMonth ? Color.clear : AppTheme.surface.opacity(0.28))
         )
         .overlay {
@@ -1730,14 +1731,17 @@ struct TeachingCalendarView: View {
             .monospacedDigit()
             .foregroundStyle(
                 isSelected || isToday
-                    ? AppTheme.onPrimary
+                    ? theme.onPrimary
                     : (inMonth ? AppTheme.text : AppTheme.secondaryText.opacity(0.55))
             )
             .frame(minWidth: 22, minHeight: 22)
             .background {
                 ZStack {
                     if isSelected {
-                        Circle().fill(AppTheme.selectedDate)
+                        Circle().fill(theme.selectedDate)
+                        if !isToday && theme.configuration.preset != .default {
+                            Circle().stroke(theme.selectedDateOutline, lineWidth: 1)
+                        }
                     } else if isToday {
                         Circle().fill(Self.nowRed)
                     }
@@ -1750,6 +1754,8 @@ struct TeachingCalendarView: View {
 
     private func desktopMonthEventRow(_ event: DesktopMonthEvent) -> some View {
         let tint = desktopMonthEventTint(event.kind)
+        let usesCustomBrandTint = theme.configuration.preset != .default
+            && (event.kind == .course || event.kind == .workday)
         return HStack(spacing: 4) {
             if event.kind != .course {
                 Image(systemName: desktopMonthEventSystemImage(event.kind))
@@ -1767,7 +1773,7 @@ struct TeachingCalendarView: View {
             }
         }
         .font(.system(size: 9, weight: .semibold))
-        .foregroundStyle(tint)
+        .foregroundStyle(usesCustomBrandTint ? AppTheme.text : tint)
         .padding(.horizontal, 5)
         .frame(maxWidth: .infinity, minHeight: 15, maxHeight: 15, alignment: .leading)
         .background(tint.opacity(0.15))
@@ -1829,11 +1835,11 @@ struct TeachingCalendarView: View {
     private func desktopMonthEventTint(_ kind: DesktopMonthEvent.Kind) -> Color {
         switch kind {
         case .course:
-            return AppTheme.primary
+            return theme.primary
         case .holiday:
             return Self.holidayRed
         case .workday:
-            return AppTheme.accent
+            return theme.accentText
         case .assignment:
             return AppTheme.assignment
         case .schoolNotice:
@@ -1926,7 +1932,7 @@ struct TeachingCalendarView: View {
         let detailTint: Color
         if let holiday = holidays.first {
             detail = "\(model.localized(holiday.type == "holiday" ? "休" : "班")) \(holiday.name)"
-            detailTint = Self.holidayColor(holiday)
+            detailTint = holidayColor(holiday)
         } else {
             detail = dayCourses.isEmpty ? "无课" : "\(dayCourses.count) 门课"
             detailTint = monthTextColor(
@@ -1947,14 +1953,14 @@ struct TeachingCalendarView: View {
                         .lineLimit(2)
                         .minimumScaleFactor(0.75)
                         .transition(.opacity.combined(with: .move(edge: .top)))
-                        .foregroundStyle(isSelected ? AppTheme.onPrimary : detailTint)
+                        .foregroundStyle(isSelected ? theme.onPrimary : detailTint)
                 } else {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(deadlineEvents.prefix(3))) { event in
                             Text(event.title)
                                 .font(.system(size: 9, weight: .semibold))
                                 .lineLimit(1)
-                                .foregroundStyle(isSelected ? AppTheme.onPrimary : event.tint)
+                                .foregroundStyle(isSelected ? theme.onPrimary : event.tint)
                                 .frame(maxWidth: .infinity, minHeight: 13, alignment: .leading)
                         }
                         if deadlineEvents.count > 3 {
@@ -1964,7 +1970,7 @@ struct TeachingCalendarView: View {
                                 Text("+\(deadlineEvents.count - 3)")
                                     .font(.system(size: 9, weight: .semibold))
                                     .foregroundStyle(
-                                        isSelected ? AppTheme.onPrimary : AppTheme.secondaryText
+                                        isSelected ? theme.onPrimary : AppTheme.secondaryText
                                     )
                             }
                             .buttonStyle(.plain)
@@ -1984,7 +1990,7 @@ struct TeachingCalendarView: View {
                     }
                     ForEach(Array(deadlineEvents.prefix(3))) { event in
                         Circle()
-                            .fill(isSelected ? AppTheme.onPrimary : event.tint)
+                            .fill(isSelected ? theme.onPrimary : event.tint)
                             .frame(width: 4, height: 4)
                     }
                     ForEach(0 ..< min(dayCourses.count, 3), id: \.self) { _ in
@@ -2122,7 +2128,7 @@ struct TeachingCalendarView: View {
         return VStack(alignment: .leading, spacing: layout.monthContentSpacing) {
             Text(title)
                 .font(.system(size: layout.monthTitleFontSize, weight: .semibold))
-                .foregroundStyle(AppTheme.primary)
+                .foregroundStyle(theme.primary)
                 .frame(height: layout.monthTitleHeight, alignment: .leading)
 
             VStack(spacing: layout.gridSpacing) {
@@ -2195,7 +2201,7 @@ struct TeachingCalendarView: View {
         let deadlineKinds = snapshot.deadlineKinds
         let baseColor = dayCourses.isEmpty
             ? Color.clear
-            : AppTheme.primary.opacity(
+            : theme.primary.opacity(
                 TeachingCalendarLogic.yearCourseOpacity(courseCount: dayCourses.count)
             )
 
@@ -2206,15 +2212,15 @@ struct TeachingCalendarView: View {
                 Text(model.localized(item.type == "holiday" ? "休" : "班"))
                     .font(.system(size: layout.holidayFontSize, weight: .semibold))
                     .foregroundStyle(
-                        isSelected || isToday ? AppTheme.onPrimary : Self.holidayColor(item)
+                        isSelected || isToday ? theme.onPrimary : holidayColor(item)
                     )
             }
         }
         .font(.system(size: layout.dayFontSize, weight: .medium))
         .foregroundStyle(
             isSelected || isToday
-                ? AppTheme.onPrimary
-                : (dayCourses.isEmpty ? AppTheme.text : AppTheme.onPrimary)
+                ? theme.onPrimary
+                : (dayCourses.isEmpty ? AppTheme.text : theme.onPrimary)
         )
         .frame(
             maxWidth: .infinity,
@@ -2226,7 +2232,12 @@ struct TeachingCalendarView: View {
                 RoundedRectangle(cornerRadius: 3).fill(baseColor)
                 if isSelected {
                     Circle()
-                        .fill(AppTheme.selectedDate)
+                        .fill(theme.selectedDate)
+                        .overlay {
+                            if theme.configuration.preset != .default {
+                                Circle().stroke(theme.selectedDateOutline, lineWidth: 1)
+                            }
+                        }
                         .frame(
                             width: layout.selectionDiameter,
                             height: layout.selectionDiameter
@@ -2360,11 +2371,11 @@ struct TeachingCalendarView: View {
                 Text("\(snapshot.dayNumber)")
                 if let item = holidays.first {
                     Text(model.localized(item.type == "holiday" ? "休" : "班"))
-                        .foregroundStyle(isSelected ? AppTheme.onPrimary : Self.holidayColor(item))
+                        .foregroundStyle(isSelected ? theme.onPrimary : holidayColor(item))
                 }
             }
-            .font(.system(size: 9, weight: .medium))
-            .foregroundStyle(isSelected ? AppTheme.onPrimary : AppTheme.text)
+            .font(.system(size: 9, weight: isSelected && theme.configuration.preset != .default ? .bold : .medium))
+            .foregroundStyle(isSelected ? theme.onPrimary : AppTheme.text)
             .frame(maxWidth: .infinity, minHeight: 30)
             .background(yearCellColor(selected: isSelected, courseCount: dayCourses.count))
             .overlay {
@@ -2374,7 +2385,8 @@ struct TeachingCalendarView: View {
                             .stroke(allDayEventTint(outerKind), lineWidth: 1.5)
                     } else {
                         RoundedRectangle(cornerRadius: 3)
-                            .stroke(AppTheme.border, lineWidth: 1)
+                            .stroke(isSelected && theme.configuration.preset != .default ? theme.selectedDateOutline : AppTheme.border,
+                                    lineWidth: 1)
                     }
                     if deadlineKinds.count > 1 {
                         RoundedRectangle(cornerRadius: 1)
@@ -2603,7 +2615,7 @@ struct TeachingCalendarView: View {
             ForEach(holidays) { item in
                 Text("\(model.localized(item.type == "holiday" ? "休" : "班")) \(item.name)")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Self.holidayColor(item))
+                    .foregroundStyle(holidayColor(item))
             }
             if dayCourses.isEmpty {
                 Text("暂无课程").foregroundStyle(AppTheme.secondaryText)
@@ -2832,7 +2844,7 @@ struct TeachingCalendarView: View {
                     }
                 }
                 if let yi = info.yi {
-                    almanacAdvice("宜", value: yi, color: AppTheme.primary)
+                    almanacAdvice("宜", value: yi, color: theme.primary)
                 }
                 if let ji = info.ji {
                     almanacAdvice("忌", value: ji, color: AppTheme.danger)
@@ -2899,7 +2911,7 @@ struct TeachingCalendarView: View {
                 ForEach(items) { item in
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "doc.text")
-                            .foregroundStyle(AppTheme.primary)
+                            .foregroundStyle(theme.primary)
                             .frame(width: 22)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.title).font(.subheadline.weight(.semibold))
@@ -3061,7 +3073,7 @@ struct TeachingCalendarView: View {
         } label: {
             Image(systemName: isFavorite ? "star.fill" : "star")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(isFavorite ? AppTheme.accent : AppTheme.secondaryText)
+                .foregroundStyle(isFavorite ? theme.accent : AppTheme.secondaryText)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
@@ -3096,7 +3108,7 @@ struct TeachingCalendarView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
+        .background(theme.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func almanacPill(_ title: String, value: String) -> some View {
@@ -3210,9 +3222,9 @@ struct TeachingCalendarView: View {
 
     private func calendarAgendaTint(_ kind: CalendarAgendaItemKind) -> Color {
         switch kind {
-        case .course: AppTheme.primary
+        case .course: theme.primary
         case .holiday: Self.holidayRed
-        case .workday: AppTheme.primary
+        case .workday: theme.primary
         case .assignment: AppTheme.assignment
         case .schoolNotice: AppTheme.schoolNotice
         case .competition: AppTheme.competitionDeadline
@@ -3333,7 +3345,7 @@ struct TeachingCalendarView: View {
     }
 
     private func allDayEventTint(_ kind: CalendarAllDayEventKind) -> Color {
-        CalendarDeadlinePresentation.tint(for: kind)
+        theme.deadlineTint(for: kind)
     }
 
     private var periodTitle: String {
@@ -3822,23 +3834,23 @@ struct TeachingCalendarView: View {
     }
 
     private func monthCellColor(selected: Bool, inMonth: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.selectedDate }
+        if selected { return theme.selectedDate }
         if !inMonth { return AppTheme.surface }
         guard courseCount > 0 else { return AppTheme.background }
-        return AppTheme.primary.opacity(min(0.08 + Double(courseCount) * 0.10, 0.48))
+        return theme.primary.opacity(min(0.08 + Double(courseCount) * 0.10, 0.48))
     }
 
     private func monthTextColor(selected: Bool, inMonth: Bool, holidays: [HolidayItem]) -> Color {
-        if selected { return AppTheme.onPrimary }
+        if selected { return theme.onPrimary }
         if !inMonth { return AppTheme.secondaryText.opacity(0.55) }
-        if let holiday = holidays.first { return Self.holidayColor(holiday) }
+        if let holiday = holidays.first { return holidayColor(holiday) }
         return AppTheme.text
     }
 
     private func yearCellColor(selected: Bool, courseCount: Int) -> Color {
-        if selected { return AppTheme.selectedDate }
+        if selected { return theme.selectedDate }
         guard courseCount > 0 else { return AppTheme.background }
-        return AppTheme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount))
+        return theme.primary.opacity(TeachingCalendarLogic.yearCourseOpacity(courseCount: courseCount))
     }
 
     private func dayAccessibilityLabel(
@@ -3853,8 +3865,8 @@ struct TeachingCalendarView: View {
         calendar.isDate(left, inSameDayAs: right)
     }
 
-    private static func holidayColor(_ item: HolidayItem) -> Color {
-        item.type == "holiday" ? holidayRed : AppTheme.primary
+    private func holidayColor(_ item: HolidayItem) -> Color {
+        item.type == "holiday" ? Self.holidayRed : theme.primary
     }
 
     private static let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]

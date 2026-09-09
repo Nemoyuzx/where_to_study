@@ -6,11 +6,46 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ScheduleSnapshot } from '../common/Models';
 import { JsonFile } from '../store/JsonFile';
 import { AppContext } from '../store/AppContext';
+import { ColorThemes, ColorThemeSelection } from '../common/ColorThemes';
 import {
   TodayCourseWidgetData, WidgetArchive, WidgetArchiveCourse, WidgetCoursePreferences
 } from './TodayCourseWidgetData';
 
 export class WidgetSync {
+  private static themeWrite: Promise<void> = Promise.resolve();
+
+  static themePath(filesDir: string): string {
+    return filesDir + '/WhereToStudyNative/widget-color-theme.json';
+  }
+
+  // 外观单独归档，未获取课表时的空卡片也能共享主题；不重载课表或网络。
+  static refreshTheme(selection: ColorThemeSelection): void {
+    const serialized: string = ColorThemes.encode(selection);
+    WidgetSync.themeWrite = WidgetSync.themeWrite.catch(() => {}).then(async (): Promise<void> => {
+      await JsonFile.writeTextAtomic(WidgetSync.themePath(AppContext.filesRoot()), serialized);
+      await WidgetSync.reloadAllForms();
+    });
+    WidgetSync.themeWrite.catch(() => {});
+  }
+
+  static loadThemeSync(filesDir: string): ColorThemeSelection {
+    try {
+      return ColorThemes.decode(fs.readTextSync(WidgetSync.themePath(filesDir)));
+    } catch (e) {
+      return new ColorThemeSelection();
+    }
+  }
+
+  static themeBinding(data: Record<string, Object>, selection: ColorThemeSelection,
+    dark: boolean): Record<string, Object> {
+    const seed = ColorThemes.seeds(selection);
+    data['themeCustomized'] = selection.preset !== 'default';
+    data['themePrimary'] = ColorThemes.text(seed.primary, dark);
+    data['themePrimaryFill'] = ColorThemes.fill(seed.primary);
+    data['themeAccent'] = seed.accent;
+    return data;
+  }
+
   // AppModel 在课表保存/清除/加载后调用；失败不影响主流程。
   static refresh(schedule: ScheduleSnapshot | null,
     preferences: WidgetCoursePreferences = new WidgetCoursePreferences()): void {

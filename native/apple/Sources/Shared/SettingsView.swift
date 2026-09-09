@@ -7,6 +7,7 @@ enum SettingsSurfaceID: String, Hashable {
     case notification
     case information
     case widget
+    case colorTheme
     case language
     case aboutAndPrivacy
     case localData
@@ -18,6 +19,7 @@ enum AppFilingInformation {
 }
 
 private struct FavoriteDeadlineManagementView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
@@ -80,7 +82,7 @@ private struct FavoriteDeadlineManagementView: View {
                 model.setFavorite(item, isFavorite: false)
             } label: {
                 Image(systemName: "star.fill")
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(theme.accent)
                     .frame(width: 36, height: 36)
                     .contentShape(Rectangle())
             }
@@ -123,6 +125,7 @@ enum SettingsLayoutPolicy {
         .notification,
         .information,
         .widget,
+        .colorTheme,
         .language,
         .aboutAndPrivacy,
         .localData
@@ -134,6 +137,7 @@ enum SettingsLayoutPolicy {
         .notification,
         .information,
         .widget,
+        .colorTheme,
         .language,
         .aboutAndPrivacy,
         .localData
@@ -141,6 +145,7 @@ enum SettingsLayoutPolicy {
 }
 
 struct SettingsView: View {
+    @Environment(\.appTheme) private var theme
     private enum AccountField: Hashable {
         case account
         case password
@@ -317,6 +322,8 @@ struct SettingsView: View {
             informationSurface
         case .widget:
             widgetSurface
+        case .colorTheme:
+            ColorThemeSettingsSurface()
         case .language:
             languageSurface
         case .aboutAndPrivacy:
@@ -337,7 +344,7 @@ struct SettingsView: View {
                 if model.isSampleMode {
                     Label("内置示例模式已开启，不会连接教务服务或读写真实用户数据。", systemImage: "eye")
                         .font(.callout.weight(.semibold))
-                        .foregroundStyle(AppTheme.primary)
+                        .foregroundStyle(theme.primary)
                     if model.canExitSampleMode {
                         Button {
                             AppHaptics.impact()
@@ -490,11 +497,11 @@ struct SettingsView: View {
                     model.saveSettings()
                 } label: {
                     Label("保存设置", systemImage: "checkmark")
-                        .foregroundStyle(AppTheme.onPrimary)
+                        .foregroundStyle(theme.onPrimary)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppTheme.primaryFill)
+                .tint(theme.primaryFill)
                 .disabled(model.isSampleMode)
                 Button {
                     AppHaptics.impact()
@@ -565,7 +572,7 @@ struct SettingsView: View {
                     )
                 )
                 .toggleStyle(.switch)
-                .tint(AppTheme.primary)
+                .tint(theme.primary)
                 .disabled(model.isSampleMode)
                 TextField("学期编号", text: $model.termID)
                     .textFieldStyle(.roundedBorder)
@@ -618,7 +625,7 @@ struct SettingsView: View {
                     )
                 )
                 .toggleStyle(.switch)
-                .tint(AppTheme.primary)
+                .tint(theme.primary)
                 .disabled(model.isSampleMode && !model.isReviewDemo)
                 Text("仅在当天有课时通知；课表更新或账号变更后会自动重排。")
                     .font(.callout)
@@ -700,7 +707,7 @@ struct SettingsView: View {
                     }
                 }
                 .toggleStyle(.switch)
-                .tint(AppTheme.primary)
+                .tint(theme.primary)
                 .disabled(model.isSampleMode)
                 .accessibilityIdentifier("settings.custom-deadlines-enabled")
                 TextField("自定义日程 HTTPS 地址", text: $model.customDeadlinesURL)
@@ -765,14 +772,14 @@ struct SettingsView: View {
     private var referenceNotice: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(AppTheme.primary)
+                .foregroundStyle(theme.primary)
             Text("显示数据仅供参考，请以实际情况为准。\nDisplayed data is for reference only; please rely on the actual official information.")
                 .font(.callout)
                 .foregroundStyle(AppTheme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(AppTheme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .background(theme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("settings.reference-notice")
     }
 
@@ -803,7 +810,7 @@ struct SettingsView: View {
             }
         }
         .toggleStyle(.switch)
-        .tint(AppTheme.primary)
+        .tint(theme.primary)
         .disabled(model.isSampleMode)
     }
 
@@ -864,7 +871,7 @@ struct SettingsView: View {
                     )
                 )
                 .toggleStyle(.switch)
-                .tint(AppTheme.primary)
+                .tint(theme.primary)
                 .disabled(model.isSampleMode)
                 Toggle(
                     "显示任课教师",
@@ -877,7 +884,7 @@ struct SettingsView: View {
                     )
                 )
                 .toggleStyle(.switch)
-                .tint(AppTheme.primary)
+                .tint(theme.primary)
                 .disabled(model.isSampleMode)
 
                 Text("最多显示课程")
@@ -930,7 +937,8 @@ struct SettingsView: View {
                     usesWidgetContainer: false,
                     language: TodayCourseWidgetData.Language.resolve(
                         rawValue: model.appLanguage.rawValue
-                    )
+                    ),
+                    colorTheme: model.colorTheme
                 )
                 .aspectRatio(widgetPreviewSize.aspectRatio, contentMode: .fit)
                 .frame(maxWidth: widgetPreviewSize.maximumWidth)
@@ -977,7 +985,7 @@ struct SettingsView: View {
         ) {
             Label("✓ 与当前学期一致", systemImage: "checkmark.circle.fill")
                 .font(.caption)
-                .foregroundStyle(AppTheme.primary)
+                .foregroundStyle(theme.primary)
         } else if SemesterLogic.isValidTermID(model.termID),
                   SemesterLogic.isValidTermStartDate(model.termStartDate) {
             Label("当前设置与检测结果不同", systemImage: "exclamationmark.triangle")

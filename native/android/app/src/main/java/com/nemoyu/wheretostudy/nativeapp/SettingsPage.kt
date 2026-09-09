@@ -62,7 +62,7 @@ class SettingsPage(
         isFillViewport = true
         clipToPadding = false
         scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-        setBackgroundColor(Palette.background)
+        setThemeBackgroundColor { Palette.background }
         addView(verticalPage(activity).apply {
             if (isCompact) {
                 setPadding(activity.dp(20), activity.dp(16), activity.dp(20), activity.dp(88))
@@ -95,6 +95,8 @@ class SettingsPage(
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(widgetSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(ColorThemeSettingsView(activity))
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(languageSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(aboutSurface())
@@ -117,6 +119,8 @@ class SettingsPage(
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(widgetSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(ColorThemeSettingsView(activity))
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(languageSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(aboutSurface())
@@ -133,7 +137,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "语言"
             textSize = 13f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, 0, 0, activity.dp(6))
         })
         val languages = AppLanguage.entries
@@ -156,7 +160,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "更改语言后将立即重新加载界面。"
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(7), 0, 0)
         })
     }
@@ -171,7 +175,7 @@ class SettingsPage(
         val password = field("密码", "", true)
         val passwordStatus = TextView(activity).apply {
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(activity.dp(2), activity.dp(7), activity.dp(2), 0)
         }
         fun updatePasswordStatus() {
@@ -204,7 +208,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "默认校区"
             textSize = 13f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, 0, 0, activity.dp(if (isCompact) 5 else 7))
         })
         val campusLabels = AppMetadata.campuses.map { activity.uiText(it.name) }
@@ -287,13 +291,11 @@ class SettingsPage(
             text = "保存设置"
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(Palette.onPrimary)
+            setThemeTextColor { Palette.onPrimary }
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(
-                activity,
-                Palette.primaryFill,
-                radius = 6,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.primaryFill },
+                radius = 6)
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
@@ -320,14 +322,11 @@ class SettingsPage(
             text = "获取/刷新个人课表"
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(Palette.primaryText)
+            setThemeTextColor { Palette.primaryText }
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(
-                activity,
-                Palette.surface,
-                Palette.primary,
-                radius = 6,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.surface }, { Palette.primary },
+                radius = 6)
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
@@ -375,13 +374,13 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = activity.getString(R.string.credential_security_note)
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(if (isCompact) 8 else 12), 0, 0)
         })
         addView(TextView(activity).apply {
             text = activity.getString(R.string.account_privacy_notice)
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setLineSpacing(0f, 1.1f)
             setPadding(0, activity.dp(if (isCompact) 8 else 12), 0, activity.dp(8))
         })
@@ -401,7 +400,7 @@ class SettingsPage(
         val autoDetect = Switch(activity).apply {
             text = "自动检测当前学期"
             textSize = 15f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             isChecked = preferences.automaticTermDetectionEnabled
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
@@ -425,7 +424,7 @@ class SettingsPage(
                 "关闭自动检测后，将使用手动填写的学期信息。"
             }
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(8), 0, activity.dp(if (isCompact) 8 else 12))
             autoDetect.setOnCheckedChangeListener { button, checked ->
                 activity.performControlHaptic(button)
@@ -476,7 +475,7 @@ class SettingsPage(
         addView(Switch(activity).apply {
             text = activity.getString(R.string.daily_course_notification_toggle)
             textSize = 15f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             isChecked = preferences.dailyCourseNotificationsEnabled
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
@@ -499,7 +498,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = activity.getString(R.string.daily_course_notification_description)
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(4), 0, 0)
         })
     }
@@ -547,7 +546,7 @@ class SettingsPage(
         addView(Switch(activity).apply {
             text = "显示课程地点"
             textSize = 15f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             isChecked = preferences.widgetShowsLocation
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
@@ -561,7 +560,7 @@ class SettingsPage(
         addView(Switch(activity).apply {
             text = "显示任课教师"
             textSize = 15f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             isChecked = preferences.widgetShowsTeacher
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
@@ -575,7 +574,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "最多显示课程"
             textSize = 13f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(8), 0, activity.dp(5))
         })
         addView(segmentedControl(
@@ -593,7 +592,7 @@ class SettingsPage(
         })
 
         addView(View(activity).apply {
-            setBackgroundColor(Palette.border)
+            setThemeBackgroundColor { Palette.border }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
             topMargin = activity.dp(14)
             bottomMargin = activity.dp(12)
@@ -601,7 +600,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "样式预览 · 示例内容"
             textSize = 14f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
         })
         val previewLabels = listOf("紧凑", "标准", "展开").map(activity::uiText)
@@ -625,7 +624,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；展开样式最多展示 6 门课程。预览使用虚构示例，不会写入课表。"
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(8), 0, 0)
         })
     }
@@ -639,7 +638,7 @@ class SettingsPage(
         addView(featureSwitch("黄历与宜忌", preferences.almanacEnabled) {
             preferences.almanacEnabled = it
         })
-        addView(View(activity).apply { setBackgroundColor(Palette.border) },
+        addView(View(activity).apply { setThemeBackgroundColor { Palette.border } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
                 topMargin = activity.dp(8)
                 bottomMargin = activity.dp(8)
@@ -700,7 +699,7 @@ class SettingsPage(
             preferences.hackathonDeadlinesEnabled = it
             if (it) activity.prewarmPublicDeadlinesIfEnabled()
         })
-        addView(View(activity).apply { setBackgroundColor(Palette.border) },
+        addView(View(activity).apply { setThemeBackgroundColor { Palette.border } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
                 topMargin = activity.dp(10)
                 bottomMargin = activity.dp(8)
@@ -722,7 +721,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "只发送无凭据 GET；拒绝重定向、本机及私有/保留 IP，响应上限 2 MiB。"
             textSize = 11f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(5), 0, activity.dp(7))
         })
         lateinit var saveCustomButton: TextView
@@ -791,7 +790,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "天气、黄历和 DDL 来自第三方公开服务；已收藏日程会保存完整快照，来源关闭、失败或删除后仍会显示，直到取消收藏。"
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(6), 0, 0)
         })
     }
@@ -800,8 +799,8 @@ class SettingsPage(
         text = "显示数据仅供参考，请以实际情况为准。\n" +
             "Displayed data is for reference only; please rely on the actual official information."
         textSize = 13f
-        setTextColor(Palette.muted)
-        background = roundedBackground(activity, Palette.surfaceVariant, radius = 9)
+        setThemeTextColor { Palette.muted }
+        background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 9)
         setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
         contentDescription = text
     }
@@ -813,7 +812,7 @@ class SettingsPage(
     ): Switch = Switch(activity).apply {
         text = label
         textSize = 15f
-        setTextColor(Palette.text)
+        setThemeTextColor { Palette.text }
         isChecked = checked
         minHeight = activity.dp(UiMetrics.controlHeightDp)
         setPadding(0, 0, 0, 0)
@@ -839,12 +838,9 @@ class SettingsPage(
         var selectedIndex = initialIndex.coerceIn(labels.indices)
         val control = FrameLayout(activity).apply {
             id = viewID
-            background = roundedBackground(
-                activity,
-                Palette.surfaceVariant,
-                Palette.border,
-                radius = 9,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.surfaceVariant }, { Palette.border },
+                radius = 9)
             clipChildren = false
             clipToPadding = false
             layoutParams = LinearLayout.LayoutParams(
@@ -855,11 +851,9 @@ class SettingsPage(
         val thumbInset = activity.dp(3)
         val thumb = View(activity).apply {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            background = roundedBackground(
-                activity,
-                Palette.primaryFill,
-                radius = 7,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.primaryFill },
+                radius = 7)
         }
         control.addView(
             thumb,
@@ -879,7 +873,7 @@ class SettingsPage(
                     gravity = Gravity.CENTER
                     includeFontPadding = false
                     maxLines = 2
-                    setTextColor(if (index == selectedIndex) Palette.onPrimary else Palette.text)
+                    setThemeTextColor { if (index == selectedIndex) Palette.onPrimary else Palette.text }
                     setTypeface(
                         typeface,
                         if (index == selectedIndex) Typeface.BOLD else Typeface.NORMAL,
@@ -895,9 +889,7 @@ class SettingsPage(
                             val tab = row.getChildAt(tabIndex) as TextView
                             val selected = tabIndex == selectedIndex
                             tab.isSelected = selected
-                            tab.setTextColor(
-                                if (selected) Palette.onPrimary else Palette.text,
-                            )
+                            tab.setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
                             tab.setTypeface(
                                 tab.typeface,
                                 if (selected) Typeface.BOLD else Typeface.NORMAL,
@@ -1012,7 +1004,7 @@ class SettingsPage(
             addView(TextView(activity).apply {
                 text = label
                 textSize = 15f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 includeFontPadding = false
             })
             addView(deadlineLegendDot(label, dotID, color))
@@ -1040,14 +1032,11 @@ class SettingsPage(
         text = label
         textSize = 15f
         gravity = Gravity.CENTER
-        setTextColor(if (primary) Palette.onPrimary else Palette.primaryText)
+        setThemeTextColor { if (primary) Palette.onPrimary else Palette.primaryText }
         setTypeface(typeface, Typeface.BOLD)
-        background = roundedBackground(
-            activity,
-            if (primary) Palette.primaryFill else Palette.surface,
-            if (primary) Palette.primaryFill else Palette.primary,
-            radius = 6,
-        )
+        background = themedRoundedBackground(
+            activity, { if (primary) Palette.primaryFill else Palette.surface }, { if (primary) Palette.primaryFill else Palette.primary },
+            radius = 6)
         isClickable = true
         isFocusable = true
         layoutParams = LinearLayout.LayoutParams(
@@ -1067,7 +1056,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。"
             textSize = 12f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setLineSpacing(0f, 1.1f)
             setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
         })
@@ -1075,14 +1064,11 @@ class SettingsPage(
             text = "清除本地数据"
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(Palette.danger)
+            setThemeTextColor { Palette.danger }
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(
-                activity,
-                Palette.dangerSurface,
-                Palette.dangerBorder,
-                radius = 6,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.dangerSurface }, { Palette.dangerBorder },
+                radius = 6)
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
@@ -1121,7 +1107,7 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = "Where To Study  ${BuildConfig.VERSION_NAME}\n北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。"
             textSize = 13f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setLineSpacing(0f, 1.12f)
             setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
         })
@@ -1138,14 +1124,11 @@ class SettingsPage(
             text = "隐私说明"
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(Palette.primaryText)
+            setThemeTextColor { Palette.primaryText }
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(
-                activity,
-                Palette.surface,
-                Palette.border,
-                radius = 6,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.surface }, { Palette.border },
+                radius = 6)
             isClickable = true
             isFocusable = true
             layoutParams = LinearLayout.LayoutParams(
@@ -1163,7 +1146,7 @@ class SettingsPage(
         hint = hintText
         setText(value)
         textSize = 15f
-        setTextColor(Palette.text)
+        setThemeTextColor { Palette.text }
         setHintTextColor(Palette.muted)
         isSingleLine = true
         inputType = if (secure) {
@@ -1175,12 +1158,9 @@ class SettingsPage(
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             setAutofillHints(null)
         }
-        background = roundedBackground(
-            activity,
-            Palette.surface,
-            Palette.border,
-            radius = 6,
-        )
+        background = themedRoundedBackground(
+            activity, { Palette.surface }, { Palette.border },
+            radius = 6)
         setPadding(activity.dp(13), 0, activity.dp(13), 0)
         layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1193,14 +1173,11 @@ class SettingsPage(
             text = label
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(Palette.primaryText)
+            setThemeTextColor { Palette.primaryText }
             setTypeface(typeface, Typeface.BOLD)
-            background = roundedBackground(
-                activity,
-                Palette.surface,
-                Palette.border,
-                radius = 6,
-            )
+            background = themedRoundedBackground(
+                activity, { Palette.surface }, { Palette.border },
+                radius = 6)
             isClickable = true
             isFocusable = true
             minHeight = activity.dp(UiMetrics.controlHeightDp)
@@ -1220,14 +1197,14 @@ class SettingsPage(
         addView(TextView(activity).apply {
             text = activity.getString(R.string.planner_eyebrow)
             textSize = 11f
-            setTextColor(Palette.muted)
+            setThemeTextColor { Palette.muted }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
         })
         addView(TextView(activity).apply {
             text = "设置"
             textSize = 28f
-            setTextColor(Palette.text)
+            setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
             setPadding(0, activity.dp(3), 0, 0)
@@ -1242,7 +1219,7 @@ class SettingsPage(
         val content = LinearLayout(activity).apply {
             id = R.id.privacy_policy_content
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.surface)
+            setThemeBackgroundColor { Palette.surface }
             setPadding(
                 activity.dp(20),
                 activity.dp(18),
@@ -1252,13 +1229,13 @@ class SettingsPage(
             addView(TextView(activity).apply {
                 text = "隐私声明 / Privacy Policy"
                 textSize = 24f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
                 text = "生效日期 / Effective date: 2026-08-31"
                 textSize = 13f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(4), 0, activity.dp(14))
             })
             addView(privacyParagraph(
@@ -1273,14 +1250,11 @@ class SettingsPage(
                 text = "在 GitHub 查看完整声明 / Full policy on GitHub ↗"
                 textSize = 15f
                 gravity = Gravity.CENTER
-                setTextColor(Palette.primaryText)
+                setThemeTextColor { Palette.primaryText }
                 setTypeface(typeface, Typeface.BOLD)
-                background = roundedBackground(
-                    activity,
-                    Palette.surface,
-                    Palette.border,
-                    radius = 6,
-                )
+                background = themedRoundedBackground(
+                    activity, { Palette.surface }, { Palette.border },
+                    radius = 6)
                 isClickable = true
                 isFocusable = true
                 contentDescription = "在 GitHub 查看完整隐私声明"
@@ -1304,7 +1278,7 @@ class SettingsPage(
         val scroll = ScrollView(activity).apply {
             isFillViewport = true
             scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            setBackgroundColor(Palette.surface)
+            setThemeBackgroundColor { Palette.surface }
             addView(content)
         }
         AlertDialog.Builder(activity)
@@ -1320,7 +1294,7 @@ class SettingsPage(
             addView(TextView(activity).apply {
                 text = title
                 textSize = 16f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(privacyParagraph(body).apply {
@@ -1331,7 +1305,7 @@ class SettingsPage(
     private fun privacyParagraph(body: String): TextView = TextView(activity).apply {
         text = body
         textSize = 14f
-        setTextColor(Palette.muted)
+        setThemeTextColor { Palette.muted }
         setLineSpacing(0f, 1.15f)
     }
 

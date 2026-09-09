@@ -1,5 +1,4 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
 use ratatui::Frame;
@@ -20,12 +19,12 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     // Login form
     let focus = app.settings_focus;
     let account_style = if focus == 0 && app.settings_editing {
-        Style::default().fg(theme.background).bg(theme.primary)
+        theme.primary_selected()
     } else {
         theme.strong_text()
     };
     let password_style = if focus == 1 && app.settings_editing {
-        Style::default().fg(theme.background).bg(theme.primary)
+        theme.primary_selected()
     } else {
         theme.strong_text()
     };
@@ -51,7 +50,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         Line::from(if app.settings_editing {
             "输入模式 · ↑↓/Tab 切换 · Enter 登录 · Esc 结束输入"
         } else {
-            "Enter/e 开始输入 · l 登录 · o 退出登录 · r 刷新课表"
+            "Enter/e 输入 · l 登录 · o 退出登录 · t 颜色主题 / Color Theme"
         }),
     ])
     .block(Block::default().borders(Borders::ALL).title("账号设置"))

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PlannerView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -223,7 +224,7 @@ struct PlannerView: View {
         HStack(spacing: 10) {
             Image(systemName: weatherSymbol(day.weatherDay))
                 .font(.title3)
-                .foregroundStyle(AppTheme.primary)
+                .foregroundStyle(theme.primary)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(model.localized(label)) · \(shortDate(day.date))")
@@ -298,11 +299,11 @@ struct PlannerView: View {
                         }
                         Text(model.isRefreshingClassrooms ? "正在获取当天空教室…" : "获取空教室信息")
                     }
-                    .foregroundStyle(AppTheme.onPrimary)
+                    .foregroundStyle(theme.onPrimary)
                     .frame(maxWidth: .infinity, minHeight: 28)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(AppTheme.primaryFill)
+                .tint(theme.primaryFill)
                 .disabled(model.isRefreshingClassrooms)
 
                 if !model.classroomStatusMessage.isEmpty {
@@ -336,7 +337,7 @@ struct PlannerView: View {
                     )
                 )
                 .toggleStyle(.switch)
-                .tint(AppTheme.primary)
+                .tint(theme.primary)
 
                 HStack(spacing: 8) {
                     Button("选中空闲") {
@@ -374,13 +375,13 @@ struct PlannerView: View {
                     .font(.caption.monospacedDigit())
             }
             .frame(maxWidth: .infinity, minHeight: 54)
-            .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
+            .foregroundStyle(selected ? theme.onPrimary : AppTheme.text)
             .background(
-                selected ? AppTheme.primaryFill : (busy ? AppTheme.accent.opacity(0.45) : AppTheme.background)
+                selected ? theme.primaryFill : (busy ? theme.accent.opacity(0.45) : AppTheme.background)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(selected ? AppTheme.primaryFill : AppTheme.border, lineWidth: 1)
+                    .stroke(selected ? theme.primaryFill : AppTheme.border, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
@@ -443,11 +444,11 @@ struct PlannerView: View {
                                     .lineLimit(2)
                                     .multilineTextAlignment(.center)
                                     .frame(maxWidth: .infinity, minHeight: 46)
-                                    .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
-                                    .background(selected ? AppTheme.primaryFill : AppTheme.background)
+                                    .foregroundStyle(selected ? theme.onPrimary : AppTheme.text)
+                                    .background(selected ? theme.primaryFill : AppTheme.background)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6)
-                                            .stroke(selected ? AppTheme.primaryFill : AppTheme.border, lineWidth: 1)
+                                            .stroke(selected ? theme.primaryFill : AppTheme.border, lineWidth: 1)
                                     )
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
@@ -517,7 +518,7 @@ struct PlannerView: View {
                 Text(room.name).font(.headline)
                 Text(selectedRanges)
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(AppTheme.primary)
+                    .foregroundStyle(theme.primary)
             }
             Spacer(minLength: 8)
             Text(room.size.map { "\($0) \(model.localized("座"))" } ?? model.localized("座位未知"))

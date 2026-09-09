@@ -8,6 +8,8 @@ import teachingCalendarLogicTest from './TeachingCalendarLogic.test';
 import calendarImportLogicTest from './CalendarImportLogic.test';
 import dailyCoursePlanningTest from './DailyCoursePlanning.test';
 import adaptivePolicyTest from './AdaptivePolicy.test';
+import calendarTypographyTest from './CalendarTypography.test';
+import colorThemesTest from './ColorThemes.test';
 import robustnessTest from './Robustness.test';
 import credentialStoreTest from './CredentialStore.test';
 import todayCourseWidgetDataTest from './TodayCourseWidgetData.test';
@@ -29,6 +31,8 @@ export default function testsuite() {
   calendarImportLogicTest();
   dailyCoursePlanningTest();
   adaptivePolicyTest();
+  calendarTypographyTest();
+  colorThemesTest();
   robustnessTest();
   credentialStoreTest();
   todayCourseWidgetDataTest();

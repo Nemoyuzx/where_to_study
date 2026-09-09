@@ -104,7 +104,7 @@ export struct ChipButton {
     .padding(2)
     .justifyContent(FlexAlign.Center)
     .backgroundColor(this.selected ? AppTheme.primaryFill() :
-      (this.busy ? '#73E2BC62' : AppTheme.background()))
+      (this.busy ? AppTheme.accentSurface() : AppTheme.background()))
     .borderRadius(8)
     .border({
       width: 1,

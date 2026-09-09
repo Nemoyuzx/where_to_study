@@ -14,6 +14,9 @@ import {
 import { FileClassroomStore, ClassroomStoring } from '../store/ClassroomStore';
 import { FileHolidayStore, HolidayStoring } from '../store/HolidayStore';
 import { PreferencesStore } from '../store/PreferencesStore';
+import { ColorThemeStore } from '../store/ColorThemeStore';
+import { ColorThemes, ColorThemeSelection, ColorThemeState } from '../common/ColorThemes';
+import { AppTheme } from '../common/AppTheme';
 import { ScheduleFetching, SJDScheduleClient } from '../net/SjdScheduleClient';
 import { ClassroomFetching, SJDClassroomClient } from '../net/SjdClassroomClient';
 import { HolidayFetching, HolidayClient } from '../net/HolidayClient';
@@ -173,6 +176,8 @@ class HolidayLoadState {
 
 @ObservedV2
 export class AppModel implements CalendarViewportPreloadTarget {
+  @Trace colorTheme: ColorThemeState = AppTheme.state;
+  private readonly colorThemeStore: ColorThemeStore;
   @Trace selectedSection: AppSection = AppSection.planner;
   @Trace account: string = '';
   @Trace password: string = '';
@@ -312,6 +317,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.statusMessageAutoDismissMs = 4000;
     this.preferencesName = preferencesName;
     this.preferences = new PreferencesStore(preferencesName);
+    this.colorThemeStore = new ColorThemeStore(this.colorTheme, this.preferences);
   }
 
   // 与 iOS 端 AppModel.init 对应的冷启动引导（RootView.aboutToAppear 调用一次）。
@@ -331,6 +337,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.launched = true;
     // BUG-039 修复：UI 测试偏好域每次启动清空，避免跨测试残留状态。
     await this.prepareForLaunch();
+    await this.restoreColorTheme();
     const savedTermID: string | null = await this.preferences.getString('termID');
     const savedTermStart: string | null = await this.preferences.getString('termStartDate');
     const savedCampusID: string | null = await this.preferences.getString('campusID');
@@ -687,6 +694,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private async restorePersistedSettings(): Promise<void> {
     try {
+      await this.restoreColorTheme();
       const savedTermID: string | null = await this.preferences.getString('termID');
       const savedTermStart: string | null = await this.preferences.getString('termStartDate');
       const savedCampusID: string | null = await this.preferences.getString('campusID');
@@ -754,6 +762,39 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   // ---------- 设置保存 ----------
+
+  private async restoreColorTheme(): Promise<void> {
+    try {
+      await this.colorThemeStore.restore(this.isSampleMode());
+      if (!this.isSampleMode()) {
+        WidgetSync.refreshTheme(this.colorTheme.selection);
+      }
+    } catch (e) {
+      // 本地外观读取失败不影响隐私同意状态和数据加载。
+    }
+  }
+
+  async selectColorTheme(preset: string): Promise<boolean> {
+    return this.saveColorTheme(this.colorTheme.selection.selecting(preset));
+  }
+
+  async setCustomColorTheme(primary: string, accent: string, selectedDate: string): Promise<boolean> {
+    const selection: ColorThemeSelection | null = ColorThemes.custom(primary, accent, selectedDate);
+    return selection !== null ? this.saveColorTheme(selection) : false;
+  }
+
+  private async saveColorTheme(selection: ColorThemeSelection): Promise<boolean> {
+    const sample: boolean = this.isSampleMode();
+    try {
+      await this.colorThemeStore.save(selection, sample);
+      if (!sample) {
+        WidgetSync.refreshTheme(selection);
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   async saveSettings(): Promise<boolean> {
     if (this.isSampleMode()) {
@@ -1331,6 +1372,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     await this.preferences.remove('customDeadlinesURL');
     await this.preferences.remove('favoriteDeadlinesV1');
     await this.preferences.remove('appLanguage');
+    await this.colorThemeStore.save(new ColorThemeSelection(), false);
+    WidgetSync.refreshTheme(this.colorTheme.selection);
     this.widgetShowsLocation = true;
     this.widgetShowsTeacher = true;
     this.widgetCourseLimit = WidgetCoursePreferences.defaultLimit;

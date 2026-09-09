@@ -4,9 +4,10 @@
 import { Course, SlotMetadata } from '../../common/Models';
 import { DateParts, StrictDates } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
+import { CalendarTypography } from '../../common/CalendarTypography';
 import { AppLanguage } from '../../common/AppLocalization';
 import { AppModel } from '../../model/AppModel';
-import { PhoneNavigationLayout } from '../../common/DeviceState';
+import { DeviceState, PhoneNavigationLayout } from '../../common/DeviceState';
 import { CalendarFormatters, CalendarTimelineDay, CalendarTimelineLogic } from './CalendarLogic';
 
 export class MobileCalendarTimelineLayout {
@@ -206,6 +207,7 @@ export struct MobileCalendarTimelineView {
   };
   @Local nowEpochMs: number = Date.now();
   @Local viewportWidth: number = 300;
+  private readonly isPc: boolean = DeviceState.isPc2in1();
   private scroller: Scroller = new Scroller();
   private timerId: number = -1;
   private viewVisible: boolean = true;
@@ -384,7 +386,7 @@ export struct MobileCalendarTimelineView {
           ForEach(this.hours, (hour: number) => {
             if (!this.hourLabelObscured(hour)) {
               Text(CalendarFormatters.hourLabel(hour))
-                .fontSize(this.expanded ? 10 : 9)
+                .fontSize(CalendarTypography.fontSize(this.expanded ? 10 : 9, this.isPc))
                 .fontColor(AppTheme.secondaryText())
                 .width(this.hourAxisWidth() - 8)
                 .textAlign(TextAlign.Center)
@@ -556,7 +558,7 @@ export struct MobileCalendarTimelineView {
         .fontColor(AppTheme.secondaryText())
         .maxLines(1)
       Text(slot.start + '-' + slot.end)
-        .fontSize(9)
+        .fontSize(CalendarTypography.fontSize(9, this.isPc))
         .fontColor(AppTheme.secondaryText())
         .maxLines(1)
     }
@@ -574,7 +576,7 @@ export struct MobileCalendarTimelineView {
   @Builder
   slotGuide(slot: SlotMetadata) {
     Text(this.model.text('第' + slot.label + '节') + ' ' + slot.start + '-' + slot.end)
-      .fontSize(9)
+      .fontSize(CalendarTypography.fontSize(9, this.isPc))
       .fontColor(AppTheme.secondaryText())
       .padding({ left: 6, right: 6, top: 3, bottom: 3 })
       .borderRadius(9)
@@ -603,26 +605,26 @@ export struct MobileCalendarTimelineView {
     }
   }
 
-  // 宽屏课程块直接对齐 macOS CalendarTimelineView：周视图使用 9/8/8 字号、
+  // 宽屏课程块沿用 macOS 层级；PC 单独遵循 >=10fp 下限，平板保留原字号。
   // 单行 metadata、每轨 6vp gutter、4vp padding、5vp 圆角且不加左强调边。
   @Builder
   courseBlockForExpanded(dayIndex: number, placement: CoursePlacement) {
     Column({ space: 1 }) {
       Text(placement.course.name)
-        .fontSize(this.showsWeekColumns ? 9 : 11)
+        .fontSize(CalendarTypography.fontSize(this.showsWeekColumns ? 9 : 11, this.isPc))
         .fontWeight(FontWeight.Medium)
         .fontColor(AppTheme.onPrimary())
         .maxLines(1)
       if (this.blockHeight(placement.course) >= 38) {
         Text(placement.course.timeRange)
-          .fontSize(this.showsWeekColumns ? 8 : 9)
+          .fontSize(CalendarTypography.fontSize(this.showsWeekColumns ? 8 : 9, this.isPc))
           .fontColor(AppTheme.onPrimary())
           .maxLines(1)
       }
       if (this.blockHeight(placement.course) >= 42 &&
         this.courseMetadataOf(placement.course).length > 0) {
         Text(this.courseMetadataOf(placement.course))
-          .fontSize(this.showsWeekColumns ? 8 : 9)
+          .fontSize(CalendarTypography.fontSize(this.showsWeekColumns ? 8 : 9, this.isPc))
           .fontColor(AppTheme.onPrimary())
           .maxLines(1)
       }
@@ -687,7 +689,7 @@ export struct MobileCalendarTimelineView {
         .maxLines(3)
       if (this.blockHeight(placement.course) >= 38) {
         Text(placement.course.timeRange)
-          .fontSize(8)
+          .fontSize(CalendarTypography.fontSize(8, this.isPc))
           .fontColor(AppTheme.onPrimary())
           .maxLines(2)
       }

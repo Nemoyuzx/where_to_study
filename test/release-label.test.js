@@ -37,7 +37,7 @@ test("release labels reject numeric suffixes after alpha", () => {
   }
 });
 
-test("all tracked client projects use the 0.2.8 release version", () => {
+test("client versions preserve stable 0.2.8 and the prepared HarmonyOS 0.2.9 update", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -50,6 +50,10 @@ test("all tracked client projects use the 0.2.8 release version", () => {
   const nativeApple = readFileSync(path.join(root, "native", "apple", "project.yml"), "utf8");
   const nativeHarmony = readFileSync(
     path.join(root, "native", "harmony", "AppScope", "app.json5"),
+    "utf8",
+  );
+  const nativeHarmonyAppMeta = readFileSync(
+    path.join(root, "native", "harmony", "entry", "src", "main", "ets", "common", "AppMeta.ets"),
     "utf8",
   );
   const tauriApple = readFileSync(path.join(root, "src-tauri", "gen", "apple", "project.yml"), "utf8");
@@ -96,8 +100,9 @@ test("all tracked client projects use the 0.2.8 release version", () => {
   assert.match(nativeAndroid, /versionCode = 46/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.8"/);
   assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "79"/);
-  assert.match(nativeHarmony, /"versionName": "0\.2\.8"/);
-  assert.match(nativeHarmony, /"versionCode": 1002022/);
+  assert.match(nativeHarmony, /"versionName": "0\.2\.9"/);
+  assert.match(nativeHarmony, /"versionCode": 1002024/);
+  assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.2\.9'/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.8/);
   assert.match(tauriApple, /CFBundleVersion: "47"/);
   assert.match(tauriAppleInfo, /<string>0\.2\.8<\/string>/);

@@ -6,6 +6,7 @@ import { AdaptiveLayoutPolicy, PhoneNavigationLayout } from '../common/DeviceSta
 import { AppContext } from '../store/AppContext';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { PrivacyPolicyView } from './PrivacyPolicyView';
+import { ColorThemeSettingsCard } from './ColorThemeSettingsCard';
 import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
 } from '../widget/TodayCourseWidgetData';
@@ -131,6 +132,7 @@ export struct SettingsView {
               this.notificationSurface()
               this.dailyInfoSurface()
               this.widgetSurface()
+              ColorThemeSettingsCard()
               this.languageSurface()
               this.aboutSurface()
               this.localDataSurface()
@@ -147,6 +149,7 @@ export struct SettingsView {
             this.notificationSurface()
             this.dailyInfoSurface()
             this.widgetSurface()
+            ColorThemeSettingsCard()
             this.languageSurface()
             this.aboutSurface()
             this.localDataSurface()

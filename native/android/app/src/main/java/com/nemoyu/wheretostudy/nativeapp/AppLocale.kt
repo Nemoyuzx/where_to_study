@@ -557,6 +557,17 @@ object UiText {
 
     fun localizeDialog(dialog: Dialog) {
         dialog.window?.decorView?.let(::localizeTree)
+        if (dialog is AlertDialog) {
+            listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL)
+                .mapNotNull(dialog::getButton).forEach { button ->
+                    val defaultColors = button.textColors
+                    button.bindTheme("dialogButton") {
+                        button.setTextColor(if (Palette.selection.preset == "default") defaultColors
+                            else android.content.res.ColorStateList.valueOf(Palette.primaryText))
+                    }
+                }
+        }
+        dialog.window?.decorView?.refreshColorTheme()
     }
 
     private fun dateText(source: String): String? {

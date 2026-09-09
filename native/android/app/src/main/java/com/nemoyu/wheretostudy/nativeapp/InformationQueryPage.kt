@@ -271,7 +271,7 @@ internal class InformationQueryPage(
         root = LinearLayout(activity).apply {
             id = R.id.information_query_page
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Palette.background)
+            setThemeBackgroundColor { Palette.background }
             addView(queryHeader())
             addView(modeSelector(), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -327,11 +327,11 @@ internal class InformationQueryPage(
             id = R.id.information_query_mode_switch
             val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
             setPadding(inset, inset, inset, inset)
-            background = roundedBackground(activity, Palette.surfaceVariant, radius = 10)
+            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 10)
         }
         val thumb = View(activity).apply {
             id = R.id.information_query_mode_thumb
-            background = roundedBackground(activity, Palette.segmentedSelection, radius = 8)
+            background = themedRoundedBackground(activity, { Palette.segmentedSelection }, radius = 8)
         }
         control.addView(thumb, FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT))
         val row = LinearLayout(activity).apply {
@@ -346,7 +346,7 @@ internal class InformationQueryPage(
                     text = mode.label
                     textSize = 14f
                     gravity = Gravity.CENTER
-                    setTextColor(Palette.text)
+                    setThemeTextColor { Palette.text }
                     setTypeface(typeface, if (mode == sessionState.selectedMode) Typeface.BOLD else Typeface.NORMAL)
                     isClickable = true
                     isFocusable = true
@@ -465,27 +465,27 @@ internal class InformationQueryPage(
             addView(TextView(activity).apply {
                 text = presentation.status
                 textSize = 17f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
             presentation.nextDeparture?.let { value ->
                 addView(TextView(activity).apply {
                     text = value
                     textSize = 13f
-                    setTextColor(Palette.primaryText)
+                    setThemeTextColor { Palette.primaryText }
                     setPadding(0, activity.dp(5), 0, 0)
                 })
             }
             if (presentation.isStale) addView(TextView(activity).apply {
                 text = "当前显示上一次有效缓存，服务正在恢复。"
                 textSize = 12f
-                setTextColor(Palette.danger)
+                setThemeTextColor { Palette.danger }
                 setPadding(0, activity.dp(6), 0, 0)
             })
             addView(TextView(activity).apply {
                 text = "数据更新时间：${snapshot.generatedAt.replace('T', ' ').take(16)}"
                 textSize = 11f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(6), 0, 0)
             })
         })
@@ -507,7 +507,7 @@ internal class InformationQueryPage(
                     addView(TextView(activity).apply {
                         text = "$campus · $location"
                         textSize = 13f
-                        setTextColor(Palette.text)
+                        setThemeTextColor { Palette.text }
                         setPadding(0, activity.dp(3), 0, activity.dp(3))
                     })
                 }
@@ -522,7 +522,7 @@ internal class InformationQueryPage(
                         text = "• $note"
                         UiText.preserveRawText(this)
                         textSize = 12f
-                        setTextColor(Palette.muted)
+                        setThemeTextColor { Palette.muted }
                         setPadding(0, activity.dp(2), 0, activity.dp(2))
                     })
                 }
@@ -544,21 +544,21 @@ internal class InformationQueryPage(
             addView(TextView(activity).apply {
                 text = "${route.from} → ${route.to}"
                 textSize = 16f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
                 text = route.periodLabel
                 UiText.preserveRawText(this)
                 textSize = 11f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(3), 0, activity.dp(7))
             })
             if (route.departures.isEmpty()) {
                 addView(TextView(activity).apply {
                     text = "今日该方向无班车"
                     textSize = 13f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                 })
             } else {
                 route.departures.forEach { departure ->
@@ -569,14 +569,14 @@ internal class InformationQueryPage(
                         addView(TextView(activity).apply {
                             text = departure.time
                             textSize = 14f
-                            setTextColor(Palette.primaryText)
+                            setThemeTextColor { Palette.primaryText }
                             setTypeface(typeface, Typeface.BOLD)
                         }, LinearLayout.LayoutParams(activity.dp(64), ViewGroup.LayoutParams.WRAP_CONTENT))
                         addView(TextView(activity).apply {
                             text = "${departure.vehicle} × ${departure.count}"
                             UiText.preserveRawText(this)
                             textSize = 13f
-                            setTextColor(Palette.text)
+                            setThemeTextColor { Palette.text }
                         })
                     })
                 }
@@ -634,7 +634,7 @@ internal class InformationQueryPage(
                 id = R.id.information_query_show_ended
                 text = "显示已结束"
                 textSize = 13f
-                setTextColor(Palette.text)
+                setThemeTextColor { Palette.text }
                 isChecked = sessionState.showsEnded
                 setOnCheckedChangeListener { button, checked ->
                     activity.performControlHaptic(button)
@@ -646,7 +646,7 @@ internal class InformationQueryPage(
             addView(TextView(activity).apply {
                 id = R.id.information_query_result_count
                 textSize = 12f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(4), 0, activity.dp(8))
             })
             eventList = LinearLayout(activity).apply {
@@ -687,11 +687,11 @@ internal class InformationQueryPage(
         // from writing it back and accidentally resetting incremental paging.
         UiText.preserveRawText(this)
         textSize = 14f
-        setTextColor(Palette.text)
+        setThemeTextColor { Palette.text }
         setHintTextColor(Palette.muted)
         isSingleLine = true
         inputType = InputType.TYPE_CLASS_TEXT
-        background = roundedBackground(activity, Palette.surface, Palette.border, radius = 8)
+        background = themedRoundedBackground(activity, { Palette.surface }, { Palette.border }, radius = 8)
         setPadding(activity.dp(12), 0, activity.dp(12), 0)
         minHeight = activity.dp(42)
         addTextChangedListener(object : TextWatcher {
@@ -726,14 +726,11 @@ internal class InformationQueryPage(
                     isFocusable = true
                     fun bind() {
                         val selected = category == sessionState.category
-                        setTextColor(if (selected) Palette.onPrimary else Palette.text)
+                        setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
                         setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
-                        background = roundedBackground(
-                            activity,
-                            if (selected) Palette.primaryFill else Palette.surface,
-                            if (selected) Palette.primaryFill else Palette.border,
-                            radius = 17,
-                        )
+                        background = themedRoundedBackground(
+                            activity, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
+                            radius = 17)
                     }
                     bind()
                     setOnClickListener { source ->
@@ -767,7 +764,7 @@ internal class InformationQueryPage(
                 addView(TextView(activity).apply {
                     text = "分类"
                     textSize = 12f
-                    setTextColor(Palette.muted)
+                    setThemeTextColor { Palette.muted }
                     setPadding(0, 0, activity.dp(8), 0)
                 }, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -785,14 +782,11 @@ internal class InformationQueryPage(
                         isFocusable = true
                         fun bind() {
                             val selected = category == sessionState.metadataCategory
-                            setTextColor(if (selected) Palette.onPrimary else Palette.text)
+                            setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
                             setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
-                            background = roundedBackground(
-                                activity,
-                                if (selected) Palette.primaryFill else Palette.surface,
-                                if (selected) Palette.primaryFill else Palette.border,
-                                radius = 17,
-                            )
+                            background = themedRoundedBackground(
+                                activity, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
+                                radius = 17)
                         }
                         bind()
                         setOnClickListener { source ->
@@ -805,17 +799,14 @@ internal class InformationQueryPage(
                                 val button = row.getChildAt(index + 1) as TextView
                                 val value = (listOf<String?>(null) + options)[index]
                                 val selected = value == sessionState.metadataCategory
-                                button.setTextColor(if (selected) Palette.onPrimary else Palette.text)
+                                button.setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
                                 button.setTypeface(
                                     button.typeface,
                                     if (selected) Typeface.BOLD else Typeface.NORMAL,
                                 )
-                                button.background = roundedBackground(
-                                    activity,
-                                    if (selected) Palette.primaryFill else Palette.surface,
-                                    if (selected) Palette.primaryFill else Palette.border,
-                                    radius = 17,
-                                )
+                                button.background = themedRoundedBackground(
+                                    activity, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
+                                    radius = 17)
                             }
                             root.findViewById<LinearLayout?>(R.id.information_query_events_list)
                                 ?.let(::renderImportantEventList)
@@ -916,7 +907,7 @@ internal class InformationQueryPage(
                         text = item.name
                         UiText.preserveRawText(this)
                         textSize = 15f
-                        setTextColor(Palette.text)
+                        setThemeTextColor { Palette.text }
                         setTypeface(typeface, Typeface.BOLD)
                         maxLines = 3
                         ellipsize = TextUtils.TruncateAt.END
@@ -928,7 +919,7 @@ internal class InformationQueryPage(
                         ).joinToString(" · ")
                         UiText.preserveRawText(this)
                         textSize = 11f
-                        setTextColor(DeadlineVisualLogic.color(item))
+                        setThemeTextColor { DeadlineVisualLogic.color(item) }
                         setPadding(0, activity.dp(4), 0, 0)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -939,7 +930,7 @@ internal class InformationQueryPage(
             addView(TextView(activity).apply {
                 text = item.deadline.replace('T', ' ').take(16)
                 textSize = 13f
-                setTextColor(Palette.primaryText)
+                setThemeTextColor { Palette.primaryText }
                 setTypeface(typeface, Typeface.BOLD)
                 setPadding(0, activity.dp(7), 0, 0)
             })
@@ -954,7 +945,7 @@ internal class InformationQueryPage(
                 text = metadata
                 UiText.preserveRawText(this)
                 textSize = 11f
-                setTextColor(Palette.muted)
+                setThemeTextColor { Palette.muted }
                 maxLines = 2
                 ellipsize = TextUtils.TruncateAt.END
                 setPadding(0, activity.dp(4), 0, 0)
@@ -971,7 +962,7 @@ internal class InformationQueryPage(
             if (item.archived) addView(TextView(activity).apply {
                 text = "已归档"
                 textSize = 11f
-                setTextColor(Palette.danger)
+                setThemeTextColor { Palette.danger }
                 setPadding(0, activity.dp(4), 0, 0)
             })
             (item.officialURL ?: item.metadataSource?.url ?: item.sourceHomepage)?.let { url ->
@@ -986,7 +977,7 @@ internal class InformationQueryPage(
         text = value
         UiText.preserveRawText(this)
         textSize = 11f
-        setTextColor(Palette.muted)
+        setThemeTextColor { Palette.muted }
         maxLines = maximumLines
         ellipsize = TextUtils.TruncateAt.END
         setPadding(0, activity.dp(4), 0, 0)
@@ -997,13 +988,13 @@ internal class InformationQueryPage(
         scaleType = ImageView.ScaleType.CENTER
         isClickable = true
         isFocusable = true
-        background = roundedBackground(activity, Color.TRANSPARENT, radius = 8)
+        background = themedRoundedBackground(activity, { Color.TRANSPARENT }, radius = 8)
         tag = item.favoriteID
         setTag(R.id.favorite_deadline_item_key, item.favoriteID)
         fun bind() {
             val favorite = preferences.isFavorite(item)
             setImageResource(if (favorite) R.drawable.ic_star_filled else R.drawable.ic_star_outline)
-            imageTintList = ColorStateList.valueOf(if (favorite) Palette.accent else Palette.muted)
+            bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(if (favorite) Palette.accent else Palette.muted) }
             contentDescription = activity.uiText(if (favorite) "取消收藏" else "收藏日程")
         }
         bind()
@@ -1040,7 +1031,7 @@ internal class InformationQueryPage(
     private fun statusText(message: String): TextView = TextView(activity).apply {
         text = message
         textSize = 13f
-        setTextColor(Palette.muted)
+        setThemeTextColor { Palette.muted }
         gravity = Gravity.CENTER
         setPadding(0, activity.dp(18), 0, activity.dp(18))
     }
@@ -1053,7 +1044,7 @@ internal class InformationQueryPage(
         id = viewID
         text = "$label ↗"
         textSize = 11f
-        setTextColor(Palette.primaryText)
+        setThemeTextColor { Palette.primaryText }
         setPadding(0, activity.dp(8), 0, activity.dp(8))
         isClickable = true
         isFocusable = true

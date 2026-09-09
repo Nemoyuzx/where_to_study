@@ -6,6 +6,51 @@ import XCTest
 
 @MainActor
 final class MobileMonthNativeGridTests: XCTestCase {
+    func testBlackSelectedDateAddsOutlineOnlyWhenThereIsNoDeadlineBorder() throws {
+        let source = snapshots()[0]
+        let day = MobileMonthDaySnapshot(date: source.date, dateKey: source.dateKey, dayNumberText: source.dayNumberText,
+            accessibilityLabel: source.accessibilityLabel, courses: [], holiday: nil, events: [], allDayEvents: [], deadlineKinds: [])
+        let view = MobileMonthGridUIView()
+        view.overrideUserInterfaceStyle = .dark
+        view.frame = CGRect(x: 0, y: 0, width: 350, height: 500)
+        let theme = try XCTUnwrap(ColorThemeConfiguration.default.editing(primary: "#FFFFFF", accent: "#FFFFFF", selectedDate: "#000000"))
+        view.update(configuration(days: [day]), theme: theme)
+        let cell = view.cells[0]
+        let border = try XCTUnwrap(cell.layer.sublayers?.compactMap { $0 as? CAShapeLayer }.first)
+        XCTAssertFalse(border.isHidden)
+        XCTAssertEqual(UIColor(cgColor: try XCTUnwrap(border.strokeColor)),
+                       UIColor(AppTheme(configuration: theme).selectedDateOutline).resolvedColor(with: view.traitCollection))
+        view.update(configuration(days: [source]), theme: theme)
+        XCTAssertEqual(UIColor(cgColor: try XCTUnwrap(border.strokeColor)),
+                       UIColor(AppTheme.assignment).resolvedColor(with: view.traitCollection))
+    }
+
+    func testThemeChangeRecolorsRetainedCellsWithoutChangingTheirDatesOrAccessibility() throws {
+        let view = MobileMonthGridUIView()
+        view.overrideUserInterfaceStyle = .light
+        view.frame = CGRect(x: 0, y: 0, width: 350, height: 500)
+        var selectedDate: Date?
+        let days = snapshots()
+        let grid = configuration(days: days, onSelect: { selectedDate = $0 })
+        view.update(grid)
+        let identities = view.cells.map(ObjectIdentifier.init)
+        let labels = view.cells.map { $0.eventLabels.map(ObjectIdentifier.init) }
+        let accessibility = view.cells.map { $0.summary.accessibilityIdentifier }
+        let original = view.cells[0].backgroundColor
+        let theme = ColorThemeConfiguration.default.selecting(.ocean)
+        view.update(grid, theme: theme)
+        XCTAssertNotEqual(view.cells[0].backgroundColor, original)
+        XCTAssertEqual(view.cells[0].backgroundColor,
+                       UIColor(AppTheme(configuration: theme).selectedDate).resolvedColor(with: view.traitCollection))
+        XCTAssertEqual(view.cells.map(ObjectIdentifier.init), identities)
+        XCTAssertEqual(view.cells.map { $0.eventLabels.map(ObjectIdentifier.init) }, labels)
+        XCTAssertEqual(view.cells.map { $0.summary.accessibilityIdentifier }, accessibility)
+        XCTAssertTrue(view.cells[0].summary.accessibilityActivate())
+        XCTAssertEqual(selectedDate, days[0].date)
+        view.update(grid)
+        XCTAssertEqual(view.cells[0].backgroundColor, original)
+    }
+
     func testAnimationReusesFortyTwoCellsAndTheirEventLabels() {
         let days = snapshots()
         let view = MobileMonthGridUIView()

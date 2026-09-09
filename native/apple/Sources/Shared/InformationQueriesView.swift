@@ -245,6 +245,7 @@ enum InformationQueryErrorLocalization {
 }
 
 struct InformationQueriesView: View {
+    @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @ObservedObject private var shuttleStore: ShuttleBusStore
@@ -357,7 +358,7 @@ struct InformationQueriesView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: statusIcon)
                             .font(.title2)
-                            .foregroundStyle(departureCount == 0 ? AppTheme.accent : AppTheme.primary)
+                            .foregroundStyle(departureCount == 0 ? theme.accentText : theme.primary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(model.localized(statusTitle))
                                 .font(.headline)
@@ -380,7 +381,7 @@ struct InformationQueriesView: View {
                     if snapshot.status == "stale" {
                         Label("当前展示最近一次成功同步的缓存", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                             .font(.caption)
-                            .foregroundStyle(AppTheme.accent)
+                            .foregroundStyle(theme.accentText)
                     }
                     if let notice = ShuttleBusTodayLogic.scheduleNotice(in: snapshot) {
                         Divider()
@@ -449,7 +450,7 @@ struct InformationQueriesView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "arrow.left.arrow.right")
-                        .foregroundStyle(AppTheme.primary)
+                        .foregroundStyle(theme.primary)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("\(schedule.from) → \(schedule.to)")
                             .font(.headline)
@@ -474,7 +475,7 @@ struct InformationQueriesView: View {
                                     Text(departure.departureTime)
                                         .font(.subheadline.weight(.bold).monospacedDigit())
                                     if departure.departureTime == nextDeparture {
-                                        Circle().fill(AppTheme.primary).frame(width: 5, height: 5)
+                                        Circle().fill(theme.primary).frame(width: 5, height: 5)
                                     }
                                 }
                                 Text("\(departure.service.vehicle) × \(departure.service.count)")
@@ -485,7 +486,7 @@ struct InformationQueriesView: View {
                             .frame(maxWidth: .infinity)
                             .background(
                                 departure.departureTime == nextDeparture
-                                    ? AppTheme.primary.opacity(0.12)
+                                    ? theme.primary.opacity(0.12)
                                     : AppTheme.background,
                                 in: RoundedRectangle(cornerRadius: 8)
                             )
@@ -551,14 +552,14 @@ struct InformationQueriesView: View {
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(
                                             effectiveCategory == category
-                                                ? AppTheme.onPrimary
+                                                ? theme.onPrimary
                                                 : AppTheme.text
                                         )
                                         .padding(.horizontal, 11)
                                         .padding(.vertical, 7)
                                         .background(
                                             effectiveCategory == category
-                                                ? AppTheme.primaryFill
+                                                ? theme.primaryFill
                                                 : AppTheme.background,
                                             in: Capsule()
                                         )
@@ -587,7 +588,7 @@ struct InformationQueriesView: View {
 
                     Toggle("显示已结束", isOn: $showsEndedEvents)
                         .toggleStyle(.switch)
-                        .tint(AppTheme.primary)
+                        .tint(theme.primary)
                         .accessibilityIdentifier("queries.events.show-ended")
 
                     HStack {
@@ -747,7 +748,7 @@ struct InformationQueriesView: View {
                         model.setFavorite(item, isFavorite: !isFavorite)
                     } label: {
                         Image(systemName: isFavorite ? "star.fill" : "star")
-                            .foregroundStyle(isFavorite ? AppTheme.accent : AppTheme.secondaryText)
+                            .foregroundStyle(isFavorite ? theme.accent : AppTheme.secondaryText)
                             .frame(width: 34, height: 34)
                     }
                     .buttonStyle(.plain)
@@ -805,7 +806,7 @@ struct InformationQueriesView: View {
     private func sourceNotice(text: String, url: URL) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "info.circle")
-                .foregroundStyle(AppTheme.primary)
+                .foregroundStyle(theme.primary)
             Text(model.localized(text))
                 .font(.caption)
                 .foregroundStyle(AppTheme.secondaryText)
@@ -817,7 +818,7 @@ struct InformationQueriesView: View {
             .accessibilityLabel("查看数据来源")
         }
         .padding(12)
-        .background(AppTheme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .background(theme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func metadataCategoryButton(title: String, value: String) -> some View {
@@ -828,10 +829,10 @@ struct InformationQueriesView: View {
         } label: {
             Text(model.localized(title))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(selected ? AppTheme.onPrimary : AppTheme.text)
+                .foregroundStyle(selected ? theme.onPrimary : AppTheme.text)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 7)
-                .background(selected ? AppTheme.primaryFill : AppTheme.background, in: Capsule())
+                .background(selected ? theme.primaryFill : AppTheme.background, in: Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("queries.events.category.\(value.isEmpty ? "all" : value)")

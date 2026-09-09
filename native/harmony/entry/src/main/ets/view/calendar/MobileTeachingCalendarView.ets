@@ -6,6 +6,7 @@ import { AppModel } from '../../model/AppModel';
 import { Course, HolidayItem } from '../../common/Models';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
+import { CalendarTypography } from '../../common/CalendarTypography';
 import { DeadlineVisual, DeadlineVisualKind } from '../../common/DeadlineVisual';
 import { PageTitle, SurfaceCard } from '../SharedComponents';
 import {
@@ -21,7 +22,7 @@ import {
 } from '../../net/CalendarDailyInfoClient';
 import { vibrator } from '@kit.SensorServiceKit';
 import { AppLanguage } from '../../common/AppLocalization';
-import { PhoneNavigationLayout } from '../../common/DeviceState';
+import { DeviceState, PhoneNavigationLayout } from '../../common/DeviceState';
 
 class MonthEvent {
   readonly id: string;
@@ -67,6 +68,7 @@ export struct MobileTeachingCalendarView {
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local showingActions: boolean = false;
   @Local contentWidth: number = 350;
+  private readonly isPc: boolean = DeviceState.isPc2in1();
   @Local contentHeight: number = 500;
   @Local rootWidth: number = 350;
   @Local rootHeight: number = 640;
@@ -108,7 +110,8 @@ export struct MobileTeachingCalendarView {
     'model.competitionDeadlinesEnabled', 'model.conferenceDeadlinesEnabled',
     'model.schoolContestNoticesEnabled', 'model.summerCampDeadlinesEnabled',
     'model.hackathonDeadlinesEnabled', 'model.customDeadlinesEnabled', 'model.customDeadlinesURL',
-    'model.languageSettingRawValue', 'model.systemLanguageID')
+    'model.languageSettingRawValue', 'model.systemLanguageID',
+    'model.colorTheme.selection', 'model.colorTheme.dark')
   onCalendarDataChange(monitor: IMonitor): void {
     this.calendarDataRevision++;
   }
@@ -688,13 +691,13 @@ export struct MobileTeachingCalendarView {
         Column({ space: 0 }) {
           Text((this.isEnglish() ? 'Cal ' : '公历 ') +
             StrictDates.isoWeekNumber(this.selectedDate()).toString())
-            .fontSize(9.5)
+            .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.secondaryText())
           Text((this.isEnglish() ? 'Teach ' : '教学 ') +
             (this.model.weekNumberOn(this.selectedDate()) === null ? '—' :
               (this.model.weekNumberOn(this.selectedDate()) as number).toString()))
-            .fontSize(9.5)
+            .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
             .fontColor(AppTheme.secondaryText())
         }
         .width(MobileCalendarTimelineLayout.axisWidth)
@@ -733,7 +736,7 @@ export struct MobileTeachingCalendarView {
       Row({ space: 2 }) {
         if (this.firstHoliday(day) !== null) {
           Text(this.model.text(this.firstHoliday(day)?.type === 'holiday' ? '休' : '班'))
-            .fontSize(8)
+            .fontSize(CalendarTypography.fontSize(8, this.isPc))
             .fontWeight(FontWeight.Bold)
             .fontColor(day.equals(this.selectedDate()) ? AppTheme.onPrimary() :
               this.stripForeground(this.firstHoliday(day)))
@@ -747,7 +750,7 @@ export struct MobileTeachingCalendarView {
               this.stripForeground(this.firstHoliday(day)))
         }
       }
-      .height(8)
+      .height(this.isPc ? 14 : 8)
     }
     .layoutWeight(1)
     .height(56)
@@ -1018,7 +1021,7 @@ export struct MobileTeachingCalendarView {
                 this.presentAllDayDialog(renderDate, CalendarMode.day);
               }
             })
-        }, (item: CalendarAllDayItem) => 'selected-all-day-item.' + item.id)
+        }, (item: CalendarAllDayItem) => 'selected-all-day-item.' + item.id + AppTheme.colorKey())
         if (this.allDayItemsOn(renderDate).length > 3) {
           Text('+' + (this.allDayItemsOn(renderDate).length - 3).toString())
             .fontSize(10.5)
@@ -1066,7 +1069,7 @@ export struct MobileTeachingCalendarView {
               .height(40)
           } else {
             Text(this.weekAllDayLabel(day))
-              .fontSize(9.5)
+              .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
               .fontWeight(FontWeight.Bold)
               .fontColor(this.allDayItemsOn(day)[0].tint)
               .maxLines(1)
@@ -1107,7 +1110,7 @@ export struct MobileTeachingCalendarView {
     for (const item of this.holidayItemsOn(day)) {
       result.push(new CalendarAllDayItem('holiday-' + item.id(),
         this.model.text(item.type === 'holiday' ? '休' : '班') + ' ' + item.name,
-        item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary(), AppTheme.selection(),
+        item.type === 'holiday' ? AppTheme.holiday() : AppTheme.selectionText(), AppTheme.selection(),
         TeachingCalendarLogic.timelineAgendaSortOrder(item.type)));
     }
     for (const item of this.dayDataOn(day).assignments) {
@@ -1354,7 +1357,7 @@ export struct MobileTeachingCalendarView {
         }
         if (this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive)) < 0.99) {
           Text(this.compactMonthMarker(day))
-            .fontSize(9.5)
+            .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
             .fontColor(this.monthForeground(day, this.renderedMonthDate(renderDate, interactive)))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1380,7 +1383,8 @@ export struct MobileTeachingCalendarView {
       .justifyContent(this.monthExpansionProgress(
         this.renderedMonthSheetPosition(interactive)) > 0.01 ?
         FlexAlign.Start : FlexAlign.Center)
-      this.deadlineBorderLayers(day, 10, 7, 6)
+      this.deadlineBorderLayers(day, 10, 7, 6,
+        day.equals(this.renderedMonthDate(renderDate, interactive)))
     }
     .layoutWeight(1)
     .height(this.monthRowHeight(rowIndex, renderDate,
@@ -1456,10 +1460,10 @@ export struct MobileTeachingCalendarView {
         this.visibleMonthEventCount(day, renderDate, interactive)),
         (event: MonthEvent) => {
           this.monthEventItem(event, day, renderDate, interactive)
-        }, (event: MonthEvent) => 'month-event.' + event.id + '.' + event.title)
+        }, (event: MonthEvent) => 'month-event.' + event.id + '.' + event.title + AppTheme.colorKey())
       if (this.hiddenMonthEventCount(day, renderDate, interactive) > 0) {
         Text('+' + this.hiddenMonthEventCount(day, renderDate, interactive).toString())
-          .fontSize(9.5)
+          .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
           .fontWeight(FontWeight.Medium)
           .fontColor(day.equals(this.renderedMonthDate(renderDate, interactive)) ?
             AppTheme.onPrimary() : AppTheme.text())
@@ -1484,7 +1488,7 @@ export struct MobileTeachingCalendarView {
   @Builder
   monthEventItem(event: MonthEvent, day: DateParts, renderDate: DateParts, interactive: boolean) {
     Text(event.title)
-      .fontSize(9.5)
+      .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
       .fontWeight(FontWeight.Medium)
       .fontColor(day.equals(this.renderedMonthDate(renderDate, interactive)) ?
         AppTheme.onPrimary() : event.tint)
@@ -1510,11 +1514,11 @@ export struct MobileTeachingCalendarView {
         'holiday-' + item.id(), this.model.text(item.type === 'holiday' ? '休' : '班') +
           ' ' + item.name,
         item.type === 'holiday', item.type === 'workday',
-        item.type === 'holiday' ? AppTheme.holiday() : AppTheme.primary(), AppTheme.selection()));
+        item.type === 'holiday' ? AppTheme.holiday() : AppTheme.selectionText(), AppTheme.selection()));
     }
     for (const course of data.courses) {
       result.push(new MonthEvent('course-' + course.id, course.name, false, false,
-        AppTheme.primary(), AppTheme.selection()));
+        AppTheme.selectionText(), AppTheme.selection()));
     }
     for (const item of data.assignments) {
       result.push(new MonthEvent('assignment-' + item.id,
@@ -1672,7 +1676,7 @@ export struct MobileTeachingCalendarView {
       Row({ space: 1 }) {
         ForEach(CalendarFormatters.weekdayLabels, (label: string) => {
           Text(this.model.text(label))
-            .fontSize(8)
+            .fontSize(CalendarTypography.fontSize(8, this.isPc))
             .fontColor(AppTheme.secondaryText())
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
@@ -1704,9 +1708,10 @@ export struct MobileTeachingCalendarView {
       Stack({ alignContent: Alignment.Center }) {
         Row({ space: 2 }) {
           Text(day.day.toString())
-            .fontSize(8)
+            .fontSize(CalendarTypography.fontSize(8, this.isPc))
             .fontColor(day.equals(this.selectedDate()) ?
-              AppTheme.onPrimary() : AppTheme.text())
+              AppTheme.onPrimary() : AppTheme.textOnPrimaryBlend(
+                TeachingCalendarLogic.yearCourseOpacity(this.markerCount(day)), this.isDarkMode))
           if (TeachingCalendarLogic.showsTodayMarker(day.equals(StrictDates.todayParts()))) {
             Column()
               .width(4)
@@ -1719,7 +1724,7 @@ export struct MobileTeachingCalendarView {
         .height('100%')
         .justifyContent(FlexAlign.Center)
         .alignItems(VerticalAlign.Center)
-        this.deadlineBorderLayers(day, 4, 2, 4)
+        this.deadlineBorderLayers(day, 4, 2, 4, day.equals(this.selectedDate()))
       }
       .width('100%')
       .height(26)
@@ -1755,7 +1760,15 @@ export struct MobileTeachingCalendarView {
 
   @Builder
   deadlineBorderLayers(day: DateParts, outerRadius: number, innerRadius: number,
-    innerInset: number) {
+    innerInset: number, selected: boolean) {
+    if (AppTheme.shouldOutlineSelectedDate(selected, this.yearDeadlineKinds(day).length > 0)) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .border({ width: 1.5, color: AppTheme.selectedDateOutline() })
+        .borderRadius(outerRadius)
+        .hitTestBehavior(HitTestMode.None)
+    }
     ForEach(this.yearDeadlineKinds(day),
       (kind: DeadlineVisualKind, index: number) => {
       Column()
@@ -1865,7 +1878,7 @@ export struct MobileTeachingCalendarView {
                 .borderRadius(6)
                 .backgroundColor(item.fill)
                 .alignItems(VerticalAlign.Center)
-              }, (item: CalendarAllDayItem) => 'all-day-dialog.' + mode + '.' + item.id)
+              }, (item: CalendarAllDayItem) => 'all-day-dialog.' + mode + '.' + item.id + AppTheme.colorKey())
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
@@ -2224,14 +2237,6 @@ class CalendarAllDayItem {
 // 主题主色的透明度变体（供月/年单元格背景使用；深浅色下均可用）。
 class CalendarColors {
   static primaryWithAlpha(alpha: number, dark: boolean): string {
-    const clamped: number = Math.min(Math.max(alpha, 0), 1);
-    const fg: number[] = dark ? [0x5A, 0xD2, 0xB8] : [0x16, 0x6B, 0x5D];
-    const bg: number[] = dark ? [0x00, 0x00, 0x00] : [0xF2, 0xF2, 0xF7];
-    const channels: string[] = [];
-    for (let i = 0; i < 3; i++) {
-      const v: number = Math.round(bg[i] + (fg[i] - bg[i]) * clamped);
-      channels.push(v.toString(16).padStart(2, '0'));
-    }
-    return '#' + channels.join('').toUpperCase();
+    return AppTheme.primaryWithAlpha(alpha, dark);
   }
 }

@@ -1,4 +1,12 @@
-# Where To Study Apple 0.2.9 TestFlight Hotfix
+# Where To Study 0.2.9 — Release preparation and TestFlight updates
+
+## Color themes — 2026-09-09 testing-only uploads
+
+本轮提交各平台颜色主题与鸿蒙 PC 字号修复的当前源码，保留 `c2ccb7b` 及其之前的 Apple 身份、产品显示名、离线帮助和支持邮箱修复，也保留当前工作区的 Apple 修改，不还原旧版本。
+
+计划上传 Apple `0.2.9 (88)`（iOS/iPadOS、macOS）到 TestFlight，以及 HarmonyOS `0.2.9 (1002024)` 到 AppGallery Connect **仅测试**通道。Apple 继续通过构建参数覆盖版本，避免改动用户的项目配置。所有上传均不提交 App Store/AppGallery 上架审核，不修改现有待审版本、测试群组或 GitHub Release。
+
+之前的主题验证范围与限制见[颜色主题测试说明](color-themes.md)。本轮上传前另核对用户新增 Apple 修改和支持页测试。上传结果将在收到各工具的成功回执后补充，当前段落不是已上传声明。
 
 ## macOS 0.2.9 (86) — App Review fixes synchronized
 
@@ -11,6 +19,12 @@
 本次完成上传，没有修改 0.2.8 (85) 的 App Review 提交、TestFlight 测试群组或 GitHub Release，也没有上传 iOS 构建。上传后未额外检查后台 processing 或测试员可用状态。独立构建目录保留了此前 build 85 的签名归档。
 
 忽略目录下的证据：`release-artifacts/macos-029-review-sync/macos-upload-86.log`、`archive-verification.json` 及对应签名导出记录。
+
+## HarmonyOS 0.2.9 (1002023) — uploaded through DevEco
+
+2026-09-08 按用户提供的上架后报告修复 PC 默认/最大化窗口中的小字号问题：周视图全天 DDL、课程时段、月周标签、年星期/日期统一遵循至少 10fp，PC 窄窗口回退到紧凑日历时同样生效。月周标签改为独立布局行，手机和平板原字号保持不变。
+
+本地 144 项鸿蒙单元测试、146 项仓库测试、HAP/APP 构建和正式签名验证通过；版本核对为 `0.2.9 (1002023)`。2026-09-08 16:12 +0800 已按用户要求通过 DevEco“上传产品 → 测试和发布”上传 AppGallery Connect，结果页显示“云测试结果：通过”。已核对并保存 DevEco 最终产物及其摘要，具体范围、上传记录和验证边界见[鸿蒙 PC 字号记录](harmony-pc-typography-v0.2.9.md)。设备视觉回归仍待完成；上传快速云测试不代表完整上架审核通过，未再次提交商店审核或更新 GitHub Release。鸿蒙安装包继续不作为 GitHub 附件发布。
 
 ## 0.2.9 (84) — first year-date detail sheet animation
 

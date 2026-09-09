@@ -7,6 +7,7 @@ private struct TodayCourseEntry: TimelineEntry {
     let preferences: TodayCourseWidgetData.Preferences
     let weekNumber: Int?
     let language: TodayCourseWidgetData.Language
+    let colorTheme: ColorThemeConfiguration
 }
 
 private struct TodayCourseProvider: TimelineProvider {
@@ -16,7 +17,8 @@ private struct TodayCourseProvider: TimelineProvider {
             courses: TodayCourseWidgetData.previewCourses(),
             preferences: .default,
             weekNumber: 8,
-            language: TodayCourseWidgetData.loadLanguage()
+            language: TodayCourseWidgetData.loadLanguage(),
+            colorTheme: ColorThemeConfiguration.loadForWidget()
         )
     }
 
@@ -44,7 +46,8 @@ private struct TodayCourseProvider: TimelineProvider {
             courses: TodayCourseWidgetData.courses(on: date, archive: archive),
             preferences: TodayCourseWidgetData.loadPreferences(),
             weekNumber: TodayCourseWidgetData.weekNumber(on: date, archive: archive),
-            language: TodayCourseWidgetData.loadLanguage()
+            language: TodayCourseWidgetData.loadLanguage(),
+            colorTheme: ColorThemeConfiguration.loadForWidget()
         )
     }
 }
@@ -61,7 +64,8 @@ private struct TodayCourseWidgetView: View {
             weekNumber: entry.weekNumber,
             family: family,
             usesWidgetContainer: true,
-            language: entry.language
+            language: entry.language,
+            colorTheme: entry.colorTheme
         )
     }
 }

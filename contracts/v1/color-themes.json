@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "defaultPreset": "default",
+  "customPreset": "custom",
+  "presets": [
+    { "id": "default", "nameZh": "默认青绿", "nameEn": "Classic Teal", "primary": "#166B5D", "accent": "#E2BC62", "selectedDate": "#2563EB" },
+    { "id": "ocean", "nameZh": "海洋蓝", "nameEn": "Ocean Blue", "primary": "#1565C0", "accent": "#26A69A", "selectedDate": "#7C3AED" },
+    { "id": "violet", "nameZh": "鸢尾紫", "nameEn": "Iris Violet", "primary": "#7C3AED", "accent": "#D08A2E", "selectedDate": "#00796B" },
+    { "id": "amber", "nameZh": "暖琥珀", "nameEn": "Warm Amber", "primary": "#A65300", "accent": "#2E7D6F", "selectedDate": "#2563EB" },
+    { "id": "rose", "nameZh": "玫瑰", "nameEn": "Rose", "primary": "#B42368", "accent": "#8C6A35", "selectedDate": "#2563EB" }
+  ]
+}

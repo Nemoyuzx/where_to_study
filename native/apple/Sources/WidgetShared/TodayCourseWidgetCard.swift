@@ -11,6 +11,7 @@ struct TodayCourseWidgetCard: View {
     let family: WidgetFamily
     let usesWidgetContainer: Bool
     var language: TodayCourseWidgetData.Language = .simplifiedChinese
+    var colorTheme: ColorThemeConfiguration = .default
 
     var body: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 7) {
@@ -175,7 +176,7 @@ struct TodayCourseWidgetCard: View {
     }
 
     private var theme: WidgetThemePalette {
-        colorScheme == .dark ? .dark : .light
+        .resolved(colorTheme, dark: colorScheme == .dark)
     }
 
     private var primary: Color { theme.primary.color }

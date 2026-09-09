@@ -47,7 +47,9 @@ enum AppLaunchConfiguration {
 
     @MainActor
     static func makeModel() -> AppModel {
-        guard isUITesting || isUITestingLive || isReviewDemo else {
+        // Hosted XCTest sessions must not launch real account/cache work while
+        // their tests exercise isolated models and preferences.
+        guard isUITesting || isUITestingLive || isReviewDemo || isXCTestRunning else {
             return AppModel(deferLocalDataLoading: true)
         }
 

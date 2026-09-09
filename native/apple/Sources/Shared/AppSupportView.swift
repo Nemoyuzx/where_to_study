@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AppSupportView: View {
+    @Environment(\.appTheme) private var theme
     @Environment(\.dismiss) private var dismiss
 
     private static let emailAddress = "2099905168@qq.com"
@@ -88,7 +89,7 @@ struct AppSupportView: View {
                 }
             }
         }
-        .tint(AppTheme.primary)
+        .tint(theme.primary)
         #if os(macOS)
         .frame(minWidth: 560, idealWidth: 680, minHeight: 520, idealHeight: 720)
         #endif

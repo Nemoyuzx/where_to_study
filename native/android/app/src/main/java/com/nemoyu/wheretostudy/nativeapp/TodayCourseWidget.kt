@@ -10,6 +10,9 @@ import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.TextView
+import android.widget.ImageView
+import android.content.res.ColorStateList
+import android.content.res.Configuration
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -18,6 +21,20 @@ enum class WidgetCoursePhase {
     UPCOMING,
     IN_PROGRESS,
     FINISHED,
+}
+
+private val widgetThemeAccentIDs = listOf(
+    R.id.widget_theme_accent_1, R.id.widget_theme_accent_2, R.id.widget_theme_accent_3,
+    R.id.widget_theme_accent_4, R.id.widget_theme_accent_5, R.id.widget_theme_accent_6,
+)
+private val widgetThemeIconIDs = listOf(R.id.widget_theme_calendar_icon, R.id.widget_theme_empty_icon)
+
+private fun widgetThemeColors(context: Context): Pair<Int, Int> {
+    val selection = ColorThemePreferences(context).load()
+    if (selection.preset == "default") return context.getColor(R.color.widget_primary) to context.getColor(R.color.widget_accent)
+    val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    val colors = ColorThemeLogic.palette(selection, dark)
+    return colors.primaryText to colors.accent
 }
 
 data class TodayCourseWidgetContent(
@@ -285,6 +302,11 @@ object TodayCourseWidgetPreviewBinder {
         rowLimit: Int,
     ) {
         val context = root.context
+        root.bindTheme("widgetColors") {
+            val (primary, accent) = widgetThemeColors(context)
+            widgetThemeIconIDs.forEach { id -> root.findViewById<ImageView>(id).imageTintList = ColorStateList.valueOf(primary) }
+            widgetThemeAccentIDs.forEach { id -> root.findViewById<View>(id).setBackgroundColor(accent) }
+        }
         root.findViewById<TextView>(R.id.widget_course_count).text = if (content.courses.isEmpty()) {
             ""
         } else {
@@ -381,6 +403,9 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
             val content = TodayCourseWidgetLogic.content(schedule, System.currentTimeMillis())
             val localizedContext = AppLocale.wrap(context, preferences.languageCode)
             val views = RemoteViews(context.packageName, R.layout.widget_today_course)
+            val (primary, accent) = widgetThemeColors(context)
+            widgetThemeIconIDs.forEach { id -> views.setInt(id, "setColorFilter", primary) }
+            widgetThemeAccentIDs.forEach { id -> views.setInt(id, "setBackgroundColor", accent) }
             val rowLimit = minOf(
                 TodayCourseWidgetLogic.rowLimit(
                     manager.getAppWidgetOptions(widgetID)

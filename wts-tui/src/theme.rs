@@ -1,9 +1,16 @@
 use ratatui::style::{Color, Modifier, Style};
 
 /// Application colour palette (mirrors the desktop app's green/gold scheme).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
     pub background: Color,
     pub primary: Color,
+    pub primary_fill: Color,
+    pub on_primary: Color,
+    pub selected_date: Color,
+    pub on_selected_date: Color,
+    pub event: Color,
+    pub workday: Color,
     pub text: Color,
     pub text_muted: Color,
     pub danger: Color,
@@ -24,6 +31,12 @@ pub const LIGHT: Theme = Theme {
     background: Color::Rgb(245, 246, 243),
     surface: Color::Rgb(255, 255, 255),
     primary: Color::Rgb(22, 107, 93),
+    primary_fill: Color::Rgb(22, 107, 93),
+    on_primary: Color::Rgb(245, 246, 243),
+    selected_date: Color::Rgb(22, 107, 93),
+    on_selected_date: Color::Rgb(245, 246, 243),
+    event: Color::Rgb(22, 107, 93),
+    workday: Color::Rgb(226, 188, 98),
     primary_soft: Color::Rgb(232, 244, 240),
     gold: Color::Rgb(226, 188, 98),
     gold_soft: Color::Rgb(255, 241, 204),
@@ -38,6 +51,12 @@ pub const DARK: Theme = Theme {
     background: Color::Rgb(16, 20, 18),
     surface: Color::Rgb(26, 32, 29),
     primary: Color::Rgb(36, 125, 107),
+    primary_fill: Color::Rgb(36, 125, 107),
+    on_primary: Color::Rgb(16, 20, 18),
+    selected_date: Color::Rgb(36, 125, 107),
+    on_selected_date: Color::Rgb(16, 20, 18),
+    event: Color::Rgb(36, 125, 107),
+    workday: Color::Rgb(226, 188, 98),
     primary_soft: Color::Rgb(25, 54, 47),
     gold: Color::Rgb(226, 188, 98),
     gold_soft: Color::Rgb(59, 50, 27),
@@ -51,6 +70,16 @@ pub const DARK: Theme = Theme {
 impl Theme {
     pub fn primary_text(&self) -> Style {
         Style::default().fg(self.primary)
+    }
+
+    pub fn primary_selected(&self) -> Style {
+        Style::default().fg(self.on_primary).bg(self.primary_fill)
+    }
+
+    pub fn workday_text(&self) -> Style {
+        Style::default()
+            .fg(self.workday)
+            .add_modifier(Modifier::BOLD)
     }
 
     pub fn muted_text(&self) -> Style {

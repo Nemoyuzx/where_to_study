@@ -172,6 +172,7 @@ enum HolidayDisplayLogic {
 @MainActor
 final class AppModel: ObservableObject {
     let navigation = PrimaryNavigationState()
+    @Published private(set) var colorTheme: ColorThemeConfiguration
     @Published var account = ""
     @Published var password = ""
     @Published private(set) var hasSavedPassword = false
@@ -226,6 +227,8 @@ final class AppModel: ObservableObject {
     private let statusMessageAutoDismissDelay: Duration
     private let now: @Sendable () -> Date
     private let defaults: UserDefaults
+    private let themeWidgetDefaults: UserDefaults?
+    private let reloadWidgetTheme: @MainActor () -> Void
     private let supportsRuntimeModeSwitching: Bool
     private let deferLocalDataLoading: Bool
     private let localDataPersistence = LocalDataPersistence()
@@ -260,6 +263,12 @@ final class AppModel: ObservableObject {
         statusMessageAutoDismissDelay: Duration = .seconds(4),
         now: @escaping @Sendable () -> Date = Date.init,
         defaults: UserDefaults = .standard,
+        themeWidgetDefaults: UserDefaults? = AppLaunchConfiguration.isXCTestRunning
+            ? nil : UserDefaults(suiteName: TodayCourseWidgetData.appGroupIdentifier),
+        reloadWidgetTheme: @escaping @MainActor () -> Void = {
+            guard !AppLaunchConfiguration.isXCTestRunning else { return }
+            WidgetCenter.shared.reloadAllTimelines()
+        },
         deferLocalDataLoading: Bool = false
     ) {
         self.runtimeMode = runtimeMode
@@ -277,6 +286,9 @@ final class AppModel: ObservableObject {
         self.statusMessageAutoDismissDelay = statusMessageAutoDismissDelay
         self.now = now
         self.defaults = defaults
+        self.themeWidgetDefaults = themeWidgetDefaults
+        self.reloadWidgetTheme = reloadWidgetTheme
+        colorTheme = runtimeMode.isSample ? .default : ColorThemeConfiguration.load(defaults: defaults)
         self.deferLocalDataLoading = deferLocalDataLoading
         appLanguage = AppLocalization.persistedLanguage(defaults: defaults)
         let initialAutomaticTermDetection = defaults.object(
@@ -462,6 +474,7 @@ final class AppModel: ObservableObject {
         dailyClassroomRefreshTask?.cancel()
         dailyClassroomRefreshTask = nil
         runtimeMode = .sample(review: true)
+        colorTheme = .default
 
         account = ""
         password = ""
@@ -496,6 +509,7 @@ final class AppModel: ObservableObject {
         guard canExitSampleMode else { return }
         invalidatePendingOperations()
         runtimeMode = .live
+        colorTheme = ColorThemeConfiguration.load(defaults: defaults)
 
         account = ""
         password = ""
@@ -531,6 +545,32 @@ final class AppModel: ObservableObject {
         #if os(macOS)
         startDailyClassroomRefresh()
         #endif
+    }
+
+    func selectColorTheme(_ preset: ColorThemePreset) {
+        setColorTheme(colorTheme.selecting(preset))
+    }
+
+    @discardableResult
+    func setCustomColorTheme(primary: String, accent: String, selectedDate: String) -> Bool {
+        guard let next = colorTheme.editing(primary: primary, accent: accent, selectedDate: selectedDate) else { return false }
+        setColorTheme(next)
+        return true
+    }
+
+    func restoreDefaultColorTheme() {
+        // Keep the custom seeds so a later return to Custom restores the edit.
+        setColorTheme(colorTheme.selecting(.default))
+    }
+
+    private func setColorTheme(_ next: ColorThemeConfiguration) {
+        guard colorTheme != next else { return }
+        colorTheme = next
+        // The demo remains isolated from real preferences and widgets.
+        guard !isSampleMode else { return }
+        next.save(defaults: defaults)
+        if let themeWidgetDefaults { next.save(defaults: themeWidgetDefaults) }
+        reloadWidgetTheme()
     }
 
     @discardableResult
@@ -937,6 +977,9 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: Self.customDeadlinesURLKey)
         defaults.removeObject(forKey: Self.favoriteDeadlinesKey)
         defaults.removeObject(forKey: AppLocalization.defaultsKey)
+        defaults.removeObject(forKey: ColorThemeConfiguration.defaultsKey)
+        themeWidgetDefaults?.removeObject(forKey: ColorThemeConfiguration.defaultsKey)
+        colorTheme = .default
         campusID = "01"
         queryCampusID = "01"
         automaticTermDetectionEnabled = true
@@ -966,6 +1009,7 @@ final class AppModel: ObservableObject {
         selectedBuildings.removeAll()
         usePersonalSchedule = true
         synchronizeSelectedSlots()
+        reloadWidgetTheme()
         synchronizeWidgetSchedule()
 
         statusMessage = failures.isEmpty

@@ -5,6 +5,10 @@
 @Entry
 @Component
 struct TodayCourseCard {
+  @LocalStorageProp('themeCustomized') themeCustomized: boolean = false;
+  @LocalStorageProp('themePrimary') themePrimary: string = '#166B5D';
+  @LocalStorageProp('themePrimaryFill') themePrimaryFill: string = '#166B5D';
+  @LocalStorageProp('themeAccent') themeAccent: string = '#E2BC62';
   @LocalStorageProp('todayTitle') todayTitle: string = '今日课程';
   @LocalStorageProp('todayCountText') todayCountText: string = '';
   @LocalStorageProp('dateContext') dateContext: string = '';
@@ -62,8 +66,9 @@ struct TodayCourseCard {
         .width(3)
         .height(30)
         .borderRadius(1.5)
-        .backgroundColor(highlighted ? $r('app.color.app_primary_fill') :
-          $r('app.color.widget_accent'))
+        .backgroundColor(highlighted ?
+          (this.themeCustomized ? this.themePrimaryFill : $r('app.color.app_primary_fill')) :
+          (this.themeCustomized ? this.themeAccent : $r('app.color.widget_accent')))
       Column({ space: 1 }) {
         Text(name)
           .fontSize(14)
@@ -126,7 +131,7 @@ struct TodayCourseCard {
         Row({ space: 9 }) {
           Text(this.emptyGlyph)
             .fontSize(22)
-            .fontColor($r('app.color.widget_primary'))
+            .fontColor(this.themeCustomized ? this.themePrimary : $r('app.color.widget_primary'))
           Column({ space: 2 }) {
             Text(this.emptyText)
               .fontSize(14)

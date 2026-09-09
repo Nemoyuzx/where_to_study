@@ -42,7 +42,7 @@ fn credentials_path() -> ServiceResult<PathBuf> {
 }
 
 #[cfg(target_os = "windows")]
-fn default_config_root() -> Option<PathBuf> {
+pub(crate) fn default_config_root() -> Option<PathBuf> {
     env::var_os("LOCALAPPDATA")
         .or_else(|| env::var_os("APPDATA"))
         .or_else(|| {
@@ -57,7 +57,7 @@ fn default_config_root() -> Option<PathBuf> {
 }
 
 #[cfg(target_os = "macos")]
-fn default_config_root() -> Option<PathBuf> {
+pub(crate) fn default_config_root() -> Option<PathBuf> {
     env::var_os("HOME").map(|home| {
         PathBuf::from(home)
             .join("Library")
@@ -66,7 +66,7 @@ fn default_config_root() -> Option<PathBuf> {
 }
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-fn default_config_root() -> Option<PathBuf> {
+pub(crate) fn default_config_root() -> Option<PathBuf> {
     env::var_os("XDG_CONFIG_HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)

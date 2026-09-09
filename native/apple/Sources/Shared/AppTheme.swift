@@ -19,6 +19,10 @@ struct AppThemeColor: Equatable, Sendable {
         self.opacity = opacity
     }
 
+    init(_ rgb: ThemeRGB) {
+        self.init(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+
     var color: Color {
         Color(red: red, green: green, blue: blue, opacity: opacity)
     }
@@ -67,9 +71,54 @@ struct AppThemePalette: Equatable, Sendable {
         hackathonDeadline: AppThemeColor(red: 255, green: 155, blue: 100),
         customDeadline: AppThemeColor(red: 156, green: 176, blue: 196)
     )
+
+    static func resolved(_ configuration: ColorThemeConfiguration, dark: Bool) -> AppThemePalette {
+        let original = dark ? Self.dark : Self.light
+        guard configuration.preset != .default else { return original }
+        let seeds = configuration.seeds
+        return AppThemePalette(
+            primary: AppThemeColor(seeds.primary.readableText(dark: dark)),
+            primaryFill: AppThemeColor(seeds.primary.accessibleFill()),
+            accent: AppThemeColor(seeds.accent),
+            onPrimary: original.onPrimary,
+            selectedDate: AppThemeColor(seeds.selectedDate.accessibleFill()),
+            assignment: original.assignment, schoolNotice: original.schoolNotice,
+            publicDeadline: original.publicDeadline, conferenceDeadline: original.conferenceDeadline,
+            summerCampDeadline: original.summerCampDeadline, hackathonDeadline: original.hackathonDeadline,
+            customDeadline: original.customDeadline
+        )
+    }
 }
 
-enum AppTheme {
+/// A value in SwiftUI's environment makes every consumer update in place.
+/// Static colors remain available for invariant semantic colors and legacy
+/// default-palette tests; variable brand colors use the environment instance.
+struct AppTheme: Equatable, Sendable {
+    var configuration: ColorThemeConfiguration = .default
+    var primary: Color { Self.adaptiveColor(\.primary, configuration: configuration) }
+    var primaryFill: Color { Self.adaptiveColor(\.primaryFill, configuration: configuration) }
+    var accent: Color { Self.adaptiveColor(\.accent, configuration: configuration) }
+    var onPrimary: Color { Self.onPrimary }
+    var selectedDate: Color { Self.adaptiveColor(\.selectedDate, configuration: configuration) }
+    var selectedDateOutline: Color {
+        guard configuration.preset != .default else { return selectedDate }
+        return Self.adaptiveValue(light: configuration.seeds.selectedDate.accessibleFill(),
+                                  dark: configuration.seeds.selectedDate.readableText(dark: true))
+    }
+    var accentText: Color {
+        guard configuration.preset != .default else { return Self.accent }
+        return Self.adaptiveValue(light: configuration.seeds.accent.readableText(dark: false),
+                                  dark: configuration.seeds.accent.readableText(dark: true))
+    }
+    var onAccent: Color {
+        guard configuration.preset != .default else { return Self.text }
+        return configuration.seeds.accent.contrast(against: .black) >= 4.5 ? .black : .white
+    }
+
+    func deadlineTint(for kind: CalendarAllDayEventKind) -> Color {
+        kind == .workday ? primary : CalendarDeadlinePresentation.tint(for: kind)
+    }
+
     static let primary = adaptiveColor(\.primary)
     static let primaryFill = adaptiveColor(\.primaryFill)
     static let accent = adaptiveColor(\.accent)
@@ -101,13 +150,13 @@ enum AppTheme {
     #endif
 
     private static func adaptiveColor(
-        _ keyPath: KeyPath<AppThemePalette, AppThemeColor>
+        _ keyPath: KeyPath<AppThemePalette, AppThemeColor>,
+        configuration: ColorThemeConfiguration = .default
     ) -> Color {
         #if os(macOS)
         return Color(nsColor: NSColor(name: nil) { appearance in
-            let palette = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? AppThemePalette.dark
-                : AppThemePalette.light
+            let palette = AppThemePalette.resolved(configuration,
+                dark: appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
             let value = palette[keyPath: keyPath]
             return NSColor(
                 srgbRed: value.red,
@@ -118,9 +167,7 @@ enum AppTheme {
         })
         #else
         return Color(uiColor: UIColor { traits in
-            let palette = traits.userInterfaceStyle == .dark
-                ? AppThemePalette.dark
-                : AppThemePalette.light
+            let palette = AppThemePalette.resolved(configuration, dark: traits.userInterfaceStyle == .dark)
             let value = palette[keyPath: keyPath]
             return UIColor(
                 red: value.red,
@@ -130,6 +177,33 @@ enum AppTheme {
             )
         })
         #endif
+    }
+
+    private static func adaptiveValue(light: ThemeRGB, dark: ThemeRGB) -> Color {
+        #if os(macOS)
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let rgb = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: Double(rgb.red) / 255, green: Double(rgb.green) / 255,
+                           blue: Double(rgb.blue) / 255, alpha: 1)
+        })
+        #else
+        Color(uiColor: UIColor { traits in
+            let rgb = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: Double(rgb.red) / 255, green: Double(rgb.green) / 255,
+                           blue: Double(rgb.blue) / 255, alpha: 1)
+        })
+        #endif
+    }
+}
+
+private struct AppThemeEnvironmentKey: EnvironmentKey {
+    static let defaultValue = AppTheme()
+}
+
+extension EnvironmentValues {
+    var appTheme: AppTheme {
+        get { self[AppThemeEnvironmentKey.self] }
+        set { self[AppThemeEnvironmentKey.self] = newValue }
     }
 }
 
