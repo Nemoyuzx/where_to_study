@@ -24,7 +24,7 @@ If text appears on a tinted surface, verify contrast against that actual composi
 
 Provide a bilingual Color Theme / 颜色主题 settings section with preset swatches, a selected-state indicator, three labeled custom RGB controls, a live preview, and Restore Default / 恢复默认. Keep the settings accessible at narrow widths and large text sizes. Native color pickers may supplement editable hexadecimal text; a color picker is not a replacement for validation.
 
-## Coordinated backgrounds / 背景协调优化（2026-09-09，未上传）
+## Coordinated backgrounds / 背景协调优化（2026-09-09，已上传测试版）
 
 按用户反馈，将四套非默认预设调整为低饱和、相近色相的方案，并同步处理整页背景、卡片、浮层、输入框、导航和边框。深色使用带对应色调的分层底色，浅色使用柔和底色与接近白色的卡片。默认主题仍保留原始平台色板。
 
@@ -37,12 +37,12 @@ Provide a bilingual Color Theme / 颜色主题 settings section with preset swat
 - Web/Tauri 共用前端：仓库 161 项测试通过，Vite 构建通过。按用户要求关闭独立 Chrome 调试会话，改用 Microsoft Edge（msedge，Edg/152）完成最终预设×浅深色、背景/卡片实际取色、非法输入、保存重载、恢复默认保留三色、未保存账号输入及零主题网络请求检查；390px 英文视口无横向溢出。黑色自定义主色的年历检查了 71 个实际有课且未选中的日期格，最低文字对比度约 5.17:1。Edge 截图位于忽略目录 `output/playwright/surface-themes/edge/`。
 - Apple：macOS 23 项定向检查与后续 15 项回归通过；iPhone 32 项单测、3 项 UI 和最后 8 项回归通过；iPad 3 项 UI 通过，NavigationStack 内部背景修复后追加 7 项单测、2 项 UI 通过。检查了真实模拟器截图与 macOS 离屏渲染图。用户既有审核/支持、产品名、邮箱、版本和存储格式未改。
 - Android：209 项 JVM、Debug/APK/androidTest 构建通过，Lint 0 错误、56 警告；13 项主题 UI 检查分别在中文浅色与英文深色通过，最后 4 项半透明叠层/控件恢复检查也分别通过。检查 12 张截图。两个既有基线失败没有重复追查或记为通过。
-- HarmonyOS：完整基础背景版构建与 162 项单测通过；补齐实际染色文字后，最终 163 项单测与 HAP 构建通过，未再完整打 APP。TUI：36 项测试通过，含各预设×浅深色×真实页面 TestBackend 层级和墨色检查。
+- HarmonyOS：完整基础背景版构建与 162 项单测通过；补齐实际染色文字后，最终 163 项单测与 HAP 构建通过。随后 DevEco 生成完整 APP 并上传仅测试，最终 APP/HAP 版本和签名校验通过。TUI：36 项测试通过，含各预设×浅深色×真实页面 TestBackend 层级和墨色检查。
 - 未做 Windows/Ubuntu 安装态、鸿蒙设备截图或固定桌面 Widget 的系统刷新调度验证；不能将上述浏览器、离屏或单元测试当作这些覆盖。
 
-本次背景优化没有提交、推送或上传，不包含在已经上传的 Apple 88 / HarmonyOS 1002024 中。以后调试本项目的网页界面使用 Edge。截图不加入 README。
+本次背景优化已以 `75023e1` 提交并推送，包含在 Apple `0.2.9 (89)` TestFlight 和 HarmonyOS `0.2.9 (1002025)` 仅测试包中；两端均有成功回执，鸿蒙快速云测试通过。未提交任何商店审核或 GitHub Release，用户既有 Apple 修改原样保留。详见[上传记录](release-v0.2.9.md)。以后调试本项目的网页界面使用 Edge。截图不加入 README。
 
-The follow-up refines non-default presets and applies coordinated low-saturation canvas, card, elevated, control and text colors across clients. Custom primary colors generate the same background system without a storage migration. Final web checks used Microsoft Edge, not Chrome. This background refinement is not yet uploaded; earlier test builds remain unchanged.
+The follow-up refines non-default presets and applies coordinated low-saturation canvas, card, elevated, control and text colors across clients. Custom primary colors generate the same background system without a storage migration. Final web checks used Microsoft Edge, not Chrome. Source commit `75023e1` is uploaded in Apple 0.2.9 (89) and HarmonyOS 0.2.9 (1002025) test builds; no store review or public release was submitted.
 
 ## Implementation and validation / 实现与验证（2026-09-08）
 

@@ -4,7 +4,24 @@
 
 按用户要求提交低饱和预设与背景/卡片/控件联动配色，以及实际染色文字可读性修复；保持默认主题、DDL/今日标识、Apple 审核身份与支持信息。验证范围见[背景主题记录](color-themes.md)。
 
-本轮准备 Apple `0.2.9 (89)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002025)` **仅测试**上传；不提交审核、不修改待审版本或 GitHub Release。Apple 版本继续通过构建参数覆盖，不修改用户项目版本配置。成功回执待上传后补充。
+源码提交 `75023e1592f09a1672e08fee563a0c26bc239158` 已推送 GitHub `main`。Apple `0.2.9 (89)`（iOS/iPadOS、macOS）TestFlight 和 HarmonyOS `0.2.9 (1002025)` **仅测试**上传均已完成；不提交审核、不修改待审版本、测试群组或 GitHub Release。Apple 版本继续通过构建参数覆盖，不修改用户项目版本配置。上传前后 85 个 Apple 源码/配置文件 SHA-256 全部一致，两个新增主题 Swift 文件已包含在源码提交中。
+
+### Success receipts / 本轮成功回执
+
+- iOS/iPadOS：本地 Xcode 于 **2026-09-09 10:36:48 +0800** 返回 `Upload succeeded`，随后 `EXPORT SUCCEEDED`。宿主与 Widget 均为 `0.2.9 (89)`，Automatic 归档及 Apple Distribution 导出校验通过。
+- macOS：本地 Xcode 于 **2026-09-09 10:39:37 +0800** 返回 `Upload succeeded`，随后 `EXPORT SUCCEEDED`。Universal 宿主与 Widget 均为 `0.2.9 (89)`，Manual 签名归档校验通过，产品名保持 `Where To Study`。
+- HarmonyOS：**2026-09-09 10:46 +0800** 确认 DevEco 结果页显示 **“云测试结果：通过”**。明确选择第二项“生成.app包并上传至AppGallery Connect进行测试”，未选择“测试和发布”。最终 APP/HAP 的 `pack.info` 均为 `0.2.9 (1002025)`，单独 build 字段为 `1`。两份产物均通过 `verify-app` 与 SHA-256 摘要校验，保存副本与上传后原件逐字节一致。
+
+Apple 沿用单次 `scripts/native-apple-app-store.sh upload all`，设置 `APPLE_MARKETING_VERSION=0.2.9`、`APPLE_BUILD_NUMBER=89`、iOS Automatic/macOS Manual；团队读取本机现有证书，不提交签名配置。脚本一次依次完成两端归档、校验和上传，没有重复构建或上传，也未在成功后检查 App Store Connect processing。DevEco 依次使用“从磁盘全部重新加载 → 同步和刷新项目 → 构建 → 上传产品”；应用列表首次因 401 为空，用户中心工具栏动作刷新会话后恢复，随后仅发起一次测试上传。
+
+复用[背景配色回归结果与限制](color-themes.md)，本轮提交前另外执行仓库测试 **161/161 通过**、`git diff --check`，并完成 Apple 源码保留审查和签名归档核验。DevEco 重新生成最终完整 APP；快速云测试通过不等同于完整商店审核或鸿蒙真机视觉回归。
+
+忽略目录 `release-artifacts/theme-surfaces-029-testing/` 保存两端 Apple 上传日志、build 89 归档、Apple 前后校验与初始差异，以及鸿蒙最终上传包和签名日志：
+
+- APP：1,279,025 bytes，SHA-256 `a7a123a48e3cad85833d2f199b3d737428f838b0b125b49482df98b1d701a2af`。
+- HAP：1,888,844 bytes，SHA-256 `c8aa76ccb5fed441d822152f530214d1338e4f681cb798518de3b185f4a1f669`。
+
+Source commit `75023e1` includes the coordinated background refinement and preserves the user's Apple review/support changes. Apple 0.2.9 (89) and HarmonyOS 0.2.9 (1002025) were uploaded for testing only. No store review, test-group change, Android/vivo upload or GitHub Release publication was performed. Use new build numbers for later uploads; do not repeat these successful uploads.
 
 ## Color themes — 2026-09-09 testing-only uploads
 
