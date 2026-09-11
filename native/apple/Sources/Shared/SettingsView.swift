@@ -149,6 +149,7 @@ struct SettingsView: View {
     private enum AccountField: Hashable {
         case account
         case password
+        case teachingCloudPassword
         case termID
         case termStartDate
         case customURL
@@ -458,11 +459,41 @@ struct SettingsView: View {
                     .textFieldStyle(ThemeTextFieldStyle())
                     .disabled(model.isSampleMode)
                     .focused($focusedAccountField, equals: .password)
-                    .submitLabel(.done)
+                    .submitLabel(.next)
                     .onSubmit {
-                        dismissKeyboard()
+                        focusedAccountField = .teachingCloudPassword
                     }
                     .accessibilityIdentifier("field.password")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("教学云平台密码（选填）")
+                        .font(.subheadline.weight(.medium))
+                    SecureField(
+                        model.localized(model.canPreserveSavedTeachingCloudPassword
+                            ? "已安全保存，留空保持不变" : "留空使用教务密码"),
+                        text: $model.teachingCloudPassword
+                    )
+                    .textFieldStyle(ThemeTextFieldStyle())
+                    .disabled(model.isSampleMode)
+                    .focused($focusedAccountField, equals: .teachingCloudPassword)
+                    .submitLabel(.done)
+                    .onSubmit { dismissKeyboard() }
+                    .accessibilityIdentifier("field.teaching-cloud-password")
+                    Text(model.localized(model.canPreserveSavedTeachingCloudPassword
+                        ? "已设置独立的教学云平台密码"
+                        : "教学云平台当前使用教务密码"))
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                    Text("使用相同学号，仅用于获取课程作业 DDL。已保存的独立密码留空不变；修改后请保存设置。")
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if model.canPreserveSavedTeachingCloudPassword || !model.teachingCloudPassword.isEmpty {
+                        Button("改用教务密码") { model.useAcademicPasswordForAssignments() }
+                            .buttonStyle(.borderless)
+                            .disabled(model.isSampleMode)
+                            .accessibilityIdentifier("action.teaching-cloud-use-academic-password")
+                    }
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("保存账号前请阅读并同意隐私政策。")
                         .font(.caption)
@@ -519,6 +550,27 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.isRefreshingSchedule || model.isSampleMode)
+                if !model.currentCourseDeletions.isEmpty {
+                    Divider()
+                    Label("已删除课程（本学期）", systemImage: "arrow.uturn.backward")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(model.currentCourseDeletions) { deletion in
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(deletion.name).font(.subheadline)
+                                Text(deletion.teacher).font(.caption)
+                                Text(deletion.scope == .course
+                                    ? model.localized("本学期整门课程")
+                                    : "\(deletion.date ?? "") · \(deletion.startSlot + 1)–\(deletion.endSlot + 1)")
+                                    .font(.caption)
+                            }
+                            Spacer()
+                            Button("恢复") { model.restoreCourseDeletion(deletion) }
+                                .buttonStyle(.borderless)
+                                .accessibilityIdentifier("action.restore-course.\(deletion.id)")
+                        }
+                    }
+                }
                 if !model.statusMessage.isEmpty {
                     Text(model.localized(model.statusMessage))
                         .font(.caption)

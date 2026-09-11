@@ -4,6 +4,7 @@
 // 常展开的月网格（直接显示课程与节假日条目）+ 12 个月年视图与跳转面板。
 import { AppModel } from '../../model/AppModel';
 import { Course, HolidayItem } from '../../common/Models';
+import { CourseRemovalButton } from '../CourseRemovalButton';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { CalendarTypography } from '../../common/CalendarTypography';
@@ -1456,6 +1457,7 @@ export struct ExpandedTeachingCalendarView {
             }
             .alignItems(HorizontalAlign.Start)
             .layoutWeight(1)
+            CourseRemovalButton({ course: course, date: day })
           }
           .width('100%')
           .alignItems(VerticalAlign.Top)

@@ -83,6 +83,8 @@ class SettingsPage(
                         addView(accountSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(semesterSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(deletedCoursesSurface())
                     }, LinearLayout.LayoutParams(
                         0,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -113,6 +115,8 @@ class SettingsPage(
                 addView(accountSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(semesterSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(deletedCoursesSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(notificationSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
@@ -160,14 +164,92 @@ class SettingsPage(
         })
     }
 
+    private fun deletedCoursesSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        applyCompactSurfacePadding()
+        addView(sectionTitle(activity, "已删除课程"))
+        addView(TextView(activity).apply {
+            text = "管理当前账号、本学期的本地删除记录。恢复后立即重新显示课程。"
+            textSize = 12f
+            setThemeTextColor { Palette.muted }
+        })
+        addView(spacer(activity, compactGap))
+        addView(TextView(activity).apply {
+            text = "管理已删除课程"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setThemeTextColor { Palette.primary }
+            background = themedRoundedBackground(activity, { Palette.selectionSurface }, radius = 8)
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(44))
+            applyPhoneButtonStyle()
+            setOnClickListener {
+                activity.performControlHaptic(it)
+                showDeletedCourses()
+            }
+        })
+    }
+
+    private fun showDeletedCourses() {
+        runCatching { scheduleRepository.deletedCourses() }.onSuccess { records ->
+            if (records.isEmpty()) {
+                AlertDialog.Builder(activity)
+                    .setTitle(activity.uiText("已删除课程"))
+                    .setMessage(activity.uiText("当前账号、本学期暂无课程删除记录"))
+                    .setPositiveButton(activity.uiText("完成"), null)
+                    .show().also(UiText::localizeDialog)
+                return@onSuccess
+            }
+            val labels = records.map { record ->
+                val scope = if (record.scope == CourseDeletionScope.WHOLE_COURSE) {
+                    activity.uiText("本学期整门课程")
+                } else {
+                    "${record.date} · ${(record.startSlot ?: 0) + 1}-${(record.endSlot ?: 0) + 1} " + activity.uiText("节次")
+                }
+                "${record.courseName}\n${record.teacher} · $scope"
+            }
+            AlertDialog.Builder(activity)
+                .setTitle(activity.uiText("已删除课程"))
+                .setItems(labels.toTypedArray()) { _, index ->
+                    val record = records[index]
+                    AlertDialog.Builder(activity)
+                        .setTitle(activity.uiText("恢复课程"))
+                        .setMessage(labels[index] + "\n\n" + activity.uiText("将移除此条删除记录；其他删除记录仍然有效。"))
+                        .setNegativeButton(activity.uiText("取消"), null)
+                        .setPositiveButton(activity.uiText("恢复")) { _, _ ->
+                            runCatching { scheduleRepository.restoreCourse(record.id) }.onSuccess {
+                                activity.personalScheduleWasEdited()
+                                Toast.makeText(activity, activity.uiText("课程删除记录已恢复"), Toast.LENGTH_SHORT).show()
+                            }.onFailure(::showCourseDeletionError)
+                        }.show().also(UiText::localizeDialog)
+                }
+                .setNegativeButton(activity.uiText("取消"), null)
+                .show().also(UiText::localizeDialog)
+        }.onFailure(::showCourseDeletionError)
+    }
+
+    private fun showCourseDeletionError(error: Throwable) {
+        Toast.makeText(activity, activity.uiText(error.message ?: "无法读取或保存课程删除记录"), Toast.LENGTH_LONG).show()
+    }
+
     private fun accountSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
-        val savedIdentity = credentialStore.load()?.let { it.account to it.password.isNotEmpty() }
+        val savedIdentity = credentialStore.load()?.let {
+            Triple(it.account, it.password.isNotEmpty(), !it.teachingCloudPassword.isNullOrEmpty())
+        }
         var persistedAccount = savedIdentity?.first.orEmpty()
         var hasPersistedPassword = savedIdentity?.second == true
+        var hasPersistedCloudPassword = savedIdentity?.third == true
+        var useAcademicPassword = false
         addView(sectionTitle(activity, "个人账户", R.drawable.ic_settings_account))
         val account = field("教务账号", persistedAccount, false)
-        val password = field("密码", "", true)
+        val password = field("教务密码", "", true)
+        val cloudPassword = field("教学云平台密码（可选）", "", true)
+        val cloudPasswordStatus = TextView(activity).apply {
+            textSize = 12f
+            setThemeTextColor { Palette.muted }
+            setPadding(activity.dp(2), activity.dp(7), activity.dp(2), 0)
+        }
         val passwordStatus = TextView(activity).apply {
             textSize = 12f
             setThemeTextColor { Palette.muted }
@@ -184,6 +266,13 @@ class SettingsPage(
                 ""
             }
             passwordStatus.visibility = if (passwordStatus.text.isEmpty()) View.GONE else View.VISIBLE
+            cloudPasswordStatus.text = activity.uiText(when {
+                cloudPassword.text.isNotEmpty() -> "保存后使用独立教学云平台密码获取作业 DDL"
+                useAcademicPassword -> "保存后使用教务密码获取作业 DDL"
+                hasPersistedCloudPassword && persistedAccount == account.text.toString().trim() ->
+                    "教学云平台密码已安全保存，留空保持不变"
+                else -> "仅用于课程作业 DDL；未设置时使用教务密码"
+            })
         }
         account.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -194,11 +283,37 @@ class SettingsPage(
 
             override fun afterTextChanged(value: Editable?) = Unit
         })
+        cloudPassword.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) {
+                if (!value.isNullOrEmpty()) useAcademicPassword = false
+                updatePasswordStatus()
+            }
+            override fun afterTextChanged(value: Editable?) = Unit
+        })
         updatePasswordStatus()
         addView(account)
         addView(spacer(activity, compactGap))
         addView(password)
         addView(passwordStatus)
+        addView(spacer(activity, compactGap))
+        addView(cloudPassword)
+        addView(cloudPasswordStatus)
+        addView(TextView(activity).apply {
+            text = "使用教务密码"
+            textSize = 13f
+            setThemeTextColor { Palette.primary }
+            gravity = Gravity.CENTER_VERTICAL
+            minHeight = activity.dp(controlHeight)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                activity.performControlHaptic(it)
+                cloudPassword.text.clear()
+                useAcademicPassword = true
+                updatePasswordStatus()
+            }
+        })
         addView(spacer(activity, if (isCompact) 10 else 16))
         addView(TextView(activity).apply {
             text = "默认校区"
@@ -228,6 +343,8 @@ class SettingsPage(
                     saved = savedCredentials,
                     requestedAccount = account.text.toString(),
                     enteredPassword = password.text.toString(),
+                    enteredTeachingCloudPassword = cloudPassword.text.toString(),
+                    useAcademicPassword = useAcademicPassword,
                 )
                 val accountChanged = CredentialUpdateLogic.changesAccount(
                     savedCredentials,
@@ -236,6 +353,9 @@ class SettingsPage(
                 val persist: () -> Credentials = {
                     credentials.also {
                         credentialStore.save(credentials)
+                        if (CredentialUpdateLogic.changesAssignmentCredentials(savedCredentials, credentials)) {
+                            activity.clearCalendarAssignmentData()
+                        }
                         preferences.campusID = AppMetadata.campuses[selectedCampusIndex].id
                     }
                 }
@@ -249,7 +369,7 @@ class SettingsPage(
                         "无法可靠撤销旧账号的课程提醒，设置未保存。"
                     }
                     LocalDataCoordinator.clear {
-                        scheduleRepository.clearLocalDataCoordinated()
+                        scheduleRepository.clearLocalDataCoordinated(clearCourseDeletions = false)
                         classroomRepository.clearLocalDataCoordinated()
                         persist()
                     }
@@ -278,7 +398,10 @@ class SettingsPage(
         fun applySavedCredentials(credentials: Credentials) {
             persistedAccount = credentials.account
             hasPersistedPassword = credentials.password.isNotEmpty()
+            hasPersistedCloudPassword = !credentials.teachingCloudPassword.isNullOrEmpty()
+            useAcademicPassword = false
             password.text.clear()
+            cloudPassword.text.clear()
             updatePasswordStatus()
         }
 
@@ -1214,6 +1337,7 @@ class SettingsPage(
         } else {
             InputType.TYPE_CLASS_TEXT
         }
+        if (secure) isSaveEnabled = false
         if (secure && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             setAutofillHints(null)
@@ -1413,8 +1537,8 @@ class SettingsPage(
             ("学号和密码保存在操作系统的受保护凭据存储中。保存有效凭据且开启自动学期检测后，启动时会自动刷新一次个人课表，用于校验学期号和第一周周一。你主动请求课表、空教室或作业时也会按对应用途通过 HTTPS 使用凭据。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。\n\n" +
                 "Credentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password."),
         "本地数据 / Local data" to
-            ("课表、空教室、校区、学期、开关、自定义日程地址和最多 500 条收藏快照保存在设备上；课程小组件只读取本地课表。“清除本地数据”会一并移除这些内容。\n\n" +
-                "Schedules, classroom results, campus, term, switches, the custom feed URL, and up to 500 favorite snapshots stay locally. Course widgets read only the local schedule. Clear local data removes all of these items."),
+            ("课表、空教室、校区、学期、开关、自定义日程地址和最多 500 条收藏快照保存在设备上；课程小组件只读取本地课表。课程删除记录按账号和学期隔离，仅影响本机有效课表，可在设置中恢复。“清除本地数据”会一并移除这些内容。\n\n" +
+                "Schedules, classroom results, campus, term, switches, the custom feed URL, and up to 500 favorite snapshots stay locally. Course widgets read only the local schedule. Course deletions are isolated by account and term, affect only the effective timetable on this device, and can be restored in Settings. Clear local data removes all of these items."),
         "节假日数据 / Holiday data" to
             ("应用可能通过 unpkg 获取固定版本 holiday-calendar 数据；Android 在已有权限时也可能读取系统节假日日历。请求仅含 CN 与年份。iOS 只依据权威休息日数据显示“休”。\n\n" +
                 "The app may retrieve pinned holiday-calendar data through unpkg; Android may read the OS holiday calendar when permitted. Requests contain only CN and year. iOS marks rest days only from authoritative rest-day data."),
@@ -1422,8 +1546,8 @@ class SettingsPage(
             ("UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 与校内通知提供公开活动。自定义日程只向用户填写的 HTTPS 地址发送无凭据 GET，拒绝重定向、本机和私有/保留 IP 字面量，响应上限 2 MiB。所有显示数据仅供参考。\n\n" +
                 "UAPI provides district-level weather and base almanac data without GPS; Timeless may add advice. Contest DDL and campus notices provide public events. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."),
         "云课堂作业 / UCloud assignments" to
-            ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\n" +
-                "The password is submitted only to auth.bupt.edu.cn over HTTPS. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."),
+            ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\n" +
+                "The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate teaching cloud password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."),
         "系统日历、通知与小组件 / Calendar, notifications, and widgets" to
             ("日历写入和本地课程通知需要你的操作与权限；应用只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供，相关数据不上传。\n\n" +
                 "Calendar writes and local course notifications require your action and permission, and only marked events are managed. Widgets exist only on supported platforms. This data is not uploaded."),

@@ -5,6 +5,8 @@ import { AppSection } from '../common/AppSection';
 import { Classroom, ClassroomDefaults, ClassroomsCache, Course, HolidayItem,
   HolidaysSnapshot, ScheduleDefaults, ScheduleSnapshot, SlotMetadata } from '../common/Models';
 import { ScheduleLogic } from '../common/ScheduleLogic';
+import { CourseRemovalLogic, CourseRemovalRecord } from '../common/CourseRemoval';
+import { CourseRemovalStoring, FileCourseRemovalStore } from '../store/CourseRemovalStore';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { Credentials, AssetCredentialStore, CredentialStoring } from '../store/CredentialStore';
@@ -182,6 +184,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
   @Trace account: string = '';
   @Trace password: string = '';
   @Trace hasSavedPassword: boolean = false;
+  @Trace cloudPassword: string = '';
+  @Trace hasSavedCloudPassword: boolean = false;
+  @Trace useAcademicPasswordForCloud: boolean = false;
   @Trace termID: string = ScheduleDefaults.termID;
   @Trace termStartDate: string = ScheduleDefaults.termStartDate;
   // 自动检测当前学期（对应 Android automaticTermDetectionEnabled）：
@@ -208,6 +213,12 @@ export class AppModel implements CalendarViewportPreloadTarget {
   @Trace selectedBuildings: Set<string> = new Set<string>();
   @Trace usePersonalSchedule: boolean = true;
   @Trace schedule: ScheduleSnapshot | null = null;
+  @Trace courseRemovals: CourseRemovalRecord[] = [];
+  @Trace isUpdatingCourseRemovals: boolean = false;
+  private rawSchedule: ScheduleSnapshot | null = null;
+  private scheduleAccount: string = '';
+  private courseRemovalsLoaded: boolean = false;
+  private readonly courseRemovalStore: CourseRemovalStoring;
   @Trace classroomsCache: ClassroomsCache | null = null;
   @Trace holidaysByYear: Map<number, HolidaysSnapshot> = new Map<number, HolidaysSnapshot>();
   @Trace weatherByCampus: Map<string, CampusWeather> = new Map<string, CampusWeather>();
@@ -275,7 +286,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private readonly preferencesName: string;
   private classroomRefreshInFlight: boolean = false;
   private weatherRevision: number = 0;
-  private calendarDailyInfoRevision: number = 0;
+  @Trace calendarDailyInfoRevision: number = 0;
   private assignmentMarkerLoadingDates: Set<string> = new Set<string>();
   private deadlineMarkerLoadingDates: Set<string> = new Set<string>();
   private publicDeadlinePrewarmInFlight: Promise<void> | null = null;
@@ -301,12 +312,14 @@ export class AppModel implements CalendarViewportPreloadTarget {
     preferencesName: string = 'where-to-study',
     weatherClient: WeatherFetching = new UAPIWeatherClient(),
     assignmentClient: AssignmentDeadlineFetching = new UCloudAssignmentClient(),
-    preferencesStore: PreferencesStore | null = null
+    preferencesStore: PreferencesStore | null = null,
+    courseRemovalStore: CourseRemovalStoring = new FileCourseRemovalStore()
   ) {
     this.runtimeMode = runtimeMode;
     this.supportsRuntimeModeSwitching = !runtimeMode.isSample;
     this.credentialStore = credentialStore;
     this.scheduleStore = scheduleStore;
+    this.courseRemovalStore = courseRemovalStore;
     this.schedulePersistence = new SchedulePersistenceCoordinator(scheduleStore);
     this.scheduleClient = scheduleClient;
     this.classroomStore = classroomStore;
@@ -827,10 +840,22 @@ export class AppModel implements CalendarViewportPreloadTarget {
       if (StrictDates.parseDateString(nextTermStartDate) === null) {
         throw CredentialSettingsError.invalidTermStartDate();
       }
+      if (this.account.trim().length === 0 && this.cloudPassword.length > 0) {
+        throw CredentialSettingsError.accountRequired();
+      }
       const storedCredentials: Credentials | null = await this.credentialStore.load();
-      const credentialAction: CredentialSaveAction = CredentialSettingsLogic.saveAction(
+      let credentialAction: CredentialSaveAction = CredentialSettingsLogic.saveAction(
         this.account, this.password, storedCredentials?.account ?? null,
         storedCredentials !== null && storedCredentials.password.length > 0);
+      let nextCredentials: Credentials | null = credentialAction.kind === CredentialSaveActionKind.preserve ?
+        storedCredentials : credentialAction.credentials;
+      if (nextCredentials !== null) {
+        nextCredentials = Credentials.withCloudPasswordDraft(nextCredentials.account,
+          nextCredentials.password, storedCredentials, this.cloudPassword, this.useAcademicPasswordForCloud);
+        credentialAction = CredentialSaveAction.replace(nextCredentials);
+      }
+      const cloudIdentityChanged: boolean = storedCredentials?.account !== nextCredentials?.account ||
+        storedCredentials?.effectiveCloudPassword() !== nextCredentials?.effectiveCloudPassword();
       let nextCredentialAccount: string | null = null;
       if (credentialAction.kind === CredentialSaveActionKind.preserve) {
         nextCredentialAccount = storedCredentials !== null ? storedCredentials.account : null;
@@ -859,6 +884,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
       }
       this.account = CredentialSettingsLogic.normalizedAccount(this.account);
       this.password = '';
+      this.cloudPassword = '';
+      this.useAcademicPasswordForCloud = false;
+      if (cloudIdentityChanged) {
+        this.resetCalendarDailyInfoState();
+      }
       this.termID = nextTermID;
       this.termStartDate = nextTermStartDate;
       await this.preferences.setString('campusID', this.campusID);
@@ -1353,6 +1383,80 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   // ---------- 清除本地数据 ----------
 
+  removedCoursesForAccount(): CourseRemovalRecord[] {
+    const scope: string = CourseRemovalLogic.accountScope(this.savedCredentialAccount ?? '');
+    return this.courseRemovals.filter((record: CourseRemovalRecord): boolean => record.accountScope === scope);
+  }
+
+  async removeCourse(course: Course, date: DateParts, wholeCourse: boolean,
+    expectedTermID: string, expectedAccount: string): Promise<boolean> {
+    if (this.isSampleMode() || this.rawSchedule === null || this.isUpdatingCourseRemovals ||
+      this.scheduleAccount.length === 0 || !this.canPreserveSavedPassword() ||
+      this.rawSchedule.termID !== expectedTermID || this.scheduleAccount !== expectedAccount.trim()) {
+      return false;
+    }
+    const current: Course[] = this.coursesOn(date);
+    if (!current.some((item: Course): boolean => item.id === course.id)) {
+      return false;
+    }
+    const record: CourseRemovalRecord = CourseRemovalLogic.create(this.scheduleAccount,
+      this.rawSchedule, course, date, wholeCourse);
+    const records: CourseRemovalRecord[] = this.courseRemovals.filter(
+      (item: CourseRemovalRecord): boolean => item.id !== record.id);
+    records.push(record);
+    return this.saveCourseRemovals(records, '课程已从个人课表删除，可在设置中恢复。');
+  }
+
+  async restoreCourse(record: CourseRemovalRecord): Promise<boolean> {
+    if (this.isSampleMode() || this.isUpdatingCourseRemovals ||
+      !this.removedCoursesForAccount().some((item: CourseRemovalRecord): boolean => item.id === record.id)) {
+      return false;
+    }
+    return this.saveCourseRemovals(this.courseRemovals.filter(
+      (item: CourseRemovalRecord): boolean => item.id !== record.id), '课程删除记录已恢复。');
+  }
+
+  private async saveCourseRemovals(records: CourseRemovalRecord[], message: string): Promise<boolean> {
+    this.isUpdatingCourseRemovals = true;
+    const generation: number = this.localDataGeneration;
+    try {
+      await this.courseRemovalStore.save(records);
+      if (generation !== this.localDataGeneration) {
+        // 账号切换后重新读完整文件，保留刚刚完成写入的原账号记录。
+        this.courseRemovalsLoaded = false;
+        return false;
+      }
+      this.courseRemovals = records;
+      this.applyCourseRemovals();
+      this.synchronizeWidgetSchedule();
+      this.synchronizeSelectedSlots();
+      this.dailyCourseNotificationDirty = true;
+      this.reconcileDailyCourseNotifications(false);
+      this.setStatusMessage(message);
+      return true;
+    } catch (e) {
+      this.setStatusMessage('课程修改未保存，请重试。');
+      return false;
+    } finally {
+      this.isUpdatingCourseRemovals = false;
+    }
+  }
+
+  private async loadCourseRemovals(): Promise<void> {
+    if (this.isSampleMode()) {
+      return;
+    }
+    if (!this.courseRemovalsLoaded) {
+      this.courseRemovals = await this.courseRemovalStore.load();
+      this.courseRemovalsLoaded = true;
+    }
+  }
+
+  private applyCourseRemovals(): void {
+    this.schedule = this.rawSchedule === null ? null : CourseRemovalLogic.apply(
+      this.rawSchedule, this.scheduleAccount, this.courseRemovals);
+  }
+
   async clearLocalData(): Promise<void> {
     if (this.isSampleMode()) {
       this.statusMessage = '示例模式不读写真实本地数据';
@@ -1384,6 +1488,15 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.updateSavedCredentialState(null);
 
     this.schedule = null;
+    this.rawSchedule = null;
+    this.scheduleAccount = '';
+    try {
+      await this.courseRemovalStore.clear();
+      this.courseRemovals = [];
+      this.courseRemovalsLoaded = true;
+    } catch (e) {
+      failures.push('课程删除记录');
+    }
     try {
       await WidgetSync.clear();
     } catch (e) {
@@ -1509,6 +1622,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
     const work: Promise<void> = (async (): Promise<void> => {
       try {
+        await this.loadCourseRemovals();
         const fetched: ScheduleSnapshot = await this.scheduleClient.fetch(
           credentials, fallbackTermID, fallbackTermStart);
         if (generation !== this.localDataGeneration || refreshToken !== this.scheduleRefreshToken) {
@@ -1526,7 +1640,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
           refreshToken !== this.scheduleRefreshToken) {
           return;
         }
-        this.schedule = resolved;
+        this.rawSchedule = resolved;
+        this.scheduleAccount = credentials.account.trim();
+        this.applyCourseRemovals();
         this.synchronizeWidgetSchedule();
         this.calendarImportStatusMessage = '';
         if (usesAutomaticTermDetection) {
@@ -1540,7 +1656,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
         this.synchronizeSelectedSlots();
         this.dailyCourseNotificationDirty = true;
         this.reconcileDailyCourseNotifications(false);
-        this.setStatusMessage('个人课表已更新，共 ' + resolved.courses.length.toString() + ' 门课程', true);
+        this.setStatusMessage('个人课表已更新，共 ' + (this.schedule?.courses.length ?? 0).toString() + ' 门课程', true);
       } catch (e) {
         if (generation !== this.localDataGeneration || refreshToken !== this.scheduleRefreshToken) {
           return;
@@ -1900,7 +2016,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       }
     } else {
       try {
-        const credentials: Credentials = await this.credentialsForRequest();
+        const credentials: Credentials = await this.assignmentCredentialsForRequest();
         const requests: Promise<void>[] = [];
         for (const date of dates) {
           const request: Promise<void> = this.assignmentClient.fetch(credentials, date)
@@ -2012,7 +2128,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     const revision: number = this.calendarDailyInfoRevision;
     const work: Promise<void> = (async (): Promise<void> => {
       try {
-        const credentials: Credentials = await this.credentialsForRequest();
+        const credentials: Credentials = await this.assignmentCredentialsForRequest();
         const fetched: AssignmentDeadlineItem[] = await this.assignmentClient.fetch(credentials, date);
         if (revision !== this.calendarDailyInfoRevision) {
           return;
@@ -2294,9 +2410,20 @@ export class AppModel implements CalendarViewportPreloadTarget {
     return CredentialSettingsLogic.credentialsForRequest(this.account, this.password, stored);
   }
 
+  private async assignmentCredentialsForRequest(): Promise<Credentials> {
+    const stored: Credentials | null = await this.credentialStore.load();
+    if (stored === null || stored.account.trim() !== this.account.trim()) {
+      throw CredentialSettingsError.accountRequired();
+    }
+    return stored;
+  }
+
   private updateSavedCredentialState(credentials: Credentials | null): void {
     this.savedCredentialAccount = credentials !== null ? credentials.account : null;
     this.hasSavedPassword = credentials !== null && credentials.password.length > 0;
+    this.hasSavedCloudPassword = credentials !== null && credentials.cloudPassword.length > 0;
+    this.cloudPassword = '';
+    this.useAcademicPasswordForCloud = false;
   }
 
   private async clearAccountScopedData(): Promise<void> {
@@ -2310,6 +2437,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
     let failed: boolean = false;
     this.schedule = null;
+    this.rawSchedule = null;
+    this.scheduleAccount = '';
     try {
       await WidgetSync.clear();
     } catch (e) {
@@ -2352,6 +2481,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private async loadSchedule(): Promise<void> {
     try {
+      await this.loadCourseRemovals();
       const loaded: ScheduleSnapshot | null = await this.scheduleStore.load();
       let shouldClearLoaded: boolean = false;
       if (this.isSampleMode()) {
@@ -2375,6 +2505,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
       } else {
         // 手动模式继续展示并使用用户明确配置时保存的缓存。
         this.schedule = loaded;
+      }
+      this.rawSchedule = this.schedule;
+      this.scheduleAccount = this.savedCredentialAccount ?? '';
+      if (!this.isSampleMode()) {
+        this.applyCourseRemovals();
       }
       // 决策完成后再同步卡片，旧学期缓存从未进入 UI 或卡片归档。
       this.synchronizeWidgetSchedule();

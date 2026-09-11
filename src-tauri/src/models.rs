@@ -55,6 +55,8 @@ pub struct SavedSettings {
     #[serde(default)]
     pub has_saved_password: bool,
     #[serde(default)]
+    pub has_saved_teaching_cloud_password: bool,
+    #[serde(default)]
     pub term_id: String,
     #[serde(default)]
     pub term_start_date: String,
@@ -98,6 +100,7 @@ impl SavedSettings {
         Self {
             account: String::new(),
             has_saved_password: false,
+            has_saved_teaching_cloud_password: false,
             term_id: String::new(),
             term_start_date: String::new(),
             campus_id: crate::config::CAMPUSES[0].id.to_string(),
@@ -137,6 +140,10 @@ pub struct SaveSettingsRequest {
     pub account: String,
     #[serde(default)]
     pub password: Option<String>,
+    #[serde(default)]
+    pub teaching_cloud_password: Option<String>,
+    #[serde(default)]
+    pub clear_teaching_cloud_password: bool,
     #[serde(default)]
     pub term_id: String,
     #[serde(default)]
@@ -198,6 +205,8 @@ mod term_default_tests {
         let mut request = SaveSettingsRequest {
             account: String::new(),
             password: None,
+            teaching_cloud_password: None,
+            clear_teaching_cloud_password: false,
             term_id: String::new(),
             term_start_date: String::new(),
             campus_id: String::new(),
@@ -514,6 +523,8 @@ pub struct HolidaysResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Course {
     pub id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source_course_id: String,
     pub name: String,
     #[serde(default)]
     pub teacher: String,

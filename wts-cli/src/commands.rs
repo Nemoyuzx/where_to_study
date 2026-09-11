@@ -1,8 +1,9 @@
 use chrono::{Datelike, NaiveDate};
 use where_to_study_lib::config::today_in_app_tz;
+use where_to_study_lib::course_deletions::{self, CourseDeletion};
 use where_to_study_lib::error::{ServiceError, ServiceResult};
 use where_to_study_lib::models::{ClassroomsRequest, Course, ScheduleRequest, ScheduleResponse};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::credentials;
 use crate::output;
@@ -57,7 +58,7 @@ fn schedule_request(
     }
 }
 
-pub fn login(account: Option<String>) -> ServiceResult<()> {
+pub fn login(account: Option<String>, use_academic_password: bool) -> ServiceResult<()> {
     let entered_account = match account {
         Some(value) => Zeroizing::new(value),
         None => credentials::prompt_account()?,
@@ -78,7 +79,20 @@ pub fn login(account: Option<String>) -> ServiceResult<()> {
     } else {
         std::mem::take(&mut *entered)
     };
-    credentials::save(&account, password)?;
+    let mut cloud = if use_academic_password {
+        Zeroizing::new(String::new())
+    } else {
+        credentials::prompt_password(
+            "教学云平台密码（选填；同账号留空保持，未设置时使用教务密码）：",
+        )?
+    };
+    credentials::save(
+        &account,
+        password,
+        std::mem::take(&mut *cloud),
+        use_academic_password,
+    )?;
+    where_to_study_lib::assignments::clear_cache();
     println!(
         "已保存账号 {account} 的凭据到本地配置文件：{}",
         credentials::storage_description()?
@@ -88,15 +102,182 @@ pub fn login(account: Option<String>) -> ServiceResult<()> {
 
 pub fn logout() -> ServiceResult<()> {
     credentials::clear()?;
+    where_to_study_lib::assignments::clear_cache();
     println!("已清除 CLI 本地配置文件中的教务凭据。");
+    Ok(())
+}
+
+fn saved_deletions(
+    credentials: &where_to_study_lib::credential_store::Credentials,
+) -> ServiceResult<Vec<CourseDeletion>> {
+    if !where_to_study_lib::scoped_cache::is_valid_account_scope(&credentials.account_scope) {
+        return Ok(vec![]);
+    }
+    course_deletions::load(
+        &credentials::deletion_path(&credentials.account_scope)?,
+        &credentials.account_scope,
+    )
+}
+
+async fn raw_schedule(
+    credentials: &where_to_study_lib::credential_store::Credentials,
+) -> ServiceResult<ScheduleResponse> {
+    let mut request = schedule_request(credentials.clone());
+    let result = where_to_study_lib::schedule::fetch_schedule(&request).await;
+    if let Some(password) = request.password.as_mut() {
+        password.zeroize();
+    }
+    result
+}
+
+async fn effective_schedule(
+    credentials: &where_to_study_lib::credential_store::Credentials,
+) -> ServiceResult<ScheduleResponse> {
+    let raw = raw_schedule(credentials).await?;
+    Ok(course_deletions::apply(
+        &raw,
+        &saved_deletions(credentials)?,
+    ))
+}
+
+pub async fn courses(json: bool) -> ServiceResult<()> {
+    let schedule = effective_schedule(&require_credentials()?).await?;
+    if json {
+        print_json(&schedule)?;
+    } else {
+        println!(
+            "学期 {} · {} 条课程安排",
+            schedule.term_id,
+            schedule.courses.len()
+        );
+        for course in schedule.courses {
+            println!(
+                "{}  {}  {}  周{} {}  {}",
+                course.id,
+                course.name,
+                course.teacher,
+                course.weekday,
+                course.time_range,
+                course.room
+            );
+        }
+    }
+    Ok(())
+}
+
+pub async fn delete_course(
+    course_id: String,
+    date: Option<String>,
+    yes: bool,
+) -> ServiceResult<()> {
+    let credentials = require_credentials()?;
+    let path = credentials::deletion_path(&credentials.account_scope)?;
+    let raw = raw_schedule(&credentials).await?;
+    let rule = CourseDeletion::create(&raw, &course_id, date.as_deref())?;
+    let mut records = saved_deletions(&credentials)?;
+    let scope = rule.date.as_deref().unwrap_or("本学期整门课程");
+    if !yes {
+        use std::io::Write;
+        print!("仅从本地课表删除「{}」({scope})？学校课程、作业和已导出日历保持不变；可恢复。输入 y 确认：", rule.name);
+        std::io::stdout()
+            .flush()
+            .map_err(|_| ServiceError::new("无法显示确认提示。"))?;
+        let mut confirmation = String::new();
+        std::io::stdin()
+            .read_line(&mut confirmation)
+            .map_err(|_| ServiceError::new("无法读取确认输入。"))?;
+        if !confirmation.trim().eq_ignore_ascii_case("y") {
+            println!("已取消。");
+            return Ok(());
+        }
+    }
+    if !records.iter().any(|existing| existing.id == rule.id) {
+        records.push(rule.clone());
+    }
+    course_deletions::save(&path, &credentials.account_scope, &records)?;
+    println!(
+        "已删除本地课程「{}」。恢复：where-to-study-cli course-restore {}",
+        rule.name, rule.id
+    );
+    Ok(())
+}
+
+pub fn course_deletions(json: bool) -> ServiceResult<()> {
+    let records = saved_deletions(&require_credentials()?)?;
+    if json {
+        print_json(&records)?;
+    } else {
+        for rule in records {
+            println!(
+                "{}  {}  {}  {}  {}",
+                rule.id,
+                rule.term_id,
+                rule.name,
+                rule.teacher,
+                rule.date.as_deref().unwrap_or("本学期整门课程")
+            );
+        }
+    }
+    Ok(())
+}
+
+pub fn restore_course(deletion_id: String) -> ServiceResult<()> {
+    let credentials = require_credentials()?;
+    let mut records = saved_deletions(&credentials)?;
+    let before = records.len();
+    records.retain(|record| record.id != deletion_id);
+    if before == records.len() {
+        return Err(ServiceError::new("当前账号中没有该课程删除记录。"));
+    }
+    course_deletions::save(
+        &credentials::deletion_path(&credentials.account_scope)?,
+        &credentials.account_scope,
+        &records,
+    )?;
+    println!("已恢复该课程删除记录，下次查询课表时生效。");
+    Ok(())
+}
+
+pub async fn assignments(date: Option<String>, json: bool) -> ServiceResult<()> {
+    let credentials = require_credentials()?;
+    let request = where_to_study_lib::models::AssignmentsRequest {
+        date: parse_date(date.as_deref())?.to_string(),
+    };
+    let response = where_to_study_lib::assignments::fetch_assignments(
+        &request,
+        &credentials.account,
+        credentials.assignment_password(),
+        &credentials.account_scope,
+    )
+    .await?;
+    if json {
+        print_json(&response)?;
+    } else {
+        println!("{} · {} 项作业", response.date, response.items.len());
+        for item in response.items {
+            println!(
+                "{}  {}  {}",
+                item.deadline,
+                item.course_name.as_deref().unwrap_or(""),
+                item.title
+            );
+        }
+    }
+    Ok(())
+}
+
+fn print_json(value: &impl serde::Serialize) -> ServiceResult<()> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).map_err(|_| ServiceError::new("无法序列化输出。"))?
+    );
     Ok(())
 }
 
 pub async fn schedule(date: Option<String>, json: bool) -> ServiceResult<()> {
     let credentials = require_credentials()?;
     let target_date = parse_date(date.as_deref())?;
-    let request = schedule_request(credentials);
-    let schedule = where_to_study_lib::schedule::fetch_schedule(&request).await?;
+    let schedule = effective_schedule(&credentials).await?;
     let week = schedule_week_number(&schedule, target_date)?;
     if json {
         println!(
@@ -112,8 +293,7 @@ pub async fn schedule(date: Option<String>, json: bool) -> ServiceResult<()> {
 pub async fn week(date: Option<String>, json: bool) -> ServiceResult<()> {
     let credentials = require_credentials()?;
     let target_date = parse_date(date.as_deref())?;
-    let request = schedule_request(credentials);
-    let schedule = where_to_study_lib::schedule::fetch_schedule(&request).await?;
+    let schedule = effective_schedule(&credentials).await?;
     let week = schedule_week_number(&schedule, target_date)?;
     if json {
         println!(
@@ -571,6 +751,7 @@ mod tests {
             term_start_date: "2026-03-02".to_string(),
             fetched_at: String::new(),
             courses: vec![Course {
+                source_course_id: String::new(),
                 id: "legacy".to_string(),
                 name: "旧缓存课程".to_string(),
                 teacher: String::new(),

@@ -10,7 +10,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8),
+            Constraint::Length(10),
             Constraint::Min(4),
             Constraint::Length(5),
         ])
@@ -37,6 +37,24 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     } else {
         app.login_account.clone()
     };
+    let cloud_style = if focus == 2 && app.settings_editing {
+        theme.primary_selected()
+    } else {
+        theme
+            .layer_style(theme.surface_variant)
+            .patch(theme.strong_text())
+    };
+    let cloud_display = if !app.teaching_cloud_password.is_empty() {
+        "•".repeat(app.teaching_cloud_password.chars().count())
+    } else if app.use_academic_password {
+        "（保存后改用教务密码）".into()
+    } else if app.has_teaching_cloud_password
+        && app.login_account.trim() == app.saved_account.trim()
+    {
+        "（已保存，留空保持不变）".into()
+    } else {
+        "（使用教务密码）".into()
+    };
     let password_display = if app.login_password.is_empty()
         && app.credentials_saved
         && app.login_account.trim() == app.saved_account.trim()
@@ -49,12 +67,14 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     };
     let form = Paragraph::new(vec![
         Line::from(format!("账号：{account_display}")).style(account_style),
-        Line::from(format!("密码：{password_display}")).style(password_style),
+        Line::from(format!("教务密码：{password_display}")).style(password_style),
+        Line::from(format!("教学云平台密码（选填）：{cloud_display}")).style(cloud_style),
+        Line::from("同学号，仅作业认证；TUI 暂无作业页，CLI 使用其单独保存的账户。"),
         Line::from(""),
         Line::from(if app.settings_editing {
             "输入模式 · ↑↓/Tab 切换 · Enter 登录 · Esc 结束输入"
         } else {
-            "Enter/e 输入 · l 登录 · o 退出登录 · t 颜色主题 / Color Theme"
+            "Enter/e 输入 · l 保存 · u 改用教务密码 · m 管理课程 · o 退出 · t 颜色主题"
         }),
     ])
     .block(theme.card_block().borders(Borders::ALL).title("账号设置"))

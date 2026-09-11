@@ -5,6 +5,7 @@ import { Classroom, Course, SlotMetadata } from '../common/Models';
 import { StrictDates } from '../common/StrictDates';
 import { CampusWeather, CampusWeatherDay } from '../net/DailyInfoClient';
 import { WeatherCardPolicy } from '../common/WeatherCardPolicy';
+import { CourseRemovalButton } from './CourseRemovalButton';
 
 export class PlannerLayoutMetrics {
   static readonly slotMinimumWidth: number = 104;
@@ -593,6 +594,7 @@ export struct PlannerView {
       Text(course.timeRange)
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
+      CourseRemovalButton({ course: course, date: StrictDates.todayParts() })
     }
     .width('100%')
     .padding({ top: this.isCompact() ? 7 : 10, bottom: this.isCompact() ? 7 : 10 })

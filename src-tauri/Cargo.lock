@@ -5083,7 +5083,7 @@ dependencies = [
 
 [[package]]
 name = "where_to_study"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "android-native-keyring-store",
  "block2",

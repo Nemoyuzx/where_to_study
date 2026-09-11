@@ -9,16 +9,34 @@ import { BusinessError } from '@kit.BasicServicesKit';
 export class Credentials {
   account: string;
   password: string;
+  cloudPassword: string;
 
-  constructor(account: string, password: string) {
+  constructor(account: string, password: string, cloudPassword: string = '') {
     this.account = account;
     this.password = password;
+    this.cloudPassword = cloudPassword;
+  }
+
+  effectiveCloudPassword(): string {
+    return this.cloudPassword.length > 0 ? this.cloudPassword : this.password;
+  }
+
+  // 空白草稿保留同一账号的覆盖密码；账号切换必须丢弃旧覆盖。
+  static withCloudPasswordDraft(account: string, password: string,
+    stored: Credentials | null, draft: string, useAcademicPassword: boolean): Credentials {
+    const sameAccount: boolean = stored !== null && stored.account.trim() === account.trim();
+    const cloudPassword: string = useAcademicPassword ? '' :
+      (draft.length > 0 ? draft : (sameAccount ? stored!.cloudPassword : ''));
+    return new Credentials(account.trim(), password, cloudPassword);
   }
 
   toJsonText(): string {
     const out: Record<string, Object> = {};
     out['account'] = this.account;
     out['password'] = this.password;
+    if (this.cloudPassword.length > 0) {
+      out['cloudPassword'] = this.cloudPassword;
+    }
     return JSON.stringify(out);
   }
 
@@ -26,7 +44,8 @@ export class Credentials {
     const raw: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
     return new Credentials(
       typeof raw['account'] === 'string' ? raw['account'] as string : '',
-      typeof raw['password'] === 'string' ? raw['password'] as string : ''
+      typeof raw['password'] === 'string' ? raw['password'] as string : '',
+      typeof raw['cloudPassword'] === 'string' ? raw['cloudPassword'] as string : ''
     );
   }
 }
@@ -120,7 +139,7 @@ export class AssetCredentialStore implements CredentialStoring {
     // 往返校验防止系统存储异常被误报为保存成功。
     const stored: Credentials | null = await this.load();
     if (stored === null || stored.account !== credentials.account ||
-      stored.password !== credentials.password) {
+      stored.password !== credentials.password || stored.cloudPassword !== credentials.cloudPassword) {
       throw new Error('系统安全存储不可用，账号密码未能保存，请稍后重试。');
     }
   }

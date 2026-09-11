@@ -923,6 +923,14 @@ class MainActivity : Activity() {
         DailyCourseSummaryScheduler.reconcile(this)
     }
 
+    fun personalScheduleWasEdited() {
+        // Cancel an already displayed summary and invalidate any in-flight draft
+        // before a deleted occurrence can be delivered from its older snapshot.
+        DailyCourseSummaryNotificationRuntime.cancel(this)
+        DailyCourseSummaryScheduler.reconcileAt(this, forceReschedule = true)
+        refreshCurrentPage()
+    }
+
     fun importCachedScheduleToSystemCalendar(
         onComplete: (Result<SystemCalendarImportResult>) -> Unit,
     ) {

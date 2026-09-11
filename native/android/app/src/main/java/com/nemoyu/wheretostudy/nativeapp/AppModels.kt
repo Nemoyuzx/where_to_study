@@ -28,6 +28,7 @@ data class Course(
     val endSlot: Int,
     val sectionText: String,
     val timeRange: String,
+    val sourceCourseID: String? = null,
 )
 
 data class ScheduleSnapshot(

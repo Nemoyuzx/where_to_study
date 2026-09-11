@@ -83,6 +83,7 @@ struct Course: Codable, Identifiable, Equatable, Sendable {
     let endSlot: Int
     let sectionText: String
     let timeRange: String
+    var sourceCourseID: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id, name, teacher, room, weekday
@@ -93,6 +94,7 @@ struct Course: Codable, Identifiable, Equatable, Sendable {
         case endSlot = "end_slot"
         case sectionText = "section_text"
         case timeRange = "time_range"
+        case sourceCourseID = "source_course_id"
     }
 }
 
@@ -277,7 +279,8 @@ enum ScheduleLogic {
                 startSlot: course.startSlot,
                 endSlot: course.endSlot,
                 sectionText: course.sectionText,
-                timeRange: course.timeRange
+                timeRange: course.timeRange,
+                sourceCourseID: course.sourceCourseID
             )
         }
     }

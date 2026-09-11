@@ -1,6 +1,6 @@
 # 隐私声明 / Privacy Policy
 
-生效日期 / Effective date: 2026-08-31
+生效日期 / Effective date: 2026-09-11
 
 Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。
 
@@ -17,6 +17,10 @@ The account and password you enter are stored in the operating system's protecte
 个人课表、空教室结果、校区、学期和功能开关会缓存在设备上，以减少重复请求。收藏活动时，应用还会在设备上保存该日程的完整快照，使其在来源关闭、失败或删除条目后仍能显示；收藏不会上传或跨设备同步。受支持系统上的课程小组件只读取本地课表快照。你可以取消单条收藏，或在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室和节假日缓存、收藏、偏好设置及应用管理的提醒任务。
 
 Schedules, classroom results, campus, term, and feature preferences are cached on your device to reduce repeated requests. Favoriting an event also stores its complete snapshot on that device so it remains visible if its source is disabled, unavailable, or removes the item; favorites are neither uploaded nor synchronized between devices. Course widgets on supported systems read only a local schedule snapshot. You can remove individual favorites or use “Clear local data” in Settings to remove saved credentials, schedule, classroom and holiday caches, favorites, preferences, and app-managed reminder tasks.
+
+课程删除仅是本地课表编辑：可删除某日的一次课程，或本学期整门课程的排课。应用保留原始课表并另存按账号和学期隔离的删除记录，刷新时重新应用，用户可在设置中恢复。这些记录会影响本机课程显示、空闲节次、受支持的小组件与课程提醒，不修改学校选课、学校作业或先前独立导出的系统日历事件；清除本地数据会一并删除记录。图形客户端使用现有应用私有存储，终端客户端沿用其受文件权限保护的本地存储。
+
+Course deletion is a local timetable edit: remove one dated occurrence or all meetings of a course in the current semester. The original timetable is retained, with separate account- and semester-scoped deletion records re-applied after refresh and restorable in Settings. Edits affect local course displays, free periods, supported widgets and reminders; they do not alter university enrollment, assignments, or previously exported system-calendar events. Clearing local data removes these records. Graphical clients use app-private storage; terminal clients retain their permission-protected local-file storage.
 
 ## 节假日数据 / Holiday data
 
@@ -43,6 +47,10 @@ You may optionally provide a public HTTPS JSON URL as a custom schedule source. 
 Requests to `https://where-to-study.cn/api/contest-events`, `https://where-to-study.cn/api/contest-notices`, and `https://where-to-study.cn/api/shuttle-bus` are credential-free `GET` requests to the fixed HTTPS host, reject redirects, and enforce response-size limits. They contain no cookies, tokens, schedules, classrooms, assignments, or other personal data. All weather, folklore, shuttle, and deadline information shown in the app is for reference only; rely on actual official information.
 
 ## 云课堂作业 / UCloud assignments
+
+“个人账户”可为同一学号另设教学云平台密码，仅用于作业认证，保存于与教务密码相同的受保护凭据存储；未单独设置时使用教务密码。同账号编辑时留空保留已保存的独立密码，选择“改用教务密码”并保存才会清除该覆盖。更换学号不会继承旧账号的教学云密码；有效凭据改变后，旧作业会话及缓存失效。终端客户端的凭据文件仅允许当前用户读写，不等同于系统钥匙串加密。
+
+Personal Account can store a separate teaching cloud password for the same student ID, used only for assignment authentication and kept in the same protected credential store as the academic password. If unset, the academic password is used. Leaving an edit blank for the same account retains its saved override; explicitly choosing and saving “Use academic password” clears that override. A different student ID never inherits the previous account's cloud password. Effective credential changes invalidate old assignment sessions and caches. Terminal clients use owner-only credential files, which are not equivalent to OS keychain encryption.
 
 日期详情请求课程作业时，应用会从安全存储临时读取已保存的教务账号和密码，只将其通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再用一次性票据换取仅存于内存的云课堂令牌，并从 `apiucloud.bupt.edu.cn` 读取课程与作业。应用不读取浏览器 Cookie 或 token，不向 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn` 发送密码，也不把认证票据、Cookie、令牌或作业写入磁盘。跨日期查询结果最多在内存复用 10 分钟，并在切换账号或清除本地数据时失效。
 

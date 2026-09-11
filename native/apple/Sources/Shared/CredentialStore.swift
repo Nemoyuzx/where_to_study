@@ -4,6 +4,13 @@ import Security
 struct Credentials: Codable, Equatable, Sendable {
     var account: String
     var password: String
+    var teachingCloudPassword: String? = nil
+
+    /// Only the teaching cloud client uses this override. Older Keychain records
+    /// decode the optional field as nil and continue using the academic password.
+    var effectiveTeachingCloudPassword: String {
+        teachingCloudPassword.flatMap { $0.isEmpty ? nil : $0 } ?? password
+    }
 }
 
 protocol CredentialStoring: Sendable {

@@ -183,7 +183,7 @@ export class SJDScheduleParser {
     return new Course(
       id, name, teacher, location, weekText, weeks, [], weekday,
       startSlot, endSlot, (startSlot + 1).toString() + '-' + (endSlot + 1).toString() + '节',
-      startTime + '-' + endTime
+      startTime + '-' + endTime, JsonUtil.string(raw['jx0408id']).trim()
     );
   }
 

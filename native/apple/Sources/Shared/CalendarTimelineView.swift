@@ -705,6 +705,7 @@ struct CalendarTimelineView: View {
                     let bottom = max(top + 34, yPosition(minute: end) - 2)
                     courseBlock(
                         placement: placement,
+                        date: day.date,
                         trackWidth: trackWidth,
                         x: x,
                         top: top,
@@ -717,6 +718,7 @@ struct CalendarTimelineView: View {
 
     private func courseBlock(
         placement: CalendarCoursePlacement,
+        date: Date,
         trackWidth: CGFloat,
         x: CGFloat,
         top: CGFloat,
@@ -758,6 +760,7 @@ struct CalendarTimelineView: View {
         .accessibilityLabel(
             "\(placement.course.timeRange)，\(placement.course.name)，\(metadata)"
         )
+        .modifier(CourseManagementModifier(course: placement.course, date: date))
     }
 
     @ViewBuilder

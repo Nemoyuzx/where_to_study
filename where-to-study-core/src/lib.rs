@@ -1,9 +1,13 @@
+#[path = "../../src-tauri/src/assignments.rs"]
+pub mod assignments;
 #[path = "../../src-tauri/src/auth.rs"]
 pub mod auth;
 #[path = "../../src-tauri/src/classrooms.rs"]
 pub mod classrooms;
 #[path = "../../src-tauri/src/config.rs"]
 pub mod config;
+#[path = "../../src-tauri/src/course_deletions.rs"]
+pub mod course_deletions;
 pub mod credential_store;
 #[path = "../../src-tauri/src/error.rs"]
 pub mod error;

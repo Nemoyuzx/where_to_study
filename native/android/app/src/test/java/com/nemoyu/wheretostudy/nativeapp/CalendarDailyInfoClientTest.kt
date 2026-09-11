@@ -257,6 +257,62 @@ class CalendarDailyInfoClientTest {
     }
 
     @Test
+    fun ucloudUsesIndependentPasswordAndRefreshesCacheWhenEffectivePasswordChanges() {
+        var saved = Credentials("2023000000", "academic", "cloud")
+        val observed = mutableListOf<Credentials>()
+        val client = UCloudAssignmentClient(
+            loadCredentials = { saved },
+            fetchAllOverride = {
+                observed += it
+                listOf(assignment("result-${observed.size}", "2026-08-22 18:00:00"))
+            },
+            elapsedRealtime = { 1_000L },
+        )
+        assertEquals(listOf("result-1"), client.fetch("2026-08-22").map { it.id })
+        assertEquals("cloud", observed.single().password)
+        saved = saved.copy(password = "new-academic")
+        client.fetch("2026-08-22")
+        assertEquals(1, observed.size)
+        saved = saved.copy(teachingCloudPassword = "new-cloud")
+        assertEquals(listOf("result-2"), client.fetch("2026-08-22").map { it.id })
+        assertEquals("new-cloud", observed.last().password)
+        saved = saved.copy(teachingCloudPassword = null)
+        assertEquals(listOf("result-3"), client.fetch("2026-08-22").map { it.id })
+        assertEquals("new-academic", observed.last().password)
+    }
+
+    @Test
+    fun ucloudCredentialChangeRejectsAnOlderFlightWithoutCachingItsResults() {
+        val saved = java.util.concurrent.atomic.AtomicReference(Credentials("same-account", "academic", "old-cloud"))
+        val oldStarted = CountDownLatch(1)
+        val releaseOld = CountDownLatch(1)
+        val client = UCloudAssignmentClient(
+            loadCredentials = saved::get,
+            fetchAllOverride = { credentials ->
+                if (credentials.password == "old-cloud") {
+                    oldStarted.countDown()
+                    assertTrue(releaseOld.await(2, TimeUnit.SECONDS))
+                    listOf(assignment("old", "2026-08-22 18:00:00"))
+                } else listOf(assignment("new", "2026-08-22 18:00:00"))
+            },
+            elapsedRealtime = { 1_000L },
+        )
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val old = executor.submit<List<AssignmentDeadlineItem>> { client.fetch("2026-08-22") }
+            assertTrue(oldStarted.await(2, TimeUnit.SECONDS))
+            saved.set(saved.get().copy(teachingCloudPassword = "new-cloud"))
+            assertEquals(listOf("new"), client.fetch("2026-08-22").map { it.id })
+            releaseOld.countDown()
+            assertTrue(assertThrows(ExecutionException::class.java) { old.get(2, TimeUnit.SECONDS) }.cause is DailyInfoClientException)
+            assertEquals(listOf("new"), client.fetch("2026-08-22").map { it.id })
+        } finally {
+            releaseOld.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun ucloudConcurrentDatesShareOneAccountWideFetchAll() {
         val fetchCount = AtomicInteger(0)
         val selectedFlights = CountDownLatch(2)

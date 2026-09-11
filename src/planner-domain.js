@@ -50,6 +50,9 @@ export function shanghaiDateString(date = new Date()) {
 export const DEFAULT_SETTINGS = {
   account: '',
   password: '',
+  teachingCloudPassword: '',
+  hasSavedTeachingCloudPassword: false,
+  clearTeachingCloudPassword: false,
   hasSavedPassword: false,
   termId: '',
   termStartDate: '',
@@ -520,6 +523,9 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
   return {
     account: data.account ?? fallback.account ?? '',
     password: '',
+    teachingCloudPassword: '',
+    hasSavedTeachingCloudPassword: Boolean(data.has_saved_teaching_cloud_password),
+    clearTeachingCloudPassword: false,
     hasSavedPassword: Boolean(data.has_saved_password),
     termId: data.term_id || fallback.termId || DEFAULT_SETTINGS.termId,
     termStartDate: data.term_start_date || fallback.termStartDate || DEFAULT_SETTINGS.termStartDate,
@@ -646,12 +652,61 @@ export function savedCredentialSnapshot(settings) {
   return {
     account: settings.account.trim(),
     hasSavedPassword: settings.hasSavedPassword,
+    hasSavedTeachingCloudPassword: Boolean(settings.hasSavedTeachingCloudPassword),
   }
 }
 
 export function accountHasSavedPassword(account, savedCredential) {
   return savedCredential.hasSavedPassword
     && account.trim() === savedCredential.account
+}
+
+export function settingsWithCredentialDraft(settings, field, value, savedCredential) {
+  const next = { ...settings, [field]: value }
+  if (field === 'account') {
+    next.hasSavedPassword = accountHasSavedPassword(value, savedCredential)
+    next.hasSavedTeachingCloudPassword = value.trim() === savedCredential.account
+      && Boolean(savedCredential.hasSavedTeachingCloudPassword)
+    next.teachingCloudPassword = ''
+    next.clearTeachingCloudPassword = false
+  } else if (field === 'teachingCloudPassword') {
+    next.clearTeachingCloudPassword = false
+  } else if (field === 'clearTeachingCloudPassword' && value) {
+    next.teachingCloudPassword = ''
+  }
+  return next
+}
+
+export function courseEditRequest(savedAccount, termId, courseId, date = null) {
+  const account = String(savedAccount || '').trim()
+  if (!account) throw new Error('请先在设置中保存教务账号和密码。')
+  if (!isValidTermId(termId) || !String(courseId || '').trim()) {
+    throw new Error('课程已变化，请重新选择。')
+  }
+  if (date !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(date)
+    || localDateString(dateFromString(date)) !== date)) {
+    throw new Error('课程日期格式不正确。')
+  }
+  return { account, term_id: termId, course_id: courseId, date }
+}
+
+export function applyCourseDeletions(schedule, deletions = []) {
+  if (!schedule) return null
+  return {
+    ...schedule,
+    courses: schedule.courses.map((course) => ({
+      ...course,
+      week_numbers: course.week_numbers.filter((week) => !deletions.some((rule) => {
+        const sourceID = String(course.source_course_id || '').trim()
+        const ruleID = String(rule.source_course_id || '').trim()
+        const sameCourse = sourceID && ruleID ? sourceID === ruleID
+          : rule.name.trim() === course.name.trim() && rule.teacher.trim() === course.teacher.trim()
+        return rule.term_id === schedule.term_id && sameCourse && (!rule.date
+          || (rule.date === addDays(schedule.term_start_date, (week - 1) * 7 + course.weekday - 1)
+            && rule.start_slot === course.start_slot && rule.end_slot === course.end_slot))
+      })),
+    })).filter((course) => course.week_numbers.length),
+  }
 }
 
 export function reminderSettingsPayload(savedSettings, enabled, minutes) {
@@ -662,10 +717,24 @@ export function reminderSettingsPayload(savedSettings, enabled, minutes) {
   })
 }
 
+export function semesterSettingsPayload(savedSettings, draft) {
+  return settingsToPayload({
+    ...savedSettings,
+    password: '',
+    teachingCloudPassword: '',
+    clearTeachingCloudPassword: false,
+    termId: draft.termId,
+    termStartDate: draft.termStartDate,
+    automaticTermDetectionEnabled: draft.automaticTermDetectionEnabled,
+  })
+}
+
 export function settingsToPayload(settings) {
   return {
     account: settings.account,
     password: settings.password || null,
+    teaching_cloud_password: settings.teachingCloudPassword || null,
+    clear_teaching_cloud_password: Boolean(settings.clearTeachingCloudPassword),
     term_id: settings.termId,
     term_start_date: settings.termStartDate,
     campus_id: settings.campusId,

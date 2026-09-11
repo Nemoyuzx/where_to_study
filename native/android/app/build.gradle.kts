@@ -29,7 +29,7 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 46
-        versionName = "0.2.8"
+        versionName = "0.2.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["disableAnalytics"] = "true"

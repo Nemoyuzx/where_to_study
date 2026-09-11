@@ -176,6 +176,48 @@ export default function calendarDailyInfoClientTest() {
       expect(results[1][0].id).assertEqual('second');
     });
 
+    it('ucloud_uses_cloud_override_and_invalidates_on_effective_password_change', 0, async () => {
+      const seen: string[] = [];
+      const client: UCloudAssignmentClient = new UCloudAssignmentClient(
+        async (credentials: Credentials): Promise<AssignmentDeadlineItem[]> => {
+          seen.push(credentials.password);
+          return [];
+        });
+      await client.fetch(new Credentials('student', 'academic', 'cloud'), '2026-09-11');
+      await client.fetch(new Credentials('student', 'changed-academic', 'cloud'), '2026-09-12');
+      expect(seen.length).assertEqual(1);
+      expect(seen[0]).assertEqual('cloud');
+      await client.fetch(new Credentials('student', 'changed-academic', 'new-cloud'), '2026-09-11');
+      await client.fetch(new Credentials('student', 'changed-academic'), '2026-09-11');
+      expect(seen.join(',')).assertEqual('cloud,new-cloud,changed-academic');
+    });
+
+    it('ucloud_old_inflight_password_cannot_overwrite_new_cache', 0, async () => {
+      let releaseOld: () => void = (): void => {};
+      const gate: Promise<void> = new Promise<void>((resolve) => {
+        releaseOld = (): void => resolve();
+      });
+      let count: number = 0;
+      const client: UCloudAssignmentClient = new UCloudAssignmentClient(
+        async (credentials: Credentials): Promise<AssignmentDeadlineItem[]> => {
+          count++;
+          if (credentials.password === 'old-cloud') {
+            await gate;
+          }
+          return [new AssignmentDeadlineItem(credentials.password === 'old-cloud' ? 'old' : 'new',
+            'Assignment', null, '2026-09-11 20:00:00', '未提交')];
+        });
+      const old: Promise<AssignmentDeadlineItem[]> = client.fetch(
+        new Credentials('student', 'academic', 'old-cloud'), '2026-09-11');
+      await client.fetch(new Credentials('student', 'academic', 'new-cloud'), '2026-09-11');
+      releaseOld();
+      await old;
+      const cached: AssignmentDeadlineItem[] = await client.fetch(
+        new Credentials('student', 'academic', 'new-cloud'), '2026-09-11');
+      expect(cached[0].id).assertEqual('new');
+      expect(count).assertEqual(2);
+    });
+
     it('startup_warmup_shares_one_range_fetch_and_page_changes_filter_in_memory', 0, async () => {
       const transport: CountingDeadlineTransport = new CountingDeadlineTransport();
       let contestParses: number = 0;

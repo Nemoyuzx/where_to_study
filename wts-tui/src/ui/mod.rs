@@ -24,6 +24,10 @@ pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
         theme_editor::draw(frame, area, editor, theme);
         return;
     }
+    if app.course_manager.is_some() {
+        crate::course_manager::draw(frame, area, app, theme);
+        return;
+    }
     if app.color_theme.preset != "default" {
         frame.render_widget(
             Block::default().style(Style::default().bg(theme.background).fg(theme.text)),
@@ -96,7 +100,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
     let hint = if app.selected_tab_index == 4 {
         "←/→ 切换班车/事件 · r 刷新 · ↑↓ 浏览 · Tab/1-6 切换页面 · 事件：/ 搜索 t 类型 c 分类 p 来源 e 已结束 f 收藏"
     } else {
-        "q 退出 · r 刷新 · l 登录 · o 退出登录 · Tab/1-6 切换页面"
+        "q 退出 · r 刷新 · l 保存账号 · o 退出登录 · m 管理课程 · Tab/1-6 切换页面"
     };
     let hint_bar = Paragraph::new(Span::styled(hint, theme.muted_text()));
     frame.render_widget(hint_bar, chunks[3]);

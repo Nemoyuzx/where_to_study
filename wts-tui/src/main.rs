@@ -1,5 +1,6 @@
 mod app;
 mod color_theme;
+mod course_manager;
 mod file_credentials;
 mod theme;
 mod ui;
@@ -56,7 +57,7 @@ enum Message {
         request_id: u64,
         result: ServiceResult<where_to_study_lib::models::ImportantEventsResponse>,
     },
-    CredentialsSaved(Result<String, String>),
+    CredentialsSaved(Result<(String, String, bool), String>),
     CredentialsCleared(Result<(), String>),
 }
 
@@ -131,6 +132,11 @@ fn main() -> io::Result<()> {
                 !credentials.account.trim().is_empty() && !credentials.password.is_empty();
             app.saved_account = credentials.account.clone();
             app.login_account = credentials.account.trim().to_string();
+            app.has_teaching_cloud_password = credentials
+                .teaching_cloud_password
+                .as_ref()
+                .is_some_and(|value| !value.is_empty());
+            load_course_deletions(&mut app, &credentials.account_scope);
         }
         Ok(None) => {}
         Err(error) => app.set_error(error.message),
@@ -230,7 +236,7 @@ fn run(
                     }
                     match result {
                         Ok(schedule) => {
-                            app.schedule = Some(schedule);
+                            app.set_raw_schedule(schedule);
                             app.set_status("课表已刷新".to_string());
                         }
                         Err(error) => app.set_error(error.message),
@@ -288,22 +294,32 @@ fn run(
                     }
                 }
                 Message::CredentialsSaved(result) => match result {
-                    Ok(account) => {
+                    Ok((account, scope, has_cloud_password)) => {
+                        if app.saved_account.trim() != account.trim() {
+                            app.clear_account_data();
+                        }
                         app.invalidate_data_requests();
                         app.credentials_saved = true;
                         app.saved_account = account;
                         app.login_password.clear();
+                        app.teaching_cloud_password.clear();
+                        app.use_academic_password = false;
+                        app.has_teaching_cloud_password = has_cloud_password;
                         app.settings_editing = false;
                         app.set_status("凭据已保存到本地文件".to_string());
+                        load_course_deletions(app, &scope);
                     }
                     Err(message) => app.set_error(message),
                 },
                 Message::CredentialsCleared(result) => match result {
                     Ok(()) => {
-                        app.invalidate_data_requests();
+                        app.clear_account_data();
                         app.credentials_saved = false;
                         app.saved_account.clear();
                         app.login_password.clear();
+                        app.teaching_cloud_password.clear();
+                        app.has_teaching_cloud_password = false;
+                        app.use_academic_password = false;
                         app.set_status("已退出登录".to_string());
                     }
                     Err(message) => app.set_error(message),
@@ -322,6 +338,10 @@ fn current_theme(app: &App) -> Theme {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool {
+    if app.course_manager.is_some() {
+        course_manager::handle_key(app, key);
+        return false;
+    }
     if let Some(editor) = &mut app.theme_editor {
         match editor.handle_key(key) {
             color_theme::EditorAction::None => {}
@@ -372,6 +392,14 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
     }
 
     match key.code {
+        KeyCode::Char('m') if matches!(app.selected_tab_index, 0 | 1 | 3 | 5) => {
+            app.course_manager = Some(course_manager::CourseManager::new());
+        }
+        KeyCode::Char('u') if app.selected_tab_index == 5 => {
+            app.use_academic_password = true;
+            app.teaching_cloud_password.clear();
+            app.set_status("保存设置后，教学云平台将改用教务密码".into());
+        }
         KeyCode::Char('t') if app.selected_tab_index == 5 => {
             app.theme_editor = Some(color_theme::ThemeEditor::new(&app.color_theme));
         }
@@ -432,7 +460,7 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
         },
         KeyCode::Down => match app.selected_tab_index {
             2 => app.move_building_cursor(1),
-            5 => app.settings_focus = (app.settings_focus + 1).min(1),
+            5 => app.settings_focus = (app.settings_focus + 1).min(2),
             _ => {}
         },
         KeyCode::PageUp if app.selected_tab_index == 2 => {
@@ -581,22 +609,32 @@ fn refresh_events(app: &mut App, tx: &mpsc::Sender<Message>, force: bool) {
 fn handle_settings_input(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool {
     match key.code {
         KeyCode::Esc => app.settings_editing = false,
-        KeyCode::Tab => app.settings_focus = (app.settings_focus + 1) % 2,
+        KeyCode::Tab => app.settings_focus = (app.settings_focus + 1) % 3,
         KeyCode::Up => app.settings_focus = app.settings_focus.saturating_sub(1),
-        KeyCode::Down => app.settings_focus = (app.settings_focus + 1).min(1),
-        KeyCode::Enter if app.settings_focus == 0 => app.settings_focus = 1,
+        KeyCode::Down => app.settings_focus = (app.settings_focus + 1).min(2),
+        KeyCode::Enter if app.settings_focus < 2 => app.settings_focus += 1,
         KeyCode::Enter => login_with_form(app, tx),
         KeyCode::Backspace if app.settings_focus == 0 => {
             app.login_account.pop();
+            app.teaching_cloud_password.clear();
+            app.use_academic_password = false;
+        }
+        KeyCode::Backspace if app.settings_focus == 1 => {
+            app.login_password.pop();
         }
         KeyCode::Backspace => {
-            app.login_password.pop();
+            app.teaching_cloud_password.pop();
         }
         KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
             if app.settings_focus == 0 {
                 app.login_account.push(ch);
-            } else {
+                app.teaching_cloud_password.clear();
+                app.use_academic_password = false;
+            } else if app.settings_focus == 1 {
                 app.login_password.push(ch);
+            } else {
+                app.teaching_cloud_password.push(ch);
+                app.use_academic_password = false;
             }
         }
         _ => {}
@@ -663,28 +701,68 @@ fn login_with_form(app: &mut App, tx: &mpsc::Sender<Message>) {
     }
     if app.login_password.is_empty() {
         if app.credentials_saved && app.saved_account.trim() == account {
-            app.settings_editing = false;
-            app.set_status("已沿用本地保存的密码".to_string());
+            if app.teaching_cloud_password.is_empty()
+                && !app.use_academic_password
+                && where_to_study_lib::scoped_cache::is_valid_account_scope(&app.account_scope)
+            {
+                app.settings_editing = false;
+                app.set_status("已沿用本地保存的密码".to_string());
+                return;
+            }
+        } else {
+            app.set_error("请输入密码。".to_string());
             return;
         }
-        app.set_error("请输入密码。".to_string());
-        return;
     }
 
     app.clear_error();
     let password = Zeroizing::new(std::mem::take(&mut *app.login_password));
+    let cloud_password = Zeroizing::new(std::mem::take(&mut *app.teaching_cloud_password));
+    let use_academic_password = app.use_academic_password;
     app.settings_editing = false;
     let tx = tx.clone();
     thread::spawn(move || {
-        let result = save_credentials(account, password).map_err(|error| error.message);
+        let result = save_credentials(account, password, cloud_password, use_academic_password)
+            .map_err(|error| error.message);
         let _ = tx.send(Message::CredentialsSaved(result));
     });
 }
 
-fn save_credentials(account: String, mut password: Zeroizing<String>) -> ServiceResult<String> {
+fn save_credentials(
+    account: String,
+    password: Zeroizing<String>,
+    cloud_password: Zeroizing<String>,
+    use_academic_password: bool,
+) -> ServiceResult<(String, String, bool)> {
     let existing = file_credentials::load()?;
+    let credentials = credentials_for_edit(
+        existing.as_ref(),
+        account,
+        password,
+        cloud_password,
+        use_academic_password,
+    )?;
+    file_credentials::save(&credentials)?;
+    where_to_study_lib::assignments::clear_cache();
+    Ok((
+        credentials.account.clone(),
+        credentials.account_scope.clone(),
+        credentials
+            .teaching_cloud_password
+            .as_ref()
+            .is_some_and(|value| !value.is_empty()),
+    ))
+}
+
+fn credentials_for_edit(
+    existing: Option<&Credentials>,
+    account: String,
+    mut password: Zeroizing<String>,
+    mut cloud_password: Zeroizing<String>,
+    use_academic_password: bool,
+) -> ServiceResult<Credentials> {
+    let same_account = existing.filter(|saved| saved.account.trim() == account.trim());
     let account_scope = existing
-        .as_ref()
         .filter(|credentials| credentials.account.trim() == account)
         .map(|credentials| credentials.account_scope.as_str())
         .filter(|scope| where_to_study_lib::scoped_cache::is_valid_account_scope(scope))
@@ -692,15 +770,45 @@ fn save_credentials(account: String, mut password: Zeroizing<String>) -> Service
         .map(Ok)
         .unwrap_or_else(where_to_study_lib::scoped_cache::new_account_scope)?;
 
-    let mut credentials = Credentials {
+    if password.is_empty() {
+        let saved = same_account
+            .filter(|saved| !saved.password.is_empty())
+            .ok_or_else(|| ServiceError::new("更换账号时请输入教务密码。"))?;
+        *password = saved.password.clone();
+    }
+    let teaching_cloud_password = if use_academic_password {
+        None
+    } else if !cloud_password.is_empty() {
+        Some(std::mem::take(&mut *cloud_password))
+    } else {
+        same_account.and_then(|saved| saved.teaching_cloud_password.clone())
+    };
+    Ok(Credentials {
         account: account.clone(),
         password: std::mem::take(&mut *password),
+        teaching_cloud_password,
         account_scope,
-    };
-    let result = file_credentials::save(&credentials);
-    credentials.password.zeroize();
-    result?;
-    Ok(account)
+    })
+}
+
+fn load_course_deletions(app: &mut App, scope: &str) {
+    app.account_scope = scope.to_string();
+    app.course_deletions.clear();
+    app.course_deletion_path = None;
+    if !where_to_study_lib::scoped_cache::is_valid_account_scope(scope) {
+        return;
+    }
+    let result = file_credentials::course_deletion_path(scope).and_then(|path| {
+        where_to_study_lib::course_deletions::load(&path, scope).map(|records| (path, records))
+    });
+    match result {
+        Ok((path, records)) => {
+            app.course_deletion_path = Some(path);
+            app.course_deletions = records;
+            app.recompute_schedule();
+        }
+        Err(error) => app.set_error(error.message),
+    }
 }
 
 fn clear_credentials(app: &mut App, tx: &mpsc::Sender<Message>) {
@@ -708,11 +816,20 @@ fn clear_credentials(app: &mut App, tx: &mpsc::Sender<Message>) {
     let tx = tx.clone();
     thread::spawn(move || {
         let result = file_credentials::clear().map_err(|error| error.message);
+        if result.is_ok() {
+            where_to_study_lib::assignments::clear_cache();
+        }
         let _ = tx.send(Message::CredentialsCleared(result));
     });
 }
 
 fn refresh_schedule(app: &mut App, tx: &mpsc::Sender<Message>) {
+    if where_to_study_lib::scoped_cache::is_valid_account_scope(&app.account_scope)
+        && app.course_deletion_path.is_none()
+    {
+        app.set_error("本地课程删除记录不可用，请检查文件后重新保存账号。".into());
+        return;
+    }
     let credentials = match require_credentials() {
         Ok(credentials) => credentials,
         Err(error) => {
@@ -947,6 +1064,7 @@ mod tests {
         app.login_account = "2023000000".to_string();
         app.saved_account = "2023000000".to_string();
         app.credentials_saved = true;
+        app.account_scope = where_to_study_lib::scoped_cache::new_account_scope().unwrap();
         app.settings_editing = true;
 
         login_with_form(&mut app, &tx);
@@ -954,6 +1072,63 @@ mod tests {
         assert!(!app.settings_editing);
         assert!(app.error_message.is_none());
         assert_eq!(app.status_message.as_deref(), Some("已沿用本地保存的密码"));
+    }
+
+    #[test]
+    fn cloud_password_edits_preserve_academic_password_and_isolate_accounts() {
+        let saved = Credentials {
+            account: "a".into(),
+            password: "academic".into(),
+            teaching_cloud_password: Some("cloud".into()),
+            account_scope: where_to_study_lib::scoped_cache::new_account_scope().unwrap(),
+        };
+        let edited = credentials_for_edit(
+            Some(&saved),
+            "a".into(),
+            Zeroizing::new(String::new()),
+            Zeroizing::new("new-cloud".into()),
+            false,
+        )
+        .unwrap();
+        assert_eq!(edited.password, "academic");
+        assert_eq!(edited.assignment_password(), "new-cloud");
+        assert_eq!(edited.account_scope, saved.account_scope);
+        let fallback = credentials_for_edit(
+            Some(&saved),
+            "a".into(),
+            Zeroizing::new(String::new()),
+            Zeroizing::new(String::new()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(fallback.assignment_password(), "academic");
+        assert!(fallback.teaching_cloud_password.is_none());
+        let changed = credentials_for_edit(
+            Some(&saved),
+            "b".into(),
+            Zeroizing::new("new-academic".into()),
+            Zeroizing::new(String::new()),
+            false,
+        )
+        .unwrap();
+        assert!(changed.teaching_cloud_password.is_none());
+        assert_ne!(changed.account_scope, saved.account_scope);
+    }
+
+    #[test]
+    fn account_field_edit_discards_unsaved_cloud_password_and_uses_three_fields() {
+        let (tx, _rx) = mpsc::channel();
+        let mut app = App::new(false);
+        app.selected_tab_index = 5;
+        app.settings_editing = true;
+        app.teaching_cloud_password.push_str("draft");
+        handle_key(&mut app, key(KeyCode::Char('a')), &tx);
+        assert!(app.teaching_cloud_password.is_empty());
+        handle_key(&mut app, key(KeyCode::Tab), &tx);
+        handle_key(&mut app, key(KeyCode::Tab), &tx);
+        assert_eq!(app.settings_focus, 2);
+        handle_key(&mut app, key(KeyCode::Char('x')), &tx);
+        assert_eq!(&*app.teaching_cloud_password, "x");
     }
 
     #[test]

@@ -817,6 +817,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     private let fetchAllProvider: @Sendable (Credentials) async throws -> [AssignmentDeadlineItem]
     private let flightSelectionObserver: (@Sendable (Bool) -> Void)?
     private var cache: Cache?
+    private var activeCredentials: Credentials?
     private var inFlightFetches = [String: InFlightFetch]()
     private var revision: UInt64 = 0
     private var nextFlightID: UInt64 = 0
@@ -867,11 +868,20 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     private func accountWideItems() async throws -> [AssignmentDeadlineItem] {
         guard let credentials = try credentialStore.load(),
               !credentials.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !credentials.password.isEmpty
+              !credentials.effectiveTeachingCloudPassword.isEmpty
         else {
+            invalidateAuthentication()
             throw CalendarDeadlineError.service("请先在设置中保存教务账号和密码。")
         }
         let account = credentials.account.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedCredentials = Credentials(
+            account: account,
+            password: credentials.effectiveTeachingCloudPassword
+        )
+        if activeCredentials != normalizedCredentials {
+            invalidateAuthentication()
+            activeCredentials = normalizedCredentials
+        }
         let allItems: [AssignmentDeadlineItem]
         if let cache,
            cache.account == account,
@@ -887,10 +897,6 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
                 nextFlightID &+= 1
                 let flightID = nextFlightID
                 let requestRevision = revision
-                let normalizedCredentials = Credentials(
-                    account: account,
-                    password: credentials.password
-                )
                 let fetchAllProvider = fetchAllProvider
                 flight = InFlightFetch(
                     id: flightID,
@@ -911,7 +917,11 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
                 }
                 throw error
             }
-            guard revision == flight.revision else {
+            let latest = try credentialStore.load()
+            guard revision == flight.revision,
+                  latest?.account.trimmingCharacters(in: .whitespacesAndNewlines) == account,
+                  latest?.effectiveTeachingCloudPassword == normalizedCredentials.password
+            else {
                 throw CancellationError()
             }
             if inFlightFetches[account]?.id == flight.id {
@@ -923,8 +933,13 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     }
 
     func reset() async {
+        invalidateAuthentication()
+    }
+
+    private func invalidateAuthentication() {
         revision &+= 1
         cache = nil
+        activeCredentials = nil
         let invalidated = inFlightFetches.values.map(\.task)
         inFlightFetches.removeAll()
         invalidated.forEach { $0.cancel() }
@@ -1508,6 +1523,7 @@ final class CalendarDeadlineStore: ObservableObject {
     private var customSourceURL: URL?
     private var customRevision: UInt64 = 0
     private var assignmentRevision: UInt64 = 0
+    private var assignmentResetTask: Task<Void, Never>?
     private var publicPrewarmFlight: (
         id: UInt64,
         task: Task<[String: PublicDeadlineSnapshot], Error>
@@ -1809,6 +1825,9 @@ final class CalendarDeadlineStore: ObservableObject {
     }
 
     func loadAssignments(dates: [String], sampleMode: Bool, force: Bool = false) async {
+        let revisionBeforeReset = assignmentRevision
+        await assignmentResetTask?.value
+        guard revisionBeforeReset == assignmentRevision else { return }
         let requestedDates = Array(Set(dates)).sorted().filter { date in
             (force || assignmentsByDate[date] == nil) && !loadingAssignmentDates.contains(date)
         }
@@ -1867,6 +1886,10 @@ final class CalendarDeadlineStore: ObservableObject {
         assignmentsByDate.removeAll()
         assignmentUnavailableByDate.removeAll()
         loadingAssignmentDates.removeAll()
-        Task { await assignmentClient.reset() }
+        let previousReset = assignmentResetTask
+        assignmentResetTask = Task {
+            await previousReset?.value
+            await assignmentClient.reset()
+        }
     }
 }

@@ -8,6 +8,9 @@
   Secret Service 桌面会话的 Linux 服务器
 - `schedule`：显示服务返回学期内的指定日期（默认今天，上海时区）个人课程
 - `week`：显示本周课程
+- `courses`：列出本学期可见课程及删除所需 ID；`course-delete` 支持单次和整门课程，
+  `course-deletions` 查看删除记录，`course-restore` 恢复
+- `assignments`：使用同学号及可选独立教学云平台密码，查询指定日期的课程作业 DDL
 - `classrooms`：按校区、教学楼、节次筛选查询当天空教室（实时接口不支持其他日期）
 - `holidays`：显示中国法定节假日与调休（支持离线兜底数据）
 - `shuttle`：显示当天班车状态和当前生效时刻表
@@ -76,6 +79,17 @@ where-to-study-cli schedule --date 2026-06-01
 # 查看本周课程（JSON 输出）
 where-to-study-cli week --json
 
+# 查看课程 ID，删除单次或本学期整门课程（终端会要求确认）
+where-to-study-cli courses
+where-to-study-cli course-delete COURSE_ID --date 2026-09-07
+where-to-study-cli course-delete COURSE_ID --all-semester
+where-to-study-cli course-deletions
+where-to-study-cli course-restore DELETION_ID
+
+# 查询教学云作业；login 会以隐藏输入询问可选独立教学云密码
+where-to-study-cli assignments --date 2026-09-07 --json
+where-to-study-cli login --use-academic-password
+
 # 查询西土城 教1 楼 1-4 节的空教室
 where-to-study-cli classrooms --campus 01 --building 教1 --slots 1-4
 
@@ -104,7 +118,9 @@ where-to-study-cli logout
 ```
 
 `login` 不带参数时会依次提示输入账号和密码，二者均不回显；同账号留空密码会保留
-已保存密码。为避免凭据出现在 shell 历史、进程参数或程序日志中，不提供命令行密码
+已保存密码。教学云平台使用相同学号；可选独立密码留空时保留同账号已保存值，
+未设置则使用教务密码。`login --use-academic-password` 明确删除独立密码。
+更换账号不会继承原账号的独立密码。为避免凭据出现在 shell 历史、进程参数或程序日志中，不提供命令行密码
 选项。`logout` 只清除 CLI 自己的凭据文件，不会改动桌面端账号。
 
 凭据以 JSON 保存在当前用户专属的配置目录中，并通过目录 `0700`、文件 `0600`
@@ -113,8 +129,15 @@ where-to-study-cli logout
 - macOS：`~/Library/Application Support/Where To Study/cli-credentials.json`
 - Linux：`${XDG_CONFIG_HOME:-~/.config}/where-to-study/cli-credentials.json`
 
-该文件包含明文教务密码，不应同步、备份到公共位置或提交到版本控制。多人共用主机
+该文件包含明文教务密码及可选教学云平台密码，不应同步、备份到公共位置或提交到版本控制。多人共用主机
 应为每位用户使用独立系统账号；不再需要凭据时运行 `where-to-study-cli logout`。
+
+课程删除记录在凭据同目录的 `cli-course-deletions-<opaque-scope>.json` 中独立保存，
+按账号作用域和学期隔离；不含账号密码。课表每次查询后重新应用删除记录，因此刷新
+不会恢复已删除课程。整门课程依源课程 ID 匹配，旧数据缺 ID 时按课程名和教师匹配；
+单次删除额外限定上海日期和节次。`--yes` 可明确跳过删除的交互确认。
+这些操作只改变本地显示，不会退选学校课程、删除作业或已导出的系统日历事件。
+CLI、TUI 与图形客户端各自保存凭据和课表删除记录；退出登录后的新账号作用域不会继承旧记录。
 
 ## 设计
 

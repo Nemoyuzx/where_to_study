@@ -35,6 +35,16 @@ fn read_limited_cache_bytes(
 }
 
 pub fn load(app: &AppHandle, account_scope: &str) -> ServiceResult<Option<ScheduleResponse>> {
+    let raw = load_raw(app, account_scope)?;
+    let rules = crate::course_deletions::load(&deletion_path(app)?, account_scope)?;
+    Ok(raw.map(|raw| crate::course_deletions::apply(&raw, &rules)))
+}
+
+pub fn deletion_path(app: &AppHandle) -> ServiceResult<PathBuf> {
+    Ok(schedule_path(app)?.with_file_name(crate::course_deletions::FILE_NAME))
+}
+
+pub fn load_raw(app: &AppHandle, account_scope: &str) -> ServiceResult<Option<ScheduleResponse>> {
     let path = schedule_path(app)?;
     if !path.exists() {
         return Ok(None);

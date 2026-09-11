@@ -32,7 +32,12 @@ pub fn prompt_account() -> ServiceResult<Zeroizing<String>> {
 }
 
 /// Save credentials to a user-only local file.
-pub fn save(account: &str, password: String) -> ServiceResult<()> {
+pub fn save(
+    account: &str,
+    password: String,
+    teaching_cloud_password: String,
+    use_academic_password: bool,
+) -> ServiceResult<()> {
     let account = account.trim();
     let path = credential_file_path()?;
     let existing = load_from_path(&path)?;
@@ -40,9 +45,45 @@ pub fn save(account: &str, password: String) -> ServiceResult<()> {
     let credentials = Credentials {
         account: account.to_string(),
         password,
+        teaching_cloud_password: cloud_password_for(
+            existing.as_ref(),
+            account,
+            teaching_cloud_password,
+            use_academic_password,
+        ),
         account_scope,
     };
     save_to_path(&path, &credentials)
+}
+
+fn cloud_password_for(
+    existing: Option<&Credentials>,
+    account: &str,
+    entered: String,
+    use_academic_password: bool,
+) -> Option<String> {
+    if use_academic_password {
+        None
+    } else if !entered.is_empty() {
+        Some(entered)
+    } else {
+        existing
+            .filter(|saved| saved.account.trim() == account.trim())
+            .and_then(|saved| saved.teaching_cloud_password.clone())
+    }
+}
+
+pub fn deletion_path(scope: &str) -> ServiceResult<PathBuf> {
+    if !where_to_study_lib::scoped_cache::is_valid_account_scope(scope) {
+        return Err(ServiceError::new(
+            "请先重新 login，以启用账号隔离的课程删除记录。",
+        ));
+    }
+    let file_name = format!(
+        "cli-course-deletions-{}.json",
+        scope.trim_start_matches("opaque-v1:")
+    );
+    Ok(credential_file_path()?.with_file_name(file_name))
 }
 
 fn account_scope_for(existing: Option<&Credentials>, account: &str) -> ServiceResult<String> {
@@ -280,10 +321,36 @@ mod tests {
 
     static TEST_ID: AtomicU64 = AtomicU64::new(0);
 
+    #[test]
+    fn cloud_password_blank_edits_and_account_changes_preserve_only_matching_account() {
+        let mut old = fixture("a", VALID_SCOPE);
+        old.teaching_cloud_password = Some("cloud".into());
+        assert_eq!(
+            cloud_password_for(Some(&old), "a", String::new(), false).as_deref(),
+            Some("cloud")
+        );
+        assert_eq!(
+            cloud_password_for(Some(&old), "b", String::new(), false),
+            None
+        );
+        assert_eq!(
+            cloud_password_for(Some(&old), "a", String::new(), true),
+            None
+        );
+        assert_eq!(
+            cloud_password_for(Some(&old), "a", "new-cloud".into(), false).as_deref(),
+            Some("new-cloud")
+        );
+        let legacy: Credentials =
+            serde_json::from_str(r#"{"account":"a","password":"academic"}"#).unwrap();
+        assert_eq!(legacy.assignment_password(), "academic");
+    }
+
     fn fixture(account: &str, scope: &str) -> Credentials {
         Credentials {
             account: account.to_string(),
             password: "fixture-password".to_string(),
+            teaching_cloud_password: None,
             account_scope: scope.to_string(),
         }
     }

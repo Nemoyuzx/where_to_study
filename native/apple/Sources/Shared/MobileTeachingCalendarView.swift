@@ -1861,6 +1861,7 @@ struct MobileTeachingCalendarView: View {
             detailRow("地点", course.room.isEmpty ? "未标注" : course.room)
             detailRow("教师", course.teacher.isEmpty ? "未标注" : course.teacher)
             detailRow("教学周", course.weekText)
+            CourseDeletionControl(course: course, date: day) { presentedDetail = nil }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

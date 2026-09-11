@@ -4,19 +4,24 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde::{Deserialize, Serialize};
 use where_to_study_lib::error::{ServiceError, ServiceResult};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::Zeroizing;
 
 const CREDENTIALS_FILE_NAME: &str = "credentials.json";
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-pub struct Credentials {
-    pub account: String,
-    pub password: String,
-    #[serde(default)]
-    pub account_scope: String,
+pub use where_to_study_lib::credential_store::Credentials;
+
+pub fn course_deletion_path(scope: &str) -> ServiceResult<PathBuf> {
+    if !where_to_study_lib::scoped_cache::is_valid_account_scope(scope) {
+        return Err(ServiceError::new(
+            "请先保存账号，以启用隔离的课程删除记录。",
+        ));
+    }
+    Ok(credentials_path()?.with_file_name(format!(
+        "course-deletions-{}.json",
+        scope.trim_start_matches("opaque-v1:")
+    )))
 }
 
 pub fn load() -> ServiceResult<Option<Credentials>> {
@@ -297,6 +302,7 @@ mod tests {
         Credentials {
             account: account.to_string(),
             password: password.to_string(),
+            teaching_cloud_password: None,
             account_scope:
                 "opaque-v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
                     .to_string(),

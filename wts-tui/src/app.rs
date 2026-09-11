@@ -31,6 +31,11 @@ pub struct App {
     pub tab: Tab,
     pub selected_tab_index: usize,
     pub schedule: Option<ScheduleResponse>,
+    pub raw_schedule: Option<ScheduleResponse>,
+    pub course_deletions: Vec<where_to_study_lib::course_deletions::CourseDeletion>,
+    pub course_deletion_path: Option<std::path::PathBuf>,
+    pub account_scope: String,
+    pub course_manager: Option<crate::course_manager::CourseManager>,
     pub classrooms: Option<ClassroomsCacheResponse>,
     pub holidays: BTreeMap<i32, HolidaysResponse>,
     pub holiday_requests: BTreeSet<i32>,
@@ -51,6 +56,9 @@ pub struct App {
     pub calendar_month: NaiveDate,
     pub login_account: String,
     pub login_password: Zeroizing<String>,
+    pub teaching_cloud_password: Zeroizing<String>,
+    pub has_teaching_cloud_password: bool,
+    pub use_academic_password: bool,
     pub settings_focus: usize,
     pub settings_editing: bool,
     pub credentials_saved: bool,
@@ -82,6 +90,11 @@ impl App {
             tab: Tab::Home,
             selected_tab_index: 0,
             schedule: None,
+            raw_schedule: None,
+            course_deletions: vec![],
+            course_deletion_path: None,
+            account_scope: String::new(),
+            course_manager: None,
             classrooms: None,
             holidays: BTreeMap::new(),
             holiday_requests: BTreeSet::new(),
@@ -103,6 +116,9 @@ impl App {
                 .unwrap_or(today),
             login_account: String::new(),
             login_password: Zeroizing::new(String::new()),
+            teaching_cloud_password: Zeroizing::new(String::new()),
+            has_teaching_cloud_password: false,
+            use_academic_password: false,
             settings_focus: 0,
             settings_editing: false,
             credentials_saved: false,
@@ -131,6 +147,34 @@ impl App {
     pub fn set_error(&mut self, message: String) {
         self.status_message = None;
         self.error_message = Some(message);
+    }
+
+    pub fn set_raw_schedule(&mut self, schedule: ScheduleResponse) {
+        self.raw_schedule = Some(schedule);
+        self.recompute_schedule();
+    }
+
+    pub fn recompute_schedule(&mut self) {
+        self.schedule = self
+            .raw_schedule
+            .as_ref()
+            .map(|raw| where_to_study_lib::course_deletions::apply(raw, &self.course_deletions));
+        self.room_scroll = 0;
+    }
+
+    pub fn clear_account_data(&mut self) {
+        self.invalidate_data_requests();
+        self.schedule = None;
+        self.raw_schedule = None;
+        self.classrooms = None;
+        self.available_buildings.clear();
+        self.selected_buildings.clear();
+        self.building_cursor = 0;
+        self.room_scroll = 0;
+        self.course_deletions.clear();
+        self.course_deletion_path = None;
+        self.account_scope.clear();
+        self.course_manager = None;
     }
 
     pub fn clear_error(&mut self) {
@@ -527,6 +571,7 @@ mod tests {
             fetched_at: "2026-01-01T00:00:00+08:00".to_string(),
             courses: vec![
                 Course {
+                    source_course_id: String::new(),
                     id: "c2".to_string(),
                     name: "神经网络".to_string(),
                     teacher: "示例教师".to_string(),
@@ -541,6 +586,7 @@ mod tests {
                     time_range: "14:45-16:25".to_string(),
                 },
                 Course {
+                    source_course_id: String::new(),
                     id: "c1".to_string(),
                     name: "数据挖掘".to_string(),
                     teacher: "示例教师".to_string(),

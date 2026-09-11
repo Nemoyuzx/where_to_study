@@ -2632,6 +2632,7 @@ struct TeachingCalendarView: View {
                             .font(.caption)
                             .foregroundStyle(theme.secondaryText)
                     }
+                    .modifier(CourseManagementModifier(course: course, date: day))
                 }
             }
             if !assignments.isEmpty {
@@ -2686,6 +2687,7 @@ struct TeachingCalendarView: View {
                                 .foregroundStyle(theme.secondaryText)
                         }
                     }
+                    .modifier(CourseManagementModifier(course: course, date: day))
                 }
             }
         }

@@ -53,6 +53,7 @@ mod tests {
     #[test]
     fn date_state_marks_busy_and_free_slots() {
         let courses = vec![Course {
+            source_course_id: String::new(),
             id: "c1".to_string(),
             name: "课程".to_string(),
             teacher: String::new(),

@@ -4,6 +4,7 @@
 // 详情卡片）四种视图，支持左右滑动翻页与月视图上下滑动展开/收起。
 import { AppModel } from '../../model/AppModel';
 import { Course, HolidayItem } from '../../common/Models';
+import { CourseRemovalButton } from '../CourseRemovalButton';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { CalendarTypography } from '../../common/CalendarTypography';
@@ -969,6 +970,7 @@ export struct MobileTeachingCalendarView {
             }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
+            CourseRemovalButton({ course: course, date: renderDate })
           }
           .width('100%')
           .height(34)
@@ -2060,6 +2062,7 @@ export struct MobileTeachingCalendarView {
             }
             .alignItems(HorizontalAlign.Start)
             .layoutWeight(1)
+            CourseRemovalButton({ course: course, date: day })
           }
           .width('100%')
           .alignItems(VerticalAlign.Top)

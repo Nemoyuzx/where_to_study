@@ -1,5 +1,15 @@
 # Where To Study 0.2.9 — Release preparation and TestFlight updates
 
+## 2026-09-11 — course management and separate teaching cloud password (code only)
+
+各平台源码增加课程单次／整学期本地删除、刷新后保留及恢复，并在个人账户中增加教学云平台独立密码。
+桌面托盘、小组件、课程提醒与空闲节次使用有效课表；未设置独立密码时兼容原有教务密码。
+详细行为、安全边界和测试见[课程管理说明](course-management-v0.2.9.md)。此前 Android 视觉优化以独立提交保留。
+
+所有客户端的开发版本统一为 **0.2.9**，现有分发构建计数不在本轮递增。
+**本轮仅提交并推送代码，不创建 tag/Release，不上传 TestFlight/AppGallery 或其它商店包，也不修改待审版本。**
+下面的历史上传记录保持原样，不能视为包含本轮新功能。
+
 ## Platform standards fixes — 2026-09-09 testing-only follow-up
 
 本轮修复隐私清单和打包门禁、鸿蒙卡片读写目录及刷新、Android 任务恢复/语言分包/大字体布局，以及桌面通知实际发送/撤销边界。详细验证与未覆盖范围见[规范修复记录](platform-standards-fixes-v0.2.9.md)。

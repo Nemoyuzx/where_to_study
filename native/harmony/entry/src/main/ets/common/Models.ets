@@ -48,11 +48,12 @@ export class Course {
   readonly endSlot: number;
   readonly sectionText: string;
   readonly timeRange: string;
+  readonly sourceCourseID: string;
 
   constructor(
     id: string, name: string, teacher: string, room: string, weekText: string,
     weekNumbers: number[], examWeekNumbers: number[], weekday: number,
-    startSlot: number, endSlot: number, sectionText: string, timeRange: string
+    startSlot: number, endSlot: number, sectionText: string, timeRange: string, sourceCourseID: string = ''
   ) {
     this.id = id;
     this.name = name;
@@ -66,6 +67,7 @@ export class Course {
     this.endSlot = endSlot;
     this.sectionText = sectionText;
     this.timeRange = timeRange;
+    this.sourceCourseID = sourceCourseID;
   }
 
   static fromJson(raw: Record<string, Object>): Course {
@@ -87,7 +89,8 @@ export class Course {
       startSlot,
       endSlot,
       JsonUtil.string(raw['section_text']),
-      JsonUtil.string(raw['time_range'])
+      JsonUtil.string(raw['time_range']),
+      JsonUtil.string(raw['source_course_id'])
     );
   }
 
@@ -105,6 +108,9 @@ export class Course {
     out['end_slot'] = this.endSlot;
     out['section_text'] = this.sectionText;
     out['time_range'] = this.timeRange;
+    if (this.sourceCourseID.length > 0) {
+      out['source_course_id'] = this.sourceCourseID;
+    }
     return out;
   }
 }

@@ -7,6 +7,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.Calendar
 
 private data class ScheduleRefreshRequest(
     val credentials: Credentials,
@@ -64,14 +65,17 @@ class ScheduleRepository(
     private val refreshLock = Any()
     private val nextRefreshToken = AtomicLong(0)
     private val closed = AtomicBoolean(false)
+    private val deletionStore = CourseDeletionStore(appContext)
     private var activeRefreshToken: Long? = null
+    private var rawSchedule: ScheduleSnapshot? = null
 
     @Volatile
     var schedule: ScheduleSnapshot? = null
         private set
 
     init {
-        schedule = loadUsableCachedSchedule()
+        rawSchedule = loadUsableCachedSchedule()
+        schedule = runCatching { rawSchedule?.let(::effectiveSchedule) }.getOrNull()
         reconcileAutomaticTermAfterLaunch()
     }
 
@@ -129,13 +133,15 @@ class ScheduleRepository(
                             if (closed.get() || !isActiveRefresh(refreshToken)) {
                                 throw ScheduleClientException("个人课表获取服务已关闭。")
                             }
+                            val effective = effectiveSchedule(resolved)
                             store.save(resolved)
-                            schedule = resolved
+                            rawSchedule = resolved
+                            schedule = effective
                             runCatching { TodayCourseWidgetProvider.refresh(appContext) }
                             preferences.termID = resolved.termID
                             preferences.termStartDate = resolved.termStartDate
+                            effective
                         }
-                        resolved
                     }
                 }
                 mainHandler.post {
@@ -180,12 +186,67 @@ class ScheduleRepository(
         LocalDataCoordinator.clear(::clearLocalDataCoordinated)
     }
 
-    internal fun clearLocalDataCoordinated() {
+    internal fun clearLocalDataCoordinated(clearCourseDeletions: Boolean = true) {
+        if (clearCourseDeletions) deletionStore.clear()
         store.clear()
+        rawSchedule = null
         schedule = null
         runCatching { TodayCourseWidgetProvider.refresh(appContext) }
         synchronized(refreshLock) { activeRefreshToken = null }
     }
+
+    internal fun deletedCourses(): List<CourseDeletion> = CourseDeletionLogic.records(
+        credentialStore.load()?.account.orEmpty(),
+        rawSchedule?.termID ?: preferences.termID,
+        deletionStore.load(),
+    )
+
+    internal fun deleteCourse(
+        course: Course,
+        date: Calendar,
+        scope: CourseDeletionScope,
+        expectedTermID: String,
+    ) {
+        val generation = LocalDataCoordinator.snapshot()
+        LocalDataCoordinator.withCurrent(generation) {
+            val raw = rawSchedule ?: throw IllegalStateException("请先获取个人课表。")
+            check(raw.termID == expectedTermID) { "课表已更新，请重新选择课程。" }
+            val account = credentialStore.load()?.account.orEmpty()
+            val existing = deletionStore.load()
+            val deletion = CourseDeletionLogic.create(account, raw, course, date, scope)
+            val visible = CourseDeletionLogic.apply(raw, account, existing)
+            check(ScheduleLogic.courses(visible, date).any {
+                CourseDeletionLogic.matchesCourse(deletion, it) &&
+                    it.startSlot == course.startSlot && it.endSlot == course.endSlot
+            }) { "课表已更新，请重新选择课程。" }
+            val updated = existing + deletion
+            deletionStore.save(updated)
+            schedule = CourseDeletionLogic.apply(raw, account, updated)
+        }
+        runCatching { TodayCourseWidgetProvider.refresh(appContext) }
+    }
+
+    internal fun restoreCourse(deletionID: String) {
+        val generation = LocalDataCoordinator.snapshot()
+        LocalDataCoordinator.withCurrent(generation) {
+            val account = credentialStore.load()?.account.orEmpty()
+            val existing = deletionStore.load()
+            val current = CourseDeletionLogic.records(
+                account, rawSchedule?.termID ?: preferences.termID, existing,
+            )
+            check(current.any { it.id == deletionID }) { "课程删除记录已更新，请重试。" }
+            val updated = existing.filterNot { it.id == deletionID }
+            deletionStore.save(updated)
+            schedule = rawSchedule?.let { CourseDeletionLogic.apply(it, account, updated) }
+        }
+        runCatching { TodayCourseWidgetProvider.refresh(appContext) }
+    }
+
+    private fun effectiveSchedule(raw: ScheduleSnapshot): ScheduleSnapshot = CourseDeletionLogic.apply(
+        raw,
+        credentialStore.load()?.account.orEmpty(),
+        deletionStore.load(),
+    )
 
     internal fun automaticTermForCurrentLaunch(): SuggestedTerm =
         SemesterLogic.resolveAutomaticLaunchTerm(

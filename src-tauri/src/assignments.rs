@@ -12,6 +12,7 @@ use reqwest::header::{
 use reqwest::{Client, Response, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha1::{Digest, Sha1};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::{ServiceError, ServiceResult};
@@ -92,6 +93,28 @@ pub fn clear_cache() {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     *cached = None;
+}
+
+pub fn credential_revision() -> u64 {
+    ASSIGNMENT_REVISION.load(Ordering::SeqCst)
+}
+
+pub fn ensure_credential_revision(revision: u64) -> Result<(), String> {
+    if credential_revision() == revision {
+        Ok(())
+    } else {
+        Err("教学云平台凭据已更改，请重新获取作业。".to_string())
+    }
+}
+
+fn credential_cache_scope(account_scope: &str, password: &str) -> Zeroizing<String> {
+    // Memory-only namespace: an old-password request must not populate the
+    // new-password cache, even if it started between credential load and reset.
+    Zeroizing::new(format!(
+        "{}:{:x}",
+        account_scope,
+        Sha1::digest(password.as_bytes())
+    ))
 }
 
 fn zeroize_items(items: &mut [AssignmentDeadlineItem]) {
@@ -748,12 +771,13 @@ pub async fn fetch_assignments(
     account_scope: &str,
 ) -> ServiceResult<AssignmentsResponse> {
     let date = parse_date(payload.date.trim())?;
-    let all_items = match cached_items(account_scope) {
+    let credential_scope = credential_cache_scope(account_scope, password);
+    let all_items = match cached_items(&credential_scope) {
         Some(items) => items,
         None => {
             let request_revision = ASSIGNMENT_REVISION.load(Ordering::SeqCst);
             let items = fetch_all_assignments(account, password).await?;
-            save_cache(account_scope, &items, request_revision);
+            save_cache(&credential_scope, &items, request_revision);
             items
         }
     };
@@ -786,12 +810,13 @@ pub async fn fetch_assignment_calendar(
         ));
     }
 
-    let all_items = match cached_items(account_scope) {
+    let credential_scope = credential_cache_scope(account_scope, password);
+    let all_items = match cached_items(&credential_scope) {
         Some(items) => items,
         None => {
             let request_revision = ASSIGNMENT_REVISION.load(Ordering::SeqCst);
             let items = fetch_all_assignments(account, password).await?;
-            save_cache(account_scope, &items, request_revision);
+            save_cache(&credential_scope, &items, request_revision);
             items
         }
     };
@@ -807,6 +832,16 @@ pub async fn fetch_assignment_calendar(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn credential_cache_namespaces_isolate_password_changes_without_plaintext() {
+        let old = super::credential_cache_scope("account-a", "old-password");
+        let new = super::credential_cache_scope("account-a", "new-password");
+        let other = super::credential_cache_scope("account-b", "new-password");
+        assert_ne!(*old, *new);
+        assert_ne!(*other, *new);
+        assert!(!old.contains("old-password"));
+        assert!(!new.contains("new-password"));
+    }
     use super::*;
 
     #[test]
@@ -930,6 +965,7 @@ mod tests {
         assert_eq!(filtered[0].id, "inside");
     }
 
+    #[cfg(feature = "tauri-runtime")]
     #[test]
     #[ignore = "requires the current user's saved Keychain credentials and live BUPT services"]
     fn live_saved_credentials_can_fetch_assignments_without_browser_state() {
@@ -938,7 +974,7 @@ mod tests {
             .expect("saved credentials should exist");
         let items = tauri::async_runtime::block_on(fetch_all_assignments(
             &credentials.account,
-            &credentials.password,
+            credentials.assignment_password(),
         ))
         .expect("native UCloud assignment sync should succeed");
         assert!(

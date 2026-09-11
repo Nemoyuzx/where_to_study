@@ -1646,11 +1646,12 @@ dependencies = [
 
 [[package]]
 name = "where-to-study-cli"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "chrono",
  "clap",
  "rpassword",
+ "serde",
  "serde_json",
  "tokio",
  "where-to-study-core",
@@ -1659,7 +1660,7 @@ dependencies = [
 
 [[package]]
 name = "where-to-study-core"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "chrono",
  "chrono-tz",

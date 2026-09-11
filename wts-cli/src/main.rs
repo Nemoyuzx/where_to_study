@@ -25,9 +25,46 @@ enum Commands {
     Login {
         /// 教务学号；省略时在终端中隐藏输入
         account: Option<String>,
+        /// 删除独立教学云密码，恢复使用教务密码（密码始终交互输入）
+        #[arg(long)]
+        use_academic_password: bool,
     },
     /// 清除已保存的教务凭据
     Logout,
+    /// 列出本学期可见课程及其 ID，供删除命令选择
+    Courses {
+        #[arg(long)]
+        json: bool,
+    },
+    /// 仅删除本地课程；必须选择单次日期或本学期整门课程
+    CourseDelete {
+        course_id: String,
+        #[arg(
+            long,
+            conflicts_with = "all_semester",
+            required_unless_present = "all_semester"
+        )]
+        date: Option<String>,
+        #[arg(long)]
+        all_semester: bool,
+        /// 确认执行本地删除；不提供时终端交互确认
+        #[arg(long)]
+        yes: bool,
+    },
+    /// 列出当前账号的课程删除记录（含恢复所需 ID）
+    CourseDeletions {
+        #[arg(long)]
+        json: bool,
+    },
+    /// 恢复一条本地课程删除记录
+    CourseRestore { deletion_id: String },
+    /// 使用教学云平台密码查询指定日期的作业 DDL
+    Assignments {
+        #[arg(long)]
+        date: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// 显示某天的课程（默认今天）
     Schedule {
         /// 目标日期 yyyy-MM-dd（默认今天，按上海时区）
@@ -112,8 +149,21 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
     let result = match cli.command {
-        Commands::Login { account } => commands::login(account),
+        Commands::Login {
+            account,
+            use_academic_password,
+        } => commands::login(account, use_academic_password),
         Commands::Logout => commands::logout(),
+        Commands::Courses { json } => commands::courses(json).await,
+        Commands::CourseDelete {
+            course_id,
+            date,
+            all_semester: _,
+            yes,
+        } => commands::delete_course(course_id, date, yes).await,
+        Commands::CourseDeletions { json } => commands::course_deletions(json),
+        Commands::CourseRestore { deletion_id } => commands::restore_course(deletion_id),
+        Commands::Assignments { date, json } => commands::assignments(date, json).await,
         Commands::Schedule { date, json } => commands::schedule(date, json).await,
         Commands::Week { date, json } => commands::week(date, json).await,
         Commands::Classrooms {
@@ -159,6 +209,39 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_course_delete_requires_exactly_one_scope_and_passwords_are_not_arguments() {
+        assert!(Cli::try_parse_from(["wts", "course-delete", "course-id"]).is_err());
+        assert!(Cli::try_parse_from([
+            "wts",
+            "course-delete",
+            "course-id",
+            "--date",
+            "2026-09-07",
+            "--yes"
+        ])
+        .is_ok());
+        assert!(
+            Cli::try_parse_from(["wts", "course-delete", "course-id", "--all-semester"]).is_ok()
+        );
+        assert!(Cli::try_parse_from([
+            "wts",
+            "course-delete",
+            "course-id",
+            "--all-semester",
+            "--date",
+            "2026-09-07"
+        ])
+        .is_err());
+        assert!(Cli::try_parse_from(["wts", "login", "--use-academic-password"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["wts", "login", "--teaching-cloud-password", "secret"]).is_err()
+        );
+        assert!(
+            Cli::try_parse_from(["wts", "assignments", "--date", "2026-09-07", "--json"]).is_ok()
+        );
+    }
 
     #[test]
     fn login_does_not_accept_password_in_process_arguments() {

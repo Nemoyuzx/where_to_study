@@ -1,6 +1,7 @@
 // 以原生 Android SettingsPage.kt 为手机端视觉与交互基准的设置页。
 import { AppModel } from '../model/AppModel';
 import { AppMeta } from '../common/AppMeta';
+import { CourseRemovalRecord } from '../common/CourseRemoval';
 import { AppTheme } from '../common/AppTheme';
 import { AdaptiveLayoutPolicy, PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
@@ -124,6 +125,7 @@ export struct SettingsView {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
               this.accountSurface()
+              this.removedCoursesSurface()
               this.semesterSurface()
             }
             .layoutWeight(1)
@@ -146,6 +148,7 @@ export struct SettingsView {
         } else {
           Column({ space: 16 }) {
             this.accountSurface()
+            this.removedCoursesSurface()
             this.semesterSurface()
             this.notificationSurface()
             this.dailyInfoSurface()
@@ -310,11 +313,61 @@ export struct SettingsView {
   }
 
   @Builder
+  removedCoursesSurface() {
+    Column({ space: 10 }) {
+      this.sectionTitle('已删除课程')
+      Text(this.model.text('恢复后将重新计入个人课表、空闲节次、卡片和课程提醒。'))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+      if (this.model.removedCoursesForAccount().length === 0) {
+        Text(this.model.text('暂无已删除课程'))
+          .fontSize(13)
+          .fontColor(AppTheme.secondaryText())
+      } else {
+        ForEach(this.model.removedCoursesForAccount(), (record: CourseRemovalRecord) => {
+          Row({ space: 8 }) {
+            Column({ space: 3 }) {
+              Text(record.name).fontSize(14).fontColor(AppTheme.text())
+              if (record.teacher.length > 0) {
+                Text(record.teacher).fontSize(12).fontColor(AppTheme.secondaryText())
+              }
+              Text(record.termID + ' · ' + (record.date.length === 0 ?
+                this.model.text('整门课程') : record.date + ' · ' +
+                (record.startSlot + 1).toString() + '-' + (record.endSlot + 1).toString()))
+                .fontSize(12).fontColor(AppTheme.secondaryText())
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Button(this.model.text('恢复'))
+              .type(ButtonType.Normal)
+              .fontColor(AppTheme.primary())
+              .backgroundColor(Color.Transparent)
+              .enabled(!this.model.isSampleMode() && !this.model.isUpdatingCourseRemovals)
+              .onClick(() => {
+                this.model.restoreCourse(record).catch((): void => {});
+              })
+          }
+          .width('100%')
+        }, (record: CourseRemovalRecord): string => record.id)
+      }
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
   accountSurface() {
     Column() {
       this.sectionTitle('个人账户')
 
       this.field('教务账号', this.model.account, InputType.Normal, (value: string): void => {
+        if (value.trim() !== this.model.account.trim()) {
+          this.model.cloudPassword = '';
+          this.model.useAcademicPasswordForCloud = false;
+        }
         this.model.account = value;
       }, true, 'settings_account_input')
       Blank().height(7)
@@ -327,6 +380,39 @@ export struct SettingsView {
           .fontColor(AppTheme.secondaryText())
           .width('100%')
           .padding({ left: 2, right: 2, top: 7 })
+      }
+      Blank().height(10)
+      this.field('教学云平台密码', this.model.cloudPassword, InputType.Password, (value: string): void => {
+        this.model.cloudPassword = value;
+        this.model.useAcademicPasswordForCloud = false;
+      }, true, 'settings_cloud_password_input')
+      Text(this.model.text(this.model.hasSavedCloudPassword && this.model.canPreserveSavedPassword() &&
+        !this.model.useAcademicPasswordForCloud ? '独立密码已安全保存，留空保持不变' :
+        '未设置独立密码时使用教务密码'))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+        .padding({ top: 7 })
+      Text(this.model.text('仅用于作业 DDL；与教务密码不同时填写，保存后生效。'))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+        .padding({ top: 4 })
+      Button(this.model.text('使用教务密码'))
+        .type(ButtonType.Normal)
+        .fontSize(13)
+        .fontColor(AppTheme.primary())
+        .backgroundColor(Color.Transparent)
+        .enabled(!this.model.isSampleMode())
+        .onClick(() => {
+          this.model.cloudPassword = '';
+          this.model.useAcademicPasswordForCloud = true;
+        })
+      if (this.model.useAcademicPasswordForCloud) {
+        Text(this.model.text('保存后将清除独立密码并使用教务密码'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
       }
       Text(this.model.text('默认校区'))
         .fontSize(13)

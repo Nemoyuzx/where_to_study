@@ -7,6 +7,7 @@ import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
@@ -20,7 +21,7 @@ internal class UCloudAssignmentClient internal constructor(
     private val flightSelectionObserver: ((isLeader: Boolean) -> Unit)? = null,
 ) {
     private data class CachedAssignments(
-        val account: String,
+        val credentialKey: String,
         val fetchedAtElapsed: Long,
         val items: List<AssignmentDeadlineItem>,
     )
@@ -37,7 +38,7 @@ internal class UCloudAssignmentClient internal constructor(
     )
 
     private data class InFlightFetch(
-        val account: String,
+        val credentialKey: String,
         val revision: Long,
         val result: CompletableFuture<List<AssignmentDeadlineItem>>,
     )
@@ -54,14 +55,15 @@ internal class UCloudAssignmentClient internal constructor(
     fun fetch(date: String): List<AssignmentDeadlineItem> {
         requireUCloudDate(date)
         val credentials = loadCredentials()
-            ?.takeIf { it.account.trim().isNotEmpty() && it.password.isNotEmpty() }
+            ?.takeIf { it.account.trim().isNotEmpty() && it.effectiveTeachingCloudPassword.isNotEmpty() }
             ?: throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
         val account = credentials.account.trim()
-        val normalizedCredentials = Credentials(account, credentials.password)
+        val normalizedCredentials = Credentials(account, credentials.effectiveTeachingCloudPassword)
+        val credentialKey = credentialKey(normalizedCredentials)
         val now = elapsedRealtime()
         val cached = synchronized(stateLock) {
             cachedAssignments?.takeIf {
-                it.account == account && now - it.fetchedAtElapsed < CACHE_LIFETIME_MS
+                it.credentialKey == credentialKey && now - it.fetchedAtElapsed < CACHE_LIFETIME_MS
             }
         }
         val allItems = cached?.items ?: fetchAllSingleFlight(normalizedCredentials)
@@ -82,20 +84,21 @@ internal class UCloudAssignmentClient internal constructor(
     private fun fetchAllSingleFlight(
         credentials: Credentials,
     ): List<AssignmentDeadlineItem> {
+        val credentialKey = credentialKey(credentials)
         val selection = synchronized(stateLock) {
             val currentRevision = revision.get()
-            val existing = inFlightFetches[credentials.account]
+            val existing = inFlightFetches[credentialKey]
             if (existing != null &&
-                existing.account == credentials.account &&
+                existing.credentialKey == credentialKey &&
                 existing.revision == currentRevision
             ) {
                 existing to false
             } else {
                 InFlightFetch(
-                    account = credentials.account,
+                    credentialKey = credentialKey,
                     revision = currentRevision,
                     result = CompletableFuture(),
-                ).also { inFlightFetches[credentials.account] = it } to true
+                ).also { inFlightFetches[credentialKey] = it } to true
             }
         }
         val flight = selection.first
@@ -105,14 +108,17 @@ internal class UCloudAssignmentClient internal constructor(
                 val items = fetchAllOverride?.invoke(credentials) ?: fetchAll(credentials)
                 val isCurrent = synchronized(stateLock) {
                     val current = revision.get() == flight.revision &&
-                        inFlightFetches[credentials.account]?.result === flight.result
+                        inFlightFetches[credentialKey]?.result === flight.result &&
+                        loadCredentials()?.let(::credentialKey) == credentialKey
                     if (current) {
                         cachedAssignments = CachedAssignments(
-                            credentials.account,
+                            credentialKey,
                             elapsedRealtime(),
                             items,
                         )
-                        inFlightFetches.remove(credentials.account)
+                    }
+                    if (inFlightFetches[credentialKey]?.result === flight.result) {
+                        inFlightFetches.remove(credentialKey)
                     }
                     current
                 }
@@ -125,8 +131,8 @@ internal class UCloudAssignmentClient internal constructor(
                 }
             } catch (error: Exception) {
                 synchronized(stateLock) {
-                    if (inFlightFetches[credentials.account]?.result === flight.result) {
-                        inFlightFetches.remove(credentials.account)
+                    if (inFlightFetches[credentialKey]?.result === flight.result) {
+                        inFlightFetches.remove(credentialKey)
                     }
                 }
                 flight.result.completeExceptionally(error)
@@ -140,6 +146,20 @@ internal class UCloudAssignmentClient internal constructor(
         } catch (error: ExecutionException) {
             throw (error.cause as? Exception)
                 ?: DailyInfoClientException("作业请求失败。", error)
+        }
+    }
+
+    // Cache identity follows the effective cloud credential, including same-account
+    // password edits. Keep only a digest as the map key and never persist it.
+    private fun credentialKey(credentials: Credentials): String {
+        val account = credentials.account.trim()
+        val payload = "${account.length}:$account${credentials.effectiveTeachingCloudPassword}"
+            .toByteArray(StandardCharsets.UTF_8)
+        return try {
+            MessageDigest.getInstance("SHA-256").digest(payload)
+                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        } finally {
+            payload.fill(0)
         }
     }
 

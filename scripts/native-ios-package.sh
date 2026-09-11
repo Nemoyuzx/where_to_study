@@ -10,7 +10,7 @@ APPLE_DIR="$ROOT_DIR/native/apple"
 PROJECT="$APPLE_DIR/WhereToStudyNative.xcodeproj"
 DERIVED_DATA="$APPLE_DIR/DerivedData/release-iOS"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.8}"
+RELEASE_LABEL="${1:-v0.2.9}"
 printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
 CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
 CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"

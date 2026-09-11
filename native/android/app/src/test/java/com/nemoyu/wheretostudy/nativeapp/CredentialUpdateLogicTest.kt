@@ -6,6 +6,43 @@ import org.junit.Test
 
 class CredentialUpdateLogicTest {
     @Test
+    fun independentCloudPasswordRetainsBlanksAndSupportsExplicitFallback() {
+        val saved = Credentials("20260001", "academic", "cloud")
+        assertEquals(saved, CredentialUpdateLogic.resolve(saved, "20260001", ""))
+        val academicEdit = CredentialUpdateLogic.resolve(saved, "20260001", "new-academic")
+        assertEquals("cloud", academicEdit.effectiveTeachingCloudPassword)
+        assertEquals(false, CredentialUpdateLogic.changesAssignmentCredentials(saved, academicEdit))
+        val cloudEdit = CredentialUpdateLogic.resolve(saved, "20260001", "", "new-cloud")
+        assertEquals("academic", cloudEdit.password)
+        assertEquals("new-cloud", cloudEdit.effectiveTeachingCloudPassword)
+        assertEquals(true, CredentialUpdateLogic.changesAssignmentCredentials(saved, cloudEdit))
+        val fallback = CredentialUpdateLogic.resolve(saved, "20260001", "", useAcademicPassword = true)
+        assertEquals(null, fallback.teachingCloudPassword)
+        assertEquals("academic", fallback.effectiveTeachingCloudPassword)
+        assertEquals(true, CredentialUpdateLogic.changesAssignmentCredentials(saved, fallback))
+    }
+
+    @Test
+    fun cloudPasswordNeverTransfersToAnotherAccount() {
+        val saved = Credentials("20260001", "academic", "cloud")
+        val updated = CredentialUpdateLogic.resolve(saved, "20260002", "new-academic")
+        assertEquals(null, updated.teachingCloudPassword)
+        assertEquals("new-academic", updated.effectiveTeachingCloudPassword)
+        assertEquals(null, CredentialUpdateLogic.resolve(saved, "", "").teachingCloudPassword)
+        assertThrows(CredentialUpdateException::class.java) {
+            CredentialUpdateLogic.resolve(saved, "", "", "cloud")
+        }
+    }
+
+    @Test
+    fun absentCloudOverrideFollowsAcademicPasswordChanges() {
+        val saved = Credentials("20260001", "academic")
+        val updated = CredentialUpdateLogic.resolve(saved, "20260001", "new-academic")
+        assertEquals("new-academic", updated.effectiveTeachingCloudPassword)
+        assertEquals(true, CredentialUpdateLogic.changesAssignmentCredentials(saved, updated))
+    }
+
+    @Test
     fun blankPasswordPreservesOnlyTheSameSavedAccount() {
         val saved = Credentials("20260001", "local-secret")
 

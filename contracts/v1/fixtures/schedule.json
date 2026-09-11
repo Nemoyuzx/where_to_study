@@ -5,6 +5,7 @@
   "courses": [
     {
       "id": "0cb282cebe22",
+      "source_course_id": "fixture-course-1",
       "name": "示例课程",
       "teacher": "测试教师",
       "room": "教一楼-101",
@@ -19,6 +20,7 @@
     },
     {
       "id": "9fcc32896745",
+      "source_course_id": "fixture-course-2",
       "name": "示例实验",
       "teacher": "测试教师",
       "room": "主楼-201",

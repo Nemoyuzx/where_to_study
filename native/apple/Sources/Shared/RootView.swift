@@ -30,6 +30,7 @@ private struct CustomDeadlinePrewarmID: Equatable {
 
 private struct AssignmentDeadlinePrewarmID: Equatable {
     let account: String
+    let credentialRevision: Int
     let scheduleFetchedAt: String?
     let sampleMode: Bool
     let isSceneActive: Bool
@@ -215,6 +216,7 @@ struct RootView: View {
         }
         .task(id: AssignmentDeadlinePrewarmID(
             account: model.account,
+            credentialRevision: model.assignmentCredentialRevision,
             scheduleFetchedAt: model.schedule?.fetchedAt,
             sampleMode: model.isSampleMode,
             isSceneActive: scenePhase == .active,
@@ -296,6 +298,9 @@ struct RootView: View {
             }
         }
         .onChange(of: model.account) { _ in
+            calendarDeadlines.clearAssignments()
+        }
+        .onChange(of: model.assignmentCredentialRevision) { _ in
             calendarDeadlines.clearAssignments()
         }
         .onChange(of: model.isSampleMode) { sampleMode in

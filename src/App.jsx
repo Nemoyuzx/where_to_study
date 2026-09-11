@@ -39,9 +39,12 @@ import {
 } from 'lucide-react'
 import {
   accountHasSavedPassword,
+  applyCourseDeletions,
+  courseEditRequest,
   dailyCourseNotificationTime,
   parseDailyCourseNotificationTime,
   reminderSettingsPayload,
+  semesterSettingsPayload,
   addDays,
   buildCalendarDayMap,
   buildMiniMonthDays,
@@ -102,6 +105,7 @@ import {
   savedCredentialSnapshot,
   savedSettingsToState,
   settingsWithScheduleTerm,
+  settingsWithCredentialDraft,
   settingsToPayload,
   shanghaiDateString,
   shiftDate,
@@ -124,6 +128,33 @@ const NAV_ITEMS = [
 ]
 
 const EN_TEXT = Object.freeze({
+  '课程详情': 'Course details',
+  '关闭课程详情': 'Close course details',
+  '选择删除范围': 'Choose deletion scope',
+  '仅删除本次': 'Only this occurrence',
+  '删除本学期整门课程': 'Entire course this semester',
+  '确认删除本次': 'Delete this occurrence',
+  '确认删除整门课程': 'Delete the entire course',
+  '只移除所选日期、节次的这一次课程。': 'Remove only this course occurrence on the selected date and periods.',
+  '移除这门课程本学期所有日期与节次。': 'Remove every occurrence of this course for the semester.',
+  '只修改本机个人课表，可在设置中恢复；不修改学校数据、作业 DDL 或已经导出的系统日历。':
+    'Only changes your local schedule and can be restored in Settings. School records, assignment deadlines, and previously exported calendar events are unchanged.',
+  '已删除课程': 'Deleted courses',
+  '恢复课程': 'Restore courses',
+  '恢复': 'Restore',
+  '本学期没有已删除课程。': 'No deleted courses this semester.',
+  '整门课程': 'Entire course',
+  '本次课程': 'This occurrence',
+  '课程已变化，请重新选择。': 'The course has changed. Select it again.',
+  '课程日期格式不正确。': 'The course date is invalid.',
+  '操作失败，请重试。': 'The change could not be saved. Please try again.',
+  '教学云平台密码': 'Teaching Cloud password',
+  '独立密码已安全保存，留空保持不变': 'Separate password is securely saved; leave blank to keep it',
+  '未设置时使用教务密码': 'Uses the academic password when not set',
+  '仅用于作业 DDL；与教务密码不同时填写，保存后生效。':
+    'Only for assignment deadlines. Enter it if different from your academic password, then save.',
+  '使用教务密码': 'Use academic password',
+  '保存后将清除独立密码并使用教务密码': 'Saving will remove the separate password and use the academic password',
   '空教室': 'Empty Classrooms',
   '教学日历': 'Teaching Calendar',
   '查询': 'Query',
@@ -596,6 +627,15 @@ function browserPreviewClassrooms(targetDate = localDateString()) {
   }
 }
 
+let browserPreviewCourseRules = []
+let browserPreviewRawSchedule = browserPreviewSchedule()
+let browserPreviewSavedSettings = null
+function previewCourseEdits() {
+  const account = browserPreviewSavedSettings?.account || 'browser-preview'
+  const deletions = browserPreviewCourseRules.filter((rule) => rule.account === account)
+  return { schedule: applyCourseDeletions(browserPreviewRawSchedule, deletions), deletions }
+}
+
 function browserPreviewCommand(name, payload = {}) {
   const year = payload.year || new Date().getFullYear()
   if (name === 'get_metadata') {
@@ -608,6 +648,7 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'load_saved_settings') {
+    if (browserPreviewSavedSettings) return browserPreviewSavedSettings
     return {
       account: DEFAULT_SETTINGS.account,
       has_saved_password: false,
@@ -635,9 +676,12 @@ function browserPreviewCommand(name, payload = {}) {
       const validationError = manualTermValidationError(payload.term_id, payload.term_start_date)
       if (validationError) throw new Error(validationError)
     }
-    return {
+    const sameAccount = browserPreviewSavedSettings?.account === String(payload.account || '').trim()
+    browserPreviewSavedSettings = {
       account: payload.account || '',
-      has_saved_password: Boolean(payload.password),
+      has_saved_password: Boolean(payload.password || (sameAccount && browserPreviewSavedSettings?.has_saved_password)),
+      has_saved_teaching_cloud_password: !payload.clear_teaching_cloud_password && Boolean(
+        payload.teaching_cloud_password || (sameAccount && browserPreviewSavedSettings?.has_saved_teaching_cloud_password)),
       term_id: payload.term_id || DEFAULT_SETTINGS.termId,
       term_start_date: payload.term_start_date || DEFAULT_SETTINGS.termStartDate,
       campus_id: payload.campus_id || DEFAULT_SETTINGS.campusId,
@@ -656,8 +700,20 @@ function browserPreviewCommand(name, payload = {}) {
       custom_deadlines_enabled: Boolean(payload.custom_deadlines_enabled),
       custom_deadlines_url: String(payload.custom_deadlines_url || '').trim(),
     }
+    return browserPreviewSavedSettings
   }
-  if (name === 'load_saved_schedule' || name === 'load_saved_schedule_for_scope') return browserPreviewSchedule()
+  if (name === 'load_saved_schedule' || name === 'load_saved_schedule_for_scope') return previewCourseEdits().schedule
+  if (name === 'delete_schedule_course') {
+    const course = browserPreviewRawSchedule.courses.find((course) => course.id === payload.course_id)
+    if (!course) throw new Error('课程已变化，请重新选择。')
+    browserPreviewCourseRules.push({ ...course, account: payload.account, term_id: payload.term_id, date: payload.date || null, id: `preview-edit-${Date.now()}` })
+    return previewCourseEdits()
+  }
+  if (name === 'restore_schedule_course') {
+    browserPreviewCourseRules = browserPreviewCourseRules.filter((rule) => rule.id !== payload.course_id)
+    return previewCourseEdits()
+  }
+  if (name === 'load_course_deletions') return previewCourseEdits()
   if (name === 'load_saved_classrooms' || name === 'load_saved_classrooms_for_scope') return browserPreviewClassrooms()
   if (name === 'fetch_holidays') {
     return {
@@ -686,7 +742,8 @@ function browserPreviewCommand(name, payload = {}) {
           termId: payload.term_id || DEFAULT_SETTINGS.termId,
           termStartDate: payload.term_start_date || DEFAULT_SETTINGS.termStartDate,
         }
-    return browserPreviewSchedule(fallbackTerm.termId, fallbackTerm.termStartDate)
+    browserPreviewRawSchedule = browserPreviewSchedule(fallbackTerm.termId, fallbackTerm.termStartDate)
+    return previewCourseEdits().schedule
   }
   if (name === 'import_schedule_to_calendar' || name === 'import_favorite_deadlines_to_calendar') {
     throw new Error('手机浏览器预览不支持导入苹果日历，请在 macOS App 中使用。')
@@ -867,6 +924,8 @@ function browserPreviewCommand(name, payload = {}) {
     }
   }
   if (name === 'clear_local_data') {
+    browserPreviewCourseRules = []
+    browserPreviewSavedSettings = null
     return true
   }
   if (name === 'set_interface_language') {
@@ -954,7 +1013,7 @@ function WeatherStrip({ weather, loading, error, onRetry, language, t }) {
   )
 }
 
-function SelectedDaySchedule({ date, weekState, slotMeta, language, t }) {
+function SelectedDaySchedule({ date, weekState, slotMeta, language, t, onCourseSelect }) {
   return (
     <section className="panel selected-day-schedule">
       <div className="panel-title selected-day-title">
@@ -971,7 +1030,7 @@ function SelectedDaySchedule({ date, weekState, slotMeta, language, t }) {
             <article key={`${date}-${course.id}`}>
               <time>{bounds.start}</time>
               <div>
-                <strong><CourseName course={course} t={t} /></strong>
+                <button type="button" className="course-edit-link" onClick={() => onCourseSelect?.(course, date)}><strong><CourseName course={course} t={t} /></strong></button>
                 <span>{bounds.start}-{bounds.end} · {course.room || t('地点未标注')}</span>
               </div>
             </article>
@@ -1326,6 +1385,96 @@ async function command(name, payload) {
   }
 }
 
+function CourseManagementDialog({ title, busy, onClose, children, t }) {
+  const dialogRef = useRef(null)
+  const closeRef = useRef(null)
+  const controlsRef = useRef({ busy, onClose })
+  controlsRef.current = { busy, onClose }
+  useEffect(() => {
+    if (!busy && !dialogRef.current?.contains(document.activeElement)) closeRef.current?.focus()
+  }, [busy])
+  useEffect(() => {
+    const previouslyFocused = document.activeElement
+    closeRef.current?.focus()
+    const handleKey = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        if (!controlsRef.current.busy) controlsRef.current.onClose()
+      } else if (event.key === 'Tab') {
+        const items = dialogRef.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), [href]')
+        if (!items?.length) return
+        const first = items[0]
+        const last = items[items.length - 1]
+        if (!dialogRef.current.contains(document.activeElement)) {
+          event.preventDefault()
+          first.focus()
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKey, true)
+    return () => {
+      window.removeEventListener('keydown', handleKey, true)
+      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) previouslyFocused.focus()
+    }
+  }, [])
+  return (
+    <div className="calendar-agenda-backdrop course-management-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !busy) onClose()
+    }}>
+      <section ref={dialogRef} className="calendar-agenda-dialog course-management-dialog" role="dialog" aria-modal="true" aria-labelledby="course-management-title" aria-busy={busy}>
+        <header>
+          <h2 id="course-management-title">{title}</h2>
+          <button ref={closeRef} type="button" onClick={onClose} disabled={busy} aria-label={t('关闭课程详情')}><X size={19} /></button>
+        </header>
+        <div className="course-management-body">{children}</div>
+      </section>
+    </div>
+  )
+}
+
+function CourseEditDialog({ selection, busy, error, onClose, onDelete, t, language, slotMeta }) {
+  const [scope, setScope] = useState('once')
+  const bounds = courseTimeBounds(selection.course, slotMeta)
+  return (
+    <CourseManagementDialog title={t('课程详情')} busy={busy} onClose={onClose} t={t}>
+      <div className="course-edit-summary">
+        <h3>{selection.course.name}</h3>
+        <p>{formatUiCourseDate(selection.date, language)} · {bounds.start}-{bounds.end}</p>
+        <p>{selection.course.teacher || t('教师未标注')} · {selection.course.room || t('地点未标注')}</p>
+        <p>{selection.termId}</p>
+      </div>
+      <fieldset className="course-delete-options" disabled={busy}>
+        <legend>{t('选择删除范围')}</legend>
+        {[
+          ['once', '仅删除本次', '只移除所选日期、节次的这一次课程。'],
+          ['whole', '删除本学期整门课程', '移除这门课程本学期所有日期与节次。'],
+        ].map(([value, label, hint]) => (
+          <label key={value} className={scope === value ? 'selected' : ''}>
+            <input type="radio" name="course-delete-scope" value={value} checked={scope === value} onChange={() => setScope(value)} />
+            <span><strong>{t(label)}</strong><small>{t(hint)}</small></span>
+          </label>
+        ))}
+      </fieldset>
+      <p className="course-edit-note">{t('只修改本机个人课表，可在设置中恢复；不修改学校数据、作业 DDL 或已经导出的系统日历。')}</p>
+      {error ? <p className="course-edit-error" role="alert">{t(error)}</p> : null}
+      <div className="course-edit-actions">
+        <button type="button" className="secondary" onClick={onClose} disabled={busy}>{t('取消')}</button>
+        <button type="button" className="danger" onClick={() => onDelete(scope)} disabled={busy}>
+          {busy ? <Loader2 className="spin" size={17} /> : <Trash2 size={17} />}
+          {t(scope === 'whole' ? '确认删除整门课程' : '确认删除本次')}
+        </button>
+      </div>
+    </CourseManagementDialog>
+  )
+}
+
 function App() {
   const [reminderSettingsStatus, setReminderSettingsStatus] = useState('')
   const colorTheme = useColorTheme()
@@ -1354,6 +1503,13 @@ function App() {
     () => window.matchMedia('(max-width: 720px)').matches,
   )
   const [schedule, setSchedule] = useState(null)
+  const [courseDeletions, setCourseDeletions] = useState([])
+  const [courseEditDialog, setCourseEditDialog] = useState(null)
+  const [courseRecoveryOpen, setCourseRecoveryOpen] = useState(false)
+  const [courseEditBusy, setCourseEditBusy] = useState(false)
+  const [courseEditError, setCourseEditError] = useState('')
+  const courseEditRevisionRef = useRef(0)
+  const courseEditBusyRef = useRef(false)
   const [classroomsCache, setClassroomsCache] = useState(null)
   const [classroomsCacheLoaded, setClassroomsCacheLoaded] = useState(false)
   const [selectedSlots, setSelectedSlots] = useState([])
@@ -1418,6 +1574,7 @@ function App() {
   const almanacRevisionRef = useRef(0)
   const deadlinesRevisionRef = useRef(0)
   const assignmentsRevisionRef = useRef(0)
+  const assignmentCredentialRevisionRef = useRef(0)
   const requestedCalendarSupplementRanges = useRef(new Set())
   const deadlineCoveredDatesRef = useRef(new Set())
   const deadlinePreheatPromiseRef = useRef(null)
@@ -1446,6 +1603,7 @@ function App() {
 
   useEffect(() => {
     const handleDesktopShortcut = (event) => {
+      if (courseEditDialog || courseRecoveryOpen) return
       const target = event.target instanceof Element ? event.target : null
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       if (event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -1483,7 +1641,7 @@ function App() {
     }
     window.addEventListener('keydown', handleDesktopShortcut)
     return () => window.removeEventListener('keydown', handleDesktopShortcut)
-  }, [activePage, calendarDate, calendarView, todayDate])
+  }, [activePage, calendarDate, calendarView, todayDate, courseEditDialog, courseRecoveryOpen])
 
   const calendarMonthKey = calendarDate.slice(0, 7)
 
@@ -1669,7 +1827,8 @@ function App() {
       command('get_metadata'),
       command('load_saved_settings'),
       command('load_saved_schedule'),
-    ]).then(([metadataResult, settingsResult, scheduleResult]) => {
+      command('load_course_deletions'),
+    ]).then(([metadataResult, settingsResult, scheduleResult, courseEditsResult]) => {
       if (cancelled) return
       const nextMetadata = metadataResult.status === 'fulfilled'
         ? metadataResult.value
@@ -1706,6 +1865,11 @@ function App() {
 
       const savedCredential = savedCredentialSnapshot(nextSettings)
       savedCredentialState.current = savedCredential
+      if (courseEditsResult.status === 'fulfilled') {
+        setCourseDeletions(courseEditsResult.value?.deletions || [])
+      } else {
+        setError(normalizeError(courseEditsResult.reason))
+      }
       if (revision === credentialStateRevision.current) {
         setSettings(nextSettings)
         setQueryCampusId(nextSettings.campusId)
@@ -1714,6 +1878,8 @@ function App() {
         setSettings((current) => ({
           ...current,
           hasSavedPassword: accountHasSavedPassword(current.account, savedCredential),
+          hasSavedTeachingCloudPassword: current.account.trim() === savedCredential.account
+            && savedCredential.hasSavedTeachingCloudPassword,
         }))
       }
       setSettingsLoaded(true)
@@ -2225,16 +2391,11 @@ function App() {
     if (field === 'dailyCourseNotificationsEnabled' || field === 'dailyCourseNotificationMinutes') {
       setReminderSettingsStatus('')
     }
-    if (field === 'account' || field === 'password') {
+    if (['account', 'password', 'teachingCloudPassword', 'clearTeachingCloudPassword'].includes(field)) {
       credentialStateRevision.current += 1
     }
     setSettings((current) => {
-      const next = { ...current, [field]: value }
-      if (field === 'account') {
-        const saved = savedCredentialState.current
-        next.hasSavedPassword = accountHasSavedPassword(value, saved)
-      }
-      return next
+      return settingsWithCredentialDraft(current, field, value, savedCredentialState.current)
     })
   }
 
@@ -2262,7 +2423,7 @@ function App() {
   }
 
   async function saveCurrentSettings() {
-    if (settingsSaving || !settingsLoaded) return
+    if (settingsSaving || !settingsLoaded || courseEditBusyRef.current) return
     if (!settings.automaticTermDetectionEnabled) {
       const validationError = manualTermValidationError(settings.termId, settings.termStartDate)
       if (validationError) {
@@ -2277,6 +2438,9 @@ function App() {
     const revision = credentialStateRevision.current
     const clearRevision = localDataClearRevision.current
     const previousSavedCredential = { ...savedCredentialState.current }
+    const credentialsMayChange = Boolean(settings.password || settings.teachingCloudPassword
+      || settings.clearTeachingCloudPassword || settings.account.trim() !== previousSavedCredential.account)
+    if (credentialsMayChange) resetAssignmentCredentialCache()
 
     try {
       const data = await command('save_saved_settings', settingsToPayload(settings))
@@ -2289,10 +2453,15 @@ function App() {
         localDataClearRevision.current += 1
         clearAccountScopedViewState()
       }
+      if (credentialsMayChange || accountChanged) {
+        resetAssignmentCredentialCache()
+      }
       if (revision !== credentialStateRevision.current) {
         setSettings((current) => ({
           ...current,
           hasSavedPassword: accountHasSavedPassword(current.account, savedCredential),
+          hasSavedTeachingCloudPassword: current.account.trim() === savedCredential.account
+            && savedCredential.hasSavedTeachingCloudPassword,
         }))
         return
       }
@@ -2304,25 +2473,72 @@ function App() {
         autoFetchedScheduleKey.current = ''
       }
     } catch (saveError) {
+      if (clearRevision !== localDataClearRevision.current) return
+      if (credentialsMayChange) resetAssignmentCredentialCache()
       if (saveError.accountScopeCleared) {
         credentialStateRevision.current += 1
         localDataClearRevision.current += 1
         clearAccountScopedViewState()
+      }
+      if (credentialsMayChange || saveError.accountScopeCleared) {
+        const recoveryClearRevision = localDataClearRevision.current
         try {
           const persisted = await command('load_saved_settings')
+          if (recoveryClearRevision !== localDataClearRevision.current) return
           const recoveredSettings = savedSettingsToState(persisted)
-          savedCredentialState.current = savedCredentialSnapshot(recoveredSettings)
-          setSettings(recoveredSettings)
-          setMinSeats(Number(recoveredSettings.defaultMinSeats) || 0)
+          const recoveredCredential = savedCredentialSnapshot(recoveredSettings)
+          if (savedCredentialState.current.account !== recoveredCredential.account) {
+            localDataClearRevision.current += 1
+            clearAccountScopedViewState()
+          }
+          savedCredentialState.current = recoveredCredential
+          // A failed save keeps user-entered drafts; only saved-status flags
+          // are refreshed from the authoritative credential store.
+          setSettings((current) => ({
+            ...current,
+            hasSavedPassword: accountHasSavedPassword(current.account, recoveredCredential),
+            hasSavedTeachingCloudPassword: current.account.trim() === recoveredCredential.account
+              && recoveredCredential.hasSavedTeachingCloudPassword,
+          }))
+          resetAssignmentCredentialCache()
         } catch {
-          savedCredentialState.current = { account: '', hasSavedPassword: false }
-          setSettings({ ...DEFAULT_SETTINGS })
-          setMinSeats(0)
+          if (recoveryClearRevision !== localDataClearRevision.current) return
+          savedCredentialState.current = { account: '', hasSavedPassword: false, hasSavedTeachingCloudPassword: false }
+          localDataClearRevision.current += 1
+          clearAccountScopedViewState()
+          setSettings((current) => ({ ...current, hasSavedPassword: false, hasSavedTeachingCloudPassword: false }))
         }
       }
-      setError(saveError.message)
+      setError(normalizeError(saveError))
     } finally {
       setSettingsSaving(false)
+    }
+  }
+
+  async function saveTermSettings() {
+    if (settingsSaving || !settingsLoaded || courseEditBusyRef.current) return
+    if (!settings.automaticTermDetectionEnabled) {
+      const validationError = manualTermValidationError(settings.termId, settings.termStartDate)
+      if (validationError) {
+        setError(validationError)
+        return
+      }
+    }
+    const clearRevision = localDataClearRevision.current
+    setSettingsSaving(true)
+    setSettingsSaved(false)
+    setError('')
+    try {
+      const saved = savedSettingsToState(await command('load_saved_settings'))
+      if (clearRevision !== localDataClearRevision.current) return
+      await command('save_saved_settings', semesterSettingsPayload(saved, settings))
+      if (clearRevision !== localDataClearRevision.current) return
+      setSettingsSaved(true)
+      autoFetchedScheduleKey.current = ''
+    } catch (saveError) {
+      if (clearRevision === localDataClearRevision.current) setError(normalizeError(saveError))
+    } finally {
+      if (clearRevision === localDataClearRevision.current) setSettingsSaving(false)
     }
   }
 
@@ -2876,7 +3092,7 @@ function App() {
   }
 
   async function loadSchedule() {
-    if (settingsSaving || !settingsLoaded) return false
+    if (settingsSaving || !settingsLoaded || courseEditBusyRef.current) return false
     if (!settings.automaticTermDetectionEnabled) {
       const validationError = manualTermValidationError(settings.termId, settings.termStartDate)
       if (validationError) {
@@ -2887,6 +3103,7 @@ function App() {
     let succeeded = false
     await runTask('schedule', async () => {
       const accountDataRevision = localDataClearRevision.current
+      const courseEditRevision = courseEditRevisionRef.current
       const requestTerm = scheduleRequestTerm(settings)
       const data = await command('fetch_schedule', requestBody(settings, {
         term_id: requestTerm.termId,
@@ -2894,6 +3111,7 @@ function App() {
         automatic_term_detection_enabled: settings.automaticTermDetectionEnabled,
       }))
       if (accountDataRevision !== localDataClearRevision.current) return
+      if (courseEditRevision !== courseEditRevisionRef.current) return
       setSchedule(data)
       setCalendarImportedPath('')
       setUsePersonalSchedule(true)
@@ -2907,16 +3125,26 @@ function App() {
           // Keep persistence outside the React state updater. Updaters may run
           // more than once in development, while saving credentials/settings
           // must remain a single, observable operation.
-          const persisted = await command('save_saved_settings', settingsToPayload(scheduleSettings))
+          const persisted = await command('save_saved_settings', {
+            ...settingsToPayload(scheduleSettings),
+            teaching_cloud_password: null,
+            clear_teaching_cloud_password: false,
+          })
           if (accountDataRevision !== localDataClearRevision.current) return
+          if (courseEditRevision !== courseEditRevisionRef.current) return
           const persistedSettings = savedSettingsToState(persisted, scheduleSettings)
           const persistedCredential = savedCredentialSnapshot(persistedSettings)
           savedCredentialState.current = persistedCredential
+          if (scheduleSettings.password) {
+            resetAssignmentCredentialCache()
+          }
           setSettings((current) => ({
             ...current,
             termId: persistedSettings.termId,
             termStartDate: persistedSettings.termStartDate,
             hasSavedPassword: accountHasSavedPassword(current.account, persistedCredential),
+            hasSavedTeachingCloudPassword: current.account.trim() === persistedCredential.account
+              && persistedCredential.hasSavedTeachingCloudPassword,
           }))
         }
       }
@@ -3119,6 +3347,7 @@ function App() {
     const rangeDates = datesInRange(startDate, endDate)
     if (!rangeDates.length) return
     const accountDataRevision = localDataClearRevision.current
+    const assignmentCredentialRevision = assignmentCredentialRevisionRef.current
     const accountScopeKey = savedCredentialState.current.account || settings.account.trim() || 'anonymous'
     const assignmentKey = `assignments:${accountScopeKey}:${startDate}:${endDate}`
     const deadlineKey = `deadlines:${startDate}:${endDate}`
@@ -3135,7 +3364,7 @@ function App() {
         start_date: startDate,
         end_date: endDate,
       }).then((data) => {
-        if (accountDataRevision !== localDataClearRevision.current) return
+        if (accountDataRevision !== localDataClearRevision.current || assignmentCredentialRevision !== assignmentCredentialRevisionRef.current) return
         const itemsByDate = new Map()
         ;(data?.items || []).forEach((item) => {
           const date = datePart(item.deadline)
@@ -3160,6 +3389,7 @@ function App() {
           return next
         })
       }).catch((assignmentError) => {
+        if (assignmentCredentialRevision !== assignmentCredentialRevisionRef.current) return
         requestedCalendarSupplementRanges.current.delete(assignmentKey)
         if (accountDataRevision !== localDataClearRevision.current) return
         setAssignmentsErrorByDate((current) => {
@@ -3168,7 +3398,7 @@ function App() {
           return next
         })
       }).finally(() => {
-        if (selectedDateInRange) setAssignmentsLoadingDate('')
+        if (selectedDateInRange && assignmentCredentialRevision === assignmentCredentialRevisionRef.current) setAssignmentsLoadingDate('')
       }))
     }
 
@@ -3310,6 +3540,14 @@ function App() {
   }
 
   function clearAccountScopedViewState() {
+    courseEditRevisionRef.current += 1
+    courseEditBusyRef.current = false
+    setCourseEditBusy(false)
+    setCourseEditError('')
+    assignmentCredentialRevisionRef.current += 1
+    setCourseDeletions([])
+    setCourseEditDialog(null)
+    setCourseRecoveryOpen(false)
     setReminderSettingsStatus('')
     assignmentsRevisionRef.current += 1
     requestedCalendarSupplementRanges.current.clear()
@@ -3324,6 +3562,87 @@ function App() {
     setUsePersonalSchedule(true)
     setCalendarImportedPath('')
     autoFetchedClassroomsDate.current = ''
+  }
+
+  function resetAssignmentCredentialCache() {
+    assignmentsRevisionRef.current += 1
+    assignmentCredentialRevisionRef.current += 1
+    requestedCalendarSupplementRanges.current.clear()
+    setAssignmentsByDate({})
+    setAssignmentsErrorByDate({})
+    setAssignmentsLoadingDate('')
+    setCalendarSupplementRevision((value) => value + 1)
+  }
+
+  function courseAccount() {
+    return savedCredentialState.current.account || (hasTauriRuntime() ? '' : 'browser-preview')
+  }
+
+  function openCourseDetails(course, date) {
+    if (!course || !schedule || settingsSaving || courseEditBusyRef.current) return
+    setCourseEditError('')
+    setCalendarPopover(null)
+    setCourseEditDialog({ course, date, termId: schedule.term_id,
+      account: courseAccount(), accountRevision: localDataClearRevision.current })
+  }
+
+  async function updateCourseDeletion(record = null, scope = 'once') {
+    if (courseEditBusyRef.current || settingsSaving || (!record && !courseEditDialog)) return
+    const selection = courseEditDialog
+    const account = record ? courseAccount() : selection.account
+    const accountRevision = localDataClearRevision.current
+    if (!record && (selection.accountRevision !== accountRevision || selection.termId !== schedule?.term_id
+      || selection.account !== courseAccount())) {
+      setCourseEditError('课程已变化，请重新选择。')
+      return
+    }
+    courseEditBusyRef.current = true
+    setCourseEditBusy(true)
+    setCourseEditError('')
+    const editRevision = ++courseEditRevisionRef.current
+    try {
+      const payload = courseEditRequest(account, record?.term_id || selection.termId,
+        record?.id || selection.course.id, record || scope === 'whole' ? null : selection.date)
+      const response = await command(record ? 'restore_schedule_course' : 'delete_schedule_course', payload)
+      if (accountRevision !== localDataClearRevision.current || editRevision !== courseEditRevisionRef.current
+        || account !== courseAccount()) return
+      courseEditRevisionRef.current += 1
+      setSchedule(response.schedule)
+      setCourseDeletions(response.deletions || [])
+      setSelectedSlots([])
+      setCourseEditDialog(null)
+    } catch (editError) {
+      if (accountRevision === localDataClearRevision.current && account === courseAccount()) {
+        setCourseEditError(normalizeError(editError) || '操作失败，请重试。')
+      }
+    } finally {
+      if (accountRevision === localDataClearRevision.current && account === courseAccount()) {
+        courseEditBusyRef.current = false
+        setCourseEditBusy(false)
+      }
+    }
+  }
+
+  async function openCourseRecovery() {
+    if (courseEditBusyRef.current || settingsSaving) return
+    setCourseRecoveryOpen(true)
+    setCourseEditError('')
+    setCourseEditBusy(true)
+    courseEditBusyRef.current = true
+    const accountRevision = localDataClearRevision.current
+    const editRevision = courseEditRevisionRef.current
+    try {
+      const response = await command('load_course_deletions')
+      if (accountRevision !== localDataClearRevision.current || editRevision !== courseEditRevisionRef.current) return
+      setCourseDeletions(response.deletions || [])
+    } catch (editError) {
+      if (accountRevision === localDataClearRevision.current) setCourseEditError(normalizeError(editError))
+    } finally {
+      if (accountRevision === localDataClearRevision.current) {
+        courseEditBusyRef.current = false
+        setCourseEditBusy(false)
+      }
+    }
   }
 
   return (
@@ -3556,7 +3875,7 @@ function App() {
                 {plannerWeekState.dayCourses.length ? plannerWeekState.dayCourses.map((course) => (
                   <article key={course.id} className="course-row">
                     <div>
-                      <strong><CourseName course={course} t={t} /></strong>
+                      <button type="button" className="course-edit-link" onClick={() => openCourseDetails(course, todayDate)}><strong><CourseName course={course} t={t} /></strong></button>
                       <span>{course.teacher || t('教师未标注')}</span>
                     </div>
                     <div>
@@ -3884,7 +4203,12 @@ function App() {
                                   className="time-course-block"
                                   style={{ top: `${top}%`, height: `${height}%` }}
                                   title={`${course.name} · ${bounds.start}-${bounds.end} · ${course.room || t('地点未标注')}`}
-                                  onClick={() => chooseCalendarDate(dateString)}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    chooseCalendarDate(dateString)
+                                    openCourseDetails(course, dateString)
+                                  }}
+                                  onKeyDown={(event) => event.stopPropagation()}
                                 >
                                   <strong><CourseName course={course} t={t} /></strong>
                                   <span className="course-block-time">{bounds.start}-{bounds.end}</span>
@@ -3950,6 +4274,7 @@ function App() {
                               label: course.name,
                               desktopLabel: course.name,
                               type: 'course',
+                              course,
                               subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
                               time: `${bounds.start}-${bounds.end}`,
                             }
@@ -4008,7 +4333,9 @@ function App() {
                                     onClick={(event) => {
                                       event.stopPropagation()
                                       chooseCalendarDate(dateString)
-                                      if (entry.type !== 'course') {
+                                      if (entry.type === 'course') {
+                                        openCourseDetails(entry.course, dateString)
+                                      } else {
                                         setCalendarAgendaDialog({
                                           date: dateString,
                                           sourceView: 'month',
@@ -4069,7 +4396,7 @@ function App() {
                       </button>
                     ) : null}
                     <div className="month-detail-stack">
-                      <SelectedDaySchedule date={calendarDate} weekState={calendarWeekState} slotMeta={slotMeta} language={uiLanguage} t={t} />
+                      <SelectedDaySchedule date={calendarDate} weekState={calendarWeekState} slotMeta={slotMeta} language={uiLanguage} t={t} onCourseSelect={openCourseDetails} />
                       <AssignmentDeadlineCard
                         date={calendarDate}
                         response={assignmentsByDate[calendarDate]}
@@ -4244,7 +4571,7 @@ function App() {
                         const bounds = courseTimeBounds(course, slotMeta)
                         return (
                           <article key={`${calendarPopover.date}-${course.id}`}>
-                            <strong><CourseName course={course} t={t} /></strong>
+                            <button type="button" className="course-edit-link" onClick={() => openCourseDetails(course, calendarPopover.date)}><strong><CourseName course={course} t={t} /></strong></button>
                             <span>{bounds.start}-{bounds.end}</span>
                             <small>{course.room || t('地点未标注')}</small>
                           </article>
@@ -4306,6 +4633,24 @@ function App() {
                   autoComplete="new-password"
                 />
               </label>
+              <label>
+                {t('教学云平台密码')}
+                <input
+                  value={settings.teachingCloudPassword}
+                  onChange={(event) => updateSetting('teachingCloudPassword', event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') saveCurrentSettings() }}
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder={settings.hasSavedTeachingCloudPassword && !settings.clearTeachingCloudPassword
+                    ? t('独立密码已安全保存，留空保持不变') : t('未设置时使用教务密码')}
+                  aria-describedby="teaching-cloud-password-hint"
+                />
+              </label>
+              <p id="teaching-cloud-password-hint" className="term-detect-note">{t('仅用于作业 DDL；与教务密码不同时填写，保存后生效。')}</p>
+              <button type="button" className="secondary cloud-password-reset" onClick={() => updateSetting('clearTeachingCloudPassword', true)} disabled={settingsSaving || courseEditBusy}>
+                {t('使用教务密码')}
+              </button>
+              {settings.clearTeachingCloudPassword ? <p className="term-detect-note" role="status">{t('保存后将清除独立密码并使用教务密码')}</p> : null}
               <div className="field-group">
                 {t('默认校区')}
                 <div className="campus-options">
@@ -4328,6 +4673,14 @@ function App() {
                 {loading === 'schedule' ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />} {t('获取/刷新个人课表')}
               </button>
               {settingsSaved ? <span className="settings-saved-note">{t('已保存')}</span> : null}
+            </section>
+
+            <section className="panel course-recovery-settings">
+              <div className="panel-title"><CalendarDays size={18} /><h2>{t('已删除课程')}</h2></div>
+              <p className="term-detect-note">{t('只修改本机个人课表，可在设置中恢复；不修改学校数据、作业 DDL 或已经导出的系统日历。')}</p>
+              <button type="button" className="secondary settings-full-button" onClick={openCourseRecovery} disabled={!settingsLoaded || settingsSaving || courseEditBusy}>
+                <RefreshCw size={17} />{t('恢复课程')}
+              </button>
             </section>
 
             <section className="panel">
@@ -4380,7 +4733,7 @@ function App() {
                   ) : null}
                 </div>
               ) : null}
-              <button type="button" className="secondary settings-full-button" onClick={saveCurrentSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
+              <button type="button" className="secondary settings-full-button" onClick={saveTermSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
                 <CheckCircle2 size={17} /> {t('保存学期设置')}
               </button>
             </section>
@@ -4624,6 +4977,31 @@ function App() {
           setPrivacyPolicyOpen(false)
           privacyTriggerRef.current?.focus()
         }} />
+      ) : null}
+      {courseEditDialog ? (
+        <CourseEditDialog key={`${courseEditDialog.course.id}:${courseEditDialog.date}`}
+          selection={courseEditDialog} busy={courseEditBusy} error={courseEditError}
+          onClose={() => setCourseEditDialog(null)} onDelete={(scope) => updateCourseDeletion(null, scope)}
+          t={t} language={uiLanguage} slotMeta={slotMeta} />
+      ) : null}
+      {courseRecoveryOpen ? (
+        <CourseManagementDialog title={t('恢复课程')} busy={courseEditBusy} onClose={() => setCourseRecoveryOpen(false)} t={t}>
+          <p className="course-edit-note">{schedule?.term_id || settings.termId}</p>
+          {courseEditError ? <p className="course-edit-error" role="alert">{t(courseEditError)}</p> : null}
+          <div className="course-recovery-list">
+            {courseDeletions.filter((record) => record.term_id === (schedule?.term_id || settings.termId)).length ?
+              courseDeletions.filter((record) => record.term_id === (schedule?.term_id || settings.termId)).map((record) => (
+                <article key={record.id}>
+                  <div>
+                    <strong>{record.name}</strong>
+                    <span>{record.teacher || t('教师未标注')}</span>
+                    <small>{record.date ? `${record.date} · ${Number(record.start_slot) + 1}-${Number(record.end_slot) + 1}` : t('整门课程')}</small>
+                  </div>
+                  <button type="button" className="secondary" disabled={courseEditBusy} onClick={() => updateCourseDeletion(record)}>{t('恢复')}</button>
+                </article>
+              )) : <p className="course-edit-note">{t('本学期没有已删除课程。')}</p>}
+          </div>
+        </CourseManagementDialog>
       ) : null}
     </main>
   )

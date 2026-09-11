@@ -12,6 +12,7 @@ import calendarTypographyTest from './CalendarTypography.test';
 import colorThemesTest from './ColorThemes.test';
 import robustnessTest from './Robustness.test';
 import credentialStoreTest from './CredentialStore.test';
+import courseRemovalTest from './CourseRemoval.test';
 import todayCourseWidgetDataTest from './TodayCourseWidgetData.test';
 import dailyInfoClientTest from './DailyInfoClient.test';
 import calendarDailyInfoClientTest from './CalendarDailyInfoClient.test';
@@ -36,6 +37,7 @@ export default function testsuite() {
   colorThemesTest();
   robustnessTest();
   credentialStoreTest();
+  courseRemovalTest();
   todayCourseWidgetDataTest();
   dailyInfoClientTest();
   calendarDailyInfoClientTest();

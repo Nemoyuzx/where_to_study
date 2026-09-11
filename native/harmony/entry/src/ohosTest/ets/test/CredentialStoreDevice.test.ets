@@ -17,11 +17,16 @@ export default function credentialStoreDeviceTest() {
         expect(first?.account ?? '').assertEqual('2026000000');
         expect(first?.password ?? '').assertEqual('first-password');
 
-        await store.save(new Credentials('2026000000', 'updated-password'));
+        await store.save(new Credentials('2026000000', 'updated-password', 'cloud-password'));
         const updated: Credentials | null = await store.load();
         expect(updated !== null).assertTrue();
         expect(updated?.account ?? '').assertEqual('2026000000');
         expect(updated?.password ?? '').assertEqual('updated-password');
+        expect(updated?.cloudPassword ?? '').assertEqual('cloud-password');
+        await store.save(new Credentials('2026000000', 'updated-password'));
+        const fallback: Credentials | null = await store.load();
+        expect(fallback?.cloudPassword ?? '').assertEqual('');
+        expect(fallback?.effectiveCloudPassword() ?? '').assertEqual('updated-password');
       } finally {
         await store.clear();
       }

@@ -38,6 +38,37 @@ enum CredentialSaveAction: Equatable {
 
 enum CredentialSettingsLogic {
     static func saveAction(
+        account: String,
+        password: String,
+        teachingCloudPassword: String,
+        useAcademicPassword: Bool,
+        storedCredentials: Credentials?
+    ) throws -> CredentialSaveAction {
+        let action = try saveAction(
+            account: account, password: password,
+            storedAccount: storedCredentials?.account,
+            hasStoredPassword: !(storedCredentials?.password.isEmpty ?? true)
+        )
+        guard action != .clear else {
+            guard teachingCloudPassword.isEmpty else { throw CredentialSettingsError.accountRequired }
+            return .clear
+        }
+        var next: Credentials
+        switch action {
+        case .preserve:
+            guard let storedCredentials else { throw CredentialSettingsError.passwordRequiredForChangedAccount }
+            next = storedCredentials
+        case let .replace(credentials): next = credentials
+        case .clear: return .clear
+        }
+        let sameAccount = normalizedAccount(storedCredentials?.account ?? "") == next.account
+        next.teachingCloudPassword = useAcademicPassword ? nil
+            : (!teachingCloudPassword.isEmpty ? teachingCloudPassword
+                : (sameAccount ? storedCredentials?.teachingCloudPassword : nil))
+        return next == storedCredentials ? .preserve : .replace(next)
+    }
+
+    static func saveAction(
         account inputAccount: String,
         password inputPassword: String,
         storedAccount: String?,
@@ -173,9 +204,22 @@ enum HolidayDisplayLogic {
 final class AppModel: ObservableObject {
     let navigation = PrimaryNavigationState()
     @Published private(set) var colorTheme: ColorThemeConfiguration
-    @Published var account = ""
+    @Published var account = "" {
+        didSet {
+            if CredentialSettingsLogic.normalizedAccount(account) != CredentialSettingsLogic.normalizedAccount(oldValue) {
+                teachingCloudPassword = ""
+                useAcademicPasswordForTeachingCloud = false
+            }
+        }
+    }
     @Published var password = ""
+    @Published var teachingCloudPassword = "" {
+        didSet { if !teachingCloudPassword.isEmpty { useAcademicPasswordForTeachingCloud = false } }
+    }
     @Published private(set) var hasSavedPassword = false
+    @Published private(set) var hasSavedTeachingCloudPassword = false
+    @Published private(set) var useAcademicPasswordForTeachingCloud = false
+    @Published private(set) var assignmentCredentialRevision = 0
     @Published var termID: String
     @Published var termStartDate: String
     @Published private(set) var automaticTermDetectionEnabled: Bool
@@ -185,6 +229,7 @@ final class AppModel: ObservableObject {
     @Published var selectedBuildings = Set<String>()
     @Published var usePersonalSchedule = true
     @Published var schedule: ScheduleSnapshot?
+    @Published private(set) var courseDeletions: [CourseDeletion] = []
     @Published var classroomsCache: ClassroomsCache?
     @Published private(set) var holidaysByYear = [Int: HolidaysSnapshot]()
     @Published var statusMessage = ""
@@ -217,6 +262,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var runtimeMode: AppRuntimeMode
     private let credentialStore: any CredentialStoring
     private let scheduleStore: any ScheduleStoring
+    private let courseDeletionStore: any CourseDeletionStoring
+    private var rawSchedule: ScheduleSnapshot?
+    private var courseDeletionRevision = 0
+    private var courseDeletionLoadFailed = false
     private let scheduleClient: any ScheduleFetching
     private let classroomStore: any ClassroomStoring
     private let classroomClient: any ClassroomFetching
@@ -233,12 +282,14 @@ final class AppModel: ObservableObject {
     private let supportsRuntimeModeSwitching: Bool
     private let deferLocalDataLoading: Bool
     private let localDataPersistence = LocalDataPersistence()
+    private let widgetDataPersistence = LocalDataPersistence()
+    private var widgetDataGeneration = 0
     private var initialLocalDataTask: Task<Void, Never>?
     private var holidayLoads = HolidayLoadState()
     private var localDataGeneration = 0
     // Presentation tasks must discard frozen account data at the same boundary
     // as disk/network work, even when the selected date has not changed.
-    var calendarDataOwnerRevision: Int { localDataGeneration }
+    var calendarDataOwnerRevision: Int { localDataGeneration + courseDeletionRevision + assignmentCredentialRevision }
     private var scheduleRefreshToken = 0
     private var classroomRefreshToken = 0
     private var calendarImportToken = 0
@@ -253,6 +304,7 @@ final class AppModel: ObservableObject {
         runtimeMode: AppRuntimeMode = .live,
         credentialStore: any CredentialStoring = KeychainCredentialStore(),
         scheduleStore: any ScheduleStoring = FileScheduleStore(),
+        courseDeletionStore: any CourseDeletionStoring = FileCourseDeletionStore(),
         scheduleClient: any ScheduleFetching = SJDScheduleClient(),
         classroomStore: any ClassroomStoring = FileClassroomStore(),
         classroomClient: any ClassroomFetching = SJDClassroomClient(),
@@ -276,6 +328,7 @@ final class AppModel: ObservableObject {
         supportsRuntimeModeSwitching = runtimeMode == .live
         self.credentialStore = credentialStore
         self.scheduleStore = scheduleStore
+        self.courseDeletionStore = courseDeletionStore
         self.scheduleClient = scheduleClient
         self.classroomStore = classroomStore
         self.classroomClient = classroomClient
@@ -349,6 +402,7 @@ final class AppModel: ObservableObject {
             favoriteDeadlines = Self.loadFavoriteDeadlines(defaults: defaults)
         }
         loadCredentials()
+        loadCourseDeletions()
         loadInitialLocalData()
     }
 
@@ -376,6 +430,108 @@ final class AppModel: ObservableObject {
         hasSavedPassword
             && CredentialSettingsLogic.normalizedAccount(account)
                 == CredentialSettingsLogic.normalizedAccount(savedCredentialAccount ?? "")
+    }
+
+    var canPreserveSavedTeachingCloudPassword: Bool {
+        canPreserveSavedPassword && hasSavedTeachingCloudPassword && !useAcademicPasswordForTeachingCloud
+    }
+
+    func useAcademicPasswordForAssignments() {
+        teachingCloudPassword = ""
+        useAcademicPasswordForTeachingCloud = true
+    }
+
+    var currentCourseDeletions: [CourseDeletion] {
+        guard !isSampleMode else { return [] }
+        return courseDeletions.filter {
+            $0.accountScope == CourseDeletionLogic.accountKey(savedCredentialAccount ?? "")
+                && $0.termID == (rawSchedule?.termID ?? termID)
+        }
+    }
+
+    @discardableResult
+    func deleteCourse(_ course: Course, on date: Date, scope: CourseDeletionScope) -> Bool {
+        guard !isSampleMode, !courseDeletionLoadFailed,
+              let snapshot = rawSchedule, let savedCredentialAccount,
+              snapshot.courses.contains(where: { $0.id == course.id })
+        else {
+            statusMessage = "课程删除失败，请重新获取课表后重试"
+            return false
+        }
+        if scope == .occurrence {
+            guard let termStart = StrictContractDateParser.date(from: snapshot.termStartDate),
+                  Calendar.shanghai.component(.weekday, from: termStart) == 2,
+                  ScheduleLogic.courses(on: date, termStart: termStart, courses: snapshot.courses)
+                    .contains(where: { $0.id == course.id })
+            else {
+                statusMessage = "课程删除失败，请重新获取课表后重试"
+                return false
+            }
+        }
+        let deletion = CourseDeletion(account: savedCredentialAccount, termID: snapshot.termID,
+                                      course: course, date: date, scope: scope)
+        do {
+            let updated = courseDeletions + [deletion]
+            try courseDeletionStore.save(updated)
+            courseDeletions = updated
+            refreshEffectiveSchedule()
+            statusMessage = "课程已从本地课表删除，可在个人账户中恢复"
+            return true
+        } catch {
+            statusMessage = "课程删除未保存，请重试"
+            return false
+        }
+    }
+
+    @discardableResult
+    func restoreCourseDeletion(_ deletion: CourseDeletion) -> Bool {
+        guard !courseDeletionLoadFailed,
+              currentCourseDeletions.contains(where: { $0.id == deletion.id }) else { return false }
+        do {
+            let updated = courseDeletions.filter { $0.id != deletion.id }
+            try courseDeletionStore.save(updated)
+            courseDeletions = updated
+            refreshEffectiveSchedule()
+            statusMessage = "课程删除记录已恢复"
+            return true
+        } catch {
+            statusMessage = "课程恢复未保存，请重试"
+            return false
+        }
+    }
+
+    private func loadCourseDeletions() {
+        guard !isSampleMode else { return }
+        do {
+            courseDeletions = try courseDeletionStore.load()
+            courseDeletionLoadFailed = false
+        } catch {
+            courseDeletionLoadFailed = true
+            schedule = nil
+            synchronizeWidgetSchedule()
+            cancelDailyCourseNotifications()
+            statusMessage = "本地课程删除记录读取失败"
+        }
+    }
+
+    private func assignSchedule(_ snapshot: ScheduleSnapshot?) {
+        rawSchedule = snapshot
+        guard isSampleMode || !courseDeletionLoadFailed else {
+            schedule = nil
+            return
+        }
+        schedule = snapshot.map {
+            isSampleMode ? $0 : CourseDeletionLogic.applying(courseDeletions, to: $0, account: savedCredentialAccount ?? "")
+        }
+    }
+
+    private func refreshEffectiveSchedule() {
+        courseDeletionRevision &+= 1
+        assignSchedule(rawSchedule)
+        synchronizeWidgetSchedule()
+        synchronizeSelectedSlots()
+        cancelDailyCourseNotifications()
+        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
     }
 
     var todayCourses: [Course] {
@@ -481,7 +637,7 @@ final class AppModel: ObservableObject {
         account = ""
         password = ""
         updateSavedCredentialState(nil)
-        schedule = SampleData.schedule()
+        assignSchedule(SampleData.schedule())
         classroomsCache = SampleData.classrooms()
         termID = schedule?.termID ?? "review-demo"
         termStartDate = schedule?.termStartDate ?? ScheduleDefaults.termStartDate
@@ -516,7 +672,7 @@ final class AppModel: ObservableObject {
 
         account = ""
         password = ""
-        schedule = nil
+        assignSchedule(nil)
         classroomsCache = nil
         holidaysByYear.removeAll()
         holidayStatusByYear.removeAll()
@@ -602,8 +758,9 @@ final class AppModel: ObservableObject {
             let credentialAction = try CredentialSettingsLogic.saveAction(
                 account: account,
                 password: password,
-                storedAccount: storedCredentials?.account,
-                hasStoredPassword: !(storedCredentials?.password.isEmpty ?? true)
+                teachingCloudPassword: teachingCloudPassword,
+                useAcademicPassword: useAcademicPasswordForTeachingCloud,
+                storedCredentials: storedCredentials
             )
             let nextCredentialAccount: String? = switch credentialAction {
             case .preserve:
@@ -628,9 +785,11 @@ final class AppModel: ObservableObject {
             case let .replace(credentials):
                 try credentialStore.save(credentials)
                 updateSavedCredentialState(credentials)
+                assignmentCredentialRevision &+= 1
             case .clear:
                 try credentialStore.clear()
                 updateSavedCredentialState(nil)
+                assignmentCredentialRevision &+= 1
             }
             let credentialsBecameAvailable = !hadStoredPassword && hasSavedPassword
             if accountChanged || credentialsBecameAvailable {
@@ -638,6 +797,8 @@ final class AppModel: ObservableObject {
             }
             account = CredentialSettingsLogic.normalizedAccount(account)
             password = ""
+            teachingCloudPassword = ""
+            useAcademicPasswordForTeachingCloud = false
             if automaticTermDetectionEnabled {
                 let automaticTerm = accountChanged
                     ? SemesterLogic.resolveSettings(
@@ -718,7 +879,7 @@ final class AppModel: ObservableObject {
                    termStartDate: schedule.termStartDate,
                    for: now()
                ) == nil {
-                self.schedule = nil
+                assignSchedule(nil)
                 synchronizeWidgetSchedule()
                 synchronizeSelectedSlots()
             }
@@ -955,8 +1116,16 @@ final class AppModel: ObservableObject {
         updateSavedCredentialState(nil)
 
         do {
+            try courseDeletionStore.clear()
+            courseDeletions = []
+            courseDeletionLoadFailed = false
+        } catch {
+            failures.append("课程删除记录")
+        }
+
+        do {
             try scheduleStore.clear()
-            schedule = nil
+            assignSchedule(nil)
             synchronizeWidgetSchedule()
             calendarImportStatusMessage = ""
         } catch {
@@ -1053,6 +1222,13 @@ final class AppModel: ObservableObject {
             }
             return
         }
+        let previousRules = courseDeletions
+        let wasUnavailable = courseDeletionLoadFailed
+        loadCourseDeletions()
+        if wasUnavailable || courseDeletionLoadFailed || previousRules != courseDeletions {
+            refreshEffectiveSchedule()
+        }
+        guard !courseDeletionLoadFailed else { return }
         let credentials: Credentials
         do {
             credentials = try credentialsForRequest()
@@ -1109,7 +1285,7 @@ final class AppModel: ObservableObject {
                 )
                 guard saved, generation == localDataGeneration,
                       refreshToken == scheduleRefreshToken else { return }
-                schedule = resolvedSchedule
+                assignSchedule(resolvedSchedule)
                 synchronizeWidgetSchedule()
                 calendarImportStatusMessage = ""
                 termID = resolvedSchedule.termID
@@ -1427,6 +1603,9 @@ final class AppModel: ObservableObject {
     private func updateSavedCredentialState(_ credentials: Credentials?) {
         savedCredentialAccount = credentials?.account
         hasSavedPassword = !(credentials?.password.isEmpty ?? true)
+        hasSavedTeachingCloudPassword = !(credentials?.teachingCloudPassword?.isEmpty ?? true)
+        teachingCloudPassword = ""
+        useAcademicPasswordForTeachingCloud = false
     }
 
     private func clearAccountScopedData() throws {
@@ -1441,7 +1620,7 @@ final class AppModel: ObservableObject {
         } catch {
             failed = true
         }
-        schedule = nil
+        assignSchedule(nil)
         synchronizeWidgetSchedule()
         calendarImportStatusMessage = ""
         do {
@@ -1539,7 +1718,7 @@ final class AppModel: ObservableObject {
         do {
             let cachedSchedule = try result.get()
             if isSampleMode {
-                schedule = cachedSchedule
+                assignSchedule(cachedSchedule)
                 if let cachedSchedule {
                     termID = cachedSchedule.termID
                     termStartDate = cachedSchedule.termStartDate
@@ -1551,7 +1730,7 @@ final class AppModel: ObservableObject {
                     termStartDate: cachedSchedule?.termStartDate,
                     for: currentDate
                 )
-                schedule = acceptedSettings == nil ? nil : cachedSchedule
+                assignSchedule(acceptedSettings == nil ? nil : cachedSchedule)
                 let automaticTerm = acceptedSettings ?? SemesterLogic.resolveSettings(
                     automaticDetectionEnabled: true,
                     persistedTermID: defaults.string(forKey: "termID"),
@@ -1565,11 +1744,11 @@ final class AppModel: ObservableObject {
                     defaults.set(termStartDate, forKey: "termStartDate")
                 }
             } else {
-                schedule = cachedSchedule
+                assignSchedule(cachedSchedule)
             }
             synchronizeWidgetSchedule()
         } catch {
-            schedule = nil
+            assignSchedule(nil)
             synchronizeWidgetSchedule()
             statusMessage = localized("本地课表读取失败：") + error.localizedDescription
         }
@@ -1609,12 +1788,18 @@ final class AppModel: ObservableObject {
             courseLimit: widgetCourseLimit
         )
         let languageRawValue = appLanguage.rawValue
+        widgetDataGeneration &+= 1
+        let generation = widgetDataGeneration
+        let persistence = widgetDataPersistence
+        persistence.invalidate(generation: generation)
         Task.detached(priority: .utility) {
-            Self.writeWidgetSchedule(
-                snapshot,
-                preferences: preferences,
-                languageRawValue: languageRawValue
-            )
+            _ = persistence.perform(ifGeneration: generation) {
+                Self.writeWidgetSchedule(
+                    snapshot,
+                    preferences: preferences,
+                    languageRawValue: languageRawValue
+                )
+            }
         }
         #endif
     }
@@ -1662,6 +1847,11 @@ final class AppModel: ObservableObject {
         let revision = dailyCourseNotificationRevision
         guard dailyCourseNotificationsEnabled else {
             dailyCourseNotificationScheduler.cancelPending(revision: revision)
+            return
+        }
+        guard !courseDeletionLoadFailed else {
+            dailyCourseNotificationScheduler.cancelPending(revision: revision)
+            dailyCourseNotificationStatusMessage = "本地课程删除记录读取失败"
             return
         }
 

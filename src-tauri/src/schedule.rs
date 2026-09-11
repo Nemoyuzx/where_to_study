@@ -263,6 +263,7 @@ pub fn parse_sjd_courses(
         );
         courses.push(Course {
             id: course_id,
+            source_course_id: json_string(raw_course.get("jx0408id")).trim().to_string(),
             name,
             teacher,
             room: location,

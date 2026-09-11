@@ -31,7 +31,7 @@ export struct CalendarSectionView {
     'model.schoolContestNoticesEnabled',
     'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled',
     'model.customDeadlinesEnabled', 'model.customDeadlinesURL', 'model.favoriteDeadlines',
-    'model.almanacEnabled')
+    'model.almanacEnabled', 'model.calendarDailyInfoRevision')
   onViewportSourceChange(monitor: IMonitor): void {
     this.prewarmViewport(true);
   }

@@ -8,7 +8,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.2.8"
+    MARKETING_VERSION: "0.2.9"
     CURRENT_PROJECT_VERSION: "79"
     CODE_SIGN_STYLE: Automatic
 targets:

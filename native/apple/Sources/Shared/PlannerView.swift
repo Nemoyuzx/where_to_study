@@ -423,6 +423,7 @@ struct PlannerView: View {
                 .fixedSize()
         }
         .padding(.vertical, 2)
+        .modifier(CourseManagementModifier(course: course, date: .now))
     }
 
     private var buildingsSurface: some View {

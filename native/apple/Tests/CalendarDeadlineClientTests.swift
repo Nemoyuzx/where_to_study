@@ -344,6 +344,41 @@ final class CalendarDeadlineClientTests: XCTestCase {
         XCTAssertEqual(invocationCountAfterCompletion, 1)
     }
 
+    func testUCloudUsesSeparatePasswordAndInvalidatesCacheAfterSameAccountPasswordChange() async throws {
+        let store = MutableDeadlineCredentialStore(Credentials(account: "a", password: "academic", teachingCloudPassword: "cloud"))
+        let recorder = DeadlineCredentialRecorder()
+        let client = UCloudAssignmentClient(credentialStore: store, fetchAll: { credentials in
+            await recorder.record(credentials)
+            return []
+        })
+        _ = try await client.fetch(date: "2026-09-07")
+        _ = try await client.fetch(date: "2026-09-08")
+        let first = await recorder.values
+        XCTAssertEqual(first, [Credentials(account: "a", password: "cloud")])
+        try store.save(Credentials(account: "a", password: "academic", teachingCloudPassword: "new-cloud"))
+        _ = try await client.fetch(date: "2026-09-07")
+        try store.save(Credentials(account: "a", password: "academic"))
+        _ = try await client.fetch(date: "2026-09-07")
+        let values = await recorder.values
+        XCTAssertEqual(values.map(\.password), ["cloud", "new-cloud", "academic"])
+    }
+
+    func testUCloudRejectsOldPasswordResultEvenBeforeAnotherFetchStarts() async throws {
+        let store = MutableDeadlineCredentialStore(Credentials(account: "a", password: "academic", teachingCloudPassword: "cloud"))
+        let provider = ControlledUCloudFetch()
+        let client = UCloudAssignmentClient(credentialStore: store, fetchAll: { credentials in
+            try await provider.fetch(credentials: credentials)
+        })
+        let request = Task { try await client.fetch(date: "2026-08-23") }
+        await provider.waitUntilInvocationCount(1)
+        try store.save(Credentials(account: "a", password: "academic", teachingCloudPassword: "new-cloud"))
+        await provider.complete(invocation: 1, with: [assignment(id: "old", deadline: "2026-08-23 08:00:00")])
+        do {
+            _ = try await request.value
+            XCTFail("A result from the previous password must be discarded")
+        } catch is CancellationError { }
+    }
+
     func testUCloudBatchFiltersSeveralVisibleDatesAfterOneAccountWideFetch() async throws {
         let provider = ControlledUCloudFetch()
         let client = UCloudAssignmentClient(
@@ -611,6 +646,20 @@ private struct StaticDeadlineCredentialStore: CredentialStoring {
 
     func save(_: Credentials) throws {}
     func clear() throws {}
+}
+
+private final class MutableDeadlineCredentialStore: CredentialStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var credentials: Credentials?
+    init(_ credentials: Credentials) { self.credentials = credentials }
+    func load() throws -> Credentials? { lock.withLock { credentials } }
+    func save(_ credentials: Credentials) throws { lock.withLock { self.credentials = credentials } }
+    func clear() throws { lock.withLock { credentials = nil } }
+}
+
+private actor DeadlineCredentialRecorder {
+    private(set) var values = [Credentials]()
+    func record(_ credentials: Credentials) { values.append(credentials) }
 }
 
 private actor ControlledUCloudFetch {

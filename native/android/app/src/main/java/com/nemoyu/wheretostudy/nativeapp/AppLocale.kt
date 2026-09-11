@@ -215,6 +215,36 @@ object UiText {
         "忌" to "Avoid",
         "个人账户" to "Account",
         "教务账号" to "Academic Account",
+        "仅删除这一次" to "Delete This Occurrence",
+        "删除本学期整门课程" to "Delete This Course for the Term",
+        "本学期所有教学周和上课时段" to "All teaching weeks and sessions in this term",
+        "仅从本机个人课表中删除，可在设置的已删除课程中恢复。不会修改学校课表或已导出的系统日历。" to
+            "Removes it from the personal timetable on this device. Restore it under Deleted Courses in Settings. The school timetable and previously exported system calendar stay unchanged.",
+        "课程已删除，可在设置中恢复" to "Course deleted; restore it in Settings",
+        "无法保存课程删除记录" to "Unable to save the course deletion",
+        "已删除课程" to "Deleted Courses",
+        "管理已删除课程" to "Manage Deleted Courses",
+        "管理当前账号、本学期的本地删除记录。恢复后立即重新显示课程。" to "Manage local deletions for the current account and term. Restored courses reappear immediately.",
+        "当前账号、本学期暂无课程删除记录" to "No deleted courses for the current account and term",
+        "本学期整门课程" to "Entire course for this term",
+        "恢复课程" to "Restore Course",
+        "恢复" to "Restore",
+        "删除" to "Delete",
+        "将移除此条删除记录；其他删除记录仍然有效。" to "Removes this deletion record. Other deletion records still apply.",
+        "课程删除记录已恢复" to "Selected deletion undone",
+        "无法读取或保存课程删除记录" to "Unable to read or save course deletions",
+        "课表已更新，请重新选择课程。" to "The timetable changed. Please select the course again.",
+        "课程删除记录已更新，请重试。" to "Course deletions changed. Please try again.",
+        "课表缺少学期编号，无法删除课程。" to "Cannot delete a course without a term identifier.",
+        "课程删除记录格式不受支持。" to "Unsupported course deletion record format.",
+        "无法清除课程删除记录。" to "Unable to clear course deletions.",
+        "教务密码" to "Academic Password",
+        "教学云平台密码（可选）" to "Teaching Cloud Password (Optional)",
+        "使用教务密码" to "Use Academic Password",
+        "保存后使用独立教学云平台密码获取作业 DDL" to "After saving, assignments use the separate teaching cloud password",
+        "保存后使用教务密码获取作业 DDL" to "After saving, assignments use the academic password",
+        "教学云平台密码已安全保存，留空保持不变" to "Teaching cloud password saved securely; leave blank to keep it",
+        "仅用于课程作业 DDL；未设置时使用教务密码" to "Used only for assignment deadlines; defaults to the academic password",
         "密码" to "Password",
         "默认校区" to "Default Campus",
         "西土城" to "Xitucheng",
@@ -497,9 +527,9 @@ object UiText {
         source.startsWith("学号和密码保存在") ->
             "Your student ID and password remain in protected operating-system storage. They are used over HTTPS only when you request schedules, classrooms, or assignments. The maintainer cannot read them, and Settings never returns the saved password."
         source.startsWith("密码仅通过 HTTPS 提交") ->
-            "The password is sent only to auth.bupt.edu.cn over HTTPS. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. Browser cookies are not read, and tickets, cookies, tokens, and assignments are not written to disk; results may be reused in memory for up to 10 minutes."
+            "The password is sent only to auth.bupt.edu.cn over HTTPS. An optional separate teaching cloud password uses the same protected credential storage; otherwise the academic password is used. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. Browser cookies are not read, and tickets, cookies, tokens, and assignments are not written to disk; results may be reused in memory for up to 10 minutes."
         source.startsWith("课表、空教室、校区") ->
-            "Schedules, classroom data, campus, semester settings, switches, the custom feed URL, and up to 500 favorite snapshots remain on the device. Course widgets read only the local schedule. Clearing local data removes all of these items."
+            "Schedules, classroom data, campus, semester settings, switches, the custom feed URL, and up to 500 favorite snapshots remain on the device. Course widgets read only the local schedule. Course deletions are isolated by account and term, affect only this device, and can be restored in Settings. Clearing local data removes all of these items."
         source.startsWith("应用可能通过 unpkg") ->
             "The app may fetch a fixed holiday-calendar dataset from unpkg. Android may also read a system holiday calendar when permission already exists. Requests contain only CN and the year. iOS marks days off only from authoritative rest-day data."
         source.startsWith("UAPI 按校区行政区") ->

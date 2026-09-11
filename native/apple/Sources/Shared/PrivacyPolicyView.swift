@@ -57,6 +57,10 @@ struct PrivacyPolicyView: View {
                         body: "本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。\n\nThe project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies."
                     )
                     privacySection(
+                        title: "独立教学云密码与课程删除 / Teaching cloud password and course deletion",
+                        body: "你可为相同学号单独设置教学云平台密码，同样保存在系统 Keychain 中，仅用于教学云作业认证；未设置时使用教务密码。更换账号不会复用原账号的独立密码。课程删除记录按账号和学期保存在本机，可仅删除一次课程或本学期整门课程，刷新后仍生效，可在个人账户中恢复。它们会同步影响本地课表、空闲节次、课程小组件与提醒，不修改学校选课、作业或已导出的系统日历事件；清除本地数据时一并删除。\n\nYou can save a separate teaching cloud password for the same student ID in Keychain, used only for assignment authentication. Without it, the academic password is used. Changing accounts never reuses the previous account’s separate password. Course deletions are stored locally by account and semester, cover one occurrence or the entire course, survive refresh, and can be restored in Personal Account. They affect the local timetable, free periods, widgets, and reminders, without changing university enrollment, assignments, or exported calendar events. Clear local data also removes these records."
+                    )
+                    privacySection(
                         title: "保留与删除 / Retention and deletion",
                         body: "凭据与缓存保留在设备上，直到被替换、清除或随卸载移除；清除本地数据不会删除学校或第三方持有的记录。\n\nCredentials and caches stay on your device until replaced, cleared, or removed with the app. Clearing local data does not delete records held by BUPT or third parties."
                     )

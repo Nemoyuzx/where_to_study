@@ -24,6 +24,14 @@ Silicon 兼容构建。
   最新源码进一步采用协调的低饱和背景、分层卡片和控件色；自定义主色也会自动搭配背景。这轮背景优化及后续规范修复已包含在 Apple `0.2.9 (91)` TestFlight 与鸿蒙 `0.2.9 (1002027)` 仅测试构建中，未提交商店审核或正式发布。
 - 图形客户端支持跟随系统、简体中文与 English；静态界面切换语言，第三方 API 返回的课程、天气、黄历、作业和竞赛内容保持原文。
 
+### 0.2.9 开发中功能 / Unreleased 0.2.9 features
+
+- 课程详情支持“仅删除本次”或“删除本学期整门课程”，只编辑本地课表，刷新后仍保持，可在设置中恢复；课表、空闲节次、小组件与课程提醒同步采用有效结果。不会向学校退课或删除学校作业，也不会自动移除已导出的系统日历事件。
+- 个人账户可单独设置“教学云平台密码”用于作业 DDL，同一学号无需重复输入。未设置时回退到教务密码；同账号密码框留空保留原密码，显式选择“改用教务密码”并保存可清除独立密码。
+- Course details support removing one occurrence or the whole semester's course, with persistent local edits and restoration. Personal Account accepts an optional separate teaching cloud password for assignment DDLs. Neither feature modifies university-side data.
+
+本轮仅提交源码，不发布 Release 或上传商店测试包。行为边界与验证记录见[课程管理和教学云账户说明](./docs/course-management-v0.2.9.md)。
+
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
 

@@ -64,6 +64,16 @@ export default function appLocalizationTest() {
         .assertEqual('No courses');
       expect(AppLocalization.text('视图', AppLanguage.english, 'en-US'))
         .assertEqual('View');
+      expect(AppLocalization.text('教学云平台密码', AppLanguage.english, 'en-US'))
+        .assertEqual('Teaching Cloud password');
+      expect(AppLocalization.text('独立密码已安全保存，留空保持不变', AppLanguage.english, 'en-US'))
+        .assertEqual('Separate password is securely saved; leave blank to keep it');
+      expect(AppLocalization.text('仅删除本次', AppLanguage.english, 'en-US'))
+        .assertEqual('Delete this occurrence');
+      expect(AppLocalization.text('删除本学期整门课程', AppLanguage.english, 'en-US'))
+        .assertEqual('Delete this course for the semester');
+      expect(AppLocalization.text('已删除课程', AppLanguage.simplifiedChinese, 'en-US'))
+        .assertEqual('已删除课程');
     });
   });
 }

@@ -15,7 +15,11 @@ import javax.crypto.spec.GCMParameterSpec
 data class Credentials(
     val account: String,
     val password: String,
-)
+    val teachingCloudPassword: String? = null,
+) {
+    val effectiveTeachingCloudPassword: String
+        get() = teachingCloudPassword?.takeIf(String::isNotEmpty) ?: password
+}
 
 internal class CredentialUpdateException(message: String) : IllegalArgumentException(message)
 
@@ -24,21 +28,35 @@ internal object CredentialUpdateLogic {
         saved: Credentials?,
         requestedAccount: String,
         enteredPassword: String,
+        enteredTeachingCloudPassword: String = "",
+        useAcademicPassword: Boolean = false,
     ): Credentials {
         val account = requestedAccount.trim()
         if (account.isEmpty()) {
-            if (enteredPassword.isNotEmpty()) {
+            if (enteredPassword.isNotEmpty() || enteredTeachingCloudPassword.isNotEmpty()) {
                 throw CredentialUpdateException("请输入教务账号。")
             }
             return Credentials("", "")
         }
-        if (enteredPassword.isNotEmpty()) return Credentials(account, enteredPassword)
-        if (saved != null && saved.account == account) return saved
-        throw CredentialUpdateException("更换教务账号时必须输入新密码。")
+        val sameAccount = saved?.account?.trim() == account
+        val password = enteredPassword.takeIf(String::isNotEmpty)
+            ?: saved?.password?.takeIf { sameAccount }
+            ?: throw CredentialUpdateException("更换教务账号时必须输入新密码。")
+        val cloudPassword = when {
+            useAcademicPassword -> null
+            enteredTeachingCloudPassword.isNotEmpty() -> enteredTeachingCloudPassword
+            sameAccount -> saved?.teachingCloudPassword
+            else -> null
+        }
+        return Credentials(account, password, cloudPassword)
     }
 
     fun changesAccount(saved: Credentials?, resolved: Credentials): Boolean =
         saved?.account?.trim().orEmpty() != resolved.account
+
+    fun changesAssignmentCredentials(saved: Credentials?, resolved: Credentials): Boolean =
+        changesAccount(saved, resolved) ||
+            saved?.effectiveTeachingCloudPassword != resolved.effectiveTeachingCloudPassword
 }
 
 class SecureCredentialStore(context: Context) {
@@ -50,6 +68,7 @@ class SecureCredentialStore(context: Context) {
         val payload = JSONObject()
             .put("account", credentials.account)
             .put("password", credentials.password)
+            .put("teaching_cloud_password", credentials.teachingCloudPassword?.takeIf(String::isNotEmpty))
             .toString()
             .toByteArray(StandardCharsets.UTF_8)
         val ciphertext = try {
@@ -78,6 +97,8 @@ class SecureCredentialStore(context: Context) {
                 Credentials(
                     account = objectValue.optString("account"),
                     password = objectValue.optString("password"),
+                    teachingCloudPassword = objectValue.optString("teaching_cloud_password")
+                        .takeIf(String::isNotEmpty),
                 )
             } finally {
                 plaintext.fill(0)

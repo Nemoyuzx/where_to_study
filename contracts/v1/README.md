@@ -18,6 +18,9 @@
 - 缓存不得包含账号、密码、token 或 cookie。
 - `saved_settings` 是 Tauri 设置读取响应，只用 `has_saved_password` 表示系统凭据是否存在，绝不包含密码。
 - `save_settings_request.password` 是一次性输入；传 `null` 或空字符串时保留已有密码，只有非空新值才替换系统凭据。
+- `course.source_course_id` 是可选的上游教学班标识（`jx0408id`），不同于包含教室、周次和时段的行 `id`；旧缓存缺失时以名称与教师识别本地整课删除。单次删除进一步限定上海日期与起止节次，整课删除限定当前学期。
+- 可选 `save_settings_request.teaching_cloud_password` 单独覆盖教学云认证密码；空值保留同账号已存覆盖，新账号不得继承旧覆盖。`clear_teaching_cloud_password=true` 明确清除覆盖并恢复教务密码；读取仅返回 `has_saved_teaching_cloud_password`，不得返回秘密。它不用于教务课表或空教室请求。
+- 课程删除规则独立于原始课表缓存，按本地账号作用域和学期隔离；有效课表投影用于所有消费者。删除与恢复均不得调用学校的写入接口，原子存储失败不得显示成功。
 - `daily_course_notification_minutes` 为北京时间（Asia/Shanghai / UTC+8）零点后的整数分钟，范围 `0...1439`，默认 `450`（07:30）；该字段可缺省以兼容旧设置。读取旧版或损坏的时间值时回退默认，保存非法时间时拒绝请求。它是本地偏好，不随账号或课表上传，也不改变默认关闭的提醒开关。
 - `saved_settings` 与 `save_settings_request` 的 `term_id`、`term_start_date` 可以同时为空；自动模式请求课表时临时按上海日期推断，手动模式保存或请求时必须提供完整值。成功的 `schedule` 响应仍必须包含非空学期号和有效开学日期。
 

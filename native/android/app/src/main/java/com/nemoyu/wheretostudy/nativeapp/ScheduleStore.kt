@@ -29,6 +29,7 @@ object ScheduleJsonCodec {
                 endSlot = item.getInt("end_slot"),
                 sectionText = item.optString("section_text"),
                 timeRange = item.optString("time_range"),
+                sourceCourseID = item.optString("source_course_id").trim().takeIf(String::isNotEmpty),
             )
         }
         return ScheduleSnapshot(
@@ -57,7 +58,8 @@ object ScheduleJsonCodec {
                     .put("start_slot", course.startSlot)
                     .put("end_slot", course.endSlot)
                     .put("section_text", course.sectionText)
-                    .put("time_range", course.timeRange))
+                    .put("time_range", course.timeRange)
+                    .put("source_course_id", course.sourceCourseID))
             }
         })
         .toString(2)
@@ -118,8 +120,15 @@ internal fun selectUsableSchedule(
 internal fun loadUsableSchedule(context: Context): ScheduleSnapshot? {
     val appContext = context.applicationContext
     val schedule = runCatching { ScheduleStore(appContext).load() }.getOrNull()
-    return selectUsableSchedule(
+    val usable = selectUsableSchedule(
         schedule = schedule,
         automaticTermDetectionEnabled = AppPreferences(appContext).automaticTermDetectionEnabled,
     )
+    return usable?.let {
+        CourseDeletionLogic.apply(
+            it,
+            SecureCredentialStore(appContext).load()?.account.orEmpty(),
+            CourseDeletionStore(appContext).load(),
+        )
+    }
 }

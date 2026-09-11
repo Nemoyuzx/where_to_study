@@ -80,6 +80,8 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
   private inFlight: Promise<AssignmentDeadlineItem[]> | null = null;
   private inFlightAccount: string = '';
   private revision: number = 0;
+  private activeAccount: string = '';
+  private activePassword: string = '';
   private readonly fetchAllProvider: ((credentials: Credentials) =>
     Promise<AssignmentDeadlineItem[]>) | null;
 
@@ -93,8 +95,15 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       throw new Error('作业日期格式不正确。');
     }
     const account: string = credentials.account.trim();
-    if (account.length === 0 || credentials.password.length === 0) {
+    const password: string = credentials.effectiveCloudPassword();
+    if (account.length === 0 || password.length === 0) {
       throw new Error('请先在设置中保存教务账号和密码。');
+    }
+    // 凭据只在内存中比较，绝不写入缓存文件、日志或状态文案。
+    if (this.activeAccount !== account || this.activePassword !== password) {
+      this.reset();
+      this.activeAccount = account;
+      this.activePassword = password;
     }
     let allItems: AssignmentDeadlineItem[];
     const now: number = Date.now();
@@ -105,7 +114,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       allItems = await this.inFlight;
     } else {
       const requestRevision: number = this.revision;
-      const normalized: Credentials = new Credentials(account, credentials.password);
+      const normalized: Credentials = new Credentials(account, password);
       const work: Promise<AssignmentDeadlineItem[]> = this.fetchAllProvider === null ?
         this.fetchAll(normalized) : this.fetchAllProvider(normalized);
       this.inFlight = work;
@@ -136,6 +145,8 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     this.cache = null;
     this.inFlight = null;
     this.inFlightAccount = '';
+    this.activeAccount = '';
+    this.activePassword = '';
   }
 
   private async fetchAll(credentials: Credentials): Promise<AssignmentDeadlineItem[]> {
@@ -236,7 +247,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     const ticket: string | null = locations.length > 0 ?
       UCloudAssignmentClient.ticketFrom(locations[0]) : null;
     if (ticket === null) {
-      throw new Error('统一认证未返回有效票据；请检查账号密码，若官方页面要求验证码请先完成验证。');
+      throw new Error('教学云登录失败，请检查设置中的教学云平台密码；未设置时使用教务密码。若官方页面要求验证码，请先完成验证。');
     }
 
     const tokenFields: Map<string, string> = new Map<string, string>();

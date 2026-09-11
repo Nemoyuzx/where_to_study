@@ -31,6 +31,7 @@
       "properties": {
         "account": { "type": "string" },
         "has_saved_password": { "type": "boolean" },
+        "has_saved_teaching_cloud_password": { "type": "boolean", "default": false },
         "term_id": { "type": "string", "pattern": "^(?:|[0-9]{4}-[0-9]{4}-[12])$" },
         "term_start_date": {
           "anyOf": [
@@ -51,6 +52,8 @@
       "properties": {
         "account": { "type": "string" },
         "password": { "type": ["string", "null"] },
+        "teaching_cloud_password": { "type": ["string", "null"] },
+        "clear_teaching_cloud_password": { "type": "boolean", "default": false },
         "term_id": { "type": "string", "pattern": "^(?:|[0-9]{4}-[0-9]{4}-[12])$" },
         "term_start_date": {
           "anyOf": [
@@ -70,6 +73,7 @@
       "required": ["id", "name", "teacher", "room", "week_text", "week_numbers", "exam_week_numbers", "weekday", "start_slot", "end_slot", "section_text", "time_range"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "source_course_id": { "type": "string" },
         "name": { "type": "string", "minLength": 1 },
         "teacher": { "type": "string" },
         "room": { "type": "string" },

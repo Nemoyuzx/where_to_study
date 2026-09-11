@@ -9,7 +9,7 @@ npm --prefix "$ROOT_DIR" run licenses:check
 ANDROID_DIR="$ROOT_DIR/native/android"
 PROPERTIES_PATH="${ANDROID_SIGNING_PROPERTIES_FILE:-$ANDROID_DIR/keystore.properties}"
 OUTPUT_DIR="${NATIVE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/release-artifacts}"
-RELEASE_LABEL="${1:-v0.2.8}"
+RELEASE_LABEL="${1:-v0.2.9}"
 printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
 CONTEST_API_HOST="where-to-study.cn"
 CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"

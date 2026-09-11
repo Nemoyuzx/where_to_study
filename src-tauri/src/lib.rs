@@ -4,6 +4,7 @@ mod calendar_export;
 pub mod classrooms;
 mod classrooms_store;
 pub mod config;
+pub mod course_deletions;
 pub mod credential_store;
 pub mod daily_info;
 pub mod deadlines;
@@ -320,6 +321,20 @@ fn notify_account_scope_cleared(app: &tauri::AppHandle) {
 }
 
 static LOCAL_DATA: LocalDataCoordinator = LocalDataCoordinator::new();
+static COURSE_EDITS_REVISION: AtomicU64 = AtomicU64::new(0);
+
+// Call while holding LOCAL_DATA's account gate: edits advance this revision in
+// that same gate, so checking and publishing cannot straddle a successful edit.
+fn publish_current_course_content<T>(
+    revision: &AtomicU64,
+    expected: u64,
+    publish: impl FnOnce() -> Result<T, String>,
+) -> Result<Option<T>, String> {
+    if revision.load(Ordering::SeqCst) != expected {
+        return Ok(None);
+    }
+    publish().map(Some)
+}
 #[cfg(not(mobile))]
 static DESKTOP_SCHEDULER_THREAD: Mutex<Option<std::thread::Thread>> = Mutex::new(None);
 #[cfg(not(mobile))]
@@ -381,6 +396,23 @@ mod local_data_coordination_tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::{mpsc, Arc};
     use std::thread;
+
+    #[test]
+    fn edited_courses_reject_an_already_prepared_notification() {
+        let revision = AtomicU64::new(1);
+        let prepared = revision.load(Ordering::SeqCst);
+        revision.fetch_add(1, Ordering::SeqCst);
+        let result =
+            publish_current_course_content(&revision, prepared, || -> Result<(), String> {
+                panic!("a pre-edit notification must not be published")
+            })
+            .unwrap();
+        assert!(result.is_none());
+        assert_eq!(
+            publish_current_course_content(&revision, 2, || Ok("fresh")).unwrap(),
+            Some("fresh")
+        );
+    }
 
     #[test]
     fn queued_settings_save_cannot_restore_credentials_after_clear() {
@@ -947,6 +979,12 @@ fn save_saved_settings_sync(
         },
         || clear_account_scoped_caches(&app),
         |plan| {
+            let assignment_credentials_changed = plan.assignment_credentials_changed();
+            if assignment_credentials_changed {
+                assignments::clear_cache();
+            }
+            // Invalidate before attempting the secure-store transaction: a
+            // failed settings write followed by a failed rollback is uncertain.
             let saved = settings_store::commit_save(&app, plan).map_err(|error| error.message)?;
             settings_store::clear_account_access_revoked(&app).map_err(|error| error.message)?;
             Ok(saved)
@@ -1189,7 +1227,139 @@ async fn fetch_schedule(
             Ok(())
         })
         .map_err(LocalDataAccessError::message)?;
-    Ok(schedule)
+    let rules = LOCAL_DATA
+        .with_current_account(generation, || {
+            let path = schedule_store::deletion_path(&app).map_err(|error| error.message)?;
+            course_deletions::load(&path, &account_scope).map_err(|error| error.message)
+        })
+        .map_err(LocalDataAccessError::message)?;
+    Ok(course_deletions::apply(&schedule, &rules))
+}
+
+#[derive(serde::Deserialize)]
+struct CourseEditRequest {
+    account: String,
+    term_id: String,
+    course_id: String,
+    date: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct CourseEditsResponse {
+    schedule: Option<ScheduleResponse>,
+    deletions: Vec<course_deletions::CourseDeletion>,
+}
+
+fn course_edits_response(
+    app: &tauri::AppHandle,
+    scope: &str,
+) -> Result<CourseEditsResponse, String> {
+    let path = schedule_store::deletion_path(app).map_err(|error| error.message)?;
+    let deletions = course_deletions::load(&path, scope).map_err(|error| error.message)?;
+    // Retain the normal active-term visibility checks as well as edit filters.
+    Ok(CourseEditsResponse {
+        schedule: load_schedule_for_scope(app, scope)?,
+        deletions,
+    })
+}
+
+#[tauri::command]
+fn load_course_deletions(app: tauri::AppHandle) -> Result<CourseEditsResponse, String> {
+    let generation = LOCAL_DATA.begin();
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            let Some(scope) = saved_account_scope()? else {
+                return Ok(CourseEditsResponse {
+                    schedule: None,
+                    deletions: vec![],
+                });
+            };
+            course_edits_response(&app, &scope)
+        })
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+fn delete_schedule_course(
+    app: tauri::AppHandle,
+    payload: CourseEditRequest,
+) -> Result<CourseEditsResponse, String> {
+    let generation = LOCAL_DATA.begin();
+    let response = LOCAL_DATA
+        .with_current_account(generation, || {
+            let scope = request_account_scope(&Some(payload.account.clone()))?;
+            let raw = schedule_store::load_raw(&app, &scope)
+                .map_err(|error| error.message)?
+                .ok_or_else(|| "请先获取个人课表。".to_string())?;
+            if raw.term_id != payload.term_id {
+                return Err("学期已变化，请重新选择课程。".into());
+            }
+            let rule = course_deletions::CourseDeletion::create(
+                &raw,
+                &payload.course_id,
+                payload.date.as_deref(),
+            )
+            .map_err(|error| error.message)?;
+            let path = schedule_store::deletion_path(&app).map_err(|error| error.message)?;
+            let mut rules = course_deletions::load(&path, &scope).map_err(|error| error.message)?;
+            if !rules.iter().any(|saved| saved.id == rule.id) {
+                rules.push(rule);
+            }
+            course_deletions::save(&path, &scope, &rules).map_err(|error| error.message)?;
+            COURSE_EDITS_REVISION.fetch_add(1, Ordering::SeqCst);
+            let _ = app.emit(
+                "schedule:updated",
+                ScheduleUpdatedEvent {
+                    account_scope: scope.clone(),
+                },
+            );
+            course_edits_response(&app, &scope)
+        })
+        .map_err(LocalDataAccessError::message)?;
+    refresh_after_course_edit(&app);
+    Ok(response)
+}
+
+#[tauri::command]
+fn restore_schedule_course(
+    app: tauri::AppHandle,
+    payload: CourseEditRequest,
+) -> Result<CourseEditsResponse, String> {
+    let generation = LOCAL_DATA.begin();
+    let response = LOCAL_DATA
+        .with_current_account(generation, || {
+            let scope = request_account_scope(&Some(payload.account.clone()))?;
+            let path = schedule_store::deletion_path(&app).map_err(|error| error.message)?;
+            let mut rules = course_deletions::load(&path, &scope).map_err(|error| error.message)?;
+            rules.retain(|rule| !(rule.id == payload.course_id && rule.term_id == payload.term_id));
+            course_deletions::save(&path, &scope, &rules).map_err(|error| error.message)?;
+            COURSE_EDITS_REVISION.fetch_add(1, Ordering::SeqCst);
+            let _ = app.emit(
+                "schedule:updated",
+                ScheduleUpdatedEvent {
+                    account_scope: scope.clone(),
+                },
+            );
+            course_edits_response(&app, &scope)
+        })
+        .map_err(LocalDataAccessError::message)?;
+    refresh_after_course_edit(&app);
+    Ok(response)
+}
+
+fn refresh_after_course_edit(app: &tauri::AppHandle) {
+    #[cfg(not(mobile))]
+    {
+        // Clear a stale delivered summary. Future tasks and tray contents read
+        // the effective local schedule; no already-exported calendar is changed.
+        if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
+            let _ = app.emit("schedule:daily-notification-error", error.to_string());
+        }
+        refresh_tray_courses(app.clone(), true);
+        wake_desktop_scheduler();
+    }
+    #[cfg(mobile)]
+    let _ = app;
 }
 
 #[tauri::command]
@@ -1327,22 +1497,26 @@ async fn fetch_shuttle_bus() -> Result<ShuttleBusResponse, String> {
 #[tauri::command]
 async fn fetch_assignments(payload: AssignmentsRequest) -> Result<AssignmentsResponse, String> {
     let generation = LOCAL_DATA.begin();
-    let credentials = LOCAL_DATA
+    let (credentials, credential_revision) = LOCAL_DATA
         .with_current_account(generation, || {
-            load_saved_credentials_with_scope()?
-                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())
+            let credentials = load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
+            Ok((credentials, assignments::credential_revision()))
         })
         .map_err(LocalDataAccessError::message)?;
     let response = assignments::fetch_assignments(
         &payload,
         &credentials.account,
-        &credentials.password,
+        credentials.assignment_password(),
         &credentials.account_scope,
     )
     .await
     .map_err(|error| error.message)?;
     LOCAL_DATA
-        .with_current_account(generation, || Ok(response))
+        .with_current_account(generation, || {
+            assignments::ensure_credential_revision(credential_revision)?;
+            Ok(response)
+        })
         .map_err(LocalDataAccessError::message)
 }
 
@@ -1369,22 +1543,26 @@ async fn fetch_assignment_calendar(
     payload: CalendarRangeRequest,
 ) -> Result<AssignmentCalendarResponse, String> {
     let generation = LOCAL_DATA.begin();
-    let credentials = LOCAL_DATA
+    let (credentials, credential_revision) = LOCAL_DATA
         .with_current_account(generation, || {
-            load_saved_credentials_with_scope()?
-                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())
+            let credentials = load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
+            Ok((credentials, assignments::credential_revision()))
         })
         .map_err(LocalDataAccessError::message)?;
     let response = assignments::fetch_assignment_calendar(
         &payload,
         &credentials.account,
-        &credentials.password,
+        credentials.assignment_password(),
         &credentials.account_scope,
     )
     .await
     .map_err(|error| error.message)?;
     LOCAL_DATA
-        .with_current_account(generation, || Ok(response))
+        .with_current_account(generation, || {
+            assignments::ensure_credential_revision(credential_revision)?;
+            Ok(response)
+        })
         .map_err(LocalDataAccessError::message)
 }
 
@@ -1982,12 +2160,16 @@ async fn load_today_course_content(
     };
     let schedule = match schedule::fetch_schedule(&request).await {
         Ok(schedule) => {
-            if let Err(error) = LOCAL_DATA.with_current_account(generation, || {
-                schedule_store::save(&app, &account_scope, &schedule).map_err(|error| error.message)
+            match LOCAL_DATA.with_current_account(generation, || {
+                schedule_store::save(&app, &account_scope, &schedule)
+                    .map_err(|error| error.message)?;
+                schedule_store::load(&app, &account_scope)
+                    .map_err(|error| error.message)?
+                    .ok_or_else(|| "无法读取已保存课表。".to_string())
             }) {
-                return TrayCourseContent::Message(error.message());
+                Ok(effective) => effective,
+                Err(error) => return TrayCourseContent::Message(error.message()),
             }
-            schedule
         }
         Err(error) => return TrayCourseContent::Message(error.message),
     };
@@ -2033,6 +2215,7 @@ fn set_tray_menu(app: &tauri::AppHandle, content: TrayCourseContent) -> tauri::R
 #[cfg(not(mobile))]
 fn refresh_tray_courses(app: tauri::AppHandle, prefer_saved_schedule: bool) {
     let generation = LOCAL_DATA.begin();
+    let course_revision = COURSE_EDITS_REVISION.load(Ordering::SeqCst);
     if let Err(error) = LOCAL_DATA.with_current_account(generation, || {
         set_tray_menu(&app, TrayCourseContent::Loading).map_err(|error| error.to_string())
     }) {
@@ -2053,6 +2236,14 @@ fn refresh_tray_courses(app: tauri::AppHandle, prefer_saved_schedule: bool) {
         let content =
             load_today_course_content(app.clone(), generation, prefer_saved_schedule).await;
         let _ = LOCAL_DATA.with_current_account(generation, || {
+            let content = if COURSE_EDITS_REVISION.load(Ordering::SeqCst) != course_revision {
+                match load_current_schedule(&app)? {
+                    Some(effective) => schedule_to_tray_content(effective),
+                    None => TrayCourseContent::Message("暂无本地课表。".to_string()),
+                }
+            } else {
+                content
+            };
             set_tray_menu(&app, content).map_err(|error| error.to_string())
         });
     });
@@ -2534,20 +2725,24 @@ fn send_daily_course_notification(
         return Ok(false);
     }
     let generation = LOCAL_DATA.begin();
-    let Some((title, body)) = daily_course_notification_content(app, today, generation)? else {
-        // No course day is completed silently, not sent as a noisy empty summary.
-        return Ok(true);
-    };
+    let course_revision = COURSE_EDITS_REVISION.load(Ordering::SeqCst);
+    let summary = daily_course_notification_content(app, today, generation)?;
     LOCAL_DATA
         .with_current_account(generation, || {
-            deliver_with_current_preferences(
-                &DESKTOP_NOTIFICATION_PREFERENCES,
-                expected_preferences,
-                today,
-                desktop_now,
-                || desktop_notifications::show(&app.config().identifier, &title, &body),
-            )
-            .map(|result| result.is_some())
+            publish_current_course_content(&COURSE_EDITS_REVISION, course_revision, || {
+                let Some((title, body)) = summary else {
+                    return Ok(true);
+                };
+                deliver_with_current_preferences(
+                    &DESKTOP_NOTIFICATION_PREFERENCES,
+                    expected_preferences,
+                    today,
+                    desktop_now,
+                    || desktop_notifications::show(&app.config().identifier, &title, &body),
+                )
+                .map(|result| result.is_some())
+            })
+            .map(|result| result.unwrap_or(false))
         })
         .map_err(LocalDataAccessError::message)
 }
@@ -3292,6 +3487,9 @@ pub fn run() {
             save_saved_settings,
             clear_local_data,
             load_saved_schedule,
+            load_course_deletions,
+            delete_schedule_course,
+            restore_schedule_course,
             load_saved_schedule_for_scope,
             load_saved_classrooms,
             load_saved_classrooms_for_scope,

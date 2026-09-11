@@ -359,6 +359,7 @@ object SjdScheduleParser {
             endSlot = endSlot,
             sectionText = "${startSlot + 1}-${endSlot + 1}节",
             timeRange = "$startTime-$endTime",
+            sourceCourseID = raw.opt("jx0408id").stringValue().trim().takeIf(String::isNotEmpty),
         )
     }
 

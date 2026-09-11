@@ -136,6 +136,12 @@ pub struct SettingsSavePlan {
 }
 
 impl SettingsSavePlan {
+    pub fn assignment_credentials_changed(&self) -> bool {
+        self.previous_credentials.as_ref().is_none_or(|previous| {
+            previous.account != self.credentials.account
+                || previous.assignment_password() != self.credentials.assignment_password()
+        })
+    }
     pub fn account_changed(&self) -> bool {
         self.account_changed
     }
@@ -217,6 +223,7 @@ where
     let mut settings = SavedSettings {
         account: String::new(),
         has_saved_password: false,
+        has_saved_teaching_cloud_password: false,
         term_id: file.term_id.clone(),
         term_start_date: file.term_start_date.clone(),
         campus_id: file.campus_id.clone(),
@@ -241,6 +248,7 @@ where
         let credentials = Credentials {
             account: file.account.clone(),
             password: file.password.clone(),
+            teaching_cloud_password: None,
             account_scope: if file.account.trim().is_empty() {
                 String::new()
             } else {
@@ -302,7 +310,12 @@ where
         .as_deref()
         .filter(|value| !value.is_empty());
     let password = if requested_account.is_empty() {
-        if entered_password.is_some() {
+        if entered_password.is_some()
+            || request
+                .teaching_cloud_password
+                .as_ref()
+                .is_some_and(|value| !value.is_empty())
+        {
             return Err(ServiceError::new("请输入教务账号。"));
         }
         String::new()
@@ -330,11 +343,31 @@ where
     let credentials = Credentials {
         account: requested_account.to_string(),
         password,
+        teaching_cloud_password: if requested_account.is_empty()
+            || request.clear_teaching_cloud_password
+        {
+            None
+        } else if let Some(value) = request
+            .teaching_cloud_password
+            .as_ref()
+            .filter(|value| !value.is_empty())
+        {
+            Some(value.clone())
+        } else {
+            existing
+                .as_ref()
+                .filter(|value| value.account.trim() == requested_account)
+                .and_then(|value| value.teaching_cloud_password.clone())
+        },
         account_scope,
     };
     let settings = SavedSettings {
         account: credentials.account.clone(),
         has_saved_password: !credentials.password.is_empty(),
+        has_saved_teaching_cloud_password: credentials
+            .teaching_cloud_password
+            .as_ref()
+            .is_some_and(|value| !value.is_empty()),
         term_id: request.term_id.clone(),
         term_start_date: request.term_start_date.clone(),
         campus_id: request.campus_id.clone(),
@@ -427,6 +460,10 @@ fn settings_with_credentials(
     if let Some(credentials) = credentials {
         settings.account = credentials.account.clone();
         settings.has_saved_password = !credentials.password.is_empty();
+        settings.has_saved_teaching_cloud_password = credentials
+            .teaching_cloud_password
+            .as_ref()
+            .is_some_and(|value| !value.is_empty());
     }
     Ok(settings)
 }
@@ -618,10 +655,68 @@ mod tests {
     const FIXTURE_SCOPE: &str =
         "opaque-v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+    #[test]
+    fn independent_cloud_password_preserves_blanks_clears_explicitly_and_never_crosses_accounts() {
+        let mut previous = fixture_credentials("fixture-account", "academic");
+        previous.teaching_cloud_password = Some(" cloud-secret ".into());
+        let preserved =
+            prepare_save_with(fixture_request(None), || Ok(Some(previous.clone()))).unwrap();
+        assert_eq!(
+            preserved.credentials.assignment_password(),
+            " cloud-secret "
+        );
+        assert_eq!(preserved.credentials.password, "academic");
+        assert!(!preserved.assignment_credentials_changed());
+        let mut request = fixture_request(None);
+        request.teaching_cloud_password = Some("replacement".into());
+        let replaced = prepare_save_with(request, || Ok(Some(previous.clone()))).unwrap();
+        assert_eq!(replaced.credentials.assignment_password(), "replacement");
+        assert!(replaced.assignment_credentials_changed());
+        let mut request = fixture_request(None);
+        request.clear_teaching_cloud_password = true;
+        let cleared = prepare_save_with(request, || Ok(Some(previous.clone()))).unwrap();
+        assert_eq!(cleared.credentials.assignment_password(), "academic");
+        assert!(cleared.assignment_credentials_changed());
+        let mut request = fixture_request(Some("other-academic"));
+        request.account = "other-account".into();
+        let changed = prepare_save_with(request, || Ok(Some(previous))).unwrap();
+        assert!(changed.credentials.teaching_cloud_password.is_none());
+        assert_eq!(changed.credentials.assignment_password(), "other-academic");
+    }
+
+    #[test]
+    fn cloud_secret_is_only_in_secure_payload_not_settings_or_public_response() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(SETTINGS_FILE_NAME);
+        let mut request = fixture_request(Some("academic-secret"));
+        request.teaching_cloud_password = Some("cloud-secret".into());
+        let plan = prepare_save_with(request, || Ok(None)).unwrap();
+        let response = commit_save_to_path(&path, plan, |credentials| {
+            assert_eq!(credentials.assignment_password(), "cloud-secret");
+            Ok(())
+        })
+        .unwrap();
+        assert!(response.has_saved_teaching_cloud_password);
+        let public = serde_json::to_string(&response).unwrap();
+        let disk = fs::read_to_string(path).unwrap();
+        for secret in ["academic-secret", "cloud-secret"] {
+            assert!(!public.contains(secret));
+            assert!(!disk.contains(secret));
+        }
+        let legacy: Credentials =
+            serde_json::from_str(r#"{"account":"a","password":"legacy"}"#).unwrap();
+        assert_eq!(legacy.assignment_password(), "legacy");
+        let mut request = fixture_request(None);
+        request.account.clear();
+        request.teaching_cloud_password = Some("cloud-only".into());
+        assert!(prepare_save_with(request, || Ok(None)).is_err());
+    }
+
     fn fixture_credentials(account: &str, password: &str) -> Credentials {
         Credentials {
             account: account.to_string(),
             password: password.to_string(),
+            teaching_cloud_password: None,
             account_scope: if account.is_empty() {
                 String::new()
             } else {
@@ -634,6 +729,7 @@ mod tests {
         SavedSettings {
             account: "fixture-account".to_string(),
             has_saved_password: true,
+            has_saved_teaching_cloud_password: false,
             term_id: "2025-2026-2".to_string(),
             term_start_date: "2026-03-02".to_string(),
             campus_id: "01".to_string(),
@@ -658,6 +754,8 @@ mod tests {
         SaveSettingsRequest {
             account: "fixture-account".to_string(),
             password: password.map(ToOwned::to_owned),
+            teaching_cloud_password: None,
+            clear_teaching_cloud_password: false,
             term_id: "2025-2026-2".to_string(),
             term_start_date: "2026-03-02".to_string(),
             campus_id: "01".to_string(),

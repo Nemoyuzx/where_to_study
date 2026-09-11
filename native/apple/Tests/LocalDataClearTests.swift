@@ -6,6 +6,153 @@ import XCTest
 #endif
 
 final class LocalDataClearTests: XCTestCase {
+    func testLegacyCredentialsDecodeAndCloudPasswordEditsAreAccountIsolated() throws {
+        let legacy = try JSONDecoder().decode(Credentials.self, from: Data("{\"account\":\"a\",\"password\":\"academic\"}".utf8))
+        XCTAssertNil(legacy.teachingCloudPassword)
+        XCTAssertEqual(legacy.effectiveTeachingCloudPassword, "academic")
+        let saved = Credentials(account: "a", password: "academic", teachingCloudPassword: "cloud")
+        XCTAssertEqual(try JSONDecoder().decode(Credentials.self, from: JSONEncoder().encode(saved)), saved)
+        XCTAssertEqual(try CredentialSettingsLogic.saveAction(account: "a", password: "", teachingCloudPassword: "", useAcademicPassword: false, storedCredentials: saved), .preserve)
+        XCTAssertEqual(try CredentialSettingsLogic.saveAction(account: "a", password: "new-academic", teachingCloudPassword: "", useAcademicPassword: false, storedCredentials: saved), .replace(Credentials(account: "a", password: "new-academic", teachingCloudPassword: "cloud")))
+        XCTAssertEqual(try CredentialSettingsLogic.saveAction(account: "a", password: "", teachingCloudPassword: "", useAcademicPassword: true, storedCredentials: saved), .replace(legacy))
+        XCTAssertEqual(try CredentialSettingsLogic.saveAction(account: "b", password: "new-academic", teachingCloudPassword: "", useAcademicPassword: false, storedCredentials: saved), .replace(Credentials(account: "b", password: "new-academic")))
+    }
+
+    @MainActor
+    func testSavedCloudPasswordStaysBlankAndSaveInvalidatesAssignmentCredentials() throws {
+        let suite = "CloudPasswordSettings.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = InMemoryCredentialStore(credentials: Credentials(account: "fixture-account", password: "academic", teachingCloudPassword: "cloud"))
+        let model = AppModel(credentialStore: store,
+                             scheduleStore: InMemoryScheduleStore(schedule: Self.schedule),
+                             classroomStore: InMemoryClassroomStore(cache: nil),
+                             holidayStore: InMemoryHolidayStore(snapshot: nil),
+                             dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+                             now: { Self.scheduleNow }, defaults: defaults)
+        XCTAssertEqual(model.password, "")
+        XCTAssertEqual(model.teachingCloudPassword, "")
+        XCTAssertTrue(model.canPreserveSavedTeachingCloudPassword)
+        XCTAssertTrue(model.saveSettings())
+        XCTAssertEqual(model.assignmentCredentialRevision, 0)
+        model.teachingCloudPassword = "different-cloud"
+        XCTAssertTrue(model.saveSettings())
+        XCTAssertEqual(try store.load()?.password, "academic")
+        XCTAssertEqual(try store.load()?.effectiveTeachingCloudPassword, "different-cloud")
+        XCTAssertEqual(model.teachingCloudPassword, "")
+        XCTAssertEqual(model.assignmentCredentialRevision, 1)
+        XCTAssertEqual(model.calendarDataOwnerRevision, 1)
+        model.useAcademicPasswordForAssignments()
+        XCTAssertTrue(model.saveSettings())
+        XCTAssertNil(try store.load()?.teachingCloudPassword)
+        XCTAssertEqual(model.assignmentCredentialRevision, 2)
+        XCTAssertNil(defaults.object(forKey: "teachingCloudPassword"))
+        model.teachingCloudPassword = "unsaved-old-account-cloud"
+        model.account = "different-account"
+        XCTAssertEqual(model.teachingCloudPassword, "")
+    }
+
+    @MainActor
+    func testCourseDeletionPersistsAcrossRefreshAndRelaunchAndRestoresRawCourse() async throws {
+        let suite = "ModelCourseDeletion.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let date = StrictContractDateParser.date(from: "2026-09-07")!
+        let course = Course(id: "course", name: "Course", teacher: "Teacher", room: "Room", weekText: "1-2周", weekNumbers: [1, 2], examWeekNumbers: [], weekday: 1, startSlot: 0, endSlot: 1, sectionText: "1-2节", timeRange: "08:00-09:50")
+        let raw = ScheduleSnapshot(termID: "2026-2027-1", termStartDate: "2026-09-07", fetchedAt: "fixture", courses: [course])
+        let schedules = RecordingScheduleStore(schedule: raw)
+        let deletions = FileCourseDeletionStore(fileURL: directory.appendingPathComponent("deletions.json"))
+        let credentials = InMemoryCredentialStore(credentials: Credentials(account: "a", password: "academic"))
+        func makeModel() -> AppModel {
+            AppModel(credentialStore: credentials, scheduleStore: schedules, courseDeletionStore: deletions,
+                     scheduleClient: ImmediateScheduleClient(snapshot: raw),
+                     classroomStore: InMemoryClassroomStore(cache: nil), holidayStore: InMemoryHolidayStore(snapshot: nil),
+                     dailyCourseNotificationScheduler: NoopNotificationScheduler(), now: { date }, defaults: defaults)
+        }
+        let model = makeModel()
+        XCTAssertTrue(model.deleteCourse(course, on: date, scope: .occurrence))
+        XCTAssertTrue(model.courses(on: date).isEmpty)
+        XCTAssertEqual(model.schedule?.courses.first?.weekNumbers, [2])
+        XCTAssertEqual(try schedules.load(), raw)
+        model.refreshSchedule()
+        for _ in 0 ..< 200 where model.isRefreshingSchedule { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertFalse(model.isRefreshingSchedule)
+        XCTAssertEqual(schedules.savedSchedule, raw)
+        XCTAssertTrue(model.courses(on: date).isEmpty)
+        let relaunched = makeModel()
+        XCTAssertTrue(relaunched.courses(on: date).isEmpty)
+        XCTAssertTrue(relaunched.restoreCourseDeletion(try XCTUnwrap(relaunched.currentCourseDeletions.first)))
+        XCTAssertEqual(relaunched.courses(on: date), [course])
+        XCTAssertEqual(try deletions.load(), [])
+        XCTAssertTrue(relaunched.deleteCourse(course, on: date, scope: .course))
+        relaunched.clearLocalData()
+        XCTAssertEqual(try deletions.load(), [])
+    }
+
+    @MainActor
+    func testCourseDeletionWriteFailureKeepsScheduleAndExistingRules() throws {
+        let suite = "CourseDeletionFailure.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let date = StrictContractDateParser.date(from: "2026-09-07")!
+        let course = Course(id: "course", name: "Course", teacher: "Teacher", room: "Room", weekText: "1周", weekNumbers: [1], examWeekNumbers: [], weekday: 1, startSlot: 0, endSlot: 1, sectionText: "1-2节", timeRange: "08:00-09:50")
+        let raw = ScheduleSnapshot(termID: "2026-2027-1", termStartDate: "2026-09-07", fetchedAt: "fixture", courses: [course])
+        let model = AppModel(credentialStore: InMemoryCredentialStore(credentials: Credentials(account: "a", password: "academic")),
+                             scheduleStore: InMemoryScheduleStore(schedule: raw), courseDeletionStore: FailingCourseDeletionStore(),
+                             classroomStore: InMemoryClassroomStore(cache: nil), holidayStore: InMemoryHolidayStore(snapshot: nil),
+                             dailyCourseNotificationScheduler: NoopNotificationScheduler(), now: { date }, defaults: defaults)
+        XCTAssertFalse(model.deleteCourse(course, on: date, scope: .course))
+        XCTAssertEqual(model.schedule, raw)
+        XCTAssertEqual(model.courseDeletions, [])
+    }
+
+    @MainActor
+    func testUnreadableCourseDeletionsSuppressScheduleAndNotificationsUntilSuccessfulRetry() async throws {
+        let suite = "CourseDeletionReadFailure.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: DailyCourseNotificationSettings.enabledKey)
+        let date = StrictContractDateParser.date(from: "2026-09-07")!
+        let course = Course(id: "course", name: "Course", teacher: "Teacher", room: "Room", weekText: "1周", weekNumbers: [1], examWeekNumbers: [], weekday: 1, startSlot: 0, endSlot: 1, sectionText: "1-2节", timeRange: "08:00-09:50")
+        let raw = ScheduleSnapshot(termID: "2026-2027-1", termStartDate: "2026-09-07", fetchedAt: "fixture", courses: [course])
+        let deletion = CourseDeletion(account: "a", termID: raw.termID, course: course, date: date, scope: .course)
+        let records = RecoverableCourseDeletionStore(records: [deletion])
+        let scheduler = CourseDeletionNotificationRecorder()
+        let client = RecordingScheduleClient(snapshot: raw)
+        let model = AppModel(credentialStore: InMemoryCredentialStore(credentials: Credentials(account: "a", password: "academic")),
+                             scheduleStore: InMemoryScheduleStore(schedule: raw), courseDeletionStore: records,
+                             scheduleClient: client, classroomStore: InMemoryClassroomStore(cache: nil),
+                             holidayStore: InMemoryHolidayStore(snapshot: nil),
+                             dailyCourseNotificationScheduler: scheduler, now: { date }, defaults: defaults)
+        XCTAssertNil(model.schedule)
+        XCTAssertTrue(model.courses(on: date).isEmpty)
+        XCTAssertTrue(scheduler.scheduled.isEmpty)
+        XCTAssertGreaterThan(scheduler.cancellations, 0)
+        model.refreshSchedule()
+        XCTAssertNil(model.schedule)
+        XCTAssertEqual(client.callCount, 0)
+        XCTAssertTrue(scheduler.scheduled.isEmpty)
+        records.setReadable(true)
+        model.refreshSchedule()
+        for _ in 0 ..< 200 where model.isRefreshingSchedule { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertFalse(model.isRefreshingSchedule)
+        XCTAssertNotNil(model.schedule)
+        XCTAssertTrue(model.schedule?.courses.isEmpty == true)
+        XCTAssertEqual(model.currentCourseDeletions, [deletion])
+        XCTAssertTrue(scheduler.scheduled.isEmpty)
+        XCTAssertTrue(model.restoreCourseDeletion(deletion))
+        XCTAssertEqual(model.courses(on: date), [course])
+        records.setReadable(false)
+        model.refreshSchedule()
+        XCTAssertNil(model.schedule)
+        XCTAssertTrue(scheduler.scheduled.isEmpty)
+        XCTAssertFalse(model.restoreCourseDeletion(deletion))
+    }
+
     func testHolidayLoadStateKeepsNewLoadWhenOldLoadFinishesAfterReset() throws {
         let year = 2026
         var loads = HolidayLoadState()
@@ -1123,4 +1270,51 @@ private struct NoopNotificationScheduler: DailyCourseNotificationScheduling {
         revision _: UInt64
     ) async throws {}
     func cancelPending(revision _: UInt64) {}
+}
+
+private struct FailingCourseDeletionStore: CourseDeletionStoring {
+    func load() throws -> [CourseDeletion] { [] }
+    func save(_: [CourseDeletion]) throws { throw CocoaError(.fileWriteNoPermission) }
+    func clear() throws { }
+}
+
+private final class RecoverableCourseDeletionStore: CourseDeletionStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var readable = false
+    private var records: [CourseDeletion]
+    init(records: [CourseDeletion]) { self.records = records }
+    func setReadable(_ value: Bool) { lock.withLock { readable = value } }
+    func load() throws -> [CourseDeletion] {
+        try lock.withLock {
+            guard readable else { throw CocoaError(.fileReadNoPermission) }
+            return records
+        }
+    }
+    func save(_ records: [CourseDeletion]) throws { lock.withLock { self.records = records } }
+    func clear() throws { lock.withLock { records = [] } }
+}
+
+private final class CourseDeletionNotificationRecorder: DailyCourseNotificationScheduling, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [DailyCourseNotificationRequest] = []
+    private var cancellationCount = 0
+    private var revision: UInt64 = 0
+    var scheduled: [DailyCourseNotificationRequest] { lock.withLock { requests } }
+    var cancellations: Int { lock.withLock { cancellationCount } }
+    func authorizationStatus(timeout _: Duration) async throws -> DailyCourseNotificationAuthorization { .authorized }
+    func requestAuthorization(timeout _: Duration) async throws -> Bool { true }
+    func replacePending(with requests: [DailyCourseNotificationRequest], revision: UInt64) async throws {
+        lock.withLock {
+            guard revision >= self.revision else { return }
+            self.revision = revision
+            self.requests = requests
+        }
+    }
+    func cancelPending(revision: UInt64) {
+        lock.withLock {
+            self.revision = revision
+            cancellationCount += 1
+            requests = []
+        }
+    }
 }

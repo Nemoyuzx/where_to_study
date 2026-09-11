@@ -474,7 +474,9 @@ enum SJDScheduleParser {
             startSlot: startSlot,
             endSlot: endSlot,
             sectionText: "\(startSlot + 1)-\(endSlot + 1)节",
-            timeRange: "\(startTime)-\(endTime)"
+            timeRange: "\(startTime)-\(endTime)",
+            sourceCourseID: SJDScheduleClient.string(raw["jx0408id"])
+                .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         )
     }
 
