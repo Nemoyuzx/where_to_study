@@ -1,5 +1,53 @@
 # Where To Study 0.2.9 — Release and upload record
 
+## Published / 已正式公开 — 2026-09-11
+
+**[Where To Study v0.2.9](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.9)** 于 **2026-09-11 22:37:00 +0800** 正式公开，Release ID 为 `387037069`。已验证 `releases/latest` 指向 `v0.2.9`，`draft=false`、`prerelease=false`，公开附件恰为 **11 个**；标题保持 `Where To Study v0.2.9`。没有改动已发布的 0.2.8。
+
+最终代码 tag 指向 **`223e4703693f93b2ae37ec13b17913483981d4bf`**。这份完成回执是之后追加的纯文档记录，不移动已正式公开的 tag，不改变已核验的安装包。
+
+| 最终 tag 工作流 | 运行 ID | 结果 |
+| --- | --- | --- |
+| Windows | [34606368848](https://github.com/Nemoyuzx/where_to_study/actions/runs/34606368848) | success |
+| Linux | [34606368885](https://github.com/Nemoyuzx/where_to_study/actions/runs/34606368885) | success |
+| macOS | [34606368862](https://github.com/Nemoyuzx/where_to_study/actions/runs/34606368862) | success |
+| Native Clients | [34606369020](https://github.com/Nemoyuzx/where_to_study/actions/runs/34606369020) | success |
+| CLI | [34606368815](https://github.com/Nemoyuzx/where_to_study/actions/runs/34606368815) | success |
+| TUI | [34606368846](https://github.com/Nemoyuzx/where_to_study/actions/runs/34606368846) | success |
+| Security Checks | [34606368875](https://github.com/Nemoyuzx/where_to_study/actions/runs/34606368875) | success |
+
+Native CI 最后成功于 **14:34:56 UTC**。实际测试结果：macOS 345 项（344 通过、1 条件跳过、0 失败），iOS unit 370 项（369 通过、1 条件跳过、0 失败），iOS UI 42 项（35 通过、7 平台条件跳过、0 失败），共享 Rust 177 通过／3 ignored／0 失败。修复的节假日提示翻月用例首轮通过，CI 记录 104 帧、102 个不同位置，并验证动画期间状态冻结、完成后显示新状态；没有用删除断言或跳过此用例换取通过。
+
+Windows/Linux 的 9 个文件验证了来源证明，11 个公开文件全部重新下载并与本地逐字节摘要一致。最终 CodeQL 四语言分析通过，open CodeQL alerts、Dependabot alerts、PR 均为 **0**；依赖未维护提示仍在，不把“无开放告警”表述成绝对无风险。
+
+商店状态分别见下面最终上传记录：Apple 两端 (92) 上传成功，vivo (48) 审核中，鸿蒙 (1002029) 预审中；华为 Android (48) 已上传保存，仍需确认重传原承诺函后提交审核。上传、预审、人工审核和正式上架是不同阶段。下次上传须采用未用过的递增构建号，不重复本次成功的 Apple/DevEco 上传。
+
+## Final package uploads / 最终包上传
+
+发布代码为 **`223e4703693f93b2ae37ec13b17913483981d4bf`**，`v0.2.9` 的 annotated tag 为 `dff809118cce6af205b20e66f93cc682eca696b9`。此提交相对 `1720bfc` 仅修复 Windows 上 CI 测试的 CRLF 换行兼容，不改变应用代码。该修复已经过真实 Windows CI，未跳过原预算检查。
+
+首轮标签均为本次任务创建且尚未公开的草稿标签；因用户追加班车布局修改及随后暴露的 Windows 测试兼容问题，使用精确旧 tag SHA 的 `--force-with-lease` 更新至最终提交。未改动任何已公开的旧版本标签或 0.2.8 资产。首轮未完成的 Native CI 已取消，最终发布门禁只采用上述最终提交的 tag 工作流。
+
+- **Apple**：保留已成功上传的 iOS/iPadOS、macOS **0.2.9 (92)**。其 Release 应用代码未因之后仅 DEBUG／测试修正改变，未重复归档上传。实际已上传包和 DMG 的源提交仍准确记为 `446ab44`，不追溯改成后来的提交。
+- **vivo**：最终 **0.2.9 (48)** 于 **2026-09-11 21:48:22 +0800** 重新提交，页面显示 **审核中**；审核通过后立即发布。此前 (47) 的提交已经撤回，不是最终包。
+- **华为 Android**：最终 **0.2.9 (48)** 于 **21:43:21 +0800** 上传并保存到版本 `2037245361105446080`。仍为 **准备提交**，旧授权材料下载链接过期的问题尚待用户确认重传原承诺函后解决，不记为审核成功。
+- **HarmonyOS**：最终 **0.2.9 (1002029)** 通过 DevEco 第一项“测试和发布”上传；AGC 软件包行记录 **21:50:55 +0800**，DevEco 显示 **云测试结果：通过**。已绑定至版本 `2037251738360139840` 并再次提交，页面显示 **预审中**；此前 (1002028) 的预审已撤回。没有重复使用测试专用上传选项。
+
+Android/HarmonyOS 的包名、证书／公钥、权限及 SDK／设备范围与已上架 0.2.8 已逐项验证一致；发布地区、上架方式与鸿蒙包加密设置沿用旧版本。只有版本号、更新说明和必要隐私说明变化。
+
+| 最终产物 | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Android Universal APK (48) | 1,127,110 | `c6c956f7bb88c66b87c02b09308af9ed202994cde4db03740915430bfbed69b6` |
+| native macOS Universal DMG (92) | 7,240,272 | `1b9c5d27740f819b368c6ced73884230594ba2b971c07a9b9c01482c9e5188ed` |
+| DevEco 实际 APP (1002029) | 1,311,809 | `a3be673972501b7f77f2678e77dc74edbb3116c86073b67bd9c4d59d0131fe35` |
+| DevEco 实际 HAP (1002029) | 1,968,160 | `11e6d4452c633ad616760f71a2f809bea47cb2aea51d1674e7d1c0f6d575aba7` |
+
+最终 Android：Release JVM **240/240**，Lint **0 errors / 61 warnings / 1 hint**；设备中英文矩阵 **17 项**通过。最终 HarmonyOS **198/198** 测试、编译与 Release 模式门禁通过，但缺少可运行的模拟器／真机，未宣称设备视觉实测。见[班车布局验证](shuttle-layout-v0.2.9.md)。
+
+GitHub 的 11 个候选资产已上传至草稿，逐个核对服务端大小／SHA-256，并重新下载验证与本地字节一致。Windows/Linux 的 9 个文件另外通过固定仓库、tag、workflow、GitHub 托管 runner、source digest 和 signer digest 的来源证明检查；这不代表 Windows 获得 Authenticode 签名。原生 DMG 仍未公证。
+
+最终七条 tag 工作流均成功，GitHub 已正式公开，见文首回执。忽略目录 `release-artifacts/v0.2.9-final/` 保留 `github-release-verification.json`、`github-ci-final/manifest.json`、`android-shuttle-qa/` 与 `harmony-deveco1002029/receipt.md`。不将 APP/HAP、AAB、iOS 归档、ZIP 或校验侧文件作为公开附件。
+
 ## 2026-09-11 — follow-up before public release
 
 首轮上传后，用户追加要求 Android/HarmonyOS 班车查询布局与 iOS 一致。因此 **vivo 0.2.9 (47)** 的审核和 **HarmonyOS 0.2.9 (1002028)** 的预审均已撤回，准备完成布局对齐后使用 **Android (48)**、**HarmonyOS (1002029)** 重新提交。0.2.8 已上架版本未动；Apple 0.2.9 (92) TestFlight 上传保持成功，不重复上传未改业务逻辑的 Apple 包。GitHub 0.2.9 仍为未公开草稿，不能把下面首轮回执视为最终公开版本已完成。
