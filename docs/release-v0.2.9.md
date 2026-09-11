@@ -1,5 +1,16 @@
 # Where To Study 0.2.9 — Release and upload record
 
+## 2026-09-12 — compact-control hotfix (layout only)
+
+用户确认本轮**只发布布局修复，成绩／考试代码保留在本地，不进入新包**。布局代码提交为 `7dca1b1a34a1a2627e15a51b0425efd9927097c1`，已推送 `main`。Android 常规控件基准改为 32dp 并恢复紧凑间距；HarmonyOS 对应控件为 32vp。未撤回底部安全区、滚动、隐私、备案或现有功能。细节及测试见[控件密度热修复](mobile-control-density-v0.2.9.md)。
+
+- **GitHub 完成**：替换 v0.2.9 的 Android Universal APK 为 **0.2.9 (49)**，1,126,550 bytes，SHA-256 `8f309f13830bf02791eb2e932cf64176425b83148af0f231fe6e58e1ba6bbacd`。已重新下载并 `cmp` 逐字节确认。保留标题 `Where To Study v0.2.9`、正式状态、原 tag 与其余 10 个附件；未上传 AAB、鸿蒙或 Apple 包。Release 正文注明热修复源码与原 tag 源码压缩包的区别。
+- **vivo 已提交**：旧 (48) 于 **02:12:23 +0800** 撤回；新 (49) 上传并保存，**02:15:14 +0800** 提交后详情显示 **审核中**，设置为审核通过后立即发布。已核验版本号 49、原包名、兼容手机／平板、备案和空敏感权限申请列表。已上架 0.2.8 未动。
+- **华为 Android 尚未上传**：Edge 登录态过期，已要求用户重新登录。不能把本地已签名 (49) 视为已上传；原 (48) 准备提交状态及旧授权附件问题仍按历史记录保留。
+- **HarmonyOS 尚未上传**：本地 0.2.9 (1002030) Release APP／HAP 编译、198 项测试和 `pack.info` 检查通过。使用隔离工程 `/Users/nemoyu/Desktop/code/where_to_study-android029-hotfix/native/harmony`；DevEco 在首次打开该工程的“信任项目”确认处暂停，等待用户确认，不勾选信任整个目录或安全排除。网页也需重新登录。继续时仍用“上传产品 → 测试和发布”，上传后记录实际生成的包，不能从含未发布功能的主工作区上传同号包。
+
+主工作区的成绩／考试改动先以 stash `2b685831ba1d0a585e1f9f6f40c16c6375c07437` 完整备份，再合入热修复并恢复；备份保留未删除。两个查询布局合并点按“保留新功能逻辑 + 32dp/vp 尺寸”解决，不将未发布功能提交到远端。
+
 ## Published / 已正式公开 — 2026-09-11
 
 **[Where To Study v0.2.9](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.2.9)** 于 **2026-09-11 22:37:00 +0800** 正式公开，Release ID 为 `387037069`。已验证 `releases/latest` 指向 `v0.2.9`，`draft=false`、`prerelease=false`，公开附件恰为 **11 个**；标题保持 `Where To Study v0.2.9`。没有改动已发布的 0.2.8。
