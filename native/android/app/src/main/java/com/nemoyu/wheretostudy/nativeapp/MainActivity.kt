@@ -14,7 +14,6 @@ import android.content.res.Configuration
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.TransitionDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -64,6 +63,7 @@ class MainActivity : Activity() {
     private lateinit var content: FrameLayout
     private lateinit var adaptiveRoot: FrameLayout
     private val navigationViews = mutableMapOf<Destination, TextView>()
+    private var phoneNavigationBar: PhoneNavigationBar? = null
     private val credentialStore by lazy { SecureCredentialStore(this) }
     private val preferences by lazy { AppPreferences(this) }
     private val privacyConsentStore by lazy { PrivacyConsentStore(this) }
@@ -283,19 +283,10 @@ class MainActivity : Activity() {
             )
         }
         addView(content)
-        addView(LinearLayout(this@MainActivity).apply {
+        addView(PhoneNavigationBar(this@MainActivity).apply {
             id = R.id.phone_navigation
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(dp(10), dp(3), dp(10), dp(3))
-            clipToOutline = false
-            background = themedRoundedBackground(
-                this@MainActivity, { Palette.surfaceVariant },
-                radius = PhoneNavigationLayoutLogic.HEIGHT_DP / 2)
-            elevation = dp(8).toFloat()
-            Destination.entries.forEach { destination ->
-                addView(navigationTab(destination, compact = true))
-            }
+            setItems(Destination.entries.map { destination -> navigationTab(destination, compact = true) })
+            phoneNavigationBar = this
         }, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(PhoneNavigationLayoutLogic.HEIGHT_DP),
@@ -397,6 +388,7 @@ class MainActivity : Activity() {
         navigationRailAnimator = null
         currentLayoutSpec = spec
         navigationViews.clear()
+        phoneNavigationBar = null
         navigationRail = null
         navigationRailHeader = null
         navigationRailBrand = null
@@ -480,15 +472,31 @@ class MainActivity : Activity() {
             isFocusable = true
             contentDescription = destination.label
             if (compact) {
-                text = destination.label
-                setCompoundDrawablesRelativeWithIntrinsicBounds(0, destination.iconResource, 0, 0)
+                val showsCaption = phoneNavigationCaptionsFit()
+                text = if (showsCaption) destination.label else null
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                val icon = getDrawable(destination.iconResource)?.mutate()?.apply {
+                    setBounds(0, 0, dp(24), dp(24))
+                }
+                if (showsCaption) {
+                    setCompoundDrawablesRelative(null, icon, null, null)
+                } else {
+                    foreground = icon
+                    foregroundGravity = Gravity.CENTER
+                }
                 compoundDrawablePadding = dp(2)
-                setPadding(0, dp(3), 0, dp(2))
+                setPadding(dp(1), dp(3), dp(1), dp(3))
+                if (android.os.Build.VERSION.SDK_INT >= 26) tooltipText = uiText(destination.label)
             } else {
                 applyNavigationRailTabPresentation(this, destination)
             }
             setOnClickListener {
                 performControlHaptic(it)
+                if (destination == Destination.SETTINGS && destination == selectedDestination &&
+                    settingsRoute == SettingsRoute.MAIN && content.childCount > 0) {
+                    return@setOnClickListener
+                }
                 if (destination == Destination.SETTINGS) settingsRoute = SettingsRoute.MAIN
                 navigate(destination)
             }
@@ -507,6 +515,25 @@ class MainActivity : Activity() {
             }
             navigationViews[destination] = this
         }
+
+    private fun phoneNavigationCaptionsFit(): Boolean {
+        val height = dp(PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP - 24 - 2 - 6)
+        val pageWidth = currentLayoutSpec?.contentWidthDp ?: resources.configuration.screenWidthDp
+        val width = (dp(pageWidth) - dp(PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP * 2 + 8)) /
+            Destination.entries.size - dp(2)
+        // Account for localized glyphs, CJK fallback fonts and the longest caption.
+        // Switch all items together to centered icons if any caption cannot fit.
+        return Destination.entries.all { destination ->
+            val label = TextView(this).apply {
+                text = uiText(destination.label)
+                textSize = 11f
+                includeFontPadding = false
+                setTypeface(typeface, Typeface.BOLD)
+                measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+            }
+            label.measuredHeight <= height && label.measuredWidth <= width
+        }
+    }
 
     private fun applyNavigationRailTabPresentation(view: TextView, destination: Destination) {
         view.text = if (navigationRailCollapsed) null else uiText(destination.label)
@@ -647,13 +674,13 @@ class MainActivity : Activity() {
         }
         navigationViews.forEach { (item, view) ->
             val selected = item == destination
-            val wasSelected = item == previousDestination
+            view.isSelected = selected
             view.setThemeTextColor {
                 if (!selected) Palette.muted
                 else if (Palette.selection.preset == "default") Palette.primaryText
                 else ColorThemeLogic.readableText(
                     Palette.primaryText,
-                    if (currentLayoutSpec?.usesBottomNavigation == true) Palette.background else Palette.selectionSurface,
+                    if (currentLayoutSpec?.usesBottomNavigation == true) Palette.surface else Palette.selectionSurface,
                 )
             }
             view.bindTheme("navigationTint") {
@@ -661,54 +688,24 @@ class MainActivity : Activity() {
                 view.compoundDrawableTintList = color
                 view.foregroundTintList = color
             }
-            view.setTypeface(view.typeface, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
-            val selectionRadius = if (currentLayoutSpec?.usesBottomNavigation == true) {
-                PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP / 2
-            } else {
-                UiMetrics.controlRadiusDp
-            }
-            fun targetBackgroundColor() = when {
-                currentLayoutSpec?.usesBottomNavigation == true && selected -> Palette.background
-                currentLayoutSpec?.usesBottomNavigation == true -> Color.TRANSPARENT
-                selected -> Palette.selectionSurface
-                else -> Color.TRANSPARENT
-            }
-            val targetBackground = themedRoundedBackground(
-                this, { targetBackgroundColor() },
-                radius = selectionRadius)
-            val animatePhoneSelection = currentLayoutSpec?.usesBottomNavigation == true &&
-                previousDestination != destination && wasSelected != selected
-            if (animatePhoneSelection) {
-                fun sourceBackgroundColor() = if (wasSelected) Palette.background else Color.TRANSPARENT
-                view.background = TransitionDrawable(arrayOf(
-                    themedRoundedBackground(this, { sourceBackgroundColor() }, radius = selectionRadius),
-                    targetBackground,
-                )).apply {
-                    isCrossFadeEnabled = true
-                    startTransition(PhoneNavigationLayoutLogic.SELECTION_ANIMATION_MILLIS.toInt())
-                }
-                view.animate().cancel()
-                if (selected) {
-                    view.scaleX = 0.92f
-                    view.scaleY = 0.92f
-                    view.animate()
-                        .scaleX(1f)
-                        .scaleY(1f)
-                        .setDuration(PhoneNavigationLayoutLogic.SELECTION_ANIMATION_MILLIS)
-                        .setInterpolator(AccelerateDecelerateInterpolator())
-                        .start()
-                } else {
-                    view.scaleX = 1f
-                    view.scaleY = 1f
-                }
-            } else {
+            view.setTypeface(Typeface.DEFAULT, if (item == destination) Typeface.BOLD else Typeface.NORMAL)
+            if (currentLayoutSpec?.usesBottomNavigation == true) {
                 view.animate().cancel()
                 view.scaleX = 1f
                 view.scaleY = 1f
-                view.background = targetBackground
+                view.background = null
+                UiText.localizeTree(view)
+                return@forEach
             }
+            view.animate().cancel()
+            view.scaleX = 1f
+            view.scaleY = 1f
+            view.background = themedRoundedBackground(
+                this, { if (selected) Palette.selectionSurface else Color.TRANSPARENT },
+                radius = UiMetrics.controlRadiusDp)
             UiText.localizeTree(view)
         }
+        phoneNavigationBar?.select(destination.ordinal, previousDestination != destination)
         updatePhoneNavigationVisibility()
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(

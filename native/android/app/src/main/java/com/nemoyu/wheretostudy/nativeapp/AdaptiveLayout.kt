@@ -24,8 +24,8 @@ data class AdaptiveLayoutSpec(
 
 object PhoneNavigationLayoutLogic {
     const val HEIGHT_DP = 56
-    const val ITEM_HEIGHT_DP = 46
-    const val HORIZONTAL_MARGIN_DP = 32
+    const val ITEM_HEIGHT_DP = 48
+    const val HORIZONTAL_MARGIN_DP = 20
     const val BOTTOM_MARGIN_DP = 10
     const val CONTENT_GAP_DP = 8
     const val CONTENT_INSET_DP = HEIGHT_DP + BOTTOM_MARGIN_DP + CONTENT_GAP_DP

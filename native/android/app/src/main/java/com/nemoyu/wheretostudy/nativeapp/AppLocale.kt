@@ -84,6 +84,8 @@ object UiText {
         "空教室结果" to "Available Classrooms",
         "教学楼" to "Building",
         "节次筛选" to "Period Filter",
+        "选中空闲" to "Select Free",
+        "清空" to "Clear",
         "个人空闲节次" to "My Free Periods",
         "使用个人课表排除已有课程" to "Exclude periods occupied by my schedule",
         "获取空教室信息" to "Fetch Classroom Data",

@@ -254,6 +254,20 @@ internal class InformationQueryPage(
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
     private var isAppendingImportantEventPage = false
+    private val isCompact: Boolean
+        get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
+    private val pagePaddingDp: Int
+        get() = if (isCompact) 16 else UiMetrics.pagePaddingDp
+    private val sectionSpacingDp: Int
+        get() = if (isCompact) UiMetrics.phoneSectionSpacingDp else 12
+    private val controlRadiusDp: Int
+        get() = if (isCompact) UiMetrics.phoneControlRadiusDp else UiMetrics.controlRadiusDp
+    private val filterHeightDp: Int
+        get() = if (isCompact) UiMetrics.phoneControlMinHeightDp else 34
+
+    private fun querySurface(): LinearLayout =
+        surface(activity, showsBorder = false, compact = isCompact)
+
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val shuttleObserver: () -> Unit = {
         if (::root.isInitialized && root.isAttachedToWindow &&
@@ -275,10 +289,10 @@ internal class InformationQueryPage(
             addView(queryHeader())
             addView(modeSelector(), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(48),
+                modeSelectorHeightPx(),
             ).apply {
-                marginStart = activity.dp(20)
-                marginEnd = activity.dp(20)
+                marginStart = activity.dp(pagePaddingDp)
+                marginEnd = activity.dp(pagePaddingDp)
                 bottomMargin = activity.dp(8)
             })
         }
@@ -309,11 +323,11 @@ internal class InformationQueryPage(
     private fun queryHeader(): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        setPadding(activity.dp(20), activity.dp(16), activity.dp(20), activity.dp(8))
+        setPadding(activity.dp(pagePaddingDp), activity.dp(16), activity.dp(pagePaddingDp), activity.dp(12))
         addView(pageTitle(
             activity,
             "查询",
-            titleSizeSp = if (availableWidthDp < 600) 26f else 34f,
+            titleSizeSp = if (isCompact) UiMetrics.phonePageTitleSizeSp else 34f,
         ).apply { setPadding(0, 0, 0, 0) }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -322,16 +336,15 @@ internal class InformationQueryPage(
 
     private fun modeSelector(): FrameLayout {
         val labels = InformationQueryMode.entries
-        val initialIndex = sessionState.selectedMode.ordinal
         val control = FrameLayout(activity).apply {
             id = R.id.information_query_mode_switch
             val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
             setPadding(inset, inset, inset, inset)
-            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 10)
+            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = controlRadiusDp)
         }
         val thumb = View(activity).apply {
             id = R.id.information_query_mode_thumb
-            background = themedRoundedBackground(activity, { Palette.segmentedSelection }, radius = 8)
+            background = themedRoundedBackground(activity, { Palette.segmentedSelection }, radius = controlRadiusDp - 2)
         }
         control.addView(thumb, FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT))
         val row = LinearLayout(activity).apply {
@@ -344,10 +357,12 @@ internal class InformationQueryPage(
                         R.id.information_query_events_tab
                     }
                     text = mode.label
-                    textSize = 14f
+                    textSize = if (isCompact) 15f else 14f
+                    includeFontPadding = false
                     gravity = Gravity.CENTER
                     setThemeTextColor { Palette.text }
-                    setTypeface(typeface, if (mode == sessionState.selectedMode) Typeface.BOLD else Typeface.NORMAL)
+                    isSelected = mode == sessionState.selectedMode
+                    setTypeface(Typeface.DEFAULT, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
                     isClickable = true
                     isFocusable = true
                     setOnClickListener { source ->
@@ -357,10 +372,10 @@ internal class InformationQueryPage(
                         sessionState.selectedMode = mode
                         val tabRow = parent as ViewGroup
                         repeat(tabRow.childCount) { index ->
-                            (tabRow.getChildAt(index) as TextView).setTypeface(
-                                (tabRow.getChildAt(index) as TextView).typeface,
-                                if (index == mode.ordinal) Typeface.BOLD else Typeface.NORMAL,
-                            )
+                            (tabRow.getChildAt(index) as TextView).apply {
+                                isSelected = index == mode.ordinal
+                                setTypeface(Typeface.DEFAULT, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
+                            }
                         }
                         moveModeThumb(control, thumb, mode.ordinal, animate = true)
                         renderMode(animate = true, direction = mode.ordinal.compareTo(oldOrdinal))
@@ -372,8 +387,30 @@ internal class InformationQueryPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
         ))
-        control.post { moveModeThumb(control, thumb, initialIndex, animate = false) }
+        // A selection can arrive before the first layout (including accessibility
+        // actions). Initialize from current state, not a stale construction index.
+        control.post { moveModeThumb(control, thumb, sessionState.selectedMode.ordinal, animate = false) }
         return control
+    }
+
+    private fun modeSelectorHeightPx(): Int {
+        if (!isCompact) return activity.dp(48)
+        val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
+        val labelWidth = ((activity.dp(availableWidthDp - pagePaddingDp * 2) - inset * 2) /
+            InformationQueryMode.entries.size).coerceAtLeast(1)
+        val labelHeight = InformationQueryMode.entries.maxOf { mode ->
+            TextView(activity).apply {
+                text = activity.uiText(mode.label)
+                textSize = 15f
+                includeFontPadding = false
+                setTypeface(typeface, Typeface.BOLD)
+                measure(
+                    View.MeasureSpec.makeMeasureSpec(labelWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                )
+            }.measuredHeight
+        }
+        return maxOf(activity.dp(UiMetrics.phoneControlMinHeightDp), labelHeight + inset * 2 + activity.dp(12))
     }
 
     private fun moveModeThumb(control: FrameLayout, thumb: View, index: Int, animate: Boolean) {
@@ -439,9 +476,9 @@ internal class InformationQueryPage(
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(
-                activity.dp(20),
+                activity.dp(pagePaddingDp),
                 activity.dp(8),
-                activity.dp(20),
+                activity.dp(pagePaddingDp),
                 activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(
                     usesBottomNavigation,
                 )),
@@ -459,12 +496,12 @@ internal class InformationQueryPage(
 
     private fun LinearLayout.renderShuttleSnapshot(snapshot: ShuttleBusSnapshot) {
         val presentation = ShuttleBusLogic.today(snapshot, Calendar.getInstance(shanghai))
-        addView(surface(activity, showsBorder = false).apply {
+        addView(querySurface().apply {
             id = R.id.information_query_shuttle_status
             addView(sectionTitle(activity, "今日班车状态"))
             addView(TextView(activity).apply {
                 text = presentation.status
-                textSize = 17f
+                textSize = if (isCompact) 19f else 17f
                 setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
@@ -489,7 +526,7 @@ internal class InformationQueryPage(
                 setPadding(0, activity.dp(6), 0, 0)
             })
         })
-        addView(spacer(activity, 12))
+        addView(spacer(activity, sectionSpacingDp))
         addView(LinearLayout(activity).apply {
             id = R.id.information_query_shuttle_routes
             orientation = LinearLayout.VERTICAL
@@ -500,8 +537,7 @@ internal class InformationQueryPage(
             }
         })
         if (presentation.stops.isNotEmpty()) {
-            addView(spacer(activity, 4))
-            addView(surface(activity, showsBorder = false).apply {
+            addView(querySurface().apply {
                 addView(sectionTitle(activity, "候车地点"))
                 presentation.stops.forEach { (campus, location) ->
                     addView(TextView(activity).apply {
@@ -514,8 +550,8 @@ internal class InformationQueryPage(
             })
         }
         if (presentation.notes.isNotEmpty()) {
-            addView(spacer(activity, 12))
-            addView(surface(activity, showsBorder = false).apply {
+            addView(spacer(activity, sectionSpacingDp))
+            addView(querySurface().apply {
                 addView(sectionTitle(activity, "乘车提示"))
                 presentation.notes.forEach { note ->
                     addView(TextView(activity).apply {
@@ -536,23 +572,24 @@ internal class InformationQueryPage(
     }
 
     private fun shuttleRouteCard(route: TodayShuttleRoute): LinearLayout =
-        surface(activity, showsBorder = false).apply {
+        querySurface().apply {
+            tag = "information.query.shuttle.route"
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = activity.dp(12) }
+            ).apply { bottomMargin = activity.dp(sectionSpacingDp) }
             addView(TextView(activity).apply {
                 text = "${route.from} → ${route.to}"
-                textSize = 16f
+                textSize = if (isCompact) 17f else 16f
                 setThemeTextColor { Palette.text }
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
                 text = route.periodLabel
                 UiText.preserveRawText(this)
-                textSize = 11f
+                textSize = if (isCompact) 12f else 11f
                 setThemeTextColor { Palette.muted }
-                setPadding(0, activity.dp(3), 0, activity.dp(7))
+                setPadding(0, activity.dp(4), 0, activity.dp(if (isCompact) 12 else 7))
             })
             if (route.departures.isEmpty()) {
                 addView(TextView(activity).apply {
@@ -560,6 +597,8 @@ internal class InformationQueryPage(
                     textSize = 13f
                     setThemeTextColor { Palette.muted }
                 })
+            } else if (isCompact) {
+                addView(shuttleDepartureGrid(route.departures))
             } else {
                 route.departures.forEach { departure ->
                     addView(LinearLayout(activity).apply {
@@ -582,6 +621,56 @@ internal class InformationQueryPage(
                 }
             }
         }
+
+    private fun shuttleDepartureGrid(departures: List<TodayShuttleDeparture>): LinearLayout {
+        val spacingDp = 8
+        val contentWidthDp = availableWidthDp - 2 * pagePaddingDp - 2 * UiMetrics.surfacePaddingDp
+        val columns = ((contentWidthDp + spacingDp) / (86 + spacingDp)).coerceIn(2, 4)
+        return LinearLayout(activity).apply {
+            tag = "information.query.shuttle.departures"
+            orientation = LinearLayout.VERTICAL
+            departures.chunked(columns).forEachIndexed { rowIndex, rowDepartures ->
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    rowDepartures.forEachIndexed { index, departure ->
+                        addView(LinearLayout(activity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            gravity = Gravity.CENTER
+                            minimumHeight = activity.dp(56)
+                            setPadding(activity.dp(4), activity.dp(9), activity.dp(4), activity.dp(9))
+                            background = themedRoundedBackground(activity, { Palette.background }, radius = 8)
+                            addView(TextView(activity).apply {
+                                text = departure.time
+                                textSize = 16f
+                                includeFontPadding = false
+                                setThemeTextColor { Palette.text }
+                                setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+                                gravity = Gravity.CENTER
+                            })
+                            addView(TextView(activity).apply {
+                                text = "${departure.vehicle} × ${departure.count}"
+                                UiText.preserveRawText(this)
+                                textSize = 12f
+                                includeFontPadding = false
+                                gravity = Gravity.CENTER
+                                setThemeTextColor { Palette.muted }
+                                setPadding(0, activity.dp(4), 0, 0)
+                            })
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                            if (index < columns - 1) marginEnd = activity.dp(spacingDp)
+                        })
+                    }
+                    repeat(columns - rowDepartures.size) { index ->
+                        addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f).apply {
+                            if (rowDepartures.size + index < columns - 1) marginEnd = activity.dp(spacingDp)
+                        })
+                    }
+                }, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { if (rowIndex > 0) topMargin = activity.dp(spacingDp) })
+            }
+        }
+    }
 
     private fun importantEventsContent(): ScrollView {
         val liveItems = dailyInfoRepository.importantEvents().orEmpty()
@@ -616,39 +705,50 @@ internal class InformationQueryPage(
         val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(
-                activity.dp(20),
+                activity.dp(pagePaddingDp),
                 activity.dp(8),
-                activity.dp(20),
+                activity.dp(pagePaddingDp),
                 activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(
                     usesBottomNavigation,
                 )),
             )
-            addView(searchField())
-            addView(spacer(activity, 8))
-            addView(categoryPicker(typeFilters))
-            metadataCategoryPicker(metadataCategories)?.let { picker ->
-                addView(spacer(activity, 6))
-                addView(picker)
+            val filters = if (isCompact) querySurface() else LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
             }
-            addView(Switch(activity).apply {
-                id = R.id.information_query_show_ended
-                text = "显示已结束"
-                textSize = 13f
-                setThemeTextColor { Palette.text }
-                isChecked = sessionState.showsEnded
-                setOnCheckedChangeListener { button, checked ->
-                    activity.performControlHaptic(button)
-                    sessionState.showsEnded = checked
-                    resetImportantEventPaging()
-                    renderMode(animate = false)
+            addView(filters.apply {
+                tag = "information.query.events.filters"
+                addView(searchField())
+                addView(spacer(activity, if (isCompact) 12 else 8))
+                addView(categoryPicker(typeFilters))
+                metadataCategoryPicker(metadataCategories)?.let { picker ->
+                    addView(spacer(activity, if (isCompact) 8 else 6))
+                    addView(picker)
                 }
+                addView(Switch(activity).apply {
+                    id = R.id.information_query_show_ended
+                    text = "显示已结束"
+                    textSize = if (isCompact) 14f else 13f
+                    setThemeTextColor { Palette.text }
+                    minHeight = activity.dp(if (isCompact) UiMetrics.phoneControlMinHeightDp else 34)
+                    switchPadding = activity.dp(12)
+                    isChecked = sessionState.showsEnded
+                    setOnCheckedChangeListener { button, checked ->
+                        activity.performControlHaptic(button)
+                        sessionState.showsEnded = checked
+                        resetImportantEventPaging()
+                        renderMode(animate = false)
+                    }
+                }, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { if (isCompact) topMargin = activity.dp(8) })
+                addView(TextView(activity).apply {
+                    id = R.id.information_query_result_count
+                    textSize = 12f
+                    setThemeTextColor { Palette.muted }
+                    setPadding(0, activity.dp(4), 0, activity.dp(if (isCompact) 0 else 8))
+                })
             })
-            addView(TextView(activity).apply {
-                id = R.id.information_query_result_count
-                textSize = 12f
-                setThemeTextColor { Palette.muted }
-                setPadding(0, activity.dp(4), 0, activity.dp(8))
-            })
+            if (isCompact) addView(spacer(activity, sectionSpacingDp))
             eventList = LinearLayout(activity).apply {
                 id = R.id.information_query_events_list
                 orientation = LinearLayout.VERTICAL
@@ -692,10 +792,21 @@ internal class InformationQueryPage(
         isSingleLine = true
         inputType = InputType.TYPE_CLASS_TEXT
         background = themedRoundedBackground(activity, {
-            if (Palette.selection.preset == "default") Palette.surface else Palette.surfaceVariant
-        }, { Palette.border }, radius = 8)
+            if (isCompact) Palette.background else if (Palette.selection.preset == "default") Palette.surface else Palette.surfaceVariant
+        }, { if (isCompact) Color.TRANSPARENT else Palette.border }, radius = controlRadiusDp)
         setPadding(activity.dp(12), 0, activity.dp(12), 0)
-        minHeight = activity.dp(42)
+        minHeight = activity.dp(if (isCompact) UiMetrics.phoneControlMinHeightDp else 42)
+        if (isCompact) {
+            val iconSize = activity.dp(20)
+            val icon = activity.getDrawable(R.drawable.ic_nav_query)?.mutate()?.apply {
+                setBounds(0, 0, iconSize, iconSize)
+            }
+            setCompoundDrawablesRelative(icon, null, null, null)
+            compoundDrawablePadding = activity.dp(8)
+            bindTheme("compoundDrawableTintList") {
+                compoundDrawableTintList = ColorStateList.valueOf(Palette.muted)
+            }
+        }
         addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) {
@@ -720,10 +831,11 @@ internal class InformationQueryPage(
             categories.forEach { category ->
                 addView(TextView(activity).apply {
                     text = category.label
-                    textSize = 12f
+                    textSize = if (isCompact) 13f else 12f
+                    includeFontPadding = false
                     gravity = Gravity.CENTER
                     setPadding(activity.dp(12), 0, activity.dp(12), 0)
-                    minHeight = activity.dp(34)
+                    minHeight = activity.dp(filterHeightDp)
                     isClickable = true
                     isFocusable = true
                     fun bind() {
@@ -731,8 +843,9 @@ internal class InformationQueryPage(
                         setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
                         setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
                         background = themedRoundedBackground(
-                            activity, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
-                            radius = 17)
+                            activity, { if (selected) Palette.primaryFill else if (isCompact) Palette.background else Palette.surface },
+                            { if (isCompact) Color.TRANSPARENT else if (selected) Palette.primaryFill else Palette.border },
+                            radius = if (isCompact) 24 else 17)
                     }
                     bind()
                     setOnClickListener { source ->
@@ -745,8 +858,8 @@ internal class InformationQueryPage(
                     }
                 }, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
-                    activity.dp(34),
-                ).apply { marginEnd = activity.dp(6) })
+                    activity.dp(filterHeightDp),
+                ).apply { marginEnd = activity.dp(if (isCompact) 8 else 6) })
             }
         })
     }
@@ -766,20 +879,22 @@ internal class InformationQueryPage(
                 addView(TextView(activity).apply {
                     text = "分类"
                     textSize = 12f
+                    gravity = Gravity.CENTER_VERTICAL
                     setThemeTextColor { Palette.muted }
                     setPadding(0, 0, activity.dp(8), 0)
                 }, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
-                    activity.dp(34),
+                    activity.dp(filterHeightDp),
                 ))
                 (listOf<String?>(null) + options).forEach { category ->
                     addView(TextView(activity).apply {
                         text = category ?: "全部分类"
                         if (category != null) UiText.preserveRawText(this)
-                        textSize = 12f
+                        textSize = if (isCompact) 13f else 12f
+                        includeFontPadding = false
                         gravity = Gravity.CENTER
                         setPadding(activity.dp(12), 0, activity.dp(12), 0)
-                        minHeight = activity.dp(34)
+                        minHeight = activity.dp(filterHeightDp)
                         isClickable = true
                         isFocusable = true
                         fun bind() {
@@ -787,8 +902,9 @@ internal class InformationQueryPage(
                             setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
                             setTypeface(typeface, if (selected) Typeface.BOLD else Typeface.NORMAL)
                             background = themedRoundedBackground(
-                                activity, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
-                                radius = 17)
+                                activity, { if (selected) Palette.primaryFill else if (isCompact) Palette.background else Palette.surface },
+                                { if (isCompact) Color.TRANSPARENT else if (selected) Palette.primaryFill else Palette.border },
+                                radius = if (isCompact) 24 else 17)
                         }
                         bind()
                         setOnClickListener { source ->
@@ -807,16 +923,17 @@ internal class InformationQueryPage(
                                     if (selected) Typeface.BOLD else Typeface.NORMAL,
                                 )
                                 button.background = themedRoundedBackground(
-                                    activity, { if (selected) Palette.primaryFill else Palette.surface }, { if (selected) Palette.primaryFill else Palette.border },
-                                    radius = 17)
+                                    activity, { if (selected) Palette.primaryFill else if (isCompact) Palette.background else Palette.surface },
+                                    { if (isCompact) Color.TRANSPARENT else if (selected) Palette.primaryFill else Palette.border },
+                                    radius = if (isCompact) 24 else 17)
                             }
                             root.findViewById<LinearLayout?>(R.id.information_query_events_list)
                                 ?.let(::renderImportantEventList)
                         }
                     }, LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.WRAP_CONTENT,
-                        activity.dp(34),
-                    ).apply { marginEnd = activity.dp(6) })
+                        activity.dp(filterHeightDp),
+                    ).apply { marginEnd = activity.dp(if (isCompact) 8 else 6) })
                 }
             })
         }
@@ -894,12 +1011,12 @@ internal class InformationQueryPage(
     }
 
     private fun eventCard(item: PublicDeadlineItem): LinearLayout =
-        surface(activity, showsBorder = false).apply {
+        querySurface().apply {
             setTag(R.id.favorite_deadline_item_key, item.favoriteID)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = activity.dp(10) }
+            ).apply { bottomMargin = activity.dp(if (isCompact) 12 else 10) }
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.TOP
@@ -908,34 +1025,32 @@ internal class InformationQueryPage(
                     addView(TextView(activity).apply {
                         text = item.name
                         UiText.preserveRawText(this)
-                        textSize = 15f
+                        textSize = if (isCompact) 16f else 15f
+                        includeFontPadding = false
+                        setLineSpacing(activity.dp(2).toFloat(), 1f)
                         setThemeTextColor { Palette.text }
                         setTypeface(typeface, Typeface.BOLD)
                         maxLines = 3
                         ellipsize = TextUtils.TruncateAt.END
                     })
+                    if (isCompact) addView(eventDeadline(item))
                     addView(TextView(activity).apply {
                         text = listOfNotNull(
                             eventTypeLabel(item),
                             item.metadataSource?.name ?: item.sourceName,
                         ).joinToString(" · ")
                         UiText.preserveRawText(this)
-                        textSize = 11f
-                        setThemeTextColor { DeadlineVisualLogic.color(item) }
+                        textSize = if (isCompact) 12f else 11f
+                        setThemeTextColor { if (isCompact) Palette.muted else DeadlineVisualLogic.color(item) }
                         setPadding(0, activity.dp(4), 0, 0)
                     })
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(favoriteButton(item), LinearLayout.LayoutParams(
-                    activity.dp(40), activity.dp(40),
+                    activity.dp(if (isCompact) UiMetrics.phoneControlMinHeightDp else 40),
+                    activity.dp(if (isCompact) UiMetrics.phoneControlMinHeightDp else 40),
                 ).apply { marginStart = activity.dp(6) })
             })
-            addView(TextView(activity).apply {
-                text = item.deadline.replace('T', ' ').take(16)
-                textSize = 13f
-                setThemeTextColor { Palette.primaryText }
-                setTypeface(typeface, Typeface.BOLD)
-                setPadding(0, activity.dp(7), 0, 0)
-            })
+            if (!isCompact) addView(eventDeadline(item))
             val metadata = buildList {
                 item.organizer?.let(::add)
                 addAll(item.categories.take(4))
@@ -946,7 +1061,7 @@ internal class InformationQueryPage(
             if (metadata.isNotEmpty()) addView(TextView(activity).apply {
                 text = metadata
                 UiText.preserveRawText(this)
-                textSize = 11f
+                textSize = if (isCompact) 12f else 11f
                 setThemeTextColor { Palette.muted }
                 maxLines = 2
                 ellipsize = TextUtils.TruncateAt.END
@@ -975,14 +1090,23 @@ internal class InformationQueryPage(
             }
         }
 
+    private fun eventDeadline(item: PublicDeadlineItem): TextView = TextView(activity).apply {
+        tag = "information.query.event.deadline"
+        text = item.deadline.replace('T', ' ').take(16)
+        textSize = if (isCompact) 15f else 13f
+        setThemeTextColor { DeadlineVisualLogic.color(item) }
+        setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
+        setPadding(0, activity.dp(if (isCompact) 6 else 7), 0, 0)
+    }
+
     private fun eventDetailText(value: String, maximumLines: Int): TextView = TextView(activity).apply {
         text = value
         UiText.preserveRawText(this)
-        textSize = 11f
+        textSize = if (isCompact) 12f else 11f
         setThemeTextColor { Palette.muted }
         maxLines = maximumLines
         ellipsize = TextUtils.TruncateAt.END
-        setPadding(0, activity.dp(4), 0, 0)
+        setPadding(0, activity.dp(if (isCompact) 5 else 4), 0, 0)
     }
 
     private fun favoriteButton(item: PublicDeadlineItem): ImageView = ImageView(activity).apply {
@@ -1026,7 +1150,7 @@ internal class InformationQueryPage(
             setOnClickListener { retry() }
         }
 
-    private fun statusCard(message: String): LinearLayout = surface(activity, showsBorder = false).apply {
+    private fun statusCard(message: String): LinearLayout = querySurface().apply {
         addView(statusText(message))
     }
 
@@ -1044,10 +1168,20 @@ internal class InformationQueryPage(
         viewID: Int = View.NO_ID,
     ): TextView = TextView(activity).apply {
         id = viewID
+        tag = "information.query.source.footer"
         text = "$label ↗"
-        textSize = 11f
+        textSize = if (isCompact) 12f else 11f
         setThemeTextColor { Palette.primaryText }
-        setPadding(0, activity.dp(8), 0, activity.dp(8))
+        if (isCompact) {
+            background = themedRoundedBackground(activity, { Palette.selectionSurface }, radius = controlRadiusDp)
+            setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+            setLineSpacing(activity.dp(2).toFloat(), 1f)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = activity.dp(4) }
+        } else {
+            setPadding(0, activity.dp(8), 0, activity.dp(8))
+        }
         isClickable = true
         isFocusable = true
         setOnClickListener { openURL(url) }

@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.roundToInt
+import androidx.core.graphics.ColorUtils
 
 data class ThemeColors(
     val primary: Int,
@@ -216,6 +217,11 @@ object UiMetrics {
     const val controlHeightDp = 36
     const val compactControlHeightDp = 36
     const val sectionSpacingDp = 16
+    const val phoneSurfaceRadiusDp = 12
+    const val phoneControlRadiusDp = 10
+    const val phoneControlMinHeightDp = 48
+    const val phoneSectionSpacingDp = 16
+    const val phonePageTitleSizeSp = 32f
 }
 
 fun Context.dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -243,7 +249,7 @@ fun pageTitle(
     title: String,
     subtitle: String? = null,
     subtitleIconResource: Int = 0,
-    titleSizeSp: Float = 34f,
+    titleSizeSp: Float = if (context.resources.configuration.screenWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP) UiMetrics.phonePageTitleSizeSp else 34f,
 ): LinearLayout =
     LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -308,11 +314,15 @@ fun sectionTitle(
 fun surface(
     context: Context,
     showsBorder: Boolean = true,
+    compact: Boolean = context.resources.configuration.screenWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP,
 ): LinearLayout = LinearLayout(context).apply {
     orientation = LinearLayout.VERTICAL
     background = themedRoundedBackground(
-        context, { Palette.surface }, { if (showsBorder) Palette.border else Color.TRANSPARENT },
-        radius = UiMetrics.surfaceRadiusDp)
+        context, { Palette.surface }, {
+            if (!showsBorder) Color.TRANSPARENT
+            else if (compact) ColorUtils.blendARGB(Palette.border, Palette.surface, 0.55f)
+            else Palette.border
+        }, radius = if (compact) UiMetrics.phoneSurfaceRadiusDp else UiMetrics.surfaceRadiusDp)
     setPadding(
         context.dp(UiMetrics.surfacePaddingDp),
         context.dp(UiMetrics.surfacePaddingDp),

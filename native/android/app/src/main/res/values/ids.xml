@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <item name="phone_navigation_indicator" type="id" />
     <item name="adaptive_root" type="id" />
     <item name="folding_feature_spacer" type="id" />
     <item name="phone_navigation" type="id" />

@@ -895,14 +895,16 @@ test('native Android year calendar follows the compact iOS mini-month layout', (
 test('native Android compact surfaces and timeline keep the iOS density contracts', () => {
   assert.match(
     androidUiSupportSource,
-    /fun surface\([\s\S]*showsBorder: Boolean = true[\s\S]*if \(showsBorder\) Palette\.border else Color\.TRANSPARENT/,
+    /fun surface\([\s\S]*showsBorder: Boolean = true[\s\S]*if \(!showsBorder\) Color\.TRANSPARENT[\s\S]*else if \(compact\) ColorUtils\.blendARGB\(Palette\.border, Palette\.surface, 0\.55f\)[\s\S]*else Palette\.border/,
   )
   assert.doesNotMatch(androidPlannerSource, /surface\(activity\)\.apply/)
   assert.doesNotMatch(androidSettingsSource, /surface\(activity\)\.apply/)
   assert.match(androidPlannerSource, /themedRoundedBackground\([\s\S]*\{ Palette\.border \}/)
   assert.match(androidSettingsSource, /themedRoundedBackground\([\s\S]*\{ Palette\.border \}/)
-  assert.match(androidPlannerSource, /text = "联动查询"[\s\S]*textSize = 28f/)
-  assert.match(androidSettingsSource, /text = "设置"[\s\S]*textSize = 28f/)
+  assert.match(androidPlannerSource, /text = "联动查询"[\s\S]*textSize = UiMetrics\.phonePageTitleSizeSp/)
+  assert.match(androidSettingsSource, /text = "设置"[\s\S]*textSize = UiMetrics\.phonePageTitleSizeSp/)
+  assert.match(androidUiSupportSource, /phonePageTitleSizeSp = 32f/)
+  assert.match(androidUiSupportSource, /phoneControlMinHeightDp = 48/)
   assert.doesNotMatch(androidPlannerSource, /setImageResource\(R\.drawable\.ic_refresh\)/)
   assert.match(
     androidPlannerSource,
@@ -910,7 +912,7 @@ test('native Android compact surfaces and timeline keep the iOS density contract
   )
   assert.match(
     androidPlannerSource,
-    /addView\(sectionTitle\([\s\S]*"空教室结果"[\s\S]*R\.drawable\.ic_section_check/,
+    /"空教室结果"[\s\S]*R\.drawable\.ic_section_check/,
   )
   assert.match(androidPlannerSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)
   assert.match(androidSettingsSource, /scrollBarStyle = View\.SCROLLBARS_INSIDE_OVERLAY/)

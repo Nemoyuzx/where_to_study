@@ -1232,7 +1232,7 @@ class MainNavigationSmokeTest {
                 activity.findViewById<View?>(R.id.phone_navigation)?.let {
                     assertTrue(
                         "Compact query conditions must not consume excessive vertical space",
-                        query.height <= activity.dp(180),
+                        query.height <= activity.dp(220),
                     )
                     val summary = activity.findViewById<ViewGroup>(R.id.planner_summary)
                     val metrics = summary.getChildAt(1) as LinearLayout
@@ -1891,19 +1891,21 @@ class MainNavigationSmokeTest {
                 hapticCount(scenario),
             )
             assertVisible(device, "privacy_policy_content")
-            assertNotNull(
-                "Privacy policy must disclose the project's fixed public-data endpoints",
-                device.wait(
-                    Until.findObject(
-                        By.textContains("本项目只运营用于整理公开班车与活动数据的固定接口"),
-                    ),
-                    UI_TIMEOUT_MILLIS,
-                ),
-            )
-            assertNull(
-                "Privacy policy must not claim that the project operates no backend",
-                device.findObject(By.textContains("项目不运营应用后端")),
-            )
+            // This disclosure is below the fold in the dialog, not the Activity.
+            // Scroll to it rather than assuming every policy section is visible.
+            val disclosureChinese = By.textContains("本项目只运营用于整理公开班车与活动数据的固定接口")
+            val disclosureEnglish = By.textContains("The project operates only fixed endpoints")
+            for (attempt in 0 until 12) {
+                if (device.hasObject(disclosureChinese) || device.hasObject(disclosureEnglish)) break
+                val policyScroll = device.findObject(By.res(
+                    instrumentation.targetContext.packageName, "privacy_policy_content"))?.parent
+                assertNotNull("Privacy policy must remain scrollable", policyScroll)
+                if (!policyScroll!!.scroll(androidx.test.uiautomator.Direction.DOWN, 0.65f)) break
+            }
+            assertTrue("Privacy policy must disclose fixed public-data endpoints",
+                device.hasObject(disclosureChinese) || device.hasObject(disclosureEnglish))
+            assertNull("Privacy policy must not deny the project's backend",
+                device.findObject(By.textContains("项目不运营应用后端")))
             scrollUntilVisible(device, "privacy_github_link")
             device.pressBack()
             assertVisible(device, "page_settings")

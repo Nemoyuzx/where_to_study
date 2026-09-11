@@ -96,7 +96,7 @@ class SettingsPage(
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(widgetSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
-                        addView(ColorThemeSettingsView(activity))
+                        addView(ColorThemeSettingsView(activity, isCompact, availableWidthDp))
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(languageSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
@@ -120,7 +120,7 @@ class SettingsPage(
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(widgetSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
-                addView(ColorThemeSettingsView(activity))
+                addView(ColorThemeSettingsView(activity, isCompact, availableWidthDp))
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(languageSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
@@ -134,13 +134,7 @@ class SettingsPage(
     private fun languageSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.settings_language_section
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "应用设置"))
-        addView(TextView(activity).apply {
-            text = "语言"
-            textSize = 13f
-            setThemeTextColor { Palette.muted }
-            setPadding(0, 0, 0, activity.dp(6))
-        })
+        addView(sectionTitle(activity, "语言", R.drawable.ic_settings_language))
         val languages = AppLanguage.entries
         val current = languages.indexOfFirst { it.code == preferences.languageCode }
             .coerceAtLeast(0)
@@ -171,7 +165,7 @@ class SettingsPage(
         val savedIdentity = credentialStore.load()?.let { it.account to it.password.isNotEmpty() }
         var persistedAccount = savedIdentity?.first.orEmpty()
         var hasPersistedPassword = savedIdentity?.second == true
-        addView(sectionTitle(activity, "个人账户"))
+        addView(sectionTitle(activity, "个人账户", R.drawable.ic_settings_account))
         val account = field("教务账号", persistedAccount, false)
         val password = field("密码", "", true)
         val passwordStatus = TextView(activity).apply {
@@ -303,6 +297,7 @@ class SettingsPage(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(UiMetrics.controlHeightDp),
             )
+            applyPhoneButtonStyle(primary = true)
             setOnClickListener {
                 activity.performControlHaptic(it)
                 saveSettings().onSuccess { credentials ->
@@ -334,6 +329,7 @@ class SettingsPage(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(UiMetrics.controlHeightDp),
             )
+            applyPhoneButtonStyle()
             setOnClickListener {
                 activity.performControlHaptic(it)
                 val button = it as TextView
@@ -395,7 +391,7 @@ class SettingsPage(
 
     private fun semesterSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "学期设置"))
+        addView(sectionTitle(activity, "学期设置", R.drawable.ic_nav_calendar))
         val termID = field("学期编号", preferences.termID, false)
         val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
         val autoDetect = Switch(activity).apply {
@@ -405,6 +401,7 @@ class SettingsPage(
             isChecked = preferences.automaticTermDetectionEnabled
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
+            applyPhoneSwitchStyle()
         }
         fun updateManualFields() {
             val enabled = !autoDetect.isChecked
@@ -472,7 +469,7 @@ class SettingsPage(
 
     private fun notificationSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "课程提醒"))
+        addView(sectionTitle(activity, "课程提醒", R.drawable.ic_settings_notification))
         addView(Switch(activity).apply {
             id = R.id.settings_daily_course_notification_toggle
             text = activity.getString(R.string.daily_course_notification_toggle)
@@ -481,6 +478,7 @@ class SettingsPage(
             isChecked = preferences.dailyCourseNotificationsEnabled
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
+            applyPhoneSwitchStyle()
             setOnClickListener {
                 activity.performControlHaptic(it)
                 val requested = isChecked
@@ -499,6 +497,19 @@ class SettingsPage(
         })
         val timeButton = settingsActionButton("", primary = false) { }.apply {
             id = R.id.settings_daily_course_notification_time
+            if (isCompact) {
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setTypeface(typeface, Typeface.NORMAL)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_section_clock, 0, 0, 0)
+                compoundDrawablePadding = activity.dp(8)
+                bindTheme("compoundDrawableTintList") {
+                    compoundDrawableTintList = android.content.res.ColorStateList.valueOf(Palette.primaryText)
+                }
+                (layoutParams as LinearLayout.LayoutParams).apply {
+                    topMargin = activity.dp(8)
+                    bottomMargin = activity.dp(6)
+                }
+            }
         }
         fun updateTimeLabel() {
             timeButton.text = activity.getString(
@@ -540,7 +551,7 @@ class SettingsPage(
 
     private fun widgetSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "桌面小组件"))
+        addView(sectionTitle(activity, "桌面小组件", R.drawable.ic_nav_classroom))
 
         val previewContent = TodayCourseWidgetLogic.previewContent()
         val preview = LayoutInflater.from(activity).inflate(
@@ -588,6 +599,7 @@ class SettingsPage(
             isChecked = preferences.widgetShowsLocation
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
+            applyPhoneSwitchStyle()
             setOnCheckedChangeListener { button, checked ->
                 activity.performControlHaptic(button)
                 preferences.widgetShowsLocation = checked
@@ -602,6 +614,7 @@ class SettingsPage(
             isChecked = preferences.widgetShowsTeacher
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
+            applyPhoneSwitchStyle()
             setOnCheckedChangeListener { button, checked ->
                 activity.performControlHaptic(button)
                 preferences.widgetShowsTeacher = checked
@@ -669,7 +682,7 @@ class SettingsPage(
 
     private fun informationSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "日期详情与生活信息"))
+        addView(sectionTitle(activity, "日期详情与生活信息", R.drawable.ic_section_summary))
         addView(featureSwitch("校区天气", preferences.weatherEnabled) {
             preferences.weatherEnabled = it
         })
@@ -854,6 +867,7 @@ class SettingsPage(
         isChecked = checked
         minHeight = activity.dp(UiMetrics.controlHeightDp)
         setPadding(0, 0, 0, 0)
+        applyPhoneSwitchStyle()
         setOnCheckedChangeListener { button, enabled ->
             activity.performControlHaptic(button)
             save(enabled)
@@ -877,21 +891,22 @@ class SettingsPage(
         val control = FrameLayout(activity).apply {
             id = viewID
             background = themedRoundedBackground(
-                activity, { Palette.surfaceVariant }, { Palette.border },
-                radius = 9)
+                activity, { Palette.surfaceVariant }, { if (isCompact) Color.TRANSPARENT else Palette.border },
+                radius = if (isCompact) UiMetrics.phoneControlRadiusDp else 9)
             clipChildren = false
             clipToPadding = false
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                activity.dp(UiMetrics.controlHeightDp),
+                if (isCompact) ViewGroup.LayoutParams.WRAP_CONTENT else activity.dp(UiMetrics.controlHeightDp),
             )
+            minimumHeight = activity.dp(controlHeight)
         }
         val thumbInset = activity.dp(3)
         val thumb = View(activity).apply {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             background = themedRoundedBackground(
-                activity, { Palette.primaryFill },
-                radius = 7)
+                activity, { if (isCompact) Palette.segmentedSelection else Palette.primaryFill },
+                radius = if (isCompact) UiMetrics.phoneControlRadiusDp - 2 else 7)
         }
         control.addView(
             thumb,
@@ -911,7 +926,9 @@ class SettingsPage(
                     gravity = Gravity.CENTER
                     includeFontPadding = false
                     maxLines = 2
-                    setThemeTextColor { if (index == selectedIndex) Palette.onPrimary else Palette.text }
+                    minimumHeight = activity.dp(controlHeight)
+                    if (isCompact) setPadding(activity.dp(4), activity.dp(10), activity.dp(4), activity.dp(10))
+                    setThemeTextColor { if (isCompact || index != selectedIndex) Palette.text else Palette.onPrimary }
                     setTypeface(
                         typeface,
                         if (index == selectedIndex) Typeface.BOLD else Typeface.NORMAL,
@@ -927,9 +944,9 @@ class SettingsPage(
                             val tab = row.getChildAt(tabIndex) as TextView
                             val selected = tabIndex == selectedIndex
                             tab.isSelected = selected
-                            tab.setThemeTextColor { if (selected) Palette.onPrimary else Palette.text }
+                            tab.setThemeTextColor { if (isCompact || !selected) Palette.text else Palette.onPrimary }
                             tab.setTypeface(
-                                tab.typeface,
+                                Typeface.DEFAULT,
                                 if (selected) Typeface.BOLD else Typeface.NORMAL,
                             )
                             tab.animate().cancel()
@@ -956,7 +973,7 @@ class SettingsPage(
             row,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                if (isCompact) ViewGroup.LayoutParams.WRAP_CONTENT else ViewGroup.LayoutParams.MATCH_PARENT,
             ),
         )
         control.post {
@@ -1002,7 +1019,7 @@ class SettingsPage(
         gravity = Gravity.CENTER_VERTICAL
         isClickable = false
         isFocusable = false
-        minimumHeight = activity.dp(UiMetrics.controlHeightDp)
+        minimumHeight = activity.dp(controlHeight)
         addView(deadlineLegendLabel(label, dotID, color), LinearLayout.LayoutParams(
             0,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1020,6 +1037,7 @@ class SettingsPage(
     ): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = activity.dp(controlHeight)
         addView(deadlineLegendLabel(label, dotID, color), LinearLayout.LayoutParams(
             0,
             ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1044,8 +1062,9 @@ class SettingsPage(
                 textSize = 15f
                 setThemeTextColor { Palette.text }
                 includeFontPadding = false
-            })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(deadlineLegendDot(label, dotID, color))
+            setPadding(0, activity.dp(6), activity.dp(8), activity.dp(6))
         }
 
     private fun deadlineLegendDot(label: String, dotID: Int, color: Int): View =
@@ -1081,6 +1100,7 @@ class SettingsPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(UiMetrics.controlHeightDp),
         )
+        applyPhoneButtonStyle(primary = primary)
         setOnClickListener {
             activity.performControlHaptic(it)
             onClick()
@@ -1090,7 +1110,7 @@ class SettingsPage(
     private fun localDataSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.settings_local_data_section
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "本地数据"))
+        addView(sectionTitle(activity, "本地数据", R.drawable.ic_settings_storage))
         addView(TextView(activity).apply {
             text = "个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。"
             textSize = 12f
@@ -1113,6 +1133,7 @@ class SettingsPage(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(UiMetrics.controlHeightDp),
             )
+            applyPhoneButtonStyle(destructive = true)
             setOnClickListener {
                 activity.performControlHaptic(it)
                 AlertDialog.Builder(activity)
@@ -1141,7 +1162,7 @@ class SettingsPage(
     private fun aboutSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         id = R.id.settings_about_section
-        addView(sectionTitle(activity, "关于本应用"))
+        addView(sectionTitle(activity, "关于本应用", R.drawable.ic_settings_info))
         addView(TextView(activity).apply {
             text = "Where To Study  ${BuildConfig.VERSION_NAME}\n北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。"
             textSize = 13f
@@ -1173,6 +1194,7 @@ class SettingsPage(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(UiMetrics.controlHeightDp),
             )
+            applyPhoneButtonStyle()
             setOnClickListener {
                 activity.performControlHaptic(it)
                 showPrivacyPolicy()
@@ -1204,6 +1226,16 @@ class SettingsPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             activity.dp(UiMetrics.controlHeightDp),
         )
+        if (isCompact) {
+            background = themedRoundedBackground(
+                activity,
+                { if (Palette.selection.preset == "default") Palette.background else Palette.surfaceVariant },
+                radius = UiMetrics.phoneControlRadiusDp,
+            )
+            minHeight = activity.dp(controlHeight)
+            setPadding(activity.dp(13), activity.dp(10), activity.dp(13), activity.dp(10))
+            layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        }
     }
 
     private fun settingsLinkButton(label: String, onClick: () -> Unit): TextView =
@@ -1223,6 +1255,7 @@ class SettingsPage(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 activity.dp(UiMetrics.controlHeightDp),
             )
+            applyPhoneButtonStyle()
             setOnClickListener {
                 activity.performControlHaptic(it)
                 onClick()
@@ -1241,7 +1274,7 @@ class SettingsPage(
         })
         addView(TextView(activity).apply {
             text = "设置"
-            textSize = 28f
+            textSize = UiMetrics.phonePageTitleSizeSp
             setThemeTextColor { Palette.text }
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
@@ -1250,7 +1283,35 @@ class SettingsPage(
     }
 
     private fun LinearLayout.applyCompactSurfacePadding() {
-        // Keep the shared 16dp surface inset on every width, matching SwiftUI Surface.
+        if (isCompact) {
+            background = themedRoundedBackground(activity, { Palette.surface }, radius = UiMetrics.phoneSurfaceRadiusDp)
+        }
+        // The 16dp inset remains aligned with SwiftUI Surface on every width.
+    }
+
+    private fun TextView.applyPhoneButtonStyle(primary: Boolean = false, destructive: Boolean = false) {
+        if (!isCompact) return
+        minimumHeight = activity.dp(controlHeight)
+        includeFontPadding = false
+        setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
+        layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        background = themedRoundedBackground(
+            activity,
+            { when {
+                destructive -> Palette.dangerSurface
+                primary -> Palette.primaryFill
+                else -> Palette.selectionSurface
+            } },
+            radius = UiMetrics.phoneControlRadiusDp,
+        )
+    }
+
+    private fun Switch.applyPhoneSwitchStyle() {
+        if (!isCompact) return
+        minHeight = activity.dp(controlHeight)
+        minWidth = activity.dp(controlHeight)
+        switchPadding = activity.dp(12)
+        setPadding(0, activity.dp(6), 0, activity.dp(6))
     }
 
     private fun showPrivacyPolicy() {
@@ -1389,5 +1450,8 @@ class SettingsPage(
         get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
 
     private val compactGap: Int
-        get() = if (isCompact) 7 else 10
+        get() = if (isCompact) 8 else 10
+
+    private val controlHeight: Int
+        get() = if (isCompact) UiMetrics.phoneControlMinHeightDp else UiMetrics.controlHeightDp
 }
