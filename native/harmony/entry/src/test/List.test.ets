@@ -18,6 +18,7 @@ import dailyInfoClientTest from './DailyInfoClient.test';
 import calendarDailyInfoClientTest from './CalendarDailyInfoClient.test';
 import appLocalizationTest from './AppLocalization.test';
 import shuttleBusClientTest from './ShuttleBusClient.test';
+import shuttleQueryLayoutTest from './ShuttleQueryLayout.test';
 import queryLogicTest from './QueryLogic.test';
 import networkDiagnosticsTest from './NetworkDiagnostics.test';
 import privacyConsentTest from './PrivacyConsent.test';
@@ -43,6 +44,7 @@ export default function testsuite() {
   calendarDailyInfoClientTest();
   appLocalizationTest();
   shuttleBusClientTest();
+  shuttleQueryLayoutTest();
   queryLogicTest();
   networkDiagnosticsTest();
   privacyConsentTest();

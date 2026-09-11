@@ -22,6 +22,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.graphics.ColorUtils
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -85,6 +86,25 @@ internal object InformationQueryLayoutLogic {
 
     fun modeThumbTranslationXPx(thumbWidthPx: Int, index: Int, itemCount: Int): Int =
         index.coerceIn(0, itemCount.coerceAtLeast(1) - 1) * thumbWidthPx.coerceAtLeast(1)
+}
+
+internal object ShuttleQueryLayoutLogic {
+    const val ROUTE_MIN_WIDTH_DP = 280
+    const val ROUTE_SPACING_DP = 16
+    const val DEPARTURE_MIN_WIDTH_DP = 86
+    const val DEPARTURE_SPACING_DP = 8
+
+    fun columns(contentWidth: Int, minimumWidth: Int, spacing: Int, maximumColumns: Int = Int.MAX_VALUE): Int =
+        ((contentWidth.coerceAtLeast(0) + spacing.coerceAtLeast(0)) /
+            (minimumWidth.coerceAtLeast(1) + spacing.coerceAtLeast(0)))
+            .coerceIn(1, maximumColumns.coerceAtLeast(1))
+
+    fun nextDeparture(departures: List<TodayShuttleDeparture>, currentTime: String): String? =
+        departures.firstOrNull { it.time > currentTime }?.time
+
+    fun periodText(route: TodayShuttleRoute): String = route.periodStartDate?.let { start ->
+        route.periodEndDate?.let { "$start – $it" } ?: "$start 起"
+    } ?: route.periodLabel
 }
 
 internal object ImportantEventQueryLogic {
@@ -253,11 +273,12 @@ internal class InformationQueryPage(
 ) {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
+    private var pinnedQueryHeader: LinearLayout? = null
     private var isAppendingImportantEventPage = false
     private val isCompact: Boolean
         get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
     private val pagePaddingDp: Int
-        get() = if (isCompact) 16 else UiMetrics.pagePaddingDp
+        get() = 16
     private val sectionSpacingDp: Int
         get() = if (isCompact) UiMetrics.phoneSectionSpacingDp else 12
     private val controlRadiusDp: Int
@@ -267,6 +288,14 @@ internal class InformationQueryPage(
 
     private fun querySurface(): LinearLayout =
         surface(activity, showsBorder = false, compact = isCompact)
+
+    // Match the reference shuttle Surface at every width: 16 dp insets,
+    // an 8 dp corner and a fine outline, independent of phone-only cards.
+    private fun shuttleSurface(): LinearLayout = surface(activity, showsBorder = true, compact = false).apply {
+        background = themedRoundedBackground(activity, { Palette.surface }, {
+            ColorUtils.blendARGB(Palette.border, Palette.surface, 0.55f)
+        }, radius = 8)
+    }
 
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
     private val shuttleObserver: () -> Unit = {
@@ -286,15 +315,6 @@ internal class InformationQueryPage(
             id = R.id.information_query_page
             orientation = LinearLayout.VERTICAL
             setThemeBackgroundColor { Palette.background }
-            addView(queryHeader())
-            addView(modeSelector(), LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                modeSelectorHeightPx(),
-            ).apply {
-                marginStart = activity.dp(pagePaddingDp)
-                marginEnd = activity.dp(pagePaddingDp)
-                bottomMargin = activity.dp(8)
-            })
         }
         content = FrameLayout(activity).apply { id = R.id.information_query_content }
         root.addView(content, LinearLayout.LayoutParams(
@@ -326,9 +346,12 @@ internal class InformationQueryPage(
         setPadding(activity.dp(pagePaddingDp), activity.dp(16), activity.dp(pagePaddingDp), activity.dp(12))
         addView(pageTitle(
             activity,
-            "查询",
-            titleSizeSp = if (isCompact) UiMetrics.phonePageTitleSizeSp else 34f,
-        ).apply { setPadding(0, 0, 0, 0) }, LinearLayout.LayoutParams(
+            "信息查询",
+            titleSizeSp = 34f,
+        ).apply {
+            setPadding(0, 0, 0, 0)
+            (getChildAt(0) as TextView).apply { text = text.toString().uppercase(Locale.ROOT) }
+        }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
@@ -340,11 +363,11 @@ internal class InformationQueryPage(
             id = R.id.information_query_mode_switch
             val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
             setPadding(inset, inset, inset, inset)
-            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = controlRadiusDp)
+            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 24)
         }
         val thumb = View(activity).apply {
             id = R.id.information_query_mode_thumb
-            background = themedRoundedBackground(activity, { Palette.segmentedSelection }, radius = controlRadiusDp - 2)
+            background = themedRoundedBackground(activity, { Palette.segmentedSelection }, radius = 22)
         }
         control.addView(thumb, FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT))
         val row = LinearLayout(activity).apply {
@@ -437,6 +460,12 @@ internal class InformationQueryPage(
 
     private fun renderMode(animate: Boolean, direction: Int = 0) {
         if (!::content.isInitialized) return
+        // Shuttle follows one scrolling page like iOS. Keep the established
+        // event filter/pagination viewport when users switch to important events.
+        pinnedQueryHeader?.let(root::removeView)
+        pinnedQueryHeader = if (sessionState.selectedMode == InformationQueryMode.IMPORTANT_EVENTS) {
+            queryPageHeader().also { root.addView(it, 0) }
+        } else null
         val page = when (sessionState.selectedMode) {
             InformationQueryMode.SHUTTLE -> shuttleContent()
             InformationQueryMode.IMPORTANT_EVENTS -> importantEventsContent()
@@ -468,206 +497,377 @@ internal class InformationQueryPage(
             .setInterpolator(AccelerateDecelerateInterpolator()).start()
     }
 
+    private fun queryPageHeader(): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(queryHeader())
+        addView(modeSelector(), LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, modeSelectorHeightPx(),
+        ).apply {
+            marginStart = activity.dp(pagePaddingDp)
+            marginEnd = activity.dp(pagePaddingDp)
+            bottomMargin = activity.dp(8)
+        })
+        UiText.localizeTree(this)
+    }
+
     private fun shuttleContent(): ScrollView = ScrollView(activity).apply {
         id = R.id.information_query_shuttle_scroll
         isFillViewport = true
         clipToPadding = false
         isVerticalScrollBarEnabled = false
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(
-                activity.dp(pagePaddingDp),
-                activity.dp(8),
-                activity.dp(pagePaddingDp),
-                activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(
-                    usesBottomNavigation,
-                )),
-            )
-            val snapshot = shuttleRepository.snapshot
-            when {
-                snapshot != null -> renderShuttleSnapshot(snapshot)
-                shuttleRepository.error != null -> addView(retryCard(
-                    shuttleRepository.error ?: "班车信息获取失败。",
-                ) { shuttleRepository.load(force = true) })
-                else -> addView(statusCard("正在获取今日班车与当前时刻表…"))
+        addView(object : LinearLayout(activity) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val width = MeasureSpec.getSize(widthMeasureSpec).coerceAtMost(activity.dp(1180))
+                super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), heightMeasureSpec)
             }
-        })
+        }.apply {
+            orientation = LinearLayout.VERTICAL
+            addView(queryPageHeader())
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(activity.dp(pagePaddingDp), activity.dp(8), activity.dp(pagePaddingDp),
+                    activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation)))
+                val snapshot = shuttleRepository.snapshot
+                when {
+                    snapshot != null -> renderShuttleSnapshot(snapshot)
+                    shuttleRepository.error != null -> addView(retryCard(
+                        shuttleRepository.error ?: "班车信息获取失败。",
+                    ) { shuttleRepository.load(force = true) })
+                    else -> addView(statusCard("正在获取今日班车与当前时刻表…"))
+                }
+            })
+        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL))
     }
 
     private fun LinearLayout.renderShuttleSnapshot(snapshot: ShuttleBusSnapshot) {
-        val presentation = ShuttleBusLogic.today(snapshot, Calendar.getInstance(shanghai))
-        addView(querySurface().apply {
+        val now = Calendar.getInstance(shanghai)
+        val currentTime = "%02d:%02d".format(Locale.ROOT, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE))
+        val presentation = ShuttleBusLogic.today(snapshot, now)
+        val departureCount = presentation.routes.sumOf { it.departures.size }
+        val statusTitle = when {
+            presentation.routes.isEmpty() -> "今日暂无生效班车时刻表"
+            departureCount == 0 -> "今日没有计划班次"
+            else -> "今日班车按时刻表运行"
+        }
+        addView(shuttleSurface().apply {
             id = R.id.information_query_shuttle_status
-            addView(sectionTitle(activity, "今日班车状态"))
-            addView(TextView(activity).apply {
-                text = presentation.status
-                textSize = if (isCompact) 19f else 17f
-                setThemeTextColor { Palette.text }
-                setTypeface(typeface, Typeface.BOLD)
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+                addView(shuttleIcon(if (departureCount == 0) R.drawable.ic_nav_calendar else R.drawable.ic_shuttle_bus),
+                    LinearLayout.LayoutParams(activity.dp(24), activity.dp(26)).apply { marginEnd = activity.dp(10) })
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(activity).apply {
+                        tag = "information.query.shuttle.status.title"
+                        text = statusTitle
+                        textSize = 17f
+                        setThemeTextColor { Palette.text }
+                        setTypeface(typeface, Typeface.BOLD)
+                    })
+                    addView(TextView(activity).apply {
+                        tag = "information.query.shuttle.status.summary"
+                        text = "今日共 ${presentation.routes.size} 个方向、$departureCount 个计划班次"
+                        textSize = 16f
+                        setThemeTextColor { Palette.muted }
+                        setPadding(0, activity.dp(4), 0, 0)
+                    })
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(shuttleIconButton(R.drawable.ic_refresh, "刷新班车信息").apply {
+                    id = R.id.information_query_shuttle_refresh
+                    isEnabled = !shuttleRepository.isLoading()
+                    alpha = if (isEnabled) 1f else 0.45f
+                    setOnClickListener {
+                        activity.performControlHaptic(it)
+                        shuttleRepository.load(force = true)
+                        renderMode(animate = false)
+                    }
+                }, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { marginStart = activity.dp(8) })
             })
-            presentation.nextDeparture?.let { value ->
-                addView(TextView(activity).apply {
-                    text = value
-                    textSize = 13f
-                    setThemeTextColor { Palette.primaryText }
-                    setPadding(0, activity.dp(5), 0, 0)
+            if (presentation.isStale) addView(TextView(activity).apply {
+                text = "当前展示最近一次成功同步的缓存"
+                textSize = 12f
+                setThemeTextColor { Palette.accent }
+                setPadding(0, activity.dp(10), 0, 0)
+            })
+            presentation.noticeTitle?.let { title ->
+                addView(View(activity).apply { setThemeBackgroundColor { Palette.border } },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(1)).apply {
+                        topMargin = activity.dp(10)
+                        bottomMargin = activity.dp(10)
+                    })
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.TOP
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(TextView(activity).apply {
+                            tag = "information.query.shuttle.notice.title"
+                            text = title
+                            UiText.preserveRawText(this)
+                            textSize = 15f
+                            setTypeface(typeface, Typeface.BOLD)
+                            setThemeTextColor { Palette.text }
+                        })
+                        presentation.noticePublishedAt?.let { publishedAt ->
+                            addView(TextView(activity).apply {
+                                tag = "information.query.shuttle.notice.date"
+                                text = "后勤部通知 · $publishedAt"
+                                textSize = 12f
+                                setThemeTextColor { Palette.muted }
+                                setPadding(0, activity.dp(3), 0, 0)
+                            })
+                        }
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    presentation.noticeURL?.let { url ->
+                        addView(shuttleIconButton(R.drawable.ic_shuttle_external, "查看班车通知原文", outlined = false).apply {
+                            id = R.id.information_query_shuttle_notice_link
+                            setOnClickListener { openURL(url) }
+                        }, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { marginStart = activity.dp(8) })
+                    }
                 })
             }
-            if (presentation.isStale) addView(TextView(activity).apply {
-                text = "当前显示上一次有效缓存，服务正在恢复。"
-                textSize = 12f
-                setThemeTextColor { Palette.danger }
-                setPadding(0, activity.dp(6), 0, 0)
-            })
-            addView(TextView(activity).apply {
-                text = "数据更新时间：${snapshot.generatedAt.replace('T', ' ').take(16)}"
-                textSize = 11f
-                setThemeTextColor { Palette.muted }
-                setPadding(0, activity.dp(6), 0, 0)
-            })
-        })
-        addView(spacer(activity, sectionSpacingDp))
-        addView(LinearLayout(activity).apply {
-            id = R.id.information_query_shuttle_routes
-            orientation = LinearLayout.VERTICAL
-            if (presentation.routes.isEmpty()) {
-                addView(statusCard("当前没有可安全展示的生效时刻表，请查看学校原通知。"))
-            } else {
-                presentation.routes.forEach { route -> addView(shuttleRouteCard(route)) }
+            val unassignedStops = presentation.stops.filter { (campus, _) ->
+                presentation.routes.none { route -> shuttleStopMatches(campus, route.from) }
+            }.map { (campus, location) -> "$campus · $location" }
+            (presentation.notes + unassignedStops).forEach { note ->
+                addView(TextView(activity).apply {
+                    tag = "information.query.shuttle.status.note"
+                    text = note
+                    UiText.preserveRawText(this)
+                    textSize = 12f
+                    setThemeTextColor { Palette.muted }
+                    setPadding(0, activity.dp(10), 0, 0)
+                })
             }
         })
-        if (presentation.stops.isNotEmpty()) {
-            addView(querySurface().apply {
-                addView(sectionTitle(activity, "候车地点"))
-                presentation.stops.forEach { (campus, location) ->
-                    addView(TextView(activity).apply {
-                        text = "$campus · $location"
-                        textSize = 13f
-                        setThemeTextColor { Palette.text }
-                        setPadding(0, activity.dp(3), 0, activity.dp(3))
-                    })
-                }
-            })
-        }
-        if (presentation.notes.isNotEmpty()) {
-            addView(spacer(activity, sectionSpacingDp))
-            addView(querySurface().apply {
-                addView(sectionTitle(activity, "乘车提示"))
-                presentation.notes.forEach { note ->
-                    addView(TextView(activity).apply {
-                        text = "• $note"
-                        UiText.preserveRawText(this)
-                        textSize = 12f
-                        setThemeTextColor { Palette.muted }
-                        setPadding(0, activity.dp(2), 0, activity.dp(2))
-                    })
-                }
-            })
-        }
-        addView(querySourceFooter(
-            "第三方来源：北京邮电大学后勤部公开通知；时刻表由脚本解析，仅供参考",
-            presentation.noticeURL ?: snapshot.sourcePage,
-            R.id.information_query_shuttle_source_footer,
-        ))
+        addView(spacer(activity, ShuttleQueryLayoutLogic.ROUTE_SPACING_DP))
+        addView(adaptiveShuttleGrid(
+            presentation.routes,
+            activity.dp(ShuttleQueryLayoutLogic.ROUTE_MIN_WIDTH_DP),
+            activity.dp(ShuttleQueryLayoutLogic.ROUTE_SPACING_DP),
+            maximumColumns = 2,
+        ) { route -> shuttleRouteCard(route, currentTime, presentation.stops.filter { (campus, _) ->
+            shuttleStopMatches(campus, route.from)
+        }.map { it.second }) }.apply {
+            id = R.id.information_query_shuttle_routes
+            if (presentation.routes.isEmpty()) {
+                addView(statusCard("当前没有可安全展示的生效时刻表，请查看学校原通知。"))
+            }
+        })
+        addView(TextView(activity).apply {
+            text = listOfNotNull(presentation.nextDeparture,
+                "数据更新时间：${snapshot.generatedAt.replace('T', ' ').take(16)}").joinToString("\n")
+            text = text.split('\n').joinToString("\n") { activity.uiText(it) }
+            UiText.preserveRawText(this)
+            textSize = 11f
+            setThemeTextColor { Palette.muted }
+            setPadding(0, activity.dp(12), 0, 0)
+        })
+        addView(shuttleSourceFooter(snapshot.sourcePage))
     }
 
-    private fun shuttleRouteCard(route: TodayShuttleRoute): LinearLayout =
-        querySurface().apply {
+    private fun shuttleStopMatches(campus: String, departureCampus: String): Boolean =
+        campus.contains(departureCampus) || departureCampus.contains(campus)
+
+    private fun shuttleSourceFooter(url: String): LinearLayout = LinearLayout(activity).apply {
+        id = R.id.information_query_shuttle_source_footer
+        tag = "information.query.source.footer"
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.TOP
+        setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+        background = themedRoundedBackground(activity, {
+            ColorUtils.blendARGB(Palette.background, Palette.primaryFill, 0.08f)
+        }, radius = 10)
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { topMargin = activity.dp(16) }
+        addView(shuttleIcon(R.drawable.ic_settings_info), LinearLayout.LayoutParams(activity.dp(18), activity.dp(20))
+            .apply { marginEnd = activity.dp(9) })
+        addView(TextView(activity).apply {
+            text = "第三方来源：北京邮电大学后勤部公开通知，由 Where To Study 服务解析整理，仅供参考，请以官方原文为准。"
+            textSize = 12f
+            setThemeTextColor { ColorThemeLogic.readableText(Palette.muted,
+                ColorUtils.blendARGB(Palette.background, Palette.primaryFill, 0.08f)) }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(shuttleIconButton(R.drawable.ic_shuttle_external, "查看数据来源", outlined = false).apply {
+            setOnClickListener { openURL(url) }
+        }, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { marginStart = activity.dp(4) })
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { openURL(url) }
+    }
+
+    private fun shuttleIcon(resource: Int): ImageView = ImageView(activity).apply {
+        setImageResource(resource)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(Palette.primaryText) }
+    }
+
+    private fun shuttleIconButton(resource: Int, label: String, outlined: Boolean = true): ImageView =
+        shuttleIcon(resource).apply {
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            contentDescription = activity.uiText(label)
+            isClickable = true
+            isFocusable = true
+            setPadding(activity.dp(13), activity.dp(13), activity.dp(13), activity.dp(13))
+            if (outlined) background = themedRoundedBackground(activity, {
+                ColorUtils.blendARGB(Palette.surface, Palette.primaryFill, 0.12f)
+            }, radius = 24)
+        }
+
+    private fun shuttleRouteCard(route: TodayShuttleRoute, currentTime: String, pickupLocations: List<String>): LinearLayout =
+        shuttleSurface().apply {
             tag = "information.query.shuttle.route"
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = activity.dp(sectionSpacingDp) }
-            addView(TextView(activity).apply {
-                text = "${route.from} → ${route.to}"
-                textSize = if (isCompact) 17f else 16f
-                setThemeTextColor { Palette.text }
-                setTypeface(typeface, Typeface.BOLD)
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+                addView(shuttleIcon(R.drawable.ic_shuttle_route), LinearLayout.LayoutParams(
+                    activity.dp(20), activity.dp(22),
+                ).apply { marginEnd = activity.dp(8) })
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(activity).apply {
+                        tag = "information.query.shuttle.route.title"
+                        text = "${route.from} → ${route.to}"
+                        UiText.preserveRawText(this)
+                        textSize = 17f
+                        setThemeTextColor { Palette.text }
+                        setTypeface(typeface, Typeface.BOLD)
+                    })
+                    addView(TextView(activity).apply {
+                        tag = "information.query.shuttle.route.period"
+                        text = ShuttleQueryLayoutLogic.periodText(route)
+                        if (route.periodStartDate == null) UiText.preserveRawText(this)
+                        textSize = 12f
+                        setThemeTextColor { Palette.muted }
+                        setPadding(0, activity.dp(3), 0, 0)
+                    })
+                    pickupLocations.forEach { location ->
+                        addView(TextView(activity).apply {
+                            tag = "information.query.shuttle.route.pickup"
+                            text = "${activity.uiText("候车地点")} · $location"
+                            UiText.preserveRawText(this)
+                            textSize = 12f
+                            setThemeTextColor { Palette.muted }
+                            setPadding(0, activity.dp(3), 0, 0)
+                        })
+                    }
+                }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             })
-            addView(TextView(activity).apply {
-                text = route.periodLabel
-                UiText.preserveRawText(this)
-                textSize = if (isCompact) 12f else 11f
-                setThemeTextColor { Palette.muted }
-                setPadding(0, activity.dp(4), 0, activity.dp(if (isCompact) 12 else 7))
-            })
+            addView(spacer(activity, 12))
             if (route.departures.isEmpty()) {
                 addView(TextView(activity).apply {
                     text = "今日该方向无班车"
                     textSize = 13f
                     setThemeTextColor { Palette.muted }
                 })
-            } else if (isCompact) {
-                addView(shuttleDepartureGrid(route.departures))
             } else {
-                route.departures.forEach { departure ->
-                    addView(LinearLayout(activity).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        setPadding(0, activity.dp(4), 0, activity.dp(4))
-                        addView(TextView(activity).apply {
-                            text = departure.time
-                            textSize = 14f
-                            setThemeTextColor { Palette.primaryText }
-                            setTypeface(typeface, Typeface.BOLD)
-                        }, LinearLayout.LayoutParams(activity.dp(64), ViewGroup.LayoutParams.WRAP_CONTENT))
-                        addView(TextView(activity).apply {
-                            text = "${departure.vehicle} × ${departure.count}"
-                            UiText.preserveRawText(this)
-                            textSize = 13f
-                            setThemeTextColor { Palette.text }
-                        })
-                    })
-                }
+                addView(shuttleDepartureGrid(route.departures, currentTime))
             }
         }
 
-    private fun shuttleDepartureGrid(departures: List<TodayShuttleDeparture>): LinearLayout {
-        val spacingDp = 8
-        val contentWidthDp = availableWidthDp - 2 * pagePaddingDp - 2 * UiMetrics.surfacePaddingDp
-        val columns = ((contentWidthDp + spacingDp) / (86 + spacingDp)).coerceIn(2, 4)
-        return LinearLayout(activity).apply {
-            tag = "information.query.shuttle.departures"
-            orientation = LinearLayout.VERTICAL
-            departures.chunked(columns).forEachIndexed { rowIndex, rowDepartures ->
+    private fun shuttleDepartureGrid(departures: List<TodayShuttleDeparture>, currentTime: String): LinearLayout {
+        val nextDeparture = ShuttleQueryLayoutLogic.nextDeparture(departures, currentTime)
+        val timeMeasure = TextView(activity).apply {
+            textSize = 15f
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            fontFeatureSettings = "tnum"
+            letterSpacing = 0f
+        }.paint.measureText("00:00").toInt() + activity.dp(21)
+        val minimumWidth = maxOf(activity.dp(ShuttleQueryLayoutLogic.DEPARTURE_MIN_WIDTH_DP), timeMeasure)
+        return adaptiveShuttleGrid(departures, minimumWidth,
+            activity.dp(ShuttleQueryLayoutLogic.DEPARTURE_SPACING_DP)) { departure ->
+            val isNext = departure.time == nextDeparture
+            LinearLayout(activity).apply {
+                tag = "information.query.shuttle.departure"
+                isSelected = isNext
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                minimumHeight = activity.dp(44)
+                setPadding(activity.dp(4), activity.dp(7), activity.dp(4), activity.dp(7))
+                background = themedRoundedBackground(activity, {
+                    if (isNext) ColorUtils.blendARGB(Palette.surface, Palette.primaryFill, 0.12f)
+                    else Palette.background
+                }, radius = 8)
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    rowDepartures.forEachIndexed { index, departure ->
-                        addView(LinearLayout(activity).apply {
-                            orientation = LinearLayout.VERTICAL
-                            gravity = Gravity.CENTER
-                            minimumHeight = activity.dp(56)
-                            setPadding(activity.dp(4), activity.dp(9), activity.dp(4), activity.dp(9))
-                            background = themedRoundedBackground(activity, { Palette.background }, radius = 8)
-                            addView(TextView(activity).apply {
-                                text = departure.time
-                                textSize = 16f
-                                includeFontPadding = false
-                                setThemeTextColor { Palette.text }
-                                setTypeface(Typeface.MONOSPACE, Typeface.BOLD)
-                                gravity = Gravity.CENTER
-                            })
-                            addView(TextView(activity).apply {
-                                text = "${departure.vehicle} × ${departure.count}"
-                                UiText.preserveRawText(this)
-                                textSize = 12f
-                                includeFontPadding = false
-                                gravity = Gravity.CENTER
-                                setThemeTextColor { Palette.muted }
-                                setPadding(0, activity.dp(4), 0, 0)
-                            })
-                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                            if (index < columns - 1) marginEnd = activity.dp(spacingDp)
+                    gravity = Gravity.CENTER
+                    addView(TextView(activity).apply {
+                        text = departure.time
+                        textSize = 15f
+                        includeFontPadding = false
+                        setThemeTextColor { Palette.text }
+                        setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                        fontFeatureSettings = "tnum"
+                        letterSpacing = 0f
+                        gravity = Gravity.CENTER
+                    })
+                    if (isNext) addView(View(activity).apply {
+                        tag = "information.query.shuttle.next.dot"
+                        background = themedRoundedBackground(activity, { Palette.primaryFill }, radius = 5)
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }, LinearLayout.LayoutParams(activity.dp(5), activity.dp(5)).apply { marginStart = activity.dp(4) })
+                })
+                addView(TextView(activity).apply {
+                    text = "${departure.vehicle} × ${departure.count}"
+                    UiText.preserveRawText(this)
+                    textSize = 11f
+                    includeFontPadding = false
+                    gravity = Gravity.CENTER
+                    setThemeTextColor { Palette.muted }
+                    setPadding(0, activity.dp(2), 0, 0)
+                })
+                if (isNext) contentDescription = "${activity.uiText("下一班")} ${departure.time} · ${departure.vehicle} × ${departure.count}"
+            }
+        }.apply {
+            tag = "information.query.shuttle.departures"
+        }
+    }
+
+    private fun <T> adaptiveShuttleGrid(
+        items: List<T>,
+        minimumWidthPx: Int,
+        spacingPx: Int,
+        maximumColumns: Int = Int.MAX_VALUE,
+        makeCell: (T) -> View,
+    ): LinearLayout = object : LinearLayout(activity) {
+        private var renderedColumns = 0
+
+        init {
+            orientation = VERTICAL
+            rebuild(1)
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val width = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+            if (items.isNotEmpty() && width > 0) {
+                rebuild(ShuttleQueryLayoutLogic.columns(width, minimumWidthPx, spacingPx, maximumColumns))
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+
+        private fun rebuild(columns: Int) {
+            if (items.isEmpty() || columns == renderedColumns) return
+            renderedColumns = columns
+            removeAllViews()
+            items.chunked(columns).forEachIndexed { rowIndex, rowItems ->
+                addView(LinearLayout(activity).apply {
+                    orientation = HORIZONTAL
+                    gravity = Gravity.TOP
+                    repeat(columns) { index ->
+                        val cell = rowItems.getOrNull(index)?.let(makeCell) ?: View(activity)
+                        // A plain View with WRAP_CONTENT can consume its entire
+                        // AT_MOST height in ScrollView. Empty slots reserve width only.
+                        val cellHeight = if (index < rowItems.size) ViewGroup.LayoutParams.WRAP_CONTENT else 1
+                        addView(cell, LayoutParams(0, cellHeight, 1f).apply {
+                            if (index < columns - 1) marginEnd = spacingPx
                         })
+                        UiText.localizeTree(cell)
                     }
-                    repeat(columns - rowDepartures.size) { index ->
-                        addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f).apply {
-                            if (rowDepartures.size + index < columns - 1) marginEnd = activity.dp(spacingDp)
-                        })
-                    }
-                }, LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply { if (rowIndex > 0) topMargin = activity.dp(spacingDp) })
+                }, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    if (rowIndex > 0) topMargin = spacingPx
+                })
             }
         }
     }

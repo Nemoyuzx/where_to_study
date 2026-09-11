@@ -655,7 +655,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
         let app = configuredApplication()
-        app.launchArguments = ["--review-demo", "--ui-test-slow-calendar-animation"]
+        app.launchArguments = ["--review-demo", "--ui-test-slow-calendar-animation", "--ui-test-month-transition-trace"]
         app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-11-15"
         app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "月"
         app.launchEnvironment["WHERE_TO_STUDY_UI_UNAVAILABLE_HOLIDAY_YEAR"] = "2027"
@@ -667,19 +667,31 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["2026年11月"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["节假日数据暂不可用"].exists)
 
-        // Read the incoming page twice inside the two-second transition: its x position must
-        // move instead of snapping when the destination status banner appears.
+        let probe = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label == %@", "Local month transition sample"
+        )).firstMatch
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        // Record in the app process. Accessibility queries can take longer than
+        // the whole animation on CI and must not decide whether it was frozen.
         horizontalSwipe(in: app, atY: 0.55, toLeft: true)
-        Thread.sleep(forTimeInterval: 0.15)
-        let target = app.buttons["calendar.mobile.month-day-number.2026-12-15"].firstMatch
-        XCTAssertTrue(target.waitForExistence(timeout: 0.5))
-        let firstX = target.frame.minX
-        Thread.sleep(forTimeInterval: 0.45)
-        let secondX = target.frame.minX
-        XCTAssertLessThan(secondX, firstX - 12, "跨到无节假日数据年份时仍须进行水平位移动画")
-        XCTAssertFalse(app.staticTexts["节假日数据暂不可用"].exists)
-
-        Thread.sleep(forTimeInterval: 1.6)
+        let recorded = NSPredicate { object, _ in
+            guard let value = (object as? XCUIElement)?.value as? String,
+                  let data = value.data(using: .utf8),
+                  let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return result["completed"] as? Bool == true && result["finalDate"] as? String == "2026-12-15"
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: recorded, object: probe)], timeout: 10),
+                       .completed, "Transition trace: \(probe.value as? String ?? "missing")")
+        let value = try XCTUnwrap(probe.value as? String)
+        let result = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: Any])
+        print("MONTH_TRANSITION_TRACE " + value)
+        XCTAssertGreaterThan(try XCTUnwrap(result["generation"] as? Int), 0)
+        let samples = try XCTUnwrap(result["samples"] as? [[String: Any]])
+        let positions = samples.compactMap { $0["offsetX"] as? Double }
+        XCTAssertGreaterThan(Set(positions.map { ($0 * 10).rounded() }).count, 3, "须记录到动画中间帧，不能只记录首尾跳变")
+        XCTAssertGreaterThan((positions.max() ?? 0) - (positions.min() ?? 0), 12)
+        XCTAssertTrue(samples.allSatisfy { ($0["messages"] as? [String])?.isEmpty == true }, "动画期间状态栏保持冻结")
+        XCTAssertEqual(result["finalMessages"] as? [String], ["节假日数据暂不可用"])
         XCTAssertTrue(app.staticTexts["2026年12月"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["节假日数据暂不可用"].waitForExistence(timeout: 3))
     }

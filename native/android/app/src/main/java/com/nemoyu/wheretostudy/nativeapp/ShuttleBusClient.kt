@@ -68,6 +68,8 @@ data class TodayShuttleRoute(
     val to: String,
     val periodLabel: String,
     val departures: List<TodayShuttleDeparture>,
+    val periodStartDate: String? = null,
+    val periodEndDate: String? = null,
 )
 
 data class TodayShuttlePresentation(
@@ -79,6 +81,7 @@ data class TodayShuttlePresentation(
     val notes: List<String>,
     val routes: List<TodayShuttleRoute>,
     val isStale: Boolean,
+    val noticePublishedAt: String? = null,
 )
 
 internal object ShuttleBusResponseParser {
@@ -250,6 +253,8 @@ internal object ShuttleBusLogic {
                         TodayShuttleDeparture(row.departureTime, service.vehicle, service.count)
                     }
                 },
+                periodStartDate = schedule.period.startDate,
+                periodEndDate = schedule.period.endDate,
             )
         }
         val departureCount = routes.sumOf { it.departures.size }
@@ -280,6 +285,7 @@ internal object ShuttleBusLogic {
             notes = notice?.notes.orEmpty(),
             routes = routes,
             isStale = snapshot.status == "stale",
+            noticePublishedAt = notice?.publishedAt,
         )
     }
 

@@ -50,6 +50,8 @@
     <item name="information_query_events_tab" type="id" />
     <item name="information_query_content" type="id" />
     <item name="information_query_shuttle_status" type="id" />
+    <item name="information_query_shuttle_refresh" type="id" />
+    <item name="information_query_shuttle_notice_link" type="id" />
     <item name="information_query_shuttle_scroll" type="id" />
     <item name="information_query_shuttle_source_footer" type="id" />
     <item name="information_query_shuttle_routes" type="id" />

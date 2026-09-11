@@ -4,6 +4,8 @@ import { AppTheme } from '../common/AppTheme';
 import { DeadlineVisual } from '../common/DeadlineVisual';
 import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
+import { PageTitle } from './SharedComponents';
+import { ShuttleQueryLayout } from './ShuttleQueryLayout';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
 } from '../common/QueryLogic';
@@ -13,7 +15,7 @@ import {
 import {
   ShuttleBusClient, ShuttleBusDailyView, ShuttleBusFetching, ShuttleBusLogic,
   ShuttleBusPeriodState, ShuttleBusRow, ShuttleBusSchedule, ShuttleBusService,
-  ShuttleBusSnapshot, ShuttleBusSources
+  ShuttleBusSnapshot, ShuttleBusSources, ShuttleBusStop
 } from '../net/ShuttleBusClient';
 
 @ComponentV2
@@ -26,6 +28,7 @@ export struct QueryView {
   @Local searchText: string = '';
   @Local requestedVisibleEventCount: number = ImportantEventQueryLogic.initialRequestedCount();
   @Local contentWidth: number = 390;
+  @Local contentFontScale: number = 1;
   @Local shuttleSnapshot: ShuttleBusSnapshot | null = null;
   @Local shuttleLoading: boolean = false;
   @Local shuttleError: string = '';
@@ -39,6 +42,7 @@ export struct QueryView {
   }
 
   aboutToAppear(): void {
+    this.updateFontScale();
     this.loadShuttle();
     this.model.loadImportantEvents(false);
   }
@@ -58,6 +62,14 @@ export struct QueryView {
 
   private isWide(): boolean {
     return this.contentWidth >= 760;
+  }
+
+  private updateFontScale(): void {
+    try {
+      this.contentFontScale = ShuttleQueryLayout.fontScale(AppContext.get().config.fontSizeScale ?? 1);
+    } catch (e) {
+      this.contentFontScale = 1;
+    }
   }
 
   private loadShuttle(): void {
@@ -138,11 +150,28 @@ export struct QueryView {
 
   build() {
     Column({ space: 0 }) {
-      this.pageHeader()
-      this.tabPicker()
       if (this.selectedTab() === QueryPageTab.shuttle) {
-        this.shuttleContent()
+        Scroll() {
+          Column({ space: 16 }) {
+            this.pageHeader()
+            this.tabPicker()
+            this.shuttleContent()
+          }
+          .width('100%')
+          .constraintSize({ maxWidth: ShuttleQueryLayout.maximumPageWidthVp })
+          .padding({ left: 16, right: 16, top: 16,
+            bottom: this.isWide() ? 28 : PhoneNavigationLayout.minimumContentBottomInsetVp })
+          .alignSelf(ItemAlign.Center)
+          .alignItems(HorizontalAlign.Start)
+        }
+        .id('query.shuttle.scroll')
+        .width('100%')
+        .layoutWeight(1)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       } else {
+        this.pageHeader()
+        this.tabPicker()
         this.eventsContent()
       }
     }
@@ -151,6 +180,7 @@ export struct QueryView {
     .backgroundColor(AppTheme.background())
     .onAreaChange((oldArea: Area, newArea: Area) => {
       this.contentWidth = Number(newArea.width);
+      this.updateFontScale();
     })
     .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
   }
@@ -158,44 +188,31 @@ export struct QueryView {
   @Builder
   pageHeader() {
     Row({ space: 10 }) {
-      Column({ space: 2 }) {
-        Text('Where To Study')
-          .fontSize(11)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.secondaryText())
-        Text(this.model.text('查询'))
-          .fontSize(this.isWide() ? 28 : 24)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.text())
-      }
+      PageTitle({ eyebrow: 'Where To Study', title: this.model.text('信息查询') })
       .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      Button() {
-        SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-          .fontSize(17)
-          .fontColor([AppTheme.primary()])
-      }
-      .type(ButtonType.Normal)
-      .width(38)
-      .height(38)
-      .borderRadius(19)
-      .backgroundColor(AppTheme.surface())
-      .id('query.reload')
-      .enabled(this.selectedTab() === QueryPageTab.shuttle ?
-        !this.shuttleLoading : !this.model.isLoadingImportantEvents)
-      .onClick(() => {
-        if (this.selectedTab() === QueryPageTab.shuttle) {
-          this.loadShuttle();
-        } else {
-          this.model.loadImportantEvents(true);
+      if (this.selectedTab() === QueryPageTab.events) {
+        Button() {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+            .fontSize(17)
+            .fontColor([AppTheme.primary()])
         }
-      })
+        .type(ButtonType.Normal)
+        .width(38)
+        .height(38)
+        .responseRegion({ x: -3, y: -3, width: 44, height: 44 })
+        .borderRadius(8)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .id('query.events.reload')
+        .accessibilityText(this.model.text('刷新重要事件'))
+        .enabled(!this.model.isLoadingImportantEvents)
+        .onClick(() => {
+          this.model.loadImportantEvents(true);
+        })
+      }
     }
     .width('100%')
-    .height(this.isWide() ? 70 : 58)
-    .padding({ left: this.isWide() ? 24 : 10, right: this.isWide() ? 24 : 14 })
+    .padding(this.selectedTab() === QueryPageTab.shuttle ? 0 : 16)
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(AppTheme.surface())
   }
 
   @Builder
@@ -205,12 +222,15 @@ export struct QueryView {
         Text(this.model.text(QueryPageContract.tabTitle(tab)))
           .fontSize(14)
           .fontWeight(this.selectedTab() === tab ? FontWeight.Bold : FontWeight.Regular)
-          .fontColor(this.selectedTab() === tab ? AppTheme.onPrimary() : AppTheme.text())
+          .fontColor(AppTheme.text())
           .textAlign(TextAlign.Center)
           .layoutWeight(1)
-          .height(34)
+          .constraintSize({ minHeight: 34 })
+          .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+          .maxLines(2)
           .borderRadius(8)
-          .backgroundColor(this.selectedTab() === tab ? AppTheme.primaryFill() : Color.Transparent)
+          .backgroundColor(this.selectedTab() === tab ? AppTheme.surface() : Color.Transparent)
+          .accessibilitySelected(this.selectedTab() === tab)
           .id(QueryPageContract.tabAccessibilityID(tab))
           .animation({ duration: 160, curve: Curve.EaseOut })
           .onClick(() => {
@@ -220,10 +240,10 @@ export struct QueryView {
           })
       }, (tab: QueryPageTab) => 'query-tab.' + tab)
     }
-    .width(this.isWide() ? 520 : 'calc(100% - 28vp)')
-    .height(40)
+    .width(this.selectedTab() === QueryPageTab.shuttle ? '100%' : 'calc(100% - 32vp)')
+    .constraintSize({ minHeight: 40 })
     .padding(3)
-    .margin({ top: 12, bottom: 12 })
+    .margin({ bottom: this.selectedTab() === QueryPageTab.shuttle ? 0 : 12 })
     .borderRadius(11)
     .backgroundColor(AppTheme.surfaceVariant())
     .alignSelf(ItemAlign.Center)
@@ -232,65 +252,104 @@ export struct QueryView {
   @Builder
   shuttleContent() {
     if (this.shuttleLoading && this.shuttleSnapshot === null) {
-      this.loadingMessage('正在读取最新班车信息')
+      this.shuttleMessage('正在读取最新班车信息', '正在读取后勤部最新通知与当前生效时刻表。', false)
     } else if (this.shuttleSnapshot === null) {
-      this.errorMessage(this.shuttleError, (): void => this.loadShuttle())
+      this.shuttleMessage('班车信息暂不可用', this.shuttleError, true)
     } else {
-      Scroll() {
-        Column({ space: 14 }) {
-          this.shuttleStatusCard(ShuttleBusLogic.dailyView(this.shuttleSnapshot as ShuttleBusSnapshot))
-          this.shuttleScheduleGrid(ShuttleBusLogic.dailyView(this.shuttleSnapshot as ShuttleBusSnapshot))
-          this.sourceCard('第三方来源：北京邮电大学后勤部公开通知；由 Where To Study 服务端每小时整理，结果仅供参考。',
-            ShuttleBusSources.sourcePage)
-        }
-        .width('100%')
-        .constraintSize({ maxWidth: 1100 })
-        .padding({
-          left: 16,
-          right: 16,
-          top: 2,
-          bottom: this.isWide() ? 28 : PhoneNavigationLayout.minimumContentBottomInsetVp
-        })
-        .alignSelf(ItemAlign.Center)
-        .alignItems(HorizontalAlign.Start)
-      }
-      .layoutWeight(1)
-      .width('100%')
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+      this.shuttleSnapshotContent(ShuttleBusLogic.dailyView(this.shuttleSnapshot as ShuttleBusSnapshot))
     }
   }
 
   @Builder
+  shuttleSnapshotContent(daily: ShuttleBusDailyView) {
+    Column({ space: 16 }) {
+      this.shuttleStatusCard(daily)
+      this.shuttleScheduleGrid(daily)
+      this.shuttleSourceCard()
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  shuttleMessage(title: string, detail: string, retry: boolean) {
+    Column({ space: 10 }) {
+      SymbolGlyph($r('sys.symbol.calendar'))
+        .fontSize(24)
+        .fontColor([AppTheme.primary()])
+      Text(this.model.text(title))
+        .fontSize(17)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(AppTheme.text())
+        .textAlign(TextAlign.Center)
+      Text(this.model.text(detail))
+        .fontSize(13)
+        .fontColor(AppTheme.secondaryText())
+        .textAlign(TextAlign.Center)
+      if (retry) {
+        Button(this.model.text('重新加载'))
+          .fontColor(AppTheme.primary())
+          .backgroundColor(AppTheme.surfaceVariant())
+          .borderRadius(8)
+          .onClick(() => this.loadShuttle())
+      } else {
+        LoadingProgress().width(22).height(22).color(AppTheme.primary())
+      }
+    }
+    .padding(24)
+    .width('100%')
+    .constraintSize({ minHeight: 180 })
+    .borderRadius(10)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Center)
+  }
+
+  @Builder
   shuttleStatusCard(daily: ShuttleBusDailyView) {
-    Column({ space: 8 }) {
-      Row({ space: 8 }) {
-        Column({ space: 3 }) {
-          Text(this.model.text('今日校区班车'))
-            .fontSize(19)
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        SymbolGlyph(ShuttleQueryLayout.departureCount(daily) === 0 ?
+          $r('sys.symbol.calendar') : $r('sys.symbol.bus_fill'))
+          .fontSize(24)
+          .fontColor([AppTheme.primary()])
+        Column({ space: 4 }) {
+          Text(this.model.text(ShuttleQueryLayout.statusTitle(daily)))
+            .id('query.shuttle.status')
+            .fontSize(17)
             .fontWeight(FontWeight.Bold)
             .fontColor(AppTheme.text())
-          Text(daily.date + ' · ' + this.model.text(this.periodStateTitle(daily.state)))
-            .fontSize(13)
+            .width('100%')
+          Text(this.model.text('今日共 {routes} 个方向、{departures} 个计划班次')
+            .replace('{routes}', daily.schedules.length.toString())
+            .replace('{departures}', ShuttleQueryLayout.departureCount(daily).toString()))
+            .fontSize(14)
             .fontColor(AppTheme.secondaryText())
+            .width('100%')
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
-        Text(this.shuttleSnapshot?.status === 'healthy' ? this.model.text('数据最新') :
-          this.model.text('缓存数据'))
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.selectionText())
-          .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-          .borderRadius(11)
-          .backgroundColor(AppTheme.selection())
+        Button() {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+            .fontSize(17)
+            .fontColor([AppTheme.primary()])
+        }
+        .type(ButtonType.Normal)
+        .width(36)
+        .height(36)
+        .responseRegion({ x: -4, y: -4, width: 44, height: 44 })
+        .borderRadius(8)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .id('query.reload')
+        .accessibilityText(this.model.text('刷新班车信息'))
+        .enabled(!this.shuttleLoading)
+        .onClick(() => this.loadShuttle())
       }
       .width('100%')
-      if (daily.period !== null) {
-        Text(this.periodLabel(daily))
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(AppTheme.text())
+      .alignItems(VerticalAlign.Top)
+      if (this.shuttleSnapshot?.status !== 'healthy') {
+        Text(this.model.text('当前展示最近一次成功同步的缓存'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
           .width('100%')
       }
       if (daily.usingFallback && daily.state === ShuttleBusPeriodState.active) {
@@ -300,26 +359,55 @@ export struct QueryView {
           .lineHeight(17)
           .width('100%')
       }
+      if (daily.latestNotice !== null) {
+        Divider().strokeWidth(1).color(AppTheme.border())
+        Row({ space: 8 }) {
+          Column({ space: 3 }) {
+            Text(daily.latestNotice?.title ?? '')
+              .fontSize(14)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(AppTheme.text())
+              .width('100%')
+            Text(this.model.text('后勤部通知 · ') + (daily.latestNotice?.publishedAt ?? ''))
+              .fontSize(12)
+              .fontColor(AppTheme.secondaryText())
+              .width('100%')
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+          SymbolGlyph($r('sys.symbol.arrow_up_right'))
+            .fontSize(18)
+            .fontColor([AppTheme.primary()])
+        }
+        .width('100%')
+        .constraintSize({ minHeight: 44 })
+        .alignItems(VerticalAlign.Top)
+        .accessibilityText(this.model.text('查看班车通知原文'))
+        .onClick(() => {
+          this.openURL(daily.latestNotice?.sourceURL ?? ShuttleBusSources.sourcePage);
+        })
+      }
+      ForEach(daily.scheduleNotice?.notes ?? [], (note: string) => {
+        Text(note)
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }, (note: string) => 'shuttle-note.' + note)
+      ForEach(ShuttleQueryLayout.unmatchedStops(daily), (stop: ShuttleBusStop) => {
+        Text(this.model.text('发车地点：') + stop.campus + ' · ' + stop.location)
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }, (stop: ShuttleBusStop) => 'shuttle-stop.' + stop.campus + '.' + stop.location)
       Text(this.model.text('法定节假日班车安排以学校通知为准，请提前五分钟候车。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
-        .lineHeight(17)
         .width('100%')
-      if (daily.latestNotice !== null) {
-        Text(daily.latestNotice?.title ?? '')
-          .fontSize(13)
-          .fontColor(AppTheme.primary())
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-          .onClick(() => {
-            this.openURL(daily.latestNotice?.sourceURL ?? ShuttleBusSources.sourcePage);
-          })
-      }
     }
     .padding(16)
     .width('100%')
     .borderRadius(10)
+    .border({ width: 0.5, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -344,28 +432,59 @@ export struct QueryView {
       .border({ width: 1, color: AppTheme.border() })
       .backgroundColor(AppTheme.surface())
     } else {
-      Grid() {
-        ForEach(daily.schedules, (schedule: ShuttleBusSchedule) => {
-          GridItem() {
-            this.shuttleRouteCard(schedule, daily)
-          }
-        }, (schedule: ShuttleBusSchedule) => schedule.period.key() + '.' + schedule.from + '.' + schedule.to)
+      Column({ space: ShuttleQueryLayout.routeGapVp }) {
+        ForEach(ShuttleQueryLayout.rows(daily.schedules,
+          ShuttleQueryLayout.routeColumns(this.contentWidth, this.contentFontScale)),
+          (schedules: ShuttleBusSchedule[]) => {
+            Row({ space: ShuttleQueryLayout.routeGapVp }) {
+              ForEach(ShuttleQueryLayout.columnIndices(
+                ShuttleQueryLayout.routeColumns(this.contentWidth, this.contentFontScale)),
+                (column: number) => {
+                  if (column < schedules.length) {
+                    Column() {
+                      this.shuttleRouteCard(schedules[column], daily)
+                    }
+                    .layoutWeight(1)
+                  } else {
+                    Column() {}
+                    .layoutWeight(1)
+                    .height(1)
+                    .hitTestBehavior(HitTestMode.None)
+                    .accessibilityLevel('no')
+                  }
+                }, (column: number) => 'route-column.' + column)
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Top)
+          }, (schedules: ShuttleBusSchedule[]) => this.routeRowKey(schedules, daily))
       }
-      .columnsTemplate(this.isWide() ? '1fr 1fr' : '1fr')
-      .columnsGap(12)
-      .rowsGap(12)
       .width('100%')
     }
   }
 
   @Builder
   shuttleRouteCard(schedule: ShuttleBusSchedule, daily: ShuttleBusDailyView) {
-    Column({ space: 9 }) {
-      Text(schedule.from + ' → ' + schedule.to)
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.text())
-        .width('100%')
+    Column({ space: 12 }) {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
+          .fontSize(18)
+          .fontColor([AppTheme.primary()])
+        Column({ space: 3 }) {
+          Text(schedule.from + ' → ' + schedule.to)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(AppTheme.text())
+            .width('100%')
+          Text(this.routePeriodLabel(schedule))
+            .fontSize(12)
+            .fontColor(AppTheme.secondaryText())
+            .width('100%')
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
       if (daily.scheduleNotice?.stopLocation(schedule.from) !== null) {
         Text(this.model.text('发车地点：') + (daily.scheduleNotice?.stopLocation(schedule.from) ?? ''))
           .fontSize(12)
@@ -380,47 +499,74 @@ export struct QueryView {
           .width('100%')
           .textAlign(TextAlign.Center)
       } else {
-        ForEach(ShuttleBusLogic.servicesForToday(schedule, daily.weekdayKey),
-          (row: ShuttleBusRow, index: number) => {
-            this.shuttleDepartureRow(row, daily.weekdayKey,
-              index === ShuttleBusLogic.nextDepartureIndex(
-                ShuttleBusLogic.servicesForToday(schedule, daily.weekdayKey), daily.state))
-          }, (row: ShuttleBusRow) => schedule.from + '.' + row.departureTime)
+        Column({ space: ShuttleQueryLayout.departureGapVp }) {
+          ForEach(ShuttleQueryLayout.rows(ShuttleBusLogic.servicesForToday(schedule, daily.weekdayKey),
+            ShuttleQueryLayout.departureColumns(this.contentWidth, this.contentFontScale)),
+            (departures: ShuttleBusRow[]) => {
+              Row({ space: ShuttleQueryLayout.departureGapVp }) {
+                ForEach(ShuttleQueryLayout.columnIndices(
+                  ShuttleQueryLayout.departureColumns(this.contentWidth, this.contentFontScale)),
+                  (column: number) => {
+                    if (column < departures.length) {
+                      Column() {
+                        this.shuttleDepartureRow(departures[column], daily.weekdayKey,
+                          this.isNextDeparture(departures[column], schedule, daily))
+                      }
+                      .layoutWeight(1)
+                    } else {
+                      Column() {}
+                      .layoutWeight(1)
+                      .height(1)
+                      .hitTestBehavior(HitTestMode.None)
+                      .accessibilityLevel('no')
+                    }
+                  }, (column: number) => 'departure-column.' + column)
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Top)
+            }, (departures: ShuttleBusRow[]) => this.departureRowKey(departures, daily))
+        }
+        .width('100%')
       }
     }
-    .padding(15)
+    .padding(ShuttleQueryLayout.cardPaddingVp)
     .width('100%')
     .borderRadius(10)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ width: 0.5, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   shuttleDepartureRow(row: ShuttleBusRow, weekdayKey: string, isNext: boolean) {
-    Row({ space: 10 }) {
-      Text(row.departureTime)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(isNext ? AppTheme.onPrimary() : AppTheme.text())
-        .width(62)
-      Text(this.serviceLabel(row.services.get(weekdayKey)))
-        .fontSize(13)
-        .fontColor(isNext ? AppTheme.onPrimary() : AppTheme.secondaryText())
-        .layoutWeight(1)
-      if (isNext) {
-        Text(this.model.text('下一班'))
-          .fontSize(11)
+    Column({ space: 2 }) {
+      Row({ space: 4 }) {
+        Text(row.departureTime)
+          .fontSize(14)
+          .fontFeature('"tnum" 1')
           .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.onPrimary())
+          .fontColor(isNext ? AppTheme.textOnPrimaryBlend(0.12, AppTheme.state.dark) : AppTheme.text())
+        if (isNext) {
+          Circle().width(5).height(5).fill(AppTheme.primary())
+        }
       }
+      .justifyContent(FlexAlign.Center)
+      Text(this.serviceLabel(row.services.get(weekdayKey)))
+        .fontSize(11)
+        .fontColor(isNext ? AppTheme.textOnPrimaryBlend(0.12, AppTheme.state.dark, true) :
+          AppTheme.secondaryText())
+        .textAlign(TextAlign.Center)
+        .width('100%')
     }
     .width('100%')
-    .height(38)
-    .padding({ left: 9, right: 9 })
-    .borderRadius(7)
-    .backgroundColor(isNext ? AppTheme.primaryFill() : AppTheme.surfaceVariant())
-    .alignItems(VerticalAlign.Center)
+    .constraintSize({ minHeight: 48 })
+    .padding({ left: 4, right: 4, top: 7, bottom: 7 })
+    .borderRadius(8)
+    .backgroundColor(isNext ? AppTheme.primaryWithAlpha(0.12, AppTheme.state.dark) : AppTheme.background())
+    .alignItems(HorizontalAlign.Center)
+    .accessibilityGroup(true)
+    .accessibilityText(row.departureTime + ' ' + this.serviceLabel(row.services.get(weekdayKey)) +
+      (isNext ? ' · ' + this.model.text('下一班') : ''))
   }
 
   @Builder
@@ -686,6 +832,31 @@ export struct QueryView {
   }
 
   @Builder
+  shuttleSourceCard() {
+    Row({ space: 9 }) {
+      SymbolGlyph($r('sys.symbol.info_circle'))
+        .fontSize(16)
+        .fontColor([AppTheme.textOnPrimaryBlend(0.08, AppTheme.state.dark)])
+      Text(this.model.text('第三方来源：北京邮电大学后勤部公开通知，由 Where To Study 服务解析整理，仅供参考，请以官方原文为准。'))
+        .fontSize(12)
+        .fontColor(AppTheme.textOnPrimaryBlend(0.08, AppTheme.state.dark, true))
+        .layoutWeight(1)
+      SymbolGlyph($r('sys.symbol.arrow_up_right'))
+        .fontSize(16)
+        .fontColor([AppTheme.textOnPrimaryBlend(0.08, AppTheme.state.dark)])
+    }
+    .id('query.shuttle.source')
+    .padding(12)
+    .width('100%')
+    .constraintSize({ minHeight: 44 })
+    .borderRadius(10)
+    .backgroundColor(AppTheme.primaryWithAlpha(0.08, AppTheme.state.dark))
+    .alignItems(VerticalAlign.Top)
+    .accessibilityText(this.model.text('查看数据来源'))
+    .onClick(() => this.openURL(ShuttleBusSources.sourcePage))
+  }
+
+  @Builder
   sourceCard(message: string, url: string) {
     Text(this.model.text(message))
       .fontSize(11)
@@ -698,33 +869,35 @@ export struct QueryView {
       })
   }
 
-  private periodStateTitle(state: ShuttleBusPeriodState): string {
-    if (state === ShuttleBusPeriodState.active) {
-      return '当前执行';
+  private routePeriodLabel(schedule: ShuttleBusSchedule): string {
+    if (schedule.period.startDate !== null && schedule.period.endDate !== null) {
+      return schedule.period.startDate + ' — ' + schedule.period.endDate;
     }
-    if (state === ShuttleBusPeriodState.upcoming) {
-      return '尚未开始';
+    if (schedule.period.startDate !== null) {
+      return schedule.period.startDate + this.model.text(' 起');
     }
-    if (state === ShuttleBusPeriodState.ended) {
-      return '历史时段';
-    }
-    if (state === ShuttleBusPeriodState.inactive) {
-      return '今日无生效时刻表';
-    }
-    return '时段待确认';
+    return schedule.period.label;
   }
 
-  private periodLabel(daily: ShuttleBusDailyView): string {
-    if (daily.period === null) {
-      return '';
-    }
-    if (daily.period.startDate !== null && daily.period.endDate !== null) {
-      return daily.period.startDate + ' — ' + daily.period.endDate;
-    }
-    if (daily.period.startDate !== null) {
-      return daily.period.startDate + this.model.text(' 起');
-    }
-    return daily.period.label;
+  private routeRowKey(schedules: ShuttleBusSchedule[], daily: ShuttleBusDailyView): string {
+    return schedules.map((schedule: ShuttleBusSchedule): string =>
+      schedule.period.key() + schedule.from + schedule.to).join('|') +
+      this.departureRowKey([], daily);
+  }
+
+  private departureRowKey(rows: ShuttleBusRow[], daily: ShuttleBusDailyView): string {
+    return rows.map((row: ShuttleBusRow): string =>
+      row.departureTime + this.serviceLabel(row.services.get(daily.weekdayKey))).join('|') +
+      daily.date + (this.shuttleSnapshot?.generatedAt ?? '') + AppTheme.colorKey() +
+      this.model.languageSettingRawValue + this.contentFontScale.toString() + ':' +
+      ShuttleQueryLayout.routeColumns(this.contentWidth, this.contentFontScale).toString() + ':' +
+      ShuttleQueryLayout.departureColumns(this.contentWidth, this.contentFontScale).toString();
+  }
+
+  private isNextDeparture(row: ShuttleBusRow, schedule: ShuttleBusSchedule,
+    daily: ShuttleBusDailyView): boolean {
+    const rows: ShuttleBusRow[] = ShuttleBusLogic.servicesForToday(schedule, daily.weekdayKey);
+    return rows.indexOf(row) === ShuttleBusLogic.nextDepartureIndex(rows, daily.state);
   }
 
   private serviceLabel(service: ShuttleBusService | undefined): string {

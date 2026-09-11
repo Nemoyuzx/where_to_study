@@ -2,11 +2,14 @@ package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
+import android.os.Environment
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.graphics.ColorUtils
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -23,6 +26,13 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.math.abs
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class QueryCardsVisualUiTest {
@@ -96,7 +106,7 @@ class QueryCardsVisualUiTest {
                     val row = grid.getChildAt(index) as LinearLayout
                     assertRowEdges(row)
                     assertTrue("A departure row must render its time and vehicle labels",
-                        row.height >= activity.dp(56))
+                        row.height >= activity.dp(44))
                     descendants(row).filterIsInstance<TextView>().forEach(::assertTextFits)
                 }
             }
@@ -107,6 +117,157 @@ class QueryCardsVisualUiTest {
         }
         awaitView(R.id.information_query_event_favorite)
         assertFooterClearsNavigation(scenario, R.id.information_query_events_scroll)
+    }
+
+    @Test
+    fun shuttleReferenceStructureAdaptsAcrossWidthsAndPreservesModeState() =
+        inBothLanguages(phonesOnly = false) { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
+            }
+            awaitView(R.id.information_query_shuttle_routes)
+            UiDevice.getInstance(instrumentation).waitForIdle()
+            scenario.onActivity { activity ->
+                val scroll = activity.findViewById<ScrollView>(R.id.information_query_shuttle_scroll)
+                val selector = scroll.findViewById<View>(R.id.information_query_mode_switch)
+                assertNotNull("The shuttle selector must scroll with the page title", selector)
+                val status = scroll.findViewById<ViewGroup>(R.id.information_query_shuttle_status)
+                val refresh = status.findViewById<View>(R.id.information_query_shuttle_refresh)
+                assertTrue(refresh.width >= activity.dp(48) && refresh.height >= activity.dp(48))
+                assertTrue(refresh.isClickable)
+                assertTrue(status.findViewById<View>(R.id.information_query_shuttle_notice_link).isClickable)
+                listOf("status.title", "status.summary", "notice.title", "notice.date").forEach { suffix ->
+                    assertTextFits(status.findViewWithTag("information.query.shuttle.$suffix"))
+                }
+                assertTrue(descendants(status).any { it.tag == "information.query.shuttle.status.note" })
+                val routes = scroll.findViewById<LinearLayout>(R.id.information_query_shuttle_routes)
+                val cards = descendants(routes).filterIsInstance<LinearLayout>().filter {
+                    it.tag == "information.query.shuttle.route"
+                }.toList()
+                assertEquals(2, cards.size)
+                val columns = if (routes.width >= activity.dp(576)) 2 else 1
+                assertEquals(columns, (routes.getChildAt(0) as LinearLayout).childCount)
+                cards.forEach { card ->
+                    assertNotNull(card.findViewWithTag<View>("information.query.shuttle.route.pickup"))
+                    assertNotNull(card.findViewWithTag<View>("information.query.shuttle.departures"))
+                    descendants(card).filterIsInstance<TextView>().forEach(::assertTextFits)
+                }
+                assertTrue(activity.applyColorTheme(ColorThemeSelection("ocean")))
+                assertSame(cards.first(), descendants(routes).first { it.tag == "information.query.shuttle.route" })
+                assertTrue(refresh.performClick())
+            }
+            awaitView(R.id.information_query_shuttle_routes)
+            UiDevice.getInstance(instrumentation).waitForIdle()
+            scenario.onActivity { activity ->
+                assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).performClick())
+            }
+            awaitView(R.id.information_query_search)
+            scenario.onActivity { activity ->
+                activity.findViewById<android.widget.EditText>(R.id.information_query_search).setText("test query")
+                assertTrue(activity.findViewById<View>(R.id.information_query_shuttle_tab).performClick())
+            }
+            awaitView(R.id.information_query_shuttle_routes)
+            UiDevice.getInstance(instrumentation).waitForIdle()
+            scenario.onActivity { activity ->
+                assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).performClick())
+            }
+            awaitView(R.id.information_query_search)
+            scenario.onActivity { activity ->
+                assertEquals("test query", activity.findViewById<TextView>(R.id.information_query_search).text.toString())
+            }
+        }
+
+    @Test
+    fun captureShuttleReferenceLayouts() = inBothLanguages(phonesOnly = false) { scenario ->
+        scenario.onActivity { activity ->
+            activity.findViewById<View>(R.id.navigation_query).performClick()
+            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        awaitView(R.id.information_query_shuttle_routes)
+        val closeFixture = installShuttleVisualFixture(scenario)
+        try {
+            awaitView(R.id.information_query_shuttle_routes)
+            val device = UiDevice.getInstance(instrumentation)
+            device.waitForIdle()
+            scenario.onActivity { activity ->
+                val scroll = activity.findViewById<ViewGroup>(R.id.information_query_shuttle_scroll)
+                val tiles = descendants(scroll).filterIsInstance<LinearLayout>().filter {
+                    it.tag == "information.query.shuttle.departure"
+                }.toList()
+                assertEquals(10, tiles.size)
+                val nextTiles = tiles.filter { it.isSelected }
+                val currentTime = SimpleDateFormat("HH:mm", Locale.ROOT).apply {
+                    timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+                }.format(Date())
+                assertEquals("Each direction marks only its next future departure",
+                    if (currentTime < "23:59") 2 else 0, nextTiles.size)
+                nextTiles.forEach { tile ->
+                    val dot = tile.findViewWithTag<View>("information.query.shuttle.next.dot")
+                    assertEquals(activity.dp(5), dot.width)
+                    assertEquals(activity.dp(5), dot.height)
+                    assertEquals(ColorUtils.blendARGB(Palette.surface, Palette.primaryFill, 0.12f),
+                        (tile.background as GradientDrawable).color!!.defaultColor)
+                    descendants(tile).filterIsInstance<TextView>().forEach(::assertTextFits)
+                }
+                tiles.filterNot { it.isSelected }.forEach { tile ->
+                    assertEquals(Palette.background, (tile.background as GradientDrawable).color!!.defaultColor)
+                }
+            }
+            val stage = InstrumentationRegistry.getArguments().getString("shuttleStage", "phone-light")
+                .replace(Regex("[^a-zA-Z0-9_-]"), "")
+            val language = AppPreferences(context).languageCode
+            val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "shuttle-alignment")
+                .apply { mkdirs() }
+            assertTrue(device.takeScreenshot(File(directory, "$stage-$language-top.png")))
+            scrollToEndAndWaitForFrame(scenario, R.id.information_query_shuttle_scroll)
+            scenario.onActivity { activity ->
+                val footer = activity.findViewById<View>(R.id.information_query_shuttle_source_footer)
+                val footerLocation = IntArray(2).also(footer::getLocationOnScreen)
+                val navigation = activity.findViewById<View?>(R.id.phone_navigation)
+                if (navigation != null) {
+                    val navigationLocation = IntArray(2).also(navigation::getLocationOnScreen)
+                    assertTrue("The captured fixture footer must completely clear the navigation",
+                        footerLocation[1] + footer.height <= navigationLocation[1])
+                }
+                descendants(footer).filterIsInstance<TextView>().forEach(::assertTextFits)
+            }
+            assertTrue(device.takeScreenshot(File(directory, "$stage-$language-bottom.png")))
+        } finally { closeFixture() }
+    }
+
+    private fun installShuttleVisualFixture(scenario: ActivityScenario<MainActivity>): () -> Unit {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+            timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+        }.format(Date())
+        val services = listOf("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+            .joinToString(",") { "\"$it\":{\"vehicle\":\"大巴\",\"count\":1}" }
+        val rows = listOf("07:00", "08:30", "13:30", "17:30", "23:59").joinToString(",") {
+            """{"departure_time":"$it","services":{$services}}"""
+        }
+        val schedules = listOf("西土城路校区" to "沙河校区", "沙河校区" to "西土城路校区")
+            .joinToString(",") { (from, to) ->
+                """{"period":{"label":"视觉回归示例","start_date":"$today"},"from":"$from","to":"$to","parse_status":"parsed","rows":[$rows]}"""
+            }
+        val payload = """{"schema_version":"1.0","generated_at":"${today}T00:00:00+08:00","status":"healthy",
+            "source":{"name":"示例数据","page_url":"https://hq.bupt.edu.cn/tzgg.htm"},"items":[{
+            "id":"visual-only","title":"班车布局视觉回归示例（非真实时刻表）","published_at":"$today",
+            "source_url":"https://hq.bupt.edu.cn/tzgg.htm","kind":"regular_schedule","parse_status":"parsed",
+            "stops":[{"campus":"西土城路校区","location":"教三楼西侧"},{"campus":"沙河校区","location":"学生活动中心南侧"}],
+            "notes":["视觉回归示例，请勿作为实际乘车依据。"],"schedules":[$schedules]}]}"""
+        val shuttles = ShuttleBusRepository(ShuttleBusClient { _, _, _, _ -> payload }, usesSampleData = false)
+        val events = CalendarDailyInfoRepository(usesSampleData = true)
+        scenario.onActivity { activity ->
+            val original = activity.findViewById<View>(R.id.information_query_page)
+            val parent = original.parent as ViewGroup
+            val index = parent.indexOfChild(original)
+            val params = original.layoutParams
+            parent.removeView(original)
+            val page = InformationQueryPage(activity, shuttles, events, AppPreferences(activity),
+                (parent.width / activity.resources.displayMetrics.density).toInt(), InformationQuerySessionState(),
+                activity.findViewById<View?>(R.id.phone_navigation) != null).build()
+            parent.addView(page, index, params)
+        }
+        return { shuttles.close(); events.close() }
     }
 
     @Test
@@ -167,7 +328,7 @@ class QueryCardsVisualUiTest {
         }
     }
 
-    private fun inBothLanguages(block: (ActivityScenario<MainActivity>) -> Unit) {
+    private fun inBothLanguages(phonesOnly: Boolean = true, block: (ActivityScenario<MainActivity>) -> Unit) {
         val preferences = AppPreferences(context)
         val originalLanguage = preferences.languageCode
         val originalWeather = preferences.weatherEnabled
@@ -185,7 +346,7 @@ class QueryCardsVisualUiTest {
                     scenario.onActivity { activity ->
                         phone = activity.findViewById<View?>(R.id.phone_navigation) != null
                     }
-                    assumeTrue("These regressions cover phone card layouts", phone)
+                    if (phonesOnly) assumeTrue("These regressions cover phone card layouts", phone)
                     block(scenario)
                 }
             }
@@ -204,11 +365,7 @@ class QueryCardsVisualUiTest {
     }
 
     private fun assertFooterClearsNavigation(scenario: ActivityScenario<MainActivity>, scrollID: Int) {
-        scenario.onActivity { activity ->
-            val scroll = activity.findViewById<ScrollView>(scrollID)
-            scroll.scrollTo(0, scroll.getChildAt(0).height)
-        }
-        instrumentation.waitForIdleSync()
+        scrollToEndAndWaitForFrame(scenario, scrollID)
         scenario.onActivity { activity ->
             val scroll = activity.findViewById<ScrollView>(scrollID)
             val footer = scroll.findViewWithTag<View>("information.query.source.footer")
@@ -218,7 +375,27 @@ class QueryCardsVisualUiTest {
             assertTrue("A fully scrolled source notice must clear the floating navigation",
                 footerLocation[1] + footer.height <= navigationLocation[1])
             assertTrue(footer.isClickable)
-            assertTextFits(footer as TextView)
+            descendants(footer).filterIsInstance<TextView>().forEach(::assertTextFits)
+        }
+    }
+
+    private fun scrollToEndAndWaitForFrame(scenario: ActivityScenario<MainActivity>, scrollID: Int) {
+        val drawn = CountDownLatch(1)
+        scenario.onActivity { activity ->
+            val scroll = activity.findViewById<ScrollView>(scrollID)
+            scroll.post {
+                scroll.scrollTo(0, (scroll.getChildAt(0).bottom + scroll.paddingBottom - scroll.height).coerceAtLeast(0))
+                // Accessibility-idle alone can precede the rendered scroll frame.
+                // Cross two real display callbacks before taking the screenshot.
+                scroll.postOnAnimation { scroll.postOnAnimation { drawn.countDown() } }
+            }
+        }
+        assertTrue("The scrolled frame must be drawn", drawn.await(5, TimeUnit.SECONDS))
+        instrumentation.waitForIdleSync()
+        scenario.onActivity { activity ->
+            val scroll = activity.findViewById<ScrollView>(scrollID)
+            val range = (scroll.getChildAt(0).bottom + scroll.paddingBottom - scroll.height).coerceAtLeast(0)
+            assertEquals("Capture only the actual end of the scroll range", range, scroll.scrollY)
         }
     }
 

@@ -12,6 +12,31 @@ import org.junit.Test
 
 class InformationQueryLogicTest {
     @Test
+    fun shuttleGridUsesReferenceBreakpointsAndKeepsAnExactMinuteOutOfNextDeparture() {
+        assertEquals(1, ShuttleQueryLayoutLogic.columns(575, 280, 16, 2))
+        assertEquals(2, ShuttleQueryLayoutLogic.columns(576, 280, 16, 2))
+        assertEquals(2, ShuttleQueryLayoutLogic.columns(1148, 280, 16, 2))
+        assertEquals(1, ShuttleQueryLayoutLogic.columns(179, 86, 8))
+        assertEquals(2, ShuttleQueryLayoutLogic.columns(180, 86, 8))
+        assertEquals(3, ShuttleQueryLayoutLogic.columns(274, 86, 8))
+        assertEquals(1, ShuttleQueryLayoutLogic.columns(220, 120, 8))
+        val departures = listOf("08:30", "13:30", "23:59").map { TodayShuttleDeparture(it, "大巴", 1) }
+        assertEquals("08:30", ShuttleQueryLayoutLogic.nextDeparture(departures, "08:29"))
+        assertEquals("13:30", ShuttleQueryLayoutLogic.nextDeparture(departures, "08:30"))
+        assertNull(ShuttleQueryLayoutLogic.nextDeparture(departures, "23:59"))
+    }
+
+    @Test
+    fun shuttlePeriodShowsExplicitDatesWithoutInventingAnEndDate() {
+        val route = TodayShuttleRoute("A", "B", "官方时段说明", emptyList())
+        assertEquals("官方时段说明", ShuttleQueryLayoutLogic.periodText(route))
+        assertEquals("2026-09-01 起", ShuttleQueryLayoutLogic.periodText(route.copy(periodStartDate = "2026-09-01")))
+        assertEquals("2026-09-01 – 2026-09-30", ShuttleQueryLayoutLogic.periodText(route.copy(
+            periodStartDate = "2026-09-01", periodEndDate = "2026-09-30",
+        )))
+    }
+
+    @Test
     fun queryLayoutClearsPhoneNavigationAndKeepsTheLastModeThumbInsideItsTrack() {
         assertEquals(
             PhoneNavigationLayoutLogic.CONTENT_INSET_DP,
@@ -161,6 +186,9 @@ class InformationQueryLogicTest {
         assertEquals(listOf("08:30"), presentation.routes[0].departures.map { it.time })
         assertEquals("下一班 08:30 · 西土城路校区 → 沙河校区", presentation.nextDeparture)
         assertEquals("今日安排 2 个发车时刻 · 3 辆车", presentation.status)
+        assertEquals("2026-08-19", presentation.noticePublishedAt)
+        assertEquals("2026-08-27", presentation.routes[0].periodStartDate)
+        assertEquals("2026-09-04", presentation.routes[0].periodEndDate)
         assertFalse(presentation.isStale)
     }
 

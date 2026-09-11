@@ -27,6 +27,7 @@ Silicon 兼容构建。
 
 - 课程详情支持“仅删除本次”或“删除本学期整门课程”，只编辑本地课表，刷新后仍保持，可在设置中恢复；课表、空闲节次、小组件与课程提醒同步采用有效结果。不会向学校退课或删除学校作业，也不会自动移除已导出的系统日历事件。
 - 个人账户可单独设置“教学云平台密码”用于作业 DDL，同一学号无需重复输入。未设置时回退到教务密码；同账号密码框留空保留原密码，显式选择“改用教务密码”并保存可清除独立密码。
+- Android 与鸿蒙的班车查询采用 iOS 同类布局：状态和通知卡、方向及有效日期、班次网格、下一班标记与来源说明，整页统一滚动并保留候车地点和提醒。
 - Course details support removing one occurrence or the whole semester's course, with persistent local edits and restoration. Personal Account accepts an optional separate teaching cloud password for assignment DDLs. Neither feature modifies university-side data.
 
 完整改动见 [0.2.9 更新说明](./docs/release-v0.2.9-notes.md)，课程操作的详细规则见[课程管理和教学云账户说明](./docs/course-management-v0.2.9.md)。各渠道可安装的版本以下方下载入口为准。
@@ -61,15 +62,15 @@ bupt校内的其它非官方学生组织可以联系我在网站上添加友链
 
 | 你的设备 | 选择哪个文件或渠道 | 怎么安装 |
 | --- | --- | --- |
-| Windows 64 位电脑 | `windows-x64-setup.exe` | 下载后双击，按提示安装。 |
-| Mac（Apple 芯片或 Intel） | `native-macos-universal.dmg`，也可参加下方 TestFlight 测试 | 打开 DMG，将应用拖入「应用程序」。一个文件兼容两类芯片。 |
+| Windows x64 电脑（Intel / AMD） | `windows-x64-setup.exe` | 下载后双击，按提示安装。 |
+| Mac（macOS 13 或更新版本） | `native-macos-universal.dmg`，也可参加下方 TestFlight 测试 | 打开 DMG，将应用拖入「应用程序」。一个文件同时兼容 Apple 芯片和 Intel。 |
 | Android 手机、平板或折叠屏 | `native-android-universal.apk` | 下载到设备后打开，按系统提示允许安装。无需选择芯片类型。 |
 | Ubuntu、Debian 等 Linux | `linux-x86_64.deb` 或 `linux-aarch64.deb` | 按芯片类型选择，用系统的软件安装器打开。 |
 | 其他 Linux | `linux-x86_64.AppImage` 或 `linux-aarch64.AppImage` | 在文件属性中允许「作为程序执行」，再打开。 |
-| iPhone、iPad | 下方 TestFlight 邀请 | 先安装 Apple 的 TestFlight，再打开邀请链接。 |
+| iPhone、iPad（iOS / iPadOS 16 或更新版本） | 下方 TestFlight 邀请 | 先安装 Apple 的 TestFlight，再打开邀请链接。 |
 | 鸿蒙（HarmonyOS NEXT）设备 | 华为应用市场 / AppGallery 测试渠道 | 在对应渠道安装，版本和可用性以审核通过后的页面为准。 |
 
-普通 Intel/AMD 64 位电脑选 `x86_64`（也写作 `x64`）；ARM 电脑选 `aarch64`（也写作 `arm64`）。可在系统「关于本机」或「系统信息」中查看处理器类型。
+Linux 选包时，普通 Intel/AMD 64 位电脑选 `x86_64`（也写作 `x64`），ARM 电脑选 `aarch64`（也写作 `arm64`）；可在系统「关于」或「系统信息」中查看处理器类型。Windows 当前只提供 x64 安装包，不能用 Linux 的 ARM 包代替。Mac 和 Android 的 Universal 包无需区分芯片。
 
 **不要下载 `Source code (zip)` 或 `Source code (tar.gz)` 来安装应用**：它们是供开发者使用的源码。名称带 `cli` 或 `tui` 的压缩包适合熟悉终端的 Linux 用户：CLI 是命令行工具，TUI 是终端里的文字界面，都不是普通窗口版应用。安装与使用见 [CLI 说明](./wts-cli/README.md)和 [TUI 说明](./wts-tui/README.md)。
 

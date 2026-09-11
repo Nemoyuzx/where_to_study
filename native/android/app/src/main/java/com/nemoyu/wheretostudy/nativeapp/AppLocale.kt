@@ -76,6 +76,7 @@ object UiText {
         "校区班车与重要事件" to "Campus Shuttles and Important Events",
         "班车与重要事件查询" to "Shuttles & Important Events",
         "班车查询" to "Shuttle Search",
+        "信息查询" to "Information Search",
         "重要事件" to "Important Events",
         "返回" to "Back",
         "联动查询" to "Linked Search",
@@ -281,6 +282,15 @@ object UiText {
         "预推免 DDL" to "Pre-admission DDL",
         "预推免" to "Pre-admission",
         "今日班车状态" to "Today's Shuttle Status",
+        "今日暂无生效班车时刻表" to "No active shuttle timetable today",
+        "今日没有计划班次" to "No departures scheduled today",
+        "今日班车按时刻表运行" to "Today's shuttles follow the timetable",
+        "当前展示最近一次成功同步的缓存" to "Showing the latest successfully synced cache",
+        "刷新班车信息" to "Refresh shuttle information",
+        "查看班车通知原文" to "View the original shuttle notice",
+        "查看数据来源" to "View data source",
+        "第三方来源：北京邮电大学后勤部公开通知，由 Where To Study 服务解析整理，仅供参考，请以官方原文为准。" to "Third-party source: public BUPT Logistics notices, structured by Where To Study for reference only. Please rely on the official notice.",
+        "下一班" to "Next departure",
         "候车地点" to "Pickup Locations",
         "乘车提示" to "Rider Notes",
         "未找到当前生效的班车时刻表" to "No currently effective shuttle timetable found",
@@ -396,6 +406,15 @@ object UiText {
         }
         Regex("^今日安排 (\\d+) 个发车时刻 · (\\d+) 辆车$").matchEntire(source)?.let {
             return "Today: ${it.groupValues[1]} departure times · ${it.groupValues[2]} vehicles"
+        }
+        Regex("^今日共 (\\d+) 个方向、(\\d+) 个计划班次$").matchEntire(source)?.let {
+            return "Today: ${it.groupValues[1]} directions, ${it.groupValues[2]} scheduled departures"
+        }
+        Regex("^后勤部通知 · (.+)$").matchEntire(source)?.let {
+            return "Logistics notice · ${it.groupValues[1]}"
+        }
+        Regex("^(\\d{4}-\\d{2}-\\d{2}) 起$").matchEntire(source)?.let {
+            return "From ${it.groupValues[1]}"
         }
         Regex("^下一班 (\\d{2}:\\d{2}) · (.+) → (.+)$").matchEntire(source)?.let {
             return "Next ${it.groupValues[1]} · ${it.groupValues[2]} → ${it.groupValues[3]}"

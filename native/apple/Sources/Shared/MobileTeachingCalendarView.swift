@@ -303,6 +303,12 @@ struct MobileTeachingCalendarView: View {
     @State private var frozenMonthGeneration: UInt64 = 0
     @State private var frozenMonthDetailsDate: Date?
     @State private var frozenStatusMessages: [String]?
+    #if DEBUG
+    @State private var monthTransitionTrace = MobileMonthTransitionTrace()
+    private var recordsMonthTransition: Bool {
+        ProcessInfo.processInfo.arguments.contains("--ui-test-month-transition-trace")
+    }
+    #endif
     @State private var yearPageWindow: MobileYearPageWindow?
     @State private var yearPagingProgress: CGFloat = 0
     @State private var yearPageTask: Task<Void, Never>?
@@ -922,6 +928,17 @@ struct MobileTeachingCalendarView: View {
                                     }
                                 }
                             }
+                            #if DEBUG
+                            .background(alignment: .topLeading) {
+                                if recordsMonthTransition, window.transition?.targetMonth == page.monthStart {
+                                    MobileMonthMotionMarker(
+                                        trace: monthTransitionTrace,
+                                        generation: window.transition?.generation,
+                                        messages: frozenStatusMessages ?? currentStatusMessages
+                                    ).frame(width: 1, height: 1)
+                                }
+                            }
+                            #endif
                             .offset(x: (CGFloat(page.offset) + monthPagingProgress) * gridWidth)
                             .allowsHitTesting(window.transition == nil && page.monthStart == window.centerMonth)
                             .accessibilityElement(children: active ? .contain : .ignore)
@@ -962,7 +979,10 @@ struct MobileTeachingCalendarView: View {
             .accessibilityValue(monthAccessibilityValue)
             #if DEBUG
             .overlay(alignment: .topLeading) {
-                if ProcessInfo.processInfo.arguments.contains("--ui-test-month-performance") {
+                if recordsMonthTransition {
+                    MobileMonthFrameProbe(pageID: monthGridIdentity, transitionTrace: monthTransitionTrace)
+                        .frame(width: 32, height: 10)
+                } else if ProcessInfo.processInfo.arguments.contains("--ui-test-month-performance") {
                     MobileMonthFrameProbe(pageID: monthGridIdentity).frame(width: 32, height: 10)
                         .accessibilityIdentifier("calendar.mobile.month-frame-probe")
                 }
@@ -2241,6 +2261,9 @@ struct MobileTeachingCalendarView: View {
         monthPageTask?.cancel()
         frozenMonthDetailsDate = selectedDate
         frozenStatusMessages = currentStatusMessages
+        #if DEBUG
+        if recordsMonthTransition { monthTransitionTrace.begin(generation: transition.generation) }
+        #endif
         let ownerRevision = model.calendarDataOwnerRevision
         monthPageTask = Task { @MainActor in
             while !Task.isCancelled {
@@ -2316,6 +2339,13 @@ struct MobileTeachingCalendarView: View {
             frozenStatusMessages = nil
             resetMonthDetailsScroll()
         }
+        #if DEBUG
+        if recordsMonthTransition {
+            monthTransitionTrace.finish(generation: generation,
+                                        date: StrictContractDateParser.string(from: selectedDate),
+                                        messages: frozenStatusMessages ?? currentStatusMessages)
+        }
+        #endif
         if let pending = pendingMonthPosition {
             pendingMonthPosition = nil
             settleMonthPosition(to: pending)

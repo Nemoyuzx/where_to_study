@@ -1,5 +1,38 @@
 # Where To Study 0.2.9 — Release and upload record
 
+## 2026-09-11 — follow-up before public release
+
+首轮上传后，用户追加要求 Android/HarmonyOS 班车查询布局与 iOS 一致。因此 **vivo 0.2.9 (47)** 的审核和 **HarmonyOS 0.2.9 (1002028)** 的预审均已撤回，准备完成布局对齐后使用 **Android (48)**、**HarmonyOS (1002029)** 重新提交。0.2.8 已上架版本未动；Apple 0.2.9 (92) TestFlight 上传保持成功，不重复上传未改业务逻辑的 Apple 包。GitHub 0.2.9 仍为未公开草稿，不能把下面首轮回执视为最终公开版本已完成。
+
+同时修复 Apple CI 的两处动画采样时序误报：慢速 CI 的跨进程 accessibility 查询可能越过两秒动画窗口。改为仅 DEBUG、显式测试参数启用的进程内逐帧记录，结束后验证实际位移与状态栏冻结。定向 UI 1/1 通过，采集 109 帧、107 个不同位置；Release 条件代码与已上传的 `446ab44` 一致。旧 CI `34597848960` 因 45 分钟预算到期被取消，测试仍在推进；改为 job 60 分钟、测试步骤 50 分钟，并保留失败诊断上传。未跳过或删除动画验证。
+
+华为 0.2.8 配置核对：Android 旧 0.2.8 (46) 原包与新包证书及公钥、包名、全部权限、支持设备、minSdk 24 / targetSdk 36 一致。HarmonyOS 已从 AGC 下载准确的 0.2.8 (1002022) APP，SHA-256 `25464544658f8927eac39ae23c8f3186862b3c8fcf7d7a2b95afed882988cc6d` 与旧上传记录一致；证书及公钥、包名、phone/tablet/2in1、全部五项权限和 API 6.1.1(24) 均与 1002028 一致。两个渠道沿用各自的旧发布地区及审核通过立即上架设置，鸿蒙沿用软件包加密。新版本仅按需要改变版本号、功能说明、审核指引和隐私权利入口。
+
+华为 Android 旧授权材料链接的实际只读访问返回 **AccessDenied / Request has expired**，与新版本提交时的旧材料解析失败相符；不能把问题归因于 APK 签名变化，也不能仅凭本地另一份 ZIP 推断旧文件损坏。原承诺函正文和签名不修改，重新上传等待用户确认。
+
+## 2026-09-11 — first upload receipts (superseded mobile submissions)
+
+本轮移动端与 Apple 安装包的应用源码来自 `446ab44296b20845412f5ca6babfb530cf48b23f`。后续若仅修正 CI 或 DEBUG 自动化探针，应单独记录，不应把已经成功上传的包改称来自后来的提交。
+
+- **iOS/iPadOS 0.2.9 (92)**：本地 Xcode 于 **20:47:18 +0800** 返回 `Upload succeeded` 与 `EXPORT SUCCEEDED`。
+- **macOS 0.2.9 (92)**：同一 `upload all` 调用于 **20:49:55 +0800** 返回上述两项成功回执。四个 host/Widget 版本与实际导出签名通过；89 个 Apple 文件上传前后摘要一致。未检查 App Store Connect processing，未修改 App Store 审核或测试群组。
+- **vivo Android 0.2.9 (47)**：新 APK 上传、表单保存和正式审核提交完成。应用详情显示 **2026-09-11 20:48:37** 的最新提交为 **审核中**；选择审核通过后立即发布。保留备案信息，按实际权限保持敏感权限申请列表为空，更新功能说明和演示数据测试指引；纠正旧备注中“开源软件无著作权”的错误措辞。
+- **华为 Android 0.2.9 (47)**：同一 APK 已于 **20:46:26 +0800** 上传并绑定新版本 `2037245361105446080`，更新了隐私权利入口、具体日历权限用途和审核说明。提交被平台的 **“授权书及其他材料”压缩包解析失败** 阻止，尚未进入审核。已准备不改正文及签名的承诺函重打包副本，等待用户确认后再上传，不能记为发布成功。
+- **HarmonyOS 0.2.9 (1002028)**：通过 DevEco“上传产品 → 测试和发布”上传一次，结果页显示 **云测试结果：通过**。AppGallery 正式更新 `2037251738360139840` 已选取此版本、保存新特性并提交；页面显示 **正在预审**，预审通过后才进入人工审核，尚不能声称上架。未重复上传，也未把鸿蒙包放入 GitHub。
+
+本轮本地验证：仓库 **199/199**；Apple 定向核心回归 **63/63**；Android Release 单测 **238/238**，Lint **0 errors / 62 warnings / 1 hint**；HarmonyOS **189/189**。正式签名与版本、HTTPS 地址、许可证和隐私打包门禁通过。新增鸿蒙实际包检查确保每个 HAP 为 `release` 且 `debug=false`；已保存的历史 1002027 上传包也确认为 Release，不能因工作目录曾残留 Debug 包而声称历史上传错误。
+
+实际产物与证据在忽略目录 `release-artifacts/v0.2.9-final/`：
+
+| 产物 | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Android Universal APK (47) | 1,121,458 | `d02268512b313a8426c6b803f8c2410d5da2fec78f0f0e9b695e3f7dc7e5adab` |
+| native macOS Universal DMG (92) | 7,240,272 | `1b9c5d27740f819b368c6ced73884230594ba2b971c07a9b9c01482c9e5188ed` |
+| DevEco 实际 APP (1002028) | 1,302,445 | `b641a68e62140437eb4c50109d138ec933f11d987d14524f59b1bdfcbaec360d` |
+| DevEco 实际 HAP (1002028) | 1,947,883 | `749ff8cd688a167995a1569205c13b42190fe8b4c42562c27bf8a173e833f9fd` |
+
+DMG 为 ad-hoc 签名、未公证的开源预览分发，不等同于 TestFlight Distribution 包。`harmony-deveco/` 副本为上传后实际文件，已与原件逐字节比对；`harmony-cli/` 是此前 CLI 验证副本，不能混作上传回执。
+
 ## 2026-09-11 — formal release preparation
 
 本轮用户已授权正式发布 **Where To Study v0.2.9**，并上传 vivo、华为 Android、华为 HarmonyOS；Apple 仅上传 TestFlight，不修改 App Store 审核提交。以下较早的“仅代码”或“仅测试”记录均是历史范围，不限制本轮，也不代表最新包已经上传。

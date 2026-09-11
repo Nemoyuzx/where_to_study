@@ -327,6 +327,23 @@ export class AppLocalization {
     '展开': 'Expanded',
     '正在同步云课堂作业…': 'Syncing UCloud assignments…',
     '今日校区班车': 'Today\'s Campus Shuttle',
+    '信息查询': 'Information Search',
+    '今日班车按时刻表运行': 'Today\'s Shuttle Is Running as Scheduled',
+    '今日没有计划班次': 'No Scheduled Departures Today',
+    '今日共 {routes} 个方向、{departures} 个计划班次':
+      '{routes} routes · {departures} scheduled departures today',
+    '刷新班车信息': 'Refresh Shuttle Information',
+    '刷新重要事件': 'Refresh Important Events',
+    '当前展示最近一次成功同步的缓存': 'Showing the last successfully synchronized timetable',
+    '后勤部通知 · ': 'Logistics notice · ',
+    '查看班车通知原文': 'View the Original Shuttle Notice',
+    '查看数据来源': 'View Data Source',
+    '正在读取后勤部最新通知与当前生效时刻表。':
+      'Reading the latest logistics notice and the currently active timetable.',
+    '班车信息暂不可用': 'Shuttle Information Is Unavailable',
+    '第三方来源：北京邮电大学后勤部公开通知，由 Where To Study 服务解析整理，仅供参考，请以官方原文为准。':
+      'Third-party source: public notices from BUPT Logistics, parsed by Where To Study. ' +
+      'For reference only; the official notice takes precedence.',
     '当前执行': 'In Service',
     '尚未开始': 'Not Started',
     ' 起': ' onward',

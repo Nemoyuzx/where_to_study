@@ -118,11 +118,11 @@ test("client versions consistently release 0.2.9 with fresh distribution build c
   assert.match(cliManifest, /^version = "0\.2\.9"$/m);
   assert.match(tuiManifest, /^version = "0\.2\.9"$/m);
   assert.match(nativeAndroid, /versionName = "0\.2\.9"/);
-  assert.match(nativeAndroid, /versionCode = 47/);
+  assert.match(nativeAndroid, /versionCode = 48/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.9"/);
   assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "92"/);
   assert.match(nativeHarmony, /"versionName": "0\.2\.9"/);
-  assert.match(nativeHarmony, /"versionCode": 1002028/);
+  assert.match(nativeHarmony, /"versionCode": 1002029/);
   assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.2\.9'/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.9/);
   assert.match(tauriApple, /CFBundleVersion: "47"/);
@@ -307,7 +307,8 @@ test("native Apple CI retries transient UI automation failures and preserves dia
 
   assert.match(nativeAppleBuildScript, /-retry-tests-on-failure/);
   assert.match(nativeAppleBuildScript, /-test-iterations 2/);
-  assert.match(nativeWorkflow, /timeout-minutes: 45/);
+  assert.match(nativeWorkflow, /apple:\s*\n(?:.*\n)*?\s+timeout-minutes: 60/);
+  assert.match(nativeWorkflow, /name: Build Apple clients and run platform unit tests\s*\n\s+timeout-minutes: 50/);
   assert.match(nativeWorkflow, /Upload Apple test diagnostics on failure/);
   assert.match(nativeWorkflow, /native\/apple\/DerivedData\/\*\*\/Logs\/Test\/\*\.xcresult/);
   assert.match(nativeWorkflow, /where-to-study-native-apple-test-results-/);
