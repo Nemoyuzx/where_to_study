@@ -87,6 +87,8 @@ validate_extracted_bundle() {
 
   if path_contains_fixed_text "$ROOT_DIR" "$extracted_root"; then
     echo "Linux bundle contains a local source path." >&2
+    # Name the offending packaged file, without dumping arbitrary binary data.
+    (cd "$extracted_root" && grep -a -r -l -F -- "$ROOT_DIR" .) >&2 || true
     exit 1
   fi
   if path_contains_fixed_text 'http://jwglweixin.bupt.edu.cn' "$extracted_root"; then

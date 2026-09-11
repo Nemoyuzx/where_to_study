@@ -56,7 +56,7 @@ comments. No whole rule, production path, or scanner was disabled.
 
 | Alerts | Evidence |
 | --- | --- |
-| #1 | Constant `bash -c` text with separate, quoted positional arguments. Adversarial labels and file paths containing quotes, semicolons and command-substitution text remain data in the added regression. |
+| #1, #29 | Constant `bash -c` text with separate, quoted positional arguments. Adversarial labels and file paths containing quotes, semicolons and command-substitution text remain data in the added regression. #29 is the updated helper fingerprint of the same safe invocation. |
 | #2–10, #12–13, #22 | Fictional passwords in `settings_store`'s `cfg(test)` module, injected fake stores and isolated temporary directories. Never used for live authentication. |
 | #11 | An empty password in a rejection-path test, not a usable deployed secret. |
 | #18–20 | Temporary TUI credential fixtures testing round trips, deletion and 0700/0600 permissions. |
@@ -65,13 +65,40 @@ comments. No whole rule, production path, or scanner was disabled.
 #26–28 were also fictional inputs to the now-removed password-hash test; their
 instances disappear with the real #21 fix and are left for scan-based closure.
 
+The `3294999` Rust analysis automatically marked #17, #21 and #26–28 fixed. Its
+newly indexed vendored code produced #30–42, which were individually reviewed
+against the full SARIF paths and concrete Rust/GLib types before dismissal:
+
+- #30 incorrectly dispatches a `bool` conversion to `LogLevel::from_glib`.
+- #31–35 connect concrete string/Error conversions to incompatible GObject,
+  GValue or test-only `MyBoxed` implementations; some paths also disregard the
+  non-null error branch and FFI out-parameter initialization.
+- #36–41 connect `gchar**` string-array conversions to incompatible Checksum,
+  GList, GSList or GPtrArray implementations. The actual results are
+  `Vec<GString>` or `Vec<OsString>`, with documented populated out arrays.
+- #42 confuses element destruction with freeing the backing allocation.
+  `drop_in_place` followed by `ptr::write` reinitializes a still-valid slot;
+  the allocation is freed only by `PtrSlice::drop`.
+
+References: [GLib filename charsets](https://docs.gtk.org/glib/func.get_filename_charsets.html),
+[GLib shell argument parsing](https://docs.gtk.org/glib/func.shell_parse_argv.html),
+and [Rust drop-in-place safety](https://doc.rust-lang.org/std/ptr/fn.drop_in_place.html).
+No vendored implementation was changed to mask these reports.
+
 ## Quality and verification
 
 Windows/Linux strict Clippy failures are fixed using `std::slice::from_ref`
 instead of cloned one-element slices. The TUI match guard now expresses its
 length constraint directly. Strict warnings remain enabled.
 
-Local checks cover npm install, 189 repository tests, production build, npm
+The first new Linux build passed tests and Clippy but its Debian-package gate
+detected an embedded checkout path. The Linux build wrapper now preserves caller
+flags and adds rustc `--remap-path-prefix` via `CARGO_ENCODED_RUSTFLAGS`, including
+checkout paths with spaces. The private-path rejection gate remains enabled and
+now names the offending packaged file on failure. The next CI run must verify
+the actual Debian/AppImage outputs; a local flag test alone is not that proof.
+
+Local checks cover npm install, 190 repository tests, production build, npm
 audit (zero findings), license verification, strict Tauri/CLI/TUI Clippy and
 unit tests, exact glib source/resolve checks and the optimized glib regression.
 The Rust audits report zero vulnerabilities, zero unsound findings and zero

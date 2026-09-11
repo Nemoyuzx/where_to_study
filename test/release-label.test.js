@@ -348,7 +348,10 @@ test("Linux releases build and validate both deb and AppImage artifacts", () => 
     "utf8",
   );
 
-  assert.match(packageMetadata.scripts["tauri:build:linux"], /--bundles deb,appimage/);
+  assert.equal(packageMetadata.scripts["tauri:build:linux"], "bash ./scripts/linux-build.sh");
+  const linuxBuild = readFileSync(path.join(root, "scripts", "linux-build.sh"), "utf8");
+  assert.match(linuxBuild, /--bundles deb,appimage/);
+  assert.match(linuxBuild, /--remap-path-prefix=/);
   assert.match(workflow, /runner: ubuntu-22\.04/);
   assert.match(workflow, /runner: ubuntu-22\.04-arm/);
   assert.match(workflow, /artifact: where-to-study-linux-aarch64/);
