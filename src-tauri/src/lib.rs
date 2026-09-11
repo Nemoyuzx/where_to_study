@@ -1509,6 +1509,7 @@ async fn fetch_assignments(payload: AssignmentsRequest) -> Result<AssignmentsRes
         &credentials.account,
         credentials.assignment_password(),
         &credentials.account_scope,
+        credential_revision,
     )
     .await
     .map_err(|error| error.message)?;
@@ -1555,6 +1556,7 @@ async fn fetch_assignment_calendar(
         &credentials.account,
         credentials.assignment_password(),
         &credentials.account_scope,
+        credential_revision,
     )
     .await
     .map_err(|error| error.message)?;

@@ -94,7 +94,7 @@ pub fn login(account: Option<String>, use_academic_password: bool) -> ServiceRes
     )?;
     where_to_study_lib::assignments::clear_cache();
     println!(
-        "已保存账号 {account} 的凭据到本地配置文件：{}",
+        "已保存教务凭据到本地配置文件：{}",
         credentials::storage_description()?
     );
     Ok(())
@@ -239,6 +239,7 @@ pub fn restore_course(deletion_id: String) -> ServiceResult<()> {
 }
 
 pub async fn assignments(date: Option<String>, json: bool) -> ServiceResult<()> {
+    let credential_revision = where_to_study_lib::assignments::credential_revision();
     let credentials = require_credentials()?;
     let request = where_to_study_lib::models::AssignmentsRequest {
         date: parse_date(date.as_deref())?.to_string(),
@@ -248,6 +249,7 @@ pub async fn assignments(date: Option<String>, json: bool) -> ServiceResult<()> 
         &credentials.account,
         credentials.assignment_password(),
         &credentials.account_scope,
+        credential_revision,
     )
     .await?;
     if json {

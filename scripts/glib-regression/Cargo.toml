@@ -1,0 +1,8 @@
+[package]
+name = "wts-glib-regression"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+glib = { path = "../../vendor/glib-0.18.5" }

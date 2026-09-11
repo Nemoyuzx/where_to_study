@@ -55,8 +55,10 @@ assignment page; this update does not claim otherwise.
   are restored from raw data, not reconstructed from filtered rows.
 - Tauri account gates and course-edit revisions reject stale notification/tray
   publications; even manual tray refreshes reapply local edits. Cloud result
-  cache namespaces include effective credentials in memory and never expose
-  secrets through settings responses or persisted preference files.
+  cache namespaces use an account-scoped credential revision, not a password
+  fingerprint, and never expose secrets through settings responses or persisted
+  preference files. The security follow-up is documented in
+  [the security/quality record](security-quality-2026-09-11.md).
 - Clearing local data removes deletion rules and both stored password values.
 
 ## Verification / 验证

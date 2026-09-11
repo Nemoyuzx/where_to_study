@@ -67,8 +67,22 @@ jobs:
       - name: Verify third-party license bundle
         run: npm run licenses:check
 
+      - name: Verify glib security backport source and Linux dependency graph
+        run: node scripts/verify-glib-patch.mjs --resolve
+
+      - name: Test glib security backport with release optimizations
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev
+          cargo test --manifest-path scripts/glib-regression/Cargo.toml --release --locked
+
       - name: Install pinned cargo-audit
         run: cargo install cargo-audit --version 0.22.2 --locked
 
-      - name: Audit Rust lockfile
-        run: cargo audit --file src-tauri/Cargo.lock
+      - name: Audit Rust lockfiles and reject unsound dependencies
+        run: |
+          cargo audit --file src-tauri/Cargo.lock --deny unsound
+          cargo audit --file where-to-study-core/Cargo.lock --deny unsound
+          cargo audit --file wts-cli/Cargo.lock --deny unsound
+          cargo audit --file wts-tui/Cargo.lock --deny unsound
+          cargo audit --file scripts/glib-regression/Cargo.lock --deny unsound

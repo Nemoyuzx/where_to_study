@@ -198,7 +198,7 @@ mod tests {
         changed.courses[0].id = "new-row".into();
         changed.courses[0].room = "new-room".into();
         assert_eq!(
-            apply(&changed, &[rule.clone()]).courses.len(),
+            apply(&changed, std::slice::from_ref(&rule)).courses.len(),
             raw.courses.len() - 1
         );
         changed.term_id = "another-term".into();
@@ -240,7 +240,7 @@ mod tests {
         let scope_b = scoped_cache::new_account_scope().unwrap();
         let raw = snapshot();
         let rule = CourseDeletion::create(&raw, &raw.courses[0].id, None).unwrap();
-        save(&path, &scope_a, &[rule.clone()]).unwrap();
+        save(&path, &scope_a, std::slice::from_ref(&rule)).unwrap();
         assert_eq!(load(&path, &scope_a).unwrap(), vec![rule]);
         assert!(load(&path, &scope_b).unwrap().is_empty());
         save(&path, &scope_a, &[]).unwrap();

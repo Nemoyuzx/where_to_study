@@ -382,13 +382,13 @@ impl ThemeEditor {
                 self.accept_drafts();
             }
             KeyCode::Char(ch)
-                if self.focus > 0 && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+                if self.focus > 0
+                    && !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.drafts[self.focus - 1].chars().count() < 32 =>
             {
-                if self.drafts[self.focus - 1].chars().count() < 32 {
-                    self.drafts[self.focus - 1].push(ch);
-                    if self.accept_drafts() {
-                        self.selection.preset = "custom".into();
-                    }
+                self.drafts[self.focus - 1].push(ch);
+                if self.accept_drafts() {
+                    self.selection.preset = "custom".into();
                 }
             }
             _ => {}

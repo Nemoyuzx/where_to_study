@@ -1,0 +1,2 @@
+# Preserve the upstream archive bytes used by the integrity check on every OS.
+glib-0.18.5/** -text

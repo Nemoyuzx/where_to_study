@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime};
@@ -12,7 +12,6 @@ use reqwest::header::{
 use reqwest::{Client, Response, Url};
 use serde::Deserialize;
 use serde_json::{json, Value};
-use sha1::{Digest, Sha1};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::{ServiceError, ServiceResult};
@@ -69,6 +68,7 @@ struct AuthenticatedClient {
 
 struct CachedAssignments {
     account_scope: String,
+    credential_revision: u64,
     fetched_at: Instant,
     items: Vec<AssignmentDeadlineItem>,
 }
@@ -80,41 +80,89 @@ impl Drop for CachedAssignments {
     }
 }
 
-static ASSIGNMENT_CACHE: OnceLock<Mutex<Option<CachedAssignments>>> = OnceLock::new();
-static ASSIGNMENT_REVISION: AtomicU64 = AtomicU64::new(0);
-
-fn cache() -> &'static Mutex<Option<CachedAssignments>> {
-    ASSIGNMENT_CACHE.get_or_init(|| Mutex::new(None))
+struct AssignmentCache {
+    revision: AtomicU64,
+    snapshot: Mutex<Option<CachedAssignments>>,
 }
 
-pub fn clear_cache() {
-    ASSIGNMENT_REVISION.fetch_add(1, Ordering::SeqCst);
-    let mut cached = cache()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    *cached = None;
-}
+impl AssignmentCache {
+    const fn new() -> Self {
+        Self {
+            revision: AtomicU64::new(0),
+            snapshot: Mutex::new(None),
+        }
+    }
 
-pub fn credential_revision() -> u64 {
-    ASSIGNMENT_REVISION.load(Ordering::SeqCst)
-}
+    fn clear(&self) {
+        self.revision.fetch_add(1, Ordering::SeqCst);
+        let mut cached = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *cached = None;
+    }
 
-pub fn ensure_credential_revision(revision: u64) -> Result<(), String> {
-    if credential_revision() == revision {
+    fn ensure_revision(&self, revision: u64) -> ServiceResult<()> {
+        if self.revision.load(Ordering::SeqCst) == revision {
+            Ok(())
+        } else {
+            Err(ServiceError::new("教学云平台凭据已更改，请重新获取作业。"))
+        }
+    }
+
+    fn items(
+        &self,
+        account_scope: &str,
+        request_revision: u64,
+    ) -> ServiceResult<Option<Vec<AssignmentDeadlineItem>>> {
+        let cached = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.ensure_revision(request_revision)?;
+        Ok(cached.as_ref().and_then(|snapshot| {
+            (snapshot.account_scope == account_scope
+                && snapshot.credential_revision == request_revision
+                && snapshot.fetched_at.elapsed() < CACHE_TTL)
+                .then(|| snapshot.items.clone())
+        }))
+    }
+
+    fn save(
+        &self,
+        account_scope: &str,
+        items: &[AssignmentDeadlineItem],
+        request_revision: u64,
+    ) -> ServiceResult<()> {
+        let mut cached = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        self.ensure_revision(request_revision)?;
+        *cached = Some(CachedAssignments {
+            account_scope: account_scope.to_string(),
+            credential_revision: request_revision,
+            fetched_at: Instant::now(),
+            items: items.to_vec(),
+        });
         Ok(())
-    } else {
-        Err("教学云平台凭据已更改，请重新获取作业。".to_string())
     }
 }
 
-fn credential_cache_scope(account_scope: &str, password: &str) -> Zeroizing<String> {
-    // Memory-only namespace: an old-password request must not populate the
-    // new-password cache, even if it started between credential load and reset.
-    Zeroizing::new(format!(
-        "{}:{:x}",
-        account_scope,
-        Sha1::digest(password.as_bytes())
-    ))
+static ASSIGNMENT_CACHE: AssignmentCache = AssignmentCache::new();
+
+pub fn clear_cache() {
+    ASSIGNMENT_CACHE.clear();
+}
+
+pub fn credential_revision() -> u64 {
+    ASSIGNMENT_CACHE.revision.load(Ordering::SeqCst)
+}
+
+pub fn ensure_credential_revision(revision: u64) -> Result<(), String> {
+    ASSIGNMENT_CACHE
+        .ensure_revision(revision)
+        .map_err(|error| error.message)
 }
 
 fn zeroize_items(items: &mut [AssignmentDeadlineItem]) {
@@ -740,44 +788,21 @@ async fn fetch_all_assignments(
     Ok(merge_items(all_items))
 }
 
-fn cached_items(account_scope: &str) -> Option<Vec<AssignmentDeadlineItem>> {
-    let cached = cache()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    cached.as_ref().and_then(|snapshot| {
-        (snapshot.account_scope == account_scope && snapshot.fetched_at.elapsed() < CACHE_TTL)
-            .then(|| snapshot.items.clone())
-    })
-}
-
-fn save_cache(account_scope: &str, items: &[AssignmentDeadlineItem], request_revision: u64) {
-    let mut cached = cache()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if ASSIGNMENT_REVISION.load(Ordering::SeqCst) != request_revision {
-        return;
-    }
-    *cached = Some(CachedAssignments {
-        account_scope: account_scope.to_string(),
-        fetched_at: Instant::now(),
-        items: items.to_vec(),
-    });
-}
-
+/// Capture `request_revision` alongside the credentials, under the caller's
+/// credential-change guard. Never replace it with a newer revision after load.
 pub async fn fetch_assignments(
     payload: &AssignmentsRequest,
     account: &str,
     password: &str,
     account_scope: &str,
+    request_revision: u64,
 ) -> ServiceResult<AssignmentsResponse> {
     let date = parse_date(payload.date.trim())?;
-    let credential_scope = credential_cache_scope(account_scope, password);
-    let all_items = match cached_items(&credential_scope) {
+    let all_items = match ASSIGNMENT_CACHE.items(account_scope, request_revision)? {
         Some(items) => items,
         None => {
-            let request_revision = ASSIGNMENT_REVISION.load(Ordering::SeqCst);
             let items = fetch_all_assignments(account, password).await?;
-            save_cache(&credential_scope, &items, request_revision);
+            ASSIGNMENT_CACHE.save(account_scope, &items, request_revision)?;
             items
         }
     };
@@ -786,6 +811,7 @@ pub async fn fetch_assignments(
         .into_iter()
         .filter(|item| item.deadline.get(..10) == Some(requested.as_str()))
         .collect();
+    ASSIGNMENT_CACHE.ensure_revision(request_revision)?;
     Ok(AssignmentsResponse {
         date: requested,
         source: SOURCE_URL.to_string(),
@@ -794,11 +820,13 @@ pub async fn fetch_assignments(
     })
 }
 
+/// Uses the same credential snapshot contract as `fetch_assignments`.
 pub async fn fetch_assignment_calendar(
     payload: &CalendarRangeRequest,
     account: &str,
     password: &str,
     account_scope: &str,
+    request_revision: u64,
 ) -> ServiceResult<AssignmentCalendarResponse> {
     let start = parse_date(payload.start_date.trim())?;
     let end = parse_date(payload.end_date.trim())?;
@@ -810,18 +838,16 @@ pub async fn fetch_assignment_calendar(
         ));
     }
 
-    let credential_scope = credential_cache_scope(account_scope, password);
-    let all_items = match cached_items(&credential_scope) {
+    let all_items = match ASSIGNMENT_CACHE.items(account_scope, request_revision)? {
         Some(items) => items,
         None => {
-            let request_revision = ASSIGNMENT_REVISION.load(Ordering::SeqCst);
             let items = fetch_all_assignments(account, password).await?;
-            save_cache(&credential_scope, &items, request_revision);
+            ASSIGNMENT_CACHE.save(account_scope, &items, request_revision)?;
             items
         }
     };
     let items = assignment_items_in_range(all_items, start, end);
-
+    ASSIGNMENT_CACHE.ensure_revision(request_revision)?;
     Ok(AssignmentCalendarResponse {
         start_date: start.to_string(),
         end_date: end.to_string(),
@@ -832,17 +858,71 @@ pub async fn fetch_assignment_calendar(
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn credential_cache_namespaces_isolate_password_changes_without_plaintext() {
-        let old = super::credential_cache_scope("account-a", "old-password");
-        let new = super::credential_cache_scope("account-a", "new-password");
-        let other = super::credential_cache_scope("account-b", "new-password");
-        assert_ne!(*old, *new);
-        assert_ne!(*other, *new);
-        assert!(!old.contains("old-password"));
-        assert!(!new.contains("new-password"));
-    }
     use super::*;
+
+    #[test]
+    fn credential_changes_reject_old_requests_before_reads_writes_and_responses() {
+        let cache = AssignmentCache::new();
+        let original_revision = cache.revision.load(Ordering::SeqCst);
+        let old_items = vec![AssignmentDeadlineItem {
+            id: "old-assignment".into(),
+            title: "原凭据作业".into(),
+            course_name: None,
+            deadline: "2026-09-11 12:00:00".into(),
+            status: None,
+        }];
+        cache
+            .save("account-a", &old_items, original_revision)
+            .unwrap();
+        assert_eq!(
+            cache
+                .items("account-a", original_revision)
+                .unwrap()
+                .unwrap()[0]
+                .id,
+            "old-assignment"
+        );
+        assert!(cache
+            .items("account-b", original_revision)
+            .unwrap()
+            .is_none());
+
+        cache.clear();
+        let current_revision = cache.revision.load(Ordering::SeqCst);
+        assert_ne!(original_revision, current_revision);
+        // Includes a request whose credentials were loaded before the change,
+        // but which enters the fetch function only after the cache was cleared.
+        assert!(cache.items("account-a", original_revision).is_err());
+        assert!(cache
+            .save("account-a", &old_items, original_revision)
+            .is_err());
+        assert!(cache.ensure_revision(original_revision).is_err());
+        assert!(cache
+            .items("account-a", current_revision)
+            .unwrap()
+            .is_none());
+
+        let mut new_items = old_items.clone();
+        new_items[0].id = "new-assignment".into();
+        cache
+            .save("account-a", &new_items, current_revision)
+            .unwrap();
+        // A late HTTP response must not replace the current credential cache.
+        assert!(cache
+            .save("account-a", &old_items, original_revision)
+            .is_err());
+        assert_eq!(
+            cache.items("account-a", current_revision).unwrap().unwrap()[0].id,
+            "new-assignment"
+        );
+        cache.ensure_revision(current_revision).unwrap();
+
+        cache.snapshot.lock().unwrap().as_mut().unwrap().fetched_at = Instant::now() - CACHE_TTL;
+        assert!(cache
+            .items("account-a", current_revision)
+            .unwrap()
+            .is_none());
+    }
 
     #[test]
     fn parses_confirmed_student_assignment_list_contract() {

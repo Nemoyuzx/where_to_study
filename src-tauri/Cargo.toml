@@ -55,3 +55,8 @@ objc2-user-notifications = { version = "0.3.2", features = ["block2", "UNNotific
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3.6", features = ["linux-native-sync-persistent", "crypto-rust"] }
 zbus = "5.19.0"
+
+# GTK3 still requires glib 0.18. Keep its API and backport the upstream
+# RUSTSEC-2024-0429 fix; scripts/verify-glib-patch.mjs verifies this source.
+[patch.crates-io]
+glib = { path = "../vendor/glib-0.18.5" }

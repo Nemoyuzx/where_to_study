@@ -18,10 +18,10 @@ import test from "node:test";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const validationScript = path.join(root, "scripts", "package-validation.sh");
 
-function validateReleaseLabel(label) {
+function validateReleaseLabel(label, script = validationScript) {
   execFileSync(
     "bash",
-    ["-c", 'source "$1"; validate_release_label "$2"', "validate", validationScript, label],
+    ["-c", 'source "$1"; validate_release_label "$2"', "validate", script, label],
     { stdio: "pipe" },
   );
 }
@@ -35,6 +35,26 @@ test("release labels accept stable and unnumbered alpha versions", () => {
 test("release labels reject numeric suffixes after alpha", () => {
   for (const label of ["v0.2.0-alpha.1", "v0.2.0-alpha2", "v0.2.0-Alpha-4"]) {
     assert.throws(() => validateReleaseLabel(label), label);
+  }
+});
+
+test("release validation treats shell metacharacters in paths and labels as data", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "wts-label-arguments-"));
+  const marker = path.join(directory, "unexpected-command");
+  const script = path.join(directory, "validation 'quoted' $(exit 71); exit 72;.sh");
+  try {
+    writeFileSync(script, readFileSync(validationScript));
+    assert.doesNotThrow(() => validateReleaseLabel("v0.2.9", script));
+    for (const label of [
+      `v0.2.9; touch '${marker}'`,
+      `$(touch '${marker}')`,
+      `v0.2.9\n touch '${marker}'`,
+    ]) {
+      assert.throws(() => validateReleaseLabel(label, script));
+    }
+    assert.equal(existsSync(marker), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 

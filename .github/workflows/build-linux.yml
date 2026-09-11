@@ -11,6 +11,9 @@ on:
       - ".gitattributes"
       - "src/**"
       - "src-tauri/**"
+      - "vendor/**"
+      - "scripts/verify-glib-patch.mjs"
+      - "scripts/glib-regression/**"
       - "package.json"
       - "package-lock.json"
       - "LICENSE"
@@ -111,7 +114,7 @@ jobs:
         run: npm run build
 
       - name: Check Rust formatting
-        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --package where_to_study -- --check
 
       - name: Test Rust core
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
