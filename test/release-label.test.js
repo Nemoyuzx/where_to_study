@@ -58,7 +58,7 @@ test("release validation treats shell metacharacters in paths and labels as data
   }
 });
 
-test("client versions consistently prepare 0.2.9 without changing distribution build counters", () => {
+test("client versions consistently release 0.2.9 with fresh distribution build counters", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -118,11 +118,11 @@ test("client versions consistently prepare 0.2.9 without changing distribution b
   assert.match(cliManifest, /^version = "0\.2\.9"$/m);
   assert.match(tuiManifest, /^version = "0\.2\.9"$/m);
   assert.match(nativeAndroid, /versionName = "0\.2\.9"/);
-  assert.match(nativeAndroid, /versionCode = 46/);
+  assert.match(nativeAndroid, /versionCode = 47/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.9"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "79"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "92"/);
   assert.match(nativeHarmony, /"versionName": "0\.2\.9"/);
-  assert.match(nativeHarmony, /"versionCode": 1002027/);
+  assert.match(nativeHarmony, /"versionCode": 1002028/);
   assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.2\.9'/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.9/);
   assert.match(tauriApple, /CFBundleVersion: "47"/);

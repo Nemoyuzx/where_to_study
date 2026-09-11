@@ -85,9 +85,9 @@ verify_packed_version() {
 
 cd "$HARMONY_DIR"
 "$OHPM" install
-"$HVIGOR" assembleHap
+"$HVIGOR" assembleHap -p buildMode=release
 "$HVIGOR" test --mode module -p module=entry -p buildMode=test
-"$HVIGOR" assembleApp
+"$HVIGOR" assembleApp -p buildMode=release
 
 if [[ ! -f "$TEST_RESULT" ]] || ! grep -Eq 'Tests run: [0-9]+, Failure: 0, Error: 0' "$TEST_RESULT"; then
   echo "HarmonyOS unit-test report is missing or contains failures: $TEST_RESULT" >&2
@@ -101,6 +101,7 @@ if [[ ! -f "$SIGNED_HAP" ]]; then
   exit 1
 fi
 verify_packed_version "$SIGNED_HAP"
+node "$ROOT_DIR/scripts/verify-harmony-release-package.mjs" "$SIGNED_HAP"
 if unzip -p "$SIGNED_HAP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
   echo "HarmonyOS HAP contains the retired contest API host." >&2
   exit 1
@@ -120,6 +121,7 @@ if [[ ! -f "$SIGNED_APP" ]]; then
   exit 1
 fi
 verify_packed_version "$SIGNED_APP"
+node "$ROOT_DIR/scripts/verify-harmony-release-package.mjs" "$SIGNED_APP"
 unzip -t "$SIGNED_APP" >/dev/null
 if unzip -p "$SIGNED_APP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
   echo "HarmonyOS APP contains the retired contest API host." >&2

@@ -1,4 +1,16 @@
-# Where To Study 0.2.9 — Release preparation and TestFlight updates
+# Where To Study 0.2.9 — Release and upload record
+
+## 2026-09-11 — formal release preparation
+
+本轮用户已授权正式发布 **Where To Study v0.2.9**，并上传 vivo、华为 Android、华为 HarmonyOS；Apple 仅上传 TestFlight，不修改 App Store 审核提交。以下较早的“仅代码”或“仅测试”记录均是历史范围，不限制本轮，也不代表最新包已经上传。
+
+本轮版本：Android **0.2.9 (47)**、HarmonyOS **0.2.9 (1002028)**、iOS/iPadOS 与 macOS **0.2.9 (92)**；Windows、Linux、CLI 和 TUI 均为 **0.2.9**。保留已有用户 Apple 改动及签名身份，签名配置不提交仓库。正式成功回执将在完成后单独补记，不能把准备状态视为已上传或已上架。
+
+GitHub 仅发布 11 个供用户下载的文件：Windows x64 安装程序、Linux x86_64/arm64 的 DEB 与 AppImage、同两种架构的 CLI/TUI 压缩包、Android Universal APK、原生 macOS Universal DMG。不发布 HarmonyOS APP/HAP、Android AAB、iOS 归档、macOS ZIP 或校验侧文件。源代码压缩包由 GitHub 自动提供，不是安装程序。
+
+发布途径沿用已验证流程：Apple 使用本地 Xcode 一次 `native-apple-app-store.sh upload all`（iOS Automatic、macOS Manual），以 `Upload succeeded` 和 `EXPORT SUCCEEDED` 为完成边界；HarmonyOS 使用 DevEco“上传产品 → 测试和发布”；Android 的同一签名 APK 分别上传 vivo 和华为 Android；GitHub 先核对 tag 构建、安装包和远端摘要再发布稳定版。商店审核状态与上传成功分别记录，不重复上传成功的构建。
+
+本轮包含三个依赖 PR 的合并、安全与严格质量检查修复、GLib 上游兼容补丁、账号缓存隔离、可恢复的课程本地删除、独立教学云密码、Android 导航与卡片优化，以及此前 0.2.9 的主题、提醒、小组件和日历性能改进。用户版说明见 [0.2.9 更新说明](release-v0.2.9-notes.md)，测试细节继续保留在各专项记录中。
 
 ## 2026-09-11 — course management and separate teaching cloud password (code only)
 
