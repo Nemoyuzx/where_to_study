@@ -1,6 +1,7 @@
 // 全平台“查询”入口的 HarmonyOS 原生页面：班车查询 + 重要事件。
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
+import { ControlMetrics } from '../common/ControlMetrics';
 import { DeadlineVisual } from '../common/DeadlineVisual';
 import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
@@ -225,8 +226,8 @@ export struct QueryView {
           .fontColor(AppTheme.text())
           .textAlign(TextAlign.Center)
           .layoutWeight(1)
-          .constraintSize({ minHeight: 34 })
-          .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+          .constraintSize({ minHeight: ControlMetrics.height - 6 })
+          .padding({ left: 6, right: 6 })
           .maxLines(2)
           .borderRadius(8)
           .backgroundColor(this.selectedTab() === tab ? AppTheme.surface() : Color.Transparent)
@@ -241,7 +242,7 @@ export struct QueryView {
       }, (tab: QueryPageTab) => 'query-tab.' + tab)
     }
     .width(this.selectedTab() === QueryPageTab.shuttle ? '100%' : 'calc(100% - 32vp)')
-    .constraintSize({ minHeight: 40 })
+    .constraintSize({ minHeight: ControlMetrics.height })
     .padding(3)
     .margin({ bottom: this.selectedTab() === QueryPageTab.shuttle ? 0 : 12 })
     .borderRadius(11)
@@ -335,7 +336,7 @@ export struct QueryView {
         }
         .type(ButtonType.Normal)
         .width(36)
-        .height(36)
+        .height(ControlMetrics.height)
         .responseRegion({ x: -4, y: -4, width: 44, height: 44 })
         .borderRadius(8)
         .backgroundColor(AppTheme.surfaceVariant())

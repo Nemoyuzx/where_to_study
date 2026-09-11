@@ -486,7 +486,7 @@ class MainActivity : Activity() {
                     foregroundGravity = Gravity.CENTER
                 }
                 compoundDrawablePadding = dp(2)
-                setPadding(dp(1), dp(3), dp(1), dp(3))
+                setPadding(dp(1), dp(3), dp(1), dp(2))
                 if (android.os.Build.VERSION.SDK_INT >= 26) tooltipText = uiText(destination.label)
             } else {
                 applyNavigationRailTabPresentation(this, destination)
@@ -517,7 +517,7 @@ class MainActivity : Activity() {
         }
 
     private fun phoneNavigationCaptionsFit(): Boolean {
-        val height = dp(PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP - 24 - 2 - 6)
+        val height = dp(PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP - 24 - 2 - 5)
         val pageWidth = currentLayoutSpec?.contentWidthDp ?: resources.configuration.screenWidthDp
         val width = (dp(pageWidth) - dp(PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP * 2 + 8)) /
             Destination.entries.size - dp(2)

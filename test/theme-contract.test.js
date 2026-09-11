@@ -905,7 +905,7 @@ test('native Android compact surfaces and timeline keep the iOS density contract
   assert.match(androidPlannerSource, /text = "联动查询"[\s\S]*textSize = UiMetrics\.phonePageTitleSizeSp/)
   assert.match(androidSettingsSource, /text = "设置"[\s\S]*textSize = UiMetrics\.phonePageTitleSizeSp/)
   assert.match(androidUiSupportSource, /phonePageTitleSizeSp = 32f/)
-  assert.match(androidUiSupportSource, /phoneControlMinHeightDp = 48/)
+  assert.match(androidUiSupportSource, /phoneControlMinHeightDp = 32/)
   assert.doesNotMatch(androidPlannerSource, /setImageResource\(R\.drawable\.ic_refresh\)/)
   assert.match(
     androidPlannerSource,

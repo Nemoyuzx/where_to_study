@@ -214,13 +214,13 @@ object UiMetrics {
     const val surfacePaddingDp = 16
     const val surfaceRadiusDp = 8
     const val controlRadiusDp = 8
-    const val controlHeightDp = 36
-    const val compactControlHeightDp = 36
+    const val controlHeightDp = 32
+    const val compactControlHeightDp = 32
     const val sectionSpacingDp = 16
     const val phoneSurfaceRadiusDp = 12
     const val phoneControlRadiusDp = 10
-    const val phoneControlMinHeightDp = 48
-    const val phoneSectionSpacingDp = 16
+    const val phoneControlMinHeightDp = 32
+    const val phoneSectionSpacingDp = 10
     const val phonePageTitleSizeSp = 32f
 }
 

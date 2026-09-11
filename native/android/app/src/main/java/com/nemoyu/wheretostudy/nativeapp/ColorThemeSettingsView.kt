@@ -12,7 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 
-/** Presets use a compact grid when space allows; larger fonts keep a single column. */
+/** Compact one-line presets retain the pre-polish density and can grow for large fonts. */
 internal class ColorThemeSettingsView(
     private val activity: MainActivity,
     private val isCompact: Boolean = activity.resources.configuration.screenWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP,
@@ -40,9 +40,7 @@ internal class ColorThemeSettingsView(
             setThemeTextColor { Palette.muted }
         })
         addView(spacer(activity, 12))
-        val presetContentWidthDp = availableWidthDp - 2 * (UiMetrics.pagePaddingDp + UiMetrics.surfacePaddingDp)
-        val presetColumns = if (isCompact && presetContentWidthDp >= 298 &&
-            resources.configuration.fontScale <= 1.2f) 2 else 1
+        val presetColumns = 1
         var presetLine: LinearLayout? = null
         ColorThemeLogic.presets.forEachIndexed { index, preset ->
             if (index % presetColumns == 0) {
@@ -50,14 +48,14 @@ internal class ColorThemeSettingsView(
                     orientation = HORIZONTAL
                 }
                 addView(presetLine, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
-                    topMargin = activity.dp(if (index == 0) 0 else 8)
+                    topMargin = activity.dp(if (index == 0) 0 else 4)
                 })
             }
             val row = LinearLayout(activity).apply {
-                orientation = if (isCompact) VERTICAL else HORIZONTAL
-                gravity = if (isCompact) Gravity.START else Gravity.CENTER_VERTICAL
-                minimumHeight = activity.dp(48)
-                if (isCompact) setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
+                orientation = HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = activity.dp(UiMetrics.controlHeightDp)
+                if (isCompact) setPadding(activity.dp(8), 0, activity.dp(8), 0)
                 isClickable = true
                 isFocusable = true
                 tag = "color_theme_${preset.id}"
@@ -69,8 +67,7 @@ internal class ColorThemeSettingsView(
                 val title = TextView(activity).apply {
                     textSize = 15f
                     includeFontPadding = false
-                    if (isCompact) setPadding(0, activity.dp(9), 0, 0)
-                    else setPadding(activity.dp(8), activity.dp(10), activity.dp(8), activity.dp(10))
+                    setPadding(activity.dp(8), 0, activity.dp(8), 0)
                     setThemeTextColor {
                         if (saved.preset != preset.id) Palette.text
                         else if (saved.preset == "default") Palette.primaryText
@@ -86,17 +83,12 @@ internal class ColorThemeSettingsView(
                     swatches.addView(View(activity).apply {
                         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
                         background = roundedBackground(activity, ColorThemeLogic.color(seed), radius = 99)
-                    }, LayoutParams(activity.dp(if (isCompact) 17 else 14), activity.dp(if (isCompact) 17 else 14)).apply {
+                    }, LayoutParams(activity.dp(14), activity.dp(14)).apply {
                         marginEnd = activity.dp(7)
                     })
                 }
-                if (isCompact) {
-                    addView(swatches)
-                    addView(title, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
-                } else {
-                    addView(title, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(swatches)
-                }
+                addView(title, LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(swatches)
                 setOnClickListener {
                     activity.performControlHaptic(it)
                     commit(saved.copy(preset = preset.id))
@@ -215,8 +207,8 @@ internal class ColorThemeSettingsView(
             setText(value)
             textSize = 15f
             typeface = Typeface.MONOSPACE
-            minHeight = activity.dp(48)
-            setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
+            setPadding(activity.dp(12), 0, activity.dp(12), 0)
             setThemeTextColor { Palette.text }
             background = themedRoundedBackground(activity, {
                 if (Palette.selection.preset == "default") Palette.background else Palette.surfaceVariant
@@ -253,8 +245,8 @@ internal class ColorThemeSettingsView(
         textSize = 15f
         setTypeface(typeface, Typeface.BOLD)
         gravity = Gravity.CENTER
-        minimumHeight = activity.dp(48)
-        setPadding(activity.dp(8), activity.dp(10), activity.dp(8), activity.dp(10))
+        minimumHeight = activity.dp(UiMetrics.controlHeightDp)
+        setPadding(activity.dp(8), 0, activity.dp(8), 0)
         isClickable = true
         isFocusable = true
         setThemeTextColor { if (isCompact && primary) Palette.onPrimary else Palette.primaryText }
@@ -262,7 +254,7 @@ internal class ColorThemeSettingsView(
             if (!isCompact) Palette.surface else if (primary) Palette.primaryFill else Palette.selectionSurface
         }, { if (isCompact) android.graphics.Color.TRANSPARENT else Palette.primary },
             radius = if (isCompact) UiMetrics.phoneControlRadiusDp else UiMetrics.controlRadiusDp)
-        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) }
+        layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(7) }
         setOnClickListener { activity.performControlHaptic(it); onClick() }
     }
 

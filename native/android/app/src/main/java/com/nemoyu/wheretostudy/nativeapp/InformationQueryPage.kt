@@ -284,7 +284,7 @@ internal class InformationQueryPage(
     private val controlRadiusDp: Int
         get() = if (isCompact) UiMetrics.phoneControlRadiusDp else UiMetrics.controlRadiusDp
     private val filterHeightDp: Int
-        get() = if (isCompact) UiMetrics.phoneControlMinHeightDp else 34
+        get() = UiMetrics.controlHeightDp
 
     private fun querySurface(): LinearLayout =
         surface(activity, showsBorder = false, compact = isCompact)
@@ -417,7 +417,7 @@ internal class InformationQueryPage(
     }
 
     private fun modeSelectorHeightPx(): Int {
-        if (!isCompact) return activity.dp(48)
+        if (!isCompact) return activity.dp(UiMetrics.controlHeightDp)
         val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
         val labelWidth = ((activity.dp(availableWidthDp - pagePaddingDp * 2) - inset * 2) /
             InformationQueryMode.entries.size).coerceAtLeast(1)
@@ -433,7 +433,7 @@ internal class InformationQueryPage(
                 )
             }.measuredHeight
         }
-        return maxOf(activity.dp(UiMetrics.phoneControlMinHeightDp), labelHeight + inset * 2 + activity.dp(12))
+        return maxOf(activity.dp(UiMetrics.phoneControlMinHeightDp), labelHeight + inset * 2)
     }
 
     private fun moveModeThumb(control: FrameLayout, thumb: View, index: Int, animate: Boolean) {
@@ -582,7 +582,7 @@ internal class InformationQueryPage(
                         shuttleRepository.load(force = true)
                         renderMode(animate = false)
                     }
-                }, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { marginStart = activity.dp(8) })
+                }, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp)).apply { marginStart = activity.dp(8) })
             })
             if (presentation.isStale) addView(TextView(activity).apply {
                 text = "当前展示最近一次成功同步的缓存"
@@ -623,7 +623,7 @@ internal class InformationQueryPage(
                         addView(shuttleIconButton(R.drawable.ic_shuttle_external, "查看班车通知原文", outlined = false).apply {
                             id = R.id.information_query_shuttle_notice_link
                             setOnClickListener { openURL(url) }
-                        }, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { marginStart = activity.dp(8) })
+                        }, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp)).apply { marginStart = activity.dp(8) })
                     }
                 })
             }
@@ -691,7 +691,7 @@ internal class InformationQueryPage(
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(shuttleIconButton(R.drawable.ic_shuttle_external, "查看数据来源", outlined = false).apply {
             setOnClickListener { openURL(url) }
-        }, LinearLayout.LayoutParams(activity.dp(48), activity.dp(48)).apply { marginStart = activity.dp(4) })
+        }, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp)).apply { marginStart = activity.dp(4) })
         isClickable = true
         isFocusable = true
         setOnClickListener { openURL(url) }
@@ -995,7 +995,7 @@ internal class InformationQueryPage(
             if (isCompact) Palette.background else if (Palette.selection.preset == "default") Palette.surface else Palette.surfaceVariant
         }, { if (isCompact) Color.TRANSPARENT else Palette.border }, radius = controlRadiusDp)
         setPadding(activity.dp(12), 0, activity.dp(12), 0)
-        minHeight = activity.dp(if (isCompact) UiMetrics.phoneControlMinHeightDp else 42)
+        minHeight = activity.dp(UiMetrics.controlHeightDp)
         if (isCompact) {
             val iconSize = activity.dp(20)
             val icon = activity.getDrawable(R.drawable.ic_nav_query)?.mutate()?.apply {

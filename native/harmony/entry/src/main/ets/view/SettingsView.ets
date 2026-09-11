@@ -3,6 +3,7 @@ import { AppModel } from '../model/AppModel';
 import { AppMeta } from '../common/AppMeta';
 import { CourseRemovalRecord } from '../common/CourseRemoval';
 import { AppTheme } from '../common/AppTheme';
+import { ControlMetrics } from '../common/ControlMetrics';
 import { AdaptiveLayoutPolicy, PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
@@ -436,7 +437,7 @@ export struct SettingsView {
         .borderRadius(6)
         .backgroundColor(AppTheme.primaryFill())
         .width('100%')
-        .height(36)
+        .height(ControlMetrics.height)
         .enabled(!this.model.isSampleMode())
         .contentModifier(this.model.isSampleMode() ? new DisabledSettingsButtonContent() : undefined)
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
@@ -464,7 +465,7 @@ export struct SettingsView {
           AppTheme.border() : AppTheme.primary() })
         .backgroundColor(AppTheme.surface())
         .width('100%')
-        .height(36)
+        .height(ControlMetrics.height)
         .enabled(!this.model.isRefreshingSchedule && !this.model.isSampleMode())
         .contentModifier(this.model.isRefreshingSchedule || this.model.isSampleMode() ?
           new DisabledSettingsButtonContent() : undefined)
@@ -498,7 +499,7 @@ export struct SettingsView {
         .border({ width: 1, color: AppTheme.primary() })
         .backgroundColor(AppTheme.surface())
         .width('100%')
-        .height(36)
+        .height(ControlMetrics.height)
         .id('settings_account_privacy_policy')
         .accessibilityText(this.model.text('阅读隐私政策'))
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
@@ -537,7 +538,7 @@ export struct SettingsView {
       .border({ width: 1, color: AppTheme.border() })
       .padding({ left: 13, right: 13 })
       .width('100%')
-      .height(36)
+      .height(ControlMetrics.height)
       .showPasswordIcon(false)
       .enabled(!this.model.isSampleMode() && enabled)
       .opacity(this.model.isSampleMode() || !enabled ? 0.62 : 1)
@@ -570,7 +571,7 @@ export struct SettingsView {
           })
       }
       .width('100%')
-      .constraintSize({ minHeight: 36 })
+      .constraintSize({ minHeight: ControlMetrics.height })
       .alignItems(VerticalAlign.Center)
 
       Blank().height(7)
@@ -603,7 +604,7 @@ export struct SettingsView {
         .border({ width: 1, color: AppTheme.primary() })
         .backgroundColor(AppTheme.surface())
         .width('100%')
-        .height(36)
+        .height(ControlMetrics.height)
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
         .onClick(() => {
           const work: Promise<boolean> = this.model.saveSemesterSettings();
@@ -645,7 +646,7 @@ export struct SettingsView {
           })
       }
       .width('100%')
-      .constraintSize({ minHeight: 36 })
+      .constraintSize({ minHeight: ControlMetrics.height })
       .alignItems(VerticalAlign.Center)
 
       Row({ space: 8 }) {
@@ -663,7 +664,7 @@ export struct SettingsView {
           })
       }
       .width('100%')
-      .constraintSize({ minHeight: 36 })
+      .constraintSize({ minHeight: ControlMetrics.height })
       .alignItems(VerticalAlign.Center)
 
       Text(this.model.text('显示课程数量'))
@@ -915,7 +916,7 @@ export struct SettingsView {
         .backgroundColor(markerColor)
     }
     .width('100%')
-    .constraintSize({ minHeight: 36 })
+    .constraintSize({ minHeight: ControlMetrics.height })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -946,7 +947,7 @@ export struct SettingsView {
         })
     }
     .width('100%')
-    .constraintSize({ minHeight: 36 })
+    .constraintSize({ minHeight: ControlMetrics.height })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -970,7 +971,7 @@ export struct SettingsView {
           })
       }
       .width('100%')
-      .constraintSize({ minHeight: 36 })
+      .constraintSize({ minHeight: ControlMetrics.height })
       .alignItems(VerticalAlign.Center)
 
       Row({ space: 8 }) {
@@ -1042,7 +1043,7 @@ export struct SettingsView {
         .border({ width: 1, color: this.model.isSampleMode() ? AppTheme.border() : AppTheme.danger() })
         .backgroundColor('#14FF3B30')
         .width('100%')
-        .height(36)
+        .height(ControlMetrics.height)
         .enabled(!this.model.isSampleMode())
         .contentModifier(this.model.isSampleMode() ? new DisabledSettingsButtonContent() : undefined)
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
@@ -1223,7 +1224,7 @@ export struct SettingsView {
         .border({ width: 1, color: AppTheme.border() })
         .backgroundColor(AppTheme.surface())
         .width('100%')
-        .height(36)
+        .height(ControlMetrics.height)
         .id('settings.app_filing')
         .accessibilityText(this.model.text(AppMeta.appFilingLabel))
         .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
@@ -1259,7 +1260,7 @@ export struct SettingsView {
       .border({ width: 1, color: AppTheme.border() })
       .backgroundColor(AppTheme.surface())
       .width('100%')
-      .height(36)
+      .height(ControlMetrics.height)
       .enabled(enabled)
       .contentModifier(enabled ? undefined : new DisabledSettingsButtonContent())
       .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })

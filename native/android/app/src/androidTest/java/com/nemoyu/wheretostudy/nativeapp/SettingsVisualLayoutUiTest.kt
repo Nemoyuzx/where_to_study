@@ -58,7 +58,7 @@ class SettingsVisualLayoutUiTest {
                             .filter { it.isClickable || it is EditText }
                         assertTrue("The real settings page must contain controls", touchTargets.isNotEmpty())
                         touchTargets.forEach { control ->
-                            assertTrue("Short touch target: ${control.text}", control.height >= activity.dp(48))
+                            assertTrue("Below compact baseline: ${control.text}", control.height >= activity.dp(UiMetrics.controlHeightDp))
                             val bounds = Rect()
                             control.getDrawingRect(bounds)
                             content.offsetDescendantRectToMyCoords(control, bounds)

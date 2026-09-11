@@ -9,8 +9,8 @@ class AdaptiveLayoutLogicTest {
     @Test
     fun phoneNavigationIsWiderAndShorterWhileRetainingAContentSafetyGap() {
         assertEquals(56, PhoneNavigationLayoutLogic.HEIGHT_DP)
-        assertEquals(48, PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP)
-        assertEquals(20, PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP)
+        assertEquals(46, PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP)
+        assertEquals(32, PhoneNavigationLayoutLogic.HORIZONTAL_MARGIN_DP)
         assertTrue(
             PhoneNavigationLayoutLogic.ITEM_HEIGHT_DP < PhoneNavigationLayoutLogic.HEIGHT_DP,
         )

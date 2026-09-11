@@ -1357,7 +1357,7 @@ class SettingsPage(
                 radius = UiMetrics.phoneControlRadiusDp,
             )
             minHeight = activity.dp(controlHeight)
-            setPadding(activity.dp(13), activity.dp(10), activity.dp(13), activity.dp(10))
+            setPadding(activity.dp(13), 0, activity.dp(13), 0)
             layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
         }
     }
@@ -1417,7 +1417,7 @@ class SettingsPage(
         if (!isCompact) return
         minimumHeight = activity.dp(controlHeight)
         includeFontPadding = false
-        setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10))
+        setPadding(activity.dp(12), 0, activity.dp(12), 0)
         layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
         background = themedRoundedBackground(
             activity,
@@ -1435,7 +1435,7 @@ class SettingsPage(
         minHeight = activity.dp(controlHeight)
         minWidth = activity.dp(controlHeight)
         switchPadding = activity.dp(12)
-        setPadding(0, activity.dp(6), 0, activity.dp(6))
+        setPadding(0, 0, 0, 0)
     }
 
     private fun showPrivacyPolicy() {
@@ -1574,7 +1574,7 @@ class SettingsPage(
         get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
 
     private val compactGap: Int
-        get() = if (isCompact) 8 else 10
+        get() = if (isCompact) 7 else 10
 
     private val controlHeight: Int
         get() = if (isCompact) UiMetrics.phoneControlMinHeightDp else UiMetrics.controlHeightDp

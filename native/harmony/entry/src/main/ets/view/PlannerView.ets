@@ -1,6 +1,7 @@
 // 手机布局以 Android PlannerPage.kt 为视觉和交互基准。
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
+import { ControlMetrics } from '../common/ControlMetrics';
 import { Classroom, Course, SlotMetadata } from '../common/Models';
 import { StrictDates } from '../common/StrictDates';
 import { CampusWeather, CampusWeatherDay } from '../net/DailyInfoClient';
@@ -403,7 +404,7 @@ export struct PlannerView {
       .borderRadius(8)
       .backgroundColor(AppTheme.primaryFill())
       .width('100%')
-      .height(36)
+      .height(ControlMetrics.height)
       .enabled(!this.model.isRefreshingClassrooms)
       .onClick(() => {
         this.model.refreshClassrooms(true);

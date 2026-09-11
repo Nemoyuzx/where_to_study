@@ -50,7 +50,7 @@ class QueryCardsVisualUiTest {
             val campus = page.findViewWithTag<ViewGroup>("planner.campus.control")
             val fetch = activity.findViewById<ViewGroup>(R.id.planner_fetch_button)
             assertTextFits(page.findViewWithTag("planner.page.title"))
-            assertEquals(activity.dp(UiMetrics.surfacePaddingDp), query.paddingLeft)
+            assertEquals(activity.dp(12), query.paddingLeft)
             assertEquals(query.paddingLeft, query.paddingRight)
             assertEquals(campus.left, fetch.left)
             assertEquals(campus.right, fetch.right)
@@ -133,7 +133,8 @@ class QueryCardsVisualUiTest {
                 assertNotNull("The shuttle selector must scroll with the page title", selector)
                 val status = scroll.findViewById<ViewGroup>(R.id.information_query_shuttle_status)
                 val refresh = status.findViewById<View>(R.id.information_query_shuttle_refresh)
-                assertTrue(refresh.width >= activity.dp(48) && refresh.height >= activity.dp(48))
+                assertEquals(activity.dp(UiMetrics.controlHeightDp), refresh.width)
+                assertEquals(activity.dp(UiMetrics.controlHeightDp), refresh.height)
                 assertTrue(refresh.isClickable)
                 assertTrue(status.findViewById<View>(R.id.information_query_shuttle_notice_link).isClickable)
                 listOf("status.title", "status.summary", "notice.title", "notice.date").forEach { suffix ->

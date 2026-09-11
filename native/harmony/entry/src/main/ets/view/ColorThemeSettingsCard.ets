@@ -1,5 +1,6 @@
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
+import { ControlMetrics } from '../common/ControlMetrics';
 import { AppLanguage } from '../common/AppLocalization';
 import { ColorThemes, ColorThemeSeed, ColorThemeSelection } from '../common/ColorThemes';
 
@@ -120,7 +121,7 @@ export struct ColorThemeSettingsCard {
         .backgroundColor(this.model.colorTheme.selection.preset === 'default' ?
           AppTheme.background() : AppTheme.inputSurface())
         .borderRadius(8)
-        .constraintSize({ minHeight: 44 })
+        .height(ControlMetrics.height)
         .width('100%')
         .accessibilityText(this.text(chinese, english) + ' HEX RGB')
         .onChange((next: string) => {
@@ -145,7 +146,12 @@ export struct ColorThemeSettingsCard {
       Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
         ForEach(this.allPresets(), (seed: ColorThemeSeed) => {
           Button({ type: ButtonType.Normal }) {
-            Column({ space: 8 }) {
+            Row({ space: 8 }) {
+              Text(this.text(seed.nameZh, seed.nameEn))
+                .fontSize(14)
+                .fontColor(AppTheme.text())
+                .textAlign(TextAlign.Start)
+                .layoutWeight(1)
               Row({ space: 6 }) {
                 this.swatch(seed.primary)
                 this.swatch(seed.accent)
@@ -154,19 +160,15 @@ export struct ColorThemeSettingsCard {
                   Text('✓').fontColor(AppTheme.selectionText()).fontWeight(FontWeight.Bold)
                 }
               }
-              Text(this.text(seed.nameZh, seed.nameEn))
-                .fontSize(14)
-                .fontColor(AppTheme.text())
-                .textAlign(TextAlign.Start)
-                .width('100%')
             }
-            .alignItems(HorizontalAlign.Start)
+            .alignItems(VerticalAlign.Center)
             .width('100%')
           }
           .id('color_theme_' + seed.id)
-          .width(this.cardWidth < 280 ? '100%' : '48%')
-          .padding(10)
-          .margin({ bottom: 8 })
+          .width('100%')
+          .height(ControlMetrics.height)
+          .padding({ left: 10, right: 10 })
+          .margin({ bottom: 4 })
           .borderRadius(8)
           .backgroundColor(this.model.colorTheme.selection.preset === seed.id ?
             AppTheme.selectionSurface() : AppTheme.background())
@@ -243,7 +245,8 @@ export struct ColorThemeSettingsCard {
       }
         .id('color_theme_apply')
         .backgroundColor(this.draftSelection() !== null ? AppTheme.primaryFill() : AppTheme.surfaceVariant())
-        .padding(12)
+        .padding({ left: 12, right: 12 })
+        .height(ControlMetrics.height)
         .borderRadius(8)
         .width('100%')
         .enabled(this.draftSelection() !== null)
@@ -257,7 +260,8 @@ export struct ColorThemeSettingsCard {
       }
         .id('color_theme_restore')
         .backgroundColor(AppTheme.selection())
-        .padding(12)
+        .padding({ left: 12, right: 12 })
+        .height(ControlMetrics.height)
         .borderRadius(8)
         .width('100%')
         .onClick(() => { this.choosePreset('default'); })
