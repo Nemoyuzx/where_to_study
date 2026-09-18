@@ -40,7 +40,11 @@ data class CampusWeather(
     val days: List<CampusWeatherDay>,
 )
 
-class DailyInfoClientException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class DailyInfoClientException(
+    message: String,
+    cause: Throwable? = null,
+    val httpStatus: Int? = null,
+) : Exception(message, cause)
 
 internal data class CampusWeatherTarget(
     val campusID: String,

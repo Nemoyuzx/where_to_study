@@ -19,6 +19,7 @@ internal class UCloudAssignmentClient internal constructor(
     private val fetchAllOverride: ((Credentials) -> List<AssignmentDeadlineItem>)? = null,
     private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     private val flightSelectionObserver: ((isLeader: Boolean) -> Unit)? = null,
+    private val sleep: (Long) -> Unit = { millis -> Thread.sleep(millis) },
 ) {
     private data class CachedAssignments(
         val credentialKey: String,
@@ -163,7 +164,10 @@ internal class UCloudAssignmentClient internal constructor(
         }
     }
 
-    private fun fetchAll(credentials: Credentials): List<AssignmentDeadlineItem> {
+    private fun fetchAll(credentials: Credentials): List<AssignmentDeadlineItem> =
+        withFetchRetry(sleep) { fetchAllOnce(credentials) }
+
+    private fun fetchAllOnce(credentials: Credentials): List<AssignmentDeadlineItem> {
         val authenticated = authenticate(credentials)
         val courseRoot = apiGet(
             "/ykt-site/site/list/student/current",
@@ -376,7 +380,10 @@ internal class UCloudAssignmentClient internal constructor(
                 throw DailyInfoClientException("教学云接口返回了不受信任的重定向。")
             }
             if (status !in acceptedStatus) {
-                throw DailyInfoClientException("教学云接口返回 HTTP $status。")
+                throw DailyInfoClientException(
+                    "教学云接口返回 HTTP $status。",
+                    httpStatus = status,
+                )
             }
             if (connection.contentLengthLong > maximumBytes) {
                 throw DailyInfoClientException("教学云接口响应过大。")
@@ -487,6 +494,61 @@ internal class UCloudAssignmentClient internal constructor(
         private const val MAXIMUM_COURSES = 100
         private const val MAXIMUM_ASSIGNMENTS = 5_000
         private const val CACHE_LIFETIME_MS = 10 * 60 * 1_000L
+        private const val MAX_FETCH_ATTEMPTS = 3
+        private val RETRY_BACKOFF_MS = longArrayOf(800L, 2_400L)
+
+        // The teaching-cloud chain sits behind the school's bot firewall, which
+        // intermittently answers HTTP 423 (rate/behavior block) or 401 (stale
+        // session), especially on mobile carrier networks. Re-running the whole
+        // authenticate+fetch flow obtains a fresh firewall cookie and token, so
+        // transient failures are retried before surfacing an error.
+        internal fun <T> withFetchRetry(sleep: (Long) -> Unit, block: () -> T): T {
+            var lastError: Exception? = null
+            for (attempt in 0 until MAX_FETCH_ATTEMPTS) {
+                if (attempt > 0) {
+                    try {
+                        sleep(RETRY_BACKOFF_MS[(attempt - 1).coerceAtMost(RETRY_BACKOFF_MS.lastIndex)])
+                    } catch (interrupted: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw DailyInfoClientException("作业请求已中断。", interrupted)
+                    }
+                }
+                try {
+                    return block()
+                } catch (error: Exception) {
+                    lastError = error
+                    if (!isTransientFailure(error)) {
+                        throw error
+                    }
+                }
+            }
+            throw finalFetchError(
+                lastError ?: DailyInfoClientException("教学云课程作业接口暂时不可用。"),
+            )
+        }
+
+        internal fun isTransientFailure(error: Exception): Boolean {
+            if (error is java.io.IOException) return true
+            val status = (error as? DailyInfoClientException)?.httpStatus ?: return false
+            return status == 401 || status == 408 || status == 423 || status == 429 || status >= 500
+        }
+
+        internal fun finalFetchError(error: Exception): Exception {
+            val status = (error as? DailyInfoClientException)?.httpStatus
+            return when (status) {
+                423 -> DailyInfoClientException(
+                    "教学云接口连续返回 HTTP 423（学校防火墙限流拦截）。请过几分钟再刷新，或切换网络（如移动数据与 Wi-Fi 互换）后重试。",
+                    error,
+                    status,
+                )
+                401 -> DailyInfoClientException(
+                    "教学云接口连续返回 HTTP 401（登录状态未被接受）。请在设置中核对教务账号与教学云密码；若统一认证要求验证码，请先在浏览器登录一次后再试。",
+                    error,
+                    status,
+                )
+                else -> error
+            }
+        }
 
         internal fun parseExecution(html: String): String? {
             val inputRegex = Regex("""<input\b[^>]*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
