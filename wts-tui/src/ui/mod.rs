@@ -101,8 +101,15 @@ pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
         && app.query_section == crate::app::QuerySection::Grades
     {
         "←/→ 切换查询 · t 学期 · p 记录 · a 全部学期 · r 刷新 · ↑↓ 浏览 · s 账户设置"
+    } else if app.selected_tab_index == 4
+        && matches!(
+            app.query_section,
+            crate::app::QuerySection::Exams | crate::app::QuerySection::Assignments
+        )
+    {
+        "←/→ 切换查询 · r 刷新 · ↑↓ / PgUp PgDn 浏览 · s 账户设置 · Tab/1-6 切换页面"
     } else if app.selected_tab_index == 4 {
-        "←/→ 切换班车/事件/成绩 · r 刷新 · ↑↓ 浏览 · Tab/1-6 切换页面 · 事件：/ 搜索 t 类型 c 分类 p 来源 e 已结束 f 收藏"
+        "←/→ 切换班车/事件/成绩/考试/作业 · r 刷新 · ↑↓ 浏览 · 事件：/ 搜索 t 类型 c 分类 p 来源 e 已结束 f 收藏"
     } else {
         "q 退出 · r 刷新 · l 保存账号 · o 退出登录 · m 管理课程 · Tab/1-6 切换页面"
     };

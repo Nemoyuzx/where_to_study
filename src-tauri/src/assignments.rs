@@ -19,6 +19,7 @@ use crate::models::{
     AssignmentCalendarResponse, AssignmentDeadlineItem, AssignmentsRequest, AssignmentsResponse,
     CalendarRangeRequest,
 };
+use crate::session_cache::{check_auth_payload, token_ttl, SessionCache};
 
 const SOURCE_URL: &str = "https://ucloud.bupt.edu.cn/uclass/";
 const UCLOUD_ORIGIN: &str = "https://apiucloud.bupt.edu.cn";
@@ -52,6 +53,8 @@ struct TokenPayload {
     access_token: String,
     #[serde(default, alias = "userId")]
     user_id: Value,
+    #[serde(default)]
+    expires_in: Value,
 }
 
 #[derive(Clone)]
@@ -60,10 +63,12 @@ struct CourseRef {
     name: Option<String>,
 }
 
+#[derive(Clone)]
 struct AuthenticatedClient {
     client: Client,
     access_token: Zeroizing<String>,
     user_id: String,
+    ttl: Duration,
 }
 
 struct CachedAssignments {
@@ -150,9 +155,12 @@ impl AssignmentCache {
 }
 
 static ASSIGNMENT_CACHE: AssignmentCache = AssignmentCache::new();
+static ASSIGNMENT_SESSION: SessionCache<AuthenticatedClient> = SessionCache::new();
+static ASSIGNMENT_FETCH: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 pub fn clear_cache() {
     ASSIGNMENT_CACHE.clear();
+    ASSIGNMENT_SESSION.clear();
 }
 
 pub fn credential_revision() -> u64 {
@@ -244,6 +252,24 @@ fn collect_records(payload: &Value) -> Vec<&Value> {
     .find_map(|pointer| payload.pointer(pointer).and_then(Value::as_array))
     .map(|items| items.iter().collect())
     .unwrap_or_default()
+}
+
+fn validate_record_collection(payload: &Value) -> ServiceResult<()> {
+    let records = [
+        "/data/records",
+        "/data/data/records",
+        "/records",
+        "/data/undoneList",
+        "/data/data/undoneList",
+        "/undoneList",
+    ]
+    .into_iter()
+    .find_map(|pointer| payload.pointer(pointer));
+    if records.is_some_and(Value::is_array) {
+        Ok(())
+    } else {
+        Err(ServiceError::new("教学云列表格式不正确，保留上次结果。"))
+    }
 }
 
 fn is_assignment_record(raw: &Value) -> bool {
@@ -555,12 +581,13 @@ async fn parse_api_response(response: Response) -> ServiceResult<Value> {
     let status = response.status();
     let bytes = read_limited(response, MAX_API_BYTES, "教学云数据接口").await?;
     if !status.is_success() {
-        return Err(ServiceError::new(format!(
-            "教学云数据接口返回 HTTP {}。",
-            status.as_u16()
-        )));
+        return Err(ServiceError::with_status(
+            format!("教学云数据接口返回 HTTP {}。", status.as_u16()),
+            status.as_u16(),
+        ));
     }
     let payload = parse_json(&bytes, "教学云数据接口")?;
+    check_auth_payload(&payload)?;
     if !business_success(&payload) {
         return Err(ServiceError::new(format!(
             "教学云数据接口返回业务状态 {}。",
@@ -661,10 +688,18 @@ async fn authenticate(account: &str, password: &str) -> ServiceResult<Authentica
     if user_id.trim().is_empty() {
         return Err(ServiceError::new("教学云令牌接口未返回用户标识。"));
     }
+    let ttl = token_ttl(
+        &token_payload.access_token,
+        token_payload
+            .expires_in
+            .as_u64()
+            .or_else(|| token_payload.expires_in.as_str()?.parse().ok()),
+    );
     Ok(AuthenticatedClient {
         client,
         access_token: Zeroizing::new(token_payload.access_token),
         user_id,
+        ttl,
     })
 }
 
@@ -716,11 +751,44 @@ fn merge_items(items: Vec<AssignmentDeadlineItem>) -> Vec<AssignmentDeadlineItem
     result
 }
 
+#[cfg(all(test, feature = "tauri-runtime"))]
 async fn fetch_all_assignments(
     account: &str,
     password: &str,
 ) -> ServiceResult<Vec<AssignmentDeadlineItem>> {
-    let authenticated = authenticate(account, password).await?;
+    fetch_all_assignments_at(account, password, credential_revision()).await
+}
+
+async fn fetch_all_assignments_at(
+    account: &str,
+    password: &str,
+    revision: u64,
+) -> ServiceResult<Vec<AssignmentDeadlineItem>> {
+    ASSIGNMENT_CACHE.ensure_revision(revision)?;
+    ASSIGNMENT_SESSION
+        .run(
+            account,
+            password,
+            || async {
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                let authenticated = authenticate(account, password).await?;
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                let ttl = authenticated.ttl;
+                Ok((authenticated, ttl))
+            },
+            |session| async move {
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                let items = fetch_all_with_session(session).await?;
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                Ok(items)
+            },
+        )
+        .await
+}
+
+async fn fetch_all_with_session(
+    authenticated: AuthenticatedClient,
+) -> ServiceResult<Vec<AssignmentDeadlineItem>> {
     let courses_payload = authenticated
         .get(
             "/ykt-site/site/list/student/current",
@@ -733,9 +801,8 @@ async fn fetch_all_assignments(
         )
         .await?;
     let courses = parse_courses(&courses_payload);
+    validate_record_collection(&courses_payload)?;
     let mut all_items = Vec::new();
-    let mut successful_course_requests = 0usize;
-    let mut first_course_error = None;
     for course in &courses {
         let body = json!({
             "siteId": course.id,
@@ -755,37 +822,60 @@ async fn fetch_all_assignments(
             .await
         {
             Ok(payload) => {
-                successful_course_requests += 1;
+                validate_record_collection(&payload)?;
                 all_items.extend(parse_all_assignment_deadlines(
                     &payload,
                     course.name.as_deref(),
                 ));
             }
             Err(error) => {
-                first_course_error.get_or_insert(error);
+                // Never publish/cache an incomplete catalogue as an empty or
+                // complete success. The caller keeps its previous snapshot.
+                return Err(error);
             }
         }
         if all_items.len() >= MAX_ASSIGNMENTS {
             break;
         }
     }
-    if !courses.is_empty() && successful_course_requests == 0 {
-        return Err(first_course_error
-            .unwrap_or_else(|| ServiceError::new("教学云课程作业接口暂时不可用。")));
-    }
 
     // The homepage list is merged after course lists. It covers pending
     // assignments that UCloud occasionally omits from a course page.
-    if let Ok(undone_payload) = authenticated
+    match authenticated
         .get(
             "/ykt-site/site/student/undone",
             &[("userId", authenticated.user_id.clone())],
         )
         .await
     {
-        all_items.extend(parse_all_assignment_deadlines(&undone_payload, None));
+        Ok(undone_payload) => {
+            all_items.extend(parse_all_assignment_deadlines(&undone_payload, None))
+        }
+        Err(error) if error.authentication_expired => return Err(error),
+        Err(_) => (),
     }
     Ok(merge_items(all_items))
+}
+
+/// Full course-assignment catalogue for Query. Shares the calendar data cache;
+/// an explicit refresh invalidates results, not the authentication session.
+pub async fn fetch_assignment_list(
+    account: &str,
+    password: &str,
+    account_scope: &str,
+    request_revision: u64,
+    force: bool,
+) -> ServiceResult<Vec<AssignmentDeadlineItem>> {
+    let _guard = ASSIGNMENT_FETCH.lock().await;
+    ASSIGNMENT_CACHE.ensure_revision(request_revision)?;
+    if !force {
+        if let Some(items) = ASSIGNMENT_CACHE.items(account_scope, request_revision)? {
+            return Ok(items);
+        }
+    }
+    let items = fetch_all_assignments_at(account, password, request_revision).await?;
+    ASSIGNMENT_CACHE.save(account_scope, &items, request_revision)?;
+    Ok(items)
 }
 
 /// Capture `request_revision` alongside the credentials, under the caller's
@@ -798,14 +888,8 @@ pub async fn fetch_assignments(
     request_revision: u64,
 ) -> ServiceResult<AssignmentsResponse> {
     let date = parse_date(payload.date.trim())?;
-    let all_items = match ASSIGNMENT_CACHE.items(account_scope, request_revision)? {
-        Some(items) => items,
-        None => {
-            let items = fetch_all_assignments(account, password).await?;
-            ASSIGNMENT_CACHE.save(account_scope, &items, request_revision)?;
-            items
-        }
-    };
+    let all_items =
+        fetch_assignment_list(account, password, account_scope, request_revision, false).await?;
     let requested = date.to_string();
     let items = all_items
         .into_iter()
@@ -838,14 +922,8 @@ pub async fn fetch_assignment_calendar(
         ));
     }
 
-    let all_items = match ASSIGNMENT_CACHE.items(account_scope, request_revision)? {
-        Some(items) => items,
-        None => {
-            let items = fetch_all_assignments(account, password).await?;
-            ASSIGNMENT_CACHE.save(account_scope, &items, request_revision)?;
-            items
-        }
-    };
+    let all_items =
+        fetch_assignment_list(account, password, account_scope, request_revision, false).await?;
     let items = assignment_items_in_range(all_items, start, end);
     ASSIGNMENT_CACHE.ensure_revision(request_revision)?;
     Ok(AssignmentCalendarResponse {
@@ -859,6 +937,14 @@ pub async fn fetch_assignment_calendar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_catalogue_is_not_successful_empty_data() {
+        assert!(validate_record_collection(&json!({"data":{"records":[]}})).is_ok());
+        assert!(validate_record_collection(&json!({"code":200,"data":{}})).is_err());
+        assert!(validate_record_collection(&json!({"data":{"records":null}})).is_err());
+        assert!(validate_record_collection(&json!({"data":{"records":""}})).is_err());
+    }
 
     #[test]
     fn credential_changes_reject_old_requests_before_reads_writes_and_responses() {

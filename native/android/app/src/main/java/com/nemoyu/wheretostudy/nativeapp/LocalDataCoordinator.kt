@@ -46,5 +46,8 @@ internal object LocalDataCoordinator {
         operation: () -> T,
     ): T = gate.withCurrent(expectedGeneration, operation)
 
-    fun <T> clear(operation: () -> T): T = gate.clear(operation)
+    fun <T> clear(operation: () -> T): T = gate.clear {
+        AcademicSessions.cache.clear()
+        operation()
+    }
 }

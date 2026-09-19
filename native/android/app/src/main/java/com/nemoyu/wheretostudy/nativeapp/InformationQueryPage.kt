@@ -34,6 +34,8 @@ internal enum class InformationQueryMode(val label: String) {
     SHUTTLE("班车查询"),
     IMPORTANT_EVENTS("重要事件"),
     GRADES("成绩查询"),
+    EXAMS("考试查询"),
+    ASSIGNMENTS("课程作业"),
 }
 
 internal enum class ImportantEventCategory(val label: String) {
@@ -273,6 +275,7 @@ internal class InformationQueryPage(
     private val sessionState: InformationQuerySessionState,
     private val usesBottomNavigation: Boolean,
     private val gradesRepository: AcademicGradesRepository,
+    private val scheduleRepository: ScheduleRepository,
 ) {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
@@ -311,6 +314,9 @@ internal class InformationQueryPage(
             root.isAttachedToWindow &&
             sessionState.selectedMode == InformationQueryMode.IMPORTANT_EVENTS
         ) renderMode(animate = false)
+        if (::root.isInitialized && root.isAttachedToWindow &&
+            sessionState.selectedMode == InformationQueryMode.ASSIGNMENTS
+        ) renderMode(animate = false)
     }
     private val gradeObserver: () -> Unit = {
         if (::root.isInitialized && root.isAttachedToWindow && sessionState.selectedMode == InformationQueryMode.GRADES)
@@ -337,7 +343,6 @@ internal class InformationQueryPage(
                 dailyInfoRepository.loadImportantEvents()
                 gradesRepository.addObserver(gradeObserver)
                 gradesRepository.reconcile()
-                if (sessionState.selectedMode == InformationQueryMode.GRADES) gradesRepository.load()
             }
 
             override fun onViewDetachedFromWindow(view: View) {
@@ -389,6 +394,8 @@ internal class InformationQueryPage(
                         InformationQueryMode.SHUTTLE -> R.id.information_query_shuttle_tab
                         InformationQueryMode.IMPORTANT_EVENTS -> R.id.information_query_events_tab
                         InformationQueryMode.GRADES -> R.id.information_query_grades_tab
+                        InformationQueryMode.EXAMS -> R.id.information_query_exams_tab
+                        InformationQueryMode.ASSIGNMENTS -> R.id.information_query_assignments_tab
                     }
                     text = mode.label
                     textSize = if (isCompact) 15f else 14f
@@ -413,7 +420,6 @@ internal class InformationQueryPage(
                         }
                         moveModeThumb(control, thumb, mode.ordinal, animate = true)
                         renderMode(animate = true, direction = mode.ordinal.compareTo(oldOrdinal))
-                        if (mode == InformationQueryMode.GRADES) gradesRepository.load()
                     }
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
             }
@@ -481,6 +487,8 @@ internal class InformationQueryPage(
             InformationQueryMode.SHUTTLE -> shuttleContent()
             InformationQueryMode.IMPORTANT_EVENTS -> importantEventsContent()
             InformationQueryMode.GRADES -> gradesContent()
+            InformationQueryMode.EXAMS -> examsContent()
+            InformationQueryMode.ASSIGNMENTS -> assignmentsContent()
         }
         UiText.localizeTree(page)
         val old = content.getChildAt(0)
@@ -598,6 +606,7 @@ internal class InformationQueryPage(
                             }
                         }
                         gradesRepository.isLoading -> addView(statusCard("正在获取成绩…"))
+                        gradesRepository.error == null -> addView(statusCard("点击刷新成绩获取学校已公布的成绩。"))
                     }
                 }
                 addView(TextView(activity).apply {
@@ -607,6 +616,82 @@ internal class InformationQueryPage(
                 })
             })
         }, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    private fun privateQueryContent(viewID: Int, build: LinearLayout.() -> Unit): ScrollView = ScrollView(activity).apply {
+        id = viewID
+        isFillViewport = true
+        clipToPadding = false
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(queryPageHeader())
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(activity.dp(pagePaddingDp), activity.dp(8), activity.dp(pagePaddingDp),
+                    activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation)))
+                build()
+            })
+        }, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    private fun assignmentsContent(): ScrollView = privateQueryContent(R.id.information_query_assignments_scroll) {
+        val items = dailyInfoRepository.allAssignments()
+        val loading = dailyInfoRepository.isLoadingAllAssignments()
+        addView(gradeAction(if (loading) "正在获取…" else "刷新课程作业") {
+            dailyInfoRepository.loadAllAssignments(force = true)
+        }.apply { id = R.id.information_query_assignments_refresh; isEnabled = !loading })
+        addView(querySourceFooter("教学云 · 课程作业", CalendarDailyInfoSources.assignments))
+        dailyInfoRepository.allAssignmentsError()?.let { error ->
+            addView(statusCard(if (items == null) error else "作业刷新失败，正在显示已获取的缓存。\n$error"))
+        }
+        when {
+            items != null && items.isEmpty() -> addView(statusCard("暂无课程作业 DDL"))
+            items != null -> items.sortedWith(compareBy(AssignmentDeadlineItem::deadline, AssignmentDeadlineItem::title))
+                .forEach { item ->
+                    addView(querySurface().apply {
+                        tag = "assignment.query.row"
+                        addView(eventDetailText(item.courseName ?: "课程未标注", 2))
+                        addView(TextView(activity).apply {
+                            text = item.title; UiText.preserveRawText(this)
+                            textSize = 17f; setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
+                        })
+                        addView(eventDetailText(item.deadline.replace('T', ' ').take(16), 2))
+                        item.status?.let { addView(eventDetailText(it, 2)) }
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) })
+                }
+            loading -> addView(statusCard("正在获取课程作业…"))
+            dailyInfoRepository.allAssignmentsError() == null -> addView(statusCard("点击刷新课程作业获取 DDL；使用设置中已保存的教学云密码。"))
+        }
+    }
+
+    private fun examsContent(): ScrollView = privateQueryContent(R.id.information_query_exams_scroll) {
+        val exams = scheduleRepository.schedule?.examSchedule
+        addView(gradeAction(if (scheduleRepository.isRefreshing) "正在获取…" else "刷新课表与考试") {
+            scheduleRepository.refresh {
+                if (::root.isInitialized && root.isAttachedToWindow && sessionState.selectedMode == InformationQueryMode.EXAMS)
+                    renderMode(animate = false)
+            }
+            renderMode(animate = false)
+        }.apply { id = R.id.information_query_exams_refresh; isEnabled = !scheduleRepository.isRefreshing })
+        addView(statusCard(AcademicScheduleLogic.statusText(exams)))
+        exams?.items.orEmpty().forEach { exam ->
+            addView(querySurface().apply {
+                tag = "academic.exam.row"
+                addView(TextView(activity).apply {
+                    text = exam.name; UiText.preserveRawText(this)
+                    textSize = 17f; setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
+                })
+                addView(eventDetailText(exam.date.ifBlank { "日期待定" }, 2))
+                val time = if (AcademicScheduleLogic.minute(exam.startTime) != null && AcademicScheduleLogic.minute(exam.endTime) != null)
+                    "${exam.startTime}–${exam.endTime}" else "时间待定"
+                addView(eventDetailText(time, 2))
+                if (exam.room.isNotBlank()) addView(eventDetailText(exam.room, 2))
+                if (exam.seat.isNotBlank()) addView(eventDetailText("座位：${exam.seat}", 2))
+                if (exam.timeText.isNotBlank()) addView(eventDetailText(exam.timeText, 3))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) })
+        }
     }
 
     private fun gradeAction(label: String, action: () -> Unit): TextView = TextView(activity).apply {

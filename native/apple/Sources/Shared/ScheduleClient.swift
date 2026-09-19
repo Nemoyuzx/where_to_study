@@ -177,26 +177,29 @@ struct SJDScheduleClient: ScheduleFetching {
         fallbackTermID: String,
         fallbackTermStartDate: String
     ) async throws -> ScheduleSnapshot {
-        let token = try await api.login(credentials: credentials)
-        async let currentRequest = api.curriculum(token: token, week: "")
-        async let allRequest = api.curriculum(token: token, week: "all")
-        let (currentData, allData) = try await (currentRequest, allRequest)
-        var snapshot = try SJDScheduleParser.parse(
-            currentData: currentData,
-            curriculumData: allData,
-            fallbackTermID: fallbackTermID,
-            fallbackTermStartDate: fallbackTermStartDate
-        )
-        let owner = CourseDeletionLogic.accountKey(credentials.account)
-        do {
-            let data = try await api.academic(token: token, endpoint: .examinations, parameters: ["semester": snapshot.termID])
-            snapshot.examSchedule = try AcademicResponseParser.exams(data, termID: snapshot.termID, accountKey: owner)
-        } catch {
-            snapshot.examSchedule = ExamSchedule(termID: snapshot.termID, accountKey: owner,
-                fetchedAt: SJDClassroomClient.timestamp(.now), status: "failed",
-                message: "考试安排获取失败，请刷新重试。", items: [])
+        try await api.authenticated(credentials: credentials) { token in
+            async let currentRequest = api.curriculum(token: token, week: "")
+            async let allRequest = api.curriculum(token: token, week: "all")
+            let (currentData, allData) = try await (currentRequest, allRequest)
+            var snapshot = try SJDScheduleParser.parse(
+                currentData: currentData,
+                curriculumData: allData,
+                fallbackTermID: fallbackTermID,
+                fallbackTermStartDate: fallbackTermStartDate
+            )
+            let owner = CourseDeletionLogic.accountKey(credentials.account)
+            do {
+                let data = try await api.academic(token: token, endpoint: .examinations, parameters: ["semester": snapshot.termID])
+                snapshot.examSchedule = try AcademicResponseParser.exams(data, termID: snapshot.termID, accountKey: owner)
+            } catch AuthenticationSessionError.expired {
+                throw AuthenticationSessionError.expired
+            } catch {
+                snapshot.examSchedule = ExamSchedule(termID: snapshot.termID, accountKey: owner,
+                    fetchedAt: SJDClassroomClient.timestamp(.now), status: "failed",
+                    message: "考试安排获取失败，请刷新重试。", items: [])
+            }
+            return snapshot
         }
-        return snapshot
     }
 
     fileprivate static func string(_ value: Any?) -> String {
@@ -234,6 +237,7 @@ enum SJDFormURLEncoder {
 }
 
 struct SJDAPIClient: Sendable {
+    static let sessions = AuthenticationSessionCache<String>()
     static let origin = "https://jwglweixin.bupt.edu.cn"
     static let loginReferer = "\(origin)/sjd/#/login"
     static let classroomReferer = "\(origin)/sjd/#/restClassroom"
@@ -242,13 +246,27 @@ struct SJDAPIClient: Sendable {
     private static let curriculumURL = URL(string: "\(origin)/bjyddx/student/curriculum")!
     private static let classroomsURL = URL(string: "\(origin)/bjyddx/todayClassrooms")!
     private let transport: any SJDHTTPTransport
+    private let sessions: AuthenticationSessionCache<String>
 
     init(session: URLSession = SJDURLSession.shared) {
         transport = SJDURLSessionTransport(session: session)
+        sessions = session === SJDURLSession.shared ? Self.sessions : AuthenticationSessionCache()
     }
 
-    init(transport: any SJDHTTPTransport) {
+    init(transport: any SJDHTTPTransport, sessions: AuthenticationSessionCache<String> = AuthenticationSessionCache()) {
         self.transport = transport
+        self.sessions = sessions
+    }
+
+    func authenticated<Result: Sendable>(
+        credentials: Credentials,
+        operation: @Sendable (String) async throws -> Result
+    ) async throws -> Result {
+        try await sessions.perform(
+            key: AuthenticationSessionPolicy.key(account: credentials.account, password: credentials.password),
+            login: { try await authenticate(credentials: credentials) },
+            operation: operation
+        )
     }
 
     enum AcademicEndpoint: String, Sendable {
@@ -274,6 +292,10 @@ struct SJDAPIClient: Sendable {
     }
 
     func login(credentials: Credentials) async throws -> String {
+        try await authenticated(credentials: credentials) { $0 }
+    }
+
+    private func authenticate(credentials: Credentials) async throws -> AuthenticationSession<String> {
         let account = credentials.account.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !account.isEmpty, !credentials.password.isEmpty else {
             throw ScheduleClientError.missingCredentials
@@ -295,7 +317,7 @@ struct SJDAPIClient: Sendable {
         else {
             throw ScheduleClientError.invalidResponse("移动教务登录成功但没有返回 token。")
         }
-        return token
+        return AuthenticationSession(value: token, expiresAt: AuthenticationSessionPolicy.expiresAt(token: token, payload: data))
     }
 
     func curriculum(token: String, week: String) async throws -> Data {
@@ -374,6 +396,9 @@ struct SJDAPIClient: Sendable {
             throw SJDResponseLimits.oversizedResponseError(for: endpoint)
         }
         try SJDResponseLimits.validate(result.0, endpoint: endpoint)
+        if endpoint != .login {
+            try AuthenticationSessionPolicy.checkExpiration(data: result.0, response: result.1)
+        }
         return result
     }
 

@@ -8,6 +8,7 @@ import { AppContext } from '../store/AppContext';
 import { PageTitle } from './SharedComponents';
 import { ShuttleQueryLayout } from './ShuttleQueryLayout';
 import { GradeQueryView } from './GradeQueryView';
+import { AssignmentQueryView, ExamQueryView } from './AcademicQueryViews';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
 } from '../common/QueryLogic';
@@ -51,6 +52,8 @@ export struct QueryView {
   }
 
   private selectedTab(): QueryPageTab {
+    if (this.selectedTabRawValue === QueryPageTab.assignments) { return QueryPageTab.assignments; }
+    if (this.selectedTabRawValue === QueryPageTab.exams) { return QueryPageTab.exams; }
     if (this.selectedTabRawValue === QueryPageTab.grades) { return QueryPageTab.grades; }
     return this.selectedTabRawValue === QueryPageTab.events ? QueryPageTab.events : QueryPageTab.shuttle;
   }
@@ -161,6 +164,10 @@ export struct QueryView {
             this.tabPicker()
             if (this.selectedTab() === QueryPageTab.shuttle) {
               this.shuttleContent()
+            } else if (this.selectedTab() === QueryPageTab.assignments) {
+              AssignmentQueryView({ onOpenSettings: this.onOpenSettings })
+            } else if (this.selectedTab() === QueryPageTab.exams) {
+              ExamQueryView({ onOpenSettings: this.onOpenSettings })
             } else {
               GradeQueryView({ onOpenSettings: this.onOpenSettings })
             }
@@ -172,7 +179,7 @@ export struct QueryView {
           .alignSelf(ItemAlign.Center)
           .alignItems(HorizontalAlign.Start)
         }
-        .id(this.selectedTab() === QueryPageTab.shuttle ? 'query.shuttle.scroll' : 'query.grades.scroll')
+        .id('query.' + this.selectedTab() + '.scroll')
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
@@ -231,6 +238,14 @@ export struct QueryView {
           ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => { this.tabLabel(tab, true) },
             (tab: QueryPageTab) => 'query-tab.' + tab)
         }.width('100%')
+      } else if (this.contentWidth < 600) {
+        Scroll() {
+          Row() {
+            ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => {
+              Column() { this.tabLabel(tab, true) }.width(108)
+            }, (tab: QueryPageTab) => 'query-tab.' + tab)
+          }
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
       } else {
         Row() {
           ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => { this.tabLabel(tab, false) },
@@ -268,7 +283,6 @@ export struct QueryView {
             this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, (): void => {
               this.selectedTabRawValue = tab;
             });
-            if (tab === QueryPageTab.grades) { this.model.loadGrades(false); }
           })
   }
 

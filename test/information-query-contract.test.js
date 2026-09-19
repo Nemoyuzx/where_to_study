@@ -95,7 +95,7 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(harmonyQuery, /QueryPageContract\.tabTitle\(tab\)/)
   assert.match(harmonyLogic, /'班车查询'/)
   assert.match(harmonyLogic, /'重要事件'/)
-  assert.match(harmonyLogic, /tabs:\s*QueryPageTab\[\]\s*=\s*\[QueryPageTab\.shuttle,\s*QueryPageTab\.events,\s*QueryPageTab\.grades\]/)
+  assert.match(harmonyLogic, /tabs:\s*QueryPageTab\[\]\s*=\s*\[QueryPageTab\.shuttle,\s*QueryPageTab\.events,\s*QueryPageTab\.grades,\s*QueryPageTab\.exams,\s*QueryPageTab\.assignments\]/)
   assert.match(harmonyQuery, /GradeQueryView\(/)
 })
 

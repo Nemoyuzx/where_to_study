@@ -24,6 +24,7 @@ import networkDiagnosticsTest from './NetworkDiagnostics.test';
 import privacyConsentTest from './PrivacyConsent.test';
 import widgetFileQueueTest from './WidgetFileQueue.test';
 import academicQueryTest from './AcademicQuery.test';
+import authenticatedSessionTest from './AuthenticatedSession.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -51,4 +52,5 @@ export default function testsuite() {
   privacyConsentTest();
   widgetFileQueueTest();
   academicQueryTest();
+  authenticatedSessionTest();
 }

@@ -67,6 +67,14 @@ enum Message {
             String,
         >,
     },
+    Exams {
+        request_id: u64,
+        result: Result<where_to_study_lib::academic::ExamSchedule, String>,
+    },
+    Assignments {
+        request_id: u64,
+        result: Result<Vec<where_to_study_lib::models::AssignmentDeadlineItem>, String>,
+    },
     CredentialsSaved(Result<(String, String, bool), String>),
     CredentialsCleared(Result<(), String>),
 }
@@ -345,6 +353,12 @@ fn run(
                 Message::Grades { request_id, result } => {
                     app.finish_grade_request(request_id, result);
                 }
+                Message::Exams { request_id, result } => {
+                    app.finish_exam_request(request_id, result);
+                }
+                Message::Assignments { request_id, result } => {
+                    app.finish_assignment_request(request_id, result);
+                }
             }
         }
     }
@@ -539,30 +553,30 @@ fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) ->
     match key.code {
         KeyCode::Left => {
             app.query_section = match app.query_section {
-                QuerySection::Shuttle => QuerySection::Grades,
+                QuerySection::Shuttle => QuerySection::Assignments,
                 QuerySection::Events => QuerySection::Shuttle,
                 QuerySection::Grades => QuerySection::Events,
+                QuerySection::Exams => QuerySection::Grades,
+                QuerySection::Assignments => QuerySection::Exams,
             };
             app.query_scroll = 0;
-            if app.query_section == QuerySection::Grades {
-                refresh_grades(app, tx, false);
-            }
         }
         KeyCode::Right => {
             app.query_section = match app.query_section {
                 QuerySection::Shuttle => QuerySection::Events,
                 QuerySection::Events => QuerySection::Grades,
-                QuerySection::Grades => QuerySection::Shuttle,
+                QuerySection::Grades => QuerySection::Exams,
+                QuerySection::Exams => QuerySection::Assignments,
+                QuerySection::Assignments => QuerySection::Shuttle,
             };
             app.query_scroll = 0;
-            if app.query_section == QuerySection::Grades {
-                refresh_grades(app, tx, false);
-            }
         }
         KeyCode::Char('r') => match app.query_section {
             QuerySection::Shuttle => refresh_shuttle(app, tx, true),
             QuerySection::Events => refresh_events(app, tx, true),
             QuerySection::Grades => refresh_grades(app, tx, true),
+            QuerySection::Exams => refresh_exams(app, tx),
+            QuerySection::Assignments => refresh_assignments(app, tx),
         },
         KeyCode::Up if app.query_section == QuerySection::Grades => app.move_grade_cursor(-1),
         KeyCode::Down if app.query_section == QuerySection::Grades => app.move_grade_cursor(1),
@@ -587,21 +601,48 @@ fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) ->
             app.grade_cursor = 0;
             refresh_grades(app, tx, false);
         }
-        KeyCode::Char('s') if app.query_section == QuerySection::Grades => activate_tab(app, 5, tx),
+        KeyCode::Char('s')
+            if matches!(
+                app.query_section,
+                QuerySection::Grades | QuerySection::Exams | QuerySection::Assignments
+            ) =>
+        {
+            activate_tab(app, 5, tx)
+        }
         KeyCode::Up if app.query_section == QuerySection::Events => app.move_query_cursor(-1),
         KeyCode::Down if app.query_section == QuerySection::Events => app.move_query_cursor(1),
         KeyCode::PageUp if app.query_section == QuerySection::Events => app.move_query_cursor(-10),
         KeyCode::PageDown if app.query_section == QuerySection::Events => app.move_query_cursor(10),
-        KeyCode::Up if app.query_section == QuerySection::Shuttle => {
+        KeyCode::Up
+            if matches!(
+                app.query_section,
+                QuerySection::Shuttle | QuerySection::Exams | QuerySection::Assignments
+            ) =>
+        {
             app.query_scroll = app.query_scroll.saturating_sub(1)
         }
-        KeyCode::Down if app.query_section == QuerySection::Shuttle => {
+        KeyCode::Down
+            if matches!(
+                app.query_section,
+                QuerySection::Shuttle | QuerySection::Exams | QuerySection::Assignments
+            ) =>
+        {
             app.query_scroll = app.query_scroll.saturating_add(1)
         }
-        KeyCode::PageUp if app.query_section == QuerySection::Shuttle => {
+        KeyCode::PageUp
+            if matches!(
+                app.query_section,
+                QuerySection::Shuttle | QuerySection::Exams | QuerySection::Assignments
+            ) =>
+        {
             app.query_scroll = app.query_scroll.saturating_sub(8)
         }
-        KeyCode::PageDown if app.query_section == QuerySection::Shuttle => {
+        KeyCode::PageDown
+            if matches!(
+                app.query_section,
+                QuerySection::Shuttle | QuerySection::Exams | QuerySection::Assignments
+            ) =>
+        {
             app.query_scroll = app.query_scroll.saturating_add(8)
         }
         KeyCode::Char('/') if app.query_section == QuerySection::Events => {
@@ -650,9 +691,86 @@ fn ensure_query_loaded(app: &mut App, tx: &mpsc::Sender<Message>) {
     if app.important_events.is_none() {
         refresh_events(app, tx, false);
     }
-    if app.query_section == QuerySection::Grades {
-        refresh_grades(app, tx, false);
+}
+
+fn private_query_credentials(app: &mut App, section: QuerySection) -> Option<Credentials> {
+    if app.credentials_changing || app.private_query_loading(section) {
+        return None;
     }
+    let credentials = match require_credentials() {
+        Ok(credentials) => credentials,
+        Err(_) => {
+            app.clear_account_data();
+            app.credentials_saved = false;
+            app.saved_account.clear();
+            let error = Some("请先到设置页保存账号和密码（s）。".into());
+            if section == QuerySection::Exams {
+                app.exam_error = error;
+            } else {
+                app.assignment_error = error;
+            }
+            return None;
+        }
+    };
+    if app.saved_account != credentials.account || app.account_scope != credentials.account_scope {
+        app.clear_account_data();
+        app.saved_account = credentials.account.clone();
+        app.credentials_saved = true;
+        load_course_deletions(app, &credentials.account_scope);
+    }
+    Some(credentials)
+}
+
+fn refresh_exams(app: &mut App, tx: &mpsc::Sender<Message>) {
+    let Some(credentials) = private_query_credentials(app, QuerySection::Exams) else {
+        return;
+    };
+    let request_id = app.start_exam_request();
+    let tx = tx.clone();
+    thread::spawn(move || {
+        let result = block_on(async {
+            let exams = where_to_study_lib::academic::fetch_exams(
+                &credentials.account,
+                &credentials.password,
+                None,
+            )
+            .await?;
+            academic_credentials_unchanged(&credentials)?;
+            Ok::<_, ServiceError>(exams)
+        })
+        .map_err(|_| "考试获取失败，请重试或检查账号设置。".to_string());
+        let _ = tx.send(Message::Exams { request_id, result });
+    });
+}
+
+fn refresh_assignments(app: &mut App, tx: &mpsc::Sender<Message>) {
+    let revision = where_to_study_lib::assignments::credential_revision();
+    let Some(credentials) = private_query_credentials(app, QuerySection::Assignments) else {
+        return;
+    };
+    let request_id = app.start_assignment_request();
+    let tx = tx.clone();
+    thread::spawn(move || {
+        let result = block_on(async {
+            let items = where_to_study_lib::assignments::fetch_assignment_list(
+                &credentials.account,
+                credentials.assignment_password(),
+                &credentials.account_scope,
+                revision,
+                true,
+            )
+            .await?;
+            let current = require_credentials()?;
+            if !academic_identity_matches(&current, &credentials)
+                || current.teaching_cloud_password != credentials.teaching_cloud_password
+            {
+                return Err(ServiceError::new("查询期间凭据已改变，请重新查询。"));
+            }
+            Ok(items)
+        })
+        .map_err(|error| error.message);
+        let _ = tx.send(Message::Assignments { request_id, result });
+    });
 }
 
 fn academic_credentials_unchanged(expected: &Credentials) -> ServiceResult<()> {
@@ -670,6 +788,8 @@ fn academic_identity_matches(left: &Credentials, right: &Credentials) -> bool {
 }
 
 fn begin_credential_change(app: &mut App) {
+    where_to_study_lib::classrooms::clear_session();
+    where_to_study_lib::assignments::clear_cache();
     app.invalidate_data_requests();
     app.credentials_changing = true;
 }
@@ -1359,5 +1479,31 @@ mod tests {
         assert!(!handle_key(&mut app, key(KeyCode::Char('6')), &tx));
         assert!(matches!(app.tab, Tab::Settings));
         assert_eq!(app.selected_tab_index, 5);
+    }
+
+    #[test]
+    fn all_five_query_tabs_switch_without_starting_requests_or_loading_credentials() {
+        let (tx, rx) = mpsc::channel();
+        let mut app = App::new(false);
+        switch_tab(&mut app, 4);
+        for section in [
+            QuerySection::Events,
+            QuerySection::Grades,
+            QuerySection::Exams,
+            QuerySection::Assignments,
+            QuerySection::Shuttle,
+        ] {
+            handle_query_key(&mut app, key(KeyCode::Right), &tx);
+            assert_eq!(app.query_section, section);
+            assert!(!app.loading);
+            assert!(
+                app.grade_error.is_none()
+                    && app.exam_error.is_none()
+                    && app.assignment_error.is_none()
+            );
+        }
+        handle_query_key(&mut app, key(KeyCode::Left), &tx);
+        assert_eq!(app.query_section, QuerySection::Assignments);
+        assert!(rx.try_recv().is_err());
     }
 }

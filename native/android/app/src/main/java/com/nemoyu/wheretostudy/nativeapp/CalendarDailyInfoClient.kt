@@ -838,12 +838,15 @@ internal object FixedPublicJsonTransport {
 }
 
 internal const val IMPORTANT_EVENTS_CHANGE_KEY = "__important_events__"
+internal const val ASSIGNMENTS_CHANGE_KEY = "__assignments__"
 
 internal class CalendarDailyInfoRepository(
     private val client: CalendarDailyInfoClient = CalendarDailyInfoClient(),
     private val assignmentClient: UCloudAssignmentClient? = null,
     private val preferences: AppPreferences? = null,
     private val usesSampleData: Boolean = DailyCourseNotificationRuntimeMode.isUiTesting,
+    private val beforeAssignmentPublication: (() -> Unit)? = null,
+    private val afterAssignmentPublication: (() -> Unit)? = null,
 ) {
     private val worker = Executors.newFixedThreadPool(2)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -865,6 +868,10 @@ internal class CalendarDailyInfoRepository(
     private val assignmentErrors = ConcurrentHashMap<String, String>()
     private val loadingAssignments = ConcurrentHashMap.newKeySet<String>()
     private val assignmentRevision = AtomicLong(0)
+    private val assignmentStateLock = Any()
+    @Volatile private var queryAssignmentItems: List<AssignmentDeadlineItem>? = null
+    @Volatile private var queryAssignmentError: String? = null
+    private val loadingAllAssignments = AtomicBoolean(false)
     private val observers = ConcurrentHashMap<Any, (String) -> Unit>()
     private val closed = AtomicBoolean(false)
 
@@ -895,6 +902,42 @@ internal class CalendarDailyInfoRepository(
     fun assignments(date: String): List<AssignmentDeadlineItem>? = assignmentsByDate[date]
     fun assignmentError(date: String): String? = assignmentErrors[date]
     fun isLoadingAssignments(date: String): Boolean = date in loadingAssignments
+    fun allAssignments(): List<AssignmentDeadlineItem>? = assignmentClient?.cached() ?: queryAssignmentItems
+    fun allAssignmentsError(): String? = queryAssignmentError
+    fun isLoadingAllAssignments(): Boolean = loadingAllAssignments.get()
+
+    fun loadAllAssignments(force: Boolean = false) {
+        val requestRevision = synchronized(assignmentStateLock) {
+            if (closed.get() || (!force && allAssignments() != null) ||
+                !loadingAllAssignments.compareAndSet(false, true)) return
+            queryAssignmentError = null
+            assignmentRevision.get()
+        }
+        postCompletion(ASSIGNMENTS_CHANGE_KEY) {}
+        try {
+            worker.execute {
+                val result = runCatching {
+                    when {
+                        usesSampleData -> sampleAssignments(AcademicScheduleLogic.dateText(Calendar.getInstance()))
+                        assignmentClient != null -> assignmentClient.fetchAll(force)
+                        else -> throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
+                    }
+                }
+                beforeAssignmentPublication?.invoke()
+                publishAssignments(requestRevision) {
+                    result.onSuccess { items ->
+                        queryAssignmentItems = items
+                        assignmentsByDate.clear()
+                        assignmentsByDate.putAll(items.groupBy { it.deadline.take(10) })
+                        assignmentErrors.clear()
+                    }.onFailure { queryAssignmentError = it.message ?: "课程作业获取失败。" }
+                    loadingAllAssignments.set(false)
+                    postCompletion(ASSIGNMENTS_CHANGE_KEY) {}
+                }
+                afterAssignmentPublication?.invoke()
+            }
+        } catch (_: RejectedExecutionException) { publishAssignments(requestRevision) { loadingAllAssignments.set(false) } }
+    }
 
     fun addObserver(owner: Any, observer: (String) -> Unit) {
         if (!closed.get()) observers[owner] = observer
@@ -1045,28 +1088,22 @@ internal class CalendarDailyInfoRepository(
         val requestRevision = assignmentRevision.get()
         try {
             worker.execute {
-                runCatching {
+                val result = runCatching {
                     when {
                         usesSampleData -> sampleAssignments(date)
-                        assignmentClient != null -> assignmentClient.fetch(date)
+                        assignmentClient != null -> assignmentClient.fetchAll(force).filter { it.deadline.startsWith(date) }
                         else -> throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
                     }
-                }.onSuccess {
-                    if (assignmentRevision.get() == requestRevision) {
-                        assignmentsByDate[date] = it
-                    }
-                }.onFailure {
-                    if (assignmentRevision.get() == requestRevision) {
-                        assignmentErrors[date] = it.message ?: "课程作业获取失败。"
-                    }
                 }
-                if (assignmentRevision.get() == requestRevision) {
+                publishAssignments(requestRevision) {
+                    result.onSuccess { assignmentsByDate[date] = it }
+                        .onFailure { assignmentErrors[date] = it.message ?: "课程作业获取失败。" }
                     loadingAssignments.remove(date)
                     postCompletion(date, onComplete)
                 }
             }
         } catch (_: RejectedExecutionException) {
-            loadingAssignments.remove(date)
+            publishAssignments(requestRevision) { loadingAssignments.remove(date) }
         }
     }
 
@@ -1110,11 +1147,13 @@ internal class CalendarDailyInfoRepository(
             try {
                 worker.execute {
                     loadAssignmentMarkerBatch(assignmentDates, requestRevision)
-                    assignmentDates.forEach(loadingAssignments::remove)
-                    postSourceCompletion()
+                    publishAssignments(requestRevision) {
+                        assignmentDates.forEach(loadingAssignments::remove)
+                        postSourceCompletion()
+                    }
                 }
             } catch (_: RejectedExecutionException) {
-                assignmentDates.forEach(loadingAssignments::remove)
+                publishAssignments(requestRevision) { assignmentDates.forEach(loadingAssignments::remove) }
             }
         }
         if (deadlineDates.isNotEmpty()) {
@@ -1137,21 +1176,20 @@ internal class CalendarDailyInfoRepository(
         val firstDate = dates.firstOrNull() ?: return
         val firstResult = runCatching { assignmentItemsForMarkerDate(firstDate) }
         if (firstResult.isFailure) {
-            if (assignmentRevision.get() == requestRevision) {
+            publishAssignments(requestRevision) {
                 val message = firstResult.exceptionOrNull()?.message ?: "课程作业获取失败。"
                 dates.forEach { date -> assignmentErrors[date] = message }
             }
             return
         }
-        if (assignmentRevision.get() != requestRevision) return
-        assignmentsByDate[firstDate] = firstResult.getOrThrow()
+        if (!publishAssignments(requestRevision) { assignmentsByDate[firstDate] = firstResult.getOrThrow() }) return
         dates.drop(1).forEach { date ->
             if (assignmentRevision.get() != requestRevision) return
-            runCatching { assignmentItemsForMarkerDate(date) }
-                .onSuccess { items -> assignmentsByDate[date] = items }
-                .onFailure { error ->
-                    assignmentErrors[date] = error.message ?: "课程作业获取失败。"
-                }
+            val result = runCatching { assignmentItemsForMarkerDate(date) }
+            publishAssignments(requestRevision) {
+                result.onSuccess { items -> assignmentsByDate[date] = items }
+                    .onFailure { error -> assignmentErrors[date] = error.message ?: "课程作业获取失败。" }
+            }
         }
     }
 
@@ -1234,11 +1272,20 @@ internal class CalendarDailyInfoRepository(
         prewarmDeadlines(force = true, onComplete = onComplete)
     }
 
-    fun clearAssignments() {
+    private fun publishAssignments(revision: Long, publication: () -> Unit): Boolean = synchronized(assignmentStateLock) {
+        if (closed.get() || assignmentRevision.get() != revision) return false
+        publication()
+        true
+    }
+
+    fun clearAssignments() = synchronized(assignmentStateLock) {
         assignmentRevision.incrementAndGet()
         assignmentsByDate.clear()
         assignmentErrors.clear()
         loadingAssignments.clear()
+        queryAssignmentItems = null
+        queryAssignmentError = null
+        loadingAllAssignments.set(false)
         assignmentClient?.reset()
     }
 

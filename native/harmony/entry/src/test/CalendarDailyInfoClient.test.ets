@@ -134,6 +134,15 @@ export default function calendarDailyInfoClientTest() {
       expect(items[0].courseName).assertEqual('示例课程');
     });
 
+    it('assignment_parser_does_not_report_malformed_payload_as_empty', 0, () => {
+      for (const payload of ['{}', '{"data":{}}', '{"data":{"records":{}}}']) {
+        let rejected: boolean = false;
+        try { AssignmentDeadlineResponseParser.parse(payload, '2026-09-19'); } catch (e) { rejected = true; }
+        expect(rejected).assertTrue();
+      }
+      expect(AssignmentDeadlineResponseParser.parse('{"data":{"records":[]}}', '2026-09-19').length).assertEqual(0);
+    });
+
     it('ucloud_cas_parser_pins_host_and_supports_attribute_order', 0, () => {
       expect(UCloudAssignmentClient.parseExecution(
         '<input value=\'e1&amp;s1\' type=\'hidden\' name=\'execution\'>')).assertEqual('e1&s1');

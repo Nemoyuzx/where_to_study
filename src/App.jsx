@@ -938,6 +938,12 @@ function browserPreviewCommand(name, payload = {}) {
       unavailable_reason: '浏览器预览不连接个人云课堂作业。',
     }
   }
+  if (name === 'fetch_assignment_list') {
+    return [{ id: 'demo-assignment', title: '示例作业 / Demonstration assignment', course_name: '示例课程', deadline: `${localDateString()} 23:59:00`, status: '未提交' }]
+  }
+  if (name === 'fetch_exams') {
+    return { term_id: 'demo', status: 'ok', items: [{ id: 'demo-exam', name: '示例考试 / Demonstration exam', date: localDateString(), start_time: '18:00', end_time: '20:00', room: '示例教室', seat: '12' }] }
+  }
   if (name === 'fetch_assignment_calendar') {
     const today = localDateString()
     const previewDate = today >= payload.start_date && today <= payload.end_date
@@ -3787,6 +3793,7 @@ function App() {
               language={uiLanguage}
               onToggleFavorite={toggleFavoriteDeadline}
               hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
+              examSnapshot={schedule?.exam_schedule}
               onOpenAccount={() => setActivePage('settings')}
               t={t}
             />

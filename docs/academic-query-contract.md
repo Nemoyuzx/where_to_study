@@ -1,5 +1,16 @@
 # 成绩与考试安排接入契约
 
+## 0.3.0 查询页与登录会话
+
+- 查询包含班车、重要事件、成绩、考试、课程作业 DDL 五个并列入口。作业复用已有教学云账号、全量课程作业抓取和日历缓存，不另设代理登录。
+- 新 Tauri `fetch_assignment_list({ force })` 返回既有 `AssignmentDeadlineItem[]`；显式 `force` 只刷新结果，不清除认证会话。`fetch_exams({ term_id })` 使用教务账户，`null` 表示学校当前学期；已获取的课表考试快照仍可显示。
+- SJD 和 UCloud 会话分开、按完整凭据作用域隔离、只在进程内存中保存。优先采用 JWT／服务 TTL；未给期限时约 20 分钟上限。数据刷新或切换查询页不强制重登；明确认证过期只重登一次，不把权限、限流、网络或解析失败当成过期。
+- 同一凭据并发登录合并；清理或更改凭据会撤销在途请求，旧请求不得重新建立已撤销的会话、发布结果或覆盖新缓存。服务端作业列表结构错误／必需课程抓取失败不能被表示为成功的空列表。
+- 普通课程时间继续由既有节次元数据决定，显示用的 `time_range` 不能移动实际排课。只有考试使用精确开始／结束分钟，待定时间不伪造节次。
+- CLI 增加全量 `assignment-list`，TUI Query 同样可查看作业与考试；终端本地文件账户约定不变。
+
+Token caches are process-local, credential-scoped and independent from result caches. An explicit authentication-expired response permits one login retry; network/permission/parsing failures do not. Clear/account changes reject stale responses. Regular courses retain period-based timing; only exams use exact clock ranges.
+
 ## 已核验接口
 
 协议参考：<https://github.com/Yokumii/bupt-api-collected> 的 `src/jwgl/routes.ts`。

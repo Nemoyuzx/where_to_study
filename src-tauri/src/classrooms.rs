@@ -1,11 +1,59 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::session_cache::{check_auth_payload, token_ttl, SessionCache, SessionEpoch};
 use chrono::NaiveDate;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use reqwest::Url;
 use serde_json::Value;
+use zeroize::Zeroizing;
+
+static SJD_SESSION: SessionCache<Zeroizing<String>> = SessionCache::new();
+
+pub fn clear_session() {
+    SJD_SESSION.clear();
+}
+pub fn session_epoch() -> SessionEpoch {
+    SJD_SESSION.epoch()
+}
+
+pub fn with_sjd_session<'a, T, F, Fut>(
+    account: &'a str,
+    password: &'a str,
+    request: F,
+) -> impl std::future::Future<Output = ServiceResult<T>> + 'a
+where
+    F: FnMut(Zeroizing<String>) -> Fut + 'a,
+    Fut: std::future::Future<Output = ServiceResult<T>> + 'a,
+    T: 'a,
+{
+    with_sjd_session_at(session_epoch(), account, password, request)
+}
+
+pub async fn with_sjd_session_at<T, F, Fut>(
+    epoch: SessionEpoch,
+    account: &str,
+    password: &str,
+    request: F,
+) -> ServiceResult<T>
+where
+    F: FnMut(Zeroizing<String>) -> Fut,
+    Fut: std::future::Future<Output = ServiceResult<T>>,
+{
+    SJD_SESSION
+        .run_at(
+            epoch,
+            account,
+            password,
+            || async {
+                let (token, ttl) = login_uncached(account, password).await?;
+                Ok((Zeroizing::new(token), ttl))
+            },
+            request,
+        )
+        .await
+}
 
 use crate::auth::resolve_credentials;
 use crate::config::{
@@ -172,6 +220,9 @@ pub(crate) async fn read_sjd_json_response(
     max_bytes: usize,
     response_name: &str,
 ) -> ServiceResult<Value> {
+    if response.status().as_u16() == 401 {
+        return Err(ServiceError::expired());
+    }
     let mut body = Vec::new();
     while let Some(chunk) = response
         .chunk()
@@ -180,10 +231,23 @@ pub(crate) async fn read_sjd_json_response(
     {
         append_limited_body_chunk(&mut body, &chunk, max_bytes, response_name)?;
     }
-    parse_limited_json_bytes(&body, max_bytes, response_name)
+    let payload = parse_limited_json_bytes(&body, max_bytes, response_name)?;
+    check_auth_payload(&payload)?;
+    Ok(payload)
 }
 
-pub async fn login_empty_classroom(account: &str, password: &str) -> ServiceResult<String> {
+pub fn login_empty_classroom<'a>(
+    account: &'a str,
+    password: &'a str,
+) -> impl std::future::Future<Output = ServiceResult<String>> + 'a {
+    with_sjd_session(
+        account,
+        password,
+        |token| async move { Ok(token.to_string()) },
+    )
+}
+
+async fn login_uncached(account: &str, password: &str) -> ServiceResult<(String, Duration)> {
     let client = sjd_http_client(20)?;
     let response = client
         .post(EMPTY_CLASSROOM_LOGIN_URL)
@@ -223,7 +287,13 @@ pub async fn login_empty_classroom(account: &str, password: &str) -> ServiceResu
     if token.is_empty() {
         return Err(ServiceError::new("空教室服务登录成功但没有返回 token。"));
     }
-    Ok(token)
+    let data = payload.get("data").unwrap_or(&payload);
+    let expiry = data
+        .get("expires_in")
+        .or_else(|| data.get("expiresIn"))
+        .and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok()));
+    let ttl = token_ttl(&token, expiry);
+    Ok((token, ttl))
 }
 
 fn code_is_success(payload: &Value) -> bool {
@@ -465,10 +535,13 @@ async fn fetch_realtime_classrooms(
         .map_err(|_| ServiceError::new("实时教室数据获取失败，请稍后重试。"))?;
 
     if response.status().as_u16() >= 400 {
-        return Err(ServiceError::new(format!(
-            "实时教室数据获取失败，HTTP {}。",
-            response.status().as_u16()
-        )));
+        return Err(ServiceError::with_status(
+            format!(
+                "实时教室数据获取失败，HTTP {}。",
+                response.status().as_u16()
+            ),
+            response.status().as_u16(),
+        ));
     }
     let payload =
         read_sjd_json_response(response, MAX_SJD_DATA_RESPONSE_BYTES, "实时教室服务").await?;
@@ -552,24 +625,33 @@ fn classrooms_response_from_items(
     }
 }
 
-pub async fn fetch_all_classrooms(
+pub fn fetch_all_classrooms(
+    payload: &ClassroomsRequest,
+) -> impl std::future::Future<Output = ServiceResult<ClassroomsCacheResponse>> + '_ {
+    fetch_all_classrooms_at(session_epoch(), payload)
+}
+
+pub async fn fetch_all_classrooms_at(
+    epoch: SessionEpoch,
     payload: &ClassroomsRequest,
 ) -> ServiceResult<ClassroomsCacheResponse> {
     let service_date = service_date_from_payload(payload)?;
     let (user, secret) = resolve_credentials(&payload.account, &payload.password)?;
-    let token = login_empty_classroom(&user, &secret).await?;
+    with_sjd_session_at(epoch, &user, &secret, |token| {
+        fetch_all_classrooms_with_token(service_date, token)
+    })
+    .await
+}
+
+async fn fetch_all_classrooms_with_token(
+    service_date: NaiveDate,
+    token: Zeroizing<String>,
+) -> ServiceResult<ClassroomsCacheResponse> {
     let client = sjd_http_client(30)?;
 
     let mut campus_items = Vec::with_capacity(CAMPUSES.len());
     for campus in CAMPUSES {
-        let items = fetch_realtime_classrooms(&client, &token, campus.id)
-            .await
-            .map_err(|error| {
-                ServiceError::new(format!(
-                    "{}校区实时教室数据获取失败：{}",
-                    campus.name, error
-                ))
-            })?;
+        let items = fetch_realtime_classrooms(&client, &token, campus.id).await?;
         campus_items.push((campus.id, items));
     }
 

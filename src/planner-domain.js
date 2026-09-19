@@ -486,12 +486,10 @@ export function courseTimeBounds(course, slotMeta) {
     return { start: timed ? course.start_time : '', end: timed ? course.end_time : '',
       startMinutes: timed ? startMinutes : null, endMinutes: timed ? endMinutes : null, timed }
   }
-  const explicit = /^(\d{2}:\d{2})\s*[-–—]\s*(\d{2}:\d{2})$/.exec(course.time_range || '')
-  const validRange = explicit && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(explicit[1])
-    && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(explicit[2])
-    && parseTimeMinutes(explicit[1]) < parseTimeMinutes(explicit[2])
-  const start = validRange ? explicit[1] : slotMeta[course.start_slot]?.start || '08:00'
-  const end = validRange ? explicit[2] : slotMeta[course.end_slot]?.end || start
+  // Ordinary timetable periods remain authoritative. Only exams use exact
+  // clock times; a cached display label must not move courses to other slots.
+  const start = slotMeta[course.start_slot]?.start || '08:00'
+  const end = slotMeta[course.end_slot]?.end || start
   return {
     start,
     end,

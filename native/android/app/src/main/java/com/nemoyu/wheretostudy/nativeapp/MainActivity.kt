@@ -743,6 +743,7 @@ class MainActivity : Activity() {
                         sessionState = informationQuerySessionState,
                         usesBottomNavigation = currentLayoutSpec?.usesBottomNavigation == true,
                         gradesRepository = academicGradesRepository,
+                        scheduleRepository = scheduleRepository,
                     ).build(),
                     FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,

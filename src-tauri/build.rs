@@ -19,6 +19,8 @@ fn main() {
         "fetch_important_events",
         "fetch_shuttle_bus",
         "fetch_assignments",
+        "fetch_assignment_list",
+        "fetch_exams",
         "fetch_grade_terms",
         "fetch_grades",
         "fetch_deadline_calendar",

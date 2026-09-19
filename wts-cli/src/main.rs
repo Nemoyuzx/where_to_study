@@ -11,7 +11,7 @@ mod output;
     about = "Where To Study 命令行客户端 - 北邮课表与空教室查询",
     long_about = "Where To Study 命令行客户端
 
-基于与桌面版相同的数据源，支持个人课表、考试、成绩、空教室、节假日、班车与重要事件查询。
+基于与桌面版相同的数据源，支持个人课表、考试、成绩、课程作业、空教室、节假日、班车与重要事件查询。
 支持 macOS 与 Linux，账号密码保存在当前用户专属的本地配置文件中。"
 )]
 struct Cli {
@@ -62,6 +62,11 @@ enum Commands {
     Assignments {
         #[arg(long)]
         date: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// 查询教学云全部课程作业 DDL（按截止时间排序）
+    AssignmentList {
         #[arg(long)]
         json: bool,
     },
@@ -188,6 +193,7 @@ async fn main() {
         Commands::CourseDeletions { json } => commands::course_deletions(json),
         Commands::CourseRestore { deletion_id } => commands::restore_course(deletion_id),
         Commands::Assignments { date, json } => commands::assignments(date, json).await,
+        Commands::AssignmentList { json } => commands::assignment_list(json).await,
         Commands::GradeTerms { json } => commands::grade_terms(json).await,
         Commands::Grades {
             term,
@@ -241,6 +247,20 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn assignment_list_is_distinct_from_date_query_without_password_arguments() {
+        assert!(matches!(
+            Cli::try_parse_from(["wts", "assignment-list", "--json"])
+                .unwrap()
+                .command,
+            Commands::AssignmentList { json: true }
+        ));
+        assert!(Cli::try_parse_from(["wts", "assignments", "--date", "2026-09-19"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["wts", "assignment-list", "--password", "synthetic"]).is_err()
+        );
+    }
 
     #[test]
     fn grades_have_explicit_current_all_and_record_controls_without_password_arguments() {

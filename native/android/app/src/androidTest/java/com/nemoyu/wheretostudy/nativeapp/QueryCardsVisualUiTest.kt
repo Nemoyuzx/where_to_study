@@ -258,6 +258,7 @@ class QueryCardsVisualUiTest {
         val shuttles = ShuttleBusRepository(ShuttleBusClient { _, _, _, _ -> payload }, usesSampleData = false)
         val events = CalendarDailyInfoRepository(usesSampleData = true)
         val grades = AcademicGradesRepository({ null })
+        val academicSchedules = ScheduleRepository(context, SecureCredentialStore(context), AppPreferences(context))
         scenario.onActivity { activity ->
             val original = activity.findViewById<View>(R.id.information_query_page)
             val parent = original.parent as ViewGroup
@@ -266,10 +267,10 @@ class QueryCardsVisualUiTest {
             parent.removeView(original)
             val page = InformationQueryPage(activity, shuttles, events, AppPreferences(activity),
                 (parent.width / activity.resources.displayMetrics.density).toInt(), InformationQuerySessionState(),
-                activity.findViewById<View?>(R.id.phone_navigation) != null, grades).build()
+                activity.findViewById<View?>(R.id.phone_navigation) != null, grades, academicSchedules).build()
             parent.addView(page, index, params)
         }
-        return { shuttles.close(); events.close(); grades.close() }
+        return { shuttles.close(); events.close(); grades.close(); academicSchedules.close() }
     }
 
     @Test

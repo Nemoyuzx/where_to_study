@@ -6,7 +6,8 @@ import { Classroom, ClassroomDefaults, ClassroomsCache, Course, HolidayItem,
   HolidaysSnapshot, ScheduleDefaults, ScheduleSnapshot, SlotMetadata } from '../common/Models';
 import { ScheduleLogic } from '../common/ScheduleLogic';
 import { AcademicTerm, ExamSchedule, GradeOptions, GradeSnapshot } from '../common/AcademicModels';
-import { GradeFetching, SJDGradeClient } from '../net/SjdGradeClient';
+import { ExamFetching, GradeFetching, SJDExamClient, SJDGradeClient } from '../net/SjdGradeClient';
+import { SJDAPIClient } from '../net/SjdApi';
 import { CourseRemovalLogic, CourseRemovalRecord } from '../common/CourseRemoval';
 import { CourseRemovalStoring, FileCourseRemovalStore } from '../store/CourseRemovalStore';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
@@ -225,6 +226,14 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private gradeRequestRevision: number = 0;
   private gradeCache: Map<string, GradeSnapshot> = new Map<string, GradeSnapshot>();
   private readonly gradeClient: GradeFetching;
+  @Trace examTerms: AcademicTerm[] = [];
+  @Trace examQueryTermID: string = '';
+  @Trace examQuerySnapshot: ExamSchedule | null = null;
+  @Trace examQueryLoading: boolean = false;
+  @Trace examQueryError: string = '';
+  private examQueryRevision: number = 0;
+  private examQueryCache: Map<string, ExamSchedule> = new Map<string, ExamSchedule>();
+  private readonly examClient: ExamFetching;
   @Trace courseRemovals: CourseRemovalRecord[] = [];
   @Trace isUpdatingCourseRemovals: boolean = false;
   private rawSchedule: ScheduleSnapshot | null = null;
@@ -250,6 +259,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
     new Map<string, AssignmentDeadlineItem[]>();
   @Trace assignmentUnavailableByDate: Map<string, string> = new Map<string, string>();
   @Trace loadingAssignmentDates: Set<string> = new Set<string>();
+  @Trace assignmentCatalog: AssignmentDeadlineItem[] = [];
+  @Trace assignmentCatalogFetchedAt: string = '';
+  @Trace assignmentCatalogLoading: boolean = false;
+  @Trace assignmentCatalogError: string = '';
+  private assignmentCatalogRevision: number = 0;
   @Trace statusMessage: string = '';
   @Trace classroomStatusMessage: string = '';
   @Trace calendarImportStatusMessage: string = '';
@@ -326,7 +340,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     assignmentClient: AssignmentDeadlineFetching = new UCloudAssignmentClient(),
     preferencesStore: PreferencesStore | null = null,
     courseRemovalStore: CourseRemovalStoring = new FileCourseRemovalStore(),
-    gradeClient: GradeFetching = new SJDGradeClient()
+    gradeClient: GradeFetching = new SJDGradeClient(),
+    examClient: ExamFetching = new SJDExamClient()
   ) {
     this.runtimeMode = runtimeMode;
     this.supportsRuntimeModeSwitching = !runtimeMode.isSample;
@@ -336,6 +351,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.schedulePersistence = new SchedulePersistenceCoordinator(scheduleStore);
     this.scheduleClient = scheduleClient;
     this.gradeClient = gradeClient;
+    this.examClient = examClient;
     this.classroomStore = classroomStore;
     this.classroomClient = classroomClient;
     this.holidayStore = holidayStore;
@@ -1611,6 +1627,93 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.gradeSnapshot = null;
     this.gradeLoading = false;
     this.gradeError = '';
+    this.examQueryRevision++;
+    this.examQueryCache.clear();
+    this.examTerms = [];
+    this.examQueryTermID = '';
+    this.examQuerySnapshot = null;
+    this.examQueryLoading = false;
+    this.examQueryError = '';
+  }
+
+  selectExamQueryTerm(termID: string): void {
+    this.examQueryRevision++;
+    this.examQueryLoading = false;
+    this.examQueryTermID = termID;
+    this.examQuerySnapshot = this.examQueryCache.get(termID) ?? null;
+    this.examQueryError = '';
+  }
+
+  async loadExamQuery(refresh: boolean = false): Promise<void> {
+    if (this.examQueryLoading) { return; }
+    if (this.isSampleMode()) { this.examQueryError = '示例模式不查询真实考试。'; return; }
+    const revision: number = ++this.examQueryRevision;
+    const generation: number = this.localDataGeneration;
+    const account: string = this.account.trim();
+    const password: string = this.password;
+    const current: () => boolean = (): boolean => revision === this.examQueryRevision &&
+      generation === this.localDataGeneration && account === this.account.trim() && password === this.password;
+    this.examQueryLoading = true;
+    this.examQueryError = '';
+    try {
+      const credentials: Credentials | null = await this.credentialStore.load();
+      if (!current()) { return; }
+      if (credentials === null || credentials.account.trim() !== account) { throw CredentialSettingsError.accountRequired(); }
+      if (this.examTerms.length === 0) {
+        const options: GradeOptions = await this.gradeClient.options(credentials);
+        if (!current()) { return; }
+        this.examTerms = options.terms;
+        if (this.examQueryTermID.length === 0) { this.examQueryTermID = options.currentTermID; }
+      }
+      const term: string = this.examQueryTermID;
+      const cached: ExamSchedule | undefined = this.examQueryCache.get(term);
+      if (!refresh && cached !== undefined) { this.examQuerySnapshot = cached; return; }
+      const snapshot: ExamSchedule = await this.examClient.fetch(credentials, term);
+      if (!current()) { return; }
+      if (this.examQueryCache.size >= 12) { this.examQueryCache.delete(Array.from(this.examQueryCache.keys())[0]); }
+      this.examQueryCache.set(term, snapshot);
+      this.examQuerySnapshot = snapshot;
+    } catch (e) {
+      if (current()) { this.examQueryError = '考试安排暂时无法获取。'; }
+    } finally {
+      if (revision === this.examQueryRevision) { this.examQueryLoading = false; }
+    }
+  }
+
+  async loadAssignmentCatalog(refresh: boolean = false): Promise<void> {
+    if (this.assignmentCatalogLoading || (!refresh && this.assignmentCatalogFetchedAt.length > 0)) { return; }
+    if (this.isSampleMode()) { this.assignmentCatalogError = '示例模式不查询真实作业。'; return; }
+    const revision: number = ++this.assignmentCatalogRevision;
+    const generation: number = this.localDataGeneration;
+    const account: string = this.account.trim();
+    const password: string = this.password;
+    const cloudPassword: string = this.cloudPassword;
+    const current: () => boolean = (): boolean => revision === this.assignmentCatalogRevision &&
+      generation === this.localDataGeneration && account === this.account.trim() &&
+      password === this.password && cloudPassword === this.cloudPassword;
+    this.assignmentCatalogLoading = true;
+    this.assignmentCatalogError = '';
+    try {
+      const credentials: Credentials = await this.assignmentCredentialsForRequest();
+      if (!current()) { return; }
+      const items: AssignmentDeadlineItem[] = await this.assignmentClient.fetchCatalog(credentials, refresh);
+      if (!current()) { return; }
+      this.assignmentCatalog = items;
+      this.assignmentCatalogFetchedAt = StrictDates.formatFetchedAt(Date.now());
+      const byDate: Map<string, AssignmentDeadlineItem[]> = new Map<string, AssignmentDeadlineItem[]>();
+      for (const item of items) {
+        const date: string = item.deadline.substring(0, 10);
+        const dated: AssignmentDeadlineItem[] = byDate.get(date) ?? [];
+        dated.push(item);
+        byDate.set(date, dated);
+      }
+      this.assignmentDeadlinesByDate = byDate;
+      this.assignmentUnavailableByDate = new Map<string, string>();
+    } catch (e) {
+      if (current()) { this.assignmentCatalogError = '课程作业获取失败。'; }
+    } finally {
+      if (revision === this.assignmentCatalogRevision) { this.assignmentCatalogLoading = false; }
+    }
   }
 
   async selectGradeTerm(termID: string): Promise<void> {
@@ -2042,6 +2145,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private resetCalendarDailyInfoState(): void {
     this.calendarDailyInfoRevision++;
+    this.assignmentCatalogRevision++;
+    this.assignmentCatalog = [];
+    this.assignmentCatalogFetchedAt = '';
+    this.assignmentCatalogLoading = false;
+    this.assignmentCatalogError = '';
     this.almanacByDate = new Map<string, AlmanacInfo>();
     this.almanacErrors = new Map<string, string>();
     this.loadingAlmanacDates = new Set<string>();
@@ -2133,6 +2241,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     } else {
       try {
         const credentials: Credentials = await this.assignmentCredentialsForRequest();
+        if (revision !== this.calendarDailyInfoRevision) { return; }
         const requests: Promise<void>[] = [];
         for (const date of dates) {
           const request: Promise<void> = this.assignmentClient.fetch(credentials, date)
@@ -2245,6 +2354,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     const work: Promise<void> = (async (): Promise<void> => {
       try {
         const credentials: Credentials = await this.assignmentCredentialsForRequest();
+        if (revision !== this.calendarDailyInfoRevision) { return; }
         const fetched: AssignmentDeadlineItem[] = await this.assignmentClient.fetch(credentials, date);
         if (revision !== this.calendarDailyInfoRevision) {
           return;
@@ -2582,6 +2692,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   private invalidatePendingAccountRequests(): void {
+    SJDAPIClient.resetSession();
+    this.resetCalendarDailyInfoState();
     this.resetGradeState();
     this.localDataGeneration++;
     this.scheduleRefreshToken++;

@@ -195,18 +195,19 @@ struct SJDGradeClient: GradeFetching {
 
     func fetch(credentials: Credentials, termID: String?, recordType: String) async throws -> GradeQueryResult {
         guard ["", "0", "1"].contains(recordType) else { throw ScheduleClientError.invalidResponse("成绩记录类型无效。") }
-        let token = try await api.login(credentials: credentials)
-        async let currentData = api.academic(token: token, endpoint: .currentTerm)
-        async let termData = api.academic(token: token, endpoint: .semesterList)
-        let current = try AcademicResponseParser.terms(await currentData)
-        let terms = try AcademicResponseParser.terms(await termData)
-        guard let currentTermID = current.first?.id else { throw ScheduleClientError.invalidResponse("学校当前学期无法识别，请稍后重试。") }
-        let selected = termID ?? currentTermID
-        guard selected.isEmpty || terms.contains(where: { $0.id == selected }) else {
-            throw ScheduleClientError.invalidResponse("所选学期不在学校学期列表中，请刷新重试。")
+        return try await api.authenticated(credentials: credentials) { token in
+            async let currentData = api.academic(token: token, endpoint: .currentTerm)
+            async let termData = api.academic(token: token, endpoint: .semesterList)
+            let current = try AcademicResponseParser.terms(await currentData)
+            let terms = try AcademicResponseParser.terms(await termData)
+            guard let currentTermID = current.first?.id else { throw ScheduleClientError.invalidResponse("学校当前学期无法识别，请稍后重试。") }
+            let selected = termID ?? currentTermID
+            guard selected.isEmpty || terms.contains(where: { $0.id == selected }) else {
+                throw ScheduleClientError.invalidResponse("所选学期不在学校学期列表中，请刷新重试。")
+            }
+            let data = try await api.academic(token: token, endpoint: .grades, parameters: ["semester": selected, "type": recordType])
+            return GradeQueryResult(currentTermID: currentTermID, terms: terms,
+                                    snapshot: try AcademicResponseParser.grades(data, termID: selected, recordType: recordType))
         }
-        let data = try await api.academic(token: token, endpoint: .grades, parameters: ["semester": selected, "type": recordType])
-        return GradeQueryResult(currentTermID: currentTermID, terms: terms,
-                                snapshot: try AcademicResponseParser.grades(data, termID: selected, recordType: recordType))
     }
 }

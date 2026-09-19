@@ -793,12 +793,16 @@ final class AppModel: ObservableObject {
                 updateSavedCredentialState(storedCredentials)
             case let .replace(credentials):
                 try credentialStore.save(credentials)
+                SJDAPIClient.sessions.reset()
+                UCloudAssignmentClient.resetSessions()
                 if !accountChanged, storedCredentials?.password != credentials.password { invalidatePendingAccountRequests() }
                 gradeStore.reset()
                 updateSavedCredentialState(credentials)
                 assignmentCredentialRevision &+= 1
             case .clear:
                 try credentialStore.clear()
+                SJDAPIClient.sessions.reset()
+                UCloudAssignmentClient.resetSessions()
                 gradeStore.reset()
                 updateSavedCredentialState(nil)
                 assignmentCredentialRevision &+= 1
@@ -1671,6 +1675,8 @@ final class AppModel: ObservableObject {
     }
 
     private func invalidatePendingAccountRequests() {
+        SJDAPIClient.sessions.reset()
+        UCloudAssignmentClient.resetSessions()
         gradeStore.reset()
         localDataGeneration &+= 1
         localDataPersistence.invalidate(generation: localDataGeneration)

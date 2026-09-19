@@ -6,6 +6,14 @@ const normal = { id: 'ordinary', name: 'Synthetic course', weekday: 1, week_numb
 const exam = { id: 'exam', name: 'Synthetic exam', event_kind: 'exam', event_date: '2026-12-21',
   week_numbers: [], weekday: 1, start_slot: 0, end_slot: 0, start_time: '10:07', end_time: '11:43' }
 
+test('ordinary course periods remain authoritative over stale display times', () => {
+  const course = { ...normal, start_slot: 4, end_slot: 5, time_range: '08:00-08:45', start_time: '08:00', end_time: '08:45' }
+  const bounds = courseTimeBounds(course, FALLBACK_SLOTS)
+  assert.equal(bounds.start, FALLBACK_SLOTS[4].start)
+  assert.equal(bounds.end, FALLBACK_SLOTS[5].end)
+  assert.deepEqual(getWeekState([course], '2026-08-31', '2026-08-31').busySlots, [4, 5])
+})
+
 test('dated exams appear beyond teaching weeks without changing teaching-week bounds', () => {
   const state = getWeekState([normal, exam], '2026-08-31', '2026-12-21')
   assert.equal(state.weekNumber, 0)

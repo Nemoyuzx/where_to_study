@@ -49,6 +49,12 @@
     <item name="information_query_shuttle_tab" type="id" />
     <item name="information_query_events_tab" type="id" />
     <item name="information_query_grades_tab" type="id" />
+    <item name="information_query_exams_tab" type="id" />
+    <item name="information_query_assignments_tab" type="id" />
+    <item name="information_query_exams_scroll" type="id" />
+    <item name="information_query_exams_refresh" type="id" />
+    <item name="information_query_assignments_scroll" type="id" />
+    <item name="information_query_assignments_refresh" type="id" />
     <item name="information_query_grades_scroll" type="id" />
     <item name="information_query_grades_term" type="id" />
     <item name="information_query_grades_refresh" type="id" />

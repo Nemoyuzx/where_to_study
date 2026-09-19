@@ -5235,7 +5235,7 @@ input:disabled {
   border-radius: 12px;
   display: grid;
   gap: 4px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
   padding: 4px;
 }
 
@@ -5275,6 +5275,7 @@ input:disabled {
 .query-grades[hidden] { display: none; }
 .query-grade-filters { display: flex; flex-wrap: wrap; gap: 12px; }
 .query-grade-filters label { display: grid; gap: 6px; flex: 1 1 200px; min-width: 0; color: var(--text-secondary); }
+.query-grade-filters input { min-width: 0; width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); color: var(--text-primary); }
 .query-grade-filters select { width: 100%; min-height: 38px; padding: 8px; color: var(--text-primary); background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; }
 .query-grade-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; }
 .query-grade-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }

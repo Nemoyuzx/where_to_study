@@ -792,6 +792,7 @@ export class AssignmentDeadlineResponseParser {
       secondDataValue : firstData;
     let records: Object[] = JsonUtil.array(secondData['records']);
     if (!Array.isArray(secondData['records'])) {
+      if (!Array.isArray(secondData['undoneList'])) { throw new CalendarDailyInfoError('作业数据格式不正确。'); }
       records = JsonUtil.array(secondData['undoneList']);
     }
     const result: AssignmentDeadlineItem[] = [];

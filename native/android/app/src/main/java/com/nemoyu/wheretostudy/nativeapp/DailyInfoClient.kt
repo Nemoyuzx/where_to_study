@@ -44,6 +44,7 @@ class DailyInfoClientException(
     message: String,
     cause: Throwable? = null,
     val httpStatus: Int? = null,
+    val sessionExpired: Boolean = false,
 ) : Exception(message, cause)
 
 internal data class CampusWeatherTarget(

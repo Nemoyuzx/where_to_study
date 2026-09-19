@@ -32,7 +32,7 @@ class SjdClassroomClient(
             throw ClassroomClientException("空教室实时接口仅支持当天查询。")
         }
         val fetchedAt = timestamp(now)
-        val token = api.login(credentials)
+        return api.authenticated(credentials) { token ->
         val payloads = AppMetadata.campuses.associate { campus ->
             val payload = api.get(
                 path = "/bjyddx/todayClassrooms",
@@ -48,7 +48,8 @@ class SjdClassroomClient(
             }
             campus.id to payload
         }
-        return SjdClassroomParser.parse(payloads, targetDate, fetchedAt)
+        SjdClassroomParser.parse(payloads, targetDate, fetchedAt)
+        }
     }
 
     private companion object {

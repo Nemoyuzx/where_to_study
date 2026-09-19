@@ -1,6 +1,6 @@
 # 隐私声明 / Privacy Policy
 
-生效日期 / Effective date: 2026-09-12
+生效日期 / Effective date: 2026-09-19
 
 Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。
 
@@ -13,6 +13,10 @@ Where To Study is an independent, unofficial client for viewing BUPT schedules, 
 The account and password you enter are stored in the operating system's protected credential storage. The app uses them over HTTPS when you request schedules, empty classrooms, or assignments as described below. After valid credentials are saved and automatic term detection is enabled, the app also refreshes the personal schedule once at launch to verify the term identifier and first Monday. Schedule and classroom requests are sent to `jwglweixin.bupt.edu.cn`. The current day's classroom availability may additionally refresh at launch, on returning to the foreground, or around 07:00 where the platform permits background work. The maintainer cannot read these credentials, and settings APIs never return a saved password.
 
 ## 成绩与考试安排 / Grades and exam arrangements
+
+查询页还提供独立的考试安排与课程作业 DDL 页面；你可以主动获取或刷新，切换栏目本身不触发重复登录。作业使用设置中的教学云密码，留空则沿用教务密码。登录令牌仅在当前应用进程的内存中按账户及密码隔离复用，不写入磁盘或传给本应用服务端。优先遵守服务提供的令牌有效期；没有有效期信息时使用有界短期缓存。明确认证失效时最多重新登录重试一次；更改账户／密码、清除数据或切换示例模式会使对应会话失效。关闭进程后需重新登录。
+
+Query also provides separate exam and assignment-deadline pages with explicit fetch/refresh controls. Switching sections does not itself repeat login. Assignments use the separate Teaching Cloud password, or the academic password when it is blank. Login sessions are reused only in process memory, scoped to the account and password, never written to disk or sent to this app's server. Advertised token expiry is respected; tokens without expiry metadata use a bounded short lifetime. Explicit authentication expiry permits at most one login retry. Account/password changes, data clearing, or switching to demo mode invalidate the relevant session. Restarting the process requires a new login.
 
 主动打开“查询 → 成绩”后，应用使用已保存的教务账号和教务密码直接通过 HTTPS 从 `jwglweixin.bupt.edu.cn` 获取学校学期列表、本人课程成绩及学校返回的绩点。教学云平台的独立密码不用于此查询；不会查询其他学生。成绩不写入磁盘、不上传至本项目服务端或参考项目的代理服务；图形端只在当前会话的有界内存中短期复用，并在账号或相关凭据变化、清除数据后失效。终端的显式打印／JSON 输出会显示用户主动请求的成绩，请勿分享包含个人成绩的终端记录。
 

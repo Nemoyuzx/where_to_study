@@ -28,7 +28,27 @@ class AcademicQueryUiTest {
     private val context get() = instrumentation.targetContext
     @Before fun privacy() = ensurePrivacyConsentForUiTest()
 
-    @Test fun gradesAreReadableInBothLanguagesWithThreeQuerySegments() {
+    @Test fun jwtLifetimeAndClearingBetweenFetchAndPublicationAreEnforced() {
+        assertEquals(0L, SessionExpiryMessage.jwtExpiresAtMillis("header.eyJleHAiOjB9.signature"))
+        val beforePublish = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val finished = CountDownLatch(1)
+        val repository = CalendarDailyInfoRepository(usesSampleData = true,
+            beforeAssignmentPublication = { beforePublish.countDown(); check(release.await(5, TimeUnit.SECONDS)) },
+            afterAssignmentPublication = { finished.countDown() })
+        try {
+            instrumentation.runOnMainSync { repository.loadAllAssignments(force = true) }
+            assertTrue(beforePublish.await(5, TimeUnit.SECONDS))
+            instrumentation.runOnMainSync { repository.clearAssignments() }
+            release.countDown()
+            assertTrue(finished.await(5, TimeUnit.SECONDS))
+            assertNull(repository.allAssignments())
+            assertNull(repository.allAssignmentsError())
+            assertFalse(repository.isLoadingAllAssignments())
+        } finally { release.countDown(); repository.close() }
+    }
+
+    @Test fun gradesAreReadableInBothLanguagesWithFiveQuerySegments() {
         val preferences = AppPreferences(context)
         val previousLanguage = preferences.languageCode
         try {
@@ -39,6 +59,7 @@ class AcademicQueryUiTest {
                     { _, term, type -> fixture(term, type) })
                 val shuttles = ShuttleBusRepository(usesSampleData = true)
                 val events = CalendarDailyInfoRepository(usesSampleData = true)
+                val schedules = ScheduleRepository(context, SecureCredentialStore(context), preferences)
                 try {
                     ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
                         .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
@@ -54,15 +75,18 @@ class AcademicQueryUiTest {
                             parent.addView(InformationQueryPage(activity, shuttles, events, AppPreferences(activity),
                                 (parent.width / activity.resources.displayMetrics.density).toInt(),
                                 InformationQuerySessionState(InformationQueryMode.GRADES.name),
-                                activity.findViewById<View?>(R.id.phone_navigation) != null, grades).build(), params)
+                                activity.findViewById<View?>(R.id.phone_navigation) != null, grades, schedules).build(), params)
+                            assertFalse(grades.isLoading)
+                            assertNull(grades.snapshot)
+                            activity.findViewById<View>(R.id.information_query_grades_refresh).performClick()
                         }
                         val device = UiDevice.getInstance(instrumentation)
                         assertTrue(device.wait(Until.hasObject(By.text("Synthetic grades / 合成成绩示例")), 5_000))
                         instrumentation.waitForIdleSync()
                         scenario.onActivity { activity ->
                             val selector = activity.findViewById<ViewGroup>(R.id.information_query_mode_switch)
-                            assertTrue("Three segments must remain a compact control", selector.height <= activity.dp(100))
-                            assertEquals(3, (selector.getChildAt(1) as ViewGroup).childCount)
+                            assertTrue("Five segments must remain a compact control", selector.height <= activity.dp(100))
+                            assertEquals(5, (selector.getChildAt(1) as ViewGroup).childCount)
                             descendants(selector).filterIsInstance<TextView>().forEach { label ->
                                 assertTrue("Query labels must not be clipped", label.layout.height <= label.height - label.compoundPaddingTop - label.compoundPaddingBottom)
                             }
@@ -76,9 +100,34 @@ class AcademicQueryUiTest {
                         val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "academic-query").apply { mkdirs() }
                         assertTrue(device.takeScreenshot(File(directory, "$language-${context.resources.configuration.screenWidthDp}.png")))
                     }
-                } finally { grades.close(); shuttles.close(); events.close() }
+                } finally { grades.close(); shuttles.close(); events.close(); schedules.close() }
             }
         } finally { preferences.languageCode = previousLanguage }
+    }
+
+    @Test fun assignmentAndExamTabsRenderWithoutFetchingOnSelection() {
+        ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.findViewById<View>(R.id.navigation_query).performClick()
+                activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
+                val page = activity.findViewById<View>(R.id.information_query_assignments_scroll)
+                assertTrue(descendants(page).filterIsInstance<TextView>().any {
+                    it.text == activity.uiText("点击刷新课程作业获取 DDL；使用设置中已保存的教学云密码。")
+                })
+                activity.findViewById<View>(R.id.information_query_assignments_refresh).performClick()
+            }
+            val device = UiDevice.getInstance(instrumentation)
+            assertTrue(device.wait(Until.hasObject(By.text("示例课程作业")), 5_000))
+            scenario.onActivity { activity ->
+                activity.findViewById<View>(R.id.information_query_exams_tab).performClick()
+                assertNotNull(activity.findViewById<View>(R.id.information_query_exams_refresh))
+                activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
+                assertEquals(1, descendants(activity.findViewById(R.id.information_query_assignments_scroll))
+                    .count { it.tag == "assignment.query.row" })
+                assertTrue(activity.findViewById<View>(R.id.information_query_assignments_refresh).isEnabled)
+            }
+        }
     }
 
     @Test fun changedPasswordRejectsLatePrivateGradesAndClearsMemory() {

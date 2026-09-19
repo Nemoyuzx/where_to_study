@@ -18,6 +18,7 @@ import org.json.JSONObject
 class ScheduleClientException(
     message: String,
     val retryable: Boolean = false,
+    val sessionExpired: Boolean = false,
 ) : Exception(message)
 
 internal object SjdInputLimits {
@@ -115,12 +116,24 @@ internal data class SjdRedirectRequest(
     val preserveBody: Boolean,
 )
 
-class SjdApiClient {
+class SjdApiClient internal constructor(
+    private val sessions: AuthenticatedSessionCache<String> = AcademicSessions.cache,
+    private val loginOverride: ((Credentials) -> String)? = null,
+    private val requestOverride: ((String, String, String?) -> JSONObject)? = null,
+) {
+    internal fun <T> authenticated(credentials: Credentials, request: (String) -> T): T = sessions.perform(
+        sessionCredentialKey(credentials.account, credentials.password),
+        login = { login(credentials) },
+        expiresSession = { (it as? ScheduleClientException)?.sessionExpired == true },
+        request = request,
+    )
+
     fun login(credentials: Credentials): String {
         val account = credentials.account.trim()
         if (account.isEmpty() || credentials.password.isEmpty()) {
             throw ScheduleClientException("请先在设置中填写并保存教务账号和密码。")
         }
+        loginOverride?.let { return it(credentials) }
         val login = post(
             path = "/bjyddx/login",
             referer = LOGIN_REFERER,
@@ -141,7 +154,7 @@ class SjdApiClient {
         referer: String,
         form: Map<String, String> = emptyMap(),
         token: String? = null,
-    ): JSONObject = request("POST", path, referer, form, token)
+    ): JSONObject = checkedRequest("POST", path, referer, form, token)
 
     fun get(
         path: String,
@@ -150,7 +163,17 @@ class SjdApiClient {
         token: String? = null,
     ): JSONObject {
         val queryString = if (query.isEmpty()) "" else "?${String(formData(query), StandardCharsets.UTF_8)}"
-        return request("GET", "$path$queryString", referer, emptyMap(), token)
+        return checkedRequest("GET", "$path$queryString", referer, emptyMap(), token)
+    }
+
+    private fun checkedRequest(method: String, path: String, referer: String,
+        form: Map<String, String>, token: String?): JSONObject {
+        val payload = requestOverride?.invoke(method, path, token) ?: request(method, path, referer, form, token)
+        if (token != null && !isSuccessful(payload) &&
+            (payload.opt("code").stringValue() == "401" || SessionExpiryMessage.matches(message(payload, "")))) {
+            throw ScheduleClientException("移动教务会话已过期，请重新登录。", sessionExpired = true)
+        }
+        return payload
     }
 
     fun isSuccessful(payload: JSONObject): Boolean = payload.opt("code").stringValue() == "1"
@@ -207,6 +230,7 @@ class SjdApiClient {
                         retryable = status == HTTP_REQUEST_TIMEOUT ||
                             status == HTTP_TOO_MANY_REQUESTS ||
                             status >= HTTP_SERVER_ERROR,
+                        sessionExpired = token != null && status == 401,
                     )
                 }
                 return runCatching { JSONObject(body) }.getOrElse {
@@ -243,7 +267,7 @@ class SjdScheduleClient(
         fallbackTermID: String,
         fallbackTermStartDate: String,
     ): ScheduleSnapshot {
-        val token = api.login(credentials)
+        return api.authenticated(credentials) { token ->
         val current = post(
             path = "/bjyddx/student/curriculum?week=",
             referer = SjdApiClient.CLASSROOM_REFERER,
@@ -270,10 +294,12 @@ class SjdScheduleClient(
                 schedule.termID, CourseDeletionLogic.accountKey(credentials.account),
             )
         }.getOrElse {
+            if ((it as? ScheduleClientException)?.sessionExpired == true) throw it
             ExamSchedule(schedule.termID, CourseDeletionLogic.accountKey(credentials.account),
                 AcademicResponseParser.timestamp(), "failed", "考试安排获取失败，请重新刷新课表", emptyList())
         }
-        return schedule.copy(examSchedule = exams)
+        schedule.copy(examSchedule = exams)
+        }
     }
 
     private fun post(

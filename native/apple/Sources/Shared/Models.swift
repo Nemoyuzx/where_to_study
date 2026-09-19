@@ -92,10 +92,11 @@ struct Course: Codable, Identifiable, Equatable, Sendable {
     var isExam: Bool { eventKind == "exam" }
 
     var minuteInterval: Range<Int>? {
-        let parts = timeRange.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
-        let explicit = parts.count == 2 && AcademicTime.minute(parts[0]) != nil && AcademicTime.minute(parts[1]) != nil
-        let start = isExam ? startTime : startTime ?? (explicit ? parts[0] : SlotMetadata.defaults[safe: startSlot]?.start)
-        let end = isExam ? endTime : endTime ?? (explicit ? parts[1] : SlotMetadata.defaults[safe: endSlot]?.end)
+        // Ordinary timetable courses have always occupied their inclusive slot
+        // range. timeRange is display text and must not move a course or change
+        // its busy slots. Exams alone use the school's precise clock range.
+        let start = isExam ? startTime : SlotMetadata.defaults[safe: startSlot]?.start
+        let end = isExam ? endTime : SlotMetadata.defaults[safe: endSlot]?.end
         guard let start, let end,
               let first = AcademicTime.minute(start), let last = AcademicTime.minute(end), first < last
         else { return nil }

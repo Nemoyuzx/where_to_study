@@ -13,6 +13,7 @@
 - `courses`：列出本学期可见课程及删除所需 ID；`course-delete` 支持单次和整门课程，
   `course-deletions` 查看删除记录，`course-restore` 恢复
 - `assignments`：使用同学号及可选独立教学云平台密码，查询指定日期的课程作业 DDL
+- `assignment-list`：查询全部课程作业 DDL，包含课程、截止时间及提交状态，按截止时间排序
 - `classrooms`：按校区、教学楼、节次筛选查询当天空教室（实时接口不支持其他日期）
 - `holidays`：显示中国法定节假日与调休（支持离线兜底数据）
 - `shuttle`：显示当天班车状态和当前生效时刻表
@@ -103,6 +104,7 @@ where-to-study-cli course-restore DELETION_ID
 
 # 查询教学云作业；login 会以隐藏输入询问可选独立教学云密码
 where-to-study-cli assignments --date 2026-09-07 --json
+where-to-study-cli assignment-list --json
 where-to-study-cli login --use-academic-password
 
 # 查询西土城 教1 楼 1-4 节的空教室

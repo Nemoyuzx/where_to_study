@@ -7,7 +7,7 @@ use sha1::{Digest, Sha1};
 
 use crate::auth::resolve_credentials;
 use crate::classrooms::{
-    login_empty_classroom, read_sjd_json_response, sjd_headers, sjd_http_client,
+    read_sjd_json_response, session_epoch, sjd_headers, sjd_http_client, with_sjd_session_at,
     MAX_SJD_DATA_RESPONSE_BYTES,
 };
 use crate::config::{
@@ -16,6 +16,7 @@ use crate::config::{
 };
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{Course, ScheduleRequest, ScheduleResponse};
+use crate::session_cache::SessionEpoch;
 
 pub fn expand_week_numbers(week_text: &str) -> Vec<i64> {
     let mut raw = week_text.replace('，', ",").replace(' ', "");
@@ -360,37 +361,99 @@ pub fn infer_term_id(payload: &Value) -> Option<String> {
 }
 
 async fn fetch_sjd_schedule(
+    epoch: SessionEpoch,
     account: &Option<String>,
     password: &Option<String>,
     term_id: String,
     fallback_term_start_date: NaiveDate,
 ) -> ServiceResult<ScheduleResponse> {
     let (user, secret) = resolve_credentials(account, password)?;
-    let token = login_empty_classroom(&user, &secret).await?;
+    let key = crate::academic::account_key(&user);
+    let partial_schedule = std::sync::Mutex::new(None);
+    // Curriculum and exam sync share one epoch and one authentication retry
+    // budget. A cleared request cannot capture a new epoch for its second stage.
+    let result = with_sjd_session_at(epoch, &user, &secret, |token| {
+        let term_id = term_id.clone();
+        let key = key.clone();
+        let partial_schedule = &partial_schedule;
+        async move {
+            let mut schedule =
+                fetch_sjd_schedule_with_token(&token, term_id, fallback_term_start_date).await?;
+            match crate::academic::fetch_exams_using_token(&token, &schedule.term_id, &key).await {
+                Ok(exams) => schedule.exam_schedule = Some(exams),
+                Err(error) => {
+                    schedule.exam_schedule = Some(crate::academic::ExamSchedule {
+                        term_id: schedule.term_id.clone(),
+                        account_key: key,
+                        fetched_at: now_in_app_tz(),
+                        status: "failed".into(),
+                        message: "考试安排同步失败，普通课程仍可查看。".into(),
+                        items: vec![],
+                    });
+                    if error.authentication_expired {
+                        // Retain the successfully fetched lessons if exams are
+                        // still unauthorized after the single session retry.
+                        *partial_schedule
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(schedule);
+                        return Err(error);
+                    }
+                }
+            }
+            Ok(schedule)
+        }
+    })
+    .await;
+    finish_schedule_exam_refresh(
+        result,
+        partial_schedule
+            .into_inner()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
+}
 
+fn finish_schedule_exam_refresh(
+    result: ServiceResult<ScheduleResponse>,
+    partial: Option<ScheduleResponse>,
+) -> ServiceResult<ScheduleResponse> {
+    match result {
+        Err(error) if error.authentication_expired => partial.ok_or(error),
+        // Revocation / epoch changes must propagate even if lessons completed.
+        result => result,
+    }
+}
+
+async fn fetch_sjd_schedule_with_token(
+    token: &str,
+    term_id: String,
+    fallback_term_start_date: NaiveDate,
+) -> ServiceResult<ScheduleResponse> {
     let client = sjd_http_client(30)?;
 
     let current_response = client
         .post(SJD_STUDENT_CURRICULUM_URL)
         .query(&[("week", "")])
-        .headers(sjd_headers(Some(&token), SJD_REST_CLASSROOM_PAGE_URL))
+        .headers(sjd_headers(Some(token), SJD_REST_CLASSROOM_PAGE_URL))
         .send()
         .await
         .map_err(|error| ServiceError::new(format!("无法连接移动教务课表服务：{error}")))?;
     let all_response = client
         .post(SJD_STUDENT_CURRICULUM_URL)
         .query(&[("week", "all")])
-        .headers(sjd_headers(Some(&token), SJD_REST_CLASSROOM_PAGE_URL))
+        .headers(sjd_headers(Some(token), SJD_REST_CLASSROOM_PAGE_URL))
         .send()
         .await
         .map_err(|error| ServiceError::new(format!("无法连接移动教务课表服务：{error}")))?;
 
     for response in [&current_response, &all_response] {
         if response.status().as_u16() >= 400 {
-            return Err(ServiceError::new(format!(
-                "移动教务课表获取失败，HTTP {}。",
-                response.status().as_u16()
-            )));
+            return Err(ServiceError::with_status(
+                format!(
+                    "移动教务课表获取失败，HTTP {}。",
+                    response.status().as_u16()
+                ),
+                response.status().as_u16(),
+            ));
         }
     }
 
@@ -423,7 +486,7 @@ async fn fetch_sjd_schedule(
     let inferred_start =
         infer_term_start_date(&current_payload).unwrap_or(fallback_term_start_date);
     let inferred_term_id = infer_term_id(&current_payload).unwrap_or_default();
-    let mut schedule = parse_sjd_courses(
+    let schedule = parse_sjd_courses(
         &all_payload,
         if inferred_term_id.is_empty() {
             term_id
@@ -432,14 +495,6 @@ async fn fetch_sjd_schedule(
         },
         inferred_start,
     )?;
-    schedule.exam_schedule = Some(
-        crate::academic::fetch_exams_with_token(
-            &token,
-            &schedule.term_id,
-            &crate::academic::account_key(&user),
-        )
-        .await,
-    );
     Ok(schedule)
 }
 
@@ -484,11 +539,21 @@ fn resolve_schedule_term(
     Ok((term_id, term_start_date))
 }
 
-pub async fn fetch_schedule(payload: &ScheduleRequest) -> ServiceResult<ScheduleResponse> {
+pub fn fetch_schedule(
+    payload: &ScheduleRequest,
+) -> impl std::future::Future<Output = ServiceResult<ScheduleResponse>> + '_ {
+    fetch_schedule_at(session_epoch(), payload)
+}
+
+pub async fn fetch_schedule_at(
+    epoch: SessionEpoch,
+    payload: &ScheduleRequest,
+) -> ServiceResult<ScheduleResponse> {
     let current_term = suggested_term_for_date(today_in_app_tz());
     let (term_id, term_start_date) = resolve_schedule_term(payload, current_term)?;
 
     fetch_sjd_schedule(
+        epoch,
         &payload.account,
         &payload.password,
         term_id,
@@ -500,6 +565,29 @@ pub async fn fetch_schedule(payload: &ScheduleRequest) -> ServiceResult<Schedule
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exam_auth_retry_failure_keeps_lessons_but_revocation_discards_them() {
+        let partial = ScheduleResponse {
+            term_id: "2026-2027-1".into(),
+            exam_schedule: Some(crate::academic::ExamSchedule {
+                status: "failed".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let retained =
+            finish_schedule_exam_refresh(Err(ServiceError::expired()), Some(partial.clone()))
+                .unwrap();
+        assert_eq!(retained.term_id, "2026-2027-1");
+        assert_eq!(retained.exam_schedule.unwrap().status, "failed");
+        assert!(finish_schedule_exam_refresh(
+            Err(ServiceError::new("账户已更改，请重新获取。")),
+            Some(partial)
+        )
+        .is_err());
+        assert!(finish_schedule_exam_refresh(Err(ServiceError::expired()), None).is_err());
+    }
 
     #[test]
     fn expand_week_numbers_with_odd_even() {

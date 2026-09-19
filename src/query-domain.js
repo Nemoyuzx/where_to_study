@@ -19,6 +19,16 @@ export const IMPORTANT_EVENT_TYPES = Object.freeze([
 
 export const IMPORTANT_EVENT_BATCH_SIZE = 20
 
+export function filterAssignmentQueries(items, { query = '', course = '', range = 'all', now = new Date() } = {}) {
+  const needle = query.trim().toLowerCase()
+  return items.filter(item => {
+    if (course && item.course_name !== course) return false
+    if (needle && ![item.title, item.course_name, item.status].some(v => String(v || '').toLowerCase().includes(needle))) return false
+    const deadline = deadlineTimestamp(item.deadline)
+    return range === 'all' || (Number.isFinite(deadline) && (range === 'past' ? deadline < now.getTime() : deadline >= now.getTime()))
+  }).sort((a, b) => (deadlineTimestamp(a.deadline) || Number.MAX_SAFE_INTEGER) - (deadlineTimestamp(b.deadline) || Number.MAX_SAFE_INTEGER) || String(a.id).localeCompare(String(b.id)))
+}
+
 export function nextImportantEventVisibleCount(
   currentCount,
   totalCount,
@@ -177,7 +187,12 @@ export function shanghaiClockMinutes(date = new Date()) {
 }
 
 function deadlineTimestamp(value) {
-  const timestamp = new Date(value).getTime()
+  // UCloud also returns timezone-less school-local timestamps. Interpret those
+  // in Asia/Shanghai even when the desktop itself is in a different timezone.
+  const raw = String(value || '').trim()
+  const normalized = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(raw)
+    ? `${raw.replace(' ', 'T')}+08:00` : raw
+  const timestamp = new Date(normalized).getTime()
   return Number.isFinite(timestamp) ? timestamp : null
 }
 

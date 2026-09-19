@@ -86,6 +86,9 @@ export struct GradeQueryView {
               this.gradeCard(item)
             }, (item: GradeItem) => item.id)
           }
+        } else if (this.model.gradeError.length === 0) {
+          Text(this.model.text('点击刷新以查询，切换页面保留上次结果。'))
+            .fontSize(14).fontColor(AppTheme.secondaryText())
         }
       }
     }.width('100%').alignItems(HorizontalAlign.Start)

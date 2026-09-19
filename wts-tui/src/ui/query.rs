@@ -26,11 +26,19 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         QuerySection::Shuttle => 0,
         QuerySection::Events => 1,
         QuerySection::Grades => 2,
+        QuerySection::Exams => 3,
+        QuerySection::Assignments => 4,
     };
     let labels = if area.width < 64 {
-        ["班车", "事件", "成绩"]
+        ["班车", "事件", "成绩", "考试", "作业"]
     } else {
-        ["班车查询", "重要事件查询", "成绩查询"]
+        [
+            "班车查询",
+            "重要事件查询",
+            "成绩查询",
+            "考试查询",
+            "课程作业",
+        ]
     };
     let tabs = Tabs::new(labels)
         .select(selected)
@@ -43,7 +51,182 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         QuerySection::Shuttle => draw_shuttle(frame, &chunks, app, theme),
         QuerySection::Events => draw_events(frame, &chunks, app, theme),
         QuerySection::Grades => draw_grades(frame, &chunks, app, theme),
+        QuerySection::Exams => draw_exams(frame, &chunks, app, theme),
+        QuerySection::Assignments => draw_assignments(frame, &chunks, app, theme),
     }
+}
+
+struct PrivateQueryList<'a> {
+    title: &'a str,
+    lines: Vec<Line<'a>>,
+    error: Option<&'a str>,
+    has_cache: bool,
+    source: &'a str,
+}
+
+fn draw_private_list(
+    frame: &mut Frame,
+    chunks: &[Rect],
+    app: &App,
+    theme: &Theme,
+    content: PrivateQueryList<'_>,
+) {
+    let PrivateQueryList {
+        title,
+        lines,
+        error,
+        has_cache,
+        source,
+    } = content;
+    frame.render_widget(
+        Paragraph::new("←→ 切换查询 · r 刷新 · ↑↓ / PgUp PgDn 滚动 · s 设置")
+            .wrap(Wrap { trim: false })
+            .block(theme.control_block().borders(Borders::ALL).title(title)),
+        chunks[1],
+    );
+    frame.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((app.query_scroll.min(u16::MAX as usize) as u16, 0))
+            .block(theme.card_block().borders(Borders::ALL).title(title)),
+        chunks[2],
+    );
+    let detail = if let Some(error) = error {
+        format!(
+            "{error}\n{}{source}",
+            if has_cache {
+                "正在显示此前结果。\n"
+            } else {
+                ""
+            }
+        )
+    } else if app.private_query_loading(app.query_section) {
+        format!("正在获取…\n{source}")
+    } else {
+        source.to_string()
+    };
+    frame.render_widget(
+        Paragraph::new(detail)
+            .wrap(Wrap { trim: false })
+            .style(theme.muted_text())
+            .block(
+                theme
+                    .elevated_block()
+                    .borders(Borders::ALL)
+                    .title("状态与来源"),
+            ),
+        chunks[3],
+    );
+}
+
+fn draw_assignments(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
+    let lines = match &app.query_assignments {
+        None => vec![Line::from("尚未查询课程作业；按 r 获取教学云 DDL。")],
+        Some(items) if items.is_empty() => vec![Line::from("暂无课程作业 DDL")],
+        Some(items) => items
+            .iter()
+            .flat_map(|item| {
+                [
+                    Line::from(Span::styled(item.title.as_str(), theme.strong_text())),
+                    Line::from(format!(
+                        "{} · {} · {}",
+                        item.deadline,
+                        item.course_name.as_deref().unwrap_or("课程未标注"),
+                        item.status.as_deref().unwrap_or("状态未标注")
+                    )),
+                    Line::from(""),
+                ]
+            })
+            .collect(),
+    };
+    draw_private_list(frame, chunks, app, theme, PrivateQueryList {
+        title: "课程作业 DDL", lines,
+        error: app.assignment_error.as_deref(), has_cache: app.query_assignments.is_some(),
+        source: "来源：教学云 ucloud.bupt.edu.cn；使用已保存的教学云密码。\n按截止时间排序；查询标签切换只展示缓存，r 主动刷新。",
+    })
+}
+
+fn draw_exams(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
+    let lines = match &app.query_exams {
+        None => vec![Line::from("尚未查询考试；按 r 获取学校当前学期安排。")],
+        Some(exams) if exams.items.is_empty() => vec![Line::from(if exams.status == "failed" {
+            "考试安排获取失败，请按 r 重试。"
+        } else {
+            "本学期暂无考试安排"
+        })],
+        Some(exams) => {
+            let mut items: Vec<_> = exams.items.iter().collect();
+            items.sort_by(|a, b| {
+                (a.date.is_empty(), &a.date, &a.start_time, &a.name).cmp(&(
+                    b.date.is_empty(),
+                    &b.date,
+                    &b.start_time,
+                    &b.name,
+                ))
+            });
+            items
+                .into_iter()
+                .flat_map(|exam| {
+                    [
+                        Line::from(Span::styled(exam.name.as_str(), theme.strong_text())),
+                        Line::from(format!(
+                            "{} · {} · {}",
+                            if exam.date.is_empty() {
+                                "日期待定"
+                            } else {
+                                &exam.date
+                            },
+                            if exam.start_time.is_empty() || exam.end_time.is_empty() {
+                                "时间待定".into()
+                            } else {
+                                format!("{}–{}", exam.start_time, exam.end_time)
+                            },
+                            exam.room
+                        )),
+                        Line::from(format!(
+                            "{}{}",
+                            if exam.seat.is_empty() {
+                                String::new()
+                            } else {
+                                format!("座位 {} · ", exam.seat)
+                            },
+                            exam.time_text
+                        )),
+                        Line::from(""),
+                    ]
+                })
+                .collect()
+        }
+    };
+    let source = app.query_exams.as_ref().map_or_else(
+        || "来源：学校移动教务；使用教务密码。".to_string(),
+        |exams| {
+            format!(
+                "来源：学校移动教务 · 学期 {}\n更新于 {} · {}{}",
+                exams.term_id,
+                exams.fetched_at,
+                if exams.status == "stale" {
+                    "缓存："
+                } else {
+                    ""
+                },
+                exams.message
+            )
+        },
+    );
+    draw_private_list(
+        frame,
+        chunks,
+        app,
+        theme,
+        PrivateQueryList {
+            title: "考试查询",
+            lines,
+            error: app.exam_error.as_deref(),
+            has_cache: app.query_exams.is_some(),
+            source: &source,
+        },
+    )
 }
 
 fn draw_grades(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
@@ -494,5 +677,59 @@ mod tests {
         assert!(text.contains("真实分类"));
         assert!(text.contains("仅收藏"));
         assert!(text.contains("详情与来源"));
+    }
+
+    #[test]
+    fn assignment_query_renders_deadline_status_empty_and_cached_failure_at_narrow_widths() {
+        let mut app = App::new(false);
+        app.query_section = QuerySection::Assignments;
+        app.query_assignments = Some(vec![where_to_study_lib::models::AssignmentDeadlineItem {
+            id: "synthetic".into(),
+            title: "合成作业".into(),
+            course_name: Some("合成课程".into()),
+            deadline: "2026-09-20 18:00:00".into(),
+            status: Some("未提交".into()),
+        }]);
+        for (width, height) in [(40, 22), (80, 24), (120, 32)] {
+            let text = rendered_text_at_size(&mut app, width, height);
+            assert!(text.contains("合成作业"));
+            assert!(text.contains("合成课程"));
+            assert!(text.contains("2026-09-20"));
+            assert!(text.contains("未提交"));
+        }
+        app.assignment_error = Some("合成刷新失败".into());
+        assert!(rendered_text(&mut app).contains("正在显示此前结果"));
+        app.query_assignments = Some(vec![]);
+        assert!(rendered_text(&mut app).contains("暂无课程作业DDL"));
+    }
+
+    #[test]
+    fn exam_query_keeps_undated_and_exact_time_records() {
+        use where_to_study_lib::academic::{ExamArrangement, ExamSchedule};
+        let mut app = App::new(false);
+        app.query_section = QuerySection::Exams;
+        app.query_exams = Some(ExamSchedule {
+            term_id: "2026-2027-1".into(),
+            status: "fresh".into(),
+            items: vec![
+                ExamArrangement {
+                    name: "待定考试".into(),
+                    ..Default::default()
+                },
+                ExamArrangement {
+                    name: "精确时间考试".into(),
+                    date: "2026-09-20".into(),
+                    start_time: "10:07".into(),
+                    end_time: "11:43".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        });
+        let text = rendered_text(&mut app);
+        assert!(text.contains("日期待定"));
+        assert!(text.contains("时间待定"));
+        assert!(text.contains("10:07–11:43"));
+        assert!(text.contains("2026-2027-1"));
     }
 }

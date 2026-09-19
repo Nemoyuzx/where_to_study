@@ -8,11 +8,20 @@ import {
 } from './HttpUtil';
 import { ScheduleClientError } from './SjdErrors';
 import { NetworkDiagnostics } from './NetworkDiagnostics';
+import { AuthenticatedSession, AuthenticationExpiredError, AuthenticationFailure, SessionLease } from './AuthenticatedSession';
 import {
   SJDNetworkPolicy, SJDResponseEndpoint, SJDResponseLimits, SJDFormURLEncoder
 } from './SjdEncoding';
 
 export class SJDAPIClient {
+  private static readonly sessions: AuthenticatedSession<string> = new AuthenticatedSession<string>();
+  static resetSession(): void { SJDAPIClient.sessions.reset(); }
+
+  async withSession<T>(credentials: Credentials, request: (token: string) => Promise<T>): Promise<T> {
+    return await SJDAPIClient.sessions.run(credentials.account.trim(), credentials.password,
+      async (): Promise<SessionLease<string>> => new SessionLease<string>(
+        await this.login(credentials), Date.now() + 10 * 60 * 1000), request);
+  }
   static readonly origin: string = 'https://jwglweixin.bupt.edu.cn';
   static readonly loginReferer: string = SJDAPIClient.origin + '/sjd/#/login';
   static readonly classroomReferer: string = SJDAPIClient.origin + '/sjd/#/restClassroom';
@@ -155,7 +164,8 @@ export class SJDAPIClient {
     }
     try {
       try {
-        return await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
+        const result: HttpResult = await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
+        return this.checkAuthentication(result, endpoint);
       } catch (e) {
         // 部分真实设备网络会优先选择不可达的 IPv6 路径。默认族失败且错误
         // 属于 DNS/连接/收发/超时时，仅对固定 SJD 主机回退一次 IPv4。
@@ -163,7 +173,8 @@ export class SJDAPIClient {
           spec.addressFamily === http.AddressFamily.DEFAULT &&
           NetworkDiagnostics.shouldRetryIPv4(e.code)) {
           spec.addressFamily = http.AddressFamily.ONLY_V4;
-          return await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
+          const result: HttpResult = await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
+          return this.checkAuthentication(result, endpoint);
         }
         if (e instanceof Error) {
           throw e;
@@ -179,6 +190,18 @@ export class SJDAPIClient {
       }
       throw new Error('网络请求失败。');
     }
+  }
+
+  private checkAuthentication(result: HttpResult, endpoint: SJDResponseEndpoint): HttpResult {
+    if (endpoint !== SJDResponseEndpoint.login) {
+      const root: Record<string, Object> | null = JsonUtil.parseObject(result.body);
+      if (AuthenticationFailure.isExpired(result.statusCode,
+        root === null ? '' : SJDAPIClient.string(root['code']),
+        root === null ? '' : SJDAPIClient.message(root, ''))) {
+        throw new AuthenticationExpiredError();
+      }
+    }
+    return result;
   }
 
   private static headersFor(referer: string, token: string | null): Record<string, string> {

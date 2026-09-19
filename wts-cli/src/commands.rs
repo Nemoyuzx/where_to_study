@@ -96,6 +96,7 @@ pub fn login(account: Option<String>, use_academic_password: bool) -> ServiceRes
         use_academic_password,
     )?;
     where_to_study_lib::assignments::clear_cache();
+    where_to_study_lib::classrooms::clear_session();
     println!(
         "已保存教务凭据到本地配置文件：{}",
         credentials::storage_description()?
@@ -106,6 +107,7 @@ pub fn login(account: Option<String>, use_academic_password: bool) -> ServiceRes
 pub fn logout() -> ServiceResult<()> {
     credentials::clear()?;
     where_to_study_lib::assignments::clear_cache();
+    where_to_study_lib::classrooms::clear_session();
     println!("已清除 CLI 本地配置文件中的教务凭据。");
     Ok(())
 }
@@ -258,6 +260,7 @@ pub async fn assignments(date: Option<String>, json: bool) -> ServiceResult<()> 
         credential_revision,
     )
     .await?;
+    ensure_assignment_credentials_current(&credentials)?;
     if json {
         print_json(&response)?;
     } else {
@@ -270,6 +273,47 @@ pub async fn assignments(date: Option<String>, json: bool) -> ServiceResult<()> 
                 item.title
             );
         }
+    }
+    Ok(())
+}
+
+pub async fn assignment_list(json: bool) -> ServiceResult<()> {
+    let revision = where_to_study_lib::assignments::credential_revision();
+    let credentials = require_credentials()?;
+    let items = where_to_study_lib::assignments::fetch_assignment_list(
+        &credentials.account,
+        credentials.assignment_password(),
+        &credentials.account_scope,
+        revision,
+        true,
+    )
+    .await?;
+    ensure_assignment_credentials_current(&credentials)?;
+    if json {
+        print_json(&serde_json::json!({"source": "https://ucloud.bupt.edu.cn", "items": items}))?;
+    } else {
+        println!("教学云 · {} 项课程作业 DDL", items.len());
+        for item in items {
+            println!(
+                "{}  {}  {}  {}",
+                item.deadline,
+                item.course_name.as_deref().unwrap_or("课程未标注"),
+                item.title,
+                item.status.as_deref().unwrap_or("")
+            );
+        }
+    }
+    Ok(())
+}
+
+fn ensure_assignment_credentials_current(
+    expected: &where_to_study_lib::credential_store::Credentials,
+) -> ServiceResult<()> {
+    let current = require_credentials()?;
+    if !academic_identity_matches(&current, expected)
+        || current.teaching_cloud_password != expected.teaching_cloud_password
+    {
+        return Err(ServiceError::new("查询期间凭据已改变，请重新查询。"));
     }
     Ok(())
 }

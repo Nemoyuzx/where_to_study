@@ -56,7 +56,8 @@ internal object CredentialUpdateLogic {
 
     fun changesAssignmentCredentials(saved: Credentials?, resolved: Credentials): Boolean =
         changesAccount(saved, resolved) ||
-            saved?.effectiveTeachingCloudPassword != resolved.effectiveTeachingCloudPassword
+            saved?.effectiveTeachingCloudPassword != resolved.effectiveTeachingCloudPassword ||
+            (saved?.teachingCloudPassword == null) != (resolved.teachingCloudPassword == null)
 }
 
 class SecureCredentialStore(context: Context) {

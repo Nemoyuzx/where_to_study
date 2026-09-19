@@ -25,15 +25,16 @@ struct SJDClassroomClient: ClassroomFetching {
         guard targetDate == Self.contractDate() else {
             throw ClassroomClientError.service("空教室实时接口仅支持当天查询。")
         }
-        let token = try await api.login(credentials: credentials)
-        async let xitucheng = api.classrooms(token: token, campusID: "01")
-        async let shahe = api.classrooms(token: token, campusID: "04")
-        let payloads = try await ["01": xitucheng, "04": shahe]
-        return try SJDClassroomParser.parse(
-            payloads: payloads,
-            targetDate: targetDate,
-            fetchedAt: Self.timestamp()
-        )
+        return try await api.authenticated(credentials: credentials) { token in
+            async let xitucheng = api.classrooms(token: token, campusID: "01")
+            async let shahe = api.classrooms(token: token, campusID: "04")
+            let payloads = try await ["01": xitucheng, "04": shahe]
+            return try SJDClassroomParser.parse(
+                payloads: payloads,
+                targetDate: targetDate,
+                fetchedAt: Self.timestamp()
+            )
+        }
     }
 
     static func contractDate(_ date: Date = .now) -> String {

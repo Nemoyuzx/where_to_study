@@ -19,6 +19,7 @@ mod recommender;
 pub mod schedule;
 mod schedule_store;
 pub mod scoped_cache;
+pub mod session_cache;
 mod settings_store;
 pub mod shuttle;
 
@@ -47,12 +48,12 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
 
 use crate::models::{
-    AlmanacRequest, AlmanacResponse, AssignmentCalendarResponse, AssignmentsRequest,
-    AssignmentsResponse, CalendarRangeRequest, ClassroomsCacheResponse, ClassroomsRequest,
-    CustomDeadlineCalendarRequest, DeadlineCalendarResponse, DeadlineItem, DeadlinesRequest,
-    DeadlinesResponse, HolidaysRequest, HolidaysResponse, ImportantEventsResponse,
-    MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest, ScheduleResponse,
-    ShuttleBusResponse, WeatherRequest, WeatherResponse,
+    AlmanacRequest, AlmanacResponse, AssignmentCalendarResponse, AssignmentDeadlineItem,
+    AssignmentsRequest, AssignmentsResponse, CalendarRangeRequest, ClassroomsCacheResponse,
+    ClassroomsRequest, CustomDeadlineCalendarRequest, DeadlineCalendarResponse, DeadlineItem,
+    DeadlinesRequest, DeadlinesResponse, HolidaysRequest, HolidaysResponse,
+    ImportantEventsResponse, MetadataResponse, SaveSettingsRequest, SavedSettings, ScheduleRequest,
+    ScheduleResponse, ShuttleBusResponse, WeatherRequest, WeatherResponse,
 };
 
 const STALE_LOCAL_DATA_MESSAGE: &str = "本地数据已清除，本次后台结果未保存。";
@@ -410,6 +411,86 @@ mod local_data_coordination_tests {
     use std::sync::atomic::AtomicUsize;
     use std::sync::{mpsc, Arc};
     use std::thread;
+
+    #[tokio::test]
+    async fn password_change_after_credential_capture_rejects_before_login() {
+        let coordinator = LocalDataCoordinator::new();
+        let sessions = session_cache::SessionCache::<usize>::new();
+        let generation = coordinator.begin();
+        let (account, password, epoch) = coordinator
+            .with_current_account(generation, || {
+                Ok(("synthetic-account", "old-fixture", sessions.epoch()))
+            })
+            .unwrap();
+        // A same-account password change does not change LOCAL_DATA generation.
+        // The independently captured session epoch must still invalidate it.
+        coordinator
+            .with_current_account(generation, || {
+                sessions.clear();
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(coordinator.begin(), generation);
+        let stale = sessions
+            .run_at(
+                epoch,
+                account,
+                password,
+                || async { panic!("old credentials must not be sent after settings save") },
+                |token| async move { Ok(token) },
+            )
+            .await;
+        assert!(stale.is_err());
+        let replacement_epoch = coordinator
+            .with_current_account(generation, || Ok(sessions.epoch()))
+            .unwrap();
+        assert_eq!(
+            sessions
+                .run_at(
+                    replacement_epoch,
+                    account,
+                    "new-fixture",
+                    || async { Ok((42, std::time::Duration::from_secs(60))) },
+                    |token| async move { Ok(token) }
+                )
+                .await
+                .unwrap(),
+            42
+        );
+    }
+
+    #[tokio::test]
+    async fn account_clear_invalidates_the_epoch_captured_under_account_gate() {
+        let coordinator = LocalDataCoordinator::new();
+        let sessions = session_cache::SessionCache::<usize>::new();
+        let generation = coordinator.begin();
+        let epoch = coordinator
+            .with_current_account(generation, || Ok(sessions.epoch()))
+            .unwrap();
+        coordinator
+            .revoke_and_clear(
+                || Ok(()),
+                || {
+                    sessions.clear();
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            coordinator.with_current_account(coordinator.begin(), || Ok(sessions.epoch())),
+            Err(LocalDataAccessError::AccountAccessRevoked)
+        );
+        assert!(sessions
+            .run_at(
+                epoch,
+                "old",
+                "fixture",
+                || async { panic!("cleared account must not restore its session") },
+                |token| async move { Ok(token) }
+            )
+            .await
+            .is_err());
+    }
 
     #[test]
     fn edited_courses_reject_an_already_prepared_notification() {
@@ -988,12 +1069,14 @@ fn save_saved_settings_sync(
         |plan| (plan.account_changed(), plan.has_account()),
         || settings_store::mark_account_access_revoked(&app).map_err(|error| error.message),
         || {
+            classrooms::clear_session();
             credential_store::save(&credential_store::Credentials::default())
                 .map_err(|error| error.message)
         },
         || clear_account_scoped_caches(&app),
         |plan| {
             if plan.academic_credentials_changed() {
+                classrooms::clear_session();
                 ACADEMIC_CREDENTIAL_REVISION.fetch_add(1, Ordering::AcqRel);
             }
             let assignment_credentials_changed = plan.assignment_credentials_changed();
@@ -1033,6 +1116,7 @@ fn save_saved_settings_sync(
 }
 
 fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
+    classrooms::clear_session();
     ACADEMIC_CREDENTIAL_REVISION.fetch_add(1, Ordering::AcqRel);
     let mut errors = Vec::new();
     #[cfg(not(mobile))]
@@ -1071,6 +1155,11 @@ fn clear_local_data_sync(app: tauri::AppHandle) -> Result<bool, String> {
     let result = LOCAL_DATA.revoke_and_clear(
         || settings_store::mark_account_access_revoked(&app).map_err(|error| error.message),
         || {
+            // Invalidate inside the same account gate used to capture request
+            // credentials and epochs. Otherwise a request can start between
+            // clear_session() and account revocation with the cleared epoch.
+            classrooms::clear_session();
+            ACADEMIC_CREDENTIAL_REVISION.fetch_add(1, Ordering::AcqRel);
             let mut errors = Vec::new();
             #[cfg(not(mobile))]
             if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
@@ -1209,17 +1298,21 @@ async fn fetch_schedule(
     let manual_term_id = payload.term_id.clone();
     let manual_term_start_date = payload.term_start_date.clone();
     let generation = LOCAL_DATA.begin();
-    let (account_scope, credential_revision) = LOCAL_DATA
+    let (account_scope, credential_revision, session_epoch) = LOCAL_DATA
         .with_current_account(generation, || {
             settings_store::apply_saved_credentials(&mut payload.account, &mut payload.password)
                 .map_err(|error| error.message)?;
             let request_scope = request_account_scope(&payload.account)?;
             let saved_scope = require_saved_account_scope()?;
             validate_account_scope_match(&request_scope, &saved_scope)?;
-            Ok((request_scope, academic_credential_revision()))
+            Ok((
+                request_scope,
+                academic_credential_revision(),
+                classrooms::session_epoch(),
+            ))
         })
         .map_err(LocalDataAccessError::message)?;
-    let mut schedule = schedule::fetch_schedule(&payload)
+    let mut schedule = schedule::fetch_schedule_at(session_epoch, &payload)
         .await
         .map_err(|error| error.message)?;
     if !automatic_term_detection_enabled {
@@ -1423,14 +1516,18 @@ async fn fetch_classrooms(
     mut payload: ClassroomsRequest,
 ) -> Result<ClassroomsCacheResponse, String> {
     let generation = LOCAL_DATA.begin();
-    let account_scope = LOCAL_DATA
+    let (account_scope, credential_revision, session_epoch) = LOCAL_DATA
         .with_current_account(generation, || {
             settings_store::apply_saved_credentials(&mut payload.account, &mut payload.password)
                 .map_err(|error| error.message)?;
             let request_scope = request_account_scope(&payload.account)?;
             let saved_scope = require_saved_account_scope()?;
             validate_account_scope_match(&request_scope, &saved_scope)?;
-            Ok(request_scope)
+            Ok((
+                request_scope,
+                academic_credential_revision(),
+                classrooms::session_epoch(),
+            ))
         })
         .map_err(LocalDataAccessError::message)?;
     // The SJD classroom endpoint only serves "today" in the app timezone;
@@ -1444,11 +1541,12 @@ async fn fetch_classrooms(
         return Err("空教室接口仅支持查询今天的数据。".to_string());
     }
     payload.target_date = Some(today.to_string());
-    let classrooms = classrooms::fetch_all_classrooms(&payload)
+    let classrooms = classrooms::fetch_all_classrooms_at(session_epoch, &payload)
         .await
         .map_err(|error| error.message)?;
     LOCAL_DATA
         .with_current_account(generation, || {
+            ensure_academic_credential_revision(credential_revision)?;
             classrooms_store::save(&app, &account_scope, &classrooms).map_err(|error| error.message)
         })
         .map_err(LocalDataAccessError::message)?;
@@ -1527,16 +1625,21 @@ async fn fetch_shuttle_bus() -> Result<ShuttleBusResponse, String> {
 #[tauri::command]
 async fn fetch_grade_terms() -> Result<academic::GradeTerms, String> {
     let generation = LOCAL_DATA.begin();
-    let (credentials, revision) = LOCAL_DATA
+    let (credentials, revision, session_epoch) = LOCAL_DATA
         .with_current_account(generation, || {
             let credentials = load_saved_credentials_with_scope()?
                 .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
-            Ok((credentials, academic_credential_revision()))
+            Ok((
+                credentials,
+                academic_credential_revision(),
+                classrooms::session_epoch(),
+            ))
         })
         .map_err(LocalDataAccessError::message)?;
-    let response = academic::fetch_terms(&credentials.account, &credentials.password)
-        .await
-        .map_err(|e| e.message)?;
+    let response =
+        academic::fetch_terms_at(session_epoch, &credentials.account, &credentials.password)
+            .await
+            .map_err(|e| e.message)?;
     LOCAL_DATA
         .with_current_account(generation, || {
             ensure_academic_credential_revision(revision)?;
@@ -1548,16 +1651,25 @@ async fn fetch_grade_terms() -> Result<academic::GradeTerms, String> {
 #[tauri::command]
 async fn fetch_grades(payload: academic::GradeRequest) -> Result<academic::GradeReport, String> {
     let generation = LOCAL_DATA.begin();
-    let (credentials, revision) = LOCAL_DATA
+    let (credentials, revision, session_epoch) = LOCAL_DATA
         .with_current_account(generation, || {
             let credentials = load_saved_credentials_with_scope()?
                 .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
-            Ok((credentials, academic_credential_revision()))
+            Ok((
+                credentials,
+                academic_credential_revision(),
+                classrooms::session_epoch(),
+            ))
         })
         .map_err(LocalDataAccessError::message)?;
-    let response = academic::fetch_grades(&credentials.account, &credentials.password, &payload)
-        .await
-        .map_err(|e| e.message)?;
+    let response = academic::fetch_grades_at(
+        session_epoch,
+        &credentials.account,
+        &credentials.password,
+        &payload,
+    )
+    .await
+    .map_err(|e| e.message)?;
     LOCAL_DATA
         .with_current_account(generation, || {
             ensure_academic_credential_revision(revision)?;
@@ -1588,6 +1700,71 @@ async fn fetch_assignments(payload: AssignmentsRequest) -> Result<AssignmentsRes
     LOCAL_DATA
         .with_current_account(generation, || {
             assignments::ensure_credential_revision(credential_revision)?;
+            Ok(response)
+        })
+        .map_err(LocalDataAccessError::message)
+}
+
+#[derive(serde::Deserialize)]
+struct AssignmentQueryRequest {
+    #[serde(default)]
+    force: bool,
+}
+
+#[tauri::command]
+async fn fetch_assignment_list(
+    payload: AssignmentQueryRequest,
+) -> Result<Vec<AssignmentDeadlineItem>, String> {
+    let generation = LOCAL_DATA.begin();
+    let (credentials, revision) = LOCAL_DATA
+        .with_current_account(generation, || {
+            let credentials = load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
+            Ok((credentials, assignments::credential_revision()))
+        })
+        .map_err(LocalDataAccessError::message)?;
+    let items = assignments::fetch_assignment_list(
+        &credentials.account,
+        credentials.assignment_password(),
+        &credentials.account_scope,
+        revision,
+        payload.force,
+    )
+    .await
+    .map_err(|e| e.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            assignments::ensure_credential_revision(revision)?;
+            Ok(items)
+        })
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+async fn fetch_exams(payload: academic::GradeRequest) -> Result<academic::ExamSchedule, String> {
+    let generation = LOCAL_DATA.begin();
+    let (credentials, revision, session_epoch) = LOCAL_DATA
+        .with_current_account(generation, || {
+            let credentials = load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
+            Ok((
+                credentials,
+                academic_credential_revision(),
+                classrooms::session_epoch(),
+            ))
+        })
+        .map_err(LocalDataAccessError::message)?;
+    let response = academic::fetch_exams_at(
+        session_epoch,
+        &credentials.account,
+        &credentials.password,
+        payload.term_id.as_deref(),
+    )
+    .await
+    .map_err(|e| e.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            ensure_academic_credential_revision(revision)?;
             Ok(response)
         })
         .map_err(LocalDataAccessError::message)
@@ -1883,23 +2060,29 @@ async fn fetch_today_classrooms_from_saved_settings(
     app: tauri::AppHandle,
 ) -> Result<ClassroomsCacheResponse, ScheduledClassroomRefreshError> {
     let generation = LOCAL_DATA.begin();
-    let (request, account_scope) = LOCAL_DATA
+    let (request, account_scope, credential_revision, session_epoch) = LOCAL_DATA
         .with_current_account(generation, || {
             let settings = settings_store::load(&app).map_err(|error| error.message)?;
             let mut request = classrooms_request_from_settings(settings);
             settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
                 .map_err(|error| error.message)?;
             let account_scope = request_account_scope(&request.account)?;
-            Ok((request, account_scope))
+            Ok((
+                request,
+                account_scope,
+                academic_credential_revision(),
+                classrooms::session_epoch(),
+            ))
         })
         .map_err(ScheduledClassroomRefreshError::from_local_data)?;
     auth::resolve_credentials(&request.account, &request.password)
         .map_err(|error| ScheduledClassroomRefreshError::MissingCredentials(error.message))?;
-    let classrooms = classrooms::fetch_all_classrooms(&request)
+    let classrooms = classrooms::fetch_all_classrooms_at(session_epoch, &request)
         .await
         .map_err(|error| ScheduledClassroomRefreshError::Retryable(error.message))?;
     LOCAL_DATA
         .with_current_account(generation, || {
+            ensure_academic_credential_revision(credential_revision)?;
             classrooms_store::save(&app, &account_scope, &classrooms)
                 .map_err(|error| error.message)?;
             let _ = app.emit(
@@ -2236,8 +2419,8 @@ async fn load_today_course_content(
         }
     }
 
-    let (request, account_scope, credential_revision) =
-        match LOCAL_DATA.with_current_account(generation, || {
+    let (request, account_scope, credential_revision, session_epoch) = match LOCAL_DATA
+        .with_current_account(generation, || {
             let settings = settings_store::load(&app).map_err(|error| error.message)?;
             let mut request = ScheduleRequest {
                 account: non_empty_option(settings.account),
@@ -2249,12 +2432,17 @@ async fn load_today_course_content(
             settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
                 .map_err(|error| error.message)?;
             let account_scope = request_account_scope(&request.account)?;
-            Ok((request, account_scope, academic_credential_revision()))
+            Ok((
+                request,
+                account_scope,
+                academic_credential_revision(),
+                classrooms::session_epoch(),
+            ))
         }) {
-            Ok(request) => request,
-            Err(error) => return TrayCourseContent::Message(error.message()),
-        };
-    let schedule = match schedule::fetch_schedule(&request).await {
+        Ok(request) => request,
+        Err(error) => return TrayCourseContent::Message(error.message()),
+    };
+    let schedule = match schedule::fetch_schedule_at(session_epoch, &request).await {
         Ok(mut schedule) => {
             match LOCAL_DATA.with_current_account(generation, || {
                 ensure_academic_credential_revision(credential_revision)?;
@@ -3604,6 +3792,8 @@ pub fn run() {
             fetch_important_events,
             fetch_shuttle_bus,
             fetch_assignments,
+            fetch_assignment_list,
+            fetch_exams,
             fetch_grade_terms,
             fetch_grades,
             fetch_deadline_calendar,

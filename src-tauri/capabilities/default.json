@@ -26,6 +26,8 @@
     "allow-fetch-important-events",
     "allow-fetch-shuttle-bus",
     "allow-fetch-assignments",
+    "allow-fetch-assignment-list",
+    "allow-fetch-exams",
     "allow-fetch-deadline-calendar",
     "allow-fetch-custom-deadline-calendar",
     "allow-fetch-assignment-calendar"

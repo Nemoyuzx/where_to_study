@@ -74,6 +74,18 @@ final class AcademicQueryTests: XCTestCase {
         XCTAssertEqual(ScheduleLogic.coursesByDate(for: [day], termStart: day, courses: snapshot.courses, exams: snapshot.examSchedule)["2026-09-07"], today)
     }
 
+    func testOrdinaryCoursesKeepSlotBoundariesWhenDisplayTimeDisagrees() throws {
+        let course = Course(id: "slot-course", name: "Slot course", teacher: "", room: "", weekText: "1", weekNumbers: [1],
+            examWeekNumbers: [], weekday: 1, startSlot: 2, endSlot: 2, sectionText: "3", timeRange: "08:00-09:35",
+            startTime: "08:00", endTime: "09:35")
+        XCTAssertEqual(course.minuteInterval, (9 * 60 + 50) ..< (10 * 60 + 35))
+        XCTAssertEqual(ScheduleLogic.busySlots(on: day, termStart: day, courses: [course]), [2])
+        let examination = exam(start: "09:40", end: "09:55")
+        XCTAssertEqual(try XCTUnwrap(examination.course()).minuteInterval, (9 * 60 + 40) ..< (9 * 60 + 55))
+        let exams = schedule([examination]).examSchedule
+        XCTAssertEqual(ScheduleLogic.courses(on: day, termStart: day, courses: [course], exams: exams).map(\.id), [examination.id])
+    }
+
     func testSeparateExamDateAndClocksAreUsedOnlyWhenPrimaryTimeIsEmpty() throws {
         let data = Data(#"{"code":1,"data":[{"courseName":"合成辅助考试","time":"","ksqssj":"2026-09-07","zssj1":"09:20","zssj2":"11:00"},{"courseName":"主字段待定","time":"另行通知","ksqssj":"2026-09-07","zssj1":"09:20","zssj2":"11:00"},{"courseName":"非法跨日","ksqssj":"2026-09-07","zssj1":"23:00","zssj2":"01:00"},{"courseName":"非法日期","ksqssj":"2026-02-30","zssj1":"09:20","zssj2":"11:00"},{"courseName":"非法分钟","ksqssj":"2026-09-07","zssj1":"09:60","zssj2":"11:00"}]}"#.utf8)
         let items = try AcademicResponseParser.exams(data, termID: "2026-2027-1", accountKey: owner).items

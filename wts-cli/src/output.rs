@@ -6,45 +6,6 @@ use where_to_study_lib::public_queries::{TodayShuttlePresentation, TodayShuttleR
 
 const WEEKDAY_LABELS: [&str; 7] = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
-#[cfg(test)]
-mod academic_tests {
-    use super::*;
-    use where_to_study_lib::academic::GradeItem;
-
-    #[test]
-    fn grade_output_preserves_zero_qualitative_missing_and_school_gpa() {
-        let mut report = GradeReport {
-            items: vec![
-                GradeItem {
-                    name: "合成零分".into(),
-                    score: "0".into(),
-                    credits: "0".into(),
-                    semester_name: "合成学期".into(),
-                    ..Default::default()
-                },
-                GradeItem {
-                    name: "合成文字".into(),
-                    score: "优秀".into(),
-                    ..Default::default()
-                },
-                GradeItem {
-                    name: "合成未公布".into(),
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-        let text = grade_report_text(&report);
-        assert!(text.contains("成绩：0  学分：0"));
-        assert!(text.contains("成绩：优秀"));
-        assert!(text.contains("成绩：未公布"));
-        assert!(text.contains("合成学期"));
-        assert!(!text.contains("平均学分绩点"));
-        report.average_grade_point = "0".into();
-        assert!(grade_report_text(&report).contains("平均学分绩点：0"));
-    }
-}
-
 pub fn day_courses(schedule: &ScheduleResponse, date: NaiveDate) -> Vec<&Course> {
     let Ok(start) = NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d") else {
         return vec![];
@@ -441,4 +402,43 @@ pub fn print_important_events(
     }
     println!("第三方来源：{source}\n显示数据仅供参考，请以实际情况为准。");
     Ok(())
+}
+
+#[cfg(test)]
+mod academic_tests {
+    use super::*;
+    use where_to_study_lib::academic::GradeItem;
+
+    #[test]
+    fn grade_output_preserves_zero_qualitative_missing_and_school_gpa() {
+        let mut report = GradeReport {
+            items: vec![
+                GradeItem {
+                    name: "合成零分".into(),
+                    score: "0".into(),
+                    credits: "0".into(),
+                    semester_name: "合成学期".into(),
+                    ..Default::default()
+                },
+                GradeItem {
+                    name: "合成文字".into(),
+                    score: "优秀".into(),
+                    ..Default::default()
+                },
+                GradeItem {
+                    name: "合成未公布".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let text = grade_report_text(&report);
+        assert!(text.contains("成绩：0  学分：0"));
+        assert!(text.contains("成绩：优秀"));
+        assert!(text.contains("成绩：未公布"));
+        assert!(text.contains("合成学期"));
+        assert!(!text.contains("平均学分绩点"));
+        report.average_grade_point = "0".into();
+        assert!(grade_report_text(&report).contains("平均学分绩点：0"));
+    }
 }

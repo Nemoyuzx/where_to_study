@@ -20,6 +20,9 @@ internal class UCloudAssignmentClient internal constructor(
     private val elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
     private val flightSelectionObserver: ((isLeader: Boolean) -> Unit)? = null,
     private val sleep: (Long) -> Unit = { millis -> Thread.sleep(millis) },
+    private val authenticateOverride: ((Credentials) -> AuthenticatedSession)? = null,
+    private val fetchAuthenticatedOverride: ((AuthenticatedSession) -> List<AssignmentDeadlineItem>)? = null,
+    private val apiRequestOverride: ((String, AuthenticatedSession) -> JSONObject)? = null,
 ) {
     private data class CachedAssignments(
         val credentialKey: String,
@@ -27,9 +30,10 @@ internal class UCloudAssignmentClient internal constructor(
         val items: List<AssignmentDeadlineItem>,
     )
 
-    private data class AuthenticatedSession(
+    internal data class AuthenticatedSession(
         val accessToken: String,
         val userID: String,
+        val expiresAtElapsed: Long? = null,
     )
 
     private data class HTTPResult(
@@ -52,9 +56,23 @@ internal class UCloudAssignmentClient internal constructor(
     private var cachedAssignments: CachedAssignments? = null
     private val inFlightFetches = mutableMapOf<String, InFlightFetch>()
     private val revision = AtomicLong(0)
+    private val sessions = AuthenticatedSessionCache<AuthenticatedSession>(
+        expiresAtMillis = { session -> session.expiresAtElapsed ?: SessionExpiryMessage.jwtExpiresAtMillis(session.accessToken)
+            ?.let { elapsedRealtime() + (it - System.currentTimeMillis()).coerceAtLeast(0) } },
+        clockMillis = elapsedRealtime,
+    )
 
     fun fetch(date: String): List<AssignmentDeadlineItem> {
         requireUCloudDate(date)
+        return fetchAll().filter { it.deadline.startsWith(date) }
+    }
+
+    fun cached(): List<AssignmentDeadlineItem>? = synchronized(stateLock) {
+        val key = loadCredentials()?.let(::credentialKey)
+        cachedAssignments?.takeIf { it.credentialKey == key }?.items
+    }
+
+    fun fetchAll(force: Boolean = false): List<AssignmentDeadlineItem> {
         val credentials = loadCredentials()
             ?.takeIf { it.account.trim().isNotEmpty() && it.effectiveTeachingCloudPassword.isNotEmpty() }
             ?: throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
@@ -64,14 +82,15 @@ internal class UCloudAssignmentClient internal constructor(
         val now = elapsedRealtime()
         val cached = synchronized(stateLock) {
             cachedAssignments?.takeIf {
-                it.credentialKey == credentialKey && now - it.fetchedAtElapsed < CACHE_LIFETIME_MS
+                !force && it.credentialKey == credentialKey && now - it.fetchedAtElapsed in 0 until CACHE_LIFETIME_MS
             }
         }
         val allItems = cached?.items ?: fetchAllSingleFlight(normalizedCredentials)
-        return allItems.filter { it.deadline.startsWith(date) }
+        return allItems
     }
 
     fun reset() {
+        sessions.clear()
         val invalidated = synchronized(stateLock) {
             revision.incrementAndGet()
             cachedAssignments = null
@@ -164,11 +183,15 @@ internal class UCloudAssignmentClient internal constructor(
         }
     }
 
-    private fun fetchAll(credentials: Credentials): List<AssignmentDeadlineItem> =
-        withFetchRetry(sleep) { fetchAllOnce(credentials) }
+    private fun fetchAll(credentials: Credentials): List<AssignmentDeadlineItem> = sessions.perform(
+        credentialKey(credentials),
+        login = { authenticateOverride?.invoke(credentials) ?: authenticate(credentials) },
+        expiresSession = ::isSessionExpiry,
+    ) { authenticated ->
+        fetchAuthenticatedOverride?.invoke(authenticated) ?: fetchAllOnce(authenticated)
+    }
 
-    private fun fetchAllOnce(credentials: Credentials): List<AssignmentDeadlineItem> {
-        val authenticated = authenticate(credentials)
+    private fun fetchAllOnce(authenticated: AuthenticatedSession): List<AssignmentDeadlineItem> {
         val courseRoot = apiGet(
             "/ykt-site/site/list/student/current",
             mapOf(
@@ -206,6 +229,7 @@ internal class UCloudAssignmentClient internal constructor(
                 successfulCourseRequests += 1
                 allItems += AssignmentDeadlineResponseParser.parseAll(root, course.second)
             } catch (error: Exception) {
+                if (isSessionExpiry(error)) throw error
                 if (firstCourseError == null) firstCourseError = error
             }
         }
@@ -214,14 +238,16 @@ internal class UCloudAssignmentClient internal constructor(
                 ?: DailyInfoClientException("教学云课程作业接口暂时不可用。")
         }
 
-        runCatching {
+        try {
+            val root =
             apiGet(
                 "/ykt-site/site/student/undone",
                 mapOf("userId" to authenticated.userID),
                 authenticated,
             )
-        }.onSuccess { root ->
             allItems += AssignmentDeadlineResponseParser.parseAll(root, null)
+        } catch (error: Exception) {
+            if (isSessionExpiry(error)) throw error
         }
         return merge(allItems)
     }
@@ -292,7 +318,9 @@ internal class UCloudAssignmentClient internal constructor(
             ?: throw DailyInfoClientException("教学云令牌接口未返回访问令牌。")
         val userID = stringValue(tokenRoot.opt("user_id") ?: tokenRoot.opt("userId"))
             ?: throw DailyInfoClientException("教学云令牌接口未返回用户标识。")
-        return AuthenticatedSession(accessToken, userID)
+        val lifetime = SessionExpiryMessage.expirationMillis(tokenRoot.opt("expires_in"))
+        return AuthenticatedSession(accessToken, userID,
+            lifetime?.let { elapsedRealtime() + it })
     }
 
     private fun apiGet(
@@ -303,7 +331,8 @@ internal class UCloudAssignmentClient internal constructor(
         val queryText = query.entries.joinToString("&") {
             "${encode(it.key)}=${encode(it.value)}"
         }
-        return apiRoot(
+        return withFetchRetry(sleep, retryUnauthorized = false) {
+            apiRequestOverride?.invoke(path, authenticated) ?: apiRoot(
             execute(
                 trustedAPIURI("$path?$queryText"),
                 method = "GET",
@@ -314,13 +343,15 @@ internal class UCloudAssignmentClient internal constructor(
                 acceptedStatus = 200..299,
             ),
         )
+        }
     }
 
     private fun apiPost(
         path: String,
         body: JSONObject,
         authenticated: AuthenticatedSession,
-    ): JSONObject = apiRoot(
+    ): JSONObject = withFetchRetry(sleep, retryUnauthorized = false) {
+        apiRequestOverride?.invoke(path, authenticated) ?: apiRoot(
         execute(
             trustedAPIURI(path),
             method = "POST",
@@ -332,6 +363,7 @@ internal class UCloudAssignmentClient internal constructor(
             acceptedStatus = 200..299,
         ),
     )
+    }
 
     private fun apiRoot(result: HTTPResult): JSONObject {
         val root = runCatching { JSONObject(result.body) }
@@ -339,6 +371,8 @@ internal class UCloudAssignmentClient internal constructor(
         if (root.has("code") && stringValue(root.opt("code")) != "200") {
             throw DailyInfoClientException(
                 "教学云数据接口返回业务状态 ${stringValue(root.opt("code")) ?: "unknown"}。",
+                sessionExpired = stringValue(root.opt("code")) == "401" ||
+                    listOf("msg", "message", "error_description").any { SessionExpiryMessage.matches(root.optString(it)) },
             )
         }
         return root
@@ -497,12 +531,8 @@ internal class UCloudAssignmentClient internal constructor(
         private const val MAX_FETCH_ATTEMPTS = 3
         private val RETRY_BACKOFF_MS = longArrayOf(800L, 2_400L)
 
-        // The teaching-cloud chain sits behind the school's bot firewall, which
-        // intermittently answers HTTP 423 (rate/behavior block) or 401 (stale
-        // session), especially on mobile carrier networks. Re-running the whole
-        // authenticate+fetch flow obtains a fresh firewall cookie and token, so
-        // transient failures are retried before surfacing an error.
-        internal fun <T> withFetchRetry(sleep: (Long) -> Unit, block: () -> T): T {
+        // Preserve bounded firewall retries independently of token refresh.
+        internal fun <T> withFetchRetry(sleep: (Long) -> Unit, retryUnauthorized: Boolean = true, block: () -> T): T {
             var lastError: Exception? = null
             for (attempt in 0 until MAX_FETCH_ATTEMPTS) {
                 if (attempt > 0) {
@@ -517,8 +547,8 @@ internal class UCloudAssignmentClient internal constructor(
                     return block()
                 } catch (error: Exception) {
                     lastError = error
-                    if (!isTransientFailure(error)) {
-                        throw error
+                    if (!isTransientFailure(error) || (!retryUnauthorized && isSessionExpiry(error))) {
+                        throw if (isSessionExpiry(error)) finalFetchError(error) else error
                     }
                 }
             }
@@ -532,6 +562,9 @@ internal class UCloudAssignmentClient internal constructor(
             val status = (error as? DailyInfoClientException)?.httpStatus ?: return false
             return status == 401 || status == 408 || status == 423 || status == 429 || status >= 500
         }
+
+        internal fun isSessionExpiry(error: Exception): Boolean =
+            (error as? DailyInfoClientException)?.let { it.httpStatus == 401 || it.sessionExpired } == true
 
         internal fun finalFetchError(error: Exception): Exception {
             val status = (error as? DailyInfoClientException)?.httpStatus

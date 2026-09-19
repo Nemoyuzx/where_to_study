@@ -9,6 +9,7 @@ import { SJDScheduleParser } from './parsers/SjdScheduleParser';
 import { SJDAcademicParser } from './parsers/SjdAcademicParser';
 import { ExamSchedule } from '../common/AcademicModels';
 import { CourseRemovalLogic } from '../common/CourseRemoval';
+import { AuthenticationExpiredError } from './AuthenticatedSession';
 
 export interface ScheduleFetching {
   fetch(credentials: Credentials, fallbackTermID: string, fallbackTermStartDate: string,
@@ -26,7 +27,7 @@ export class SJDScheduleClient implements ScheduleFetching {
     credentials: Credentials, fallbackTermID: string, fallbackTermStartDate: string,
     requestedExamTermID: string = ''
   ): Promise<ScheduleSnapshot> {
-    const token: string = await this.api.login(credentials);
+    return await this.api.withSession(credentials, async (token: string): Promise<ScheduleSnapshot> => {
     const results: string[] = await Promise.all([
       this.api.curriculum(token, ''),
       this.api.curriculum(token, 'all')
@@ -42,10 +43,12 @@ export class SJDScheduleClient implements ScheduleFetching {
       exams = SJDAcademicParser.exams(await this.api.academic(token, '/student/examinationArrangement', values),
         examTerm, accountKey, StrictDates.formatFetchedAt(Date.now()));
     } catch (e) {
+      if (e instanceof AuthenticationExpiredError) { throw e; }
       exams = new ExamSchedule(examTerm, accountKey, '', 'failed',
         '考试安排暂时无法获取。', []);
     }
     return new ScheduleSnapshot(schedule.termID, schedule.termStartDate, schedule.fetchedAt,
       schedule.courses, exams);
+    });
   }
 }

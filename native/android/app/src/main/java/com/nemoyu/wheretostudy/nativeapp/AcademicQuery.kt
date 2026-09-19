@@ -224,17 +224,15 @@ internal object AcademicResponseParser {
 }
 
 internal class SjdAcademicClient(private val api: SjdApiClient = SjdApiClient()) {
-    fun terms(credentials: Credentials): AcademicTerms {
-        val token = api.login(credentials)
-        return AcademicResponseParser.terms(
+    fun terms(credentials: Credentials): AcademicTerms = api.authenticated(credentials) { token ->
+        AcademicResponseParser.terms(
             api.post("/bjyddx/currentTerm", SjdApiClient.CLASSROOM_REFERER, token = token),
             api.post("/bjyddx/semesterList", SjdApiClient.CLASSROOM_REFERER, token = token),
         )
     }
-    fun grades(credentials: Credentials, termID: String, recordType: String): AcademicGrades {
-        val token = api.login(credentials)
+    fun grades(credentials: Credentials, termID: String, recordType: String): AcademicGrades = api.authenticated(credentials) { token ->
         val query = java.net.URLEncoder.encode(termID, StandardCharsets.UTF_8.name())
-        return AcademicResponseParser.grades(api.post(
+        AcademicResponseParser.grades(api.post(
             "/bjyddx/student/termGPA?semester=$query&type=$recordType",
             SjdApiClient.CLASSROOM_REFERER, token = token,
         ), termID, recordType)

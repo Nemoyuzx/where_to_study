@@ -18,7 +18,9 @@ import { FileScheduleStore } from '../main/ets/store/ScheduleStore';
 import { FileClassroomStore } from '../main/ets/store/ClassroomStore';
 import { FileHolidayStore } from '../main/ets/store/HolidayStore';
 import { Credentials, CredentialStoring } from '../main/ets/store/CredentialStore';
-import { GradeFetching } from '../main/ets/net/SjdGradeClient';
+import { ExamFetching, GradeFetching, SJDExamClient } from '../main/ets/net/SjdGradeClient';
+import { AssignmentDeadlineFetching, UCloudAssignmentClient } from '../main/ets/net/UCloudAssignmentClient';
+import { AssignmentDeadlineItem } from '../main/ets/net/CalendarDailyInfoClient';
 
 const term: string = '2026-2027-1';
 const start: string = '2026-08-31';
@@ -64,12 +66,24 @@ class AcademicClient implements GradeFetching {
   finish(): void { this.finishDelayed(); }
 }
 
-function modelFor(client: AcademicClient): AppModel {
+class ExamClient implements ExamFetching {
+  count: number = 0;
+  fail: boolean = false;
+  async fetch(credentials: Credentials, termID: string): Promise<ExamSchedule> {
+    this.count++;
+    if (this.fail) { throw new Error('synthetic outage'); }
+    return new ExamSchedule(termID, owner, fetched, 'fresh', '', [exam('query', start, '', '')]);
+  }
+}
+
+function modelFor(client: AcademicClient,
+  assignments: AssignmentDeadlineFetching = new UCloudAssignmentClient(),
+  exams: ExamFetching = new SJDExamClient()): AppModel {
   const model: AppModel = new AppModel(AppRuntimeMode.live(), new AcademicCredentials(),
     new FileScheduleStore('unused-academic-schedule'), undefined,
     new FileClassroomStore('unused-academic-classrooms'), undefined,
     new FileHolidayStore('unused-academic-holidays'), undefined, undefined, undefined,
-    'academic-unit-tests', undefined, undefined, undefined, undefined, client);
+    'academic-unit-tests', undefined, assignments, undefined, undefined, client, exams);
   model.account = 'synthetic-account';
   model.hasSavedPassword = true;
   return model;
@@ -215,10 +229,76 @@ export default function academicQueryTest() {
       expect(requests[0].body.includes('考试 · 时间待定')).assertTrue();
     });
 
-    it('three_query_tabs_fit_phone_tablet_and_large_text_policy', 0, () => {
+    it('five_query_tabs_fit_phone_tablet_and_large_text_policy', 0, () => {
       expect(QueryPageContract.verticalTabs(390, 1)).assertFalse();
       expect(QueryPageContract.verticalTabs(320, 2)).assertTrue();
       expect(QueryPageContract.verticalTabs(1024, 2)).assertFalse();
+    });
+
+    it('exam_queries_require_explicit_refresh_and_retain_same_term_on_failure', 0, async () => {
+      const client = new ExamClient();
+      const model = modelFor(new AcademicClient(), undefined, client);
+      expect(client.count).assertEqual(0);
+      await model.loadExamQuery();
+      expect(model.examQuerySnapshot?.termID).assertEqual(term);
+      model.selectExamQueryTerm('previous');
+      expect(model.examQuerySnapshot).assertNull();
+      expect(client.count).assertEqual(1);
+      await model.loadExamQuery(true);
+      model.selectExamQueryTerm(term);
+      expect(model.examQuerySnapshot?.termID).assertEqual(term);
+      expect(client.count).assertEqual(2);
+      client.fail = true;
+      await model.loadExamQuery(true);
+      expect(model.examQuerySnapshot?.termID).assertEqual(term);
+      expect(model.examQueryError.length > 0).assertTrue();
+      model.resetGradeState();
+      expect(model.examQuerySnapshot).assertNull();
+    });
+
+    it('assignment_catalog_shares_calendar_cache_and_preserves_last_good_on_error', 0, async () => {
+      let calls: number = 0;
+      let fail: boolean = false;
+      const client = new UCloudAssignmentClient(async (credentials: Credentials): Promise<AssignmentDeadlineItem[]> => {
+        calls++;
+        if (fail) { throw new Error('synthetic outage'); }
+        return [new AssignmentDeadlineItem('synthetic', '合成作业', '合成课程', start + ' 23:59:00', '未提交')];
+      });
+      const model = modelFor(new AcademicClient(), client);
+      expect(calls).assertEqual(0);
+      await client.fetch(new Credentials('synthetic-account', 'fixture-only'), start);
+      await model.loadAssignmentCatalog();
+      expect(calls).assertEqual(1);
+      expect(model.assignmentCatalog.length).assertEqual(1);
+      expect(model.assignmentDeadlinesByDate.get(start)?.length).assertEqual(1);
+      const timestamp: string = model.assignmentCatalogFetchedAt;
+      fail = true;
+      await model.loadAssignmentCatalog(true);
+      expect(calls).assertEqual(2);
+      expect(model.assignmentCatalog.length).assertEqual(1);
+      expect(model.assignmentCatalogFetchedAt).assertEqual(timestamp);
+      expect(model.assignmentCatalogError.length > 0).assertTrue();
+    });
+
+    it('late_assignment_catalog_cannot_repopulate_after_mode_change', 0, async () => {
+      let release: () => void = () => {};
+      let began: () => void = () => {};
+      const started: Promise<void> = new Promise<void>((resolve) => { began = resolve; });
+      const gate: Promise<void> = new Promise<void>((resolve) => { release = resolve; });
+      const client = new UCloudAssignmentClient(async (credentials: Credentials): Promise<AssignmentDeadlineItem[]> => {
+        began();
+        await gate;
+        return [new AssignmentDeadlineItem('old', 'Old', null, start + ' 23:59:00', null)];
+      });
+      const model = modelFor(new AcademicClient(), client);
+      const request: Promise<void> = model.loadAssignmentCatalog();
+      await started;
+      model.enterReviewDemo();
+      release();
+      await request;
+      expect(model.assignmentCatalog.length).assertEqual(0);
+      expect(model.assignmentCatalogFetchedAt).assertEqual('');
+      expect(model.assignmentCatalogLoading).assertFalse();
     });
 
     it('grade_cache_separates_term_type_and_explicit_refresh', 0, async () => {

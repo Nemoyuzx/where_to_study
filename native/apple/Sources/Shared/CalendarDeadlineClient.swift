@@ -202,12 +202,16 @@ extension PublicDeadlineFetching {
 }
 
 protocol AssignmentDeadlineFetching: Sendable {
+    func fetchAll(force: Bool) async throws -> [AssignmentDeadlineItem]
     func fetch(date: String) async throws -> [AssignmentDeadlineItem]
     func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]]
     func reset() async
 }
 
 extension AssignmentDeadlineFetching {
+    func fetchAll(force: Bool) async throws -> [AssignmentDeadlineItem] {
+        throw CalendarDeadlineError.service("课程作业查询暂不可用，请稍后重试。")
+    }
     func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]] {
         var itemsByDate = [String: [AssignmentDeadlineItem]]()
         for date in dates {
@@ -788,10 +792,18 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
         let items: [AssignmentDeadlineItem]
     }
 
-    private struct AuthenticatedSession {
+    private final class AuthenticatedSession: Sendable {
         let session: URLSession
         let accessToken: String
         let userID: String
+
+        init(session: URLSession, accessToken: String, userID: String) {
+            self.session = session
+            self.accessToken = accessToken
+            self.userID = userID
+        }
+
+        deinit { session.invalidateAndCancel() }
     }
 
     private struct InFlightFetch {
@@ -812,6 +824,9 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     private static let maximumCourses = 100
     private static let maximumAssignments = 5_000
     private static let cacheLifetime: TimeInterval = 10 * 60
+    private static let sessions = AuthenticationSessionCache<AuthenticatedSession>()
+
+    nonisolated static func resetSessions() { sessions.reset() }
 
     private let credentialStore: any CredentialStoring
     private let fetchAllProvider: @Sendable (Credentials) async throws -> [AssignmentDeadlineItem]
@@ -845,6 +860,10 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
         return itemsByDate[date] ?? []
     }
 
+    func fetchAll(force: Bool = false) async throws -> [AssignmentDeadlineItem] {
+        try await accountWideItems(force: force)
+    }
+
     func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]] {
         let requestedDates = Array(Set(dates)).sorted()
         guard requestedDates.allSatisfy({ StrictContractDateParser.date(from: $0) != nil }) else {
@@ -865,7 +884,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
         return itemsByDate
     }
 
-    private func accountWideItems() async throws -> [AssignmentDeadlineItem] {
+    private func accountWideItems(force: Bool = false) async throws -> [AssignmentDeadlineItem] {
         guard let credentials = try credentialStore.load(),
               !credentials.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !credentials.effectiveTeachingCloudPassword.isEmpty
@@ -883,7 +902,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
             activeCredentials = normalizedCredentials
         }
         let allItems: [AssignmentDeadlineItem]
-        if let cache,
+        if !force, let cache,
            cache.account == account,
            Date().timeIntervalSince(cache.fetchedAt) < Self.cacheLifetime {
             allItems = cache.items
@@ -937,6 +956,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     }
 
     private func invalidateAuthentication() {
+        Self.sessions.reset()
         revision &+= 1
         cache = nil
         activeCredentials = nil
@@ -946,8 +966,14 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     }
 
     private static func fetchAll(credentials: Credentials) async throws -> [AssignmentDeadlineItem] {
-        let authenticated = try await authenticate(credentials: credentials)
-        defer { authenticated.session.invalidateAndCancel() }
+        try await sessions.perform(
+            key: AuthenticationSessionPolicy.key(account: credentials.account, password: credentials.password),
+            login: { try await authenticate(credentials: credentials) },
+            operation: { try await fetchAll(authenticated: $0) }
+        )
+    }
+
+    private static func fetchAll(authenticated: AuthenticatedSession) async throws -> [AssignmentDeadlineItem] {
         let courseRoot = try await getAPI(
             path: "/ykt-site/site/list/student/current",
             queryItems: [
@@ -987,6 +1013,8 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
                     root: root,
                     courseNameOverride: course.name
                 ))
+            } catch AuthenticationSessionError.expired {
+                throw AuthenticationSessionError.expired
             } catch {
                 if firstCourseError == nil { firstCourseError = error }
             }
@@ -997,20 +1025,26 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
                 ?? CalendarDeadlineError.service("教学云课程作业接口暂时不可用。")
         }
 
-        if let undoneRoot = try? await getAPI(
+        do {
+            let undoneRoot = try await getAPI(
             path: "/ykt-site/site/student/undone",
             queryItems: [URLQueryItem(name: "userId", value: authenticated.userID)],
             authenticated: authenticated
-        ) {
+            )
             allItems.append(contentsOf: AssignmentDeadlineParser.parseAll(
                 root: undoneRoot,
                 courseNameOverride: nil
             ))
+        } catch AuthenticationSessionError.expired {
+            throw AuthenticationSessionError.expired
+        } catch {
+            // The supplementary undone feed is optional. Other request failures
+            // keep the original course-list behavior and never trigger login.
         }
         return merge(allItems)
     }
 
-    private static func authenticate(credentials: Credentials) async throws -> AuthenticatedSession {
+    private static func authenticate(credentials: Credentials) async throws -> AuthenticationSession<AuthenticatedSession> {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 30
@@ -1101,11 +1135,11 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
             else {
                 throw CalendarDeadlineError.service("教学云令牌接口未返回有效令牌或用户标识。")
             }
-            return AuthenticatedSession(
+            return AuthenticationSession(value: AuthenticatedSession(
                 session: session,
                 accessToken: accessToken,
                 userID: userID
-            )
+            ), expiresAt: AuthenticationSessionPolicy.expiresAt(token: accessToken, payload: tokenObject))
         } catch {
             session.invalidateAndCancel()
             throw error
@@ -1145,6 +1179,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
 
     private static func apiRoot(request: URLRequest, session: URLSession) async throws -> Any {
         let (data, response) = try await session.data(for: request)
+        try AuthenticationSessionPolicy.checkExpiration(data: data, response: response)
         _ = try checkedHTTP(
             response,
             data: data,
@@ -1211,9 +1246,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     }
 
     private static func formData(_ fields: [(String, String)]) -> Data? {
-        var components = URLComponents()
-        components.queryItems = fields.map { URLQueryItem(name: $0.0, value: $0.1) }
-        return components.percentEncodedQuery?.data(using: .utf8)
+        SJDFormURLEncoder.data(Dictionary(uniqueKeysWithValues: fields))
     }
 
     private static func cookieHeader(response: HTTPURLResponse, url: URL) -> String {
@@ -1513,6 +1546,11 @@ final class CalendarDeadlineStore: ObservableObject {
     @Published private(set) var assignmentsByDate = [String: [AssignmentDeadlineItem]]()
     @Published private(set) var assignmentUnavailableByDate = [String: String]()
     @Published private(set) var loadingAssignmentDates = Set<String>()
+    @Published private(set) var assignmentQueryItems: [AssignmentDeadlineItem]?
+    @Published private(set) var assignmentQueryError = ""
+    @Published private(set) var isLoadingAssignmentQuery = false
+    @Published private(set) var assignmentQueryFetchedAt: String?
+    private var assignmentQueryAttempted = false
     @Published private(set) var isLoadingPublicFeed = false
     @Published private(set) var publicFeedError = ""
 
@@ -1836,7 +1874,7 @@ final class CalendarDeadlineStore: ObservableObject {
             let generated = await Task.detached(priority: .utility) {
                 SampleCalendarDeadlineBuilder.assignments(dates: requestedDates)
             }.value
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, revisionBeforeReset == assignmentRevision else { return }
             var updatedAssignments = assignmentsByDate
             var updatedUnavailable = assignmentUnavailableByDate
             for date in requestedDates {
@@ -1881,8 +1919,48 @@ final class CalendarDeadlineStore: ObservableObject {
         }
     }
 
+    func loadAssignmentQuery(sampleMode: Bool, force: Bool = false) async {
+        let beforeReset = assignmentRevision
+        await assignmentResetTask?.value
+        guard beforeReset == assignmentRevision, !isLoadingAssignmentQuery,
+              force || !assignmentQueryAttempted else { return }
+        assignmentQueryAttempted = true
+        if sampleMode {
+            let today = StrictContractDateParser.string(from: .now)
+            assignmentQueryItems = SampleCalendarDeadlineBuilder.assignments(dates: [today])[today] ?? []
+            assignmentQueryFetchedAt = SJDClassroomClient.timestamp()
+            assignmentQueryError = ""
+            return
+        }
+        let requestRevision = assignmentRevision
+        isLoadingAssignmentQuery = true
+        assignmentQueryError = ""
+        defer { if requestRevision == assignmentRevision { isLoadingAssignmentQuery = false } }
+        do {
+            let items = try await assignmentClient.fetchAll(force: force)
+            guard requestRevision == assignmentRevision else { return }
+            assignmentQueryItems = items
+            assignmentQueryFetchedAt = SJDClassroomClient.timestamp()
+            let grouped = Dictionary(grouping: items, by: { String($0.deadline.prefix(10)) })
+            // Update dates already loaded by the calendar, including newly empty
+            // dates, and share new results with subsequent calendar navigation.
+            for date in Set(assignmentsByDate.keys).union(grouped.keys) {
+                assignmentsByDate[date] = grouped[date] ?? []
+                assignmentUnavailableByDate.removeValue(forKey: date)
+            }
+        } catch {
+            guard requestRevision == assignmentRevision else { return }
+            assignmentQueryError = "课程作业获取失败，请检查个人账户中的教学云密码或稍后重试。"
+        }
+    }
+
     func clearAssignments() {
         assignmentRevision &+= 1
+        assignmentQueryItems = nil
+        assignmentQueryError = ""
+        assignmentQueryFetchedAt = nil
+        assignmentQueryAttempted = false
+        isLoadingAssignmentQuery = false
         assignmentsByDate.removeAll()
         assignmentUnavailableByDate.removeAll()
         loadingAssignmentDates.removeAll()

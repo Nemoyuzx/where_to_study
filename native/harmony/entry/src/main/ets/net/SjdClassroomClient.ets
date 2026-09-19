@@ -22,14 +22,15 @@ export class SJDClassroomClient implements ClassroomFetching {
     if (targetDate !== today) {
       throw ClassroomClientError.service('空教室实时接口仅支持当天查询。');
     }
-    const token: string = await this.api.login(credentials);
-    const results: string[] = await Promise.all([
-      this.api.classrooms(token, '01'),
-      this.api.classrooms(token, '04')
-    ]);
-    const payloads: Map<string, string> = new Map<string, string>();
-    payloads.set('01', results[0]);
-    payloads.set('04', results[1]);
-    return SJDClassroomParser.parse(payloads, targetDate, StrictDates.formatFetchedAt(Date.now()));
+    return await this.api.withSession(credentials, async (token: string): Promise<ClassroomsCache> => {
+      const results: string[] = await Promise.all([
+        this.api.classrooms(token, '01'),
+        this.api.classrooms(token, '04')
+      ]);
+      const payloads: Map<string, string> = new Map<string, string>();
+      payloads.set('01', results[0]);
+      payloads.set('04', results[1]);
+      return SJDClassroomParser.parse(payloads, targetDate, StrictDates.formatFetchedAt(Date.now()));
+    });
   }
 }

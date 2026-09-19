@@ -11,9 +11,11 @@ import { Utf8 } from '../common/Utf8';
 import { Credentials } from '../store/CredentialStore';
 import { AssignmentDeadlineItem, AssignmentDeadlineResponseParser } from './CalendarDailyInfoClient';
 import { SJDFormURLEncoder } from './SjdEncoding';
+import { AuthenticatedSession, AuthenticationExpiredError, AuthenticationFailure, SessionLease } from './AuthenticatedSession';
 
 export interface AssignmentDeadlineFetching {
   fetch(credentials: Credentials, date: string): Promise<AssignmentDeadlineItem[]>;
+  fetchCatalog(credentials: Credentials, refresh?: boolean): Promise<AssignmentDeadlineItem[]>;
   reset(): void;
 }
 
@@ -77,6 +79,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
   private static readonly cacheLifetimeMs: number = 10 * 60 * 1000;
 
   private cache: UCloudAssignmentCache | null = null;
+  private readonly sessions: AuthenticatedSession<UCloudSession> = new AuthenticatedSession<UCloudSession>();
   private inFlight: Promise<AssignmentDeadlineItem[]> | null = null;
   private inFlightAccount: string = '';
   private revision: number = 0;
@@ -94,6 +97,11 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     if (StrictDates.parseDateString(date) === null) {
       throw new Error('作业日期格式不正确。');
     }
+    const items: AssignmentDeadlineItem[] = await this.fetchCatalog(credentials);
+    return items.filter((item: AssignmentDeadlineItem): boolean => item.deadline.startsWith(date));
+  }
+
+  async fetchCatalog(credentials: Credentials, refresh: boolean = false): Promise<AssignmentDeadlineItem[]> {
     const account: string = credentials.account.trim();
     const password: string = credentials.effectiveCloudPassword();
     if (account.length === 0 || password.length === 0) {
@@ -107,7 +115,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     }
     let allItems: AssignmentDeadlineItem[];
     const now: number = Date.now();
-    if (this.cache !== null && this.cache.account === account &&
+    if (!refresh && this.cache !== null && this.cache.account === account &&
       now - this.cache.fetchedAt < UCloudAssignmentClient.cacheLifetimeMs) {
       allItems = this.cache.items;
     } else if (this.inFlight !== null && this.inFlightAccount === account) {
@@ -116,7 +124,9 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       const requestRevision: number = this.revision;
       const normalized: Credentials = new Credentials(account, password);
       const work: Promise<AssignmentDeadlineItem[]> = this.fetchAllProvider === null ?
-        this.fetchAll(normalized) : this.fetchAllProvider(normalized);
+        this.sessions.run(account, password, (): Promise<SessionLease<UCloudSession>> => this.authenticate(normalized),
+          (session: UCloudSession): Promise<AssignmentDeadlineItem[]> => this.fetchAll(session)) :
+        this.fetchAllProvider(normalized);
       this.inFlight = work;
       this.inFlightAccount = account;
       try {
@@ -131,17 +141,12 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
         }
       }
     }
-    const result: AssignmentDeadlineItem[] = [];
-    for (const item of allItems) {
-      if (item.deadline.startsWith(date)) {
-        result.push(item);
-      }
-    }
-    return result;
+    return allItems;
   }
 
   reset(): void {
     this.revision++;
+    this.sessions.reset();
     this.cache = null;
     this.inFlight = null;
     this.inFlightAccount = '';
@@ -149,8 +154,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     this.activePassword = '';
   }
 
-  private async fetchAll(credentials: Credentials): Promise<AssignmentDeadlineItem[]> {
-    const session: UCloudSession = await this.authenticate(credentials);
+  private async fetchAll(session: UCloudSession): Promise<AssignmentDeadlineItem[]> {
     const courseQuery: Map<string, string> = new Map<string, string>();
     courseQuery.set('size', '9999');
     courseQuery.set('current', '1');
@@ -190,12 +194,13 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
           allItems.push(item);
         }
       } catch (e) {
+        if (e instanceof AuthenticationExpiredError) { throw e; }
         if (firstCourseError === null) {
           firstCourseError = e instanceof Error ? e : new Error('教学云课程作业接口暂时不可用。');
         }
       }
     }
-    if (courses.length > 0 && successfulCourseRequests === 0) {
+    if (firstCourseError !== null || (courses.length > 0 && successfulCourseRequests === 0)) {
       throw firstCourseError ?? new Error('教学云课程作业接口暂时不可用。');
     }
 
@@ -210,12 +215,13 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
         allItems.push(item);
       }
     } catch (e) {
+      if (e instanceof AuthenticationExpiredError) { throw e; }
       // 首页未完成列表仅用于补漏；课程作业列表成功时不因补漏失败而丢弃结果。
     }
     return UCloudAssignmentClient.merge(allItems);
   }
 
-  private async authenticate(credentials: Credentials): Promise<UCloudSession> {
+  private async authenticate(credentials: Credentials): Promise<SessionLease<UCloudSession>> {
     const loginPage: UCloudHTTPResult = await UCloudAssignmentClient.request(
       UCloudAssignmentClient.casLoginURL, http.RequestMethod.GET,
       UCloudAssignmentClient.htmlHeaders(), '', UCloudAssignmentClient.maximumLoginBytes,
@@ -272,7 +278,10 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     if (userID.length === 0) {
       throw new Error('教学云令牌接口未返回用户标识。');
     }
-    return new UCloudSession(accessToken, userID);
+    const lifetime: number = Number(tokenRoot['expires_in']);
+    const lifetimeMs: number = Number.isFinite(lifetime) && lifetime > 0 ?
+      Math.max(0, lifetime * 1000 - Math.min(30000, lifetime * 100)) : 10 * 60 * 1000;
+    return new SessionLease<UCloudSession>(new UCloudSession(accessToken, userID), Date.now() + lifetimeMs);
   }
 
   private async apiGet(
@@ -306,6 +315,10 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     if (root === null) {
       throw new Error('教学云数据接口没有返回有效 JSON。');
     }
+    if (AuthenticationFailure.isExpired(200, JsonUtil.string(root['code']),
+      JsonUtil.string(root['msg']) + ' ' + JsonUtil.string(root['message']))) {
+      throw new AuthenticationExpiredError();
+    }
     if (root['code'] !== undefined && JsonUtil.string(root['code']) !== '200') {
       const code: string = JsonUtil.string(root['code'], 'unknown');
       throw new Error('教学云数据接口返回业务状态 ' + code + '。');
@@ -334,6 +347,10 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       const status: number = typeof response.responseCode === 'number' ?
         response.responseCode as number : 0;
       if (status < minimumStatus || status > maximumStatus) {
+        if (expectedHost === 'apiucloud.bupt.edu.cn' &&
+          !url.includes('/oauth/token') && AuthenticationFailure.isExpired(status, '', '')) {
+          throw new AuthenticationExpiredError();
+        }
         if (status >= 300 && status < 400) {
           throw new Error('教学云接口返回了不受信任的重定向。');
         }
@@ -344,6 +361,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       return new UCloudHTTPResult(status, responseBody,
         response.header as Record<string, Object>);
     } catch (e) {
+      if (e instanceof AuthenticationExpiredError) { throw e; }
       if (e instanceof Error && (e.message.startsWith('教学云接口') ||
         e.message.startsWith('统一认证'))) {
         throw e;
@@ -548,6 +566,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     const first: Record<string, Object> = Object.keys(firstValue).length > 0 ? firstValue : root;
     const secondValue: Record<string, Object> = JsonUtil.record(first['data']);
     const second: Record<string, Object> = Object.keys(secondValue).length > 0 ? secondValue : first;
+    if (!Array.isArray(second['records'])) { throw new Error('教学云课程列表数据格式不正确。'); }
     const records: Object[] = JsonUtil.array(second['records']);
     const courses: UCloudCourse[] = [];
     for (const raw of records) {

@@ -22,3 +22,5 @@ pub mod public_queries;
 pub mod schedule;
 #[path = "../../src-tauri/src/scoped_cache.rs"]
 pub mod scoped_cache;
+#[path = "../../src-tauri/src/session_cache.rs"]
+pub mod session_cache;

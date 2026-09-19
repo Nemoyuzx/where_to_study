@@ -10,11 +10,13 @@ import {
 
 export default function queryLogicTest() {
   describe('QueryLogicTest', () => {
-    it('query_contract_has_three_segmented_tabs_and_all_categories', 0, () => {
-      expect(QueryPageContract.tabs.length).assertEqual(3);
+    it('query_contract_has_five_segmented_tabs_and_all_categories', 0, () => {
+      expect(QueryPageContract.tabs.length).assertEqual(5);
       expect(QueryPageContract.tabs[0]).assertEqual(QueryPageTab.shuttle);
       expect(QueryPageContract.tabs[1]).assertEqual(QueryPageTab.events);
       expect(QueryPageContract.tabs[2]).assertEqual(QueryPageTab.grades);
+      expect(QueryPageContract.tabs[3]).assertEqual(QueryPageTab.exams);
+      expect(QueryPageContract.tabs[4]).assertEqual(QueryPageTab.assignments);
       expect(QueryPageContract.filters.indexOf(ImportantEventFilter.conference) >= 0).assertTrue();
       expect(QueryPageContract.filters.indexOf(ImportantEventFilter.schoolNotice) >= 0).assertTrue();
       expect(QueryPageContract.tabAccessibilityID(QueryPageTab.events))

@@ -4,14 +4,28 @@ enum InformationQueryMode: String, CaseIterable, Identifiable {
     case shuttle
     case importantEvents
     case grades
+    case exams
+    case assignments
 
     var id: String { rawValue }
+
+    var compactTitleKey: String {
+        switch self {
+        case .shuttle: "班车"
+        case .importantEvents: "事件"
+        case .grades: "成绩"
+        case .exams: "考试安排"
+        case .assignments: "作业"
+        }
+    }
 
     var titleKey: String {
         switch self {
         case .shuttle: "班车查询"
         case .importantEvents: "重要事件"
         case .grades: "成绩查询"
+        case .exams: "考试安排"
+        case .assignments: "课程作业 DDL"
         }
     }
 }
@@ -285,7 +299,9 @@ struct InformationQueriesView: View {
                     )
                     Picker("查询类型", selection: $selectedMode) {
                         ForEach(InformationQueryMode.allCases) { mode in
-                            Text(model.localized(mode.titleKey)).tag(mode)
+                            Text(model.localized(proxy.size.width < 560 ? mode.compactTitleKey : mode.titleKey))
+                                .accessibilityLabel(model.localized(mode.titleKey))
+                                .tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -299,6 +315,10 @@ struct InformationQueriesView: View {
                         importantEventsContent
                     case .grades:
                         GradeQueryView(store: model.gradeStore)
+                    case .exams:
+                        ExamQueryView()
+                    case .assignments:
+                        AssignmentQueryView(store: calendarDeadlines)
                     }
                 }
                 .padding(16)
@@ -321,6 +341,11 @@ struct InformationQueriesView: View {
         }
         .task(id: eventQueryKey) {
             await eventQueryStore.update(key: eventQueryKey, snapshots: calendarDeadlines.publicByDate)
+        }
+        .task(id: model.calendarDataOwnerRevision) {
+            async let grades: Void = model.loadGrades(termID: model.gradeStore.selectedTerm, recordType: model.gradeStore.recordType)
+            async let assignments: Void = calendarDeadlines.loadAssignmentQuery(sampleMode: model.isSampleMode)
+            _ = await (grades, assignments)
         }
     }
 

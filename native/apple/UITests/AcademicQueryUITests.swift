@@ -8,7 +8,14 @@ final class AcademicQueryUITests: XCTestCase {
         app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "en"
         app.launch()
         defer { app.terminate() }
-        navigate("queries", title: "Queries", in: app)
+        navigate("queries", title: "Search", in: app)
+        let assignments = app.segmentedControls.buttons["Assignment Deadlines"]
+        XCTAssertTrue(assignments.waitForExistence(timeout: 10))
+        assignments.tap()
+        XCTAssertTrue(app.staticTexts["Sample assignments; no teaching cloud connection"].waitForExistence(timeout: 10))
+        capture("synthetic-assignment-query-english")
+        app.segmentedControls.buttons["Exams"].tap()
+        XCTAssertTrue(app.staticTexts["Sample exams; no school connection"].waitForExistence(timeout: 10))
         let grades = app.segmentedControls.buttons["Grades"]
         XCTAssertTrue(grades.waitForExistence(timeout: 10))
         grades.tap()
@@ -26,6 +33,16 @@ final class AcademicQueryUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         navigate("queries", title: "查询", in: app)
+        let assignments = app.segmentedControls.buttons["课程作业 DDL"]
+        XCTAssertTrue(assignments.waitForExistence(timeout: 10))
+        assignments.tap()
+        XCTAssertTrue(app.staticTexts["示例课程作业"].waitForExistence(timeout: 10))
+        app.buttons["assignments.refresh"].tap()
+        XCTAssertTrue(app.staticTexts["示例课程作业"].waitForExistence(timeout: 5))
+        capture("synthetic-assignment-query")
+        app.segmentedControls.buttons["考试安排"].tap()
+        XCTAssertTrue(app.staticTexts["示例考试（非真实安排）"].waitForExistence(timeout: 10))
+        capture("synthetic-exam-query")
         let grades = app.segmentedControls.buttons["成绩查询"]
         XCTAssertTrue(grades.waitForExistence(timeout: 10))
         grades.tap()

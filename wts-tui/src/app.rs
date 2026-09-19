@@ -2,11 +2,11 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::color_theme::{ColorTheme, ThemeEditor};
 use chrono::{Datelike, NaiveDate};
-use where_to_study_lib::academic::{self, GradeReport, GradeTerms};
+use where_to_study_lib::academic::{self, ExamSchedule, GradeReport, GradeTerms};
 use where_to_study_lib::config::today_in_app_tz;
 use where_to_study_lib::models::{
-    ClassroomStatus, ClassroomsCacheResponse, Course, HolidaysResponse, ImportantEventItem,
-    ImportantEventsResponse, ScheduleResponse, ShuttleBusResponse,
+    AssignmentDeadlineItem, ClassroomStatus, ClassroomsCacheResponse, Course, HolidaysResponse,
+    ImportantEventItem, ImportantEventsResponse, ScheduleResponse, ShuttleBusResponse,
 };
 use where_to_study_lib::public_queries::{ImportantEventFilter, ImportantEventSourceFilter};
 use zeroize::Zeroizing;
@@ -27,6 +27,8 @@ pub enum QuerySection {
     Shuttle,
     Events,
     Grades,
+    Exams,
+    Assignments,
 }
 
 pub struct App {
@@ -72,6 +74,10 @@ pub struct App {
     pub grades: Option<GradeReport>,
     pub grade_error: Option<String>,
     pub grade_cursor: usize,
+    pub query_exams: Option<ExamSchedule>,
+    pub exam_error: Option<String>,
+    pub query_assignments: Option<Vec<AssignmentDeadlineItem>>,
+    pub assignment_error: Option<String>,
     pub schedule_agenda_scroll: usize,
     grade_cache: VecDeque<GradeReport>,
     pub query_section: QuerySection,
@@ -93,6 +99,8 @@ pub struct App {
     pending_shuttle: Option<u64>,
     pending_events: Option<u64>,
     pending_grades: Option<u64>,
+    pending_exams: Option<u64>,
+    pending_assignments: Option<u64>,
 }
 
 impl App {
@@ -142,6 +150,10 @@ impl App {
             grades: None,
             grade_error: None,
             grade_cursor: 0,
+            query_exams: None,
+            exam_error: None,
+            query_assignments: None,
+            assignment_error: None,
             schedule_agenda_scroll: 0,
             grade_cache: VecDeque::new(),
             query_section: QuerySection::Shuttle,
@@ -163,6 +175,8 @@ impl App {
             pending_shuttle: None,
             pending_events: None,
             pending_grades: None,
+            pending_exams: None,
+            pending_assignments: None,
         }
     }
 
@@ -180,6 +194,7 @@ impl App {
             schedule.exam_schedule = None;
         }
         academic::merge_exam_fallback(&mut schedule, self.raw_schedule.as_ref());
+        self.query_exams = schedule.exam_schedule.clone();
         self.raw_schedule = Some(schedule);
         self.schedule_agenda_scroll = 0;
         self.recompute_schedule();
@@ -603,6 +618,12 @@ impl App {
     }
 
     pub fn invalidate_data_requests(&mut self) {
+        self.pending_exams = None;
+        self.pending_assignments = None;
+        self.query_exams = None;
+        self.exam_error = None;
+        self.query_assignments = None;
+        self.assignment_error = None;
         self.pending_grades = None;
         self.grades = None;
         self.grade_terms = None;
@@ -627,7 +648,76 @@ impl App {
             || self.pending_classrooms.is_some()
             || self.pending_shuttle.is_some()
             || self.pending_events.is_some();
-        self.loading |= self.pending_grades.is_some();
+        self.loading |= self.pending_grades.is_some()
+            || self.pending_exams.is_some()
+            || self.pending_assignments.is_some();
+    }
+
+    pub fn private_query_loading(&self, section: QuerySection) -> bool {
+        match section {
+            QuerySection::Exams => self.pending_exams.is_some(),
+            QuerySection::Assignments => self.pending_assignments.is_some(),
+            _ => false,
+        }
+    }
+
+    pub fn start_exam_request(&mut self) -> u64 {
+        let id = self.next_request_id();
+        self.pending_exams = Some(id);
+        self.exam_error = None;
+        self.sync_loading();
+        id
+    }
+
+    pub fn finish_exam_request(&mut self, id: u64, result: Result<ExamSchedule, String>) -> bool {
+        if self.pending_exams != Some(id) {
+            return false;
+        }
+        self.pending_exams = None;
+        match result {
+            Ok(exams) => {
+                if let Some(schedule) = self
+                    .raw_schedule
+                    .as_mut()
+                    .filter(|schedule| schedule.term_id == exams.term_id)
+                {
+                    schedule.exam_schedule = Some(exams.clone());
+                }
+                self.query_exams = Some(exams);
+                self.recompute_schedule();
+            }
+            Err(error) => self.exam_error = Some(error),
+        }
+        self.sync_loading();
+        true
+    }
+
+    pub fn start_assignment_request(&mut self) -> u64 {
+        let id = self.next_request_id();
+        self.pending_assignments = Some(id);
+        self.assignment_error = None;
+        self.sync_loading();
+        id
+    }
+
+    pub fn finish_assignment_request(
+        &mut self,
+        id: u64,
+        result: Result<Vec<AssignmentDeadlineItem>, String>,
+    ) -> bool {
+        if self.pending_assignments != Some(id) {
+            return false;
+        }
+        self.pending_assignments = None;
+        match result {
+            Ok(mut items) => {
+                items.sort_by(|a, b| (&a.deadline, &a.title).cmp(&(&b.deadline, &b.title)));
+                self.query_assignments = Some(items);
+            }
+            Err(error) => self.assignment_error = Some(error),
+        }
+        self.sync_loading();
+        true
     }
 
     pub fn all_query_events(&self) -> Vec<ImportantEventItem> {
@@ -1153,5 +1243,47 @@ mod tests {
         assert!(app.loading);
         assert!(app.finish_events_request(events));
         assert!(!app.loading);
+    }
+
+    #[test]
+    fn private_query_results_survive_failure_but_clear_on_credential_changes() {
+        let mut app = App::new(false);
+        let item = AssignmentDeadlineItem {
+            id: "synthetic".into(),
+            title: "课程作业示例".into(),
+            course_name: Some("示例课程".into()),
+            deadline: "2026-09-20 18:00:00".into(),
+            status: Some("未提交".into()),
+        };
+        let first = app.start_assignment_request();
+        assert!(app.finish_assignment_request(first, Ok(vec![item.clone()])));
+        let retry = app.start_assignment_request();
+        assert!(app.finish_assignment_request(retry, Err("offline".into())));
+        assert_eq!(app.query_assignments.as_ref().unwrap(), &[item]);
+        let exam = app.start_exam_request();
+        assert!(app.finish_exam_request(exam, Ok(ExamSchedule::default())));
+        let pending = app.start_assignment_request();
+        let pending_exam = app.start_exam_request();
+        app.invalidate_data_requests();
+        assert!(!app.finish_assignment_request(pending, Ok(vec![])));
+        assert!(!app.finish_exam_request(pending_exam, Ok(ExamSchedule::default())));
+        assert!(app.query_assignments.is_none());
+        assert!(app.query_exams.is_none());
+        assert!(!app.loading);
+    }
+
+    #[test]
+    fn successful_empty_assignments_replace_previous_results() {
+        let mut app = App::new(false);
+        app.query_assignments = Some(vec![AssignmentDeadlineItem {
+            id: "old".into(),
+            title: "old".into(),
+            course_name: None,
+            deadline: "2026-09-20 18:00:00".into(),
+            status: None,
+        }]);
+        let request = app.start_assignment_request();
+        assert!(app.finish_assignment_request(request, Ok(vec![])));
+        assert_eq!(app.query_assignments, Some(vec![]));
     }
 }

@@ -44,11 +44,11 @@ test("release validation treats shell metacharacters in paths and labels as data
   const script = path.join(directory, "validation 'quoted' $(exit 71); exit 72;.sh");
   try {
     writeFileSync(script, readFileSync(validationScript));
-    assert.doesNotThrow(() => validateReleaseLabel("v0.2.9", script));
+    assert.doesNotThrow(() => validateReleaseLabel("v0.3.0", script));
     for (const label of [
-      `v0.2.9; touch '${marker}'`,
+      `v0.3.0; touch '${marker}'`,
       `$(touch '${marker}')`,
-      `v0.2.9\n touch '${marker}'`,
+      `v0.3.0\n touch '${marker}'`,
     ]) {
       assert.throws(() => validateReleaseLabel(label, script));
     }
@@ -58,7 +58,7 @@ test("release validation treats shell metacharacters in paths and labels as data
   }
 });
 
-test("client versions consistently release 0.2.9 with fresh distribution build counters", () => {
+test("client versions consistently release 0.3.0 with fresh distribution build counters", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -110,31 +110,31 @@ test("client versions consistently release 0.2.9 with fresh distribution build c
     "utf8",
   );
 
-  assert.equal(packageMetadata.version, "0.2.9");
-  assert.equal(tauriMetadata.version, "0.2.9");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 2011);
-  assert.match(cargoManifest, /^version = "0\.2\.9"$/m);
-  assert.match(coreManifest, /^version = "0\.2\.9"$/m);
-  assert.match(cliManifest, /^version = "0\.2\.9"$/m);
-  assert.match(tuiManifest, /^version = "0\.2\.9"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.2\.9"/);
-  assert.match(nativeAndroid, /versionCode = 49/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.2\.9"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "92"/);
-  assert.match(nativeHarmony, /"versionName": "0\.2\.9"/);
-  assert.match(nativeHarmony, /"versionCode": 1002030/);
-  assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.2\.9'/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.2\.9/);
-  assert.match(tauriApple, /CFBundleVersion: "47"/);
-  assert.match(tauriAppleInfo, /<string>0\.2\.9<\/string>/);
-  assert.match(tauriAppleInfo, /<string>47<\/string>/);
-  assert.match(cliWorkflow, /grep -F '0\.2\.9'/);
-  assert.match(tuiWorkflow, /grep -F '0\.2\.9'/);
+  assert.equal(packageMetadata.version, "0.3.0");
+  assert.equal(tauriMetadata.version, "0.3.0");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 2012);
+  assert.match(cargoManifest, /^version = "0\.3\.0"$/m);
+  assert.match(coreManifest, /^version = "0\.3\.0"$/m);
+  assert.match(cliManifest, /^version = "0\.3\.0"$/m);
+  assert.match(tuiManifest, /^version = "0\.3\.0"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.3\.0"/);
+  assert.match(nativeAndroid, /versionCode = 51/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.3\.0"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "94"/);
+  assert.match(nativeHarmony, /"versionName": "0\.3\.0"/);
+  assert.match(nativeHarmony, /"versionCode": 1002031/);
+  assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.3\.0'/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.3\.0/);
+  assert.match(tauriApple, /CFBundleVersion: "51"/);
+  assert.match(tauriAppleInfo, /<string>0\.3\.0<\/string>/);
+  assert.match(tauriAppleInfo, /<string>51<\/string>/);
+  assert.match(cliWorkflow, /grep -F '0\.3\.0'/);
+  assert.match(tuiWorkflow, /grep -F '0\.3\.0'/);
   assert.match(nativeWorkflow, /native-android-universal\.apk/);
   assert.doesNotMatch(nativeWorkflow, /native-android\.aab/);
-  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.9\}"/);
-  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.9\}"/);
-  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.2\.9\}"/);
+  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.0\}"/);
+  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.0\}"/);
+  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.0\}"/);
 });
 
 test("GitHub workflows publish neither HarmonyOS packages nor Android AAB files", () => {

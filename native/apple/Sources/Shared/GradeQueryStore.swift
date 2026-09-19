@@ -8,11 +8,14 @@ final class GradeQueryStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage = ""
     @Published private(set) var isSample = false
+    @Published var selectedTerm: String?
+    @Published var recordType = "1"
     private let client: any GradeFetching
     private var revision = 0
     private var owner = ""
     private var cache: [String: GradeQueryResult] = [:]
     private var cacheOrder: [String] = []
+    private var attemptedKeys = Set<String>()
 
     init(client: any GradeFetching = SJDGradeClient()) { self.client = client }
 
@@ -23,6 +26,7 @@ final class GradeQueryStore: ObservableObject {
         terms = []
         cache.removeAll()
         cacheOrder.removeAll()
+        attemptedKeys.removeAll()
         isLoading = false
         errorMessage = ""
         isSample = false
@@ -37,6 +41,8 @@ final class GradeQueryStore: ObservableObject {
         let nextOwner = CourseDeletionLogic.accountKey(credentials.account) + ":" + String(ownerRevision)
         if owner != nextOwner { reset(); owner = nextOwner }
         let key = "\(termID ?? "<current>")|\(recordType)"
+        if !force, attemptedKeys.contains(key), cache[key] == nil { return }
+        attemptedKeys.insert(key)
         revision &+= 1
         let requestRevision = revision
         if !force, let cached = cache[key] {
@@ -80,8 +86,6 @@ struct GradeQueryView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
     @ObservedObject var store: GradeQueryStore
-    @State private var selectedTerm: String? = nil
-    @State private var recordType = "1"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -93,21 +97,21 @@ struct GradeQueryView: View {
                     .accessibilityIdentifier("grades.refresh")
             }
             if !store.terms.isEmpty {
-                Picker(model.localized("学期"), selection: $selectedTerm) {
+                Picker(model.localized("学期"), selection: $store.selectedTerm) {
                     Text(model.localized("学校当前学期")).tag(String?.none)
                     Text(model.localized("全部学期")).tag(String?.some(""))
                     ForEach(store.terms) { term in Text(term.name).tag(String?.some(term.id)) }
                 }
                 .accessibilityIdentifier("grades.term")
-                .onChange(of: selectedTerm) { _ in load() }
+                .onChange(of: store.selectedTerm) { _ in load() }
             }
-            Picker(model.localized("成绩记录"), selection: $recordType) {
+            Picker(model.localized("成绩记录"), selection: $store.recordType) {
                 Text(model.localized("最好成绩")).tag("1")
                 Text(model.localized("首次成绩")).tag("0")
                 Text(model.localized("全部记录")).tag("")
             }
             .pickerStyle(.segmented)
-            .onChange(of: recordType) { _ in load() }
+            .onChange(of: store.recordType) { _ in load() }
             if store.isSample {
                 Label(model.localized("示例成绩，未连接学校服务"), systemImage: "info.circle").foregroundStyle(theme.secondaryText)
             }
@@ -147,13 +151,9 @@ struct GradeQueryView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("queries.grades")
-        .task(id: model.calendarDataOwnerRevision) {
-            selectedTerm = nil
-            await model.loadGrades(recordType: recordType)
-        }
     }
 
     private func load(force: Bool = false) {
-        Task { await model.loadGrades(termID: selectedTerm, recordType: recordType, force: force) }
+        Task { await model.loadGrades(termID: store.selectedTerm, recordType: store.recordType, force: force) }
     }
 }

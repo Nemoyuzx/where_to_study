@@ -10,11 +10,12 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::classrooms::{
-    login_empty_classroom, read_sjd_json_response, sjd_headers, sjd_http_client,
+    read_sjd_json_response, session_epoch, sjd_headers, sjd_http_client, with_sjd_session_at,
 };
 use crate::config::{now_in_app_tz as now_iso_string, SJD_REST_CLASSROOM_PAGE_URL, SLOT_TIMES};
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{Course, ScheduleResponse};
+use crate::session_cache::SessionEpoch;
 
 const BASE: &str = "https://jwglweixin.bupt.edu.cn/bjyddx";
 const MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -436,17 +437,35 @@ async fn request(path: &str, token: &str, query: &[(&str, &str)]) -> ServiceResu
         .await
         .map_err(|_| ServiceError::new("无法连接学校教务查询服务。"))?;
     if !response.status().is_success() {
-        return Err(ServiceError::new(
+        return Err(ServiceError::with_status(
             "教务查询暂不可用，请检查登录状态后重试。",
+            response.status().as_u16(),
         ));
     }
     read_sjd_json_response(response, MAX_BYTES, "教务查询").await
 }
 
-pub async fn fetch_terms(account: &str, password: &str) -> ServiceResult<GradeTerms> {
-    let token = login_empty_classroom(account, password).await?;
-    let current_term_id = parse_current_term(&request("/currentTerm", &token, &[]).await?)?;
-    let mut terms = parse_terms(&request("/semesterList", &token, &[]).await?)?;
+pub fn fetch_terms<'a>(
+    account: &'a str,
+    password: &'a str,
+) -> impl std::future::Future<Output = ServiceResult<GradeTerms>> + 'a {
+    fetch_terms_at(session_epoch(), account, password)
+}
+
+pub async fn fetch_terms_at(
+    epoch: SessionEpoch,
+    account: &str,
+    password: &str,
+) -> ServiceResult<GradeTerms> {
+    with_sjd_session_at(epoch, account, password, |token| async move {
+        fetch_terms_with_token(&token).await
+    })
+    .await
+}
+
+async fn fetch_terms_with_token(token: &str) -> ServiceResult<GradeTerms> {
+    let current_term_id = parse_current_term(&request("/currentTerm", token, &[]).await?)?;
+    let mut terms = parse_terms(&request("/semesterList", token, &[]).await?)?;
     if !terms.iter().any(|t| t.id == current_term_id) {
         terms.insert(
             0,
@@ -462,7 +481,16 @@ pub async fn fetch_terms(account: &str, password: &str) -> ServiceResult<GradeTe
     })
 }
 
-pub async fn fetch_grades(
+pub fn fetch_grades<'a>(
+    account: &'a str,
+    password: &'a str,
+    query: &'a GradeRequest,
+) -> impl std::future::Future<Output = ServiceResult<GradeReport>> + 'a {
+    fetch_grades_at(session_epoch(), account, password, query)
+}
+
+pub async fn fetch_grades_at(
+    epoch: SessionEpoch,
     account: &str,
     password: &str,
     query: &GradeRequest,
@@ -471,19 +499,68 @@ pub async fn fetch_grades(
     if !matches!(record_type, "" | "0" | "1") {
         return Err(ServiceError::new("成绩记录类型不正确。"));
     }
-    let token = login_empty_classroom(account, password).await?;
+    with_sjd_session_at(epoch, account, password, |token| async move {
+        fetch_grades_with_token(&token, query, record_type).await
+    })
+    .await
+}
+
+async fn fetch_grades_with_token(
+    token: &str,
+    query: &GradeRequest,
+    record_type: &str,
+) -> ServiceResult<GradeReport> {
     let term = match &query.term_id {
         Some(term) => term.trim().to_string(),
-        None => parse_current_term(&request("/currentTerm", &token, &[]).await?)?,
+        None => parse_current_term(&request("/currentTerm", token, &[]).await?)?,
     };
     validate_term(&term, true)?;
     let payload = request(
         "/student/termGPA",
-        &token,
+        token,
         &[("semester", &term), ("type", record_type)],
     )
     .await?;
     parse_grades(&payload, &term, record_type)
+}
+
+pub fn fetch_exams<'a>(
+    account: &'a str,
+    password: &'a str,
+    term: Option<&'a str>,
+) -> impl std::future::Future<Output = ServiceResult<ExamSchedule>> + 'a {
+    fetch_exams_at(session_epoch(), account, password, term)
+}
+
+pub async fn fetch_exams_at(
+    epoch: SessionEpoch,
+    account: &str,
+    password: &str,
+    term: Option<&str>,
+) -> ServiceResult<ExamSchedule> {
+    with_sjd_session_at(epoch, account, password, |token| async move {
+        let term = match term {
+            Some(term) => term.to_string(),
+            None => parse_current_term(&request("/currentTerm", &token, &[]).await?)?,
+        };
+        validate_term(&term, false)?;
+        fetch_exams_using_token(&token, &term, &account_key(account)).await
+    })
+    .await
+}
+
+pub(crate) async fn fetch_exams_using_token(
+    token: &str,
+    term: &str,
+    key: &str,
+) -> ServiceResult<ExamSchedule> {
+    let payload = request(
+        "/student/examinationArrangement",
+        token,
+        &[("semester", term)],
+    )
+    .await?;
+    parse_exams(&payload, term, key)
 }
 
 pub async fn fetch_exams_with_token(token: &str, term: &str, key: &str) -> ExamSchedule {
@@ -517,13 +594,8 @@ pub fn course_minutes(course: &Course) -> Option<(i64, i64)> {
         let end = minutes(course.end_time.as_deref()?)?;
         return (start < end && start < 1440).then_some((start, end));
     }
-    if let Some((a, b)) = course.time_range.split_once('-') {
-        if let (Some(start), Some(end)) = (minutes(a.trim()), minutes(b.trim())) {
-            if start < end {
-                return Some((start, end));
-            }
-        }
-    }
+    // Ordinary lessons use the verified period indices. Only examinations
+    // override the standard timetable with exact clock times.
     let start = minutes(SLOT_TIMES.get(course.start_slot)?.0)?;
     let end = minutes(SLOT_TIMES.get(course.end_slot)?.1)?;
     (start < end && start < 1440).then_some((start, end))
@@ -1006,5 +1078,20 @@ mod tests {
             iso_date("2026-08-31").unwrap(),
             iso_date("2026-09-07").unwrap()
         ));
+    }
+
+    #[test]
+    fn ordinary_course_slots_remain_authoritative_over_display_times() {
+        let mut course = lesson();
+        course.time_range = "22:00-23:00".into();
+        course.start_time = Some("22:00".into());
+        course.end_time = Some("23:00".into());
+        assert_eq!(course_minutes(&course), Some((480, 575)));
+        assert_eq!(busy_slots(&course), vec![0, 1]);
+        course.event_kind = Some("exam".into());
+        assert_eq!(course_minutes(&course), Some((1320, 1380)));
+        course.event_kind = None;
+        course.start_slot = usize::MAX;
+        assert_eq!(course_minutes(&course), None);
     }
 }

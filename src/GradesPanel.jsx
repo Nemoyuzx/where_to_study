@@ -30,7 +30,7 @@ export default function GradesPanel({ command, language, enabled, hasAccount, on
   const cache = useRef(new Map())
   useEffect(() => () => { request.current += 1; cache.current.clear() }, [])
   useEffect(() => {
-    if (!enabled || !hasAccount) return undefined
+    if (!hasAccount || refresh === 0) return undefined
     const id = ++request.current
     let alive = true
     const current = () => alive && request.current === id
@@ -63,17 +63,18 @@ export default function GradesPanel({ command, language, enabled, hasAccount, on
       } finally { if (current()) setLoading(false) }
     })()
     return () => { alive = false }
-    // Metadata is deliberately loaded only on entry/explicit refresh.
+    // User refresh/filter changes own retrieval, never segment visibility.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, hasAccount, term, recordType, refresh])
+  }, [hasAccount, term, recordType, refresh])
 
   const change = setter => event => { request.current += 1; setReport(null); setError(''); setter(event.target.value) }
   const reload = () => { request.current += 1; cache.current.clear(); setTerms(null); setReport(null); setRefresh(x => x + 1) }
   return <div className="query-grades" role="tabpanel" hidden={!enabled} aria-label={words.title}>
     <header className="query-section-header"><h2><GraduationCap size={24} /> {words.title}</h2>
-      <button type="button" onClick={reload} disabled={loading || !hasAccount} aria-label={words.refresh}><RefreshCw size={18} /></button>
+      <button type="button" onClick={reload} disabled={loading || !hasAccount} aria-label={words.refresh}><RefreshCw size={18} />{words.refresh}</button>
     </header>
     {!hasAccount ? <div className="query-grade-status"><p>{words.account}</p><button type="button" onClick={onOpenAccount}>{words.settings}</button></div> : <>
+      {refresh === 0 && <p className="query-grade-status">{en ? 'Use Refresh grades to retrieve your results.' : '点击“刷新成绩”读取本人成绩。'}</p>}
       <div className="query-grade-filters">
         <label>{words.term}<select aria-label={words.term} value={term ?? ''} disabled={!terms} onChange={change(setTerm)}>
           <option value="">{words.all}</option>
