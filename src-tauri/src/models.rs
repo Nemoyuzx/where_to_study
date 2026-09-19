@@ -7,6 +7,34 @@ fn default_true() -> bool {
 
 pub const DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES: u16 = 450;
 
+pub fn default_course_reminder_minutes() -> Vec<u16> {
+    vec![10]
+}
+
+pub fn valid_course_reminder_minutes(minutes: &[u16]) -> bool {
+    !minutes.is_empty()
+        && minutes.len() <= 5
+        && minutes.iter().all(|value| (1..=1440).contains(value))
+        && minutes
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            == minutes.len()
+}
+
+pub fn deserialize_course_reminder_minutes<'de, D>(deserializer: D) -> Result<Vec<u16>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let minutes = serde_json::from_value::<Vec<u16>>(value).unwrap_or_default();
+    Ok(if valid_course_reminder_minutes(&minutes) {
+        minutes
+    } else {
+        default_course_reminder_minutes()
+    })
+}
+
 pub fn default_daily_course_notification_minutes() -> u16 {
     DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES
 }
@@ -73,6 +101,13 @@ pub struct SavedSettings {
         deserialize_with = "deserialize_daily_course_notification_minutes"
     )]
     pub daily_course_notification_minutes: u16,
+    #[serde(default)]
+    pub course_reminders_enabled: bool,
+    #[serde(
+        default = "default_course_reminder_minutes",
+        deserialize_with = "deserialize_course_reminder_minutes"
+    )]
+    pub course_reminder_minutes: Vec<u16>,
     #[serde(default = "default_true")]
     pub automatic_term_detection_enabled: bool,
     #[serde(default = "default_true")]
@@ -108,6 +143,8 @@ impl SavedSettings {
             ui_language: "system".to_string(),
             daily_course_notifications_enabled: false,
             daily_course_notification_minutes: DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
+            course_reminders_enabled: false,
+            course_reminder_minutes: default_course_reminder_minutes(),
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,
@@ -122,6 +159,9 @@ impl SavedSettings {
     }
 
     pub fn apply_defaults(&mut self) {
+        if !valid_course_reminder_minutes(&self.course_reminder_minutes) {
+            self.course_reminder_minutes = default_course_reminder_minutes();
+        }
         if self.daily_course_notification_minutes >= 1440 {
             self.daily_course_notification_minutes = DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES;
         }
@@ -158,6 +198,10 @@ pub struct SaveSettingsRequest {
     pub daily_course_notifications_enabled: bool,
     #[serde(default = "default_daily_course_notification_minutes")]
     pub daily_course_notification_minutes: u16,
+    #[serde(default)]
+    pub course_reminders_enabled: bool,
+    #[serde(default = "default_course_reminder_minutes")]
+    pub course_reminder_minutes: Vec<u16>,
     #[serde(default = "default_true")]
     pub automatic_term_detection_enabled: bool,
     #[serde(default = "default_true")]
@@ -214,6 +258,8 @@ mod term_default_tests {
             ui_language: String::new(),
             daily_course_notifications_enabled: false,
             daily_course_notification_minutes: DEFAULT_DAILY_COURSE_NOTIFICATION_MINUTES,
+            course_reminders_enabled: false,
+            course_reminder_minutes: default_course_reminder_minutes(),
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,

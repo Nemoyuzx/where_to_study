@@ -708,6 +708,8 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(theme.secondaryText)
                 }
+                Divider()
+                PreClassReminderSettingsView()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

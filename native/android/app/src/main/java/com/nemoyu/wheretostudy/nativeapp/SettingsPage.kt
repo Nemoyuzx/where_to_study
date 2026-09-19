@@ -593,6 +593,7 @@ class SettingsPage(
                 preferences.automaticTermDetectionEnabled = autoDetect.isChecked
             }.onSuccess {
                 showSavedToast()
+                activity.reconcileDailyCourseNotifications()
                 if (autoDetect.isChecked) {
                     refreshScheduleAutomaticallyAfterSave()
                 }
@@ -686,6 +687,129 @@ class SettingsPage(
             setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(4), 0, 0)
         })
+        addView(spacer(activity, UiMetrics.sectionSpacingDp))
+        addView(Switch(activity).apply {
+            id = R.id.settings_course_reminder_toggle
+            text = activity.getString(R.string.course_reminder_toggle)
+            textSize = 15f
+            setThemeTextColor { Palette.text }
+            isChecked = preferences.courseRemindersEnabled
+            minHeight = activity.dp(UiMetrics.controlHeightDp)
+            setPadding(0, 0, 0, 0)
+            applyPhoneSwitchStyle()
+            setOnClickListener {
+                activity.performControlHaptic(it)
+                val requested = isChecked
+                isEnabled = false
+                activity.setCourseRemindersEnabled(requested) { enabled ->
+                    isChecked = enabled
+                    isEnabled = true
+                    if (requested && !enabled) Toast.makeText(activity,
+                        activity.getString(R.string.course_reminder_enable_error), Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+        val values = preferences.courseReminderOffsets.map(Int::toString).toMutableList()
+        val countLabel = TextView(activity).apply {
+            id = R.id.settings_course_reminder_count
+            textSize = 13f
+            setThemeTextColor { Palette.muted }
+        }
+        addView(countLabel)
+        val rows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        addView(rows)
+        val addButton = settingsActionButton(activity.getString(R.string.course_reminder_add), false) { }
+            .apply { id = R.id.settings_course_reminder_add }
+        lateinit var renderRows: () -> Unit
+        renderRows = {
+            rows.removeAllViews()
+            countLabel.text = activity.getString(R.string.course_reminder_count, values.size)
+            values.forEachIndexed { index, value ->
+                rows.addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(6) }
+                    addView(TextView(activity).apply {
+                        text = activity.getString(R.string.course_reminder_lead_label, index + 1)
+                        textSize = 13f
+                        setThemeTextColor { Palette.text }
+                        setPadding(0, 0, activity.dp(6), 0)
+                    })
+                    addView(field("1–1440", value, secure = false).apply {
+                        tag = "course-reminder-offset-$index"
+                        contentDescription = activity.getString(R.string.course_reminder_offset_accessibility, index + 1)
+                        inputType = InputType.TYPE_CLASS_NUMBER
+                        layoutParams = LinearLayout.LayoutParams(0, activity.dp(UiMetrics.controlHeightDp), 1f)
+                        addTextChangedListener(object : TextWatcher {
+                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { values[index] = s.toString() }
+                            override fun afterTextChanged(s: Editable?) = Unit
+                        })
+                    })
+                    addView(TextView(activity).apply {
+                        text = activity.getString(R.string.course_reminder_minutes)
+                        textSize = 13f
+                        setThemeTextColor { Palette.muted }
+                        setPadding(activity.dp(6), 0, activity.dp(6), 0)
+                    })
+                    addView(settingsActionButton("−", false) {
+                        values.removeAt(index)
+                        renderRows()
+                    }.apply {
+                        tag = "course-reminder-remove-$index"
+                        contentDescription = activity.getString(R.string.course_reminder_remove, index + 1)
+                        isEnabled = values.size > 1
+                        alpha = if (isEnabled) 1f else 0.4f
+                        layoutParams = LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp))
+                    })
+                })
+            }
+            addButton.isEnabled = values.size < CourseReminderPlanning.maximumReminders
+            addButton.alpha = if (addButton.isEnabled) 1f else 0.4f
+        }
+        addButton.setOnClickListener {
+            activity.performControlHaptic(it)
+            val next = listOf(5, 10, 15, 30, 60).firstOrNull { value -> value.toString() !in values } ?: 10
+            values.add(next.toString())
+            renderRows()
+        }
+        renderRows()
+        addView(spacer(activity, 8))
+        addView(addButton)
+        addView(spacer(activity, 8))
+        addView(settingsActionButton(activity.getString(R.string.course_reminder_save), false) {
+            runCatching {
+                val normalized = CourseReminderPlanning.parseInput(values)
+                check(CourseReminderScheduler.updateOffsets(activity, normalized))
+                values.clear()
+                values.addAll(normalized.map(Int::toString))
+                renderRows()
+            }.onSuccess { showSavedToast() }.onFailure {
+                Toast.makeText(activity, activity.getString(R.string.course_reminder_input_error), Toast.LENGTH_LONG).show()
+            }
+        }.apply { id = R.id.settings_course_reminder_save })
+        addView(TextView(activity).apply {
+            id = R.id.settings_course_reminder_delivery_status
+            text = activity.getString(if (CourseReminderScheduler.hasExactAccess(activity))
+                R.string.course_reminder_exact_description else R.string.course_reminder_inexact_description)
+            textSize = 12f
+            setThemeTextColor { Palette.muted }
+            setPadding(0, activity.dp(8), 0, 0)
+        })
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            activity.packageManager.getPackageInfo(activity.packageName, android.content.pm.PackageManager.GET_PERMISSIONS)
+                .requestedPermissions.orEmpty().contains(android.Manifest.permission.SCHEDULE_EXACT_ALARM)) {
+            addView(spacer(activity, 8))
+            addView(settingsActionButton(activity.getString(R.string.course_reminder_exact_access), false) {
+                runCatching {
+                    activity.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:${activity.packageName}")))
+                }.onFailure {
+                    Toast.makeText(activity, activity.getString(R.string.course_reminder_exact_access_error), Toast.LENGTH_LONG).show()
+                }
+            }.apply { id = R.id.settings_course_reminder_exact_access })
+        }
     }
 
     private fun widgetSurface(): LinearLayout = surface(activity, showsBorder = false).apply {

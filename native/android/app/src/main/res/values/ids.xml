@@ -37,6 +37,12 @@
     <item name="settings_daily_course_notification_toggle" type="id" />
     <item name="settings_daily_course_notification_time" type="id" />
     <item name="settings_daily_course_notification_time_picker" type="id" />
+    <item name="settings_course_reminder_toggle" type="id" />
+    <item name="settings_course_reminder_count" type="id" />
+    <item name="settings_course_reminder_add" type="id" />
+    <item name="settings_course_reminder_save" type="id" />
+    <item name="settings_course_reminder_delivery_status" type="id" />
+    <item name="settings_course_reminder_exact_access" type="id" />
     <item name="settings_widget_preview_size_selector" type="id" />
     <item name="settings_custom_deadlines_switch" type="id" />
     <item name="settings_custom_deadlines_dot" type="id" />

@@ -85,10 +85,10 @@ class SecureCredentialStore(context: Context) {
         if (!saved) throw IllegalStateException("无法安全保存本地凭据。")
     }
 
-    fun load(): Credentials? {
+    fun load(throwOnFailure: Boolean = false): Credentials? {
         val encodedIv = preferences.getString(IV_KEY, null) ?: return null
         val encodedPayload = preferences.getString(PAYLOAD_KEY, null) ?: return null
-        return runCatching {
+        val result = runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             val iv = Base64.decode(encodedIv, Base64.NO_WRAP)
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
@@ -104,7 +104,8 @@ class SecureCredentialStore(context: Context) {
             } finally {
                 plaintext.fill(0)
             }
-        }.getOrNull()
+        }
+        return if (throwOnFailure) result.getOrThrow() else result.getOrNull()
     }
 
     fun clear() {
@@ -231,6 +232,16 @@ class AppPreferences(context: Context) {
     internal var dailyCourseNotificationDeliveredDay: String
         get() = preferences.getString("daily_course_notification_delivered_day", "").orEmpty()
         set(value) { save("daily_course_notification_delivered_day", value) }
+
+    var courseRemindersEnabled: Boolean
+        get() = runCatching { preferences.getBoolean(COURSE_REMINDERS_ENABLED_KEY, false) }.getOrDefault(false)
+        set(value) { save(COURSE_REMINDERS_ENABLED_KEY, value) }
+
+    var courseReminderOffsets: List<Int>
+        get() = CourseReminderPlanning.decodeStored(
+            runCatching { preferences.getString(COURSE_REMINDER_OFFSETS_KEY, null) }.getOrNull(),
+        )
+        set(value) { save(COURSE_REMINDER_OFFSETS_KEY, CourseReminderPlanning.validateOffsets(value).joinToString(",")) }
 
     var weatherEnabled: Boolean
         get() = preferences.getBoolean(WEATHER_ENABLED_KEY, true)
@@ -364,6 +375,8 @@ class AppPreferences(context: Context) {
         const val TERM_START_DATE_KEY = "term_start_date"
         const val DAILY_COURSE_NOTIFICATIONS_KEY = "daily_course_notifications_enabled"
         const val DAILY_COURSE_NOTIFICATION_MINUTES_KEY = "daily_course_notification_minutes"
+        const val COURSE_REMINDERS_ENABLED_KEY = "course_reminders_enabled"
+        const val COURSE_REMINDER_OFFSETS_KEY = "course_reminder_offsets"
         const val AUTOMATIC_TERM_DETECTION_KEY = "automatic_term_detection_enabled"
         const val WIDGET_SHOWS_LOCATION_KEY = "widget_shows_location"
         const val WIDGET_SHOWS_TEACHER_KEY = "widget_shows_teacher"

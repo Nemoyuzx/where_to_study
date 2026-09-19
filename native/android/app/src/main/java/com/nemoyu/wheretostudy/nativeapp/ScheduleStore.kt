@@ -139,17 +139,19 @@ internal fun selectUsableSchedule(
     }
 }
 
-internal fun loadUsableSchedule(context: Context): ScheduleSnapshot? {
+internal fun loadUsableSchedule(context: Context, throwOnReadFailure: Boolean = false): ScheduleSnapshot? {
     val appContext = context.applicationContext
-    val schedule = runCatching { ScheduleStore(appContext).load() }.getOrNull()
+    val schedule = if (throwOnReadFailure) ScheduleStore(appContext).load()
+        else runCatching { ScheduleStore(appContext).load() }.getOrNull()
     val usable = selectUsableSchedule(
         schedule = schedule,
         automaticTermDetectionEnabled = AppPreferences(appContext).automaticTermDetectionEnabled,
     )
     return usable?.let {
+        val account = SecureCredentialStore(appContext).load(throwOnFailure = throwOnReadFailure)?.account.orEmpty()
         CourseDeletionLogic.apply(
-            AcademicScheduleLogic.usableExams(it, SecureCredentialStore(appContext).load()?.account.orEmpty()),
-            SecureCredentialStore(appContext).load()?.account.orEmpty(),
+            AcademicScheduleLogic.usableExams(it, account),
+            account,
             CourseDeletionStore(appContext).load(),
         )
     }

@@ -6,6 +6,8 @@ pub mod classrooms;
 mod classrooms_store;
 pub mod config;
 pub mod course_deletions;
+#[cfg(not(mobile))]
+mod course_reminders;
 pub mod credential_store;
 pub mod daily_info;
 pub mod deadlines;
@@ -393,7 +395,7 @@ fn set_desktop_notification_preferences(
     let became_enabled = enabled && !current.enabled;
     if *current != next {
         *current = next;
-        if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
+        if let Err(error) = desktop_notifications::clear_daily(&app.config().identifier) {
             let _ = app.emit(
                 "schedule:daily-notification-error",
                 format!("旧课程通知清理失败：{error}"),
@@ -1095,6 +1097,7 @@ fn save_saved_settings_sync(
     #[cfg(not(mobile))]
     match &result {
         Ok(settings) => {
+            course_reminders::configure(&app, settings);
             if set_desktop_notification_preferences(
                 &app,
                 settings.daily_course_notifications_enabled,
@@ -1104,6 +1107,7 @@ fn save_saved_settings_sync(
             }
         }
         Err(error) if error.account_scope_cleared => {
+            course_reminders::configure(&app, &SavedSettings::with_defaults());
             set_desktop_notification_preferences(
                 &app,
                 false,
@@ -1135,6 +1139,10 @@ fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
     }
     #[cfg(not(mobile))]
     if let Err(error) = clear_desktop_task_state(app) {
+        errors.push(error);
+    }
+    #[cfg(not(mobile))]
+    if let Err(error) = course_reminders::clear(app) {
         errors.push(error);
     }
     if errors.is_empty() {
@@ -1176,6 +1184,10 @@ fn clear_local_data_sync(app: tauri::AppHandle) -> Result<bool, String> {
             if let Err(error) = clear_desktop_task_state(&app) {
                 errors.push(error);
             }
+            #[cfg(not(mobile))]
+            if let Err(error) = course_reminders::clear(&app) {
+                errors.push(error);
+            }
             if let Err(error) = settings_store::clear_local_files_preserving_revocation(&app) {
                 errors.push(error.message);
             }
@@ -1190,6 +1202,7 @@ fn clear_local_data_sync(app: tauri::AppHandle) -> Result<bool, String> {
     let result = finalize_local_data_clear(result, || notify_account_scope_cleared(&app));
     #[cfg(not(mobile))]
     {
+        course_reminders::configure(&app, &SavedSettings::with_defaults());
         set_desktop_notification_preferences(
             &app,
             false,
@@ -1339,6 +1352,9 @@ async fn fetch_schedule(
                 schedule_store::load_raw(&app, &account_scope).map_err(|error| error.message)?;
             academic::merge_exam_fallback(&mut schedule, previous.as_ref());
             schedule_store::save(&app, &account_scope, &schedule).map_err(|error| error.message)?;
+            COURSE_EDITS_REVISION.fetch_add(1, Ordering::SeqCst);
+            #[cfg(not(mobile))]
+            wake_desktop_scheduler();
             #[cfg(not(mobile))]
             let _ = app.emit(
                 "schedule:updated",
@@ -2451,6 +2467,8 @@ async fn load_today_course_content(
                 academic::merge_exam_fallback(&mut schedule, previous.as_ref());
                 schedule_store::save(&app, &account_scope, &schedule)
                     .map_err(|error| error.message)?;
+                COURSE_EDITS_REVISION.fetch_add(1, Ordering::SeqCst);
+                wake_desktop_scheduler();
                 schedule_store::load(&app, &account_scope)
                     .map_err(|error| error.message)?
                     .ok_or_else(|| "无法读取已保存课表。".to_string())
@@ -2685,6 +2703,7 @@ fn sleep_until(boundary: NaiveDateTime) {
 
 #[cfg(not(mobile))]
 fn wake_desktop_scheduler() {
+    course_reminders::wake();
     let scheduler = DESKTOP_SCHEDULER_THREAD
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -3719,6 +3738,14 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
             enabled: !account_access_revoked && settings.daily_course_notifications_enabled,
             minutes: settings.daily_course_notification_minutes,
         };
+        course_reminders::configure(
+            app.app_handle(),
+            &if account_access_revoked {
+                SavedSettings::with_defaults()
+            } else {
+                settings
+            },
+        );
         setup_tray(app)?;
         let handle = app.app_handle().clone();
         tauri::async_runtime::spawn_blocking(move || {
@@ -3730,6 +3757,7 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
                     format!("旧课程通知清理失败：{error}"),
                 );
             }
+            course_reminders::start(handle.clone());
             schedule_desktop_background_tasks(handle);
         });
     }

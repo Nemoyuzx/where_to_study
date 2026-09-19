@@ -72,9 +72,9 @@ When date details request assignments, the app temporarily reads saved credentia
 
 ## 系统日历、通知与小组件 / System calendar, notifications, and widgets
 
-只有在你主动操作并授予相应系统权限后，应用才会写入系统日历或安排本地课程摘要通知。应用仅管理带有 Where To Study 标记的日历事件；课程小组件只在支持该能力的平台提供。相关数据不会上传给项目维护者。
+只有在你主动操作并授予相应系统权限后，应用才会写入系统日历或安排本地课程通知，包括每日摘要和独立的课前提醒。提前分钟、提醒次数与去重记录只保存在本机，用于根据本地有效课表安排通知。Android 课前提醒可由用户主动授予“闹钟和提醒”特殊访问权以尽量准时；未授权时使用可能延迟的大致时间提醒，不会因此收集额外数据。应用仅管理带有 Where To Study 标记的日历事件；课程小组件只在支持该能力的平台提供。相关数据不会上传给项目维护者。
 
-The app writes to the system calendar or schedules local course-summary notifications only after your action and the applicable system permission. It manages only calendar events marked by Where To Study, and course widgets are available only on platforms that support them. This data is not uploaded to the maintainer.
+The app writes to the system calendar or schedules local course notifications, including daily summaries and independent pre-class reminders, only after your action and the applicable system permission. Lead times, reminder counts and deduplication records remain on your device and are used with the local effective timetable. Android users may optionally grant Alarms & reminders special access for more timely pre-class delivery; without it, approximate reminders may be delayed. This grants no additional data collection. The app manages only calendar events marked by Where To Study, and course widgets are available only on platforms that support them. This data is not uploaded to the maintainer.
 
 ## 不收集的数据与第三方元数据 / Data not collected and third-party metadata
 

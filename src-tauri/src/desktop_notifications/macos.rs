@@ -14,10 +14,12 @@ use std::{
 };
 
 const PREFIX: &str = "wts.daily-course.";
+const PRECLASS_PREFIX: &str = "wts.pre-class.";
 const CALLBACK_TIMEOUT: Duration = Duration::from_secs(8);
 const CLEAR_RECHECK_DELAY: Duration = Duration::from_millis(50);
 // This gate covers the native calls and their callbacks, not just bookkeeping.
 static LAST: Mutex<Option<String>> = Mutex::new(None);
+static PRECLASS: Mutex<Option<String>> = Mutex::new(None);
 
 fn validate_bundle_identifier(identifier: Option<&str>) -> Result<(), String> {
     if identifier.is_some_and(|id| !id.trim().is_empty()) {
@@ -55,7 +57,7 @@ fn remove(identifiers: &[String]) {
 fn owned_identifiers(identifiers: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut owned: Vec<_> = identifiers
         .into_iter()
-        .filter(|id| id.starts_with(PREFIX))
+        .filter(|id| id.starts_with(PREFIX) || id.starts_with(PRECLASS_PREFIX))
         .collect();
     owned.sort_unstable();
     owned.dedup();
@@ -152,8 +154,21 @@ impl Submission {
 }
 
 pub fn show(_: &str, title: &str, body: &str) -> Result<(), String> {
+    show_kind(title, body, &LAST, "daily-courses")
+}
+
+pub fn show_preclass(_: &str, title: &str, body: &str) -> Result<(), String> {
+    show_kind(title, body, &PRECLASS, "pre-class")
+}
+
+fn show_kind(
+    title: &str,
+    body: &str,
+    slot: &Mutex<Option<String>>,
+    group: &str,
+) -> Result<(), String> {
     require_notification_bundle()?;
-    let mut last = LAST
+    let mut last = slot
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let center = UNUserNotificationCenter::currentNotificationCenter();
@@ -174,11 +189,16 @@ pub fn show(_: &str, title: &str, body: &str) -> Result<(), String> {
     }
     // A UUID remains unique across relaunches and process-ID reuse. A late
     // callback can only remove its own request, never a newer daily summary.
-    let identifier = format!("{PREFIX}{}", NSUUID::UUID().UUIDString());
+    let prefix = if group == "pre-class" {
+        PRECLASS_PREFIX
+    } else {
+        PREFIX
+    };
+    let identifier = format!("{prefix}{}", NSUUID::UUID().UUIDString());
     let content = UNMutableNotificationContent::new();
     content.setTitle(&NSString::from_str(title));
     content.setBody(&NSString::from_str(body));
-    content.setThreadIdentifier(&NSString::from_str("daily-courses"));
+    content.setThreadIdentifier(&NSString::from_str(group));
     let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
         &NSString::from_str(&identifier),
         &content,
@@ -214,14 +234,38 @@ pub fn show(_: &str, title: &str, body: &str) -> Result<(), String> {
 }
 
 pub fn clear(_: &str) -> Result<(), String> {
+    let daily = clear_daily("");
+    let preclass = clear_preclass("");
+    daily.and(preclass)
+}
+
+pub fn clear_daily(_: &str) -> Result<(), String> {
+    clear_kind(&LAST, PREFIX)
+}
+pub fn clear_preclass(_: &str) -> Result<(), String> {
+    clear_kind(&PRECLASS, PRECLASS_PREFIX)
+}
+
+fn clear_kind(slot: &Mutex<Option<String>>, prefix: &str) -> Result<(), String> {
     if require_notification_bundle().is_err() {
         // An unbundled process has no notification identity or owned history.
         return Ok(());
     }
-    let mut last = LAST
+    let mut last = slot
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    clear_until_absent(last.as_deref(), CALLBACK_TIMEOUT, snapshot, remove)?;
+    clear_until_absent(
+        last.as_deref(),
+        CALLBACK_TIMEOUT,
+        |timeout| {
+            snapshot(timeout).map(|ids| {
+                ids.into_iter()
+                    .filter(|id| id.starts_with(prefix))
+                    .collect()
+            })
+        },
+        remove,
+    )?;
     // Keep the known identifier when enumeration or confirmation fails.
     *last = None;
     Ok(())
@@ -252,6 +296,25 @@ mod tests {
             assert!(error.contains("已安装的 Where To Study.app"));
         }
         assert!(validate_bundle_identifier(Some("com.nemoyu.wheretostudy")).is_ok());
+    }
+
+    #[test]
+    fn kind_filters_keep_daily_and_preclass_history_separate() {
+        let all = vec![
+            "wts.daily-course.old".to_owned(),
+            "wts.pre-class.new".to_owned(),
+            "other.feature".to_owned(),
+        ];
+        for (prefix, expected) in [
+            (PREFIX, "wts.daily-course.old"),
+            (PRECLASS_PREFIX, "wts.pre-class.new"),
+        ] {
+            let owned = owned_identifiers(all.clone())
+                .into_iter()
+                .filter(|id| id.starts_with(prefix))
+                .collect::<Vec<_>>();
+            assert_eq!(owned, vec![expected]);
+        }
     }
 
     #[test]

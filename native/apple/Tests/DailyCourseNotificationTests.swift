@@ -521,14 +521,16 @@ final class DailyCourseNotificationTests: XCTestCase {
     }
 
     @MainActor
-    func testAuthorizationStatusTimeoutConvergesModelState() async throws {
+    func testAuthorizationStatusTimeoutPreservesPreferenceWithoutSchedulingOrRequestingPermission() async throws {
         let (defaults, suiteName) = isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
+        let center = NonRespondingCourseNotificationCenter(mode: .authorizationStatus)
         let scheduler = UserNotificationCourseScheduler(
-            center: NonRespondingCourseNotificationCenter(mode: .authorizationStatus),
+            center: center,
             defaults: defaults
         )
         defaults.set(true, forKey: "dailyCourseNotificationsEnabled")
+        defaults.set(true, forKey: PreClassNotificationSettings.enabledKey)
         defaults.set(AppLanguage.english.rawValue, forKey: AppLocalization.defaultsKey)
         let model = makeModel(
             notificationScheduler: scheduler,
@@ -538,9 +540,14 @@ final class DailyCourseNotificationTests: XCTestCase {
             storedSchedule: schedule(courses: [course()])
         )
 
-        try await waitUntil { !model.dailyCourseNotificationsEnabled }
+        try await waitUntil { !model.dailyCourseNotificationStatusMessage.isEmpty }
 
-        XCTAssertFalse(defaults.bool(forKey: "dailyCourseNotificationsEnabled"))
+        XCTAssertTrue(model.dailyCourseNotificationsEnabled)
+        XCTAssertTrue(defaults.bool(forKey: "dailyCourseNotificationsEnabled"))
+        XCTAssertTrue(model.preClassNotificationsEnabled)
+        XCTAssertTrue(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertEqual(center.permissionRequestCount, 0)
+        XCTAssertEqual(center.addCount, 0)
         XCTAssertEqual(
             model.dailyCourseNotificationStatusMessage,
             model.localized("课程摘要安排失败：")
@@ -566,7 +573,10 @@ final class DailyCourseNotificationTests: XCTestCase {
         )
 
         model.setDailyCourseNotificationsEnabled(true)
-        try await waitUntil { !model.dailyCourseNotificationsEnabled }
+        try await waitUntil { model.dailyCourseNotificationStatusMessage != "正在确认通知权限…" }
+
+        XCTAssertTrue(model.dailyCourseNotificationsEnabled)
+        XCTAssertTrue(defaults.bool(forKey: "dailyCourseNotificationsEnabled"))
 
         XCTAssertEqual(
             model.dailyCourseNotificationStatusMessage,
@@ -598,6 +608,234 @@ final class DailyCourseNotificationTests: XCTestCase {
 
         model.clearLocalData()
         XCTAssertEqual(scheduler.cancelledRevisions, [1, 2, 3])
+    }
+
+    @MainActor
+    func testPreClassConfigurationDoesNotEnableOrRequestPermission() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let scheduler = RecordingNotificationScheduler(authorization: .notDetermined, requestResult: true)
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults)
+        XCTAssertFalse(model.preClassNotificationsEnabled)
+        XCTAssertEqual(model.preClassNotificationOffsets, [10])
+        XCTAssertTrue(model.setPreClassNotificationOffsets([30, 10, 1]))
+        XCTAssertFalse(model.setPreClassNotificationOffsets([10, 10]))
+        XCTAssertFalse(model.setPreClassNotificationOffsets([0]))
+        XCTAssertFalse(model.setPreClassNotificationOffsets(Array(1 ... 6)))
+        await Task.yield()
+        XCTAssertEqual(model.preClassNotificationOffsets, [30, 10, 1])
+        XCTAssertEqual(defaults.array(forKey: PreClassNotificationSettings.offsetsKey) as? [Int], [30, 10, 1])
+        XCTAssertFalse(model.preClassNotificationsEnabled)
+        XCTAssertFalse(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertEqual(scheduler.permissionRequestCount, 0)
+        XCTAssertTrue(scheduler.replacements.isEmpty)
+    }
+
+    @MainActor
+    func testUndeterminedPermissionPreservesSavedChoicesWithoutAutomaticPrompt() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: PreClassNotificationSettings.enabledKey)
+        defaults.set(true, forKey: DailyCourseNotificationSettings.enabledKey)
+        let scheduler = RecordingNotificationScheduler(authorization: .notDetermined, requestResult: true)
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()]))
+        try await waitUntil { !model.preClassNotificationStatusMessage.isEmpty }
+        XCTAssertTrue(model.preClassNotificationsEnabled)
+        XCTAssertTrue(model.dailyCourseNotificationsEnabled)
+        XCTAssertTrue(scheduler.replacements.isEmpty)
+        XCTAssertEqual(scheduler.permissionRequestCount, 0)
+        XCTAssertTrue(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertTrue(defaults.bool(forKey: DailyCourseNotificationSettings.enabledKey))
+    }
+
+    @MainActor
+    func testIndependentTogglesAndLanguageRebuildOneCombinedPlan() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: DailyCourseNotificationSettings.enabledKey)
+        defaults.set(true, forKey: PreClassNotificationSettings.enabledKey)
+        defaults.set([30, 10], forKey: PreClassNotificationSettings.offsetsKey)
+        let scheduler = RecordingNotificationScheduler(authorization: .authorized, requestResult: true)
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()]))
+        try await waitUntil { scheduler.replacements.last?.requests.count == 3 }
+        model.setPreClassNotificationsEnabled(false)
+        try await waitUntil { scheduler.replacements.last?.requests.count == 1 }
+        XCTAssertTrue(scheduler.replacements.last!.requests.allSatisfy { $0.identifier.hasPrefix("daily-course-summary.") })
+        XCTAssertTrue(model.dailyCourseNotificationsEnabled)
+        model.setPreClassNotificationsEnabled(true)
+        try await waitUntil { scheduler.replacements.last?.requests.count == 3 }
+        model.setDailyCourseNotificationsEnabled(false)
+        try await waitUntil { scheduler.replacements.last?.requests.count == 2 }
+        XCTAssertTrue(scheduler.replacements.last!.requests.allSatisfy { $0.identifier.hasPrefix("pre-class-reminder.") })
+        model.setAppLanguage(.english)
+        XCTAssertTrue(model.setPreClassNotificationOffsets([15]))
+        try await waitUntil { scheduler.replacements.last?.requests.first?.title == "Class starts in 15 minutes" }
+        XCTAssertEqual(scheduler.replacements.last?.requests.first?.fireDate, try date("2026-03-02 09:35"))
+        XCTAssertTrue(model.preClassNotificationsEnabled)
+        XCTAssertFalse(defaults.bool(forKey: DailyCourseNotificationSettings.enabledKey))
+        XCTAssertTrue(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertEqual(scheduler.permissionRequestCount, 0)
+    }
+
+    @MainActor
+    func testPreClassReviewPreviewNeverChangesRealPreferencesOrRequestsPermission() {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set([20], forKey: PreClassNotificationSettings.offsetsKey)
+        let scheduler = RecordingNotificationScheduler(authorization: .notDetermined, requestResult: true)
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults)
+        model.enterReviewDemo()
+        XCTAssertEqual(model.preClassNotificationOffsets, [10])
+        model.setPreClassNotificationsEnabled(true)
+        XCTAssertTrue(model.setPreClassNotificationOffsets([30, 5]))
+        XCTAssertEqual(defaults.array(forKey: PreClassNotificationSettings.offsetsKey) as? [Int], [20])
+        XCTAssertFalse(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertEqual(scheduler.permissionRequestCount, 0)
+        XCTAssertTrue(scheduler.replacements.isEmpty)
+        model.exitReviewDemo()
+        XCTAssertEqual(model.preClassNotificationOffsets, [20])
+        XCTAssertFalse(model.preClassNotificationsEnabled)
+    }
+
+    @MainActor
+    func testAccountClearInvalidatesPausedOffsetAndLanguagePlanning() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: PreClassNotificationSettings.enabledKey)
+        let scheduler = RecordingNotificationScheduler(authorization: .authorized, requestResult: true)
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()]))
+        try await waitUntil { !scheduler.replacements.isEmpty }
+        let count = scheduler.replacements.count
+        scheduler.pauseAuthorizationQueries()
+        XCTAssertTrue(model.setPreClassNotificationOffsets([20, 5]))
+        try await waitUntil { scheduler.pendingAuthorizationQueryCount == 1 }
+        model.setAppLanguage(.english)
+        try await waitUntil { scheduler.pendingAuthorizationQueryCount == 2 }
+        model.account = "replacement-account"
+        model.password = "replacement-password"
+        XCTAssertTrue(model.saveSettings())
+        model.clearLocalData()
+        scheduler.resumeAuthorizationQueries()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(scheduler.replacements.count, count)
+        XCTAssertFalse(model.preClassNotificationsEnabled)
+        XCTAssertEqual(model.preClassNotificationOffsets, [10])
+        XCTAssertNil(defaults.object(forKey: PreClassNotificationSettings.offsetsKey))
+        XCTAssertNil(defaults.object(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertEqual(scheduler.permissionRequestCount, 0)
+    }
+
+    @MainActor
+    func testPreClassDeletionAndRestoreUseEffectiveSchedule() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: PreClassNotificationSettings.enabledKey)
+        let scheduler = RecordingNotificationScheduler(authorization: .authorized, requestResult: true)
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()]))
+        try await waitUntil { scheduler.replacements.last?.requests.count == 1 }
+        XCTAssertTrue(model.deleteCourse(course(), on: try date("2026-03-02 00:00"), scope: .occurrence))
+        try await waitUntil { scheduler.replacements.last?.requests.isEmpty == true }
+        XCTAssertTrue(model.restoreCourseDeletion(try XCTUnwrap(model.currentCourseDeletions.first)))
+        try await waitUntil { scheduler.replacements.last?.requests.count == 1 }
+        XCTAssertTrue(model.preClassNotificationsEnabled)
+    }
+
+    @MainActor
+    func testTemporarySchedulingFailureKeepsBothPreferencesAndRecoversOnForeground() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: DailyCourseNotificationSettings.enabledKey)
+        defaults.set(true, forKey: PreClassNotificationSettings.enabledKey)
+        let scheduler = RecordingNotificationScheduler(authorization: .authorized, requestResult: true)
+        scheduler.setReplacementFailure(true)
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()]))
+        try await waitUntil { model.preClassNotificationStatusMessage == "部分课前提醒暂未安排，重新打开应用时重试" }
+        XCTAssertTrue(model.dailyCourseNotificationsEnabled)
+        XCTAssertTrue(model.preClassNotificationsEnabled)
+        XCTAssertTrue(defaults.bool(forKey: DailyCourseNotificationSettings.enabledKey))
+        XCTAssertTrue(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        let cancellationCount = scheduler.cancelledRevisions.count
+        scheduler.setReplacementFailure(false)
+        model.refreshDailyCourseNotificationAuthorization()
+        try await waitUntil { scheduler.replacements.count == 2 }
+        XCTAssertEqual(scheduler.cancelledRevisions.count, cancellationCount)
+        XCTAssertEqual(scheduler.replacements.last?.requests.count, 2)
+        XCTAssertEqual(scheduler.permissionRequestCount, 0)
+    }
+
+    @MainActor
+    func testDisablingOneCategoryPreservesOtherDeliveredNotificationsThroughCompleteModelReplan() async throws {
+        for disablePreClass in [true, false] {
+            let (defaults, suiteName) = isolatedDefaults()
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            defaults.set(true, forKey: DailyCourseNotificationSettings.enabledKey)
+            defaults.set(true, forKey: PreClassNotificationSettings.enabledKey)
+            let center = PreClassTestCenter()
+            let scheduler = UserNotificationCourseScheduler(center: center, defaults: defaults, now: { Self.modelNow })
+            let model = makeModel(notificationScheduler: scheduler, defaults: defaults,
+                credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+                storedSchedule: schedule(courses: [course()]))
+            try await waitUntil { center.pending.count == 2 }
+            center.deliverPending()
+            XCTAssertEqual(center.delivered.count, 2)
+            if disablePreClass { model.setPreClassNotificationsEnabled(false) }
+            else { model.setDailyCourseNotificationsEnabled(false) }
+            try await waitUntil { center.pending.count == 1 && center.delivered.count == 1 }
+            let retainedPrefix = disablePreClass ? "daily-course-summary." : "pre-class-reminder."
+            XCTAssertTrue(center.delivered.allSatisfy { $0.hasPrefix(retainedPrefix) })
+            // The retained delivery belongs to the retired original batch.
+            model.clearLocalData()
+            try await waitUntil { center.pending.isEmpty && center.delivered.isEmpty }
+        }
+    }
+
+    @MainActor
+    func testFirstEnablePersistsBeforePartialAddFailureAndSurvivesRestartAndForegroundRefill() async throws {
+        let (defaults, suiteName) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let center = PreClassTestCenter()
+        center.watchPreferences(defaults)
+        center.failOffset(10)
+        let scheduler = UserNotificationCourseScheduler(center: center, defaults: defaults, now: { Self.modelNow })
+        let model = makeModel(notificationScheduler: scheduler, defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()]))
+        XCTAssertFalse(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertTrue(model.setPreClassNotificationOffsets([20, 10]))
+        model.setPreClassNotificationsEnabled(true)
+        try await waitUntil { model.preClassNotificationStatusMessage == "部分课前提醒暂未安排，重新打开应用时重试" }
+        XCTAssertTrue(model.preClassNotificationsEnabled)
+        XCTAssertTrue(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertFalse(center.preClassEnabledAtAdd.isEmpty)
+        XCTAssertTrue(center.preClassEnabledAtAdd.allSatisfy { $0 })
+        XCTAssertEqual(center.pending.count, 1)
+        XCTAssertTrue(center.pending.keys.allSatisfy { $0.contains(".20.revision-") })
+        let identifier = try XCTUnwrap(center.pending.keys.first)
+        XCTAssertFalse(DailyCourseNotificationForegroundPolicy.presentationOptions(identifier: identifier,
+            isEnabled: false, preClassEnabled: defaults.bool(forKey: PreClassNotificationSettings.enabledKey)).isEmpty)
+
+        let restartedScheduler = UserNotificationCourseScheduler(center: center, defaults: defaults, now: { Self.modelNow })
+        let restarted = makeModel(notificationScheduler: restartedScheduler, defaults: defaults,
+            credentials: Credentials(account: "fixture-account", password: "fixture-password"),
+            storedSchedule: schedule(courses: [course()]))
+        try await waitUntil { restarted.preClassNotificationStatusMessage == "部分课前提醒暂未安排，重新打开应用时重试" }
+        XCTAssertEqual(center.pending.count, 1)
+        XCTAssertTrue(restarted.preClassNotificationsEnabled)
+        center.failOffset(nil)
+        restarted.refreshDailyCourseNotificationAuthorization()
+        try await waitUntil { center.pending.count == 2 }
+        XCTAssertTrue(defaults.bool(forKey: PreClassNotificationSettings.enabledKey))
+        XCTAssertTrue(center.preClassEnabledAtAdd.allSatisfy { $0 })
     }
 
     private func schedule(
@@ -660,6 +898,7 @@ final class DailyCourseNotificationTests: XCTestCase {
         AppModel(
             credentialStore: NotificationTestCredentialStore(credentials: credentials),
             scheduleStore: NotificationTestScheduleStore(schedule: storedSchedule),
+            courseDeletionStore: NotificationTestCourseDeletionStore(),
             scheduleClient: NotificationTestScheduleClient(),
             classroomStore: NotificationTestClassroomStore(),
             classroomClient: NotificationTestClassroomClient(),
@@ -716,6 +955,10 @@ private final class RecordingNotificationScheduler: DailyCourseNotificationSched
     private var storedReplacements = [Replacement]()
     private var authorizationPaused = false
     private var pendingAuthorizationQueries = [CheckedContinuation<DailyCourseNotificationAuthorization, Never>]()
+    private var permissionRequests = 0
+    private var replacementFailure = false
+    var permissionRequestCount: Int { lock.withLock { permissionRequests } }
+    func setReplacementFailure(_ value: Bool) { lock.withLock { replacementFailure = value } }
 
     init(authorization: DailyCourseNotificationAuthorization, requestResult: Bool) {
         self.authorization = authorization
@@ -764,20 +1007,32 @@ private final class RecordingNotificationScheduler: DailyCourseNotificationSched
             if let status { continuation.resume(returning: status) }
         }
     }
-    func requestAuthorization(timeout _: Duration) async throws -> Bool { requestResult }
+    func requestAuthorization(timeout _: Duration) async throws -> Bool {
+        lock.withLock { permissionRequests += 1 }
+        return requestResult
+    }
 
     func replacePending(
         with requests: [DailyCourseNotificationRequest],
         revision: UInt64
     ) async throws {
-        lock.withLock {
+        try lock.withLock {
             storedReplacements.append(Replacement(requests: requests, revision: revision))
+            if replacementFailure { throw NotificationTestError.unavailable }
         }
     }
 
     func cancelPending(revision: UInt64) {
         lock.withLock { storedCancelledRevisions.append(revision) }
     }
+}
+
+private final class NotificationTestCourseDeletionStore: CourseDeletionStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var records = [CourseDeletion]()
+    func load() throws -> [CourseDeletion] { lock.withLock { records } }
+    func save(_ value: [CourseDeletion]) throws { lock.withLock { records = value } }
+    func clear() throws { lock.withLock { records = [] } }
 }
 
 private final class RecordingCourseNotificationCenter: CourseNotificationCenter, @unchecked Sendable {
@@ -844,6 +1099,11 @@ private final class NonRespondingCourseNotificationCenter: CourseNotificationCen
     }
 
     private let mode: Mode
+    private let lock = NSLock()
+    private var requests = 0
+    private var additions = 0
+    var permissionRequestCount: Int { lock.withLock { requests } }
+    var addCount: Int { lock.withLock { additions } }
 
     init(mode: Mode) {
         self.mode = mode
@@ -857,14 +1117,14 @@ private final class NonRespondingCourseNotificationCenter: CourseNotificationCen
 
     func requestAuthorization(
         completion _: @escaping @Sendable (Result<Bool, any Error>) -> Void
-    ) {}
+    ) { lock.withLock { requests += 1 } }
 
     func add(
         identifier _: String,
         title _: String,
         body _: String,
         fireDate _: Date
-    ) async throws {}
+    ) async throws { lock.withLock { additions += 1 } }
 
     func removePending(withIdentifiers _: [String]) {}
     func removeDelivered(withIdentifiers _: [String]) {}

@@ -243,6 +243,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var dailyCourseNotificationsEnabled = false
     @Published private(set) var dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes
     @Published private(set) var dailyCourseNotificationStatusMessage = ""
+    @Published private(set) var preClassNotificationsEnabled = false
+    @Published private(set) var preClassNotificationOffsets = PreClassNotificationSettings.defaultOffsets
+    @Published private(set) var preClassNotificationStatusMessage = ""
     @Published private(set) var widgetShowsLocation: Bool
     @Published private(set) var widgetShowsTeacher: Bool
     @Published private(set) var widgetCourseLimit: Int
@@ -295,6 +298,7 @@ final class AppModel: ObservableObject {
     private var classroomRefreshToken = 0
     private var calendarImportToken = 0
     private var dailyCourseNotificationRevision: UInt64 = 0
+    private var courseNotificationTask: Task<Void, Never>?
     private var dailyClassroomRefreshTask: Task<Void, Never>?
     private var statusMessageDismissTask: Task<Void, Never>?
     private var statusMessageRevision: UInt64 = 0
@@ -365,6 +369,8 @@ final class AppModel: ObservableObject {
         queryCampusID = savedCampusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
         dailyCourseNotificationMinutes = DailyCourseNotificationSettings.loadMinutes(defaults: defaults)
+        preClassNotificationsEnabled = defaults.bool(forKey: PreClassNotificationSettings.enabledKey)
+        preClassNotificationOffsets = PreClassNotificationSettings.loadOffsets(defaults: defaults)
         widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
         widgetShowsTeacher = defaults.object(forKey: Self.widgetShowsTeacherKey) as? Bool ?? true
         let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
@@ -638,6 +644,8 @@ final class AppModel: ObservableObject {
         guard canEnterReviewDemo else { return }
         invalidatePendingOperations()
         dailyCourseNotificationRevision &+= 1
+        courseNotificationTask?.cancel()
+        dailyCourseNotificationScheduler.invalidate(revision: dailyCourseNotificationRevision)
         dailyClassroomRefreshTask?.cancel()
         dailyClassroomRefreshTask = nil
         runtimeMode = .sample(review: true)
@@ -663,6 +671,9 @@ final class AppModel: ObservableObject {
         dailyCourseNotificationsEnabled = false
         statusMessage = "正在展示内置示例课表，未连接北邮服务"
         dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes
+        preClassNotificationsEnabled = false
+        preClassNotificationOffsets = PreClassNotificationSettings.defaultOffsets
+        preClassNotificationStatusMessage = ""
         classroomStatusMessage = "正在展示内置示例空教室，未连接北邮服务"
         calendarImportStatusMessage = ""
         dailyCourseNotificationStatusMessage = ""
@@ -695,6 +706,9 @@ final class AppModel: ObservableObject {
         queryCampusID = campusID
         dailyCourseNotificationsEnabled = defaults.bool(forKey: Self.dailyCourseNotificationsKey)
         dailyCourseNotificationMinutes = DailyCourseNotificationSettings.loadMinutes(defaults: defaults)
+        preClassNotificationsEnabled = defaults.bool(forKey: PreClassNotificationSettings.enabledKey)
+        preClassNotificationOffsets = PreClassNotificationSettings.loadOffsets(defaults: defaults)
+        preClassNotificationStatusMessage = ""
         widgetShowsLocation = defaults.object(forKey: Self.widgetShowsLocationKey) as? Bool ?? true
         widgetShowsTeacher = defaults.object(forKey: Self.widgetShowsTeacherKey) as? Bool ?? true
         let savedWidgetCourseLimit = defaults.integer(forKey: Self.widgetCourseLimitKey)
@@ -834,6 +848,10 @@ final class AppModel: ObservableObject {
             defaults.set(termID, forKey: "termID")
             defaults.set(termStartDate, forKey: "termStartDate")
             defaults.set(automaticTermDetectionEnabled, forKey: Self.automaticTermDetectionKey)
+            if dailyCourseNotificationsEnabled || preClassNotificationsEnabled {
+                if !accountChanged { cancelDailyCourseNotifications() }
+                reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+            }
             setStatusMessage("设置已保存", autoDismiss: true)
             if automaticTermDetectionEnabled && (accountChanged || credentialsBecameAvailable) {
                 refreshScheduleAutomaticallyIfNeeded()
@@ -864,7 +882,12 @@ final class AppModel: ObservableObject {
         } else {
             defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
             dailyCourseNotificationStatusMessage = "每日课程摘要已关闭"
-            cancelDailyCourseNotifications()
+            if preClassNotificationsEnabled {
+                cancelCourseNotificationCategory(.dailySummary, includingDelivered: true)
+                reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+            } else {
+                cancelDailyCourseNotifications(includingDelivered: true)
+            }
         }
     }
 
@@ -878,7 +901,47 @@ final class AppModel: ObservableObject {
         defaults.set(minutes, forKey: DailyCourseNotificationSettings.minutesKey)
         // Invalidate old requests before awaiting authorization: they may be
         // seconds from delivery while the system permission lookup is delayed.
-        cancelDailyCourseNotifications()
+        cancelCourseNotificationCategory(.dailySummary)
+        reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        return true
+    }
+
+    func setPreClassNotificationsEnabled(_ enabled: Bool) {
+        guard !isSampleMode else {
+            if isReviewDemo {
+                preClassNotificationsEnabled = enabled
+                preClassNotificationStatusMessage = enabled
+                    ? "示例模式已模拟开启课前提醒，未申请通知权限"
+                    : "示例模式已模拟关闭课前提醒"
+            } else {
+                preClassNotificationStatusMessage = "示例模式不会申请通知权限"
+            }
+            return
+        }
+        preClassNotificationsEnabled = enabled
+        if enabled {
+            preClassNotificationStatusMessage = "正在确认通知权限…"
+            reconcileDailyCourseNotifications(requestPermissionIfNeeded: true)
+        } else {
+            defaults.set(false, forKey: PreClassNotificationSettings.enabledKey)
+            preClassNotificationStatusMessage = "课前提醒已关闭"
+            if dailyCourseNotificationsEnabled {
+                cancelCourseNotificationCategory(.preClass, includingDelivered: true)
+                reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+            } else {
+                cancelDailyCourseNotifications(includingDelivered: true)
+            }
+        }
+    }
+
+    @discardableResult
+    func setPreClassNotificationOffsets(_ offsets: [Int]) -> Bool {
+        guard PreClassNotificationSettings.isValid(offsets), !isSampleMode || isReviewDemo else { return false }
+        guard preClassNotificationOffsets != offsets else { return true }
+        preClassNotificationOffsets = offsets
+        guard !isSampleMode else { return true }
+        defaults.set(offsets, forKey: PreClassNotificationSettings.offsetsKey)
+        cancelCourseNotificationCategory(.preClass)
         reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
         return true
     }
@@ -1078,6 +1141,10 @@ final class AppModel: ObservableObject {
         appLanguage = language
         defaults.set(language.rawValue, forKey: AppLocalization.defaultsKey)
         synchronizeWidgetSchedule()
+        if !isSampleMode, dailyCourseNotificationsEnabled || preClassNotificationsEnabled {
+            cancelDailyCourseNotifications()
+            reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        }
     }
 
     func localized(_ key: String) -> String {
@@ -1119,7 +1186,12 @@ final class AppModel: ObservableObject {
         defaults.removeObject(forKey: DailyCourseNotificationSettings.minutesKey)
         dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes
         dailyCourseNotificationStatusMessage = ""
-        cancelDailyCourseNotifications()
+        preClassNotificationsEnabled = false
+        defaults.removeObject(forKey: PreClassNotificationSettings.enabledKey)
+        defaults.removeObject(forKey: PreClassNotificationSettings.offsetsKey)
+        preClassNotificationOffsets = PreClassNotificationSettings.defaultOffsets
+        preClassNotificationStatusMessage = ""
+        cancelDailyCourseNotifications(includingDelivered: true)
         var failures = [String]()
 
         do {
@@ -1318,6 +1390,7 @@ final class AppModel: ObservableObject {
                 defaults.set(termID, forKey: "termID")
                 defaults.set(termStartDate, forKey: "termStartDate")
                 synchronizeSelectedSlots()
+                cancelDailyCourseNotifications()
                 reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
                 setStatusMessage(
                     localizedFormat(
@@ -1649,9 +1722,12 @@ final class AppModel: ObservableObject {
 
     private func clearAccountScopedData() throws {
         invalidatePendingAccountRequests()
-        cancelDailyCourseNotifications()
+        cancelDailyCourseNotifications(includingDelivered: true)
         if dailyCourseNotificationsEnabled {
             dailyCourseNotificationStatusMessage = "账号已更改，获取课表后将重新安排摘要"
+        }
+        if preClassNotificationsEnabled {
+            preClassNotificationStatusMessage = "账号已更改，获取课表后将重新安排课前提醒"
         }
         var failed = false
         do {
@@ -1741,7 +1817,7 @@ final class AppModel: ObservableObject {
         ensureHolidays(for: year)
         // Reconcile enabled notifications after their cached courses arrive.
         // A disabled setting can clear an old batch immediately on launch.
-        if !dailyCourseNotificationsEnabled {
+        if !dailyCourseNotificationsEnabled && !preClassNotificationsEnabled {
             reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
         }
     }
@@ -1883,34 +1959,56 @@ final class AppModel: ObservableObject {
     private func reconcileDailyCourseNotifications(requestPermissionIfNeeded: Bool) {
         guard !isSampleMode else {
             dailyCourseNotificationsEnabled = false
+            preClassNotificationsEnabled = false
             return
         }
+        courseNotificationTask?.cancel()
         dailyCourseNotificationRevision &+= 1
         let revision = dailyCourseNotificationRevision
-        guard dailyCourseNotificationsEnabled else {
+        dailyCourseNotificationScheduler.invalidate(revision: revision)
+        guard dailyCourseNotificationsEnabled || preClassNotificationsEnabled else {
             dailyCourseNotificationScheduler.cancelPending(revision: revision)
             return
         }
         guard !courseDeletionLoadFailed else {
-            dailyCourseNotificationScheduler.cancelPending(revision: revision)
+            dailyCourseNotificationScheduler.clearPending(revision: revision)
             dailyCourseNotificationStatusMessage = "本地课程删除记录读取失败"
+            preClassNotificationStatusMessage = "本地课程删除记录读取失败"
             return
         }
-
-        Task { [weak self] in
-            guard let self else { return }
+        // Freeze one combined plan before suspension. Every account, settings,
+        // language, or schedule change invalidates this same scheduler revision.
+        let dailyEnabled = dailyCourseNotificationsEnabled
+        let preClassEnabled = preClassNotificationsEnabled
+        let snapshot = schedule
+        let credentialsAvailable = hasSavedPassword
+        let minutes = dailyCourseNotificationMinutes
+        let offsets = preClassNotificationOffsets
+        let language = appLanguage
+        courseNotificationTask = Task { [weak self] in
+            guard let self, revision == dailyCourseNotificationRevision, !Task.isCancelled else { return }
             do {
                 let outcome = try await DailyCourseNotificationCoordinator(
                     scheduler: dailyCourseNotificationScheduler,
                     authorizationTimeout: dailyCourseNotificationAuthorizationTimeout
                 ).reconcile(
-                    enabled: dailyCourseNotificationsEnabled,
+                    enabled: dailyEnabled,
                     requestPermissionIfNeeded: requestPermissionIfNeeded,
-                    hasCredentials: hasSavedPassword,
-                    schedule: schedule,
-                    dailyCourseNotificationMinutes: dailyCourseNotificationMinutes,
+                    hasCredentials: credentialsAvailable,
+                    schedule: snapshot,
+                    dailyCourseNotificationMinutes: minutes,
+                    preClassEnabled: preClassEnabled,
+                    preClassOffsets: offsets,
+                    language: language,
                     now: now(),
-                    revision: revision
+                    revision: revision,
+                    onAuthorized: { [weak self] in
+                        guard let self, revision == self.dailyCourseNotificationRevision else { return }
+                        // Persist before the first request can be delivered.
+                        // Foreground presentation reads these same preferences.
+                        self.defaults.set(dailyEnabled, forKey: Self.dailyCourseNotificationsKey)
+                        self.defaults.set(preClassEnabled, forKey: PreClassNotificationSettings.enabledKey)
+                    }
                 )
                 guard revision == dailyCourseNotificationRevision else { return }
                 switch outcome {
@@ -1918,31 +2016,72 @@ final class AppModel: ObservableObject {
                     defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
                 case .permissionDenied:
                     dailyCourseNotificationsEnabled = false
+                    preClassNotificationsEnabled = false
                     defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
+                    defaults.set(false, forKey: PreClassNotificationSettings.enabledKey)
                     dailyCourseNotificationStatusMessage = "通知权限未开启，未安排课程摘要"
+                    preClassNotificationStatusMessage = "通知权限未开启，未安排课前提醒"
+                case .permissionRequired:
+                    defaults.set(dailyEnabled, forKey: Self.dailyCourseNotificationsKey)
+                    defaults.set(preClassEnabled, forKey: PreClassNotificationSettings.enabledKey)
+                    if dailyEnabled { dailyCourseNotificationStatusMessage = "尚未授予通知权限，请重新开启提醒以申请权限" }
+                    if preClassEnabled { preClassNotificationStatusMessage = "尚未授予通知权限，请重新开启提醒以申请权限" }
                 case .waitingForSchedule:
-                    defaults.set(true, forKey: Self.dailyCourseNotificationsKey)
-                    dailyCourseNotificationStatusMessage = "每日课程摘要已开启，获取课表后自动安排"
+                    defaults.set(dailyEnabled, forKey: Self.dailyCourseNotificationsKey)
+                    defaults.set(preClassEnabled, forKey: PreClassNotificationSettings.enabledKey)
+                    if dailyEnabled { dailyCourseNotificationStatusMessage = "每日课程摘要已开启，获取课表后自动安排" }
+                    if preClassEnabled { preClassNotificationStatusMessage = "课前提醒已开启，获取课表后自动安排" }
                 case let .scheduled(count):
                     defaults.set(true, forKey: Self.dailyCourseNotificationsKey)
                     dailyCourseNotificationStatusMessage = count == 0
                         ? "每日课程摘要已开启，当前课表没有待通知课程"
                         : localizedFormat("已安排未来 %d 个有课日的课程摘要", count)
+                case let .scheduledReminders(daily, preClass):
+                    defaults.set(dailyEnabled, forKey: Self.dailyCourseNotificationsKey)
+                    defaults.set(preClassEnabled, forKey: PreClassNotificationSettings.enabledKey)
+                    if dailyEnabled {
+                        dailyCourseNotificationStatusMessage = localizedFormat("已安排未来 %d 个有课日的课程摘要", daily)
+                    }
+                    preClassNotificationStatusMessage = preClass == 0
+                        ? "课前提醒已开启，当前没有待提醒的课程或考试"
+                        : localizedFormat("已安排 %d 条课前提醒，重新打开应用时自动补充", preClass)
                 }
             } catch {
                 guard revision == dailyCourseNotificationRevision else { return }
-                dailyCourseNotificationsEnabled = false
-                defaults.set(false, forKey: Self.dailyCourseNotificationsKey)
-                dailyCourseNotificationScheduler.cancelPending(revision: revision)
-                dailyCourseNotificationStatusMessage = localized("课程摘要安排失败：")
-                    + localized(error.localizedDescription)
+                if error is DailyCourseNotificationAuthorizationError {
+                    // A timeout is not a denial. Keep the user's choices, but
+                    // do not leave a queue active with unconfirmed permission.
+                    dailyCourseNotificationScheduler.clearPending(revision: revision)
+                }
+                // A transient add failure must not erase another category
+                // or turn the user's choice off. Refill on next foreground.
+                defaults.set(dailyEnabled, forKey: Self.dailyCourseNotificationsKey)
+                defaults.set(preClassEnabled, forKey: PreClassNotificationSettings.enabledKey)
+                if dailyEnabled {
+                    dailyCourseNotificationStatusMessage = localized("课程摘要安排失败：") + localized(error.localizedDescription)
+                }
+                if preClassEnabled {
+                    preClassNotificationStatusMessage = "部分课前提醒暂未安排，重新打开应用时重试"
+                }
             }
         }
     }
 
-    private func cancelDailyCourseNotifications() {
+    private func cancelDailyCourseNotifications(includingDelivered: Bool = false) {
+        courseNotificationTask?.cancel()
         dailyCourseNotificationRevision &+= 1
-        dailyCourseNotificationScheduler.cancelPending(revision: dailyCourseNotificationRevision)
+        if includingDelivered {
+            dailyCourseNotificationScheduler.cancelPending(revision: dailyCourseNotificationRevision)
+        } else {
+            dailyCourseNotificationScheduler.clearPending(revision: dailyCourseNotificationRevision)
+        }
+    }
+
+    private func cancelCourseNotificationCategory(_ category: CourseNotificationCategory, includingDelivered: Bool = false) {
+        courseNotificationTask?.cancel()
+        dailyCourseNotificationRevision &+= 1
+        dailyCourseNotificationScheduler.cancelPending(category: category, revision: dailyCourseNotificationRevision,
+                                                      includingDelivered: includingDelivered)
     }
 
     private static var todayString: String {

@@ -38,11 +38,11 @@ enum DailyCourseNotificationAuthorizationError: LocalizedError, Equatable, Senda
 enum DailyCourseNotificationForegroundPolicy {
     static func presentationOptions(
         identifier: String,
-        isEnabled: Bool
+        isEnabled: Bool,
+        preClassEnabled: Bool = false
     ) -> UNNotificationPresentationOptions {
-        guard
-            isEnabled,
-            identifier.hasPrefix(DailyCourseNotificationPlanner.identifierPrefix)
+        guard (isEnabled && identifier.hasPrefix(DailyCourseNotificationPlanner.identifierPrefix))
+            || (preClassEnabled && identifier.hasPrefix(PreClassNotificationPlanner.identifierPrefix))
         else { return [] }
         return [.banner, .list, .sound]
     }
@@ -67,7 +67,8 @@ final class DailyCourseNotificationForegroundDelegate: NSObject,
     ) {
         completionHandler(DailyCourseNotificationForegroundPolicy.presentationOptions(
             identifier: notification.request.identifier,
-            isEnabled: defaults.bool(forKey: DailyCourseNotificationSettings.enabledKey)
+            isEnabled: defaults.bool(forKey: DailyCourseNotificationSettings.enabledKey),
+            preClassEnabled: defaults.bool(forKey: PreClassNotificationSettings.enabledKey)
         ))
     }
 }
@@ -107,6 +108,7 @@ enum DailyCourseNotificationPlanner {
         after now: Date,
         dailyCourseNotificationMinutes: Int = DailyCourseNotificationSettings.defaultMinutes,
         scanDayLimit: Int? = nil,
+        language: AppLanguage = .simplifiedChinese,
         calendar: Calendar = .shanghai
     ) -> [DailyCourseNotificationRequest] {
         guard
@@ -162,15 +164,17 @@ enum DailyCourseNotificationPlanner {
             guard !courses.isEmpty else { continue }
             let entries = courses.map { course in
                 let location = course.room.isEmpty ? "" : " @ \(course.room)"
-                let kind = course.isExam ? "考试 · " : ""
-                let time = course.isExam && course.minuteInterval == nil ? "时间待定" : course.timeRange
+                let kind = course.isExam ? AppLocalization.string("考试", language: language) + " · " : ""
+                let time = course.isExam && course.minuteInterval == nil
+                    ? AppLocalization.string("时间待定", language: language) : course.timeRange
                 return "\(kind)\(time) \(course.name)\(location)"
             }
             let date = StrictContractDateParser.string(from: day, calendar: calendar)
             requests.append(DailyCourseNotificationRequest(
                 identifier: identifierPrefix + date,
                 fireDate: fireDate,
-                title: "今日课程 · \(courses.count) 门",
+                title: String(format: AppLocalization.string("今日课程 · %d 门", language: language),
+                              locale: language.locale, courses.count),
                 body: entries.joined(separator: "；")
             ))
         }
@@ -187,6 +191,20 @@ protocol DailyCourseNotificationScheduling: Sendable {
         revision: UInt64
     ) async throws
     func cancelPending(revision: UInt64)
+    func clearPending(revision: UInt64)
+    func cancelPending(category: CourseNotificationCategory, revision: UInt64, includingDelivered: Bool)
+    func invalidate(revision: UInt64)
+}
+
+extension DailyCourseNotificationScheduling {
+    func clearPending(revision: UInt64) { cancelPending(revision: revision) }
+    func cancelPending(category _: CourseNotificationCategory, revision: UInt64, includingDelivered _: Bool) {
+        cancelPending(revision: revision)
+    }
+    func cancelPending(category: CourseNotificationCategory, revision: UInt64) {
+        cancelPending(category: category, revision: revision, includingDelivered: true)
+    }
+    func invalidate(revision _: UInt64) {}
 }
 
 protocol CourseNotificationCenter: Sendable {
@@ -204,13 +222,20 @@ protocol CourseNotificationCenter: Sendable {
     ) async throws
     func removePending(withIdentifiers identifiers: [String])
     func removeDelivered(withIdentifiers identifiers: [String])
+    func deliveredIdentifiers(completion: @escaping @Sendable ([String]) -> Void)
+}
+
+extension CourseNotificationCenter {
+    func deliveredIdentifiers(completion: @escaping @Sendable ([String]) -> Void) { completion([]) }
 }
 
 enum DailyCourseNotificationReconcileOutcome: Equatable, Sendable {
     case disabled
     case permissionDenied
+    case permissionRequired
     case waitingForSchedule
     case scheduled(Int)
+    case scheduledReminders(daily: Int, preClass: Int)
 }
 
 struct DailyCourseNotificationCoordinator: Sendable {
@@ -223,39 +248,59 @@ struct DailyCourseNotificationCoordinator: Sendable {
         hasCredentials: Bool,
         schedule: ScheduleSnapshot?,
         dailyCourseNotificationMinutes: Int = DailyCourseNotificationSettings.defaultMinutes,
+        preClassEnabled: Bool = false,
+        preClassOffsets: [Int] = PreClassNotificationSettings.defaultOffsets,
+        language: AppLanguage = .simplifiedChinese,
         now: Date = .now,
-        revision: UInt64
+        revision: UInt64,
+        onAuthorized: @MainActor @Sendable () -> Void = {}
     ) async throws -> DailyCourseNotificationReconcileOutcome {
-        guard enabled else {
+        guard enabled || preClassEnabled else {
             scheduler.cancelPending(revision: revision)
             return .disabled
         }
 
         let status = try await scheduler.authorizationStatus(timeout: authorizationTimeout)
+        try Task.checkCancellation()
         let authorized: Bool
         switch status {
         case .authorized:
             authorized = true
         case .notDetermined where requestPermissionIfNeeded:
             authorized = try await scheduler.requestAuthorization(timeout: authorizationTimeout)
-        case .notDetermined, .denied:
+        case .notDetermined:
+            scheduler.clearPending(revision: revision)
+            return .permissionRequired
+        case .denied:
             authorized = false
         }
+        try Task.checkCancellation()
         guard authorized else {
             scheduler.cancelPending(revision: revision)
             return .permissionDenied
         }
+        await onAuthorized()
+        try Task.checkCancellation()
         guard hasCredentials, let schedule else {
-            scheduler.cancelPending(revision: revision)
+            scheduler.clearPending(revision: revision)
             return .waitingForSchedule
         }
 
-        let requests = DailyCourseNotificationPlanner.requests(
+        let summaries = enabled ? DailyCourseNotificationPlanner.requests(
             for: schedule,
             after: now,
-            dailyCourseNotificationMinutes: dailyCourseNotificationMinutes
-        )
+            dailyCourseNotificationMinutes: dailyCourseNotificationMinutes,
+            language: language
+        ) : []
+        let reminders = preClassEnabled ? PreClassNotificationPlanner.requests(
+            for: schedule, after: now, offsets: preClassOffsets, language: language
+        ) : []
+        let requests = CourseNotificationPlan.earliest(summaries + reminders, after: now)
         try await scheduler.replacePending(with: requests, revision: revision)
+        if preClassEnabled {
+            let daily = requests.filter { $0.identifier.hasPrefix(DailyCourseNotificationPlanner.identifierPrefix) }.count
+            return .scheduledReminders(daily: daily, preClass: requests.count - daily)
+        }
         return .scheduled(requests.count)
     }
 }
@@ -335,7 +380,7 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         with requests: [DailyCourseNotificationRequest],
         revision: UInt64
     ) async throws {
-        let batch = requests.prefix(DailyCourseNotificationPlanner.maximumPendingRequestCount).map {
+        let batch = CourseNotificationPlan.earliest(requests, after: now()).map {
             ($0, systemIdentifier(for: $0, revision: revision))
         }
         let replacementIdentifiers = Set(batch.map(\.1))
@@ -345,21 +390,30 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         ) else {
             return
         }
-        await removeNotifications(identifiersToRemove)
+        await removePendingNotifications(identifiersToRemove)
 
+        var firstFailure: (any Error)?
         for (request, identifier) in batch {
             guard isCurrent(revision) else { return }
-            try await center.add(
-                identifier: identifier,
-                title: request.title,
-                body: request.body,
-                fireDate: request.fireDate
-            )
+            guard request.fireDate > now() else { continue }
+            // Retry an individual transient failure once. A failed reminder
+            // must not prevent another reminder or daily summary being added.
+            for attempt in 0 ... 1 {
+                guard isCurrent(revision), request.fireDate > now() else { break }
+                do {
+                    try await center.add(identifier: identifier, title: request.title,
+                                         body: request.body, fireDate: request.fireDate)
+                    break
+                } catch {
+                    if attempt == 1 { firstFailure = firstFailure ?? error }
+                }
+            }
             guard isCurrent(revision) else {
                 center.removePending(withIdentifiers: [identifier])
                 return
             }
         }
+        if let firstFailure { throw firstFailure }
     }
 
     func cancelPending(revision: UInt64) {
@@ -370,6 +424,35 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         Task.detached(priority: .utility) {
             Self.removeNotifications(identifiersToRemove, center: center)
         }
+        removeRetiredDeliveredNotifications(category: nil)
+    }
+
+    func invalidate(revision: UInt64) {
+        revisionLock.withLock { currentRevision = max(currentRevision, revision) }
+    }
+
+    func clearPending(revision: UInt64) {
+        guard let identifiers = prepareRevision(revision, replacementIdentifiers: []) else { return }
+        let center = center
+        Task.detached(priority: .utility) { center.removePending(withIdentifiers: identifiers) }
+    }
+
+    func cancelPending(category: CourseNotificationCategory, revision: UInt64, includingDelivered: Bool) {
+        let identifiers: [String]? = revisionLock.withLock {
+            guard revision >= currentRevision else { return nil }
+            currentRevision = revision
+            let existing = storedIdentifiers()
+            let removed = Set(ownedNotificationIdentifiers().filter { $0.hasPrefix(category.identifierPrefix) })
+            storeIdentifiers(existing.subtracting(removed))
+            return removed.sorted()
+        }
+        guard let identifiers else { return }
+        let center = center
+        Task.detached(priority: .utility) {
+            center.removePending(withIdentifiers: identifiers)
+            if includingDelivered { center.removeDelivered(withIdentifiers: identifiers) }
+        }
+        if includingDelivered { removeRetiredDeliveredNotifications(category: category) }
     }
 
     private func prepareRevision(
@@ -406,15 +489,34 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         storedIdentifiers()
             .union(additionalIdentifiers)
             .union(legacyDateIdentifiers())
-            .filter { $0.hasPrefix(DailyCourseNotificationPlanner.identifierPrefix) }
+            .filter { CourseNotificationCategory.owns($0) }
             .sorted()
     }
 
-    private func removeNotifications(_ identifiers: [String]) async {
+    private func removePendingNotifications(_ identifiers: [String]) async {
         let center = center
         await Task.detached(priority: .utility) {
-            Self.removeNotifications(identifiers, center: center)
+            center.removePending(withIdentifiers: identifiers)
         }.value
+    }
+
+    private func removeRetiredDeliveredNotifications(category: CourseNotificationCategory?) {
+        // A normal replan leaves delivered notifications alone. At an explicit
+        // cancellation boundary also remove delivered IDs from older batches,
+        // which are no longer in the persisted pending set. A newer batch may
+        // arrive while the asynchronous system lookup is in flight; retain it.
+        center.deliveredIdentifiers { [weak self] identifiers in
+            guard let self else { return }
+            let removed = self.revisionLock.withLock {
+                let active = self.storedIdentifiers()
+                return identifiers.filter { identifier in
+                    CourseNotificationCategory.owns(identifier)
+                        && (category.map { identifier.hasPrefix($0.identifierPrefix) } ?? true)
+                        && !active.contains(identifier)
+                }
+            }
+            if !removed.isEmpty { self.center.removeDelivered(withIdentifiers: removed) }
+        }
     }
 
     private static func removeNotifications(
@@ -515,5 +617,11 @@ private final class SystemCourseNotificationCenter: CourseNotificationCenter, @u
 
     func removeDelivered(withIdentifiers identifiers: [String]) {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
+    func deliveredIdentifiers(completion: @escaping @Sendable ([String]) -> Void) {
+        center.getDeliveredNotifications { notifications in
+            completion(notifications.map { $0.request.identifier })
+        }
     }
 }

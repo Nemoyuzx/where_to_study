@@ -61,6 +61,8 @@ export const DEFAULT_SETTINGS = {
   uiLanguage: 'system',
   dailyCourseNotificationsEnabled: false,
   dailyCourseNotificationMinutes: 450,
+  courseRemindersEnabled: false,
+  courseReminderMinutes: [10],
   automaticTermDetectionEnabled: true,
   weatherEnabled: true,
   almanacEnabled: true,
@@ -566,6 +568,8 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
     dailyCourseNotificationMinutes: normalizeDailyCourseNotificationMinutes(
       data.daily_course_notification_minutes ?? fallback.dailyCourseNotificationMinutes,
     ),
+    courseRemindersEnabled: Boolean(data.course_reminders_enabled ?? fallback.courseRemindersEnabled ?? false),
+    courseReminderMinutes: normalizeCourseReminderMinutes(data.course_reminder_minutes ?? fallback.courseReminderMinutes),
     automaticTermDetectionEnabled: Boolean(
       data.automatic_term_detection_enabled
       ?? fallback.automaticTermDetectionEnabled
@@ -735,11 +739,27 @@ export function applyCourseDeletions(schedule, deletions = []) {
   }
 }
 
-export function reminderSettingsPayload(savedSettings, enabled, minutes) {
+export function validCourseReminderMinutes(values) {
+  return Array.isArray(values) && values.length >= 1 && values.length <= 5
+    && values.every(value => Number.isInteger(value) && value >= 1 && value <= 1440)
+    && new Set(values).size === values.length
+}
+
+export function normalizeCourseReminderMinutes(values) {
+  return validCourseReminderMinutes(values) ? [...values] : [10]
+}
+
+export function reminderSettingsPayload(savedSettings, enabled, minutes,
+  courseEnabled = savedSettings.courseRemindersEnabled, courseMinutes = savedSettings.courseReminderMinutes) {
+  if (!validCourseReminderMinutes(courseMinutes ?? [10])) {
+    throw new Error('请设置 1 至 5 次不重复的课前提醒，每次提前 1 至 1440 分钟。')
+  }
   return settingsToPayload({
     ...savedSettings,
     dailyCourseNotificationsEnabled: enabled,
     dailyCourseNotificationMinutes: minutes,
+    courseRemindersEnabled: courseEnabled,
+    courseReminderMinutes: courseMinutes ?? [10],
   })
 }
 
@@ -768,6 +788,8 @@ export function settingsToPayload(settings) {
     ui_language: normalizeUiLanguage(settings.uiLanguage),
     daily_course_notifications_enabled: Boolean(settings.dailyCourseNotificationsEnabled),
     daily_course_notification_minutes: normalizeDailyCourseNotificationMinutes(settings.dailyCourseNotificationMinutes),
+    course_reminders_enabled: Boolean(settings.courseRemindersEnabled),
+    course_reminder_minutes: normalizeCourseReminderMinutes(settings.courseReminderMinutes),
     automatic_term_detection_enabled: Boolean(settings.automaticTermDetectionEnabled),
     weather_enabled: Boolean(settings.weatherEnabled),
     almanac_enabled: Boolean(settings.almanacEnabled),

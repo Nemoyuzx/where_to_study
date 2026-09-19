@@ -18,9 +18,22 @@ struct Delivered {
 }
 
 static LAST: OnceLock<Mutex<Option<Delivered>>> = OnceLock::new();
+static PRECLASS: OnceLock<Mutex<Option<Delivered>>> = OnceLock::new();
 
 pub fn show(_: &str, title: &str, body: &str) -> Result<(), String> {
-    let mut last = LAST
+    show_kind(title, body, &LAST)
+}
+
+pub fn show_preclass(_: &str, title: &str, body: &str) -> Result<(), String> {
+    show_kind(title, body, &PRECLASS)
+}
+
+fn show_kind(
+    title: &str,
+    body: &str,
+    slot: &OnceLock<Mutex<Option<Delivered>>>,
+) -> Result<(), String> {
+    let mut last = slot
         .get_or_init(|| Mutex::new(None))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -107,7 +120,20 @@ fn close(notification: &Delivered) -> Result<(), String> {
 }
 
 pub fn clear(_: &str) -> Result<(), String> {
-    let mut last = LAST
+    let daily = clear_daily("");
+    let preclass = clear_preclass("");
+    daily.and(preclass)
+}
+
+pub fn clear_daily(_: &str) -> Result<(), String> {
+    clear_kind(&LAST)
+}
+pub fn clear_preclass(_: &str) -> Result<(), String> {
+    clear_kind(&PRECLASS)
+}
+
+fn clear_kind(slot: &OnceLock<Mutex<Option<Delivered>>>) -> Result<(), String> {
+    let mut last = slot
         .get_or_init(|| Mutex::new(None))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -209,6 +235,14 @@ mod tests {
         clear("com.nemoyu.wheretostudy").unwrap();
         assert!(LAST.get().unwrap().lock().unwrap().is_none());
         assert_eq!(seen.lock().unwrap().last().unwrap(), "close 71");
+        show("com.nemoyu.wheretostudy", "daily", "summary").unwrap();
+        show_preclass("com.nemoyu.wheretostudy", "preclass", "in ten minutes").unwrap();
+        clear_preclass("com.nemoyu.wheretostudy").unwrap();
+        assert!(LAST.get().unwrap().lock().unwrap().is_some());
+        assert!(PRECLASS.get().unwrap().lock().unwrap().is_none());
+        assert_eq!(seen.lock().unwrap().last().unwrap(), "close 73");
+        clear_daily("com.nemoyu.wheretostudy").unwrap();
+        assert_eq!(seen.lock().unwrap().last().unwrap(), "close 72");
         show("com.nemoyu.wheretostudy", "replacement", "safe text").unwrap();
         drop(_connection);
         // A dead owner must not leave the feature permanently unable to clear.

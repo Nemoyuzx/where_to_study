@@ -451,6 +451,26 @@ export class AppLocalization {
     '示例模式不会申请通知权限': 'Demo mode does not request notification permission',
     '正在确认通知权限…': 'Checking notification permission…',
     '每日课程摘要已关闭': 'Daily course summary is off',
+    '课前提醒': 'Before-class reminders',
+    '提前分钟': 'Minutes before',
+    '编辑提醒': 'Edit reminders',
+    '提醒次数': 'Reminder count',
+    '减少提醒次数': 'Fewer reminders',
+    '增加提醒次数': 'More reminders',
+    '提醒': 'Reminder',
+    '分钟': 'min',
+    '保存提醒': 'Save reminders',
+    '请输入 1–5 个不重复的整数，每个为 1–1440 分钟。':
+      'Enter 1–5 distinct whole numbers, each from 1 to 1440 minutes.',
+    '按北京时间，在课程或考试开始前提醒；默认提前 10 分钟。':
+      'Remind before classes or exams in Beijing time; 10 minutes before by default.',
+    '系统最多保留近期 30 条提醒；打开应用时自动补充后续安排。':
+      'Up to 30 upcoming reminders are kept. Open the app to schedule later reminders.',
+    '课程提醒已关闭': 'Course reminders are off',
+    '通知权限未开启，未安排课程提醒': 'Notifications are disabled; no course reminders were scheduled',
+    '课程提醒已开启，获取课表后自动安排': 'Course reminders are on and will be scheduled after fetching the schedule',
+    '课程提醒已开启，当前课表没有待通知课程': 'Course reminders are on; there are no upcoming reminders',
+    '账号已更改，获取课表后将重新安排提醒': 'The account changed; reminders will be rescheduled after fetching the schedule',
     '通知权限未开启，未安排课程摘要': 'Notifications are disabled; no course summary was scheduled',
     '每日课程摘要已开启，获取课表后自动安排':
       'Daily course summary is on and will be scheduled after fetching the schedule',
@@ -508,6 +528,17 @@ export class AppLocalization {
     if (source.startsWith('课程摘要安排失败：')) {
       return 'Unable to schedule course summaries: ' +
         source.substring('课程摘要安排失败：'.length);
+    }
+    if (source.startsWith('课程提醒安排失败：')) {
+      return 'Unable to schedule course reminders: ' + source.substring('课程提醒安排失败：'.length);
+    }
+    if (source.startsWith('已安排 ') && source.endsWith(' 条课程提醒')) {
+      return source.substring('已安排 '.length, source.length - ' 条课程提醒'.length) + ' course reminders scheduled';
+    }
+    if (source.startsWith('已安排 ') && source.endsWith(' 条课程提醒，部分提醒暂时未能安排')) {
+      return source.substring('已安排 '.length,
+        source.length - ' 条课程提醒，部分提醒暂时未能安排'.length) +
+        ' course reminders scheduled; some reminders could not be scheduled';
     }
     if (source.startsWith('自定义日程获取失败：')) {
       return 'Unable to load the custom schedule: ' +

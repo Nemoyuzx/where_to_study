@@ -44,6 +44,7 @@ import {
   dailyCourseNotificationTime,
   parseDailyCourseNotificationTime,
   reminderSettingsPayload,
+  validCourseReminderMinutes,
   semesterSettingsPayload,
   addDays,
   buildCalendarDayMap,
@@ -361,6 +362,14 @@ const EN_TEXT = Object.freeze({
   '提醒时间（北京时间）': 'Reminder time (Beijing time)',
   '保存提醒设置': 'Save reminder settings',
   '旧课程通知清理失败：': 'Could not remove previous course notifications: ',
+  '课前提醒': 'Pre-class reminders',
+  '默认提前 10 分钟；可添加多次提醒，与每日摘要分别开关。': 'Defaults to 10 minutes before class. Add multiple reminders independently of the daily summary.',
+  '提醒次数': 'Reminders per class',
+  '提前分钟': 'Minutes before class',
+  '添加提醒': 'Add reminder',
+  '删除提醒': 'Remove reminder',
+  '请设置 1 至 5 次不重复的课前提醒，每次提前 1 至 1440 分钟。': 'Set 1–5 distinct reminders, each 1–1440 minutes before class.',
+  '仅提醒有明确开始时间的课程及考试。关闭应用或休眠期间不能保证准时送达，已过期提醒不会补发。': 'Only classes and exams with a known start time are included. Delivery is not guaranteed while the app is closed or the computer sleeps; expired reminders are skipped.',
   '发送今日课程提醒失败：': 'Could not deliver today’s course reminder: ',
   '系统通知已关闭，请在 Windows 设置中允许本应用通知。': 'System notifications are disabled. Allow this app in Windows Settings.',
   '系统通知未开启，请在设置中重新开启课程提醒并允许通知。': 'Notifications are not allowed. Re-enable course reminders in Settings and allow notifications.',
@@ -677,6 +686,8 @@ function browserPreviewCommand(name, payload = {}) {
       ui_language: DEFAULT_SETTINGS.uiLanguage,
       daily_course_notifications_enabled: DEFAULT_SETTINGS.dailyCourseNotificationsEnabled,
       daily_course_notification_minutes: DEFAULT_SETTINGS.dailyCourseNotificationMinutes,
+      course_reminders_enabled: DEFAULT_SETTINGS.courseRemindersEnabled,
+      course_reminder_minutes: DEFAULT_SETTINGS.courseReminderMinutes,
       automatic_term_detection_enabled: DEFAULT_SETTINGS.automaticTermDetectionEnabled,
       weather_enabled: DEFAULT_SETTINGS.weatherEnabled,
       almanac_enabled: DEFAULT_SETTINGS.almanacEnabled,
@@ -707,6 +718,8 @@ function browserPreviewCommand(name, payload = {}) {
       ui_language: payload.ui_language || 'system',
       daily_course_notifications_enabled: Boolean(payload.daily_course_notifications_enabled),
       daily_course_notification_minutes: payload.daily_course_notification_minutes,
+      course_reminders_enabled: Boolean(payload.course_reminders_enabled),
+      course_reminder_minutes: payload.course_reminder_minutes,
       automatic_term_detection_enabled: Boolean(payload.automatic_term_detection_enabled),
       weather_enabled: Boolean(payload.weather_enabled),
       almanac_enabled: Boolean(payload.almanac_enabled),
@@ -2473,7 +2486,7 @@ function App() {
 
   function updateSetting(field, value) {
     setSettingsSaved(false)
-    if (field === 'dailyCourseNotificationsEnabled' || field === 'dailyCourseNotificationMinutes') {
+    if (['dailyCourseNotificationsEnabled', 'dailyCourseNotificationMinutes', 'courseRemindersEnabled', 'courseReminderMinutes'].includes(field)) {
       setReminderSettingsStatus('')
     }
     if (['account', 'password', 'teachingCloudPassword', 'clearTeachingCloudPassword'].includes(field)) {
@@ -2486,6 +2499,10 @@ function App() {
 
   async function saveReminderSettings() {
     if (settingsSaving || !settingsLoaded) return
+    if (!validCourseReminderMinutes(settings.courseReminderMinutes)) {
+      setError('请设置 1 至 5 次不重复的课前提醒，每次提前 1 至 1440 分钟。')
+      return
+    }
     const clearRevision = localDataClearRevision.current
     const minutes = settings.dailyCourseNotificationMinutes
     const enabled = settings.dailyCourseNotificationsEnabled
@@ -2497,7 +2514,8 @@ function App() {
       // This is local-only and does not reset automatic timetable refresh keys.
       const saved = savedSettingsToState(await command('load_saved_settings'))
       if (clearRevision !== localDataClearRevision.current) return
-      await command('save_saved_settings', reminderSettingsPayload(saved, enabled, minutes))
+      await command('save_saved_settings', reminderSettingsPayload(saved, enabled, minutes,
+        settings.courseRemindersEnabled, settings.courseReminderMinutes))
       if (clearRevision !== localDataClearRevision.current) return
       setReminderSettingsStatus('提醒设置已保存')
     } catch (saveError) {
@@ -2509,6 +2527,10 @@ function App() {
 
   async function saveCurrentSettings() {
     if (settingsSaving || !settingsLoaded || courseEditBusyRef.current) return
+    if (!validCourseReminderMinutes(settings.courseReminderMinutes)) {
+      setError('请设置 1 至 5 次不重复的课前提醒，每次提前 1 至 1440 分钟。')
+      return
+    }
     if (!settings.automaticTermDetectionEnabled) {
       const validationError = manualTermValidationError(settings.termId, settings.termStartDate)
       if (validationError) {
@@ -4875,6 +4897,36 @@ function App() {
                 />
               </label>
               <p className="term-detect-note">{t('时间按北京时间（UTC+8）计算；保存后生效，应用需在后台运行。')}</p>
+              <div className="settings-switch-row">
+                <div><strong>{t('课前提醒')}</strong><span>{t('默认提前 10 分钟；可添加多次提醒，与每日摘要分别开关。')}</span></div>
+                <button type="button" className="settings-switch" role="switch" aria-label={t('课前提醒')}
+                  aria-checked={settings.courseRemindersEnabled} disabled={settingsSaving}
+                  onClick={() => updateSetting('courseRemindersEnabled', !settings.courseRemindersEnabled)}><span aria-hidden="true" /></button>
+              </div>
+              <p className="term-detect-note">{t('提醒次数')}：{settings.courseReminderMinutes.length} / 5</p>
+              <div className="course-reminder-offsets">
+                {settings.courseReminderMinutes.map((minutes, index) => (
+                  <div className="course-reminder-offset" key={index}>
+                    <label>{t('提前分钟')} {index + 1}
+                      <input type="number" inputMode="numeric" min="1" max="1440" step="1" value={minutes}
+                        aria-label={`${t('提前分钟')} ${index + 1}`} disabled={settingsSaving}
+                        onChange={event => updateSetting('courseReminderMinutes', settings.courseReminderMinutes.map((value, i) =>
+                          i === index ? (event.target.value === '' ? '' : Number(event.target.value)) : value))} />
+                    </label>
+                    <button type="button" className="secondary" disabled={settingsSaving || settings.courseReminderMinutes.length <= 1}
+                      aria-label={`${t('删除提醒')} ${index + 1}`} onClick={() => updateSetting('courseReminderMinutes', settings.courseReminderMinutes.filter((_, i) => i !== index))}>
+                      <Trash2 size={16} /><span>{t('删除提醒')}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="secondary settings-full-button" disabled={settingsSaving || settings.courseReminderMinutes.length >= 5}
+                onClick={() => {
+                  const next = [5, 10, 15, 30, 60, 1].find(value => !settings.courseReminderMinutes.includes(value))
+                  if (next !== undefined) updateSetting('courseReminderMinutes', [...settings.courseReminderMinutes, next])
+                }}>{t('添加提醒')}</button>
+              <p className="term-detect-note">{t('请设置 1 至 5 次不重复的课前提醒，每次提前 1 至 1440 分钟。')}</p>
+              <p className="term-detect-note">{t('仅提醒有明确开始时间的课程及考试。关闭应用或休眠期间不能保证准时送达，已过期提醒不会补发。')}</p>
               <button type="button" className="secondary settings-full-button" onClick={saveReminderSettings} disabled={!settingsLoaded || settingsSaving || !!loading}>
                 <CheckCircle2 size={17} /> {t('保存提醒设置')}
               </button>

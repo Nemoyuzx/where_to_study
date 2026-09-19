@@ -118,11 +118,11 @@ test("client versions consistently release 0.3.0 with fresh distribution build c
   assert.match(cliManifest, /^version = "0\.3\.0"$/m);
   assert.match(tuiManifest, /^version = "0\.3\.0"$/m);
   assert.match(nativeAndroid, /versionName = "0\.3\.0"/);
-  assert.match(nativeAndroid, /versionCode = 52/);
+  assert.match(nativeAndroid, /versionCode = 53/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.3\.0"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "96"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "97"/);
   assert.match(nativeHarmony, /"versionName": "0\.3\.0"/);
-  assert.match(nativeHarmony, /"versionCode": 1002032/);
+  assert.match(nativeHarmony, /"versionCode": 1002033/);
   assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.3\.0'/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.3\.0/);
   assert.match(tauriApple, /CFBundleVersion: "51"/);

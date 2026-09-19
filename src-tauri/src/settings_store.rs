@@ -13,13 +13,14 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::credential_store::{self, Credentials};
 use crate::error::{ServiceError, ServiceResult};
 use crate::models::{
-    default_daily_course_notification_minutes, deserialize_daily_course_notification_minutes,
-    SaveSettingsRequest, SavedSettings,
+    default_course_reminder_minutes, default_daily_course_notification_minutes,
+    deserialize_course_reminder_minutes, deserialize_daily_course_notification_minutes,
+    valid_course_reminder_minutes, SaveSettingsRequest, SavedSettings,
 };
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const ACCOUNT_ACCESS_REVOKED_FILE_NAME: &str = "account-access-revoked";
-const SETTINGS_SCHEMA_VERSION: u32 = 10;
+const SETTINGS_SCHEMA_VERSION: u32 = 11;
 
 fn default_true() -> bool {
     true
@@ -48,6 +49,13 @@ struct SettingsFile {
         deserialize_with = "deserialize_daily_course_notification_minutes"
     )]
     daily_course_notification_minutes: u16,
+    #[serde(default)]
+    course_reminders_enabled: bool,
+    #[serde(
+        default = "default_course_reminder_minutes",
+        deserialize_with = "deserialize_course_reminder_minutes"
+    )]
+    course_reminder_minutes: Vec<u16>,
     #[serde(default = "default_true")]
     automatic_term_detection_enabled: bool,
     #[serde(default = "default_true")]
@@ -80,6 +88,8 @@ struct PersistedSettings<'a> {
     ui_language: &'a str,
     daily_course_notifications_enabled: bool,
     daily_course_notification_minutes: u16,
+    course_reminders_enabled: bool,
+    course_reminder_minutes: &'a [u16],
     automatic_term_detection_enabled: bool,
     weather_enabled: bool,
     almanac_enabled: bool,
@@ -237,6 +247,8 @@ where
         ui_language: file.ui_language.clone(),
         daily_course_notifications_enabled: file.daily_course_notifications_enabled,
         daily_course_notification_minutes: file.daily_course_notification_minutes,
+        course_reminders_enabled: file.course_reminders_enabled,
+        course_reminder_minutes: file.course_reminder_minutes.clone(),
         automatic_term_detection_enabled: file.automatic_term_detection_enabled,
         weather_enabled: file.weather_enabled,
         almanac_enabled: file.almanac_enabled,
@@ -282,6 +294,11 @@ where
     L: FnOnce() -> ServiceResult<Option<Credentials>>,
 {
     request.apply_defaults();
+    if !valid_course_reminder_minutes(&request.course_reminder_minutes) {
+        return Err(ServiceError::new(
+            "请设置 1 至 5 次不重复的课前提醒，每次提前 1 至 1440 分钟。",
+        ));
+    }
     if request.daily_course_notification_minutes >= 1440 {
         return Err(ServiceError::new("提醒时间不正确，请选择 00:00 至 23:59。"));
     }
@@ -381,6 +398,8 @@ where
         ui_language: request.ui_language.clone(),
         daily_course_notifications_enabled: request.daily_course_notifications_enabled,
         daily_course_notification_minutes: request.daily_course_notification_minutes,
+        course_reminders_enabled: request.course_reminders_enabled,
+        course_reminder_minutes: request.course_reminder_minutes.clone(),
         automatic_term_detection_enabled: request.automatic_term_detection_enabled,
         weather_enabled: request.weather_enabled,
         almanac_enabled: request.almanac_enabled,
@@ -522,6 +541,8 @@ fn write_non_sensitive_settings(path: &Path, settings: &SavedSettings) -> Servic
         ui_language: &settings.ui_language,
         daily_course_notifications_enabled: settings.daily_course_notifications_enabled,
         daily_course_notification_minutes: settings.daily_course_notification_minutes,
+        course_reminders_enabled: settings.course_reminders_enabled,
+        course_reminder_minutes: &settings.course_reminder_minutes,
         automatic_term_detection_enabled: settings.automatic_term_detection_enabled,
         weather_enabled: settings.weather_enabled,
         almanac_enabled: settings.almanac_enabled,
@@ -807,6 +828,8 @@ mod tests {
             ui_language: "en".to_string(),
             daily_course_notifications_enabled: true,
             daily_course_notification_minutes: 555,
+            course_reminders_enabled: false,
+            course_reminder_minutes: default_course_reminder_minutes(),
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,
@@ -833,6 +856,8 @@ mod tests {
             ui_language: "en".to_string(),
             daily_course_notifications_enabled: true,
             daily_course_notification_minutes: 555,
+            course_reminders_enabled: false,
+            course_reminder_minutes: default_course_reminder_minutes(),
             automatic_term_detection_enabled: true,
             weather_enabled: true,
             almanac_enabled: true,
@@ -894,6 +919,61 @@ mod tests {
             let loaded =
                 load_from_path(&path, || Ok(None), |_| panic!("no credential writes")).unwrap();
             assert_eq!(loaded.daily_course_notification_minutes, minutes);
+        }
+    }
+
+    #[test]
+    fn preclass_preferences_round_trip_and_invalid_input_is_rejected() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let mut settings = fixture_settings();
+        settings.course_reminders_enabled = true;
+        settings.course_reminder_minutes = vec![30, 10, 5];
+        write_non_sensitive_settings(&path, &settings).unwrap();
+        let loaded =
+            load_from_path(&path, || Ok(None), |_| panic!("no credential writes")).unwrap();
+        assert!(loaded.course_reminders_enabled);
+        assert_eq!(loaded.course_reminder_minutes, vec![30, 10, 5]);
+        assert_eq!(loaded.daily_course_notification_minutes, 555);
+        for minutes in [
+            vec![],
+            vec![0],
+            vec![10, 10],
+            vec![1441],
+            vec![1, 2, 3, 4, 5, 6],
+        ] {
+            let mut request = fixture_request(None);
+            request.course_reminder_minutes = minutes;
+            assert!(prepare_save_with(request, || Ok(None)).is_err());
+        }
+    }
+
+    #[test]
+    fn corrupted_preclass_values_do_not_lose_daily_settings() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        for value in [
+            serde_json::Value::Null,
+            serde_json::json!([0]),
+            serde_json::json!([10, 10]),
+            serde_json::json!([1.5]),
+            serde_json::json!("10"),
+        ] {
+            fs::write(
+                &path,
+                serde_json::to_vec(&serde_json::json!({
+                    "course_reminder_minutes": value, "daily_course_notification_minutes": 555,
+                    "daily_course_notifications_enabled": true, "ui_language": "en"
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            let loaded =
+                load_from_path(&path, || Ok(None), |_| panic!("no credential writes")).unwrap();
+            assert_eq!(loaded.course_reminder_minutes, vec![10]);
+            assert!(!loaded.course_reminders_enabled);
+            assert_eq!(loaded.daily_course_notification_minutes, 555);
+            assert!(loaded.daily_course_notifications_enabled);
         }
     }
 

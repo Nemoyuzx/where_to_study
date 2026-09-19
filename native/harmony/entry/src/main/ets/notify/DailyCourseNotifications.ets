@@ -8,7 +8,8 @@ import { AppContext } from '../store/AppContext';
 import {
   DailyCourseNotificationAuthorization,
   DailyCourseNotificationRequest, DailyCourseNotificationScheduling,
-  DailyCourseReminderOperations, DailyCourseReminderQueue, DailyCourseReminderLimitError
+  DailyCourseReminderOperations, DailyCourseReminderQueue, DailyCourseReminderLimitError,
+  DailyCourseReminderPartialFailure, DailyCourseReminderPermissionError
 } from './DailyCoursePlanning';
 
 // 提醒代理超限（1700002：The number of reminders exceeds the limit）。
@@ -42,8 +43,11 @@ export class HarmonyReminderScheduler implements DailyCourseNotificationScheduli
     try {
       return await this.queue.replace(requests, revision);
     } catch (e) {
+      if (e instanceof DailyCourseReminderPartialFailure || e instanceof DailyCourseReminderPermissionError) {
+        throw e as Error;
+      }
       const err: BusinessError = e as BusinessError;
-      throw new Error('课程摘要安排失败：' + err.message);
+      throw new Error('课程提醒安排失败：' + err.message);
     }
   }
 
@@ -99,6 +103,9 @@ class HarmonyReminderOperations implements DailyCourseReminderOperations {
       return true;
     } catch (e) {
       const error: BusinessError = e as BusinessError;
+      if (error.code === 1700001) {
+        throw new DailyCourseReminderPermissionError('系统通知权限已关闭');
+      }
       if (error.code === 401 && request.fireEpochMs <= Date.now()) {
         // 跨过原生接口的时间校验边界时，仅跳过这一条，不关闭整个提醒功能。
         return false;
@@ -115,7 +122,7 @@ export class HarmonyReminderSchedulerRequest {
   static calendar(request: DailyCourseNotificationRequest): reminderAgentManager.ReminderRequestCalendar {
     const date: Date = new Date(request.fireEpochMs);
     if (!Number.isFinite(date.getTime())) {
-      throw new Error('课程摘要安排失败：提醒日期不正确。');
+      throw new Error('课程提醒安排失败：提醒日期不正确。');
     }
     // API 接受 LocalDateTime；将规划好的北京时间绝对时刻转换为设备本地日历字段。
     return {
@@ -125,6 +132,7 @@ export class HarmonyReminderSchedulerRequest {
         hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds()
       },
       title: request.title, content: request.body, expiredContent: request.body,
+      notificationId: request.notificationId,
       tapDismissed: true
     };
   }

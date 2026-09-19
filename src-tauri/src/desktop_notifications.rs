@@ -42,6 +42,7 @@ mod platform {
     const TAG: &str = "daily-courses";
     const GROUP: &str = "wts-course";
     static LAST: OnceLock<Mutex<Option<ToastNotification>>> = OnceLock::new();
+    static PRECLASS: OnceLock<Mutex<Option<ToastNotification>>> = OnceLock::new();
 
     struct Apartment;
     impl Apartment {
@@ -69,6 +70,20 @@ mod platform {
     }
 
     pub fn show(app_id: &str, title: &str, body: &str) -> Result<(), String> {
+        show_kind(app_id, title, body, TAG, &LAST)
+    }
+
+    pub fn show_preclass(app_id: &str, title: &str, body: &str) -> Result<(), String> {
+        show_kind(app_id, title, body, "pre-class", &PRECLASS)
+    }
+
+    fn show_kind(
+        app_id: &str,
+        title: &str,
+        body: &str,
+        tag: &str,
+        slot: &OnceLock<Mutex<Option<ToastNotification>>>,
+    ) -> Result<(), String> {
         let _apartment = Apartment::enter()?;
         let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id))
             .map_err(|e| e.to_string())?;
@@ -82,12 +97,12 @@ mod platform {
         let toast =
             ToastNotification::CreateToastNotification(&document).map_err(|e| e.to_string())?;
         toast
-            .SetTag(&HSTRING::from(TAG))
+            .SetTag(&HSTRING::from(tag))
             .map_err(|e| e.to_string())?;
         toast
             .SetGroup(&HSTRING::from(GROUP))
             .map_err(|e| e.to_string())?;
-        let mut last = LAST
+        let mut last = slot
             .get_or_init(|| Mutex::new(None))
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -101,8 +116,25 @@ mod platform {
     }
 
     pub fn clear(app_id: &str) -> Result<(), String> {
+        let daily = clear_daily(app_id);
+        let preclass = clear_preclass(app_id);
+        daily.and(preclass)
+    }
+
+    pub fn clear_daily(app_id: &str) -> Result<(), String> {
+        clear_kind(app_id, TAG, &LAST)
+    }
+    pub fn clear_preclass(app_id: &str) -> Result<(), String> {
+        clear_kind(app_id, "pre-class", &PRECLASS)
+    }
+
+    fn clear_kind(
+        app_id: &str,
+        tag: &str,
+        slot: &OnceLock<Mutex<Option<ToastNotification>>>,
+    ) -> Result<(), String> {
         let _apartment = Apartment::enter()?;
-        let mut last = LAST
+        let mut last = slot
             .get_or_init(|| Mutex::new(None))
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -118,7 +150,7 @@ mod platform {
         // Stable tag/group also removes this feature's history after restart.
         let history_result = ToastNotificationManager::History().and_then(|history| {
             history.RemoveGroupedTagWithId(
-                &HSTRING::from(TAG),
+                &HSTRING::from(tag),
                 &HSTRING::from(GROUP),
                 &HSTRING::from(app_id),
             )
@@ -144,7 +176,7 @@ mod platform;
 #[path = "desktop_notifications/macos.rs"]
 mod platform;
 
-pub use platform::{clear, request_permission, show};
+pub use platform::{clear, clear_daily, clear_preclass, request_permission, show, show_preclass};
 
 #[cfg(test)]
 mod tests {

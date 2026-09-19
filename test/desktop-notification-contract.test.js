@@ -28,3 +28,18 @@ test('desktop platform adapters retain explicit removal and safe content handlin
   assert.match(source, /NotificationSetting::Enabled/)
   assert.match(source, /RoInitialize\(RO_INIT_MULTITHREADED\)/)
 })
+
+test('daily and pre-class notifications have independent delivery and removal slots', () => {
+  assert.match(source, /pub fn clear_daily/)
+  assert.match(source, /pub fn clear_preclass/)
+  assert.match(source, /pub fn show_preclass/)
+  assert.match(source, /const PRECLASS_PREFIX: &str = "wts\.pre-class\."/)
+  assert.match(source, /clear_kind\(app_id, "pre-class", &PRECLASS\)/)
+  const setter = app.slice(app.indexOf('fn set_desktop_notification_preferences('), app.indexOf('mod local_data_coordination_tests'))
+  assert.match(setter, /desktop_notifications::clear_daily\(/)
+  assert.doesNotMatch(setter, /desktop_notifications::clear\(/)
+  const preclass = readFileSync(new URL('../src-tauri/src/course_reminders.rs', import.meta.url), 'utf8')
+  assert.match(preclass, /desktop_notifications::clear_preclass\(/)
+  assert.match(preclass, /recover_after_failure/)
+  assert.doesNotMatch(preclass, /fetch_schedule|reqwest|setInterval/)
+})

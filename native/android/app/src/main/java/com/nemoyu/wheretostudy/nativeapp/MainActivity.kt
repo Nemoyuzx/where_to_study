@@ -101,6 +101,9 @@ class MainActivity : Activity() {
     private var calendarImportKind = CalendarImportKind.SCHEDULE
     private var pendingCalendarImport: PendingCalendarImport? = null
     private var notificationPermissionRequestPending = false
+    private var notificationPermissionKind = CourseNotificationKind.DAILY_SUMMARY
+    private var notificationPermissionAccountKey = ""
+    private var lastCourseReminderExactAccess: Boolean? = null
     private var pendingNotificationPermissionCompletion: ((Boolean) -> Unit)? = null
     private var currentLayoutSpec: AdaptiveLayoutSpec? = null
     private var navigationRailCollapsed = false
@@ -154,6 +157,10 @@ class MainActivity : Activity() {
         notificationPermissionRequestPending = savedInstanceState
             ?.getBoolean(NOTIFICATION_PERMISSION_PENDING_KEY, false)
             ?: false
+        notificationPermissionKind = savedInstanceState?.getString(NOTIFICATION_PERMISSION_KIND_KEY)
+            ?.let { value -> CourseNotificationKind.entries.firstOrNull { it.name == value } }
+            ?: CourseNotificationKind.DAILY_SUMMARY
+        notificationPermissionAccountKey = savedInstanceState?.getString(NOTIFICATION_PERMISSION_ACCOUNT_KEY).orEmpty()
         navigationRailCollapsed = savedInstanceState
             ?.getBoolean(NAVIGATION_RAIL_COLLAPSED_KEY, false)
             ?: false
@@ -203,6 +210,7 @@ class MainActivity : Activity() {
         } else {
             DailyClassroomRefreshScheduler.cancel(this)
             DailyCourseSummaryScheduler.cancel(this)
+            CourseReminderScheduler.cancel(this)
             showPrivacyConsentDialog()
         }
     }
@@ -218,6 +226,7 @@ class MainActivity : Activity() {
         updateAdaptiveLayout(force = true)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
         DailyCourseSummaryScheduler.reconcile(this)
+        CourseReminderScheduler.reconcile(this)
         refreshScheduleAtStartup()
         refreshClassroomsAtStartup()
         if (calendarPermissionRequestPending && hasCalendarPermissions()) {
@@ -247,8 +256,13 @@ class MainActivity : Activity() {
         calendarDailyInfoRepository.loadImportantEvents()
         shuttleBusRepository.load()
         val settingChanged = DailyCourseSummaryScheduler.synchronizePermissionState(this)
+        val courseReminderChanged = CourseReminderScheduler.synchronizePermissionState(this)
+        val exactAccess = CourseReminderScheduler.hasExactAccess(this)
+        val exactAccessChanged = lastCourseReminderExactAccess != null && lastCourseReminderExactAccess != exactAccess
+        lastCourseReminderExactAccess = exactAccess
         DailyCourseSummaryScheduler.reconcile(this)
-        if (settingChanged && ::content.isInitialized &&
+        CourseReminderScheduler.reconcile(this)
+        if ((settingChanged || courseReminderChanged || exactAccessChanged) && ::content.isInitialized &&
             selectedDestination == Destination.SETTINGS
         ) {
             refreshCurrentPage()
@@ -885,16 +899,46 @@ class MainActivity : Activity() {
     fun setDailyCourseNotificationsEnabled(
         enabled: Boolean,
         onComplete: (Boolean) -> Unit,
-    ) {
+    ) = setCourseNotificationEnabled(CourseNotificationKind.DAILY_SUMMARY, enabled, onComplete)
+
+    fun setCourseRemindersEnabled(enabled: Boolean, onComplete: (Boolean) -> Unit) =
+        setCourseNotificationEnabled(CourseNotificationKind.PRE_CLASS, enabled, onComplete)
+
+    private fun notificationPermissionGranted(kind: CourseNotificationKind): Boolean = when (kind) {
+        CourseNotificationKind.DAILY_SUMMARY -> DailyCourseSummaryNotificationRuntime.hasPermission(this)
+        CourseNotificationKind.PRE_CLASS -> CourseReminderNotificationRuntime.hasPermission(this)
+    }
+
+    private fun authorizeCourseNotification(kind: CourseNotificationKind): Boolean = when (kind) {
+        CourseNotificationKind.DAILY_SUMMARY -> DailyCourseSummaryScheduler.authorize(this).also {
+            if (it) DailyCourseSummaryScheduler.reconcile(this)
+        }
+        CourseNotificationKind.PRE_CLASS -> CourseReminderScheduler.authorize(this)
+    }
+
+    private fun revokeCourseNotification(kind: CourseNotificationKind): Boolean = when (kind) {
+        CourseNotificationKind.DAILY_SUMMARY -> DailyCourseSummaryScheduler.revoke(this)
+        CourseNotificationKind.PRE_CLASS -> CourseReminderScheduler.revoke(this)
+    }
+
+    private fun setCourseNotificationEnabled(kind: CourseNotificationKind, enabled: Boolean, onComplete: (Boolean) -> Unit) {
         if (!enabled) {
-            onComplete(DailyCourseSummaryScheduler.revoke(this))
+            if (notificationPermissionRequestPending && notificationPermissionKind == kind) {
+                notificationPermissionRequestPending = false
+                pendingNotificationPermissionCompletion = null
+            }
+            val disabled = revokeCourseNotification(kind)
+            onComplete(!disabled)
             return
         }
+        if (notificationPermissionRequestPending) { onComplete(false); return }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             notificationPermissionRequestPending = true
+            notificationPermissionKind = kind
+            notificationPermissionAccountKey = CourseReminderScheduler.accountKey(this)
             pendingNotificationPermissionCompletion = onComplete
             runCatching {
                 requestPermissions(
@@ -904,29 +948,30 @@ class MainActivity : Activity() {
             }.onFailure {
                 notificationPermissionRequestPending = false
                 pendingNotificationPermissionCompletion = null
-                DailyCourseSummaryScheduler.revoke(this)
+                revokeCourseNotification(kind)
                 onComplete(false)
             }
             return
         }
-        if (!DailyCourseSummaryNotificationRuntime.hasPermission(this)) {
-            DailyCourseSummaryScheduler.revoke(this)
+        if (!notificationPermissionGranted(kind)) {
+            revokeCourseNotification(kind)
             onComplete(false)
             return
         }
-        if (!DailyCourseSummaryScheduler.authorize(this)) {
-            onComplete(false)
-            return
-        }
-        DailyCourseSummaryScheduler.reconcile(this)
-        onComplete(true)
+        onComplete(authorizeCourseNotification(kind))
     }
 
-    fun clearDailyCourseNotificationsForAccountChange(): Boolean =
-        DailyCourseSummaryScheduler.revoke(this)
+    fun clearDailyCourseNotificationsForAccountChange(): Boolean {
+        notificationPermissionRequestPending = false
+        pendingNotificationPermissionCompletion = null
+        val dailyRevoked = DailyCourseSummaryScheduler.revoke(this)
+        val preClassRevoked = CourseReminderScheduler.revoke(this)
+        return dailyRevoked && preClassRevoked
+    }
 
     fun reconcileDailyCourseNotifications() {
         DailyCourseSummaryScheduler.reconcile(this)
+        CourseReminderScheduler.reconcile(this, force = true)
     }
 
     fun personalScheduleWasEdited() {
@@ -934,6 +979,8 @@ class MainActivity : Activity() {
         // before a deleted occurrence can be delivered from its older snapshot.
         DailyCourseSummaryNotificationRuntime.cancel(this)
         DailyCourseSummaryScheduler.reconcileAt(this, forceReschedule = true)
+        CourseReminderNotificationRuntime.cancel(this)
+        CourseReminderScheduler.reconcile(this, force = true)
         refreshCurrentPage()
     }
 
@@ -1007,13 +1054,11 @@ class MainActivity : Activity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
-            val granted = DailyCourseSummaryNotificationRuntime.hasPermission(this)
-            val enabled = granted && DailyCourseSummaryScheduler.authorize(this)
-            if (enabled) {
-                DailyCourseSummaryScheduler.reconcile(this)
-            } else {
-                DailyCourseSummaryScheduler.revoke(this)
-            }
+            val currentRequest = CourseReminderPlanning.requestMatchesAccount(notificationPermissionRequestPending,
+                notificationPermissionAccountKey, CourseReminderScheduler.accountKey(this))
+            val kind = notificationPermissionKind
+            val enabled = currentRequest && notificationPermissionGranted(kind) && authorizeCourseNotification(kind)
+            if (currentRequest && !enabled) revokeCourseNotification(kind)
             notificationPermissionRequestPending = false
             pendingNotificationPermissionCompletion?.invoke(enabled)
             pendingNotificationPermissionCompletion = null
@@ -1064,6 +1109,8 @@ class MainActivity : Activity() {
             NOTIFICATION_PERMISSION_PENDING_KEY,
             notificationPermissionRequestPending,
         )
+        outState.putString(NOTIFICATION_PERMISSION_KIND_KEY, notificationPermissionKind.name)
+        outState.putString(NOTIFICATION_PERMISSION_ACCOUNT_KEY, notificationPermissionAccountKey)
         outState.putLong(
             TEACHING_CALENDAR_DATE_KEY,
             teachingCalendarSessionState.selectedDate.timeInMillis,
@@ -1107,7 +1154,7 @@ class MainActivity : Activity() {
             runCatching(::refreshCurrentPage)
             return LocalDataClearResult(failures)
         }
-        if (!DailyCourseSummaryScheduler.revoke(this)) {
+        if (!clearDailyCourseNotificationsForAccountChange()) {
             failures += "课程提醒授权"
             runCatching(::refreshCurrentPage)
             return LocalDataClearResult(failures)
@@ -1442,6 +1489,8 @@ class MainActivity : Activity() {
         const val NO_CALENDAR_IMPORT_TOKEN = 0L
         const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4108
         const val NOTIFICATION_PERMISSION_PENDING_KEY = "notification_permission_request_pending"
+        const val NOTIFICATION_PERMISSION_KIND_KEY = "notification_permission_kind"
+        const val NOTIFICATION_PERMISSION_ACCOUNT_KEY = "notification_permission_account"
         const val TEACHING_CALENDAR_DATE_KEY = "teaching_calendar_date"
         const val TEACHING_CALENDAR_MODE_KEY = "teaching_calendar_mode"
         const val TEACHING_CALENDAR_MONTH_EXPANDED_KEY = "teaching_calendar_month_expanded"

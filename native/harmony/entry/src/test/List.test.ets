@@ -7,6 +7,7 @@ import parsersContractTest from './ParsersContract.test';
 import teachingCalendarLogicTest from './TeachingCalendarLogic.test';
 import calendarImportLogicTest from './CalendarImportLogic.test';
 import dailyCoursePlanningTest from './DailyCoursePlanning.test';
+import preClassNotificationsTest from './PreClassNotifications.test';
 import adaptivePolicyTest from './AdaptivePolicy.test';
 import calendarTypographyTest from './CalendarTypography.test';
 import colorThemesTest from './ColorThemes.test';
@@ -35,6 +36,7 @@ export default function testsuite() {
   teachingCalendarLogicTest();
   calendarImportLogicTest();
   dailyCoursePlanningTest();
+  preClassNotificationsTest();
   adaptivePolicyTest();
   calendarTypographyTest();
   colorThemesTest();

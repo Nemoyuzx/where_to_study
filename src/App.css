@@ -5998,3 +5998,14 @@ input:disabled {
     background: var(--surface);
   }
 }
+
+.course-reminder-offsets { display: grid; gap: 8px; }
+.course-reminder-offset { display: flex; align-items: end; gap: 8px; }
+.course-reminder-offset label { flex: 1; min-width: 0; margin: 0; }
+.course-reminder-offset input { width: 100%; }
+.course-reminder-offset button {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; flex-shrink: 0; min-height: 32px; padding: 5px 9px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface-cool); color: var(--text-control);
+}

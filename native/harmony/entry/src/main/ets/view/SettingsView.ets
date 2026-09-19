@@ -13,7 +13,7 @@ import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
 } from '../widget/TodayCourseWidgetData';
 import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
-import { DailyCourseNotificationSettings } from '../notify/DailyCoursePlanning';
+import { DailyCourseNotificationSettings, PreClassNotificationSettings } from '../notify/DailyCoursePlanning';
 import { PublicDeadlineItem, PublicDeadlineKindInfo,
   PublicDeadlineSource } from '../net/CalendarDailyInfoClient';
 
@@ -47,6 +47,9 @@ export struct SettingsView {
   @Local contentWidth: number = 350;
   @Local showingPrivacyPolicy: boolean = false;
   @Local customDeadlineURLDraft: string = '';
+  @Local editingPreClassReminders: boolean = false;
+  @Local preClassLeadDrafts: string[] = ['10'];
+  @Local preClassInputError: string = '';
   // 与系统服务卡片 FormDimension 使用相同尺寸与容量规则。
   @Local previewDimension: number = 3;
   private statusDismissRevision: number = 0;
@@ -952,6 +955,134 @@ export struct SettingsView {
   }
 
   @Builder
+  preClassReminderSettings() {
+    Row({ space: 8 }) {
+      Text(this.model.text('课前提醒'))
+        .fontSize(15)
+        .fontColor(AppTheme.text())
+        .layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: this.model.preClassNotificationsEnabled })
+        .id('settings_pre_class_notification_toggle')
+        .selectedColor(AppTheme.primaryFill())
+        .width(48)
+        .height(28)
+        .enabled(!this.model.isSampleMode() || this.model.isReviewDemo())
+        .onChange((value: boolean) => { this.model.setPreClassNotificationsEnabled(value); })
+    }
+    .width('100%')
+    .height(ControlMetrics.height)
+    .margin({ top: 12 })
+    Row({ space: 8 }) {
+      Text(this.model.text('提前分钟') + '：' + this.model.preClassNotificationLeadMinutes.join(' / '))
+        .fontSize(14)
+        .fontColor(AppTheme.secondaryText())
+        .layoutWeight(1)
+      Button(this.model.text('编辑提醒'))
+        .id('settings_pre_class_notification_edit')
+        .fontSize(14)
+        .height(ControlMetrics.height)
+        .fontColor(AppTheme.primary())
+        .backgroundColor(AppTheme.surfaceVariant())
+        .enabled(!this.model.isSampleMode() || this.model.isReviewDemo())
+        .onClick(() => {
+          this.preClassLeadDrafts = this.model.preClassNotificationLeadMinutes.map((value: number) => value.toString());
+          this.preClassInputError = '';
+          this.editingPreClassReminders = true;
+        })
+    }
+    .width('100%')
+    .margin({ top: 4 })
+    if (this.editingPreClassReminders) {
+      Row({ space: 8 }) {
+        Text(this.model.text('提醒次数') + '：' + this.preClassLeadDrafts.length.toString())
+          .fontSize(14)
+          .fontColor(AppTheme.text())
+          .layoutWeight(1)
+        Button('−')
+          .id('settings_pre_class_count_decrease')
+          .accessibilityText(this.model.text('减少提醒次数'))
+          .width(ControlMetrics.height)
+          .height(ControlMetrics.height)
+          .enabled(this.preClassLeadDrafts.length > 1)
+          .onClick(() => { this.preClassLeadDrafts = this.preClassLeadDrafts.slice(0, -1); })
+        Button('+')
+          .id('settings_pre_class_count_increase')
+          .accessibilityText(this.model.text('增加提醒次数'))
+          .width(ControlMetrics.height)
+          .height(ControlMetrics.height)
+          .enabled(this.preClassLeadDrafts.length < PreClassNotificationSettings.maximumCount)
+          .onClick(() => {
+            let next: number = 5;
+            while (this.preClassLeadDrafts.includes(next.toString())) { next += 5; }
+            this.preClassLeadDrafts = this.preClassLeadDrafts.concat([next.toString()]);
+          })
+      }
+      .width('100%')
+      .margin({ top: 8 })
+      ForEach(this.preClassLeadDrafts, (value: string, index: number) => {
+        Row({ space: 8 }) {
+          Text(this.model.text('提醒') + ' ' + (index + 1).toString())
+            .fontSize(14)
+            .fontColor(AppTheme.secondaryText())
+            .layoutWeight(1)
+          TextInput({ text: value, placeholder: '1–1440' })
+            .id('settings_pre_class_minutes_' + index.toString())
+            .accessibilityText(this.model.text('提前分钟') + ' ' + (index + 1).toString())
+            .type(InputType.Number)
+            .height(ControlMetrics.height)
+            .width(104)
+            .fontSize(14)
+            .onChange((text: string) => {
+              const drafts: string[] = this.preClassLeadDrafts.slice();
+              drafts[index] = text;
+              this.preClassLeadDrafts = drafts;
+              this.preClassInputError = '';
+            })
+          Text(this.model.text('分钟'))
+            .fontSize(14)
+            .fontColor(AppTheme.secondaryText())
+        }
+        .width('100%')
+        .margin({ top: 6 })
+      }, (value: string, index: number) => index.toString())
+      Row({ space: 8 }) {
+        Button(this.model.text('取消'))
+          .height(ControlMetrics.height)
+          .onClick(() => { this.editingPreClassReminders = false; })
+        Button(this.model.text('保存提醒'))
+          .id('settings_pre_class_notification_save')
+          .height(ControlMetrics.height)
+          .onClick(() => {
+            const values: number[] | null = PreClassNotificationSettings.parseDrafts(this.preClassLeadDrafts);
+            if (values === null || !this.model.setPreClassNotificationLeadMinutes(values)) {
+              this.preClassInputError = '请输入 1–5 个不重复的整数，每个为 1–1440 分钟。';
+              return;
+            }
+            this.preClassInputError = '';
+            this.editingPreClassReminders = false;
+          })
+      }
+      .margin({ top: 8 })
+      if (this.preClassInputError.length > 0) {
+        Text(this.model.text(this.preClassInputError))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }
+    }
+    Text(this.model.text('按北京时间，在课程或考试开始前提醒；默认提前 10 分钟。'))
+      .fontSize(12)
+      .fontColor(AppTheme.secondaryText())
+      .width('100%')
+      .margin({ top: 6 })
+    Text(this.model.text('系统最多保留近期 30 条提醒；打开应用时自动补充后续安排。'))
+      .fontSize(12)
+      .fontColor(AppTheme.secondaryText())
+      .width('100%')
+      .margin({ top: 4 })
+  }
+
+  @Builder
   notificationSurface() {
     Column() {
       this.sectionTitle('课程提醒')
@@ -1007,6 +1138,7 @@ export struct SettingsView {
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: 4 })
+      this.preClassReminderSettings()
       if (this.model.dailyCourseNotificationStatusMessage.length > 0) {
         Text(this.model.text(this.model.dailyCourseNotificationStatusMessage))
           .fontSize(12)
