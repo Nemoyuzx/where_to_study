@@ -79,6 +79,12 @@ struct MobileCalendarTimelineView: View {
     var onSelectCourse: ((Date, Course) -> Void)?
 
     private let calendar = Calendar.shanghai
+    private var bounds: ClosedRange<Int> { CalendarTimelineLogic.bounds(for: days.flatMap(\.courses)) }
+    private var hourRange: ClosedRange<Int> { bounds.lowerBound / 60 ... bounds.upperBound / 60 }
+    private var timelineHeight: CGFloat { CGFloat(bounds.upperBound - bounds.lowerBound) / 60 * MobileCalendarTimelineLayout.hourHeight }
+    private func yPosition(minute: Int) -> CGFloat {
+        CGFloat(min(max(minute, bounds.lowerBound), bounds.upperBound) - bounds.lowerBound) / 60 * MobileCalendarTimelineLayout.hourHeight
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -93,7 +99,7 @@ struct MobileCalendarTimelineView: View {
 
                             scrollAnchors
                         }
-                        .frame(height: MobileCalendarTimelineLayout.timelineHeight)
+                        .frame(height: timelineHeight)
 
                         Color.clear
                             .frame(height: bottomContentInset)
@@ -119,11 +125,11 @@ struct MobileCalendarTimelineView: View {
 
     private var scrollAnchors: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(8 ... 22, id: \.self) { hour in
+            ForEach(hourRange, id: \.self) { hour in
                 Color.clear
                     .frame(
                         width: 1,
-                        height: hour == 22 ? 0 : MobileCalendarTimelineLayout.hourHeight
+                        height: hour == hourRange.upperBound ? 0 : MobileCalendarTimelineLayout.hourHeight
                     )
                     .id(scrollAnchorID(hour))
                     .allowsHitTesting(false)
@@ -132,7 +138,7 @@ struct MobileCalendarTimelineView: View {
         }
         .frame(
             width: 1,
-            height: MobileCalendarTimelineLayout.timelineHeight,
+            height: timelineHeight,
             alignment: .topLeading
         )
     }
@@ -149,8 +155,8 @@ struct MobileCalendarTimelineView: View {
     private var hourAxis: some View {
         ZStack(alignment: .topLeading) {
             theme.surface
-            ForEach(8 ... 22, id: \.self) { hour in
-                let y = MobileCalendarTimelineLayout.yPosition(minute: hour * 60)
+            ForEach(hourRange, id: \.self) { hour in
+                let y = yPosition(minute: hour * 60)
                 Text(String(format: "%02d:00", hour))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(theme.secondaryText)
@@ -164,7 +170,7 @@ struct MobileCalendarTimelineView: View {
         }
         .frame(
             width: MobileCalendarTimelineLayout.axisWidth,
-            height: MobileCalendarTimelineLayout.timelineHeight
+            height: timelineHeight
         )
         .overlay(alignment: .trailing) { Divider() }
     }
@@ -178,7 +184,7 @@ struct MobileCalendarTimelineView: View {
             showsWeekColumns: showsWeekColumns
         )
         timelineGrid(width: contentWidth)
-            .frame(width: viewportWidth, height: MobileCalendarTimelineLayout.timelineHeight)
+            .frame(width: viewportWidth, height: timelineHeight)
     }
 
     private func timelineGrid(width: CGFloat) -> some View {
@@ -197,18 +203,18 @@ struct MobileCalendarTimelineView: View {
                 ZStack(alignment: .topLeading) {
                     currentTimeIndicator(width: width, dayWidth: dayWidth, now: context.date)
                 }
-                .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight, alignment: .topLeading)
+                .frame(width: width, height: timelineHeight, alignment: .topLeading)
             }
             .allowsHitTesting(false)
         }
-        .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight)
+        .frame(width: width, height: timelineHeight)
     }
 
     private func grid(width: CGFloat, dayWidth: CGFloat) -> some View {
         Canvas { context, _ in
             var hourLines = Path()
-            for hour in 8 ... 22 {
-                let y = MobileCalendarTimelineLayout.yPosition(minute: hour * 60)
+            for hour in hourRange {
+                let y = yPosition(minute: hour * 60)
                 hourLines.move(to: CGPoint(x: 0, y: y))
                 hourLines.addLine(to: CGPoint(x: width, y: y))
             }
@@ -216,7 +222,7 @@ struct MobileCalendarTimelineView: View {
 
             var slotLines = Path()
             for minute in CalendarTimelineLogic.nonHourlyCourseBoundaryMinutes {
-                let y = MobileCalendarTimelineLayout.yPosition(minute: minute)
+                let y = yPosition(minute: minute)
                 slotLines.move(to: CGPoint(x: 0, y: y))
                 slotLines.addLine(to: CGPoint(x: width, y: y))
             }
@@ -231,7 +237,7 @@ struct MobileCalendarTimelineView: View {
             for index in 0 ... max(days.count, 1) {
                 let x = CGFloat(index) * dayWidth
                 columns.move(to: CGPoint(x: x, y: 0))
-                columns.addLine(to: CGPoint(x: x, y: MobileCalendarTimelineLayout.timelineHeight))
+                columns.addLine(to: CGPoint(x: x, y: timelineHeight))
             }
             context.stroke(columns, with: .color(theme.border.opacity(0.7)), lineWidth: 1)
         }
@@ -243,7 +249,7 @@ struct MobileCalendarTimelineView: View {
            let index = days.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: selectedDate) }) {
             Rectangle()
                 .fill(theme.selectedDate.opacity(0.10))
-                .frame(width: dayWidth, height: MobileCalendarTimelineLayout.timelineHeight)
+                .frame(width: dayWidth, height: timelineHeight)
                 .offset(x: CGFloat(index) * dayWidth)
                 .allowsHitTesting(false)
         }
@@ -253,8 +259,8 @@ struct MobileCalendarTimelineView: View {
         ForEach(SlotMetadata.defaults) { slot in
             if let start = CalendarTimelineLogic.minute(of: slot.start),
                let end = CalendarTimelineLogic.minute(of: slot.end) {
-                let y = (MobileCalendarTimelineLayout.yPosition(minute: start)
-                    + MobileCalendarTimelineLayout.yPosition(minute: end)) / 2
+                let y = (yPosition(minute: start)
+                    + yPosition(minute: end)) / 2
                 HStack(spacing: 5) {
                     Text("第\(slot.label)节")
                         .fontWeight(.semibold)
@@ -272,23 +278,21 @@ struct MobileCalendarTimelineView: View {
                 .accessibilityLabel("第\(slot.label)节，\(slot.start)到\(slot.end)")
             }
         }
-        .frame(width: width, height: MobileCalendarTimelineLayout.timelineHeight, alignment: .topLeading)
+        .frame(width: width, height: timelineHeight, alignment: .topLeading)
     }
 
     private func courseBlocks(dayWidth: CGFloat) -> some View {
         ForEach(Array(days.enumerated()), id: \.element.id) { dayIndex, day in
             ForEach(day.coursePlacements) { placement in
-                if let start = SlotMetadata.defaults[safe: placement.course.startSlot]
-                    .flatMap({ CalendarTimelineLogic.minute(of: $0.start) }),
-                   let end = SlotMetadata.defaults[safe: placement.course.endSlot]
-                    .flatMap({ CalendarTimelineLogic.minute(of: $0.end) }) {
+                if let interval = placement.course.minuteInterval {
+                    let start = interval.lowerBound, end = interval.upperBound
                     let trackWidth = dayWidth / CGFloat(day.courseTrackCount)
                     let inset: CGFloat = showsWeekColumns ? 1 : 3
                     let x = CGFloat(dayIndex) * dayWidth
                         + CGFloat(placement.track) * trackWidth
                         + inset
-                    let top = MobileCalendarTimelineLayout.yPosition(minute: start) + 2
-                    let bottom = max(top + 38, MobileCalendarTimelineLayout.yPosition(minute: end) - 2)
+                    let top = yPosition(minute: start) + 2
+                    let bottom = max(top + 38, yPosition(minute: end) - 2)
                     courseBlock(
                         date: day.date,
                         placement: placement,
@@ -316,6 +320,7 @@ struct MobileCalendarTimelineView: View {
             onSelectCourse?(date, placement.course)
         } label: {
             VStack(alignment: .leading, spacing: showsWeekColumns ? 1 : 2) {
+                if placement.course.isExam { Text("考试").font(.system(size: 8, weight: .bold)) }
                 Text(placement.course.name)
                     .font(.system(size: showsWeekColumns ? 10 : 12, weight: .semibold))
                     .lineLimit(showsWeekColumns ? 3 : 1)
@@ -364,9 +369,9 @@ struct MobileCalendarTimelineView: View {
         let components = calendar.dateComponents([.hour, .minute], from: now)
         let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
         if let index = days.firstIndex(where: { calendar.isDate($0.date, inSameDayAs: now) }),
-           (MobileCalendarTimelineLayout.startMinute ... MobileCalendarTimelineLayout.endMinute)
+           bounds
             .contains(minute) {
-            let y = MobileCalendarTimelineLayout.yPosition(minute: minute)
+            let y = yPosition(minute: minute)
             let left = showsWeekColumns ? CGFloat(index) * dayWidth : 0
             let lineWidth = showsWeekColumns ? dayWidth : width
 
@@ -401,8 +406,8 @@ struct MobileCalendarTimelineView: View {
     }
 
     private func adjustedHourLabelY(hour: Int, rawY: CGFloat) -> CGFloat {
-        if hour == 8 { return rawY + 8 }
-        if hour == 22 { return rawY - 8 }
+        if hour == hourRange.lowerBound { return rawY + 8 }
+        if hour == hourRange.upperBound { return rawY - 8 }
         return rawY
     }
 

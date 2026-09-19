@@ -257,12 +257,23 @@ class SjdScheduleClient(
         if (!api.isSuccessful(current) || !api.isSuccessful(curriculum)) {
             throw ScheduleClientException("移动教务课表获取失败。")
         }
-        return SjdScheduleParser.parse(
+        val schedule = SjdScheduleParser.parse(
             current = current,
             curriculum = curriculum,
             fallbackTermID = fallbackTermID,
             fallbackTermStartDate = fallbackTermStartDate,
         )
+        val exams = runCatching {
+            AcademicResponseParser.exams(
+                api.post("/bjyddx/student/examinationArrangement?semester=${URLEncoder.encode(schedule.termID, StandardCharsets.UTF_8.name())}",
+                    SjdApiClient.CLASSROOM_REFERER, token = token),
+                schedule.termID, CourseDeletionLogic.accountKey(credentials.account),
+            )
+        }.getOrElse {
+            ExamSchedule(schedule.termID, CourseDeletionLogic.accountKey(credentials.account),
+                AcademicResponseParser.timestamp(), "failed", "考试安排获取失败，请重新刷新课表", emptyList())
+        }
+        return schedule.copy(examSchedule = exams)
     }
 
     private fun post(

@@ -3,6 +3,7 @@
 // 所有模型不可变（readonly），更新通过构造新对象完成。
 
 import { JsonUtil } from './JsonUtil';
+import { ExamSchedule } from './AcademicModels';
 
 export class SlotMetadata {
   readonly index: number;
@@ -49,11 +50,16 @@ export class Course {
   readonly sectionText: string;
   readonly timeRange: string;
   readonly sourceCourseID: string;
+  readonly eventKind: string;
+  readonly eventDate: string;
+  readonly startTime: string;
+  readonly endTime: string;
 
   constructor(
     id: string, name: string, teacher: string, room: string, weekText: string,
     weekNumbers: number[], examWeekNumbers: number[], weekday: number,
-    startSlot: number, endSlot: number, sectionText: string, timeRange: string, sourceCourseID: string = ''
+    startSlot: number, endSlot: number, sectionText: string, timeRange: string, sourceCourseID: string = '',
+    eventKind: string = '', eventDate: string = '', startTime: string = '', endTime: string = ''
   ) {
     this.id = id;
     this.name = name;
@@ -68,6 +74,10 @@ export class Course {
     this.sectionText = sectionText;
     this.timeRange = timeRange;
     this.sourceCourseID = sourceCourseID;
+    this.eventKind = eventKind;
+    this.eventDate = eventDate;
+    this.startTime = startTime;
+    this.endTime = endTime;
   }
 
   static fromJson(raw: Record<string, Object>): Course {
@@ -90,7 +100,8 @@ export class Course {
       endSlot,
       JsonUtil.string(raw['section_text']),
       JsonUtil.string(raw['time_range']),
-      JsonUtil.string(raw['source_course_id'])
+      JsonUtil.string(raw['source_course_id']), JsonUtil.string(raw['event_kind']),
+      JsonUtil.string(raw['event_date']), JsonUtil.string(raw['start_time']), JsonUtil.string(raw['end_time'])
     );
   }
 
@@ -111,6 +122,12 @@ export class Course {
     if (this.sourceCourseID.length > 0) {
       out['source_course_id'] = this.sourceCourseID;
     }
+    if (this.eventKind.length > 0) {
+      out['event_kind'] = this.eventKind;
+      out['event_date'] = this.eventDate;
+      out['start_time'] = this.startTime;
+      out['end_time'] = this.endTime;
+    }
     return out;
   }
 }
@@ -120,12 +137,15 @@ export class ScheduleSnapshot {
   readonly termStartDate: string;
   readonly fetchedAt: string;
   readonly courses: Course[];
+  readonly examSchedule: ExamSchedule | null;
 
-  constructor(termID: string, termStartDate: string, fetchedAt: string, courses: Course[]) {
+  constructor(termID: string, termStartDate: string, fetchedAt: string, courses: Course[],
+    examSchedule: ExamSchedule | null = null) {
     this.termID = termID;
     this.termStartDate = termStartDate;
     this.fetchedAt = fetchedAt;
     this.courses = courses;
+    this.examSchedule = examSchedule;
   }
 
   static fromJson(raw: Record<string, Object>): ScheduleSnapshot {
@@ -137,7 +157,7 @@ export class ScheduleSnapshot {
       JsonUtil.string(raw['term_id']),
       JsonUtil.string(raw['term_start_date']),
       JsonUtil.string(raw['fetched_at']),
-      courses
+      courses, ExamSchedule.fromJson(raw['exam_schedule'])
     );
   }
 
@@ -151,6 +171,7 @@ export class ScheduleSnapshot {
       courseList.push(c.toJson());
     }
     out['courses'] = courseList;
+    if (this.examSchedule !== null) { out['exam_schedule'] = this.examSchedule.toJson(); }
     return out;
   }
 }

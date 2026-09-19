@@ -5,6 +5,7 @@
 import { AppModel } from '../../model/AppModel';
 import { Course, HolidayItem } from '../../common/Models';
 import { CourseRemovalButton } from '../CourseRemovalButton';
+import { ScheduleLogic } from '../../common/ScheduleLogic';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { CalendarTypography } from '../../common/CalendarTypography';
@@ -815,6 +816,12 @@ export struct ExpandedTeachingCalendarView {
 
   private allDayItemsOn(day: DateParts): ExpandedAllDayItem[] {
     const result: ExpandedAllDayItem[] = [];
+    for (const course of this.coursesOn(day)) {
+      if (course.eventKind === 'exam' && !ScheduleLogic.hasTime(course)) {
+        result.push(new ExpandedAllDayItem(course.id, this.model.text('考试') + ' · ' + course.name,
+          this.model.text('时间待定'), AppTheme.accent(), AppTheme.selection()));
+      }
+    }
     for (const item of this.holidayItemsOn(day)) {
       result.push(new ExpandedAllDayItem(
         StrictDates.formatDateParts(day) + '.holiday.' + item.id(),
@@ -1441,7 +1448,7 @@ export struct ExpandedTeachingCalendarView {
       } else {
         ForEach(this.coursesOn(day), (course: Course, index: number) => {
           Row({ space: 8 }) {
-            Text(course.timeRange)
+            Text(this.model.courseTimeText(course))
               .fontSize(12)
               .fontColor(AppTheme.secondaryText())
               .width(110)

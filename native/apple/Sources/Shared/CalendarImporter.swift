@@ -8,6 +8,7 @@ struct CalendarEventDraft: Equatable, Sendable {
     let notes: String
     let startDate: Date
     let endDate: Date
+    var isAllDay: Bool = false
 }
 
 struct CalendarImportScope: Equatable, Sendable {
@@ -36,6 +37,7 @@ struct CalendarExistingEvent: Equatable, Sendable {
     let timeZoneIdentifier: String?
     let isBusy: Bool
     let alarmOffsets: [TimeInterval]
+    var isAllDay: Bool = false
 }
 
 struct CalendarSyncMatch: Equatable, Sendable {
@@ -135,7 +137,8 @@ enum CalendarImportLogic {
             calendar: calendar
         )
         return CalendarScheduleImportPlan(
-            scope: CalendarImportScope(startDate: termStart, endDate: termEnd),
+            scope: CalendarImportScope(startDate: min(termStart, drafts.map(\.startDate).min() ?? termStart),
+                                       endDate: max(termEnd, drafts.map(\.endDate).max() ?? termEnd)),
             drafts: drafts
         )
     }
@@ -322,8 +325,11 @@ enum CalendarImportLogic {
                 throw CalendarImportError.invalidCourse(course.name)
             }
 
-            let startTime = slots[course.startSlot].start
-            let endTime = slots[course.endSlot].end
+            let interval = course.minuteInterval
+            let startTime = interval.map { String(format: "%02d:%02d", $0.lowerBound / 60, $0.lowerBound % 60) }
+                ?? slots[course.startSlot].start
+            let endTime = interval.map { String(format: "%02d:%02d", $0.upperBound / 60, $0.upperBound % 60) }
+                ?? slots[course.endSlot].end
             for week in Set(course.weekNumbers).filter({ $0 > 0 }).sorted() {
                 let dayOffset = (week - 1) * 7 + (course.weekday - 1)
                 guard
@@ -336,6 +342,11 @@ enum CalendarImportLogic {
                 }
 
                 let marker = eventMarker(termID: schedule.termID, courseID: course.id, week: week)
+                let exams = (schedule.examSchedule?.items ?? []).filter {
+                    $0.date == StrictContractDateParser.string(from: day, calendar: calendar)
+                }.compactMap { $0.course(calendar: calendar)?.minuteInterval }
+                if let first = AcademicTime.minute(startTime), let last = AcademicTime.minute(endTime),
+                   exams.contains(where: { $0.overlaps(first ..< last) }) { continue }
                 guard markers.insert(marker).inserted else { continue }
                 let detailLines = [
                     course.teacher.isEmpty ? nil : "教师：\(course.teacher)",
@@ -352,6 +363,21 @@ enum CalendarImportLogic {
                     endDate: endDate
                 ))
             }
+        }
+
+        for exam in schedule.examSchedule?.items ?? [] {
+            guard let day = StrictContractDateParser.date(from: exam.date, calendar: calendar) else { continue }
+            let interval = exam.course(calendar: calendar)?.minuteInterval
+            let isAllDay = interval == nil
+            guard let start = isAllDay ? day : date(on: day, time: exam.startTime, calendar: calendar),
+                  let end = isAllDay ? calendar.date(byAdding: .day, value: 1, to: day) : date(on: day, time: exam.endTime, calendar: calendar)
+            else { continue }
+            let marker = eventMarker(termID: schedule.termID, courseID: exam.id, week: 0)
+            guard markers.insert(marker).inserted else { continue }
+            let title = isAllDay ? "考试 · 时间待定 · \(exam.name)" : "考试 · \(exam.name)"
+            drafts.append(CalendarEventDraft(marker: marker, title: title, location: exam.room,
+                notes: [exam.timeText, "由 Where To Study 导入", marker].filter { !$0.isEmpty }.joined(separator: "\n"),
+                startDate: start, endDate: end, isAllDay: isAllDay))
         }
 
         return drafts.sorted {
@@ -373,7 +399,8 @@ enum CalendarImportLogic {
             && event.calendarIdentifier == destinationCalendarIdentifier
             && event.timeZoneIdentifier == Calendar.shanghai.timeZone.identifier
             && event.isBusy
-            && event.alarmOffsets == [reminderOffset]
+            && event.isAllDay == draft.isAllDay
+            && event.alarmOffsets == (draft.isAllDay ? [] : [reminderOffset])
     }
 
     private static func date(on day: Date, time: String, calendar: Calendar) -> Date? {
@@ -477,7 +504,8 @@ final class EventKitCalendarImporter: CalendarImporting {
                 calendarIdentifier: event.calendar.calendarIdentifier,
                 timeZoneIdentifier: event.timeZone?.identifier,
                 isBusy: event.availability == .busy,
-                alarmOffsets: (event.alarms ?? []).map(\.relativeOffset).sorted()
+                alarmOffsets: (event.alarms ?? []).map(\.relativeOffset).sorted(),
+                isAllDay: event.isAllDay
             )
             return (identifier: identifier, event: event, snapshot: snapshot)
         }
@@ -543,9 +571,10 @@ final class EventKitCalendarImporter: CalendarImporting {
         event.location = draft.location
         event.notes = draft.notes
         event.startDate = draft.startDate
+        event.isAllDay = draft.isAllDay
         event.endDate = draft.endDate
         event.timeZone = Calendar.shanghai.timeZone
         event.availability = .busy
-        event.alarms = [EKAlarm(relativeOffset: CalendarImportLogic.reminderOffset)]
+        event.alarms = draft.isAllDay ? [] : [EKAlarm(relativeOffset: CalendarImportLogic.reminderOffset)]
     }
 }

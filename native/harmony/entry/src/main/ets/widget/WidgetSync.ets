@@ -172,13 +172,15 @@ export class WidgetSync {
         WidgetSync.asNumber(record['weekday']),
         WidgetSync.numberArray(record['week_numbers']),
         WidgetSync.numberArray(record['exam_week_numbers']),
-        WidgetSync.asNumber(record['start_slot'])
+        WidgetSync.asNumber(record['start_slot']), WidgetSync.asString(record['event_kind'])
       ));
     }
     const preferences: WidgetCoursePreferences = typeof raw['preferences'] === 'object' ?
       WidgetCoursePreferences.fromJson(raw['preferences'] as Record<string, Object>) :
       new WidgetCoursePreferences();
-    return new WidgetArchive(termStartDate, fetchedAt, courses, preferences);
+    const schedule: ScheduleSnapshot | null = typeof raw['schedule'] === 'object' && raw['schedule'] !== null ?
+      ScheduleSnapshot.fromJson(raw['schedule'] as Record<string, Object>) : null;
+    return new WidgetArchive(termStartDate, fetchedAt, courses, preferences, schedule);
   }
 
   private static numberArray(value: Object | undefined): number[] {
@@ -219,10 +221,12 @@ export class WidgetSync {
       item['week_numbers'] = course.weekNumbers;
       item['exam_week_numbers'] = course.examWeekNumbers;
       item['start_slot'] = course.startSlot;
+      if (course.eventKind.length > 0) { item['event_kind'] = course.eventKind; }
       courses.push(item);
     }
     out['courses'] = courses;
     out['preferences'] = archive.preferences.toJson();
+    if (archive.schedule !== null) { out['schedule'] = archive.schedule.toJson(); }
     return out;
   }
 }

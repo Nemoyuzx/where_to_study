@@ -1,0 +1,41 @@
+{
+  "term_id": "2026-2027-1",
+  "term_start_date": "2026-09-07",
+  "fetched_at": "2026-09-12T08:00:00+08:00",
+  "courses": [
+    {
+      "id": "synthetic-regular-course", "name": "合成普通课程（非真实课表）",
+      "teacher": "合成教师", "room": "合成教学楼-101", "week_text": "1,2",
+      "week_numbers": [1, 2], "exam_week_numbers": [], "weekday": 1,
+      "start_slot": 0, "end_slot": 1, "section_text": "1-2节", "time_range": "08:00-09:35"
+    }
+  ],
+  "exam_schedule": {
+    "term_id": "2026-2027-1",
+    "account_key": "sha256:8b7080a1958f793b2fe729edfc5a7967955013b11e6945d941246c68dedee434",
+    "fetched_at": "2026-09-12T08:00:00+08:00",
+    "status": "fresh", "message": "合成考试安排，非真实数据",
+    "items": [
+      {
+        "id": "synthetic-exam-timed", "name": "合成考试示例：精确时间（非真实安排）",
+        "date": "2026-09-07", "start_time": "08:30", "end_time": "10:07",
+        "room": "合成考场-201", "seat": "", "time_text": "2026-09-07 08:30-10:07"
+      },
+      {
+        "id": "synthetic-exam-later", "name": "合成考试示例：教学周外（非真实安排）",
+        "date": "2026-12-21", "start_time": "06:15", "end_time": "07:20",
+        "room": "合成考场-202", "seat": "", "time_text": "2026-12-21 06:15-07:20"
+      },
+      {
+        "id": "synthetic-exam-time-pending", "name": "合成考试示例：时间待定（非真实安排）",
+        "date": "2026-09-14", "start_time": "", "end_time": "",
+        "room": "", "seat": "", "time_text": "2026-09-14，具体时间待公布（合成示例）"
+      },
+      {
+        "id": "synthetic-exam-date-pending", "name": "合成考试示例：日期待定（非真实安排）",
+        "date": "", "start_time": "", "end_time": "",
+        "room": "", "seat": "", "time_text": "日期与时间待公布（合成示例）"
+      }
+    ]
+  }
+}

@@ -4,7 +4,8 @@ import { UrlPolicy } from './UrlPolicy';
 export enum SJDResponseEndpoint {
   login = 0,
   curriculum = 1,
-  classrooms = 2
+  classrooms = 2,
+  academic = 3
 }
 
 export class SJDResponseLimits {
@@ -23,6 +24,7 @@ export class SJDResponseLimits {
   }
 
   static oversizedMessage(endpoint: SJDResponseEndpoint): string {
+    if (endpoint === SJDResponseEndpoint.academic) { return '教务查询响应过大。'; }
     if (endpoint === SJDResponseEndpoint.login) {
       return '移动教务登录响应过大。';
     }

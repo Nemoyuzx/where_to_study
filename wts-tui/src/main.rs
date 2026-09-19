@@ -57,6 +57,16 @@ enum Message {
         request_id: u64,
         result: ServiceResult<where_to_study_lib::models::ImportantEventsResponse>,
     },
+    Grades {
+        request_id: u64,
+        result: Result<
+            (
+                Option<where_to_study_lib::academic::GradeTerms>,
+                where_to_study_lib::academic::GradeReport,
+            ),
+            String,
+        >,
+    },
     CredentialsSaved(Result<(String, String, bool), String>),
     CredentialsCleared(Result<(), String>),
 }
@@ -295,6 +305,7 @@ fn run(
                 }
                 Message::CredentialsSaved(result) => match result {
                     Ok((account, scope, has_cloud_password)) => {
+                        app.credentials_changing = false;
                         if app.saved_account.trim() != account.trim() {
                             app.clear_account_data();
                         }
@@ -309,10 +320,14 @@ fn run(
                         app.set_status("凭据已保存到本地文件".to_string());
                         load_course_deletions(app, &scope);
                     }
-                    Err(message) => app.set_error(message),
+                    Err(message) => {
+                        app.credentials_changing = false;
+                        app.set_error(message);
+                    }
                 },
                 Message::CredentialsCleared(result) => match result {
                     Ok(()) => {
+                        app.credentials_changing = false;
                         app.clear_account_data();
                         app.credentials_saved = false;
                         app.saved_account.clear();
@@ -322,8 +337,14 @@ fn run(
                         app.use_academic_password = false;
                         app.set_status("已退出登录".to_string());
                     }
-                    Err(message) => app.set_error(message),
+                    Err(message) => {
+                        app.credentials_changing = false;
+                        app.set_error(message);
+                    }
                 },
+                Message::Grades { request_id, result } => {
+                    app.finish_grade_request(request_id, result);
+                }
             }
         }
     }
@@ -392,6 +413,18 @@ fn handle_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) -> bool 
     }
 
     match key.code {
+        KeyCode::Up if app.selected_tab_index == 1 => {
+            app.schedule_agenda_scroll = app.schedule_agenda_scroll.saturating_sub(1);
+        }
+        KeyCode::Down if app.selected_tab_index == 1 => {
+            app.schedule_agenda_scroll = app.schedule_agenda_scroll.saturating_add(1);
+        }
+        KeyCode::PageUp if app.selected_tab_index == 1 => {
+            app.schedule_agenda_scroll = app.schedule_agenda_scroll.saturating_sub(5);
+        }
+        KeyCode::PageDown if app.selected_tab_index == 1 => {
+            app.schedule_agenda_scroll = app.schedule_agenda_scroll.saturating_add(5);
+        }
         KeyCode::Char('m') if matches!(app.selected_tab_index, 0 | 1 | 3 | 5) => {
             app.course_manager = Some(course_manager::CourseManager::new());
         }
@@ -505,17 +538,56 @@ fn handle_query_key(app: &mut App, key: KeyEvent, tx: &mpsc::Sender<Message>) ->
 
     match key.code {
         KeyCode::Left => {
-            app.query_section = QuerySection::Shuttle;
+            app.query_section = match app.query_section {
+                QuerySection::Shuttle => QuerySection::Grades,
+                QuerySection::Events => QuerySection::Shuttle,
+                QuerySection::Grades => QuerySection::Events,
+            };
             app.query_scroll = 0;
+            if app.query_section == QuerySection::Grades {
+                refresh_grades(app, tx, false);
+            }
         }
         KeyCode::Right => {
-            app.query_section = QuerySection::Events;
+            app.query_section = match app.query_section {
+                QuerySection::Shuttle => QuerySection::Events,
+                QuerySection::Events => QuerySection::Grades,
+                QuerySection::Grades => QuerySection::Shuttle,
+            };
             app.query_scroll = 0;
+            if app.query_section == QuerySection::Grades {
+                refresh_grades(app, tx, false);
+            }
         }
         KeyCode::Char('r') => match app.query_section {
             QuerySection::Shuttle => refresh_shuttle(app, tx, true),
             QuerySection::Events => refresh_events(app, tx, true),
+            QuerySection::Grades => refresh_grades(app, tx, true),
         },
+        KeyCode::Up if app.query_section == QuerySection::Grades => app.move_grade_cursor(-1),
+        KeyCode::Down if app.query_section == QuerySection::Grades => app.move_grade_cursor(1),
+        KeyCode::PageUp if app.query_section == QuerySection::Grades => app.move_grade_cursor(-10),
+        KeyCode::PageDown if app.query_section == QuerySection::Grades => app.move_grade_cursor(10),
+        KeyCode::Char('t') if app.query_section == QuerySection::Grades => {
+            app.cycle_grade_term();
+            refresh_grades(app, tx, false);
+        }
+        KeyCode::Char('p') if app.query_section == QuerySection::Grades => {
+            app.grade_record_type = match app.grade_record_type.as_str() {
+                "1" => "0",
+                "0" => "",
+                _ => "1",
+            }
+            .into();
+            app.grade_cursor = 0;
+            refresh_grades(app, tx, false);
+        }
+        KeyCode::Char('a') if app.query_section == QuerySection::Grades => {
+            app.grade_term = Some(String::new());
+            app.grade_cursor = 0;
+            refresh_grades(app, tx, false);
+        }
+        KeyCode::Char('s') if app.query_section == QuerySection::Grades => activate_tab(app, 5, tx),
         KeyCode::Up if app.query_section == QuerySection::Events => app.move_query_cursor(-1),
         KeyCode::Down if app.query_section == QuerySection::Events => app.move_query_cursor(1),
         KeyCode::PageUp if app.query_section == QuerySection::Events => app.move_query_cursor(-10),
@@ -578,6 +650,89 @@ fn ensure_query_loaded(app: &mut App, tx: &mpsc::Sender<Message>) {
     if app.important_events.is_none() {
         refresh_events(app, tx, false);
     }
+    if app.query_section == QuerySection::Grades {
+        refresh_grades(app, tx, false);
+    }
+}
+
+fn academic_credentials_unchanged(expected: &Credentials) -> ServiceResult<()> {
+    let current = require_credentials()?;
+    if !academic_identity_matches(&current, expected) {
+        return Err(ServiceError::new("查询期间凭据已改变，请重新查询。"));
+    }
+    Ok(())
+}
+
+fn academic_identity_matches(left: &Credentials, right: &Credentials) -> bool {
+    left.account == right.account
+        && left.password == right.password
+        && left.account_scope == right.account_scope
+}
+
+fn begin_credential_change(app: &mut App) {
+    app.invalidate_data_requests();
+    app.credentials_changing = true;
+}
+
+fn refresh_grades(app: &mut App, tx: &mpsc::Sender<Message>, force: bool) {
+    if app.credentials_changing {
+        return;
+    }
+    let credentials = match require_credentials() {
+        Ok(credentials) => credentials,
+        Err(_) => {
+            app.clear_account_data();
+            app.credentials_saved = false;
+            app.saved_account.clear();
+            app.grade_error = Some("请先到设置页保存教务账号和密码（s）。".into());
+            return;
+        }
+    };
+    if app.saved_account != credentials.account || app.account_scope != credentials.account_scope {
+        app.clear_account_data();
+        app.saved_account = credentials.account.clone();
+        app.credentials_saved = true;
+        load_course_deletions(app, &credentials.account_scope);
+    }
+    if !force && app.restore_grade_cache() {
+        return;
+    }
+    let request_id = app.start_grade_request();
+    let terms_needed = force || app.grade_terms.is_none();
+    let query = where_to_study_lib::academic::GradeRequest {
+        term_id: app.grade_term.clone(),
+        record_type: Some(app.grade_record_type.clone()),
+    };
+    let tx = tx.clone();
+    thread::spawn(move || {
+        let result = block_on(async {
+            let terms = if terms_needed {
+                Some(
+                    where_to_study_lib::academic::fetch_terms(
+                        &credentials.account,
+                        &credentials.password,
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
+            let mut query = query;
+            if query.term_id.is_none() {
+                query.term_id = terms.as_ref().map(|terms| terms.current_term_id.clone());
+            }
+            let grades = where_to_study_lib::academic::fetch_grades(
+                &credentials.account,
+                &credentials.password,
+                &query,
+            )
+            .await?;
+            academic_credentials_unchanged(&credentials)?;
+            Ok::<_, ServiceError>((terms, grades))
+        })
+        .map_err(|_| "成绩查询失败或登录状态已改变，请按 r 重试。".to_string());
+        let _ = tx.send(Message::Grades { request_id, result });
+    });
 }
 
 fn refresh_shuttle(app: &mut App, tx: &mpsc::Sender<Message>, force: bool) {
@@ -694,6 +849,9 @@ fn toggle_slot(app: &mut App, slot: usize) {
 }
 
 fn login_with_form(app: &mut App, tx: &mpsc::Sender<Message>) {
+    if app.credentials_changing {
+        return;
+    }
     let account = app.login_account.trim().to_string();
     if account.is_empty() {
         app.set_error("请输入账号。".to_string());
@@ -716,6 +874,7 @@ fn login_with_form(app: &mut App, tx: &mpsc::Sender<Message>) {
     }
 
     app.clear_error();
+    begin_credential_change(app);
     let password = Zeroizing::new(std::mem::take(&mut *app.login_password));
     let cloud_password = Zeroizing::new(std::mem::take(&mut *app.teaching_cloud_password));
     let use_academic_password = app.use_academic_password;
@@ -812,6 +971,10 @@ fn load_course_deletions(app: &mut App, scope: &str) {
 }
 
 fn clear_credentials(app: &mut App, tx: &mpsc::Sender<Message>) {
+    if app.credentials_changing {
+        return;
+    }
+    begin_credential_change(app);
     app.settings_editing = false;
     let tx = tx.clone();
     thread::spawn(move || {
@@ -824,6 +987,9 @@ fn clear_credentials(app: &mut App, tx: &mpsc::Sender<Message>) {
 }
 
 fn refresh_schedule(app: &mut App, tx: &mpsc::Sender<Message>) {
+    if app.credentials_changing {
+        return;
+    }
     if where_to_study_lib::scoped_cache::is_valid_account_scope(&app.account_scope)
         && app.course_deletion_path.is_none()
     {
@@ -837,18 +1003,24 @@ fn refresh_schedule(app: &mut App, tx: &mpsc::Sender<Message>) {
             return;
         }
     };
+    if app.saved_account != credentials.account || app.account_scope != credentials.account_scope {
+        app.clear_account_data();
+        app.saved_account = credentials.account.clone();
+        app.credentials_saved = true;
+        load_course_deletions(app, &credentials.account_scope);
+    }
     let request_id = app.start_schedule_request();
     let tx = tx.clone();
     thread::spawn(move || {
-        let mut credentials = credentials;
         let mut request = where_to_study_lib::models::ScheduleRequest {
-            account: Some(std::mem::take(&mut credentials.account)),
-            password: Some(std::mem::take(&mut credentials.password)),
+            account: Some(credentials.account.clone()),
+            password: Some(credentials.password.clone()),
             term_id: None,
             term_start_date: None,
             automatic_term_detection_enabled: None,
         };
-        let result = block_on(where_to_study_lib::schedule::fetch_schedule(&request));
+        let result = block_on(where_to_study_lib::schedule::fetch_schedule(&request))
+            .and_then(|schedule| academic_credentials_unchanged(&credentials).map(|_| schedule));
         if let Some(password) = request.password.as_mut() {
             password.zeroize();
         }
@@ -922,6 +1094,32 @@ fn activate_tab(app: &mut App, index: usize, tx: &mpsc::Sender<Message>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn academic_password_change_cancels_grades_even_when_cloud_password_is_unchanged() {
+        let saved = Credentials {
+            account: "synthetic-account".into(),
+            password: "fixture-old".into(),
+            teaching_cloud_password: Some("fixture-cloud".into()),
+            account_scope: "fixture-scope".into(),
+        };
+        let mut changed = saved.clone();
+        changed.password = "fixture-new".into();
+        assert_eq!(
+            saved.teaching_cloud_password,
+            changed.teaching_cloud_password
+        );
+        assert!(!academic_identity_matches(&saved, &changed));
+        let mut app = App::new(false);
+        let report = where_to_study_lib::academic::GradeReport::default();
+        let first = app.start_grade_request();
+        app.finish_grade_request(first, Ok((None, report.clone())));
+        let pending = app.start_grade_request();
+        begin_credential_change(&mut app);
+        assert!(app.grades.is_none());
+        assert!(app.credentials_changing);
+        assert!(!app.finish_grade_request(pending, Ok((None, report))));
+    }
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)

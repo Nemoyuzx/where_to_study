@@ -2,7 +2,6 @@ package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.TransitionDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -66,10 +65,8 @@ class InformationQueryUiTest {
 
                     val queryTab = activity.findViewById<View>(R.id.navigation_query)
                     assertTrue(queryTab.performClick())
-                    assertTrue(
-                        "Primary navigation selection must cross-fade instead of jumping",
-                        queryTab.background is TransitionDrawable,
-                    )
+                    assertTrue("Query must be the selected destination", queryTab.isSelected)
+                    assertTrue(!activity.findViewById<View>(R.id.navigation_planner).isSelected)
                     val queryPage = activity.findViewById<View>(R.id.information_query_page)
                     assertTrue(
                         "The Android query header must not render the removed subtitle",
@@ -77,16 +74,21 @@ class InformationQueryUiTest {
                     )
                 }
                 instrumentation.waitForIdleSync()
+                UiDevice.getInstance(instrumentation).waitForIdle()
 
                 scenario.onActivity { activity ->
+                    val indicator = activity.findViewById<View>(R.id.phone_navigation_indicator)
+                    val tab = activity.findViewById<View>(R.id.navigation_query)
+                    val indicatorRect = android.graphics.Rect().also(indicator::getGlobalVisibleRect)
+                    val tabRect = android.graphics.Rect().also(tab::getGlobalVisibleRect)
+                    assertEquals("Selection surface must settle on the selected tab",
+                        tabRect.exactCenterX(), indicatorRect.exactCenterX(), 1f)
                     val shuttleScroll = activity.findViewById<ScrollView>(
                         R.id.information_query_shuttle_scroll,
                     )
                     val shuttleBody = shuttleScroll.getChildAt(0)
-                    assertEquals(
-                        activity.dp(PhoneNavigationLayoutLogic.CONTENT_INSET_DP),
-                        shuttleBody.paddingBottom,
-                    )
+                    // The body can contain nested responsive grids. The next
+                    // assertion checks the footer's actual visible clearance.
                     shuttleScroll.scrollTo(0, shuttleBody.height)
                 }
                 instrumentation.waitForIdleSync()
@@ -156,12 +158,18 @@ class InformationQueryUiTest {
                     )
                 }
                 instrumentation.waitForIdleSync()
-                assertTrue(
-                    UiDevice.getInstance(instrumentation).wait(
-                        Until.hasObject(By.text(context.uiText("示例学术会议"))),
-                        5_000,
-                    ),
-                )
+                var loadedCount = 0
+                val loadDeadline = android.os.SystemClock.elapsedRealtime() + 5_000
+                while (loadedCount < InformationQuerySessionState.INITIAL_EVENT_COUNT &&
+                    android.os.SystemClock.elapsedRealtime() < loadDeadline
+                ) {
+                    scenario.onActivity { activity ->
+                        loadedCount = activity.findViewById<LinearLayout?>(R.id.information_query_events_list)?.childCount ?: 0
+                    }
+                    if (loadedCount < InformationQuerySessionState.INITIAL_EVENT_COUNT) android.os.SystemClock.sleep(30)
+                }
+                assertEquals("Initial results must load regardless of which card is above the fold",
+                    InformationQuerySessionState.INITIAL_EVENT_COUNT, loadedCount)
 
                 scenario.onActivity { activity ->
                     val list = activity.findViewById<LinearLayout>(
@@ -227,14 +235,19 @@ class InformationQueryUiTest {
                     R.id.navigation_query,
                     R.id.navigation_settings,
                 )
-                val indices = navigationIDs.map { id ->
-                    navigation.indexOfChild(activity.findViewById<View>(id))
+                val positions = navigationIDs.map { id ->
+                    val tab = activity.findViewById<View>(id)
+                    assertTrue("Every destination must be visible", tab.getGlobalVisibleRect(android.graphics.Rect()))
+                    assertTrue("Destinations may be nested inside the navigation container",
+                        generateSequence(tab.parent) { it.parent }.any { it === navigation })
+                    val position = IntArray(2).also(tab::getLocationOnScreen)
+                    if (navigation.id == R.id.phone_navigation) position[0] else position[1]
                 }
-                assertTrue(indices.all { it >= 0 })
-                assertEquals(indices.sorted(), indices)
+                assertEquals(positions.sorted(), positions)
+                assertEquals(4, positions.distinct().size)
                 assertEquals(
                     listOf("空教室", "教学日历", "查询", "设置").map(activity::uiText),
-                    navigationIDs.map { id -> activity.findViewById<TextView>(id).text.toString() },
+                    navigationIDs.map { id -> activity.findViewById<View>(id).contentDescription.toString() },
                 )
                 assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
                 assertNotNull(activity.findViewById<View?>(R.id.page_query))

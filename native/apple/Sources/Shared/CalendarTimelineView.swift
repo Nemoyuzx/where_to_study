@@ -1,6 +1,7 @@
 import SwiftUI
 
 enum CalendarAllDayEventKind: String, Equatable, Sendable {
+    case exam
     case holiday
     case workday
     case assignment
@@ -118,6 +119,7 @@ enum CalendarDeadlinePresentation {
 
     static func tint(for kind: CalendarAllDayEventKind) -> Color {
         switch kind {
+        case .exam: AppTheme.danger
         case .holiday: AppTheme.danger
         case .workday: AppTheme.primary
         case .assignment: AppTheme.assignment
@@ -132,6 +134,7 @@ enum CalendarDeadlinePresentation {
 
     static func categoryKey(for kind: CalendarAllDayEventKind) -> String {
         switch kind {
+        case .exam: "考试"
         case .holiday: "法定节假日"
         case .workday: "调休工作日"
         case .assignment: "课程作业 DDL"
@@ -165,12 +168,14 @@ struct CalendarTimelineDay: Identifiable {
         let placements = CalendarTimelineLogic.placeCourses(courses)
         coursePlacements = placements
         courseTrackCount = max(placements.map(\.track).max().map { $0 + 1 } ?? 1, 1)
-        self.allDayEvents = allDayEvents ?? holidays.map { holiday in
+        self.allDayEvents = (allDayEvents ?? holidays.map { holiday in
             CalendarAllDayEvent(
                 id: "holiday-\(holiday.id)",
                 title: "\(holiday.type == "holiday" ? "休" : "班") \(holiday.name)",
                 kind: holiday.type == "holiday" ? .holiday : .workday
             )
+        }) + courses.filter { $0.isExam && $0.minuteInterval == nil }.map {
+            CalendarAllDayEvent(id: $0.id, title: $0.name, time: "考试 · 时间待定", kind: .exam)
         }
     }
 
@@ -268,14 +273,16 @@ enum CalendarTimelineLogic {
 
     static func placeCourses(_ courses: [Course]) -> [CalendarCoursePlacement] {
         var trackEnds = [Int]()
-        return courses.sorted {
-            ($0.startSlot, $0.endSlot, $0.name) < ($1.startSlot, $1.endSlot, $1.name)
+        return courses.filter { $0.minuteInterval != nil }.sorted {
+            ($0.minuteInterval!.lowerBound, $0.minuteInterval!.upperBound, $0.name)
+                < ($1.minuteInterval!.lowerBound, $1.minuteInterval!.upperBound, $1.name)
         }.map { course in
-            let track = trackEnds.firstIndex(where: { $0 < course.startSlot }) ?? trackEnds.count
+            let interval = course.minuteInterval!
+            let track = trackEnds.firstIndex(where: { $0 <= interval.lowerBound }) ?? trackEnds.count
             if track == trackEnds.count {
-                trackEnds.append(course.endSlot)
+                trackEnds.append(interval.upperBound)
             } else {
-                trackEnds[track] = course.endSlot
+                trackEnds[track] = interval.upperBound
             }
             return CalendarCoursePlacement(course: course, track: track)
         }
@@ -285,6 +292,13 @@ enum CalendarTimelineLogic {
         [course.room, course.teacher.isEmpty ? "" : "教师：\(course.teacher)"]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
+    }
+
+    static func bounds(for courses: [Course]) -> ClosedRange<Int> {
+        let intervals = courses.compactMap(\.minuteInterval)
+        let start = min(startMinute, (intervals.map(\.lowerBound).min() ?? startMinute) / 60 * 60)
+        let end = max(endMinute, ((intervals.map(\.upperBound).max() ?? endMinute) + 59) / 60 * 60)
+        return start ... end
     }
 }
 
@@ -310,7 +324,9 @@ struct CalendarTimelineView: View {
     private let maximumVisibleAllDayRows = 3
     private let hourHeight: CGFloat = 64
 
-    private var timelineHeight: CGFloat { hourHeight * 14 }
+    private var bounds: ClosedRange<Int> { CalendarTimelineLogic.bounds(for: days.flatMap(\.courses)) }
+    private var hourMinutes: [Int] { Array(stride(from: bounds.lowerBound, through: bounds.upperBound, by: 60)) }
+    private var timelineHeight: CGFloat { hourHeight * CGFloat(bounds.upperBound - bounds.lowerBound) / 60 }
     private var visibleAllDayRowCount: Int {
         days.map {
             CalendarTimelineLogic.allDayHeaderLayout(
@@ -441,7 +457,7 @@ struct CalendarTimelineView: View {
             context.stroke(structure, with: .color(theme.border), lineWidth: 1)
 
             var hourLines = Path()
-            for minute in CalendarTimelineLogic.wholeHourMinutes {
+            for minute in hourMinutes {
                 let y = yPosition(minute: minute)
                 hourLines.move(to: CGPoint(x: 0, y: y))
                 hourLines.addLine(to: CGPoint(x: contentLeft, y: y))
@@ -479,7 +495,7 @@ struct CalendarTimelineView: View {
             context.stroke(structure, with: .color(theme.border), lineWidth: 1)
 
             var hourLines = Path()
-            for minute in CalendarTimelineLogic.wholeHourMinutes {
+            for minute in hourMinutes {
                 let y = yPosition(minute: minute)
                 hourLines.move(to: CGPoint(x: 0, y: y))
                 hourLines.addLine(to: CGPoint(x: width, y: y))
@@ -526,10 +542,10 @@ struct CalendarTimelineView: View {
 
     private func hourLabels(now: Date) -> some View {
         let currentMinute = currentMinuteIfVisible(now)
-        return ForEach(8 ... 22, id: \.self) { hour in
+        return ForEach(bounds.lowerBound / 60 ... bounds.upperBound / 60, id: \.self) { hour in
             let hourMinute = hour * 60
             let rawY = yPosition(minute: hourMinute)
-            let y = hour == 8 ? rawY + 10 : (hour == 22 ? rawY - 7 : rawY - 5)
+            let y = hour * 60 == bounds.lowerBound ? rawY + 10 : (hour * 60 == bounds.upperBound ? rawY - 7 : rawY - 5)
             if currentMinute.map({
                 CalendarTimelineLogic.hourLabelIsObscured(
                     hourMinute: hourMinute,
@@ -672,7 +688,7 @@ struct CalendarTimelineView: View {
 
     private func allDayHeaderEventLabel(_ event: CalendarAllDayEvent) -> some View {
         HStack(spacing: 3) {
-            Text(event.time ?? model.localized("全天"))
+            Text(event.kind == .exam ? model.localized("考试 · 时间待定") : event.time ?? model.localized("全天"))
                 .monospacedDigit()
             Text(event.title)
                 .lineLimit(1)
@@ -693,10 +709,8 @@ struct CalendarTimelineView: View {
     private func courseBlocks(dayWidth: CGFloat) -> some View {
         ForEach(Array(days.enumerated()), id: \.element.id) { dayIndex, day in
             ForEach(day.coursePlacements) { placement in
-                if let start = SlotMetadata.defaults[safe: placement.course.startSlot]
-                    .flatMap({ CalendarTimelineLogic.minute(of: $0.start) }),
-                   let end = SlotMetadata.defaults[safe: placement.course.endSlot]
-                    .flatMap({ CalendarTimelineLogic.minute(of: $0.end) }) {
+                if let interval = placement.course.minuteInterval {
+                    let start = interval.lowerBound, end = interval.upperBound
                     let trackWidth = dayWidth / CGFloat(day.courseTrackCount)
                     let x = CGFloat(dayIndex) * dayWidth
                         + CGFloat(placement.track) * trackWidth
@@ -733,6 +747,7 @@ struct CalendarTimelineView: View {
             : theme.primaryFill.opacity(0.86)
 
         return VStack(alignment: .leading, spacing: 1) {
+            if placement.course.isExam { Text(model.localized("考试")).font(.system(size: 8, weight: .bold)) }
             Text(placement.course.name)
                 .font(.system(size: isSingleDay ? 11 : 9, weight: .semibold))
                 .lineLimit(1)
@@ -769,7 +784,7 @@ struct CalendarTimelineView: View {
         let components = calendar.dateComponents([.hour, .minute], from: now)
         let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
         if let todayIndex,
-           (CalendarTimelineLogic.startMinute ... CalendarTimelineLogic.endMinute).contains(minute) {
+           bounds.contains(minute) {
             let y = yPosition(minute: minute)
             let left = CGFloat(todayIndex) * dayWidth
             Path { path in
@@ -805,14 +820,14 @@ struct CalendarTimelineView: View {
         }
         let components = calendar.dateComponents([.hour, .minute], from: now)
         let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
-        guard (CalendarTimelineLogic.startMinute ... CalendarTimelineLogic.endMinute).contains(minute) else {
+        guard bounds.contains(minute) else {
             return nil
         }
         return minute
     }
 
     private func yPosition(minute: Int) -> CGFloat {
-        headerHeight + timelineHeight * CalendarTimelineLogic.position(minute: minute)
+        headerHeight + hourHeight * CGFloat(min(max(minute, bounds.lowerBound), bounds.upperBound) - bounds.lowerBound) / 60
     }
 
     private func headerDetail(for day: CalendarTimelineDay) -> String {

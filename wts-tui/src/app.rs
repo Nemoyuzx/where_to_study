@@ -1,7 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::color_theme::{ColorTheme, ThemeEditor};
 use chrono::{Datelike, NaiveDate};
+use where_to_study_lib::academic::{self, GradeReport, GradeTerms};
 use where_to_study_lib::config::today_in_app_tz;
 use where_to_study_lib::models::{
     ClassroomStatus, ClassroomsCacheResponse, Course, HolidaysResponse, ImportantEventItem,
@@ -25,6 +26,7 @@ pub enum Tab {
 pub enum QuerySection {
     Shuttle,
     Events,
+    Grades,
 }
 
 pub struct App {
@@ -63,6 +65,15 @@ pub struct App {
     pub settings_editing: bool,
     pub credentials_saved: bool,
     pub saved_account: String,
+    pub credentials_changing: bool,
+    pub grade_terms: Option<GradeTerms>,
+    pub grade_term: Option<String>,
+    pub grade_record_type: String,
+    pub grades: Option<GradeReport>,
+    pub grade_error: Option<String>,
+    pub grade_cursor: usize,
+    pub schedule_agenda_scroll: usize,
+    grade_cache: VecDeque<GradeReport>,
     pub query_section: QuerySection,
     pub shuttle: Option<ShuttleBusResponse>,
     pub important_events: Option<ImportantEventsResponse>,
@@ -81,6 +92,7 @@ pub struct App {
     pending_classrooms: Option<u64>,
     pending_shuttle: Option<u64>,
     pending_events: Option<u64>,
+    pending_grades: Option<u64>,
 }
 
 impl App {
@@ -123,6 +135,15 @@ impl App {
             settings_editing: false,
             credentials_saved: false,
             saved_account: String::new(),
+            credentials_changing: false,
+            grade_terms: None,
+            grade_term: None,
+            grade_record_type: "1".into(),
+            grades: None,
+            grade_error: None,
+            grade_cursor: 0,
+            schedule_agenda_scroll: 0,
+            grade_cache: VecDeque::new(),
             query_section: QuerySection::Shuttle,
             shuttle: None,
             important_events: None,
@@ -141,6 +162,7 @@ impl App {
             pending_classrooms: None,
             pending_shuttle: None,
             pending_events: None,
+            pending_grades: None,
         }
     }
 
@@ -149,8 +171,17 @@ impl App {
         self.error_message = Some(message);
     }
 
-    pub fn set_raw_schedule(&mut self, schedule: ScheduleResponse) {
+    pub fn set_raw_schedule(&mut self, mut schedule: ScheduleResponse) {
+        if schedule.exam_schedule.as_ref().is_some_and(|exams| {
+            self.saved_account.is_empty()
+                || exams.account_key != academic::account_key(&self.saved_account)
+                || exams.term_id != schedule.term_id
+        }) {
+            schedule.exam_schedule = None;
+        }
+        academic::merge_exam_fallback(&mut schedule, self.raw_schedule.as_ref());
         self.raw_schedule = Some(schedule);
+        self.schedule_agenda_scroll = 0;
         self.recompute_schedule();
     }
 
@@ -208,17 +239,195 @@ impl App {
         let Some(schedule) = self.schedule.as_ref() else {
             return vec![];
         };
-        let Some(week) = self.schedule_week_on(date) else {
+        let Ok(start) = NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d") else {
             return vec![];
         };
-        let weekday = date.weekday().num_days_from_monday() as i64 + 1;
         let mut courses: Vec<&Course> = schedule
             .courses
             .iter()
-            .filter(|course| course.weekday == weekday && course.week_numbers.contains(&week))
+            .filter(|course| {
+                (academic::is_exam(course) || self.schedule_week_on(date).is_some())
+                    && academic::occurs_on(course, date, start)
+            })
             .collect();
-        courses.sort_by(|a, b| a.start_slot.cmp(&b.start_slot).then(a.name.cmp(&b.name)));
+        courses.sort_by(|a, b| {
+            academic::course_minutes(a)
+                .cmp(&academic::course_minutes(b))
+                .then(a.name.cmp(&b.name))
+        });
         courses
+    }
+
+    pub fn exam_status(&self) -> String {
+        self.schedule
+            .as_ref()
+            .and_then(|schedule| schedule.exam_schedule.as_ref())
+            .map_or_else(
+                || "刷新课表时同步考试安排。".into(),
+                |exams| {
+                    let state = match exams.status.as_str() {
+                        "failed" => "考试安排获取失败",
+                        "stale" => "考试安排为旧缓存",
+                        _ if exams.items.is_empty() => "暂无考试安排",
+                        _ => "考试安排已同步",
+                    };
+                    format!("{state}。{}", exams.message)
+                },
+            )
+    }
+
+    pub fn exam_agenda(&self, first: NaiveDate, days: i64) -> Vec<String> {
+        let mut lines = vec![self.exam_status()];
+        let Some(exams) = self
+            .schedule
+            .as_ref()
+            .and_then(|s| s.exam_schedule.as_ref())
+        else {
+            return lines;
+        };
+        let mut items: Vec<_> = exams
+            .items
+            .iter()
+            .filter(|exam| {
+                NaiveDate::parse_from_str(&exam.date, "%Y-%m-%d").map_or(true, |date| {
+                    date >= first && date < first + chrono::Duration::days(days)
+                })
+            })
+            .collect();
+        items.sort_by_key(|exam| (&exam.date, &exam.start_time, &exam.name));
+        for exam in items {
+            lines.push(format!(
+                "考试 · {} {} · {} · {}",
+                if exam.date.is_empty() {
+                    "日期待定"
+                } else {
+                    &exam.date
+                },
+                if exam.start_time.is_empty() {
+                    format!("时间待定 {}", exam.time_text)
+                } else {
+                    format!("{}-{}", exam.start_time, exam.end_time)
+                },
+                exam.name,
+                exam.room
+            ));
+        }
+        lines
+    }
+
+    pub fn grade_term_label(&self) -> String {
+        match self.grade_term.as_deref() {
+            None => "学校当前学期".into(),
+            Some("") => "全部学期".into(),
+            Some(id) => self
+                .grade_terms
+                .as_ref()
+                .and_then(|terms| terms.terms.iter().find(|term| term.id == id))
+                .map(|term| term.name.clone())
+                .unwrap_or_else(|| id.into()),
+        }
+    }
+
+    pub fn grade_type_label(&self) -> &'static str {
+        match self.grade_record_type.as_str() {
+            "1" => "最好成绩",
+            "0" => "首次成绩",
+            _ => "全部记录",
+        }
+    }
+
+    pub fn cycle_grade_term(&mut self) {
+        let Some(terms) = &self.grade_terms else {
+            return;
+        };
+        let mut ids = vec![String::new()];
+        ids.extend(terms.terms.iter().map(|term| term.id.clone()));
+        let current = ids
+            .iter()
+            .position(|id| Some(id) == self.grade_term.as_ref())
+            .unwrap_or(0);
+        self.grade_term = Some(ids[(current + 1) % ids.len()].clone());
+        self.grade_cursor = 0;
+    }
+
+    pub fn move_grade_cursor(&mut self, delta: isize) {
+        let maximum = self
+            .grades
+            .as_ref()
+            .map_or(0, |report| report.items.len().saturating_sub(1));
+        self.grade_cursor =
+            (self.grade_cursor as isize + delta).clamp(0, maximum as isize) as usize;
+    }
+
+    pub fn grades_loading(&self) -> bool {
+        self.pending_grades.is_some()
+    }
+
+    pub fn restore_grade_cache(&mut self) -> bool {
+        let Some(term) = self.grade_term.as_ref() else {
+            return false;
+        };
+        let report = self
+            .grade_cache
+            .iter()
+            .find(|report| report.term_id == *term && report.record_type == self.grade_record_type)
+            .cloned();
+        if let Some(report) = report {
+            self.pending_grades = None;
+            self.grades = Some(report);
+            self.grade_error = None;
+            self.sync_loading();
+            return true;
+        }
+        false
+    }
+
+    pub fn start_grade_request(&mut self) -> u64 {
+        let request_id = self.next_request_id();
+        self.pending_grades = Some(request_id);
+        if self.grades.as_ref().is_some_and(|report| {
+            Some(&report.term_id) != self.grade_term.as_ref()
+                || report.record_type != self.grade_record_type
+        }) {
+            self.grades = None;
+        }
+        self.grade_error = None;
+        self.sync_loading();
+        request_id
+    }
+
+    pub fn finish_grade_request(
+        &mut self,
+        request_id: u64,
+        result: Result<(Option<GradeTerms>, GradeReport), String>,
+    ) -> bool {
+        if self.pending_grades != Some(request_id) {
+            return false;
+        }
+        self.pending_grades = None;
+        match result {
+            Ok((terms, report)) => {
+                if let Some(terms) = terms {
+                    self.grade_terms = Some(terms);
+                }
+                if self.grade_term.is_none() {
+                    self.grade_term = Some(report.term_id.clone());
+                }
+                self.grade_cache.retain(|old| {
+                    old.term_id != report.term_id || old.record_type != report.record_type
+                });
+                self.grade_cache.push_back(report.clone());
+                while self.grade_cache.len() > 12 {
+                    self.grade_cache.pop_front();
+                }
+                self.grade_cursor = self.grade_cursor.min(report.items.len().saturating_sub(1));
+                self.grades = Some(report);
+                self.grade_error = None;
+            }
+            Err(error) => self.grade_error = Some(error),
+        }
+        self.sync_loading();
+        true
     }
 
     pub fn matching_rooms(&self) -> Vec<&ClassroomStatus> {
@@ -394,6 +603,13 @@ impl App {
     }
 
     pub fn invalidate_data_requests(&mut self) {
+        self.pending_grades = None;
+        self.grades = None;
+        self.grade_terms = None;
+        self.grade_term = None;
+        self.grade_cursor = 0;
+        self.grade_error = None;
+        self.grade_cache.clear();
         self.pending_schedule = None;
         self.pending_classrooms = None;
         self.pending_shuttle = None;
@@ -411,6 +627,7 @@ impl App {
             || self.pending_classrooms.is_some()
             || self.pending_shuttle.is_some()
             || self.pending_events.is_some();
+        self.loading |= self.pending_grades.is_some();
     }
 
     pub fn all_query_events(&self) -> Vec<ImportantEventItem> {
@@ -564,6 +781,127 @@ pub const TAB_LABELS: [&str; 6] = ["概览", "课表", "空教室", "日历", "�
 mod tests {
     use super::*;
 
+    #[test]
+    fn grade_requests_cache_by_term_and_type_and_ignore_invalidated_results() {
+        let mut app = App::new(false);
+        let old = app.start_grade_request();
+        app.grade_term = Some("synthetic-term".into());
+        let current = app.start_grade_request();
+        let report = GradeReport {
+            term_id: "synthetic-term".into(),
+            record_type: "1".into(),
+            ..Default::default()
+        };
+        assert!(!app.finish_grade_request(old, Ok((None, report.clone()))));
+        assert!(app.finish_grade_request(current, Ok((None, report.clone()))));
+        assert!(app.restore_grade_cache());
+        app.grade_record_type = "0".into();
+        assert!(!app.restore_grade_cache());
+        let pending = app.start_grade_request();
+        app.invalidate_data_requests();
+        assert!(!app.finish_grade_request(pending, Ok((None, report))));
+        assert!(app.grades.is_none());
+        assert!(app.grade_cache.is_empty());
+        assert!(!app.grades_loading());
+    }
+
+    #[test]
+    fn grades_empty_and_error_remain_distinct_and_cache_is_bounded() {
+        let mut app = App::new(false);
+        for index in 0..16 {
+            app.grade_term = Some(format!("synthetic-{index}"));
+            let request = app.start_grade_request();
+            app.finish_grade_request(
+                request,
+                Ok((
+                    None,
+                    GradeReport {
+                        term_id: format!("synthetic-{index}"),
+                        record_type: "1".into(),
+                        ..Default::default()
+                    },
+                )),
+            );
+        }
+        assert_eq!(app.grade_cache.len(), 12);
+        let request = app.start_grade_request();
+        app.finish_grade_request(request, Err("合成查询失败".into()));
+        assert_eq!(app.grade_error.as_deref(), Some("合成查询失败"));
+        assert!(app.grades.as_ref().unwrap().items.is_empty());
+        let request = app.start_grade_request();
+        app.finish_grade_request(request, Ok((None, GradeReport::default())));
+        assert!(app.grade_error.is_none());
+    }
+
+    #[test]
+    fn exams_use_actual_dates_preserve_raw_courses_and_only_reuse_same_owner_cache() {
+        use where_to_study_lib::academic::{ExamArrangement, ExamSchedule};
+        let mut app = App::new(false);
+        app.saved_account = "synthetic-account".into();
+        let mut raw = sample_schedule();
+        raw.exam_schedule = Some(ExamSchedule {
+            term_id: raw.term_id.clone(),
+            account_key: academic::account_key(&app.saved_account),
+            status: "fresh".into(),
+            items: vec![
+                ExamArrangement {
+                    id: "exam-known".into(),
+                    name: "合成冲突考试".into(),
+                    date: "2026-03-02".into(),
+                    start_time: "09:50".into(),
+                    end_time: "10:30".into(),
+                    ..Default::default()
+                },
+                ExamArrangement {
+                    id: "exam-late".into(),
+                    name: "合成晚间考试".into(),
+                    date: "2026-09-01".into(),
+                    start_time: "22:05".into(),
+                    end_time: "23:00".into(),
+                    ..Default::default()
+                },
+                ExamArrangement {
+                    id: "exam-pending".into(),
+                    name: "合成待定考试".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        });
+        app.set_raw_schedule(raw.clone());
+        let monday = NaiveDate::from_ymd_opt(2026, 3, 2).unwrap();
+        assert_eq!(app.raw_schedule.as_ref().unwrap().courses.len(), 2);
+        assert!(!app
+            .courses_on(monday)
+            .iter()
+            .any(|course| course.id == "c1"));
+        assert_eq!(app.courses_on(monday + chrono::Duration::days(7)).len(), 2);
+        let late_day = NaiveDate::from_ymd_opt(2026, 9, 1).unwrap();
+        assert_eq!(app.schedule_week_on(late_day), None);
+        assert_eq!(app.courses_on(late_day).len(), 1);
+        assert_eq!(
+            academic::course_minutes(app.courses_on(late_day)[0]),
+            Some((1325, 1380))
+        );
+        assert!(app.exam_agenda(monday, 7).join("\n").contains("日期待定"));
+        raw.exam_schedule.as_mut().unwrap().status = "failed".into();
+        raw.exam_schedule.as_mut().unwrap().items.clear();
+        app.set_raw_schedule(raw.clone());
+        assert_eq!(
+            app.raw_schedule
+                .as_ref()
+                .unwrap()
+                .exam_schedule
+                .as_ref()
+                .unwrap()
+                .status,
+            "stale"
+        );
+        raw.exam_schedule.as_mut().unwrap().account_key = academic::account_key("other-owner");
+        app.set_raw_schedule(raw);
+        assert!(app.raw_schedule.as_ref().unwrap().exam_schedule.is_none());
+    }
+
     fn sample_schedule() -> ScheduleResponse {
         ScheduleResponse {
             term_id: "2025-2026-2".to_string(),
@@ -584,6 +922,7 @@ mod tests {
                     end_slot: 8,
                     section_text: "8-9节".to_string(),
                     time_range: "14:45-16:25".to_string(),
+                    ..Default::default()
                 },
                 Course {
                     source_course_id: String::new(),
@@ -599,8 +938,10 @@ mod tests {
                     end_slot: 4,
                     section_text: "3-5节".to_string(),
                     time_range: "09:50-12:15".to_string(),
+                    ..Default::default()
                 },
             ],
+            exam_schedule: None,
         }
     }
 

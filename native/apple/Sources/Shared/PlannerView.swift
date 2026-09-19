@@ -411,6 +411,7 @@ struct PlannerView: View {
     private func courseRow(_ course: Course) -> some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
+                if course.isExam { Text(model.localized("考试")).font(.caption.bold()).foregroundStyle(AppTheme.danger) }
                 Text(course.name).font(.headline)
                 Text(course.room.isEmpty ? model.localized("地点未标注") : course.room)
                     .font(.caption)

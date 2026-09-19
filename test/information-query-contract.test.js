@@ -61,6 +61,8 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.doesNotMatch(app, /openQueryHub|queryHubOpen|queryHubReturnPage/)
   assert.match(queryHub, /role="tab"[\s\S]*'班车查询'/)
   assert.match(queryHub, /role="tab"[\s\S]*'重要事件'/)
+  assert.match(queryHub, /role="tab"[\s\S]*'成绩查询'/)
+  assert.match(queryHub, /<GradesPanel[\s\S]*enabled=\{tab === 'grades'\}/)
 
   assertOrdered(appleAppModel, ['case planner', 'case calendar', 'case queries', 'case settings'])
   assert.match(appleRoot, /case \.queries:\s+InformationQueriesView\(/)
@@ -70,6 +72,8 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.doesNotMatch(appleDesktopCalendar, /InformationQueriesView|InformationQueriesPresentation/)
   assert.doesNotMatch(appleMobileCalendar, /InformationQueriesView|InformationQueriesPresentation/)
   assert.match(appleQuery, /Picker\("查询类型"/)
+  assert.match(appleQuery, /case grades/)
+  assert.match(appleQuery, /case \.grades:\s*GradeQueryView\(store: model\.gradeStore\)/)
 
   assertOrdered(androidMain, ['PLANNER("空教室"', 'CALENDAR("教学日历"', 'QUERY("查询"', 'SETTINGS("设置"'])
   assert.match(androidMain, /Destination\.QUERY ->[\s\S]*InformationQueryPage\(/)
@@ -79,9 +83,11 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(androidCalendar, /addView\(calendarImportButton\(compact = true\)\)/)
   assert.match(androidQuery, /SHUTTLE\("班车查询"\)/)
   assert.match(androidQuery, /IMPORTANT_EVENTS\("重要事件"\)/)
+  assert.match(androidQuery, /GRADES\("成绩查询"\)/)
+  assert.match(androidQuery, /InformationQueryMode\.GRADES -> gradesContent\(\)/)
 
   assertOrdered(harmonySections, ['AppSection.planner', 'AppSection.calendar', 'AppSection.query', 'AppSection.settings'])
-  assert.match(harmonyRoot, /currentSection === AppSection\.query[\s\S]*QueryView\(\)/)
+  assert.match(harmonyRoot, /currentSection === AppSection\.query[\s\S]*QueryView\(\{\s*onOpenSettings:\s*\(\) => this\.selectSection\(AppSection\.settings\)\s*\}\)/)
   assert.doesNotMatch(harmonyRoot, /queryVisible|setQueryVisible/)
   assert.doesNotMatch(harmonySettings, /onQueryVisibilityChanged|打开查询/)
   assert.doesNotMatch(harmonyCalendar, /onQueryVisibilityChanged|onQueryRequested/)
@@ -89,6 +95,8 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(harmonyQuery, /QueryPageContract\.tabTitle\(tab\)/)
   assert.match(harmonyLogic, /'班车查询'/)
   assert.match(harmonyLogic, /'重要事件'/)
+  assert.match(harmonyLogic, /tabs:\s*QueryPageTab\[\]\s*=\s*\[QueryPageTab\.shuttle,\s*QueryPageTab\.events,\s*QueryPageTab\.grades\]/)
+  assert.match(harmonyQuery, /GradeQueryView\(/)
 })
 
 test('fixed shuttle clients reject redirects and show only an active timetable', () => {

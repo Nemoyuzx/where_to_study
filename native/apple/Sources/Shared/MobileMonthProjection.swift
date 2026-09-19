@@ -146,7 +146,7 @@ actor MobileMonthProjectionWorker {
               let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [:] }
         return ScheduleLogic.coursesByDate(
-            for: input.days, termStart: termStart, courses: schedule.courses, calendar: calendar
+            for: input.days, termStart: termStart, courses: schedule.courses, exams: schedule.examSchedule, calendar: calendar
         )
     }
 

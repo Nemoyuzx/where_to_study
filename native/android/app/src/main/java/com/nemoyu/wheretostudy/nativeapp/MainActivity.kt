@@ -78,6 +78,7 @@ class MainActivity : Activity() {
     }
     private val weatherRepository by lazy { WeatherRepository() }
     private val shuttleBusRepository by lazy { ShuttleBusRepository() }
+    private val academicGradesRepository by lazy { AcademicGradesRepository(credentialStore::load) }
     private val calendarDailyInfoRepository by lazy {
         CalendarDailyInfoRepository(
             assignmentClient = UCloudAssignmentClient(credentialStore),
@@ -310,6 +311,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 navigationRailHeader = this
+                minimumHeight = dp(64)
                 val brand = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     addView(TextView(this@MainActivity).apply {
@@ -346,7 +348,7 @@ class MainActivity : Activity() {
                 }
                 navigationRailToggle = toggle
                 addView(toggle, LinearLayout.LayoutParams(dp(48), dp(48)))
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             Destination.entries.forEach { destination ->
                 addView(navigationTab(destination, compact = false))
             }
@@ -740,6 +742,7 @@ class MainActivity : Activity() {
                             ?: currentWindowWidthDp(),
                         sessionState = informationQuerySessionState,
                         usesBottomNavigation = currentLayoutSpec?.usesBottomNavigation == true,
+                        gradesRepository = academicGradesRepository,
                     ).build(),
                     FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -850,6 +853,8 @@ class MainActivity : Activity() {
     fun refreshCalendarIfVisible() {
         if (selectedDestination == Destination.CALENDAR) refreshCurrentPage()
     }
+
+    internal fun clearAcademicGrades() { academicGradesRepository.clear(); academicGradesRepository.reconcile() }
 
     fun prewarmPublicDeadlinesIfEnabled() {
         if (!preferences.hasEnabledPublicDeadlines) return
@@ -1107,6 +1112,7 @@ class MainActivity : Activity() {
             return LocalDataClearResult(failures)
         }
         LocalDataCoordinator.clear {
+            academicGradesRepository.clear()
             calendarDailyInfoRepository.clearAssignments()
             clearItem("账号和密码") { credentialStore.clear() }
             clearItem("应用设置") { preferences.clear() }
@@ -1189,6 +1195,7 @@ class MainActivity : Activity() {
         pendingCalendarImport = null
         pendingNotificationPermissionCompletion = null
         scheduleRepository.close()
+        academicGradesRepository.close()
         classroomRepository.close()
         weatherRepository.close()
         shuttleBusRepository.close()

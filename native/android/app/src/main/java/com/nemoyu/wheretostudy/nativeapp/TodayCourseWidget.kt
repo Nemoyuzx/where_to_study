@@ -179,9 +179,12 @@ object TodayCourseWidgetLogic {
         course: Course,
         showsLocation: Boolean = true,
         showsTeacher: Boolean = true,
+        context: Context? = null,
     ): String = listOfNotNull(
-        course.timeRange,
-        course.sectionText.takeIf(String::isNotBlank),
+        if (course.eventKind == "exam") context?.uiText(course.timeRange) ?: course.timeRange else course.timeRange,
+        course.sectionText.takeIf(String::isNotBlank)?.let {
+            if (course.eventKind == "exam") context?.uiText(it) ?: it else it
+        },
         course.room.takeIf { showsLocation && it.isNotBlank() },
         course.teacher.takeIf { showsTeacher && it.isNotBlank() },
     ).joinToString(" · ")
@@ -242,6 +245,7 @@ object TodayCourseWidgetLogic {
             val start = timeParts(upcoming.timeRange)?.first.orEmpty()
             return if (start.isEmpty()) "还有待上课程" else "下一节 · $start"
         }
+        if (courses.any { it.eventKind == "exam" && AcademicScheduleLogic.interval(it) == null }) return "考试时间待定"
         return "今日课程已结束"
     }
 
@@ -263,12 +267,13 @@ object TodayCourseWidgetLogic {
         val minute = target.get(Calendar.HOUR_OF_DAY) * 60 + target.get(Calendar.MINUTE)
         return when {
             minute < range.first -> WidgetCoursePhase.UPCOMING
-            minute <= range.last -> WidgetCoursePhase.IN_PROGRESS
+            minute < range.last -> WidgetCoursePhase.IN_PROGRESS
             else -> WidgetCoursePhase.FINISHED
         }
     }
 
     private fun minuteRange(course: Course): IntRange? {
+        if (course.eventKind == "exam") return AcademicScheduleLogic.interval(course)?.let { it.first..it.second }
         val parts = timeParts(course.timeRange) ?: return null
         val start = minutes(parts.first) ?: return null
         val end = minutes(parts.second) ?: return null
@@ -396,6 +401,7 @@ object TodayCourseWidgetPreviewBinder {
                     course,
                     showsLocation,
                     showsTeacher,
+                    context,
                 )
             }
         }
@@ -606,6 +612,7 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
                             course,
                             preferences.widgetShowsLocation,
                             preferences.widgetShowsTeacher,
+                            localizedContext,
                         ),
                     )
                 }

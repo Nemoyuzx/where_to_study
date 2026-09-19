@@ -1,7 +1,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Borders, Paragraph, Tabs, Wrap};
+use ratatui::widgets::{Borders, Cell, Paragraph, Row, Table, TableState, Tabs, Wrap};
 use ratatui::Frame;
 
 use crate::app::{App, QuerySection};
@@ -12,7 +12,11 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
-            Constraint::Length(3),
+            Constraint::Length(if app.query_section == QuerySection::Grades {
+                5
+            } else {
+                3
+            }),
             Constraint::Min(5),
             Constraint::Length(7),
         ])
@@ -21,8 +25,14 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     let selected = match app.query_section {
         QuerySection::Shuttle => 0,
         QuerySection::Events => 1,
+        QuerySection::Grades => 2,
     };
-    let tabs = Tabs::new(["班车查询", "重要事件查询"])
+    let labels = if area.width < 64 {
+        ["班车", "事件", "成绩"]
+    } else {
+        ["班车查询", "重要事件查询", "成绩查询"]
+    };
+    let tabs = Tabs::new(labels)
         .select(selected)
         .highlight_style(theme.primary_selected().add_modifier(Modifier::BOLD))
         .divider("  ")
@@ -32,7 +42,122 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     match app.query_section {
         QuerySection::Shuttle => draw_shuttle(frame, &chunks, app, theme),
         QuerySection::Events => draw_events(frame, &chunks, app, theme),
+        QuerySection::Grades => draw_grades(frame, &chunks, app, theme),
     }
+}
+
+fn draw_grades(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
+    let controls = format!(
+        "{} · {}\nt 学期 · p 记录 · a 全部学期 · r 刷新 · s 设置",
+        app.grade_term_label(),
+        app.grade_type_label()
+    );
+    frame.render_widget(
+        Paragraph::new(controls).wrap(Wrap { trim: false }).block(
+            theme
+                .control_block()
+                .borders(Borders::ALL)
+                .title("学校成绩查询"),
+        ),
+        chunks[1],
+    );
+    if let Some(report) = &app.grades {
+        let rows = report.items.iter().map(|item| {
+            Row::new([
+                Cell::from(item.name.as_str()),
+                Cell::from(if item.score.is_empty() {
+                    "未公布"
+                } else {
+                    &item.score
+                }),
+                Cell::from(if item.credits.is_empty() {
+                    "未公布"
+                } else {
+                    &item.credits
+                }),
+            ])
+        });
+        let gpa = if report.average_grade_point.is_empty() {
+            String::new()
+        } else {
+            format!(" · 平均学分绩点 {}", report.average_grade_point)
+        };
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Min(12),
+                Constraint::Length(9),
+                Constraint::Length(8),
+            ],
+        )
+        .header(Row::new(["课程", "成绩", "学分"]).style(theme.strong_text()))
+        .row_highlight_style(theme.primary_selected())
+        .block(
+            theme
+                .card_block()
+                .borders(Borders::ALL)
+                .title(format!("{} 项成绩{gpa}", report.items.len())),
+        );
+        let mut state = TableState::default().with_selected(Some(app.grade_cursor));
+        frame.render_stateful_widget(table, chunks[2], &mut state);
+    } else {
+        let text = if app.grades_loading() {
+            "正在向学校查询成绩…"
+        } else {
+            app.grade_error
+                .as_deref()
+                .unwrap_or("尚未查询成绩；r 查询，s 前往账户设置。")
+        };
+        frame.render_widget(
+            Paragraph::new(text)
+                .wrap(Wrap { trim: false })
+                .block(theme.card_block().borders(Borders::ALL).title("成绩")),
+            chunks[2],
+        );
+    }
+    let detail = app
+        .grades
+        .as_ref()
+        .and_then(|report| report.items.get(app.grade_cursor))
+        .map_or_else(
+            || {
+                if app
+                    .grades
+                    .as_ref()
+                    .is_some_and(|report| report.items.is_empty())
+                {
+                    "所选学期暂无已公布成绩，按 a 查看全部学期。".into()
+                } else {
+                    "成绩仅在内存保留；账号或凭据变更后清除。".into()
+                }
+            },
+            |item| {
+                format!(
+                    "{}\n{}\n{} · {} · {}\n课程代码：{} · 成绩标识：{}",
+                    item.name,
+                    item.semester_name,
+                    item.course_attribute,
+                    item.course_nature,
+                    item.exam_nature,
+                    item.course_code,
+                    item.grade_status
+                )
+            },
+        );
+    let detail = match &app.grade_error {
+        Some(error) if app.grades.is_some() => format!("{error}\n正在显示此前结果。\n{detail}"),
+        Some(error) => error.clone(),
+        None => detail,
+    };
+    frame.render_widget(
+        Paragraph::new(detail).wrap(Wrap { trim: false }).block(
+            theme
+                .elevated_block()
+                .borders(Borders::ALL)
+                .title("成绩详情 · ↑↓ / PgUp PgDn"),
+        ),
+        chunks[3],
+    );
 }
 
 fn draw_shuttle(frame: &mut Frame, chunks: &[Rect], app: &App, theme: &Theme) {
@@ -291,7 +416,11 @@ mod tests {
     use super::*;
 
     fn rendered_text(app: &mut App) -> String {
-        let backend = TestBackend::new(120, 32);
+        rendered_text_at_size(app, 120, 32)
+    }
+
+    fn rendered_text_at_size(app: &mut App, width: u16, height: u16) -> String {
+        let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| draw(frame, frame.area(), app, &crate::theme::LIGHT))
@@ -304,6 +433,43 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>()
             .replace(' ', "")
+    }
+
+    #[test]
+    fn grade_query_renders_zero_text_grades_and_narrow_terminal_controls() {
+        use where_to_study_lib::academic::{GradeItem, GradeReport};
+        let mut app = App::new(false);
+        app.query_section = QuerySection::Grades;
+        app.grade_term = Some(String::new());
+        app.grades = Some(GradeReport {
+            items: vec![
+                GradeItem {
+                    name: "合成零分".into(),
+                    score: "0".into(),
+                    credits: "0".into(),
+                    ..Default::default()
+                },
+                GradeItem {
+                    name: "合成文字".into(),
+                    score: "优秀".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        });
+        let wide = rendered_text(&mut app);
+        assert!(wide.contains("成绩查询"));
+        assert!(wide.contains("合成零分"));
+        assert!(wide.contains("优秀"));
+        assert!(!wide.contains("平均学分绩点"));
+        for (width, height) in [(40, 22), (80, 24), (120, 32)] {
+            let text = rendered_text_at_size(&mut app, width, height);
+            assert!(text.contains("成绩"));
+            assert!(text.contains("全部学期"));
+            assert!(text.contains("合成零分"));
+        }
+        app.grade_error = Some("合成查询失败".into());
+        assert!(rendered_text(&mut app).contains("正在显示此前结果"));
     }
 
     #[test]

@@ -84,6 +84,23 @@ struct Course: Codable, Identifiable, Equatable, Sendable {
     let sectionText: String
     let timeRange: String
     var sourceCourseID: String? = nil
+    var eventKind: String? = nil
+    var eventDate: String? = nil
+    var startTime: String? = nil
+    var endTime: String? = nil
+
+    var isExam: Bool { eventKind == "exam" }
+
+    var minuteInterval: Range<Int>? {
+        let parts = timeRange.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        let explicit = parts.count == 2 && AcademicTime.minute(parts[0]) != nil && AcademicTime.minute(parts[1]) != nil
+        let start = isExam ? startTime : startTime ?? (explicit ? parts[0] : SlotMetadata.defaults[safe: startSlot]?.start)
+        let end = isExam ? endTime : endTime ?? (explicit ? parts[1] : SlotMetadata.defaults[safe: endSlot]?.end)
+        guard let start, let end,
+              let first = AcademicTime.minute(start), let last = AcademicTime.minute(end), first < last
+        else { return nil }
+        return first ..< last
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, teacher, room, weekday
@@ -95,6 +112,10 @@ struct Course: Codable, Identifiable, Equatable, Sendable {
         case sectionText = "section_text"
         case timeRange = "time_range"
         case sourceCourseID = "source_course_id"
+        case eventKind = "event_kind"
+        case eventDate = "event_date"
+        case startTime = "start_time"
+        case endTime = "end_time"
     }
 }
 
@@ -103,12 +124,85 @@ struct ScheduleSnapshot: Codable, Equatable, Sendable {
     let termStartDate: String
     let fetchedAt: String
     let courses: [Course]
+    var examSchedule: ExamSchedule? = nil
 
     enum CodingKeys: String, CodingKey {
         case courses
         case termID = "term_id"
         case termStartDate = "term_start_date"
         case fetchedAt = "fetched_at"
+        case examSchedule = "exam_schedule"
+    }
+}
+
+typealias ScheduleCourse = Course
+
+struct ExamArrangement: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    let name: String
+    let date: String
+    let startTime: String
+    let endTime: String
+    let room: String
+    let seat: String
+    let timeText: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, date, room, seat
+        case startTime = "start_time"
+        case endTime = "end_time"
+        case timeText = "time_text"
+    }
+
+    func course(calendar: Calendar = .shanghai) -> Course? {
+        guard let day = StrictContractDateParser.date(from: date, calendar: calendar) else { return nil }
+        return Course(id: id, name: name, teacher: "", room: room, weekText: "", weekNumbers: [],
+                      examWeekNumbers: [], weekday: ((calendar.component(.weekday, from: day) + 5) % 7) + 1,
+                      startSlot: -1, endSlot: -1, sectionText: "",
+                      timeRange: startTime.isEmpty || endTime.isEmpty ? timeText : "\(startTime)-\(endTime)",
+                      eventKind: "exam", eventDate: date, startTime: startTime, endTime: endTime)
+    }
+}
+
+struct ExamSchedule: Codable, Equatable, Sendable {
+    let termID: String
+    let accountKey: String
+    let fetchedAt: String
+    var status: String
+    var message: String
+    let items: [ExamArrangement]
+
+    enum CodingKeys: String, CodingKey {
+        case status, message, items
+        case termID = "term_id"
+        case accountKey = "account_key"
+        case fetchedAt = "fetched_at"
+    }
+}
+
+enum AcademicTime {
+    static func minute(_ value: String) -> Int? {
+        let bytes = Array(value.utf8)
+        guard bytes.count == 5, bytes[2] == 58,
+              [0, 1, 3, 4].allSatisfy({ (48 ... 57).contains(bytes[$0]) }) else { return nil }
+        let hour = Int(bytes[0] - 48) * 10 + Int(bytes[1] - 48)
+        let minute = Int(bytes[3] - 48) * 10 + Int(bytes[4] - 48)
+        guard hour < 24, minute < 60 else { return nil }
+        return hour * 60 + minute
+    }
+
+    static func effectiveCourses(on date: Date, courses: [Course], exams: ExamSchedule?, calendar: Calendar) -> [Course] {
+        let day = StrictContractDateParser.string(from: date, calendar: calendar)
+        let items = exams.map { ["fresh", "stale"].contains($0.status) ? $0.items : [] } ?? []
+        let examinationCourses = items.filter { $0.date == day }.compactMap { $0.course(calendar: calendar) }
+        let examinationIntervals = examinationCourses.compactMap(\.minuteInterval)
+        return (courses.filter { course in
+            guard let interval = course.minuteInterval else { return true }
+            return !examinationIntervals.contains { $0.overlaps(interval) }
+        } + examinationCourses).sorted {
+            ($0.minuteInterval?.lowerBound ?? -1, $0.name, $0.id)
+                < ($1.minuteInterval?.lowerBound ?? -1, $1.name, $1.id)
+        }
     }
 }
 
@@ -246,6 +340,7 @@ enum ScheduleLogic {
         for dates: [Date],
         termStart: Date,
         courses: [Course],
+        exams: ExamSchedule? = nil,
         calendar: Calendar = .shanghai
     ) -> [String: [Course]] {
         let coursesByWeekday = Dictionary(grouping: courses, by: \.weekday)
@@ -259,7 +354,9 @@ enum ScheduleLogic {
                         ? lhs.name < rhs.name
                         : lhs.startSlot < rhs.startSlot
                 }
-            result[StrictContractDateParser.string(from: date, calendar: calendar)] = matching
+            result[StrictContractDateParser.string(from: date, calendar: calendar)] = AcademicTime.effectiveCourses(
+                on: date, courses: matching, exams: exams, calendar: calendar
+            )
         }
     }
 
@@ -280,7 +377,9 @@ enum ScheduleLogic {
                 endSlot: course.endSlot,
                 sectionText: course.sectionText,
                 timeRange: course.timeRange,
-                sourceCourseID: course.sourceCourseID
+                sourceCourseID: course.sourceCourseID,
+                eventKind: course.eventKind, eventDate: course.eventDate,
+                startTime: course.startTime, endTime: course.endTime
             )
         }
     }
@@ -289,26 +388,32 @@ enum ScheduleLogic {
         on date: Date,
         termStart: Date,
         courses: [Course],
+        exams: ExamSchedule? = nil,
         calendar: Calendar = .shanghai
     ) -> [Course] {
         let week = weekNumber(on: date, termStart: termStart, calendar: calendar)
         let weekday = ((calendar.component(.weekday, from: date) + 5) % 7) + 1
-        return courses
+        let matching = courses
             .filter { $0.weekday == weekday && $0.weekNumbers.contains(week) }
             .sorted { lhs, rhs in
                 lhs.startSlot == rhs.startSlot ? lhs.name < rhs.name : lhs.startSlot < rhs.startSlot
             }
+        return AcademicTime.effectiveCourses(on: date, courses: matching, exams: exams, calendar: calendar)
     }
 
     static func busySlots(
         on date: Date,
         termStart: Date,
         courses: [Course],
+        exams: ExamSchedule? = nil,
         calendar: Calendar = .shanghai
     ) -> Set<Int> {
-        Set(self.courses(on: date, termStart: termStart, courses: courses, calendar: calendar)
-            .flatMap { $0.startSlot ... $0.endSlot }
-            .filter { SlotMetadata.defaults.indices.contains($0) })
+        let intervals = self.courses(on: date, termStart: termStart, courses: courses, exams: exams, calendar: calendar)
+            .compactMap(\.minuteInterval)
+        return Set(SlotMetadata.defaults.filter { slot in
+            guard let start = AcademicTime.minute(slot.start), let end = AcademicTime.minute(slot.end) else { return false }
+            return intervals.contains { $0.overlaps(start ..< end) }
+        }.map(\.index))
     }
 }
 

@@ -291,6 +291,7 @@ pub fn parse_sjd_courses(
                     end_time.as_str()
                 }
             ),
+            ..Default::default()
         });
     }
 
@@ -306,6 +307,7 @@ pub fn parse_sjd_courses(
         term_start_date: term_start_date.to_string(),
         fetched_at: now_in_app_tz(),
         courses,
+        exam_schedule: None,
     })
 }
 
@@ -421,7 +423,7 @@ async fn fetch_sjd_schedule(
     let inferred_start =
         infer_term_start_date(&current_payload).unwrap_or(fallback_term_start_date);
     let inferred_term_id = infer_term_id(&current_payload).unwrap_or_default();
-    parse_sjd_courses(
+    let mut schedule = parse_sjd_courses(
         &all_payload,
         if inferred_term_id.is_empty() {
             term_id
@@ -429,7 +431,16 @@ async fn fetch_sjd_schedule(
             inferred_term_id
         },
         inferred_start,
-    )
+    )?;
+    schedule.exam_schedule = Some(
+        crate::academic::fetch_exams_with_token(
+            &token,
+            &schedule.term_id,
+            &crate::academic::account_key(&user),
+        )
+        .await,
+    );
+    Ok(schedule)
 }
 
 fn resolve_schedule_term(

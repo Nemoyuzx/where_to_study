@@ -64,6 +64,9 @@ impl CourseDeletion {
             .iter()
             .find(|course| course.id == course_id)
             .ok_or_else(|| ServiceError::new("课程已变化，请重新选择。"))?;
+        if crate::academic::is_exam(course) {
+            return Err(ServiceError::new("考试安排不能通过课程删除操作修改。"));
+        }
         if course.name.trim().is_empty() {
             return Err(ServiceError::new("无法识别此课程。"));
         }
@@ -97,6 +100,9 @@ impl CourseDeletion {
     }
 
     fn matches_course(&self, course: &Course) -> bool {
+        if crate::academic::is_exam(course) {
+            return false;
+        }
         if !self.source_course_id.is_empty() && !course.source_course_id.trim().is_empty() {
             self.source_course_id == course.source_course_id.trim()
         } else {
@@ -109,6 +115,9 @@ pub fn apply(schedule: &ScheduleResponse, records: &[CourseDeletion]) -> Schedul
     let mut visible = schedule.clone();
     let start = date(&schedule.term_start_date).ok();
     visible.courses.retain_mut(|course| {
+        if crate::academic::is_exam(course) {
+            return false;
+        }
         let rules: Vec<_> = records
             .iter()
             .filter(|record| record.term_id == schedule.term_id && record.matches_course(course))
@@ -124,7 +133,11 @@ pub fn apply(schedule: &ScheduleResponse, records: &[CourseDeletion]) -> Schedul
                 let offset = week
                     .checked_sub(1)
                     .and_then(|value| value.checked_mul(7))
-                    .and_then(|value| value.checked_add(weekday - 1));
+                    .and_then(|value| {
+                        weekday
+                            .checked_sub(1)
+                            .and_then(|offset| value.checked_add(offset))
+                    });
                 let day = offset
                     .and_then(Duration::try_days)
                     .and_then(|offset| start.checked_add_signed(offset));
@@ -139,7 +152,7 @@ pub fn apply(schedule: &ScheduleResponse, records: &[CourseDeletion]) -> Schedul
         }
         !course.week_numbers.is_empty()
     });
-    visible
+    crate::academic::effective_schedule(&visible)
 }
 
 pub fn load(path: &Path, scope: &str) -> ServiceResult<Vec<CourseDeletion>> {
@@ -188,6 +201,33 @@ mod tests {
     use super::*;
     fn snapshot() -> ScheduleResponse {
         serde_json::from_str(include_str!("../../contracts/v1/fixtures/schedule.json")).unwrap()
+    }
+    #[test]
+    fn exams_cannot_be_deleted_and_course_rules_preserve_separate_exam_data() {
+        let mut raw = snapshot();
+        raw.term_start_date = "2026-03-02".into();
+        raw.exam_schedule = Some(crate::academic::ExamSchedule {
+            term_id: raw.term_id.clone(),
+            account_key: crate::academic::account_key("synthetic"),
+            status: "fresh".into(),
+            items: vec![crate::academic::ExamArrangement {
+                id: "exam".into(),
+                name: raw.courses[0].name.clone(),
+                date: "2026-03-02".into(),
+                start_time: "08:00".into(),
+                end_time: "10:00".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        let projected = crate::academic::effective_schedule(&raw);
+        assert!(CourseDeletion::create(&projected, "exam", None).is_err());
+        assert!(CourseDeletion::create(&projected, "exam", Some("2026-03-02")).is_err());
+        let deletion = CourseDeletion::create(&raw, &raw.courses[0].id, None).unwrap();
+        let deleted = apply(&raw, &[deletion]);
+        assert!(deleted.courses.iter().any(|c| c.id == "exam"));
+        assert_eq!(deleted.exam_schedule, raw.exam_schedule);
+        assert!(apply(&raw, &[]).courses.iter().any(|c| c.id == "exam"));
     }
     #[test]
     fn whole_course_survives_refresh_and_isolated_by_term() {

@@ -1,0 +1,9 @@
+{
+  "code": "1",
+  "data": [
+    { "courseName": "合成考试示例：精确时间（非真实安排）", "examinationPlace": "合成考场-201", "time": "2026-09-07 08:30-10:07" },
+    { "courseName": "合成考试示例：教学周外（非真实安排）", "examinationPlace": "合成考场-202", "time": "2026-12-21 06:15-07:20" },
+    { "courseName": "合成考试示例：时间待定（非真实安排）", "examinationPlace": "", "time": "2026-09-14，具体时间待公布（合成示例）" },
+    { "courseName": "合成考试示例：日期待定（非真实安排）", "examinationPlace": "", "time": "日期与时间待公布（合成示例）" }
+  ]
+}

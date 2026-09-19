@@ -32,6 +32,7 @@ struct CourseDeletion: Codable, Identifiable, Equatable, Sendable {
     }
 
     func matches(_ course: Course) -> Bool {
+        guard !course.isExam else { return false }
         let storedID = sourceCourseID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let candidateID = course.sourceCourseID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !storedID.isEmpty, !candidateID.isEmpty { return storedID == candidateID }
@@ -78,11 +79,13 @@ enum CourseDeletionLogic {
                 weekText: course.weekText, weekNumbers: weeks, examWeekNumbers: course.examWeekNumbers,
                 weekday: course.weekday, startSlot: course.startSlot, endSlot: course.endSlot,
                 sectionText: course.sectionText, timeRange: course.timeRange,
-                sourceCourseID: course.sourceCourseID
+                sourceCourseID: course.sourceCourseID,
+                eventKind: course.eventKind, eventDate: course.eventDate,
+                startTime: course.startTime, endTime: course.endTime
             )
         }
         return ScheduleSnapshot(termID: snapshot.termID, termStartDate: snapshot.termStartDate,
-                                fetchedAt: snapshot.fetchedAt, courses: courses)
+                                fetchedAt: snapshot.fetchedAt, courses: courses, examSchedule: snapshot.examSchedule)
     }
 }
 

@@ -84,7 +84,11 @@
         "start_slot": { "type": "integer", "minimum": 0, "maximum": 13 },
         "end_slot": { "type": "integer", "minimum": 0, "maximum": 13 },
         "section_text": { "type": "string" },
-        "time_range": { "type": "string" }
+        "time_range": { "type": "string" },
+        "event_kind": { "type": ["string", "null"], "enum": ["exam", null], "description": "Optional explicit event type. Missing/null means a regular course; legacy exam_week_numbers never enables this flag." },
+        "event_date": { "anyOf": [{ "type": "null" }, { "type": "string", "format": "date" }], "description": "Actual Shanghai date of a projected exam; independent of teaching-week bounds." },
+        "start_time": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/academic_start_time" }] },
+        "end_time": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/academic_end_time" }] }
       }
     },
     "schedule": {
@@ -95,8 +99,124 @@
         "term_id": { "type": "string", "minLength": 1, "pattern": "^[0-9]{4}-[0-9]{4}-[12]$" },
         "term_start_date": { "type": "string", "format": "date" },
         "fetched_at": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})$" },
-        "courses": { "type": "array", "items": { "$ref": "#/$defs/course" } }
+        "courses": { "type": "array", "items": { "$ref": "#/$defs/course" } },
+        "exam_schedule": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/exam_schedule" }], "default": null }
       }
+    },
+    "academic_text": {
+      "type": ["string", "null"],
+      "maxLength": 2048,
+      "description": "Normalized display text. Numeric upstream scalars become strings, including zero as \"0\". Missing, null or empty means unpublished/unspecified, never zero. Do not infer GPA or decode unknown grade-status codes."
+    },
+    "academic_start_time": {
+      "type": "string",
+      "pattern": "^(?:|(?:[01][0-9]|2[0-3]):[0-5][0-9])$",
+      "description": "Exact HH:mm, or empty when time is pending. A timed interval also requires a valid end strictly after start."
+    },
+    "academic_end_time": {
+      "type": "string",
+      "pattern": "^(?:|(?:[01][0-9]|2[0-3]):[0-5][0-9]|24:00)$",
+      "description": "Exact HH:mm, or empty when pending. 24:00 is an optional supported end-of-day boundary; clients that cannot represent it must retain the raw text and treat time as pending."
+    },
+    "academic_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "academic_term": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      },
+      "description": "A semester returned by the university; never synthesize a catalog from calendar years."
+    },
+    "grade_terms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current_term_id", "terms"],
+      "properties": {
+        "current_term_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "terms": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/academic_term" } }
+      }
+    },
+    "grade_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "term_id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{0,64}$", "description": "Omitted/null selects the university's current term. An explicit empty string selects all semesters." },
+        "record_type": { "type": ["string", "null"], "enum": ["1", "0", "", null], "default": "1", "description": "1 = best, 0 = first attempt, empty = all attempts; omitted/null defaults to best." }
+      }
+    },
+    "grade_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "score": { "$ref": "#/$defs/academic_text" },
+        "credits": { "$ref": "#/$defs/academic_text" },
+        "course_code": { "$ref": "#/$defs/academic_text" },
+        "course_attribute": { "$ref": "#/$defs/academic_text" },
+        "course_nature": { "$ref": "#/$defs/academic_text" },
+        "exam_nature": { "$ref": "#/$defs/academic_text" },
+        "semester_name": { "$ref": "#/$defs/academic_text" },
+        "grade_status": { "$ref": "#/$defs/academic_text" }
+      },
+      "description": "Display fields only. Prefer a stable hash of cj0708id for id; do not retain student name/number or original private response."
+    },
+    "grade_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["term_id", "record_type", "fetched_at", "items"],
+      "properties": {
+        "term_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{0,64}$", "description": "Empty only for an explicit all-semesters query." },
+        "record_type": { "type": "string", "enum": ["1", "0", ""] },
+        "fetched_at": { "$ref": "#/$defs/academic_timestamp" },
+        "average_grade_point": { "$ref": "#/$defs/academic_text" },
+        "items": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/grade_item" } }
+      },
+      "description": "Successful grade response, including a valid empty items array. Failed or malformed upstream responses are errors, not empty reports. Process memory only, isolated by academic credential revision, term and record type."
+    },
+    "exam_arrangement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "date", "start_time", "end_time", "room", "seat", "time_text"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "date": { "anyOf": [{ "const": "" }, { "type": "string", "format": "date" }] },
+        "start_time": { "$ref": "#/$defs/academic_start_time" },
+        "end_time": { "$ref": "#/$defs/academic_end_time" },
+        "room": { "type": "string", "maxLength": 2048 },
+        "seat": { "type": "string", "maxLength": 2048 },
+        "time_text": { "type": "string", "maxLength": 2048 }
+      },
+      "description": "Original normalized exam record. Unknown date/time is empty; preserve time_text. Only exact valid same-day [start,end) intervals suppress overlapping course occurrences. Unknown-date items must not be assigned to today."
+    },
+    "exam_schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["term_id", "account_key", "fetched_at", "status", "message", "items"],
+      "properties": {
+        "term_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "account_key": { "type": "string", "minLength": 40, "maxLength": 71, "pattern": "^(?:sha256:[a-f0-9]{64}|[a-f0-9]{64}|[a-f0-9]{40})$", "description": "Existing platform-local account scope digest: prefixed SHA-256 (Rust/Apple), unprefixed SHA-256 (Android), or SHA-1 (Harmony). Never a password or plaintext student account. Verify the owner before displaying or reusing cached exams." },
+        "fetched_at": { "anyOf": [{ "const": "" }, { "$ref": "#/$defs/academic_timestamp" }], "description": "Last successful fetch time for fresh/stale data. A failed result with no previous successful fetch may use empty." },
+        "status": { "type": "string", "enum": ["fresh", "stale", "failed"] },
+        "message": { "type": "string", "maxLength": 2048 },
+        "items": { "type": "array", "maxItems": 5000, "items": { "$ref": "#/$defs/exam_arrangement" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["fresh", "stale"] } }, "required": ["status"] },
+          "then": { "properties": { "fetched_at": { "$ref": "#/$defs/academic_timestamp" } } },
+          "else": { "properties": { "items": { "maxItems": 0 } } }
+        }
+      ],
+      "description": "Fresh empty data clears prior exams. A failed refresh can reuse only previously verified data with matching account_key and term_id, marked stale. No verified cache means failed with no items."
     },
     "classroom": {
       "type": "object",
@@ -166,6 +286,10 @@
     "saved_settings": { "$ref": "#/$defs/saved_settings" },
     "save_settings_request": { "$ref": "#/$defs/save_settings_request" },
     "schedule": { "$ref": "#/$defs/schedule" },
+    "grade_terms": { "$ref": "#/$defs/grade_terms" },
+    "grade_request": { "$ref": "#/$defs/grade_request" },
+    "grade_report": { "$ref": "#/$defs/grade_report" },
+    "exam_schedule": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/exam_schedule" }] },
     "classrooms": { "$ref": "#/$defs/classrooms" },
     "classrooms_cache": { "$ref": "#/$defs/classrooms_cache" },
     "holidays": { "$ref": "#/$defs/holidays" }

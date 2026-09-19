@@ -510,6 +510,7 @@ final class TeachingCalendarRenderingCache {
 private struct DesktopMonthEvent: Identifiable {
     enum Kind: Equatable {
         case course
+        case exam
         case holiday
         case workday
         case assignment
@@ -1758,6 +1759,7 @@ struct TeachingCalendarView: View {
         let usesCustomBrandTint = theme.configuration.preset != .default
             && (event.kind == .course || event.kind == .workday)
         return HStack(spacing: 4) {
+            if event.kind == .exam { Text(model.localized("考试")).font(.system(size: 8, weight: .bold)) }
             if event.kind != .course {
                 Image(systemName: desktopMonthEventSystemImage(event.kind))
                     .font(.system(size: 7, weight: .semibold))
@@ -1822,8 +1824,8 @@ struct TeachingCalendarView: View {
             DesktopMonthEvent(
                 id: "\(dateKey)|course|\(course.id)",
                 title: course.name,
-                time: course.timeRange.split(separator: "-").first.map(String.init),
-                kind: .course
+                time: course.isExam && course.minuteInterval == nil ? model.localized("时间待定") : course.timeRange.split(separator: "-").first.map(String.init),
+                kind: course.isExam ? .exam : .course
             )
         }
         return holidayEvents
@@ -1835,6 +1837,8 @@ struct TeachingCalendarView: View {
 
     private func desktopMonthEventTint(_ kind: DesktopMonthEvent.Kind) -> Color {
         switch kind {
+        case .exam:
+            return AppTheme.danger
         case .course:
             return theme.primary
         case .holiday:
@@ -1860,6 +1864,7 @@ struct TeachingCalendarView: View {
 
     private func desktopMonthEventSystemImage(_ kind: DesktopMonthEvent.Kind) -> String {
         switch kind {
+        case .exam: "pencil.and.list.clipboard"
         case .course: "book.closed.fill"
         case .holiday: "star.fill"
         case .workday: "briefcase.fill"
@@ -2623,6 +2628,7 @@ struct TeachingCalendarView: View {
             } else {
                 ForEach(dayCourses) { course in
                     VStack(alignment: .leading, spacing: 2) {
+                        if course.isExam { Text(model.localized("考试")).font(.caption.bold()).foregroundStyle(AppTheme.danger) }
                         Text(course.name).font(.subheadline.weight(.semibold))
                         Text(
                             [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
@@ -2676,6 +2682,7 @@ struct TeachingCalendarView: View {
                 ForEach(dayCourses) { course in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
+                            if course.isExam { Text(model.localized("考试")).font(.caption.bold()).foregroundStyle(AppTheme.danger) }
                             Text(course.name).font(.subheadline.weight(.semibold))
                             Spacer()
                             Text(course.timeRange).font(.caption.monospacedDigit())
@@ -3141,6 +3148,7 @@ struct TeachingCalendarView: View {
         _ event: CalendarAllDayEvent
     ) -> CalendarAgendaDisplayItem {
         let kind: CalendarAgendaItemKind = switch event.kind {
+        case .exam: .course
         case .holiday: .holiday
         case .workday: .workday
         case .assignment: .assignment
@@ -3181,6 +3189,9 @@ struct TeachingCalendarView: View {
         let kind: CalendarAgendaItemKind
         let categoryKey: String
         switch event.kind {
+        case .exam:
+            kind = .course
+            categoryKey = "考试"
         case .course:
             kind = .course
             categoryKey = "课程详情"
@@ -3381,7 +3392,7 @@ struct TeachingCalendarView: View {
             let schedule = model.schedule,
             let start = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [] }
-        return ScheduleLogic.courses(on: date, termStart: start, courses: schedule.courses)
+        return ScheduleLogic.courses(on: date, termStart: start, courses: schedule.courses, exams: schedule.examSchedule)
     }
 
     private func holidayItems(on date: Date) -> [HolidayItem] {
@@ -3474,6 +3485,7 @@ struct TeachingCalendarView: View {
                 for: days,
                 termStart: termStart,
                 courses: schedule.courses,
+                exams: schedule.examSchedule,
                 calendar: calendar
             )
         } else {

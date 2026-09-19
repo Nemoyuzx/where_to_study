@@ -8,6 +8,7 @@ macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android V
 Silicon 兼容构建。
 
 - 只通过移动教务 HTTPS 接口获取并解析北邮个人课表；请求失败时不会静默切换数据源。
+- 成绩查询位于“查询 → 成绩”，支持学校提供的学期、全部学期、最好/首次/全部记录，保留文字成绩、零分与学校绩点；成绩只在内存短期保留。刷新个人课表时同步获取期末考试安排，按实际日期和分钟显示在教学日历中；与课程时间重叠时仅隐藏那一次课程，考试优先，原始课表仍保留。未公布或时间待定不会伪造数据。接口与缓存规则见[成绩与考试说明](./docs/academic-query-contract.md)。这些新增内容以源码为准，已发布安装包请查看对应更新说明。
 - 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
 - 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
 - 空教室查询支持按个人空闲节次和教学楼筛选；Tauri 桌面端另支持最少座位数筛选。
@@ -15,10 +16,10 @@ Silicon 兼容构建。
 - iOS、macOS、Android 小组件与鸿蒙服务卡片显示今日课程，有空间时补充明日课程；Windows 与 Linux 不提供应用内课程浮窗。
 - 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；ISO 8601 公历周与教学周并列显示，且不再推断或标注考试周。日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
 - 联动查询顶部提供默认折叠的今日/明日校区天气卡片；月视图日期详情按“课程日程 → 云课堂作业 DDL → 黄历宜忌 → 统一活动 DDL”排列，学科竞赛、校内竞赛通知、夏令营与黑客松均可独立关闭。
-- 图形客户端的一级导航条在“教学日历”和“设置”之间提供独立“查询”页：顶部滑块切换当天校区班车与重要事件。班车按当前执行时段展示西土城/沙河双向班次和下一班；重要事件可搜索名称、学校与方向，按类型/分类/来源筛选并默认按 DDL 由近到远排列。
+- 图形客户端的一级导航条在“教学日历”和“设置”之间提供独立“查询”页：顶部切换校区班车、重要事件和成绩。班车按当前执行时段展示西土城/沙河双向班次和下一班；重要事件可搜索名称、学校与方向，按类型/分类/来源筛选并默认按 DDL 由近到远排列；成绩使用个人教务账户，公开查询无需读取个人成绩。
 - 作业 DDL、校内竞赛、公开活动和自定义日程同时进入日/周全天区、月格和年视图日期详情；超出紧凑区域时使用可点击的 `+N` 展开完整列表。
 - Contest DDL 中的学术会议与期刊专题已进入教学日历；重要事件查询只合并公开活动和校内竞赛通知，不包含课程作业或自定义源，并可直接复用教学日历的本地收藏。
-- 终端客户端同步支持公开查询：CLI 提供 `shuttle` / `events` 与 JSON 输出；TUI 在“日历”和“设置”之间提供独立“查询”标签，并与 CLI 共享安全的本地活动收藏。
+- 终端客户端同步支持公开查询：CLI 提供 `shuttle` / `events` 与 JSON 输出；新源码另提供 `grade-terms` / `grades` / `exams` 教务查询。TUI 在“日历”和“设置”之间提供独立“查询”标签（班车、重要事件、成绩），并与 CLI 共享安全的本地活动收藏。详细用法分别见终端客户端 README。
 - 活动日程可以收藏为完整的本地快照：即使关闭对应来源、接口暂时失败或上游删除条目，收藏仍会保留在原日期；设置中提供独立收藏管理页。还可填写符合[自定义日程接口规范](./docs/custom-schedule-api.md)的 HTTPS JSON 地址，将自有日程并入同一教学日历。
 - 颜色主题：各图形客户端与 TUI 提供默认青绿、海洋蓝、鸢尾紫、暖琥珀、玫瑰五套预设和主色/强调色/选中日期色自定义。非默认主题采用协调的低饱和背景、分层卡片和控件色，自定义主色也会自动搭配背景。默认保持原配色，图形端深浅色跟随系统，TUI 沿用终端外观判断；设置只保存在本机，DDL 类别颜色不随主题改变。[主题与测试说明 / Color themes](./docs/color-themes.md)。
 - 图形客户端支持跟随系统、简体中文与 English；静态界面切换语言，第三方 API 返回的课程、天气、黄历、作业和竞赛内容保持原文。
@@ -39,6 +40,16 @@ Windows 与 Linux 发布制品的签名边界、GitHub/Sigstore 来源证明及�
 [Windows / Linux 签名与构建来源验证](./docs/code-signing.md)。
 
 bupt校内的其它非官方学生组织可以联系我在网站上添加友链
+
+## 鸣谢 / Acknowledgements
+
+感谢以下开源项目公开接口资料与相关实现，为教务查询接入和交叉核验提供参考：
+
+- [Yokumii/bupt-api-collected](https://github.com/Yokumii/bupt-api-collected)：微教学与教学云接口资料，包括成绩和考试安排。
+- [heimaolala/open-empty-classroom](https://github.com/heimaolala/open-empty-classroom)：空教室查询相关开放实现。
+- [Jraaay/EmptyClassroom](https://github.com/Jraaay/EmptyClassroom)：空教室查询相关实现与参考。
+
+Thanks to these open-source projects for publishing academic API information and classroom-query implementations. Where To Study reuses its own direct university authentication flow; it does not send student credentials or grades to these projects or their proxy services. 各参考项目的许可证归其作者所有。
 
 ## 反馈与交流群
 

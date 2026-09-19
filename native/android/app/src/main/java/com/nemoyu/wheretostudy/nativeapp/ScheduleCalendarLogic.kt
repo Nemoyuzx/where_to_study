@@ -16,6 +16,7 @@ data class CalendarEventDraft(
     val startsAtMillis: Long,
     val endsAtMillis: Long,
     val timeZoneID: String,
+    val allDay: Boolean = false,
 )
 
 data class ManagedCalendarEvent(
@@ -56,10 +57,10 @@ object ScheduleCalendarLogic {
         val termStart = parseContractDate(schedule.termStartDate)
             ?: throw ScheduleCalendarExpansionException("课表的学期开始日期无效。")
 
-        return buildList {
+        val regular = buildList {
             schedule.courses.forEach { course ->
                 validateCourse(course)
-                course.weekNumbers.distinct().sorted().forEach { week ->
+                course.weekNumbers.distinct().sorted().forEach occurrence@{ week ->
                     if (week <= 0) {
                         throw ScheduleCalendarExpansionException("课表包含无效的教学周。")
                     }
@@ -71,6 +72,7 @@ object ScheduleCalendarLogic {
                     val eventDate = (termStart.clone() as Calendar).apply {
                         add(Calendar.DAY_OF_MONTH, dayOffset)
                     }
+                    if (ScheduleLogic.courses(schedule, eventDate).none { it.id == course.id }) return@occurrence
                     val startsAt = withTime(eventDate, AppMetadata.slots[course.startSlot].start)
                     val endsAt = withTime(eventDate, AppMetadata.slots[course.endSlot].end)
                     if (endsAt.timeInMillis <= startsAt.timeInMillis) {
@@ -93,6 +95,26 @@ object ScheduleCalendarLogic {
                 }
             }
         }
+        val exams = schedule.examSchedule?.takeIf { it.termID == schedule.termID && it.status != "failed" }
+            ?.items.orEmpty().mapNotNull { exam ->
+                val date = AcademicScheduleLogic.parseDate(exam.date) ?: return@mapNotNull null
+                val course = ScheduleLogic.courses(schedule, date).firstOrNull { it.id == "exam:${exam.id}" }
+                    ?: return@mapNotNull null
+                val interval = AcademicScheduleLogic.interval(course)
+                val allDay = interval == null
+                // Android Calendar requires all-day timestamps at UTC midnight.
+                val starts = if (allDay) (date.clone() as Calendar).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                    set(date.get(Calendar.YEAR), date.get(Calendar.MONTH), date.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
+                } else withTime(date, exam.startTime)
+                val ends = if (allDay) (starts.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 1) }
+                    else withTime(date, exam.endTime)
+                CalendarEventDraft(stableMarker(schedule.termID, "exam:${exam.id}", 1),
+                    "考试 · ${exam.name}" + if (allDay) " · 时间待定" else "", exam.room,
+                    exam.timeText, starts.timeInMillis, ends.timeInMillis,
+                    if (allDay) "UTC" else timeZoneID, allDay)
+            }
+        return (regular + exams)
             .distinctBy(CalendarEventDraft::marker)
             .sortedWith(compareBy(CalendarEventDraft::startsAtMillis, CalendarEventDraft::marker))
     }
@@ -125,7 +147,11 @@ object ScheduleCalendarLogic {
         val termEnd = (termStart.clone() as Calendar).apply {
             add(Calendar.DAY_OF_MONTH, scopeWeeks * 7)
         }
-        return CalendarTermWindow(termStart.timeInMillis, termEnd.timeInMillis)
+        val examDates = schedule.examSchedule?.items.orEmpty().mapNotNull { AcademicScheduleLogic.parseDate(it.date) }
+        val first = minOf(termStart.timeInMillis, examDates.minOfOrNull { it.timeInMillis } ?: termStart.timeInMillis)
+        val last = maxOf(termEnd.timeInMillis,
+            examDates.maxOfOrNull { it.timeInMillis + 86_400_000L } ?: termEnd.timeInMillis)
+        return CalendarTermWindow(first, last)
     }
 
     private fun validateCourse(course: Course) {

@@ -5,6 +5,7 @@
 import { AppModel } from '../../model/AppModel';
 import { Course, HolidayItem } from '../../common/Models';
 import { CourseRemovalButton } from '../CourseRemovalButton';
+import { ScheduleLogic } from '../../common/ScheduleLogic';
 import { StrictDates, DateParts } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { CalendarTypography } from '../../common/CalendarTypography';
@@ -985,7 +986,7 @@ export struct MobileTeachingCalendarView {
   }
 
   private courseSubtitle(course: Course): string {
-    const parts: string[] = [course.timeRange, CalendarTimelineLogic.courseMetadata(course)];
+    const parts: string[] = [this.model.courseTimeText(course), CalendarTimelineLogic.courseMetadata(course)];
     return parts.filter((value: string) => value.length > 0).join(' · ')
       .replace('教师：', this.model.text('教师：'));
   }
@@ -1109,6 +1110,13 @@ export struct MobileTeachingCalendarView {
 
   private allDayItemsOn(day: DateParts): CalendarAllDayItem[] {
     const result: CalendarAllDayItem[] = [];
+    for (const course of this.coursesOn(day)) {
+      if (course.eventKind === 'exam' && !ScheduleLogic.hasTime(course)) {
+        result.push(new CalendarAllDayItem(course.id,
+          this.model.text('考试') + ' · ' + course.name + ' · ' + this.model.text('时间待定'),
+          AppTheme.accent(), AppTheme.selection(), -1));
+      }
+    }
     for (const item of this.holidayItemsOn(day)) {
       result.push(new CalendarAllDayItem('holiday-' + item.id(),
         this.model.text(item.type === 'holiday' ? '休' : '班') + ' ' + item.name,

@@ -9,6 +9,7 @@ import { TeachingCalendarSession } from './calendar/TeachingCalendarSession';
 import { CalendarMode, CalendarModeInfo } from './calendar/CalendarLogic';
 import { CalendarViewportPreloadController } from './calendar/CalendarViewportPreloadController';
 import { DateParts } from '../common/StrictDates';
+import { AppTheme } from '../common/AppTheme';
 
 @ComponentV2
 export struct CalendarSectionView {
@@ -49,10 +50,18 @@ export struct CalendarSectionView {
   }
 
   build() {
+    Column() {
+      Text(this.model.text(this.model.examStatusMessage()))
+        .fontSize(12).fontColor(AppTheme.secondaryText()).width('100%')
+        .padding({ left: 16, right: 16, top: 6, bottom: 6 })
+        .id('calendar.exam.status')
+      Column() {
     if (AdaptiveLayoutPolicy.useExpandedCalendar(this.containerWidth)) {
       ExpandedTeachingCalendarView({ session: this.session })
     } else {
       MobileTeachingCalendarView({ session: this.session })
     }
+      }.width('100%').layoutWeight(1)
+    }.width('100%').height('100%')
   }
 }

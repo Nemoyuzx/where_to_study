@@ -213,7 +213,7 @@ enum SampleData {
         let weekday = ((calendar.component(.weekday, from: now) + 5) % 7) + 1
         let weekStart = calendar.date(byAdding: .day, value: 1 - weekday, to: now) ?? now
         let adjacentWeekday = weekday == 7 ? 1 : weekday + 1
-        return ScheduleSnapshot(
+        var snapshot = ScheduleSnapshot(
             termID: "review-demo",
             termStartDate: StrictContractDateParser.string(from: weekStart),
             fetchedAt: timestamp,
@@ -248,6 +248,18 @@ enum SampleData {
                 )
             ]
         )
+        if AppLaunchConfiguration.isUITesting, ProcessInfo.processInfo.arguments.contains("--ui-testing-academic") {
+            let date = StrictContractDateParser.string(from: now)
+            snapshot.examSchedule = ExamSchedule(termID: "review-demo", accountKey: "demo", fetchedAt: timestamp,
+                status: "fresh", message: "", items: [
+                    ExamArrangement(id: "demo-exam", name: "示例考试（非真实安排）", date: date,
+                                    startTime: "10:10", endTime: "11:40", room: "示例考场", seat: "",
+                                    timeText: "\(date) 10:10-11:40"),
+                    ExamArrangement(id: "demo-pending-exam", name: "示例待定考试", date: date,
+                                    startTime: "", endTime: "", room: "待公布", seat: "", timeText: "时间待定")
+                ])
+        }
+        return snapshot
     }
 
     static func classrooms(now: Date = .now) -> ClassroomsCache {

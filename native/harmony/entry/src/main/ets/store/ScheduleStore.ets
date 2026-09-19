@@ -78,7 +78,7 @@ export class FileScheduleStore implements ScheduleStoring {
       snapshot.termID,
       snapshot.termStartDate,
       snapshot.fetchedAt,
-      snapshot.courses
+      snapshot.courses, snapshot.examSchedule
     );
   }
 

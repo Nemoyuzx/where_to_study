@@ -5235,7 +5235,7 @@ input:disabled {
   border-radius: 12px;
   display: grid;
   gap: 4px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 4px;
 }
 
@@ -5261,7 +5261,8 @@ input:disabled {
 }
 
 .query-shuttle,
-.query-events {
+.query-events,
+.query-grades {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
@@ -5270,6 +5271,27 @@ input:disabled {
   gap: 14px;
   padding: 18px;
 }
+
+.query-grades[hidden] { display: none; }
+.query-grade-filters { display: flex; flex-wrap: wrap; gap: 12px; }
+.query-grade-filters label { display: grid; gap: 6px; flex: 1 1 200px; min-width: 0; color: var(--text-secondary); }
+.query-grade-filters select { width: 100%; min-height: 38px; padding: 8px; color: var(--text-primary); background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; }
+.query-grade-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; }
+.query-grade-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.query-grade-card { min-width: 0; border-radius: 12px; padding: 16px; background: var(--surface-subtle); border: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
+.query-grade-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.query-grade-card header strong { min-width: 0; }
+.query-grade-score { color: var(--primary-text); font-size: 22px; font-weight: 700; max-width: 42%; text-align: right; overflow-wrap: anywhere; }
+.query-grade-card p { margin: 10px 0 6px; }
+.query-grade-card small { display: block; color: var(--text-secondary); margin-top: 4px; }
+.query-grade-status { padding: 24px; text-align: center; background: var(--surface-subtle); border-radius: 12px; }
+.query-grade-status button { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); color: var(--primary-text); }
+.query-grades .query-source { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.query-grades .query-section-header h2 { display: flex; align-items: center; gap: 8px; }
+.course-exam-badge { font-size: 0.8em; font-weight: 750; color: var(--error-text); background: var(--error-surface); border: 1px solid currentColor; border-radius: 4px; padding: 0 3px; }
+.month-entry.exam, .time-all-day-item.exam { color: var(--error-text); background: var(--error-surface); border-left: 3px solid var(--error-text); }
+.time-course-block.exam { border-left: 4px solid var(--error-text); }
+.exam-sync-notice { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
 
 .query-section-header {
   align-items: center;

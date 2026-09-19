@@ -48,6 +48,11 @@
     <item name="information_query_mode_thumb" type="id" />
     <item name="information_query_shuttle_tab" type="id" />
     <item name="information_query_events_tab" type="id" />
+    <item name="information_query_grades_tab" type="id" />
+    <item name="information_query_grades_scroll" type="id" />
+    <item name="information_query_grades_term" type="id" />
+    <item name="information_query_grades_refresh" type="id" />
+    <item name="calendar_exam_menu_item" type="id" />
     <item name="information_query_content" type="id" />
     <item name="information_query_shuttle_status" type="id" />
     <item name="information_query_shuttle_refresh" type="id" />

@@ -28,6 +28,7 @@ enum SJDResponseEndpoint: CaseIterable, Sendable {
     case login
     case curriculum
     case classrooms
+    case academic
 }
 
 enum SJDResponseLimits {
@@ -43,6 +44,8 @@ enum SJDResponseLimits {
             maximumCurriculumBytes
         case .classrooms:
             maximumClassroomsBytes
+        case .academic:
+            maximumCurriculumBytes
         }
     }
 
@@ -57,6 +60,7 @@ enum SJDResponseLimits {
         case .login: "移动教务登录响应过大。"
         case .curriculum: "移动教务课表响应过大。"
         case .classrooms: "实时教室数据响应过大。"
+        case .academic: "成绩或考试响应过大。"
         }
         return .invalidResponse(message)
     }
@@ -177,12 +181,22 @@ struct SJDScheduleClient: ScheduleFetching {
         async let currentRequest = api.curriculum(token: token, week: "")
         async let allRequest = api.curriculum(token: token, week: "all")
         let (currentData, allData) = try await (currentRequest, allRequest)
-        return try SJDScheduleParser.parse(
+        var snapshot = try SJDScheduleParser.parse(
             currentData: currentData,
             curriculumData: allData,
             fallbackTermID: fallbackTermID,
             fallbackTermStartDate: fallbackTermStartDate
         )
+        let owner = CourseDeletionLogic.accountKey(credentials.account)
+        do {
+            let data = try await api.academic(token: token, endpoint: .examinations, parameters: ["semester": snapshot.termID])
+            snapshot.examSchedule = try AcademicResponseParser.exams(data, termID: snapshot.termID, accountKey: owner)
+        } catch {
+            snapshot.examSchedule = ExamSchedule(termID: snapshot.termID, accountKey: owner,
+                fetchedAt: SJDClassroomClient.timestamp(.now), status: "failed",
+                message: "考试安排获取失败，请刷新重试。", items: [])
+        }
+        return snapshot
     }
 
     fileprivate static func string(_ value: Any?) -> String {
@@ -235,6 +249,28 @@ struct SJDAPIClient: Sendable {
 
     init(transport: any SJDHTTPTransport) {
         self.transport = transport
+    }
+
+    enum AcademicEndpoint: String, Sendable {
+        case currentTerm = "/currentTerm"
+        case semesterList = "/semesterList"
+        case grades = "/student/termGPA"
+        case examinations = "/student/examinationArrangement"
+    }
+
+    func academic(token: String, endpoint: AcademicEndpoint, parameters: [String: String] = [:]) async throws -> Data {
+        var components = URLComponents(string: "\(Self.origin)/bjyddx\(endpoint.rawValue)")!
+        components.queryItems = parameters.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        applyHeaders(to: &request, referer: "\(Self.origin)/sjd/", token: token)
+        let (data, response) = try await responseData(for: request, endpoint: .academic)
+        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
+            throw ScheduleClientError.service("成绩或考试服务暂不可用，请稍后重试。")
+        }
+        _ = try AcademicResponseParser.rows(data)
+        return data
     }
 
     func login(credentials: Credentials) async throws -> String {

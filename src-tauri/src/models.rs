@@ -520,7 +520,7 @@ pub struct HolidaysResponse {
     pub items: Vec<HolidayItem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Course {
     pub id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -543,14 +543,24 @@ pub struct Course {
     pub section_text: String,
     #[serde(default)]
     pub time_range: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ScheduleResponse {
     pub term_id: String,
     pub term_start_date: String,
     pub fetched_at: String,
     pub courses: Vec<Course>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exam_schedule: Option<crate::academic::ExamSchedule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

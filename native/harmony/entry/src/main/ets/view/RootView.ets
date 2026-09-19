@@ -210,7 +210,7 @@ export struct RootView {
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
         } else if (this.currentSection === AppSection.query) {
-          QueryView()
+          QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
@@ -294,7 +294,7 @@ export struct RootView {
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth })
         } else if (this.currentSection === AppSection.query) {
-          QueryView()
+          QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
@@ -356,7 +356,7 @@ export struct RootView {
     } else if (section === AppSection.calendar) {
       CalendarSectionView({ containerWidth: this.containerWidth })
     } else if (section === AppSection.query) {
-      QueryView()
+      QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
     } else {
       SettingsView()
     }

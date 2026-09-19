@@ -114,22 +114,24 @@ enum DailyCourseNotificationPlanner {
                 from: schedule.termStartDate,
                 calendar: calendar
             ),
-            let lastCourseWeek = schedule.courses
-                .flatMap(\.weekNumbers)
-                .filter({ $0 > 0 })
-                .max()
+            let lastCourseWeek = schedule.courses.flatMap(\.weekNumbers).filter({ $0 > 0 }).max()
+                ?? (schedule.examSchedule?.items.isEmpty == false ? 1 : nil)
         else { return [] }
 
         let minutes = DailyCourseNotificationSettings.normalizedMinutes(dailyCourseNotificationMinutes)
         let startOfToday = calendar.startOfDay(for: now)
         let boundedLastWeek = min(lastCourseWeek, maximumScheduleWeek)
         guard
-            let termLastDay = calendar.date(
+            let courseLastDay = calendar.date(
                 byAdding: .day,
                 value: boundedLastWeek * 7 - 1,
                 to: calendar.startOfDay(for: termStart)
             )
         else { return [] }
+        let lastExamDay = schedule.examSchedule?.items.compactMap {
+            StrictContractDateParser.date(from: $0.date, calendar: calendar)
+        }.max()
+        let termLastDay = max(courseLastDay, lastExamDay ?? courseLastDay)
         let remainingTermDays = (calendar.dateComponents(
             [.day],
             from: startOfToday,
@@ -154,12 +156,15 @@ enum DailyCourseNotificationPlanner {
                 on: day,
                 termStart: termStart,
                 courses: schedule.courses,
+                exams: schedule.examSchedule,
                 calendar: calendar
             )
             guard !courses.isEmpty else { continue }
             let entries = courses.map { course in
                 let location = course.room.isEmpty ? "" : " @ \(course.room)"
-                return "\(course.timeRange) \(course.name)\(location)"
+                let kind = course.isExam ? "考试 · " : ""
+                let time = course.isExam && course.minuteInterval == nil ? "时间待定" : course.timeRange
+                return "\(kind)\(time) \(course.name)\(location)"
             }
             let date = StrictContractDateParser.string(from: day, calendar: calendar)
             requests.append(DailyCourseNotificationRequest(

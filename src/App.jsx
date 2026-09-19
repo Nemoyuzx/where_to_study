@@ -69,6 +69,8 @@ import {
   CALENDAR_WEEKDAYS,
   contractTimestamp,
   courseTimeBounds,
+  courseTimeLabel,
+  academicTimelineHours,
   dateFromString,
   deadlinePreheatPlan,
   DEFAULT_SETTINGS,
@@ -128,6 +130,13 @@ const NAV_ITEMS = [
 ]
 
 const EN_TEXT = Object.freeze({
+  '考试': 'Exam',
+  '考试详情': 'Exam details',
+  '考试安排来自学校教务服务，不支持本地删除。': 'Exam arrangements come from the university academic service and cannot be deleted locally.',
+  '考试安排同步失败，请刷新课表重试；课程已保留。': 'Exam synchronization failed. Refresh the timetable to retry; courses remain available.',
+  '考试学期与手动课表学期不一致，请启用自动学期或更正设置。': 'The exam semester differs from the manual timetable semester. Enable automatic term detection or correct the settings.',
+  '考试安排暂时未更新，正在显示本账号本学期的旧安排。': 'Exam updates are unavailable. Showing previously saved arrangements for this account and semester.',
+  '考试日期或时间待定，请以学校实际安排为准。': 'Some exam dates or times are pending. Refer to the university arrangements.',
   '课程详情': 'Course details',
   '关闭课程详情': 'Close course details',
   '选择删除范围': 'Choose deletion scope',
@@ -459,6 +468,10 @@ function loadFavoriteDeadlines() {
 }
 const PRIVACY_SECTIONS = [
   {
+    title: '成绩与考试安排 / Grades and exam arrangements',
+    body: '主动进入成绩查询时，应用使用教务密码直接通过 HTTPS 读取学校的学期、成绩与绩点；成绩仅在内存短期保留，切换账号或清除数据后失效，不写入磁盘、不上传至本应用或第三方代理。课表刷新会在同次登录中读取考试安排，并与原始课表一同按账号和学期在本机缓存。考试按实际日期和时间展示，覆盖冲突的单次课程，不修改学校记录。\n\nOpening Grades uses the academic password over HTTPS directly with the university service for semesters, grades and GPA. Grade results are kept briefly in memory, invalidated on account changes or clearing data, and never saved to disk or sent to this app’s server or a third-party proxy. Timetable refresh also retrieves exam arrangements in the same login and caches them locally by account and semester. Exams use their actual date and time and replace only conflicting course occurrences on screen; university records are not modified.',
+  },
+  {
     title: '账户与教务请求 / Account and academic requests',
     body: '学号和密码保存在操作系统的受保护凭据存储中。保存有效凭据且开启自动学期检测后，启动时会自动刷新一次个人课表，用于校验学期号和第一周周一。你主动请求课表、空教室或作业时也会按对应用途通过 HTTPS 使用凭据。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。\n\nCredentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password.',
   },
@@ -583,15 +596,20 @@ function hasTauriRuntime() {
 
 function browserPreviewSchedule(termId = '2026-2027-1', termStartDate = '2026-08-31') {
   const everyWeek = Array.from({ length: 18 }, (_, index) => index + 1)
+  const examDemo = BROWSER_PREVIEW_ENABLED && new URLSearchParams(window.location.search).get('academic-demo') === '1'
   return {
     term_id: termId,
     term_start_date: termStartDate,
     fetched_at: contractTimestamp(),
     courses: [
       { id: 'preview-course-1', name: '计算机网络', teacher: '张老师', room: '教3-201', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 1, start_slot: 0, end_slot: 1, section_text: '1-2节', time_range: '08:00-09:35' },
-      { id: 'preview-course-2', name: '数据库系统', teacher: '李老师', room: '主楼-301', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 2, start_slot: 2, end_slot: 3, section_text: '3-4节', time_range: '09:50-11:25' },
+      { id: 'preview-course-2', name: '数据库系统', teacher: '李老师', room: '主楼-301', week_text: '1-18', week_numbers: examDemo ? everyWeek.filter(week => week !== 2) : everyWeek, exam_week_numbers: [], weekday: 2, start_slot: 2, end_slot: 3, section_text: '3-4节', time_range: '09:50-11:25' },
       { id: 'preview-course-3', name: '人工智能导论', teacher: '王老师', room: '教2-401', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 3, start_slot: 5, end_slot: 6, section_text: '6-7节', time_range: '13:00-14:35' },
       { id: 'preview-course-4', name: '软件工程', teacher: '赵老师', room: '教4-101', week_text: '1-18', week_numbers: everyWeek, exam_week_numbers: [], weekday: 4, start_slot: 7, end_slot: 8, section_text: '8-9节', time_range: '14:45-16:20' },
+      ...(examDemo ? [
+        { id: 'preview-exam-1', name: '示例考试 / Demo exam', room: '示例考场', teacher: '', event_kind: 'exam', event_date: addDays(termStartDate, 8), start_time: '10:07', end_time: '11:43', time_range: '10:07-11:43', section_text: '示例座位 01', week_numbers: [], weekday: 2, start_slot: 2, end_slot: 4 },
+        { id: 'preview-exam-2', name: '待定考试 / Pending demo exam', room: '', teacher: '', event_kind: 'exam', event_date: addDays(termStartDate, 8), start_time: '', end_time: '', time_range: '时间待定', section_text: '', week_numbers: [], weekday: 2, start_slot: 0, end_slot: 0 },
+      ] : []),
     ],
   }
 }
@@ -784,6 +802,17 @@ function browserPreviewCommand(name, payload = {}) {
       ji: '嫁娶 掘井',
       source: 'https://uapis.cn',
     }
+  }
+  if (name === 'fetch_grade_terms') {
+    return { current_term_id: 'demo-term', terms: [{ id: 'demo-term', name: '示例学期 / Demo semester' }] }
+  }
+  if (name === 'fetch_grades') {
+    return { term_id: payload?.term_id ?? 'demo-term', record_type: payload?.record_type ?? '1',
+      fetched_at: contractTimestamp(), average_grade_point: '3.80', items: [
+        { id: 'demo-grade-1', name: '示例课程 / Demonstration course', score: '92', credits: '3', semester_name: 'Demo semester' },
+        { id: 'demo-grade-2', name: '示例实践 / Demonstration practice', score: '合格', credits: '0' },
+        { id: 'demo-grade-3', name: '示例未公布 / Not published', score: '', credits: '2' },
+      ] }
   }
   if (name === 'fetch_shuttle_bus') {
     const today = shanghaiDateString()
@@ -1028,10 +1057,10 @@ function SelectedDaySchedule({ date, weekState, slotMeta, language, t, onCourseS
           const bounds = courseTimeBounds(course, slotMeta)
           return (
             <article key={`${date}-${course.id}`}>
-              <time>{bounds.start}</time>
+              <time>{bounds.start || t('时间待定')}</time>
               <div>
                 <button type="button" className="course-edit-link" onClick={() => onCourseSelect?.(course, date)}><strong><CourseName course={course} t={t} /></strong></button>
-                <span>{bounds.start}-{bounds.end} · {course.room || t('地点未标注')}</span>
+                <span>{courseTimeLabel(course, slotMeta, t('时间待定'))} · {course.room || t('地点未标注')}</span>
               </div>
             </article>
           )
@@ -1108,12 +1137,14 @@ function deadlineItemEnabled(item, enabledTypes) {
 }
 
 function supplementalEntryPrefix(entry, t) {
+  if (entry.type === 'exam') return t('考试')
   if (entry.type === 'assignment') return t('作')
   if (entry.type === 'school-notice') return t('赛')
   return 'DDL'
 }
 
 function supplementalEntryKind(entry, language, t) {
+  if (entry.type === 'exam') return t('考试')
   if (entry.type === 'assignment') return language === 'en' ? 'Assignment' : '作业'
   if (entry.type === 'school-notice') return t('校内竞赛通知')
   return t(DEADLINE_TYPE_META[entry.deadlineType]?.label || '其它 DDL')
@@ -1364,7 +1395,7 @@ function FavoriteDeadlineManager({ items, onRemove, t }) {
 }
 
 function CourseName({ course, t }) {
-  return <span className="course-name-with-badge"><span>{course.name || t('课程名称未标注')}</span></span>
+  return <span className="course-name-with-badge">{course.event_kind === 'exam' ? <span className="course-exam-badge">{t('考试')}</span> : null}<span>{course.name || t('课程名称未标注')}</span></span>
 }
 
 async function command(name, payload) {
@@ -1442,6 +1473,18 @@ function CourseManagementDialog({ title, busy, onClose, children, t }) {
 function CourseEditDialog({ selection, busy, error, onClose, onDelete, t, language, slotMeta }) {
   const [scope, setScope] = useState('once')
   const bounds = courseTimeBounds(selection.course, slotMeta)
+  if (selection.course.event_kind === 'exam') return (
+    <CourseManagementDialog title={t('考试详情')} busy={false} onClose={onClose} t={t}>
+      <div className="course-edit-summary">
+        <h3><CourseName course={selection.course} t={t} /></h3>
+        <p>{formatUiCourseDate(selection.date, language)} · {courseTimeLabel(selection.course, slotMeta, t('时间待定'))}</p>
+        <p>{selection.course.room || t('地点未标注')}</p>
+        <p>{selection.course.section_text}</p>
+        {!bounds.timed ? <p>{selection.course.time_range}</p> : null}
+        <p>{t('考试安排来自学校教务服务，不支持本地删除。')}</p>
+      </div>
+    </CourseManagementDialog>
+  )
   return (
     <CourseManagementDialog title={t('课程详情')} busy={busy} onClose={onClose} t={t}>
       <div className="course-edit-summary">
@@ -2215,6 +2258,10 @@ function App() {
       time: '',
     })),
     ...supplementalEntriesFor(dateString),
+    ...getWeekState(courses, activeTermStartDate, dateString).dayCourses
+      .filter(course => course.event_kind === 'exam' && !courseTimeBounds(course, slotMeta).timed)
+      .map(course => ({ key: `exam-${course.id}`, type: 'exam', label: course.name,
+        subtitle: [course.room, course.time_range].filter(Boolean).join(' · '), time: t('时间待定') })),
   ]
   const plannerWeekState = useMemo(
     () => getWeekState(courses, activeTermStartDate, todayDate),
@@ -2252,14 +2299,6 @@ function App() {
   const selectedRanges = slotsToRanges(selectedSlots, slotMeta)
   const needsBuildingSelection = buildings.length > 0 && selectedBuildings.length === 0
   const needsSlotSelection = selectedBuildings.length > 0 && selectedSlots.length === 0
-  const calendarHours = useMemo(
-    () => Array.from({ length: CALENDAR_END_HOUR - CALENDAR_START_HOUR + 1 }, (_, index) => CALENDAR_START_HOUR + index),
-    [],
-  )
-  const calendarSlotBoundaryMinutes = useMemo(
-    () => nonHourlyCourseBoundaryMinutes(slotMeta),
-    [slotMeta],
-  )
   const visibleCalendarDays = useMemo(() => {
     if (calendarView === 'day') return [calendarDate]
     if (calendarView === 'week') {
@@ -2269,6 +2308,10 @@ function App() {
     if (calendarView === 'month') return buildMonthDays(calendarDate)
     return []
   }, [calendarDate, calendarView])
+  const timelineHours = useMemo(() => academicTimelineHours(courses, visibleCalendarDays, slotMeta, activeTermStartDate),
+    [courses, visibleCalendarDays, slotMeta, activeTermStartDate])
+  const calendarHours = useMemo(() => Array.from({ length: timelineHours.end - timelineHours.start + 1 }, (_, i) => timelineHours.start + i), [timelineHours])
+  const calendarSlotBoundaryMinutes = useMemo(() => nonHourlyCourseBoundaryMinutes(slotMeta, timelineHours.start * 60, timelineHours.end * 60), [slotMeta, timelineHours])
   const calendarYearMonths = useMemo(() => {
     const year = dateFromString(calendarDate).getFullYear()
     return Array.from({ length: 12 }, (_, monthIndex) => ({
@@ -2305,14 +2348,14 @@ function App() {
       : calendarView === 'week' && visibleCalendarDays.includes(todayDate)
     if (!todayVisible) return null
     const minutes = now.getHours() * 60 + now.getMinutes()
-    const visibleStart = CALENDAR_START_HOUR * 60
-    const visibleEnd = CALENDAR_END_HOUR * 60
+    const visibleStart = timelineHours.start * 60
+    const visibleEnd = timelineHours.end * 60
     if (minutes < visibleStart || minutes > visibleEnd) return null
     return {
       label: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
       top: ((minutes - visibleStart) / (visibleEnd - visibleStart)) * 100,
     }
-  }, [calendarDate, calendarView, now, todayDate, visibleCalendarDays])
+  }, [calendarDate, calendarView, now, todayDate, visibleCalendarDays, timelineHours])
 
   useEffect(() => {
     let cancelled = false
@@ -3588,6 +3631,7 @@ function App() {
 
   async function updateCourseDeletion(record = null, scope = 'once') {
     if (courseEditBusyRef.current || settingsSaving || (!record && !courseEditDialog)) return
+    if (!record && courseEditDialog.course.event_kind === 'exam') return
     const selection = courseEditDialog
     const account = record ? courseAccount() : selection.account
     const accountRevision = localDataClearRevision.current
@@ -3736,11 +3780,14 @@ function App() {
 
           {activePage === 'query' ? (
             <QueryHub
+              key={`academic-query:${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`}
               command={command}
               favoriteItems={favoriteDeadlines}
               isFavorite={isFavoriteDeadline}
               language={uiLanguage}
               onToggleFavorite={toggleFavoriteDeadline}
+              hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
+              onOpenAccount={() => setActivePage('settings')}
               t={t}
             />
           ) : null}
@@ -4008,6 +4055,9 @@ function App() {
               {calendarImportedPath ? (
                 <p className="calendar-export-note">{t('已生成日历文件并打开苹果日历：')}{calendarImportedPath}</p>
               ) : null}
+              {schedule?.exam_schedule?.status === 'failed' ? <p className="exam-sync-notice" role="status">{t(schedule.exam_schedule.term_id !== schedule.term_id ? '考试学期与手动课表学期不一致，请启用自动学期或更正设置。' : '考试安排同步失败，请刷新课表重试；课程已保留。')}</p> : null}
+              {schedule?.exam_schedule?.status === 'stale' ? <p className="exam-sync-notice" role="status">{t('考试安排暂时未更新，正在显示本账号本学期的旧安排。')}</p> : null}
+              {schedule?.exam_schedule?.items?.some(item => !item.date || !item.start_time) ? <details className="exam-sync-notice"><summary>{t('考试日期或时间待定，请以学校实际安排为准。')}</summary>{schedule.exam_schedule.items.filter(item => !item.date || !item.start_time).map(item => <p key={item.id}>{item.name} · {item.time_text || t('时间待定')} · {item.room || t('地点未标注')}</p>)}</details> : null}
 
               <div ref={calendarTransitionHostRef} className="calendar-transition-host">
                 {calendarView === 'day' || calendarView === 'week' ? (
@@ -4122,26 +4172,26 @@ function App() {
                     ) : null}
                     <div className="time-labels" style={{ gridColumn: 1, gridRow: visibleAllDayItems ? 3 : 2 }}>
                       {calendarHours.map((hour) => {
-                        const top = (((hour * 60) - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                        const top = (((hour * 60) - timelineHours.start * 60) / ((timelineHours.end - timelineHours.start) * 60)) * 100
                         return <span key={hour} style={{ top: `${top}%` }}>{String(hour).padStart(2, '0')}:00</span>
                       })}
                     </div>
                     <div className="slot-time-labels" style={{ gridColumn: 2, gridRow: visibleAllDayItems ? 3 : 2 }}>
                       <div className="slot-axis-grid-lines" aria-hidden="true">
                         {calendarHours.map((hour) => {
-                          const top = (((hour * 60) - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                          const top = (((hour * 60) - timelineHours.start * 60) / ((timelineHours.end - timelineHours.start) * 60)) * 100
                           return <i key={`axis-hour-${hour}`} className="hour-line" style={{ top: `${top}%` }} />
                         })}
                         {calendarSlotBoundaryMinutes.map((minute) => {
-                          const top = ((minute - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
+                          const top = ((minute - timelineHours.start * 60) / ((timelineHours.end - timelineHours.start) * 60)) * 100
                           return <i key={`axis-slot-${minute}`} className="slot-boundary-line" style={{ top: `${top}%` }} />
                         })}
                       </div>
                       {slotMeta.map((slot) => {
                         const start = parseTimeMinutes(slot.start)
                         const end = parseTimeMinutes(slot.end)
-                        const top = ((start - CALENDAR_START_HOUR * 60) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100
-                        const height = Math.max(((end - start) / ((CALENDAR_END_HOUR - CALENDAR_START_HOUR) * 60)) * 100, 4)
+                        const top = ((start - timelineHours.start * 60) / ((timelineHours.end - timelineHours.start) * 60)) * 100
+                        const height = Math.max(((end - start) / ((timelineHours.end - timelineHours.start) * 60)) * 100, 4)
                         return (
                           <span key={slot.index} style={{ top: `${top}%`, height: `${height}%` }}>
                             <strong>{uiLanguage === 'en' ? `Period ${slot.label}` : `第 ${slot.label} 节`}</strong>
@@ -4152,8 +4202,8 @@ function App() {
                     </div>
                     {visibleCalendarDays.map((dateString, dayIndex) => {
                       const dayState = getWeekState(courses, activeTermStartDate, dateString)
-                      const visibleStart = CALENDAR_START_HOUR * 60
-                      const visibleEnd = CALENDAR_END_HOUR * 60
+                      const visibleStart = timelineHours.start * 60
+                      const visibleEnd = timelineHours.end * 60
                       const visibleRange = visibleEnd - visibleStart
                       return (
                         <div
@@ -4192,15 +4242,16 @@ function App() {
                             ) : null}
                             {dayState.dayCourses.map((course, index) => {
                               const bounds = courseTimeBounds(course, slotMeta)
+                              if (!bounds.timed) return null
                               const start = Math.max(bounds.startMinutes, visibleStart)
                               const end = Math.min(bounds.endMinutes, visibleEnd)
                               const top = ((start - visibleStart) / visibleRange) * 100
-                              const height = Math.max(((end - start) / visibleRange) * 100, 6)
+                              const height = ((end - start) / visibleRange) * 100
                               return (
                                 <button
                                   key={`${dateString}-${course.id}-${index}`}
                                   type="button"
-                                  className="time-course-block"
+                                  className={`time-course-block ${course.event_kind === 'exam' ? 'exam' : ''}`}
                                   style={{ top: `${top}%`, height: `${height}%` }}
                                   title={`${course.name} · ${bounds.start}-${bounds.end} · ${course.room || t('地点未标注')}`}
                                   onClick={(event) => {
@@ -4214,7 +4265,7 @@ function App() {
                                   <span className="course-block-time">{bounds.start}-{bounds.end}</span>
                                   <small className="course-block-place">
                                     <span>{course.room || t('地点未标注')}</span>
-                                    <span>{course.teacher || t('教师未标注')}</span>
+                                    {course.event_kind !== 'exam' ? <span>{course.teacher || t('教师未标注')}</span> : null}
                                   </small>
                                 </button>
                               )
@@ -4271,12 +4322,12 @@ function App() {
                             const bounds = courseTimeBounds(course, slotMeta)
                             return {
                               key: `${dateString}-${course.id}`,
-                              label: course.name,
-                              desktopLabel: course.name,
-                              type: 'course',
+                              label: course.event_kind === 'exam' ? `${t('考试')} · ${course.name}` : course.name,
+                              desktopLabel: course.event_kind === 'exam' ? `${t('考试')} · ${course.name}` : course.name,
+                              type: course.event_kind === 'exam' ? 'exam' : 'course',
                               course,
                               subtitle: [course.room, course.teacher].filter(Boolean).join(' · '),
-                              time: `${bounds.start}-${bounds.end}`,
+                              time: bounds.timed ? `${bounds.start}-${bounds.end}` : t('时间待定'),
                             }
                           }),
                           ...supplementalEntries.map((item) => ({
@@ -4327,13 +4378,13 @@ function App() {
                                     type="button"
                                     className={`month-entry ${entry.type}`}
                                     title={entry.label}
-                                    aria-label={entry.type === 'course'
+                                    aria-label={entry.course
                                       ? entry.label
                                       : `${entry.label} · ${t('打开全天日程详情')}`}
                                     onClick={(event) => {
                                       event.stopPropagation()
                                       chooseCalendarDate(dateString)
-                                      if (entry.type === 'course') {
+                                      if (entry.course) {
                                         openCourseDetails(entry.course, dateString)
                                       } else {
                                         setCalendarAgendaDialog({
@@ -4572,7 +4623,7 @@ function App() {
                         return (
                           <article key={`${calendarPopover.date}-${course.id}`}>
                             <button type="button" className="course-edit-link" onClick={() => openCourseDetails(course, calendarPopover.date)}><strong><CourseName course={course} t={t} /></strong></button>
-                            <span>{bounds.start}-{bounds.end}</span>
+                            <span>{courseTimeLabel(course, slotMeta, t('时间待定'))}</span>
                             <small>{course.room || t('地点未标注')}</small>
                           </article>
                         )

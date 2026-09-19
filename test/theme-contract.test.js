@@ -553,16 +553,18 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
 
   assert.match(
     appleTimelineSource,
-    /for minute in CalendarTimelineLogic\.wholeHourMinutes[\s\S]*context\.stroke\(hourLines, with: \.color\(theme\.border\), lineWidth: 1\)/,
+    /for minute in hourMinutes[\s\S]*context\.stroke\(hourLines, with: \.color\(theme\.border\), lineWidth: 1\)/,
   )
+  assert.match(appleTimelineSource, /CalendarTimelineLogic\.bounds\(for: days\.flatMap\(\\\.courses\)\)/)
+  assert.match(appleTimelineSource, /hourMinutes:\s*\[Int\]\s*\{\s*Array\(stride\(from: bounds\.lowerBound, through: bounds\.upperBound, by: 60\)\)/)
   assert.match(
     appleTimelineSource,
     /for minute in CalendarTimelineLogic\.nonHourlyCourseBoundaryMinutes[\s\S]*StrokeStyle\(lineWidth: 0\.7, dash: \[4, 4\]\)/,
   )
   assert.equal(
-    appleTimelineSource.match(/for minute in CalendarTimelineLogic\.wholeHourMinutes/g)?.length,
+    appleTimelineSource.match(/for minute in hourMinutes/g)?.length,
     2,
-    'axis and day areas must both draw solid whole-hour lines',
+    'axis and day areas must both draw solid whole-hour lines across the same dynamic exam bounds',
   )
   assert.equal(
     appleTimelineSource.match(/for minute in CalendarTimelineLogic\.nonHourlyCourseBoundaryMinutes/g)

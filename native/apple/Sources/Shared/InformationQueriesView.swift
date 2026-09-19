@@ -3,6 +3,7 @@ import SwiftUI
 enum InformationQueryMode: String, CaseIterable, Identifiable {
     case shuttle
     case importantEvents
+    case grades
 
     var id: String { rawValue }
 
@@ -10,6 +11,7 @@ enum InformationQueryMode: String, CaseIterable, Identifiable {
         switch self {
         case .shuttle: "班车查询"
         case .importantEvents: "重要事件"
+        case .grades: "成绩查询"
         }
     }
 }
@@ -278,7 +280,7 @@ struct InformationQueriesView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     PageTitle(
                         eyebrow: "Where To Study",
-                        title: "信息查询",
+                        title: model.localized("信息查询"),
                         compact: proxy.size.height < 560
                     )
                     Picker("查询类型", selection: $selectedMode) {
@@ -295,6 +297,8 @@ struct InformationQueriesView: View {
                         shuttleContent
                     case .importantEvents:
                         importantEventsContent
+                    case .grades:
+                        GradeQueryView(store: model.gradeStore)
                     }
                 }
                 .padding(16)

@@ -74,7 +74,9 @@ class ScheduleRepository(
         private set
 
     init {
-        rawSchedule = loadUsableCachedSchedule()
+        rawSchedule = loadUsableCachedSchedule()?.let {
+            AcademicScheduleLogic.usableExams(it, credentialStore.load()?.account.orEmpty())
+        }
         schedule = runCatching { rawSchedule?.let(::effectiveSchedule) }.getOrNull()
         reconcileAutomaticTermAfterLaunch()
     }
@@ -124,15 +126,18 @@ class ScheduleRepository(
                         }
                     }
                     client.fetch(request.credentials, request.termID, request.termStartDate).let { fetched ->
-                        val resolved = if (request.automaticTermDetectionEnabled) {
+                        val termResolved = if (request.automaticTermDetectionEnabled) {
                             fetched
                         } else {
-                            fetched.copy(termID = request.termID, termStartDate = request.termStartDate)
+                            fetched.copy(termID = request.termID, termStartDate = request.termStartDate,
+                                examSchedule = fetched.examSchedule?.takeIf { it.termID == request.termID })
                         }
                         LocalDataCoordinator.withCurrent(refreshGeneration) {
                             if (closed.get() || !isActiveRefresh(refreshToken)) {
                                 throw ScheduleClientException("个人课表获取服务已关闭。")
                             }
+                            check(credentialStore.load() == request.credentials) { "账号凭据已更新，请重新刷新课表。" }
+                            val resolved = AcademicScheduleLogic.mergeFailure(termResolved, rawSchedule)
                             val effective = effectiveSchedule(resolved)
                             store.save(resolved)
                             rawSchedule = resolved
@@ -184,6 +189,10 @@ class ScheduleRepository(
 
     fun clearLocalData() {
         LocalDataCoordinator.clear(::clearLocalDataCoordinated)
+    }
+
+    internal fun invalidatePendingCredentialRequests() {
+        synchronized(refreshLock) { activeRefreshToken = null }
     }
 
     internal fun clearLocalDataCoordinated(clearCourseDeletions: Boolean = true) {
@@ -243,7 +252,7 @@ class ScheduleRepository(
     }
 
     private fun effectiveSchedule(raw: ScheduleSnapshot): ScheduleSnapshot = CourseDeletionLogic.apply(
-        raw,
+        AcademicScheduleLogic.usableExams(raw, credentialStore.load()?.account.orEmpty()),
         credentialStore.load()?.account.orEmpty(),
         deletionStore.load(),
     )

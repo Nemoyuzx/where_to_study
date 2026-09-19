@@ -238,6 +238,8 @@ final class ScheduleLogicTests: XCTestCase {
                     _ = try await api.curriculum(token: "token", week: "all")
                 case .classrooms:
                     _ = try await api.classrooms(token: "token", campusID: "01")
+                case .academic:
+                    _ = try await api.academic(token: "token", endpoint: .grades)
                 }
                 XCTFail("Expected \(endpoint) to reject the oversized body.")
             } catch {

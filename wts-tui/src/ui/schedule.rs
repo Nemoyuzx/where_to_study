@@ -1,7 +1,7 @@
 use chrono::{Datelike, Duration};
-use ratatui::layout::{Constraint, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Borders, Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Borders, Cell, Paragraph, Row, Table, Wrap};
 use ratatui::Frame;
 use where_to_study_lib::config::{today_in_app_tz, SLOT_TIMES};
 
@@ -9,7 +9,7 @@ use crate::app::App;
 use crate::theme::Theme;
 
 pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    let Some(schedule) = &app.schedule else {
+    let Some(_) = &app.schedule else {
         let msg = Paragraph::new("尚未获取课表。请在设置页登录并刷新，或按 r 获取。")
             .block(theme.card_block().borders(Borders::ALL).title("周课表"))
             .style(theme.muted_text());
@@ -24,11 +24,8 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
             today.weekday().num_days_from_monday() as u64
         ))
         .unwrap_or(today);
-    let Some(week) = app.schedule_week_on(today) else {
-        let msg = Paragraph::new("今天不在已加载课表的学期范围内。").style(theme.muted_text());
-        frame.render_widget(msg, area);
-        return;
-    };
+    let week = app.schedule_week_on(today);
+    let chunks = Layout::vertical([Constraint::Min(6), Constraint::Length(7)]).split(area);
 
     let mut header = vec![Cell::from("节次").style(theme.strong_text())];
     for offset in 0..7 {
@@ -52,11 +49,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         let mut cells = vec![Cell::from(format!("{} {}", start, end)).style(theme.muted_text())];
         for offset in 0..7 {
             let day = monday + Duration::days(offset);
-            let weekday = day.weekday().num_days_from_monday() as i64 + 1;
-            let courses: Vec<&where_to_study_lib::models::Course> = schedule
-                .courses
-                .iter()
-                .filter(|c| c.weekday == weekday && c.week_numbers.contains(&week))
+            let courses: Vec<&where_to_study_lib::models::Course> = app
+                .courses_on(day)
+                .into_iter()
+                .filter(|c| !where_to_study_lib::academic::is_exam(c))
                 .filter(|c| c.start_slot <= slot_index && c.end_slot >= slot_index)
                 .collect();
             if courses.is_empty() {
@@ -90,9 +86,27 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     ];
     let table =
         Table::new(rows, widths).block(theme.card_block().borders(Borders::ALL).title(format!(
-            "本周课表 · 公历第 {} 周 · 教学第 {week} 周",
-            today_in_app_tz().iso_week().week()
+            "本周课程 · 公历第 {} 周 · {}",
+            today_in_app_tz().iso_week().week(),
+            week.map_or_else(|| "教学周范围外".into(), |week| format!("教学第 {week} 周"))
         )));
 
-    frame.render_widget(table, area);
+    frame.render_widget(table, chunks[0]);
+    let agenda = app.exam_agenda(monday, 7);
+    let scroll = app
+        .schedule_agenda_scroll
+        .min(agenda.len().saturating_sub(1))
+        .min(u16::MAX as usize) as u16;
+    frame.render_widget(
+        Paragraph::new(agenda.join("\n"))
+            .wrap(Wrap { trim: false })
+            .scroll((scroll, 0))
+            .block(
+                theme
+                    .card_block()
+                    .borders(Borders::ALL)
+                    .title("本周考试与待定安排 · 真实时间 · ↑↓ 浏览"),
+            ),
+        chunks[1],
+    );
 }

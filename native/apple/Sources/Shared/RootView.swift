@@ -143,6 +143,10 @@ struct RootView: View {
             if model.isSampleMode {
                 sampleModeBanner
             }
+            if let exams = model.schedule?.examSchedule,
+               exams.status != "fresh" || exams.items.contains(where: { $0.date.isEmpty || $0.startTime.isEmpty || $0.endTime.isEmpty }) {
+                ExamScheduleNotice(exams: exams)
+            }
 
             Group {
             #if os(macOS)

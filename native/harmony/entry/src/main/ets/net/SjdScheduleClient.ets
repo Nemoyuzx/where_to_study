@@ -6,9 +6,13 @@ import { Credentials } from '../store/CredentialStore';
 import { ScheduleClientError } from './SjdErrors';
 import { SJDAPIClient } from './SjdApi';
 import { SJDScheduleParser } from './parsers/SjdScheduleParser';
+import { SJDAcademicParser } from './parsers/SjdAcademicParser';
+import { ExamSchedule } from '../common/AcademicModels';
+import { CourseRemovalLogic } from '../common/CourseRemoval';
 
 export interface ScheduleFetching {
-  fetch(credentials: Credentials, fallbackTermID: string, fallbackTermStartDate: string): Promise<ScheduleSnapshot>;
+  fetch(credentials: Credentials, fallbackTermID: string, fallbackTermStartDate: string,
+    requestedExamTermID?: string): Promise<ScheduleSnapshot>;
 }
 
 export class SJDScheduleClient implements ScheduleFetching {
@@ -19,14 +23,29 @@ export class SJDScheduleClient implements ScheduleFetching {
   }
 
   async fetch(
-    credentials: Credentials, fallbackTermID: string, fallbackTermStartDate: string
+    credentials: Credentials, fallbackTermID: string, fallbackTermStartDate: string,
+    requestedExamTermID: string = ''
   ): Promise<ScheduleSnapshot> {
     const token: string = await this.api.login(credentials);
     const results: string[] = await Promise.all([
       this.api.curriculum(token, ''),
       this.api.curriculum(token, 'all')
     ]);
-    return SJDScheduleParser.parse(results[0], results[1], fallbackTermID, fallbackTermStartDate);
+    const schedule: ScheduleSnapshot = SJDScheduleParser.parse(
+      results[0], results[1], fallbackTermID, fallbackTermStartDate);
+    const accountKey: string = CourseRemovalLogic.accountScope(credentials.account);
+    const examTerm: string = requestedExamTermID.length > 0 ? requestedExamTermID : schedule.termID;
+    let exams: ExamSchedule;
+    try {
+      const values: Map<string, string> = new Map<string, string>();
+      values.set('semester', examTerm);
+      exams = SJDAcademicParser.exams(await this.api.academic(token, '/student/examinationArrangement', values),
+        examTerm, accountKey, StrictDates.formatFetchedAt(Date.now()));
+    } catch (e) {
+      exams = new ExamSchedule(examTerm, accountKey, '', 'failed',
+        '考试安排暂时无法获取。', []);
+    }
+    return new ScheduleSnapshot(schedule.termID, schedule.termStartDate, schedule.fetchedAt,
+      schedule.courses, exams);
   }
 }
-

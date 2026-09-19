@@ -37,6 +37,7 @@ object ScheduleJsonCodec {
             termStartDate = root.getString("term_start_date"),
             fetchedAt = root.getString("fetched_at"),
             courses = courses,
+            examSchedule = root.optJSONObject("exam_schedule")?.let(::decodeExams),
         )
     }
 
@@ -44,6 +45,7 @@ object ScheduleJsonCodec {
         .put("term_id", schedule.termID)
         .put("term_start_date", schedule.termStartDate)
         .put("fetched_at", schedule.fetchedAt)
+        .put("exam_schedule", schedule.examSchedule?.let(::encodeExams))
         .put("courses", JSONArray().apply {
             schedule.courses.forEach { course ->
                 put(JSONObject()
@@ -63,6 +65,26 @@ object ScheduleJsonCodec {
             }
         })
         .toString(2)
+
+    private fun decodeExams(root: JSONObject): ExamSchedule? = runCatching {
+        val status = root.getString("status")
+        require(status in setOf("fresh", "stale", "failed"))
+        ExamSchedule(root.getString("term_id"), root.getString("account_key"), root.getString("fetched_at"),
+            status, root.optString("message"), root.getJSONArray("items").objects().map { item ->
+                ExamArrangement(item.getString("id"), item.getString("name"), item.optString("date"),
+                    item.optString("start_time"), item.optString("end_time"), item.optString("room"),
+                    item.optString("seat"), item.optString("time_text"))
+            })
+    }.getOrNull()
+
+    private fun encodeExams(exams: ExamSchedule): JSONObject = JSONObject()
+        .put("term_id", exams.termID).put("account_key", exams.accountKey)
+        .put("fetched_at", exams.fetchedAt).put("status", exams.status).put("message", exams.message)
+        .put("items", JSONArray().apply { exams.items.forEach { exam ->
+            put(JSONObject().put("id", exam.id).put("name", exam.name).put("date", exam.date)
+                .put("start_time", exam.startTime).put("end_time", exam.endTime).put("room", exam.room)
+                .put("seat", exam.seat).put("time_text", exam.timeText))
+        } })
 
     private fun JSONArray?.integers(): List<Int> = if (this == null) {
         emptyList()
@@ -126,7 +148,7 @@ internal fun loadUsableSchedule(context: Context): ScheduleSnapshot? {
     )
     return usable?.let {
         CourseDeletionLogic.apply(
-            it,
+            AcademicScheduleLogic.usableExams(it, SecureCredentialStore(appContext).load()?.account.orEmpty()),
             SecureCredentialStore(appContext).load()?.account.orEmpty(),
             CourseDeletionStore(appContext).load(),
         )

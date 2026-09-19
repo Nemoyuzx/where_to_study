@@ -8,6 +8,8 @@
   Secret Service 桌面会话的 Linux 服务器
 - `schedule`：显示服务返回学期内的指定日期（默认今天，上海时区）个人课程
 - `week`：显示本周课程
+- `grade-terms`：查询学校实际提供的成绩学期；`grades` 查询当前或指定学期，
+  支持最好／首次／全部记录及 `--all-terms`；`exams` 查看真实考试与日期、时间待定安排
 - `courses`：列出本学期可见课程及删除所需 ID；`course-delete` 支持单次和整门课程，
   `course-deletions` 查看删除记录，`course-restore` 恢复
 - `assignments`：使用同学号及可选独立教学云平台密码，查询指定日期的课程作业 DDL
@@ -17,6 +19,11 @@
 - `events`：查询、搜索、分类筛选公开活动和校内竞赛通知，默认按 DDL 升序并隐藏
   已截止事件；支持共享本地收藏（不包含作业和自定义日程）
 - 所有查询命令支持 `--json` 输出，方便脚本消费
+
+课表刷新同时从学校获取考试。普通课程原始数据不混入考试；展示时只隐藏与真实考试
+时间重叠的单次课程。考试按实际日期与分钟显示，超出教学周仍可查询；未定时间不会
+占用虚构节次。成绩不写入磁盘缓存，文字成绩、零分和未公布值分别保留，平均学分绩点
+仅在学校返回时展示。成绩及考试使用教务密码，不使用独立教学云密码。
 
 ## 构建
 
@@ -78,6 +85,14 @@ where-to-study-cli schedule --date 2026-06-01
 
 # 查看本周课程（JSON 输出）
 where-to-study-cli week --json
+
+# 查询学校学期列表、当前学期最好成绩、全部学期成绩
+where-to-study-cli grade-terms
+where-to-study-cli grades
+where-to-study-cli grades --all-terms --records best
+where-to-study-cli grades --term 2026-2027-1 --records first --json
+# --records all 表示该学期全部成绩记录；不等同于 --all-terms
+where-to-study-cli exams
 
 # 查看课程 ID，删除单次或本学期整门课程（终端会要求确认）
 where-to-study-cli courses

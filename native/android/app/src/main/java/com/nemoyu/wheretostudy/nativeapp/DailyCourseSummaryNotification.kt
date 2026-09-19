@@ -111,7 +111,7 @@ object DailyCourseSummaryLogic {
         if (courses.isEmpty()) return null
         val entries = courses.map { course ->
             val location = course.room.takeIf(String::isNotBlank)?.let { " @ $it" }.orEmpty()
-            "${course.timeRange} ${course.name}$location"
+            "${if (course.eventKind == "exam") "考试 · " else ""}${course.timeRange} ${course.name}$location"
         }
         return DailyCourseSummaryDraft(
             title = "今日课程 · ${courses.size} 门",

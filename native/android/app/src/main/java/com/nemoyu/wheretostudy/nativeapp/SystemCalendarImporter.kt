@@ -380,7 +380,7 @@ class SystemCalendarImporter(context: Context) {
         put(CalendarContract.Events.DTEND, draft.endsAtMillis)
         put(CalendarContract.Events.EVENT_TIMEZONE, draft.timeZoneID)
         put(CalendarContract.Events.EVENT_END_TIMEZONE, draft.timeZoneID)
-        put(CalendarContract.Events.ALL_DAY, 0)
+        put(CalendarContract.Events.ALL_DAY, if (draft.allDay) 1 else 0)
         put(CalendarContract.Events.AVAILABILITY, CalendarContract.Events.AVAILABILITY_BUSY)
         put(CalendarContract.Events.CUSTOM_APP_PACKAGE, appContext.packageName)
         put(CalendarContract.Events.CUSTOM_APP_URI, draft.marker)

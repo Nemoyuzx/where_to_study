@@ -1,0 +1,24 @@
+{
+  "code": 1,
+  "data": [{
+    "pjxfjd": null,
+    "achievement": [
+      {
+        "cj0708id": "synthetic-school-record-zero", "courseName": "合成成绩示例：零分与零学分（非真实成绩）",
+        "fraction": 0, "credit": 0, "kcbh": "SYNTHETIC-001",
+        "curriculumAttributes": "合成课程属性", "courseNature": "合成课程性质",
+        "examinationNature": "合成考试性质", "curSemesterName": "2025-2026-2（合成学期示例）", "cjbs": "合成标识"
+      },
+      {
+        "cj0708id": "synthetic-school-record-text", "courseName": "合成成绩示例：文字成绩（非真实成绩）",
+        "fraction": "通过", "credit": 2.5, "kcbh": "SYNTHETIC-002",
+        "curSemesterName": "2025-2026-2（合成学期示例）"
+      },
+      {
+        "cj0708id": "synthetic-school-record-pending", "courseName": "合成成绩示例：未公布（非真实成绩）",
+        "fraction": null, "credit": null, "kcbh": "SYNTHETIC-003",
+        "curSemesterName": "2026-2027-1（合成学期示例）"
+      }
+    ]
+  }]
+}

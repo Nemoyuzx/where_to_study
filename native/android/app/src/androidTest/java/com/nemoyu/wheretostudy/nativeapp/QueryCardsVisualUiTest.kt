@@ -257,6 +257,7 @@ class QueryCardsVisualUiTest {
             "notes":["视觉回归示例，请勿作为实际乘车依据。"],"schedules":[$schedules]}]}"""
         val shuttles = ShuttleBusRepository(ShuttleBusClient { _, _, _, _ -> payload }, usesSampleData = false)
         val events = CalendarDailyInfoRepository(usesSampleData = true)
+        val grades = AcademicGradesRepository({ null })
         scenario.onActivity { activity ->
             val original = activity.findViewById<View>(R.id.information_query_page)
             val parent = original.parent as ViewGroup
@@ -265,10 +266,10 @@ class QueryCardsVisualUiTest {
             parent.removeView(original)
             val page = InformationQueryPage(activity, shuttles, events, AppPreferences(activity),
                 (parent.width / activity.resources.displayMetrics.density).toInt(), InformationQuerySessionState(),
-                activity.findViewById<View?>(R.id.phone_navigation) != null).build()
+                activity.findViewById<View?>(R.id.phone_navigation) != null, grades).build()
             parent.addView(page, index, params)
         }
-        return { shuttles.close(); events.close() }
+        return { shuttles.close(); events.close(); grades.close() }
     }
 
     @Test

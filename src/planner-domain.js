@@ -477,13 +477,41 @@ export function nonHourlyCourseBoundaryMinutes(
 }
 
 export function courseTimeBounds(course, slotMeta) {
-  const start = slotMeta[course.start_slot]?.start || '08:00'
-  const end = slotMeta[course.end_slot]?.end || start
+  if (course.event_kind === 'exam') {
+    const parse = value => /^(?:[01]?\d|2[0-3]):[0-5]\d$/.test(value || '') || value === '24:00'
+      ? parseTimeMinutes(value) : null
+    const startMinutes = parse(course.start_time)
+    const endMinutes = parse(course.end_time)
+    const timed = startMinutes != null && endMinutes != null && startMinutes < endMinutes && startMinutes < 1440
+    return { start: timed ? course.start_time : '', end: timed ? course.end_time : '',
+      startMinutes: timed ? startMinutes : null, endMinutes: timed ? endMinutes : null, timed }
+  }
+  const explicit = /^(\d{2}:\d{2})\s*[-–—]\s*(\d{2}:\d{2})$/.exec(course.time_range || '')
+  const validRange = explicit && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(explicit[1])
+    && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(explicit[2])
+    && parseTimeMinutes(explicit[1]) < parseTimeMinutes(explicit[2])
+  const start = validRange ? explicit[1] : slotMeta[course.start_slot]?.start || '08:00'
+  const end = validRange ? explicit[2] : slotMeta[course.end_slot]?.end || start
   return {
     start,
     end,
     startMinutes: parseTimeMinutes(start),
     endMinutes: parseTimeMinutes(end),
+    timed: true,
+  }
+}
+
+export function courseTimeLabel(course, slotMeta, pending = '时间待定') {
+  const bounds = courseTimeBounds(course, slotMeta)
+  return bounds.timed ? `${bounds.start}-${bounds.end}` : pending
+}
+
+export function academicTimelineHours(courses, dates, slotMeta, termStartDate) {
+  const bounds = dates.flatMap(date => getWeekState(courses, termStartDate, date).dayCourses)
+    .map(course => courseTimeBounds(course, slotMeta)).filter(item => item.timed)
+  return {
+    start: Math.min(CALENDAR_START_HOUR, ...bounds.map(item => Math.floor(item.startMinutes / 60))),
+    end: Math.max(CALENDAR_END_HOUR, ...bounds.map(item => Math.ceil(item.endMinutes / 60))),
   }
 }
 
@@ -694,7 +722,7 @@ export function applyCourseDeletions(schedule, deletions = []) {
   if (!schedule) return null
   return {
     ...schedule,
-    courses: schedule.courses.map((course) => ({
+    courses: schedule.courses.map((course) => course.event_kind === 'exam' ? { ...course } : ({
       ...course,
       week_numbers: course.week_numbers.filter((week) => !deletions.some((rule) => {
         const sourceID = String(course.source_course_id || '').trim()
@@ -705,7 +733,7 @@ export function applyCourseDeletions(schedule, deletions = []) {
           || (rule.date === addDays(schedule.term_start_date, (week - 1) * 7 + course.weekday - 1)
             && rule.start_slot === course.start_slot && rule.end_slot === course.end_slot))
       })),
-    })).filter((course) => course.week_numbers.length),
+    })).filter((course) => course.event_kind === 'exam' || course.week_numbers.length),
   }
 }
 
@@ -903,13 +931,14 @@ function dateOrdinal(dateString) {
 }
 
 export function getWeekState(courses, termStartDate, targetDate) {
-  if (!termStartDate || !targetDate) {
+  if (!targetDate) {
     return { weekNumber: 0, weekday: 0, busySlots: [], dayCourses: [] }
   }
   const target = dateFromString(targetDate)
-  const days = dateOrdinal(targetDate) - dateOrdinal(termStartDate)
+  const days = termStartDate ? dateOrdinal(targetDate) - dateOrdinal(termStartDate) : -7
   const calculatedWeek = Math.max(0, Math.floor(days / 7) + 1)
   const maximumTeachingWeek = courses.reduce((maximum, course) => {
+    if (course.event_kind === 'exam') return maximum
     const weeks = Array.isArray(course.week_numbers) ? course.week_numbers : []
     return Math.max(
       maximum,
@@ -921,14 +950,16 @@ export function getWeekState(courses, termStartDate, targetDate) {
     : 0
   const weekday = target.getDay() === 0 ? 7 : target.getDay()
   const dayCourses = courses
-    .filter((course) => course.weekday === weekday
+    .filter((course) => course.event_kind === 'exam' ? course.event_date === targetDate
+      : course.weekday === weekday && weekNumber > 0
       && Array.isArray(course.week_numbers) && course.week_numbers.includes(weekNumber))
-    .sort((a, b) => a.start_slot - b.start_slot || a.name.localeCompare(b.name, 'zh-Hans-CN'))
-  const maxSlotIndex = FALLBACK_SLOTS.length - 1
+    .sort((a, b) => (courseTimeBounds(a, FALLBACK_SLOTS).startMinutes ?? -1)
+      - (courseTimeBounds(b, FALLBACK_SLOTS).startMinutes ?? -1) || a.name.localeCompare(b.name, 'zh-Hans-CN'))
   const busySlots = [...new Set(dayCourses.flatMap((course) => {
-    const slots = []
-    for (let slot = Math.max(0, course.start_slot); slot <= Math.min(course.end_slot, maxSlotIndex); slot += 1) slots.push(slot)
-    return slots
+    const bounds = courseTimeBounds(course, FALLBACK_SLOTS)
+    if (!bounds.timed) return []
+    return FALLBACK_SLOTS.filter(slot => bounds.startMinutes < parseTimeMinutes(slot.end)
+      && parseTimeMinutes(slot.start) < bounds.endMinutes).map(slot => slot.index)
   }))].sort((a, b) => a - b)
   return { weekNumber, weekday, busySlots, dayCourses }
 }

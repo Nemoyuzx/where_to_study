@@ -97,8 +97,12 @@ pub fn draw(frame: &mut Frame, app: &mut App, theme: &Theme) {
     frame.render_widget(status_bar, chunks[2]);
 
     // Key hint bar
-    let hint = if app.selected_tab_index == 4 {
-        "←/→ 切换班车/事件 · r 刷新 · ↑↓ 浏览 · Tab/1-6 切换页面 · 事件：/ 搜索 t 类型 c 分类 p 来源 e 已结束 f 收藏"
+    let hint = if app.selected_tab_index == 4
+        && app.query_section == crate::app::QuerySection::Grades
+    {
+        "←/→ 切换查询 · t 学期 · p 记录 · a 全部学期 · r 刷新 · ↑↓ 浏览 · s 账户设置"
+    } else if app.selected_tab_index == 4 {
+        "←/→ 切换班车/事件/成绩 · r 刷新 · ↑↓ 浏览 · Tab/1-6 切换页面 · 事件：/ 搜索 t 类型 c 分类 p 来源 e 已结束 f 收藏"
     } else {
         "q 退出 · r 刷新 · l 保存账号 · o 退出登录 · m 管理课程 · Tab/1-6 切换页面"
     };
@@ -115,6 +119,9 @@ fn status_line(app: &App) -> String {
     }
     if app.loading {
         parts.push("加载中…".to_string());
+    }
+    if app.schedule.is_some() && matches!(app.selected_tab_index, 0 | 1 | 3) {
+        parts.push(app.exam_status());
     }
     let date = crate::date_today_label();
     let week = app

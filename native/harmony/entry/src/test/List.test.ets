@@ -23,6 +23,7 @@ import queryLogicTest from './QueryLogic.test';
 import networkDiagnosticsTest from './NetworkDiagnostics.test';
 import privacyConsentTest from './PrivacyConsent.test';
 import widgetFileQueueTest from './WidgetFileQueue.test';
+import academicQueryTest from './AcademicQuery.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -49,4 +50,5 @@ export default function testsuite() {
   networkDiagnosticsTest();
   privacyConsentTest();
   widgetFileQueueTest();
+  academicQueryTest();
 }

@@ -65,6 +65,7 @@ struct TodayCourseWidgetCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
             if let course = courses.first {
+                if course.isExam { Text(language.text(chinese: "考试", english: "Exam")).font(.caption2.bold()) }
                 Text(course.name)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(widgetText)
@@ -202,6 +203,7 @@ struct TodayCourseWidgetCard: View {
                 .frame(width: 3, height: family == .systemSmall ? 28 : 31)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
+                    if course.isExam { Text(language.text(chinese: "考试", english: "Exam")).font(.caption2.bold()) }
                     Text(course.name)
                         .font(courseNameFont)
                         .foregroundStyle(widgetText)
@@ -294,7 +296,8 @@ struct TodayCourseWidgetCard: View {
     }
 
     private func courseDetails(_ course: TodayCourseWidgetData.Course) -> String {
-        var values = [course.timeRange]
+        var values = [course.isExam && course.startTime?.isEmpty != false
+                      ? language.text(chinese: "时间待定", english: "Time pending") : course.timeRange]
         if family != .systemSmall, let sectionText = nonempty(course.sectionText) {
             values.append(sectionText)
         }

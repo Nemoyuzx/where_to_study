@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fetch-grades"
+description = "Enables the fetch_grades command without any pre-configured scope."
+commands.allow = ["fetch_grades"]
+
+[[permission]]
+identifier = "deny-fetch-grades"
+description = "Denies the fetch_grades command without any pre-configured scope."
+commands.deny = ["fetch_grades"]

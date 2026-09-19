@@ -64,8 +64,11 @@ struct MacMenuBarView: View {
             Button("\(label)暂无课程") { showMainWindow(section: .calendar) }
         } else {
             ForEach(courses.prefix(8)) { course in
-                Button(courseLine(course)) {
+                Button {
                     showMainWindow(section: .calendar)
+                } label: {
+                    if course.isExam { Text(model.localized("考试")) }
+                    Text(courseLine(course))
                 }
             }
             if courses.count > 8 {
@@ -95,6 +98,7 @@ struct MacMenuBarView: View {
     }
 
     private func timeLabel(_ course: Course) -> String {
+        if course.isExam, course.minuteInterval == nil { return model.localized("时间待定") }
         if !course.timeRange.isEmpty { return course.timeRange }
         guard
             SlotMetadata.defaults.indices.contains(course.startSlot),

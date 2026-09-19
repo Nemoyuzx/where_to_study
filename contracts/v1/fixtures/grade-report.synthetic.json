@@ -1,0 +1,30 @@
+{
+  "term_id": "",
+  "record_type": "",
+  "fetched_at": "2026-09-12T08:00:00+08:00",
+  "average_grade_point": "",
+  "items": [
+    {
+      "id": "synthetic-grade-zero",
+      "name": "合成成绩示例：零分与零学分（非真实成绩）",
+      "score": "0", "credits": "0", "course_code": "SYNTHETIC-001",
+      "course_attribute": "合成课程属性", "course_nature": "合成课程性质",
+      "exam_nature": "合成考试性质", "semester_name": "2025-2026-2（合成学期示例）",
+      "grade_status": "合成标识"
+    },
+    {
+      "id": "synthetic-grade-text",
+      "name": "合成成绩示例：文字成绩（非真实成绩）",
+      "score": "通过", "credits": "2.5", "course_code": "SYNTHETIC-002",
+      "course_attribute": "", "course_nature": "", "exam_nature": "",
+      "semester_name": "2025-2026-2（合成学期示例）", "grade_status": ""
+    },
+    {
+      "id": "synthetic-grade-pending",
+      "name": "合成成绩示例：未公布（非真实成绩）",
+      "score": "", "credits": "", "course_code": "SYNTHETIC-003",
+      "course_attribute": "", "course_nature": "", "exam_nature": "",
+      "semester_name": "2026-2027-1（合成学期示例）", "grade_status": ""
+    }
+  ]
+}

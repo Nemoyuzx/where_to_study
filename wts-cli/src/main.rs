@@ -11,7 +11,7 @@ mod output;
     about = "Where To Study 命令行客户端 - 北邮课表与空教室查询",
     long_about = "Where To Study 命令行客户端
 
-基于与桌面版相同的数据源，支持个人课表、空教室、节假日、班车与重要事件查询。
+基于与桌面版相同的数据源，支持个人课表、考试、成绩、空教室、节假日、班车与重要事件查询。
 支持 macOS 与 Linux，账号密码保存在当前用户专属的本地配置文件中。"
 )]
 struct Cli {
@@ -62,6 +62,30 @@ enum Commands {
     Assignments {
         #[arg(long)]
         date: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// 查询学校公布的可选成绩学期
+    GradeTerms {
+        #[arg(long)]
+        json: bool,
+    },
+    /// 查询成绩（默认学校当前学期、最好成绩；不缓存到磁盘）
+    Grades {
+        /// 学期 ID，可先通过 grade-terms 查询；省略为学校当前学期
+        #[arg(long, conflicts_with = "all_terms")]
+        term: Option<String>,
+        /// 查询全部学期
+        #[arg(long)]
+        all_terms: bool,
+        /// 最好、首次或全部记录
+        #[arg(long, default_value = "best", value_parser = ["best", "first", "all"])]
+        records: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// 查询真实考试安排（包括日期或时间待定记录）
+    Exams {
         #[arg(long)]
         json: bool,
     },
@@ -164,6 +188,14 @@ async fn main() {
         Commands::CourseDeletions { json } => commands::course_deletions(json),
         Commands::CourseRestore { deletion_id } => commands::restore_course(deletion_id),
         Commands::Assignments { date, json } => commands::assignments(date, json).await,
+        Commands::GradeTerms { json } => commands::grade_terms(json).await,
+        Commands::Grades {
+            term,
+            all_terms,
+            records,
+            json,
+        } => commands::grades(term, all_terms, records, json).await,
+        Commands::Exams { json } => commands::exams(json).await,
         Commands::Schedule { date, json } => commands::schedule(date, json).await,
         Commands::Week { date, json } => commands::week(date, json).await,
         Commands::Classrooms {
@@ -209,6 +241,20 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn grades_have_explicit_current_all_and_record_controls_without_password_arguments() {
+        assert!(Cli::try_parse_from(["wts", "grade-terms", "--json"]).is_ok());
+        assert!(Cli::try_parse_from(["wts", "grades"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["wts", "grades", "--all-terms", "--records", "first"]).is_ok()
+        );
+        assert!(
+            Cli::try_parse_from(["wts", "grades", "--term", "2026-2027-1", "--all-terms"]).is_err()
+        );
+        assert!(Cli::try_parse_from(["wts", "grades", "--password", "fixture-only"]).is_err());
+        assert!(Cli::try_parse_from(["wts", "exams", "--json"]).is_ok());
+    }
 
     #[test]
     fn local_course_delete_requires_exactly_one_scope_and_passwords_are_not_arguments() {

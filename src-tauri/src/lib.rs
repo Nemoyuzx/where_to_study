@@ -1,3 +1,4 @@
+pub mod academic;
 pub mod assignments;
 pub mod auth;
 mod calendar_export;
@@ -321,6 +322,19 @@ fn notify_account_scope_cleared(app: &tauri::AppHandle) {
 }
 
 static LOCAL_DATA: LocalDataCoordinator = LocalDataCoordinator::new();
+static ACADEMIC_CREDENTIAL_REVISION: AtomicU64 = AtomicU64::new(0);
+
+fn academic_credential_revision() -> u64 {
+    ACADEMIC_CREDENTIAL_REVISION.load(Ordering::Acquire)
+}
+
+fn ensure_academic_credential_revision(expected: u64) -> Result<(), String> {
+    if academic_credential_revision() == expected {
+        Ok(())
+    } else {
+        Err("教务凭据已变化，请重新查询。".into())
+    }
+}
 static COURSE_EDITS_REVISION: AtomicU64 = AtomicU64::new(0);
 
 // Call while holding LOCAL_DATA's account gate: edits advance this revision in
@@ -979,6 +993,9 @@ fn save_saved_settings_sync(
         },
         || clear_account_scoped_caches(&app),
         |plan| {
+            if plan.academic_credentials_changed() {
+                ACADEMIC_CREDENTIAL_REVISION.fetch_add(1, Ordering::AcqRel);
+            }
             let assignment_credentials_changed = plan.assignment_credentials_changed();
             if assignment_credentials_changed {
                 assignments::clear_cache();
@@ -1016,6 +1033,7 @@ fn save_saved_settings_sync(
 }
 
 fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
+    ACADEMIC_CREDENTIAL_REVISION.fetch_add(1, Ordering::AcqRel);
     let mut errors = Vec::new();
     #[cfg(not(mobile))]
     if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
@@ -1191,14 +1209,14 @@ async fn fetch_schedule(
     let manual_term_id = payload.term_id.clone();
     let manual_term_start_date = payload.term_start_date.clone();
     let generation = LOCAL_DATA.begin();
-    let account_scope = LOCAL_DATA
+    let (account_scope, credential_revision) = LOCAL_DATA
         .with_current_account(generation, || {
             settings_store::apply_saved_credentials(&mut payload.account, &mut payload.password)
                 .map_err(|error| error.message)?;
             let request_scope = request_account_scope(&payload.account)?;
             let saved_scope = require_saved_account_scope()?;
             validate_account_scope_match(&request_scope, &saved_scope)?;
-            Ok(request_scope)
+            Ok((request_scope, academic_credential_revision()))
         })
         .map_err(LocalDataAccessError::message)?;
     let mut schedule = schedule::fetch_schedule(&payload)
@@ -1214,8 +1232,19 @@ async fn fetch_schedule(
             schedule.term_start_date = term_start_date;
         }
     }
+    if let Some(exams) = schedule.exam_schedule.as_mut() {
+        if exams.term_id != schedule.term_id {
+            exams.status = "failed".into();
+            exams.message = "考试学期与手动课表学期不一致，请启用自动学期或更正设置。".into();
+            exams.items.clear();
+        }
+    }
     LOCAL_DATA
         .with_current_account(generation, || {
+            ensure_academic_credential_revision(credential_revision)?;
+            let previous =
+                schedule_store::load_raw(&app, &account_scope).map_err(|error| error.message)?;
+            academic::merge_exam_fallback(&mut schedule, previous.as_ref());
             schedule_store::save(&app, &account_scope, &schedule).map_err(|error| error.message)?;
             #[cfg(not(mobile))]
             let _ = app.emit(
@@ -1229,6 +1258,7 @@ async fn fetch_schedule(
         .map_err(LocalDataAccessError::message)?;
     let rules = LOCAL_DATA
         .with_current_account(generation, || {
+            ensure_academic_credential_revision(credential_revision)?;
             let path = schedule_store::deletion_path(&app).map_err(|error| error.message)?;
             course_deletions::load(&path, &account_scope).map_err(|error| error.message)
         })
@@ -1495,6 +1525,48 @@ async fn fetch_shuttle_bus() -> Result<ShuttleBusResponse, String> {
 }
 
 #[tauri::command]
+async fn fetch_grade_terms() -> Result<academic::GradeTerms, String> {
+    let generation = LOCAL_DATA.begin();
+    let (credentials, revision) = LOCAL_DATA
+        .with_current_account(generation, || {
+            let credentials = load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
+            Ok((credentials, academic_credential_revision()))
+        })
+        .map_err(LocalDataAccessError::message)?;
+    let response = academic::fetch_terms(&credentials.account, &credentials.password)
+        .await
+        .map_err(|e| e.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            ensure_academic_credential_revision(revision)?;
+            Ok(response)
+        })
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+async fn fetch_grades(payload: academic::GradeRequest) -> Result<academic::GradeReport, String> {
+    let generation = LOCAL_DATA.begin();
+    let (credentials, revision) = LOCAL_DATA
+        .with_current_account(generation, || {
+            let credentials = load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
+            Ok((credentials, academic_credential_revision()))
+        })
+        .map_err(LocalDataAccessError::message)?;
+    let response = academic::fetch_grades(&credentials.account, &credentials.password, &payload)
+        .await
+        .map_err(|e| e.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            ensure_academic_credential_revision(revision)?;
+            Ok(response)
+        })
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
 async fn fetch_assignments(payload: AssignmentsRequest) -> Result<AssignmentsResponse, String> {
     let generation = LOCAL_DATA.begin();
     let (credentials, credential_revision) = LOCAL_DATA
@@ -1713,6 +1785,7 @@ mod saved_schedule_visibility_tests {
             term_start_date: term_start_date.to_string(),
             fetched_at: "2026-08-24T12:00:00+08:00".to_string(),
             courses: Vec::new(),
+            exam_schedule: None,
         }
     }
 
@@ -1868,6 +1941,16 @@ fn desktop_text<'a>(chinese: &'a str, english: &'a str) -> &'a str {
 
 #[cfg(not(mobile))]
 fn course_time_label(course: &crate::models::Course) -> String {
+    if academic::is_exam(course) {
+        return match academic::course_minutes(course) {
+            Some(_) => format!(
+                "{}-{}",
+                course.start_time.as_deref().unwrap_or(""),
+                course.end_time.as_deref().unwrap_or("")
+            ),
+            None => desktop_text("时间待定", "Time pending").into(),
+        };
+    }
     if !course.time_range.trim().is_empty() {
         return course.time_range.clone();
     }
@@ -1890,7 +1973,17 @@ fn format_course_menu_line(course: &crate::models::Course) -> String {
         course.room.clone()
     };
     truncate_menu_label(
-        format!("{}  {}  @ {}", course_time_label(course), course.name, room),
+        format!(
+            "{}  {}{}  @ {}",
+            course_time_label(course),
+            if academic::is_exam(course) {
+                desktop_text("考试 · ", "Exam · ")
+            } else {
+                ""
+            },
+            course.name,
+            room
+        ),
         42,
     )
 }
@@ -2143,26 +2236,31 @@ async fn load_today_course_content(
         }
     }
 
-    let (request, account_scope) = match LOCAL_DATA.with_current_account(generation, || {
-        let settings = settings_store::load(&app).map_err(|error| error.message)?;
-        let mut request = ScheduleRequest {
-            account: non_empty_option(settings.account),
-            password: None,
-            term_id: non_empty_option(settings.term_id),
-            term_start_date: non_empty_option(settings.term_start_date),
-            automatic_term_detection_enabled: Some(settings.automatic_term_detection_enabled),
+    let (request, account_scope, credential_revision) =
+        match LOCAL_DATA.with_current_account(generation, || {
+            let settings = settings_store::load(&app).map_err(|error| error.message)?;
+            let mut request = ScheduleRequest {
+                account: non_empty_option(settings.account),
+                password: None,
+                term_id: non_empty_option(settings.term_id),
+                term_start_date: non_empty_option(settings.term_start_date),
+                automatic_term_detection_enabled: Some(settings.automatic_term_detection_enabled),
+            };
+            settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
+                .map_err(|error| error.message)?;
+            let account_scope = request_account_scope(&request.account)?;
+            Ok((request, account_scope, academic_credential_revision()))
+        }) {
+            Ok(request) => request,
+            Err(error) => return TrayCourseContent::Message(error.message()),
         };
-        settings_store::apply_saved_credentials(&mut request.account, &mut request.password)
-            .map_err(|error| error.message)?;
-        let account_scope = request_account_scope(&request.account)?;
-        Ok((request, account_scope))
-    }) {
-        Ok(request) => request,
-        Err(error) => return TrayCourseContent::Message(error.message()),
-    };
     let schedule = match schedule::fetch_schedule(&request).await {
-        Ok(schedule) => {
+        Ok(mut schedule) => {
             match LOCAL_DATA.with_current_account(generation, || {
+                ensure_academic_credential_revision(credential_revision)?;
+                let previous = schedule_store::load_raw(&app, &account_scope)
+                    .map_err(|error| error.message)?;
+                academic::merge_exam_fallback(&mut schedule, previous.as_ref());
                 schedule_store::save(&app, &account_scope, &schedule)
                     .map_err(|error| error.message)?;
                 schedule_store::load(&app, &account_scope)
@@ -3506,6 +3604,8 @@ pub fn run() {
             fetch_important_events,
             fetch_shuttle_bus,
             fetch_assignments,
+            fetch_grade_terms,
+            fetch_grades,
             fetch_deadline_calendar,
             fetch_custom_deadline_calendar,
             fetch_assignment_calendar,

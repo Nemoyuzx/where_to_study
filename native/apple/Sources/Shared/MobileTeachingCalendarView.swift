@@ -707,6 +707,7 @@ struct MobileTeachingCalendarView: View {
                         presentCourse(course, on: selectedDate)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
+                            if course.isExam { Text(model.localized("考试")).font(.caption.bold()).foregroundStyle(AppTheme.danger) }
                             Text(course.name)
                                 .font(.caption.weight(.semibold))
                                 .lineLimit(1)
@@ -746,7 +747,7 @@ struct MobileTeachingCalendarView: View {
                         Button {
                             present(.day, on: day.date)
                         } label: {
-                            Text("\(monthDayCompactFormatter.string(from: day.date)) · \(item.title)")
+                            Text("\(monthDayCompactFormatter.string(from: day.date)) · \(item.kind == .exam ? model.localized("考试 · 时间待定") + " · " : "")\(item.title)")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(allDayEventTint(item.kind))
                                 .padding(.horizontal, 10)
@@ -1364,6 +1365,7 @@ struct MobileTeachingCalendarView: View {
                                 .fill(theme.primary)
                                 .frame(width: 4, height: 38)
                             VStack(alignment: .leading, spacing: 2) {
+                                if course.isExam { Text(model.localized("考试")).font(.caption.bold()).foregroundStyle(AppTheme.danger) }
                                 Text(course.name).font(.subheadline.weight(.semibold))
                                 Text(
                                     [course.timeRange, CalendarTimelineLogic.courseMetadata(course)]
@@ -1872,15 +1874,18 @@ struct MobileTeachingCalendarView: View {
 
     private func courseDetailCard(_ course: Course, on day: Date) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            if course.isExam { Label(model.localized("考试"), systemImage: "pencil.and.list.clipboard").foregroundStyle(AppTheme.danger) }
             Label(course.name, systemImage: "book.closed")
                 .font(.headline)
                 .foregroundStyle(theme.text)
             detailRow("日期", fullDateFormatter.string(from: day))
-            detailRow("时间", course.timeRange)
-            detailRow("节次", course.sectionText)
+            detailRow("时间", course.isExam && course.minuteInterval == nil ? model.localized("时间待定") + " · " + course.timeRange : course.timeRange)
+            if !course.isExam { detailRow("节次", course.sectionText) }
             detailRow("地点", course.room.isEmpty ? "未标注" : course.room)
-            detailRow("教师", course.teacher.isEmpty ? "未标注" : course.teacher)
-            detailRow("教学周", course.weekText)
+            if !course.isExam {
+                detailRow("教师", course.teacher.isEmpty ? "未标注" : course.teacher)
+                detailRow("教学周", course.weekText)
+            }
             CourseDeletionControl(course: course, date: day) { presentedDetail = nil }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -2002,7 +2007,7 @@ struct MobileTeachingCalendarView: View {
             let schedule = model.schedule,
             let start = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [] }
-        return ScheduleLogic.courses(on: date, termStart: start, courses: schedule.courses)
+        return ScheduleLogic.courses(on: date, termStart: start, courses: schedule.courses, exams: schedule.examSchedule)
     }
 
     private func holidayItems(on date: Date) -> [HolidayItem] {

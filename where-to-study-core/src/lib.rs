@@ -1,3 +1,5 @@
+#[path = "../../src-tauri/src/academic.rs"]
+pub mod academic;
 #[path = "../../src-tauri/src/assignments.rs"]
 pub mod assignments;
 #[path = "../../src-tauri/src/auth.rs"]

@@ -1,0 +1,7 @@
+{
+  "id": "synthetic-exam-timed", "name": "合成考试示例：精确时间（非真实安排）",
+  "teacher": "", "room": "合成考场-201", "week_text": "", "week_numbers": [],
+  "exam_week_numbers": [], "weekday": 1, "start_slot": 0, "end_slot": 0,
+  "section_text": "考试", "time_range": "08:30-10:07",
+  "event_kind": "exam", "event_date": "2026-09-07", "start_time": "08:30", "end_time": "10:07"
+}

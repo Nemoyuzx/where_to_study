@@ -592,7 +592,7 @@ export struct PlannerView {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      Text(course.timeRange)
+      Text(this.model.courseTimeText(course))
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
       CourseRemovalButton({ course: course, date: StrictDates.todayParts() })

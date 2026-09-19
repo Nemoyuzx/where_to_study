@@ -20,6 +20,27 @@ export class SJDAPIClient {
   static readonly curriculumURL: string = SJDAPIClient.origin + '/bjyddx/student/curriculum';
   static readonly classroomsURL: string = SJDAPIClient.origin + '/bjyddx/todayClassrooms';
 
+  async academic(token: string, path: string, values: Map<string, string> = new Map<string, string>()): Promise<string> {
+    const allowed: string[] = ['/currentTerm', '/semesterList', '/student/termGPA',
+      '/student/examinationArrangement'];
+    if (allowed.indexOf(path) < 0) {
+      throw ScheduleClientError.invalidResponse('教务查询地址不正确。');
+    }
+    const spec: HttpRequestSpec = new HttpRequestSpec();
+    spec.method = http.RequestMethod.POST;
+    spec.connectTimeoutMs = 30000;
+    spec.readTimeoutMs = 30000;
+    spec.maxBytes = SJDResponseLimits.maximumCurriculumBytes;
+    spec.headers = SJDAPIClient.headersFor(SJDAPIClient.classroomReferer, token);
+    const query: string = SJDFormURLEncoder.encode(values);
+    const result: HttpResult = await this.responseData(SJDAPIClient.origin + '/bjyddx' + path +
+      (query.length > 0 ? '?' + query : ''), spec, SJDResponseEndpoint.academic);
+    if (result.statusCode < 200 || result.statusCode >= 300) {
+      throw ScheduleClientError.service('教务查询暂不可用，请稍后刷新。');
+    }
+    return result.body;
+  }
+
   async login(credentials: Credentials): Promise<string> {
     const account: string = credentials.account.trim();
     if (account.length === 0 || credentials.password.length === 0) {

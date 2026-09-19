@@ -26,6 +26,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
             schedule.term_id,
             schedule.term_start_date
         ),
+        (None, Some(schedule)) => format!("学期 {} · 教学周范围外", schedule.term_id),
         _ => "未获取课表".to_string(),
     };
     let title = Paragraph::new(format!("{} · {}", today_date_label(), week_text))
@@ -36,9 +37,22 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
 
     // Today courses
     let courses = app.today_courses();
-    let mut lines = vec![format!("今天共 {} 门课", courses.len())];
+    let mut lines = vec![format!("今天共 {} 项安排", courses.len())];
     for course in &courses {
-        let time = if course.time_range.is_empty() {
+        let time = if where_to_study_lib::academic::is_exam(course) {
+            where_to_study_lib::academic::course_minutes(course).map_or_else(
+                || "全天 · 时间待定".into(),
+                |(start, end)| {
+                    format!(
+                        "{:02}:{:02}-{:02}:{:02}",
+                        start / 60,
+                        start % 60,
+                        end / 60,
+                        end % 60
+                    )
+                },
+            )
+        } else if course.time_range.is_empty() {
             format!("第{}-{}节", course.start_slot + 1, course.end_slot + 1)
         } else {
             course.time_range.clone()
@@ -48,7 +62,15 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         } else {
             course.room.clone()
         };
-        lines.push(format!("  {}  {time}  {room}", course.name));
+        lines.push(format!(
+            "  {}{}  {time}  {room}",
+            if where_to_study_lib::academic::is_exam(course) {
+                "考试 · "
+            } else {
+                ""
+            },
+            course.name
+        ));
     }
     if lines.len() == 1 {
         lines.push("  （今天没有课程）".to_string());

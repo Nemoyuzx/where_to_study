@@ -1,6 +1,7 @@
 // 系统日历导入的纯逻辑（计划/草稿/同步计划/标记），对应 iOS 端
 // CalendarImportLogic。无平台依赖，可被主机侧单元测试引用。
 import { Course, ScheduleSnapshot, SlotMetadata } from '../common/Models';
+import { ScheduleLogic } from '../common/ScheduleLogic';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { Utf8 } from '../common/Utf8';
 import { FavoriteDeadlineCodec, PublicDeadlineItem } from '../net/CalendarDailyInfoClient';
@@ -13,15 +14,17 @@ export class CalendarEventDraft {
   readonly notes: string;
   readonly startEpochMs: number;
   readonly endEpochMs: number;
+  readonly allDay: boolean;
 
   constructor(marker: string, title: string, location: string, notes: string,
-    startEpochMs: number, endEpochMs: number) {
+    startEpochMs: number, endEpochMs: number, allDay: boolean = false) {
     this.marker = marker;
     this.title = title;
     this.location = location;
     this.notes = notes;
     this.startEpochMs = startEpochMs;
     this.endEpochMs = endEpochMs;
+    this.allDay = allDay;
   }
 }
 
@@ -60,10 +63,11 @@ export class CalendarExistingEvent {
   readonly calendarIdentifier: string;
   readonly timeZoneIdentifier: string | null;
   readonly reminderMinutes: number[];
+  readonly allDay: boolean;
 
   constructor(identifier: string, marker: string | null, title: string, location: string,
     notes: string, startEpochMs: number, endEpochMs: number, calendarIdentifier: string,
-    timeZoneIdentifier: string | null, reminderMinutes: number[]) {
+    timeZoneIdentifier: string | null, reminderMinutes: number[], allDay: boolean = false) {
     this.identifier = identifier;
     this.marker = marker;
     this.title = title;
@@ -74,6 +78,7 @@ export class CalendarExistingEvent {
     this.calendarIdentifier = calendarIdentifier;
     this.timeZoneIdentifier = timeZoneIdentifier;
     this.reminderMinutes = reminderMinutes;
+    this.allDay = allDay;
   }
 }
 
@@ -188,10 +193,15 @@ export class CalendarImportLogic {
     const termWeeks: number = Math.max(CalendarImportLogic.minimumTermWeeks, maximumWeek);
     const termEnd: DateParts = StrictDates.addDays(termStart, termWeeks * 7);
     const drafts: CalendarEventDraft[] = CalendarImportLogic.eventDraftsFrom(schedule, termStart, slots);
+    let scopeStart: number = CalendarImportLogic.dayStartEpochMs(termStart);
+    let scopeEnd: number = CalendarImportLogic.dayStartEpochMs(termEnd);
+    for (const draft of drafts) {
+      scopeStart = Math.min(scopeStart, draft.startEpochMs);
+      scopeEnd = Math.max(scopeEnd, draft.endEpochMs);
+    }
     return new CalendarScheduleImportPlan(
       new CalendarImportScope(
-        CalendarImportLogic.dayStartEpochMs(termStart),
-        CalendarImportLogic.dayStartEpochMs(termEnd)
+        scopeStart, scopeEnd
       ),
       drafts
     );
@@ -281,6 +291,10 @@ export class CalendarImportLogic {
       for (const week of weeks) {
         const dayOffset: number = (week - 1) * 7 + (course.weekday - 1);
         const day: DateParts = StrictDates.addDays(termStart, dayOffset);
+        if (!ScheduleLogic.effectiveCoursesOn(day, schedule, slots).some(
+          (effective: Course) => effective.eventKind !== 'exam' && effective.id === course.id)) {
+          continue;
+        }
         const startEpochMs: number | null = CalendarImportLogic.dateEpochMs(day, startTime);
         const endEpochMs: number | null = CalendarImportLogic.dateEpochMs(day, endTime);
         if (startEpochMs === null || endEpochMs === null || endEpochMs <= startEpochMs) {
@@ -302,6 +316,26 @@ export class CalendarImportLogic {
         detailLines.push(marker);
         drafts.push(new CalendarEventDraft(
           marker, course.name, course.room, detailLines.join('\n'), startEpochMs, endEpochMs));
+      }
+    }
+    if (schedule.examSchedule?.termID === schedule.termID && schedule.examSchedule.status !== 'failed') {
+      for (const exam of schedule.examSchedule.items) {
+        const day: DateParts | null = StrictDates.parseDateString(exam.date);
+        if (day === null) { continue; }
+        const event: Course | null = ScheduleLogic.examCourse(exam, termStart);
+        if (event === null) { continue; }
+        const timed: boolean = ScheduleLogic.hasTime(event);
+        const start: number | null = timed ? CalendarImportLogic.dateEpochMs(day, exam.startTime) :
+          CalendarImportLogic.dayStartEpochMs(day);
+        const end: number | null = timed ? CalendarImportLogic.dateEpochMs(day, exam.endTime) :
+          CalendarImportLogic.dayStartEpochMs(StrictDates.addDays(day, 1));
+        if (start === null || end === null || end <= start) { continue; }
+        const marker: string = CalendarImportLogic.eventMarker(schedule.termID, exam.id, 0);
+        if (markers.has(marker)) { continue; }
+        markers.add(marker);
+        drafts.push(new CalendarEventDraft(marker, '考试 · ' + exam.name, exam.room,
+          (timed ? exam.timeText : '时间待定 · ' + exam.timeText) + '\n由 Where To Study 导入\n' + marker,
+          start, end, !timed));
       }
     }
     drafts.sort((lhs: CalendarEventDraft, rhs: CalendarEventDraft) => {
@@ -419,9 +453,11 @@ export class CalendarImportLogic {
       event.notes === draft.notes &&
       event.startEpochMs === draft.startEpochMs &&
       event.endEpochMs === draft.endEpochMs &&
+      event.allDay === draft.allDay &&
       event.calendarIdentifier === destinationCalendarIdentifier &&
       event.timeZoneIdentifier === CalendarImportLogic.shanghaiTimeZoneId &&
-      CalendarImportLogic.equalReminderMinutes(event.reminderMinutes, [CalendarImportLogic.reminderOffsetMinutes]);
+      CalendarImportLogic.equalReminderMinutes(event.reminderMinutes,
+        draft.allDay ? [] : [CalendarImportLogic.reminderOffsetMinutes]);
   }
 
   private static equalReminderMinutes(lhs: number[], rhs: number[]): boolean {

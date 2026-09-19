@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import GradesPanel from './GradesPanel.jsx'
 import {
   AlertTriangle,
   BusFront,
@@ -91,6 +92,8 @@ export default function QueryHub({
   isFavorite,
   language,
   onToggleFavorite,
+  hasAcademicAccount = false,
+  onOpenAccount,
   t,
 }) {
   const [tab, setTab] = useState('shuttle')
@@ -244,7 +247,11 @@ export default function QueryHub({
         <button type="button" role="tab" aria-selected={tab === 'events'} className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
           <CalendarClock size={17} />{t('重要事件')}
         </button>
+        <button type="button" role="tab" aria-selected={tab === 'grades'} className={tab === 'grades' ? 'active' : ''} onClick={() => setTab('grades')}>
+          <CheckCircle2 size={17} />{language === 'en' ? 'Grades' : '成绩查询'}
+        </button>
       </div>
+      <GradesPanel command={command} language={language} enabled={tab === 'grades'} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount} />
 
       {tab === 'shuttle' ? (
         <div className="query-shuttle" role="tabpanel">
@@ -312,7 +319,7 @@ export default function QueryHub({
             </>
           ) : null}
         </div>
-      ) : (
+      ) : tab === 'events' ? (
         <div className="query-events" role="tabpanel">
           <header className="query-section-header">
             <div><span>{t('公开活动与校内通知')}</span><h2>{t('按截止时间查找重要事件')}</h2></div>
@@ -359,7 +366,7 @@ export default function QueryHub({
           {favoriteOnlyMissing.length ? <p className="query-source-note">{t('另有 {count} 条已收藏事件因当前筛选或来源变化未列出，可在收藏管理中查看。', { count: favoriteOnlyMissing.length })}</p> : null}
           <p className="query-source-note">{t('第三方来源：Contest DDL 与校内竞赛通知脚本；不包含课程作业 DDL，所有时间请以官方原文为准。')} <a href="https://where-to-study.cn/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a> · <a href="https://where-to-study.cn/api/contest-notices" target="_blank" rel="noreferrer">contest-notices API</a></p>
         </div>
-      )}
+      ) : null}
     </section>
   )
 }

@@ -203,6 +203,7 @@ enum HolidayDisplayLogic {
 @MainActor
 final class AppModel: ObservableObject {
     let navigation = PrimaryNavigationState()
+    let gradeStore: GradeQueryStore
     @Published private(set) var colorTheme: ColorThemeConfiguration
     @Published var account = "" {
         didSet {
@@ -306,6 +307,7 @@ final class AppModel: ObservableObject {
         scheduleStore: any ScheduleStoring = FileScheduleStore(),
         courseDeletionStore: any CourseDeletionStoring = FileCourseDeletionStore(),
         scheduleClient: any ScheduleFetching = SJDScheduleClient(),
+        gradeClient: any GradeFetching = SJDGradeClient(),
         classroomStore: any ClassroomStoring = FileClassroomStore(),
         classroomClient: any ClassroomFetching = SJDClassroomClient(),
         holidayStore: any HolidayStoring = FileHolidayStore(),
@@ -330,6 +332,7 @@ final class AppModel: ObservableObject {
         self.scheduleStore = scheduleStore
         self.courseDeletionStore = courseDeletionStore
         self.scheduleClient = scheduleClient
+        gradeStore = GradeQueryStore(client: gradeClient)
         self.classroomStore = classroomStore
         self.classroomClient = classroomClient
         self.holidayStore = holidayStore
@@ -451,7 +454,7 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func deleteCourse(_ course: Course, on date: Date, scope: CourseDeletionScope) -> Bool {
-        guard !isSampleMode, !courseDeletionLoadFailed,
+        guard !isSampleMode, !course.isExam, !courseDeletionLoadFailed,
               let snapshot = rawSchedule, let savedCredentialAccount,
               snapshot.courses.contains(where: { $0.id == course.id })
         else {
@@ -521,7 +524,13 @@ final class AppModel: ObservableObject {
             return
         }
         schedule = snapshot.map {
-            isSampleMode ? $0 : CourseDeletionLogic.applying(courseDeletions, to: $0, account: savedCredentialAccount ?? "")
+            var scoped = $0
+            if !isSampleMode, let exams = scoped.examSchedule,
+               exams.accountKey != CourseDeletionLogic.accountKey(savedCredentialAccount ?? "") || exams.termID != scoped.termID
+                    || !["fresh", "stale", "failed"].contains(exams.status) {
+                scoped.examSchedule = nil
+            }
+            return isSampleMode ? scoped : CourseDeletionLogic.applying(courseDeletions, to: scoped, account: savedCredentialAccount ?? "")
         }
     }
 
@@ -548,7 +557,7 @@ final class AppModel: ObservableObject {
             let schedule,
             let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [] }
-        return ScheduleLogic.courses(on: date, termStart: termStart, courses: schedule.courses)
+        return ScheduleLogic.courses(on: date, termStart: termStart, courses: schedule.courses, exams: schedule.examSchedule)
     }
 
     func weekNumber(on date: Date) -> Int? {
@@ -564,7 +573,7 @@ final class AppModel: ObservableObject {
             let schedule,
             let termStart = StrictContractDateParser.date(from: schedule.termStartDate)
         else { return [] }
-        return ScheduleLogic.busySlots(on: .now, termStart: termStart, courses: schedule.courses)
+        return ScheduleLogic.busySlots(on: .now, termStart: termStart, courses: schedule.courses, exams: schedule.examSchedule)
     }
 
     var campusRooms: [Classroom] {
@@ -784,10 +793,13 @@ final class AppModel: ObservableObject {
                 updateSavedCredentialState(storedCredentials)
             case let .replace(credentials):
                 try credentialStore.save(credentials)
+                if !accountChanged, storedCredentials?.password != credentials.password { invalidatePendingAccountRequests() }
+                gradeStore.reset()
                 updateSavedCredentialState(credentials)
                 assignmentCredentialRevision &+= 1
             case .clear:
                 try credentialStore.clear()
+                gradeStore.reset()
                 updateSavedCredentialState(nil)
                 assignmentCredentialRevision &+= 1
             }
@@ -1274,11 +1286,20 @@ final class AppModel: ObservableObject {
                     fallbackTermStartDate: fallbackTermStart
                 )
                 guard generation == localDataGeneration, refreshToken == scheduleRefreshToken else { return }
-                let resolvedSchedule = usesAutomaticTermDetection ? fetched : ScheduleSnapshot(
+                var resolvedSchedule = usesAutomaticTermDetection ? fetched : ScheduleSnapshot(
                     termID: fallbackTermID,
                     termStartDate: fallbackTermStart,
                     fetchedAt: fetched.fetchedAt,
-                    courses: fetched.courses
+                    courses: fetched.courses,
+                    examSchedule: fetched.examSchedule.map { exams in exams.termID == fallbackTermID ? exams : ExamSchedule(
+                        termID: fallbackTermID, accountKey: CourseDeletionLogic.accountKey(credentials.account),
+                        fetchedAt: fetched.fetchedAt, status: "failed",
+                        message: "考试安排的学期与手动课表学期不一致，请启用自动学期后重试。", items: []
+                    ) }
+                )
+                resolvedSchedule.examSchedule = ExamScheduleCachePolicy.resolve(
+                    resolvedSchedule.examSchedule, previous: rawSchedule?.examSchedule,
+                    termID: resolvedSchedule.termID, accountKey: CourseDeletionLogic.accountKey(credentials.account)
                 )
                 let saved = try await localDataPersistence.saveSchedule(
                     resolvedSchedule, to: scheduleStore, generation: generation
@@ -1317,6 +1338,20 @@ final class AppModel: ObservableObject {
         ) else { return }
         hasRequestedAutomaticScheduleRefresh = true
         refreshSchedule()
+    }
+
+    func loadGrades(termID: String? = nil, recordType: String = "1", force: Bool = false) async {
+        if isSampleMode {
+            await gradeStore.loadSample(termID: termID, recordType: recordType)
+            return
+        }
+        do {
+            let credentials = try credentialsForRequest()
+            await gradeStore.load(credentials: credentials, ownerRevision: localDataGeneration + assignmentCredentialRevision,
+                                  termID: termID, recordType: recordType, force: force)
+        } catch {
+            gradeStore.fail(message: "请先在个人账户中保存教务账号和密码。")
+        }
     }
 
     private func setStatusMessage(_ message: String, autoDismiss: Bool = false) {
@@ -1636,6 +1671,7 @@ final class AppModel: ObservableObject {
     }
 
     private func invalidatePendingAccountRequests() {
+        gradeStore.reset()
         localDataGeneration &+= 1
         localDataPersistence.invalidate(generation: localDataGeneration)
         initialLocalDataTask?.cancel()

@@ -136,6 +136,12 @@ pub struct SettingsSavePlan {
 }
 
 impl SettingsSavePlan {
+    pub fn academic_credentials_changed(&self) -> bool {
+        self.previous_credentials.as_ref().is_none_or(|previous| {
+            previous.account != self.credentials.account
+                || previous.password != self.credentials.password
+        })
+    }
     pub fn assignment_credentials_changed(&self) -> bool {
         self.previous_credentials.as_ref().is_none_or(|previous| {
             previous.account != self.credentials.account
@@ -654,6 +660,70 @@ mod tests {
 
     const FIXTURE_SCOPE: &str =
         "opaque-v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn academic_password_change_invalidates_academic_queries_with_unchanged_independent_cloud_password(
+    ) {
+        let mut previous = fixture_credentials("fixture-account", "old-academic");
+        previous.teaching_cloud_password = Some("independent-cloud".into());
+        let plan = prepare_save_with(fixture_request(Some("new-academic")), || Ok(Some(previous)))
+            .expect("prepare academic-only credential change");
+
+        assert!(plan.academic_credentials_changed());
+        assert!(!plan.assignment_credentials_changed());
+        assert!(!plan.account_changed());
+        assert_eq!(plan.credentials.password, "new-academic");
+        assert_eq!(plan.credentials.assignment_password(), "independent-cloud");
+    }
+
+    #[test]
+    fn cloud_password_change_does_not_invalidate_unchanged_academic_credentials() {
+        let mut previous = fixture_credentials("fixture-account", "academic");
+        previous.teaching_cloud_password = Some("old-cloud".into());
+        let mut request = fixture_request(None);
+        request.teaching_cloud_password = Some("new-cloud".into());
+        let plan = prepare_save_with(request, || Ok(Some(previous)))
+            .expect("prepare cloud-only credential change");
+
+        assert!(!plan.academic_credentials_changed());
+        assert!(plan.assignment_credentials_changed());
+        assert!(!plan.account_changed());
+        assert_eq!(plan.credentials.password, "academic");
+    }
+
+    #[test]
+    fn same_credentials_and_unrelated_preferences_do_not_invalidate_academic_queries() {
+        let mut previous = fixture_credentials("fixture-account", "academic");
+        previous.teaching_cloud_password = Some("independent-cloud".into());
+        for password in [None, Some("academic")] {
+            let unchanged =
+                prepare_save_with(fixture_request(password), || Ok(Some(previous.clone())))
+                    .expect("prepare unchanged credentials");
+            assert!(!unchanged.academic_credentials_changed());
+            assert!(!unchanged.assignment_credentials_changed());
+
+            let mut preferences = fixture_request(password);
+            preferences.campus_id = "04".into();
+            preferences.daily_course_notification_minutes = 450;
+            let plan = prepare_save_with(preferences, || Ok(Some(previous.clone())))
+                .expect("prepare unrelated preferences");
+            assert!(!plan.academic_credentials_changed());
+            assert!(!plan.assignment_credentials_changed());
+        }
+    }
+
+    #[test]
+    fn changed_account_invalidates_academic_queries_even_when_password_text_is_unchanged() {
+        let previous = fixture_credentials("fixture-account", "same-academic");
+        let mut request = fixture_request(Some("same-academic"));
+        request.account = "other-account".into();
+        let plan =
+            prepare_save_with(request, || Ok(Some(previous))).expect("prepare changed account");
+
+        assert!(plan.academic_credentials_changed());
+        assert!(plan.assignment_credentials_changed());
+        assert!(plan.account_changed());
+    }
 
     #[test]
     fn independent_cloud_password_preserves_blanks_clears_explicitly_and_never_crosses_accounts() {

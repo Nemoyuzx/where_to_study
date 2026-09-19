@@ -104,9 +104,11 @@ test('reported all-day, year, slot and course labels retain their non-PC font re
     ['ExpandedTeachingCalendarView', 'yearDayButton', {}, [9]],
     ['MobileCalendarTimelineView', 'slotAxisLabel', {}, [10, 9]],
     ['MobileCalendarTimelineView', 'slotGuide', {}, [9]],
-    ['MobileCalendarTimelineView', 'courseBlockForExpanded', { showsWeekColumns: true }, [9, 8, 8]],
-    ['MobileCalendarTimelineView', 'courseBlockForExpanded', { showsWeekColumns: false }, [11, 9, 9]],
-    ['MobileCalendarTimelineView', 'courseBlockForWeek', {}, [10, 8, 10, 10, 10]],
+    // The explicit exam badge precedes the original course labels. Every
+    // pre-existing request stays intact, and the badge shares the PC floor.
+    ['MobileCalendarTimelineView', 'courseBlockForExpanded', { showsWeekColumns: true }, [9, 9, 8, 8]],
+    ['MobileCalendarTimelineView', 'courseBlockForExpanded', { showsWeekColumns: false }, [9, 11, 9, 9]],
+    ['MobileCalendarTimelineView', 'courseBlockForWeek', {}, [9, 10, 8, 10, 10, 10]],
     ['MobileTeachingCalendarView', 'weekDateStrip', {}, [9.5, 9.5]],
     ['MobileTeachingCalendarView', 'dateStripButton', {}, [11, 11, 8]],
     ['MobileTeachingCalendarView', 'weekAllDayItems', {}, [11, 9.5]],

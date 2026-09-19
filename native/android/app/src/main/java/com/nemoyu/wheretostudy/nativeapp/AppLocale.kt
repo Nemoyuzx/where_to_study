@@ -78,6 +78,38 @@ object UiText {
         "班车查询" to "Shuttle Search",
         "信息查询" to "Information Search",
         "重要事件" to "Important Events",
+        "成绩查询" to "Grades",
+        "成绩" to "Grade",
+        "学分" to "Credits",
+        "未公布" to "Not published",
+        "考试" to "Exam",
+        "考试安排" to "Exam Arrangements",
+        "日期待定" to "Date to be announced",
+        "时间待定" to "Time to be announced",
+        "考试时间待定" to "Exam time to be announced",
+        "全部学期" to "All semesters",
+        "当前学期" to "Current semester",
+        "选择学期" to "Select Semester",
+        "最好成绩" to "Best grades",
+        "首次成绩" to "First attempts",
+        "全部记录" to "All attempts",
+        "成绩记录" to "Grade Records",
+        "刷新成绩" to "Refresh Grades",
+        "正在获取成绩…" to "Loading grades…",
+        "前往账号设置" to "Open Account Settings",
+        "请先在设置中保存教务账号和密码，再查询成绩。" to "Save your academic account and password in Settings to view grades.",
+        "成绩来自学校教务系统，仅在本次使用期间保留。" to "Grades come from the university system and remain in memory for this session only.",
+        "该学期暂无已公布成绩" to "No grades have been published for this semester.",
+        "该学期暂无已公布成绩，可选择全部学期查看历史成绩。" to "No grades have been published for this semester. Select All semesters to view past grades.",
+        "暂无已公布成绩" to "No grades have been published.",
+        "成绩获取失败，请重试或检查账号设置。" to "Unable to fetch grades. Retry or check account settings.",
+        "成绩刷新失败，正在显示本次使用中已获取的成绩。" to "Refresh failed. Showing grades fetched earlier in this session.",
+        "本学期暂无考试安排" to "No exams are currently scheduled for this semester.",
+        "部分考试日期或时间待定，请查看考试安排" to "Some exam dates or times are pending. Open Exam Arrangements for details.",
+        "考试安排已同步" to "Exam arrangements are up to date.",
+        "考试安排刷新失败，正在显示本账号本学期的缓存" to "Exam refresh failed. Showing this account's cached exams for this semester.",
+        "考试安排获取失败，请重新刷新课表" to "Unable to fetch exams. Refresh your schedule to retry.",
+        "尚未获取考试安排，请刷新课表" to "Exam arrangements have not been fetched. Refresh your schedule.",
         "返回" to "Back",
         "联动查询" to "Linked Search",
         "查询条件" to "Search Filters",
@@ -396,6 +428,8 @@ object UiText {
     fun resolve(context: Context, source: String): String {
         if (!AppLocale.isEnglish(context) || source.isEmpty()) return source
         exactEnglish[source]?.let { return it }
+        Regex("^学期：(.+)$").matchEntire(source)?.let { return "Semester: ${resolve(context, it.groupValues[1])}" }
+        Regex("^平均学分绩点：(.+)$").matchEntire(source)?.let { return "Average grade point: ${it.groupValues[1]}" }
         Regex("^(\\d+) 门课$").matchEntire(source)?.let { return "${it.groupValues[1]} courses" }
         Regex("^(\\d+) 门$").matchEntire(source)?.let { return "${it.groupValues[1]} courses" }
         Regex("^收藏管理（(\\d+)）$").matchEntire(source)?.let {

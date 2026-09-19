@@ -1,23 +1,162 @@
 use chrono::{Datelike, Duration, NaiveDate};
+use where_to_study_lib::academic::{self, GradeReport};
 use where_to_study_lib::error::ServiceResult;
 use where_to_study_lib::models::{ClassroomsResponse, Course, HolidaysResponse, ScheduleResponse};
 use where_to_study_lib::public_queries::{TodayShuttlePresentation, TodayShuttleRoute};
 
 const WEEKDAY_LABELS: [&str; 7] = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
-fn day_courses(schedule: &ScheduleResponse, date: NaiveDate, week: i64) -> Vec<&Course> {
-    let weekday = date.weekday().num_days_from_monday() as i64 + 1;
+#[cfg(test)]
+mod academic_tests {
+    use super::*;
+    use where_to_study_lib::academic::GradeItem;
+
+    #[test]
+    fn grade_output_preserves_zero_qualitative_missing_and_school_gpa() {
+        let mut report = GradeReport {
+            items: vec![
+                GradeItem {
+                    name: "合成零分".into(),
+                    score: "0".into(),
+                    credits: "0".into(),
+                    semester_name: "合成学期".into(),
+                    ..Default::default()
+                },
+                GradeItem {
+                    name: "合成文字".into(),
+                    score: "优秀".into(),
+                    ..Default::default()
+                },
+                GradeItem {
+                    name: "合成未公布".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let text = grade_report_text(&report);
+        assert!(text.contains("成绩：0  学分：0"));
+        assert!(text.contains("成绩：优秀"));
+        assert!(text.contains("成绩：未公布"));
+        assert!(text.contains("合成学期"));
+        assert!(!text.contains("平均学分绩点"));
+        report.average_grade_point = "0".into();
+        assert!(grade_report_text(&report).contains("平均学分绩点：0"));
+    }
+}
+
+pub fn day_courses(schedule: &ScheduleResponse, date: NaiveDate) -> Vec<&Course> {
+    let Ok(start) = NaiveDate::parse_from_str(&schedule.term_start_date, "%Y-%m-%d") else {
+        return vec![];
+    };
     let mut courses: Vec<&Course> = schedule
         .courses
         .iter()
-        .filter(|course| course.weekday == weekday && course.week_numbers.contains(&week))
+        .filter(|course| academic::occurs_on(course, date, start))
         .collect();
-    courses.sort_by(|a, b| a.start_slot.cmp(&b.start_slot).then(a.name.cmp(&b.name)));
+    courses.sort_by(|a, b| {
+        academic::course_minutes(a)
+            .cmp(&academic::course_minutes(b))
+            .then(a.name.cmp(&b.name))
+    });
     courses
 }
 
-fn slot_label(index: usize) -> String {
-    format!("第 {} 节", index + 1)
+pub fn course_time(course: &Course) -> String {
+    match academic::course_minutes(course) {
+        Some((start, end)) => format!(
+            "{:02}:{:02}-{:02}:{:02}",
+            start / 60,
+            start % 60,
+            end / 60,
+            end % 60
+        ),
+        None => "全天 · 时间待定".into(),
+    }
+}
+
+pub fn exam_status(schedule: &ScheduleResponse) -> String {
+    match &schedule.exam_schedule {
+        None => "尚未获取考试安排。".into(),
+        Some(exams) => {
+            let state = match exams.status.as_str() {
+                "failed" => "考试安排获取失败",
+                "stale" => "考试安排为旧缓存",
+                _ if exams.items.is_empty() => "暂无考试安排",
+                _ => "考试安排已同步",
+            };
+            let pending = exams
+                .items
+                .iter()
+                .filter(|exam| exam.date.is_empty())
+                .map(|exam| exam.name.as_str())
+                .collect::<Vec<_>>();
+            format!(
+                "{state}。{}{}",
+                exams.message,
+                if pending.is_empty() {
+                    String::new()
+                } else {
+                    format!(" 日期待定：{}", pending.join("、"))
+                }
+            )
+        }
+    }
+}
+
+pub fn grade_report_text(report: &GradeReport) -> String {
+    let term = if report.term_id.is_empty() {
+        "全部学期"
+    } else {
+        &report.term_id
+    };
+    let records = match report.record_type.as_str() {
+        "1" => "最好成绩",
+        "0" => "首次成绩",
+        _ => "全部记录",
+    };
+    let mut lines = vec![format!(
+        "{term} · {records} · {} 条成绩",
+        report.items.len()
+    )];
+    if !report.average_grade_point.is_empty() {
+        lines.push(format!("平均学分绩点：{}", report.average_grade_point));
+    }
+    if report.items.is_empty() {
+        lines.push("暂无已公布成绩；可使用 --all-terms 查看全部学期。".into());
+    }
+    for item in &report.items {
+        lines.push(format!(
+            "{}  成绩：{}  学分：{}  {}",
+            item.name,
+            if item.score.is_empty() {
+                "未公布"
+            } else {
+                &item.score
+            },
+            if item.credits.is_empty() {
+                "未公布"
+            } else {
+                &item.credits
+            },
+            item.semester_name
+        ));
+        let details = [
+            &item.course_code,
+            &item.course_attribute,
+            &item.course_nature,
+            &item.exam_nature,
+            &item.grade_status,
+        ]
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+        if !details.is_empty() {
+            lines.push(format!("  {}", details.join(" · ")));
+        }
+    }
+    lines.join("\n")
 }
 
 pub fn print_schedule_day(
@@ -26,33 +165,30 @@ pub fn print_schedule_day(
     week: i64,
 ) -> ServiceResult<()> {
     let weekday = WEEKDAY_LABELS[date.weekday().num_days_from_monday() as usize];
-    let courses = day_courses(schedule, date, week);
+    let courses = day_courses(schedule, date);
     println!(
-        "{} {} · 公历第 {} 周 · 教学第 {} 周 · {} 门课",
+        "{} {} · 公历第 {} 周 · {} · {} 项安排",
         date.format("%Y-%m-%d"),
         weekday,
         date.iso_week().week(),
-        week,
+        if week > 0 {
+            format!("教学第 {week} 周")
+        } else {
+            "教学周范围外".into()
+        },
         courses.len()
     );
     println!(
         "学期 {}（第一周周一 {}）",
         schedule.term_id, schedule.term_start_date
     );
+    println!("{}", exam_status(schedule));
     if courses.is_empty() {
         println!("今天没有课程。");
         return Ok(());
     }
     for course in &courses {
-        let time = if course.time_range.is_empty() {
-            format!(
-                "{}-{}",
-                slot_label(course.start_slot),
-                slot_label(course.end_slot)
-            )
-        } else {
-            course.time_range.clone()
-        };
+        let time = course_time(course);
         let room = if course.room.is_empty() {
             "地点未标注"
         } else {
@@ -63,7 +199,18 @@ pub fn print_schedule_day(
         } else {
             &course.teacher
         };
-        println!("  {}  {}  {}  {}", course.name, time, room, teacher);
+        println!(
+            "  {}{}  {}  {}  {}",
+            if academic::is_exam(course) {
+                "考试 · "
+            } else {
+                ""
+            },
+            course.name,
+            time,
+            room,
+            teacher
+        );
     }
     Ok(())
 }
@@ -79,14 +226,19 @@ pub fn print_schedule_week(
         ))
         .unwrap_or(date);
     println!(
-        "公历第 {} 周 · 教学第 {} 周（{} 起）",
+        "公历第 {} 周 · {}（{} 起）",
         monday.iso_week().week(),
-        week,
+        if week > 0 {
+            format!("教学第 {week} 周")
+        } else {
+            "教学周范围外".into()
+        },
         monday.format("%Y-%m-%d")
     );
+    println!("{}", exam_status(schedule));
     for offset in 0..7 {
         let day = monday + Duration::days(offset);
-        let courses = day_courses(schedule, day, week);
+        let courses = day_courses(schedule, day);
         let weekday = WEEKDAY_LABELS[offset as usize];
         if courses.is_empty() {
             println!("  {} {}：无课", day.format("%m-%d"), weekday);
@@ -94,21 +246,23 @@ pub fn print_schedule_week(
         }
         println!("  {} {}：", day.format("%m-%d"), weekday);
         for course in &courses {
-            let time = if course.time_range.is_empty() {
-                format!(
-                    "{}-{}",
-                    slot_label(course.start_slot),
-                    slot_label(course.end_slot)
-                )
-            } else {
-                course.time_range.clone()
-            };
+            let time = course_time(course);
             let room = if course.room.is_empty() {
                 "地点未标注"
             } else {
                 &course.room
             };
-            println!("    {}  {}  {}", course.name, time, room);
+            println!(
+                "    {}{}  {}  {}",
+                if academic::is_exam(course) {
+                    "考试 · "
+                } else {
+                    ""
+                },
+                course.name,
+                time,
+                room
+            );
         }
     }
     Ok(())

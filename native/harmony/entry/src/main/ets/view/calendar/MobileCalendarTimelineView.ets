@@ -2,6 +2,7 @@
 // 08:00–22:00，每小时 72vp，共 1008vp；左侧小时轴 + 网格线 + 课程块 +
 // 当前时间红线。用普通组件定位代替 Canvas，避免画布 API 的平台差异。
 import { Course, SlotMetadata } from '../../common/Models';
+import { ScheduleLogic } from '../../common/ScheduleLogic';
 import { DateParts, StrictDates } from '../../common/StrictDates';
 import { AppTheme } from '../../common/AppTheme';
 import { CalendarTypography } from '../../common/CalendarTypography';
@@ -38,6 +39,20 @@ export class MobileCalendarTimelineLayout {
       result.push(hour);
     }
     return result;
+  }
+
+  static timeBounds(days: CalendarTimelineDay[]): number[] {
+    let start: number = MobileCalendarTimelineLayout.startMinute;
+    let end: number = MobileCalendarTimelineLayout.endMinute;
+    for (const day of days) {
+      for (const course of day.courses) {
+        if (ScheduleLogic.hasTime(course)) {
+          start = Math.min(start, Math.floor((ScheduleLogic.startMinute(course) ?? start) / 60) * 60);
+          end = Math.max(end, Math.ceil((ScheduleLogic.endMinute(course) ?? end) / 60) * 60);
+        }
+      }
+    }
+    return [start, end];
   }
 
   static yPosition(minute: number): number {
@@ -211,7 +226,21 @@ export struct MobileCalendarTimelineView {
   private scroller: Scroller = new Scroller();
   private timerId: number = -1;
   private viewVisible: boolean = true;
-  private readonly hours: number[] = MobileCalendarTimelineLayout.hours();
+  private axisStartMinute(): number {
+    return MobileCalendarTimelineLayout.timeBounds(this.days)[0];
+  }
+
+  private axisEndMinute(): number {
+    return MobileCalendarTimelineLayout.timeBounds(this.days)[1];
+  }
+
+  private hours(): number[] {
+    const result: number[] = [];
+    for (let hour: number = this.axisStartMinute() / 60; hour <= this.axisEndMinute() / 60; hour++) {
+      result.push(hour);
+    }
+    return result;
+  }
 
   aboutToAppear(): void {
     this.startTimerIfNeeded();
@@ -276,7 +305,7 @@ export struct MobileCalendarTimelineView {
   }
 
   private bodyHeight(): number {
-    return (MobileCalendarTimelineLayout.endMinute - MobileCalendarTimelineLayout.startMinute) / 60 *
+    return (this.axisEndMinute() - this.axisStartMinute()) / 60 *
       this.hourHeight();
   }
 
@@ -289,9 +318,8 @@ export struct MobileCalendarTimelineView {
   }
 
   private yPos(minute: number): number {
-    const clamped: number = Math.min(Math.max(minute, MobileCalendarTimelineLayout.startMinute),
-      MobileCalendarTimelineLayout.endMinute);
-    return (clamped - MobileCalendarTimelineLayout.startMinute) / 60 * this.hourHeight();
+    const clamped: number = Math.min(Math.max(minute, this.axisStartMinute()), this.axisEndMinute());
+    return (clamped - this.axisStartMinute()) / 60 * this.hourHeight();
   }
 
   private shanghaiMinuteOfDay(): number {
@@ -324,12 +352,13 @@ export struct MobileCalendarTimelineView {
   }
 
   static placeCourses(courses: Course[]): CoursePlacement[] {
-    const sorted: Course[] = courses.slice().sort((lhs: Course, rhs: Course) => {
-      if (lhs.startSlot !== rhs.startSlot) {
-        return lhs.startSlot - rhs.startSlot;
+    const sorted: Course[] = courses.filter((course: Course) => ScheduleLogic.hasTime(course))
+      .sort((lhs: Course, rhs: Course) => {
+      if (ScheduleLogic.startMinute(lhs) !== ScheduleLogic.startMinute(rhs)) {
+        return (ScheduleLogic.startMinute(lhs) ?? 0) - (ScheduleLogic.startMinute(rhs) ?? 0);
       }
-      if (lhs.endSlot !== rhs.endSlot) {
-        return lhs.endSlot - rhs.endSlot;
+      if (ScheduleLogic.endMinute(lhs) !== ScheduleLogic.endMinute(rhs)) {
+        return (ScheduleLogic.endMinute(lhs) ?? 0) - (ScheduleLogic.endMinute(rhs) ?? 0);
       }
       return lhs.name < rhs.name ? -1 : (lhs.name > rhs.name ? 1 : 0);
     });
@@ -338,16 +367,16 @@ export struct MobileCalendarTimelineView {
     for (const course of sorted) {
       let track: number = -1;
       for (let i = 0; i < trackEnds.length; i++) {
-        if (trackEnds[i] < course.startSlot) {
+        if (trackEnds[i] <= (ScheduleLogic.startMinute(course) ?? 0)) {
           track = i;
           break;
         }
       }
       if (track < 0) {
         track = trackEnds.length;
-        trackEnds.push(course.endSlot);
+        trackEnds.push(ScheduleLogic.endMinute(course) ?? 0);
       } else {
-        trackEnds[track] = course.endSlot;
+        trackEnds[track] = ScheduleLogic.endMinute(course) ?? 0;
       }
       result.push(new CoursePlacement(course, track));
     }
@@ -359,7 +388,7 @@ export struct MobileCalendarTimelineView {
       Stack({ alignContent: Alignment.TopStart }) {
         // 左侧整点/节次轴与日期网格使用同一组线型；先画线、后画标签，
         // 保证平板和 PC 宽屏不会只在右侧日期列看到网格。
-        ForEach(this.hours, (hour: number) => {
+        ForEach(this.hours(), (hour: number) => {
           Divider()
             .strokeWidth(this.expanded ? 1 : 0.5)
             .color(AppTheme.border())
@@ -383,7 +412,7 @@ export struct MobileCalendarTimelineView {
 
         // 小时轴
         Column() {
-          ForEach(this.hours, (hour: number) => {
+          ForEach(this.hours(), (hour: number) => {
             if (!this.hourLabelObscured(hour)) {
               Text(CalendarFormatters.hourLabel(hour))
                 .fontSize(CalendarTypography.fontSize(this.expanded ? 10 : 9, this.isPc))
@@ -465,7 +494,7 @@ export struct MobileCalendarTimelineView {
           }
 
           // 小时线
-          ForEach(this.hours, (hour: number) => {
+          ForEach(this.hours(), (hour: number) => {
             Divider()
               .strokeWidth(this.expanded ? 1 : 0.5)
               .color(AppTheme.border())
@@ -610,6 +639,9 @@ export struct MobileCalendarTimelineView {
   @Builder
   courseBlockForExpanded(dayIndex: number, placement: CoursePlacement) {
     Column({ space: 1 }) {
+      if (placement.course.eventKind === 'exam') {
+        Text(this.model.text('考试')).fontSize(CalendarTypography.fontSize(9, this.isPc)).fontWeight(FontWeight.Bold).fontColor(AppTheme.onPrimary())
+      }
       Text(placement.course.name)
         .fontSize(CalendarTypography.fontSize(this.showsWeekColumns ? 9 : 11, this.isPc))
         .fontWeight(FontWeight.Medium)
@@ -643,6 +675,9 @@ export struct MobileCalendarTimelineView {
   @Builder
   courseBlockForDay(dayIndex: number, placement: CoursePlacement) {
     Column({ space: 2 }) {
+      if (placement.course.eventKind === 'exam') {
+        Text(this.model.text('考试')).fontSize(10).fontWeight(FontWeight.Bold).fontColor(AppTheme.onPrimary())
+      }
       Text(placement.course.name)
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
@@ -682,6 +717,9 @@ export struct MobileCalendarTimelineView {
   @Builder
   courseBlockForWeek(dayIndex: number, placement: CoursePlacement) {
     Column({ space: 1 }) {
+      if (placement.course.eventKind === 'exam') {
+        Text(this.model.text('考试')).fontSize(CalendarTypography.fontSize(9, this.isPc)).fontWeight(FontWeight.Bold).fontColor(AppTheme.onPrimary())
+      }
       Text(placement.course.name)
         .fontSize(10)
         .fontWeight(FontWeight.Medium)
@@ -728,13 +766,11 @@ export struct MobileCalendarTimelineView {
   }
 
   private blockStartMinute(course: Course): number {
-    return CalendarTimelineLogic.minuteOf(
-      SlotMetadata.defaults[course.startSlot].start) ?? 0;
+    return ScheduleLogic.startMinute(course) ?? 0;
   }
 
   private blockEndMinute(course: Course): number {
-    return CalendarTimelineLogic.minuteOf(
-      SlotMetadata.defaults[course.endSlot].end) ?? 0;
+    return ScheduleLogic.endMinute(course) ?? 0;
   }
 
   private blockTop(course: Course): number {
@@ -838,8 +874,7 @@ export struct MobileCalendarTimelineView {
 
   private isNowVisible(): boolean {
     const minute: number = this.shanghaiMinuteOfDay();
-    if (minute < MobileCalendarTimelineLayout.startMinute ||
-      minute > MobileCalendarTimelineLayout.endMinute) {
+    if (minute < this.axisStartMinute() || minute > this.axisEndMinute()) {
       return false;
     }
     return this.includesToday();

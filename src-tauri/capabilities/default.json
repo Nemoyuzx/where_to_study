@@ -14,6 +14,8 @@
     "allow-load-saved-classrooms",
     "allow-load-saved-classrooms-for-scope",
     "allow-fetch-schedule",
+    "allow-fetch-grade-terms",
+    "allow-fetch-grades",
     "allow-import-schedule-to-calendar",
     "allow-import-favorite-deadlines-to-calendar",
     "allow-fetch-classrooms",

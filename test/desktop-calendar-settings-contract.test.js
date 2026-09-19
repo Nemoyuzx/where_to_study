@@ -247,8 +247,9 @@ test('desktop calendar imports locally persisted favorite event snapshots', () =
   assert.match(calendarExportSource, /URL:\{url\}/)
 })
 
-test('deprecated exam-week metadata has no desktop presentation or backend application', () => {
-  assert.doesNotMatch(appSource, /course\.is_exam|course-exam-badge/)
+test('only explicit academic exam events drive badges while legacy exam-week inference stays disabled', () => {
+  assert.doesNotMatch(appSource, /course\.is_exam|course\.exam_week_numbers/)
+  assert.match(appSource, /course\.event_kind === 'exam'\s*\?\s*<span className="course-exam-badge"/)
   assert.doesNotMatch(scheduleSource, /annotate_exam_weeks|EXAM_WEEK_ORDINALS/)
   assert.doesNotMatch(scheduleStoreSource, /annotate_exam_weeks/)
   assert.match(scheduleStoreSource, /course\.exam_week_numbers\.clear\(\)/)
@@ -257,7 +258,8 @@ test('deprecated exam-week metadata has no desktop presentation or backend appli
 })
 
 test('desktop day and week timelines separate hour and course-slot grid lines', () => {
-  assert.match(appSource, /nonHourlyCourseBoundaryMinutes\(slotMeta\)/)
+  assert.match(appSource, /nonHourlyCourseBoundaryMinutes\(slotMeta,\s*timelineHours\.start \* 60,\s*timelineHours\.end \* 60\)/)
+  assert.match(appSource, /academicTimelineHours\(courses,\s*visibleCalendarDays,\s*slotMeta,\s*activeTermStartDate\)/)
   assert.match(appSource, /className="slot-axis-grid-lines"/)
   assert.match(appSource, /className="time-grid-lines" aria-hidden="true"/)
   assert.match(appSource, /className="hour-line"/)

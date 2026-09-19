@@ -2,7 +2,7 @@
 // Android 端 TodayCourseWidget.kt（课程状态/高亮/上下文/预览增强版）。
 // 应用侧写入精简归档 widget-schedule.json（与沙箱课表同目录），
 // 卡片侧（FormExtensionAbility）从同一沙箱读取，无需跨进程通道。
-import { ScheduleSnapshot } from '../common/Models';
+import { Course, ScheduleSnapshot } from '../common/Models';
 import { ScheduleLogic } from '../common/ScheduleLogic';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { AppLanguage } from '../common/AppLocalization';
@@ -18,10 +18,11 @@ export class WidgetArchiveCourse {
   readonly weekNumbers: number[];
   readonly examWeekNumbers: number[];
   readonly startSlot: number;
+  readonly eventKind: string;
 
   constructor(id: string, name: string, teacher: string, room: string, sectionText: string,
     timeRange: string, weekday: number, weekNumbers: number[], examWeekNumbers: number[],
-    startSlot: number) {
+    startSlot: number, eventKind: string = '') {
     this.id = id;
     this.name = name;
     this.teacher = teacher;
@@ -32,6 +33,7 @@ export class WidgetArchiveCourse {
     this.weekNumbers = weekNumbers;
     this.examWeekNumbers = examWeekNumbers;
     this.startSlot = startSlot;
+    this.eventKind = eventKind;
   }
 }
 
@@ -40,13 +42,15 @@ export class WidgetArchive {
   readonly fetchedAt: string;
   readonly courses: WidgetArchiveCourse[];
   readonly preferences: WidgetCoursePreferences;
+  readonly schedule: ScheduleSnapshot | null;
 
   constructor(termStartDate: string, fetchedAt: string, courses: WidgetArchiveCourse[],
-    preferences: WidgetCoursePreferences = new WidgetCoursePreferences()) {
+    preferences: WidgetCoursePreferences = new WidgetCoursePreferences(), schedule: ScheduleSnapshot | null = null) {
     this.termStartDate = termStartDate;
     this.fetchedAt = fetchedAt;
     this.courses = courses;
     this.preferences = preferences;
+    this.schedule = schedule;
   }
 }
 
@@ -96,7 +100,8 @@ export class WidgetCoursePreferences {
 export enum CoursePhase {
   upcoming = 0,
   inProgress = 1,
-  finished = 2
+  finished = 2,
+  timePending = 3
 }
 
 export class TodayCourseWidgetData {
@@ -115,12 +120,18 @@ export class TodayCourseWidgetData {
         course.timeRange, course.weekday, course.weekNumbers, course.examWeekNumbers,
         course.startSlot));
     }
-    return new WidgetArchive(schedule.termStartDate, schedule.fetchedAt, courses, preferences);
+    return new WidgetArchive(schedule.termStartDate, schedule.fetchedAt, courses, preferences, schedule);
   }
 
   static coursesOn(date: DateParts, archive: WidgetArchive | null): WidgetArchiveCourse[] {
     if (archive === null) {
       return [];
+    }
+    if (archive.schedule !== null) {
+      return ScheduleLogic.effectiveCoursesOn(date, archive.schedule).map((course: Course) =>
+        new WidgetArchiveCourse(course.id, course.name, course.teacher, course.room,
+          course.sectionText, course.timeRange, course.weekday, course.weekNumbers, [],
+          course.startSlot, course.eventKind));
     }
     const termStart: DateParts | null = StrictDates.parseDateString(archive.termStartDate);
     if (termStart === null) {
@@ -148,12 +159,12 @@ export class TodayCourseWidgetData {
     const start: number | null = TodayCourseWidgetData.minuteOf(course.timeRange, true);
     const end: number | null = TodayCourseWidgetData.minuteOf(course.timeRange, false);
     if (start === null || end === null || end < start) {
-      return CoursePhase.finished;
+      return course.eventKind === 'exam' ? CoursePhase.timePending : CoursePhase.finished;
     }
     if (minute < start) {
       return CoursePhase.upcoming;
     }
-    if (minute <= end) {
+    if (minute < end) {
       return CoursePhase.inProgress;
     }
     return CoursePhase.finished;
@@ -241,6 +252,10 @@ export class TodayCourseWidgetData {
           (start.length === 0 ? '还有待上课程' : '下一节 · ' + start);
       }
     }
+    if (courses.some((course: WidgetArchiveCourse) => course.eventKind === 'exam' &&
+      TodayCourseWidgetData.minuteOf(course.timeRange, true) === null)) {
+      return english ? 'Exam time pending' : '考试时间待定';
+    }
     return english ? 'Classes finished for today' : '今日课程已结束';
   }
 
@@ -257,25 +272,28 @@ export class TodayCourseWidgetData {
   // 课程标题：高亮时加前缀（进行中 · X / 下一节 · X）。
   static courseTitle(course: WidgetArchiveCourse, minute: number,
     english: boolean = false): string {
+    const name: string = (course.eventKind === 'exam' ? (english ? 'Exam · ' : '考试 · ') : '') + course.name;
     const phase: CoursePhase = TodayCourseWidgetData.coursePhase(
       course, StrictDates.todayParts(), minute);
     if (phase === CoursePhase.inProgress) {
-      return (english ? 'In progress' : '进行中') + ' · ' + course.name;
+      return (english ? 'In progress' : '进行中') + ' · ' + name;
     }
     if (phase === CoursePhase.upcoming) {
-      return (english ? 'Next' : '下一节') + ' · ' + course.name;
+      return (english ? 'Next' : '下一节') + ' · ' + name;
     }
-    return course.name;
+    return name;
   }
 
   // 详情："时间 · 节次 · 教室 · 教师"（按偏好裁剪）。
   static courseDetails(course: WidgetArchiveCourse, prefs: WidgetCoursePreferences): string {
     const parts: string[] = [];
     if (course.timeRange.length > 0) {
-      parts.push(course.timeRange);
+      parts.push(prefs.language === AppLanguage.english ?
+        course.timeRange.replace('时间待定', 'Time pending') : course.timeRange);
     }
     if (course.sectionText.length > 0) {
-      parts.push(course.sectionText);
+      parts.push(course.eventKind === 'exam' && prefs.language === AppLanguage.english ?
+        'Exam' : course.sectionText);
     }
     if (prefs.showsLocation && course.room.length > 0) {
       parts.push(course.room);
@@ -354,7 +372,8 @@ export class TodayCourseWidgetData {
         out['course' + key + 'Details'] = '';
         out['course' + key + 'Highlighted'] = false;
       } else {
-        out['course' + key + 'Name'] = isTomorrow ? course.name :
+        out['course' + key + 'Name'] = isTomorrow ?
+          (course.eventKind === 'exam' ? (english ? 'Exam · ' : '考试 · ') : '') + course.name :
           TodayCourseWidgetData.courseTitle(course, minute, english);
         out['course' + key + 'Details'] = TodayCourseWidgetData.courseDetails(course, prefs);
         out['course' + key + 'Highlighted'] = !isTomorrow && course.id === (highlighted?.id ?? '');

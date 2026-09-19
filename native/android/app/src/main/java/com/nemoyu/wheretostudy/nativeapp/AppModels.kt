@@ -29,6 +29,10 @@ data class Course(
     val sectionText: String,
     val timeRange: String,
     val sourceCourseID: String? = null,
+    val eventKind: String? = null,
+    val eventDate: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
 )
 
 data class ScheduleSnapshot(
@@ -36,6 +40,7 @@ data class ScheduleSnapshot(
     val termStartDate: String,
     val fetchedAt: String,
     val courses: List<Course>,
+    val examSchedule: ExamSchedule? = null,
 )
 
 data class Classroom(
@@ -147,12 +152,12 @@ object ScheduleLogic {
         target: Calendar,
     ): List<Course> {
         schedule ?: return emptyList()
-        val start = parseContractDate(schedule.termStartDate) ?: return emptyList()
-        val week = weekNumber(start, target)
+        val start = parseContractDate(schedule.termStartDate)
+        val week = start?.let { weekNumber(it, target) } ?: 0
         val weekday = ((target.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
-        return schedule.courses
+        val regular = schedule.courses
             .filter { it.weekday == weekday && week in it.weekNumbers }
-            .sortedWith(compareBy(Course::startSlot, Course::name))
+        return AcademicScheduleLogic.courses(schedule, target, regular)
     }
 
     fun weekNumber(
@@ -173,8 +178,13 @@ object ScheduleLogic {
         schedule: ScheduleSnapshot?,
         target: Calendar,
     ): Set<Int> = courses(schedule, target)
-        .flatMap { it.startSlot..it.endSlot }
-        .filter { it in AppMetadata.slots.indices }
+        .flatMap { course ->
+            val interval = AcademicScheduleLogic.interval(course) ?: return@flatMap emptyList()
+            AppMetadata.slots.filter { slot ->
+                AcademicScheduleLogic.minute(slot.start)!! < interval.second &&
+                    interval.first < AcademicScheduleLogic.minute(slot.end)!!
+            }.map(SlotMetadata::index)
+        }
         .toSet()
 
     private fun startOfDay(source: Calendar): Calendar = Calendar.getInstance(shanghai).apply {

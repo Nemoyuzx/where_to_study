@@ -33,6 +33,7 @@ export struct CourseRemovalButton {
   }
 
   build() {
+    if (this.course.eventKind !== 'exam') {
     Button(this.model.text('删除'))
       .type(ButtonType.Normal)
       .fontSize(12)
@@ -52,5 +53,10 @@ export struct CourseRemovalButton {
           ]
         });
       })
+    } else {
+      Text(this.model.text('考试')).fontSize(12).fontWeight(FontWeight.Bold)
+        .fontColor(AppTheme.accent()).padding({ left: 6, right: 6 })
+        .accessibilityText(this.model.text('考试'))
+    }
   }
 }

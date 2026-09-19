@@ -43,6 +43,7 @@ internal object CourseDeletionLogic {
         date: Calendar,
         scope: CourseDeletionScope,
     ): CourseDeletion {
+        require(course.eventKind != "exam") { "考试安排不能通过课程删除操作修改。" }
         require(schedule.termID.isNotBlank()) { "课表缺少学期编号，无法删除课程。" }
         return CourseDeletion(
             id = UUID.randomUUID().toString(),
@@ -59,6 +60,7 @@ internal object CourseDeletionLogic {
     }
 
     fun matchesCourse(deletion: CourseDeletion, course: Course): Boolean {
+        if (course.eventKind == "exam") return false
         val savedID = deletion.sourceCourseID?.trim()?.takeIf(String::isNotEmpty)
         val sourceID = course.sourceCourseID?.trim()?.takeIf(String::isNotEmpty)
         return if (savedID != null && sourceID != null) savedID == sourceID

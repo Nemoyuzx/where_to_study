@@ -353,6 +353,7 @@ class SettingsPage(
                 val persist: () -> Credentials = {
                     credentials.also {
                         credentialStore.save(credentials)
+                        if (savedCredentials != credentials) activity.clearAcademicGrades()
                         if (CredentialUpdateLogic.changesAssignmentCredentials(savedCredentials, credentials)) {
                             activity.clearCalendarAssignmentData()
                         }
@@ -375,8 +376,15 @@ class SettingsPage(
                     }
                 } else {
                     credentialTransactionStarted = true
-                    val generation = LocalDataCoordinator.snapshot()
-                    LocalDataCoordinator.withCurrent(generation, persist)
+                    if (savedCredentials != credentials) {
+                        LocalDataCoordinator.clear {
+                            scheduleRepository.invalidatePendingCredentialRequests()
+                            persist()
+                        }
+                    } else {
+                        val generation = LocalDataCoordinator.snapshot()
+                        LocalDataCoordinator.withCurrent(generation, persist)
+                    }
                 }
                 check(DailyClassroomRefreshScheduler.ensureScheduled(activity)) {
                     "无法更新空教室后台刷新任务。"
@@ -515,6 +523,14 @@ class SettingsPage(
     private fun semesterSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "学期设置", R.drawable.ic_nav_calendar))
+        addView(TextView(activity).apply {
+            text = AcademicScheduleLogic.statusText(scheduleRepository.schedule?.examSchedule)
+            textSize = 13f; setThemeTextColor { Palette.primaryText }
+            minimumHeight = activity.dp(48)
+            setPadding(0, activity.dp(8), 0, activity.dp(8))
+            isClickable = true; isFocusable = true
+            setOnClickListener { showAcademicExamSchedule(activity, scheduleRepository.schedule?.examSchedule) }
+        })
         val termID = field("学期编号", preferences.termID, false)
         val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
         val autoDetect = Switch(activity).apply {

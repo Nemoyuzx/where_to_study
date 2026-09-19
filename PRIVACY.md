@@ -1,6 +1,6 @@
 # 隐私声明 / Privacy Policy
 
-生效日期 / Effective date: 2026-09-11
+生效日期 / Effective date: 2026-09-12
 
 Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。
 
@@ -11,6 +11,16 @@ Where To Study is an independent, unofficial client for viewing BUPT schedules, 
 你输入的学号和密码保存在操作系统的受保护凭据存储中。应用会在你主动获取课表、空教室或课程作业时，按下述用途通过 HTTPS 使用这些凭据。课表和空教室请求会发送到 `jwglweixin.bupt.edu.cn`；保存有效凭据且开启“自动检测当前学期”后，应用还会在启动时自动刷新一次个人课表，用于校验学期号和第一周周一。当天空教室还可能在启动、回到前台，或平台允许的每日约 07:00 后台任务中自动刷新。项目维护者无法读取这些凭据，设置接口也不会返回已保存的密码。
 
 The account and password you enter are stored in the operating system's protected credential storage. The app uses them over HTTPS when you request schedules, empty classrooms, or assignments as described below. After valid credentials are saved and automatic term detection is enabled, the app also refreshes the personal schedule once at launch to verify the term identifier and first Monday. Schedule and classroom requests are sent to `jwglweixin.bupt.edu.cn`. The current day's classroom availability may additionally refresh at launch, on returning to the foreground, or around 07:00 where the platform permits background work. The maintainer cannot read these credentials, and settings APIs never return a saved password.
+
+## 成绩与考试安排 / Grades and exam arrangements
+
+主动打开“查询 → 成绩”后，应用使用已保存的教务账号和教务密码直接通过 HTTPS 从 `jwglweixin.bupt.edu.cn` 获取学校学期列表、本人课程成绩及学校返回的绩点。教学云平台的独立密码不用于此查询；不会查询其他学生。成绩不写入磁盘、不上传至本项目服务端或参考项目的代理服务；图形端只在当前会话的有界内存中短期复用，并在账号或相关凭据变化、清除数据后失效。终端的显式打印／JSON 输出会显示用户主动请求的成绩，请勿分享包含个人成绩的终端记录。
+
+Opening Query → Grades uses the saved academic account and academic password over HTTPS directly with `jwglweixin.bupt.edu.cn` to retrieve university semesters, your course results, and university-provided GPA. It does not use the separate teaching cloud password or query other students. Grades are not saved to disk or sent to this project's server or a reference project's proxy. Graphical clients reuse them only briefly in bounded session memory, invalidated on account or relevant credential changes and clearing data. Explicit terminal/JSON output contains the grades you request; do not share terminal records containing private results.
+
+个人课表刷新会在同次教务登录中同步读取考试安排，包括课程名称、日期／时间、地点和接口提供的座位等信息，并按账号、学期随原始课表缓存于本机。考试与课程重叠时，仅在本地有效日程中隐藏冲突的单次课程；不会修改学校记录。失败时可保留同账号同学期的旧考试并明确提示过期，成功返回空列表会清除旧安排；未知时间不会被虚构为某一节课。清除本地数据会同时删除考试缓存。
+
+Timetable refresh retrieves exam arrangements in the same university login, including course name, date/time, location, and a seat if supplied, and caches them locally with the original timetable by account and semester. Exams hide only conflicting course occurrences in the local effective schedule, without modifying university records. A failed request may retain clearly marked older exams only for the same account and semester; a successful empty result clears them. Unknown times are not replaced with invented class periods. Clearing local data also removes exam caches.
 
 ## 本地数据 / Local data
 

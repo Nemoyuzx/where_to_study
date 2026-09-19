@@ -5,7 +5,8 @@ import {
 
 export enum QueryPageTab {
   shuttle = 'shuttle',
-  events = 'events'
+  events = 'events',
+  grades = 'grades'
 }
 
 export enum ImportantEventFilter {
@@ -20,7 +21,7 @@ export enum ImportantEventFilter {
 }
 
 export class QueryPageContract {
-  static readonly tabs: QueryPageTab[] = [QueryPageTab.shuttle, QueryPageTab.events];
+  static readonly tabs: QueryPageTab[] = [QueryPageTab.shuttle, QueryPageTab.events, QueryPageTab.grades];
   static readonly filters: ImportantEventFilter[] = [
     ImportantEventFilter.all,
     ImportantEventFilter.competition,
@@ -33,7 +34,11 @@ export class QueryPageContract {
   ];
 
   static tabTitle(tab: QueryPageTab): string {
-    return tab === QueryPageTab.shuttle ? '班车查询' : '重要事件';
+    return tab === QueryPageTab.shuttle ? '班车查询' : tab === QueryPageTab.grades ? '成绩查询' : '重要事件';
+  }
+
+  static verticalTabs(width: number, fontScale: number): boolean {
+    return fontScale > 1.2 && (width - 32) / 3 < 115 * fontScale;
   }
 
   static filterTitle(filter: ImportantEventFilter): string {

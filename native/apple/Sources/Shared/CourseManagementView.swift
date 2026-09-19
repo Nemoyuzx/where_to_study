@@ -10,7 +10,7 @@ struct CourseDeletionControl: View {
     @State private var showingFailure = false
 
     var body: some View {
-        if !model.isSampleMode {
+        if !model.isSampleMode, !course.isExam {
             Menu {
                 Button("仅删除本次课程", role: .destructive) { confirm(.occurrence) }
                 Button("删除本学期整门课程", role: .destructive) { confirm(.course) }
@@ -63,9 +63,10 @@ struct CourseManagementModifier: ViewModifier {
             .onTapGesture { showingDetail = true }
             .sheet(isPresented: $showingDetail) {
                 VStack(alignment: .leading, spacing: 14) {
+                    if course.isExam { Text(model.localized("考试")).font(.caption.bold()) }
                     Text(course.name).font(.title2.weight(.semibold))
                     Text(StrictContractDateParser.string(from: date))
-                    Text(course.timeRange)
+                    Text(course.isExam && course.minuteInterval == nil ? model.localized("时间待定") + " · " + course.timeRange : course.timeRange)
                     Text(course.room)
                     Text(course.teacher)
                     CourseDeletionControl(course: course, date: date) { showingDetail = false }

@@ -91,6 +91,7 @@ enum TodayCourseWidgetData {
         let termStartDate: String
         let fetchedAt: String
         let courses: [Course]
+        var examSchedule: ExamSchedule? = nil
     }
 
     struct Course: Codable, Equatable, Identifiable, Sendable {
@@ -104,6 +105,11 @@ enum TodayCourseWidgetData {
         let weekNumbers: [Int]
         let startSlot: Int
         let endSlot: Int?
+        var eventKind: String? = nil
+        var eventDate: String? = nil
+        var startTime: String? = nil
+        var endTime: String? = nil
+        var isExam: Bool { eventKind == "exam" }
 
         init(
             id: String,
@@ -115,7 +121,11 @@ enum TodayCourseWidgetData {
             weekday: Int,
             weekNumbers: [Int],
             startSlot: Int,
-            endSlot: Int? = nil
+            endSlot: Int? = nil,
+            eventKind: String? = nil,
+            eventDate: String? = nil,
+            startTime: String? = nil,
+            endTime: String? = nil
         ) {
             self.id = id
             self.name = name
@@ -127,6 +137,10 @@ enum TodayCourseWidgetData {
             self.weekNumbers = weekNumbers
             self.startSlot = startSlot
             self.endSlot = endSlot
+            self.eventKind = eventKind
+            self.eventDate = eventDate
+            self.startTime = startTime
+            self.endTime = endTime
         }
     }
 
@@ -165,7 +179,8 @@ enum TodayCourseWidgetData {
                     startSlot: $0.startSlot,
                     endSlot: $0.endSlot
                 )
-            }
+            },
+            examSchedule: schedule.examSchedule
         )
         let data = try JSONEncoder().encode(archive)
         var saved = false
@@ -242,11 +257,23 @@ enum TodayCourseWidgetData {
         else { return [] }
         let week = ScheduleLogic.weekNumber(on: date, termStart: termStart, calendar: calendar)
         let weekday = ((calendar.component(.weekday, from: date) + 5) % 7) + 1
-        return archive.courses
+        let matching = archive.courses
             .filter { $0.weekday == weekday && $0.weekNumbers.contains(week) }
             .sorted { lhs, rhs in
                 lhs.startSlot == rhs.startSlot ? lhs.name < rhs.name : lhs.startSlot < rhs.startSlot
             }
+        let resolved = AcademicTime.effectiveCourses(on: date, courses: matching.map {
+            ScheduleCourse(id: $0.id, name: $0.name, teacher: $0.teacher ?? "", room: $0.room,
+                           weekText: "", weekNumbers: $0.weekNumbers, examWeekNumbers: [], weekday: $0.weekday,
+                           startSlot: $0.startSlot, endSlot: $0.endSlot ?? $0.startSlot,
+                           sectionText: $0.sectionText ?? "", timeRange: $0.timeRange)
+        }, exams: archive.examSchedule, calendar: calendar)
+        return resolved.map {
+            Course(id: $0.id, name: $0.name, teacher: $0.teacher, room: $0.room, timeRange: $0.timeRange,
+                   sectionText: $0.sectionText, weekday: $0.weekday, weekNumbers: $0.weekNumbers,
+                   startSlot: $0.startSlot, endSlot: $0.endSlot, eventKind: $0.eventKind,
+                   eventDate: $0.eventDate, startTime: $0.startTime, endTime: $0.endTime)
+        }
     }
 
     static func weekNumber(
@@ -365,6 +392,9 @@ enum TodayCourseWidgetData {
         calendar: Calendar = .shanghai
     ) -> String {
         guard !courses.isEmpty else { return emptyMessage(language: language) }
+        if courses.allSatisfy({ $0.isExam && minuteRange(for: $0) == nil }) {
+            return language.text(chinese: "考试时间待定", english: "Exam time pending")
+        }
         if let course = courses.first(where: {
             coursePhase($0, at: date, calendar: calendar) == .inProgress
         }) {
@@ -489,6 +519,12 @@ enum TodayCourseWidgetData {
     }
 
     private static func minuteRange(for course: Course) -> ClosedRange<Int>? {
+        if course.isExam {
+            guard let startText = course.startTime, let endText = course.endTime,
+                  let start = AcademicTime.minute(startText), let end = AcademicTime.minute(endText), start < end
+            else { return nil }
+            return start ... (end - 1)
+        }
         guard let parts = timeParts(course.timeRange) else { return nil }
         guard let start = minutes(parts.start), let end = minutes(parts.end), end >= start else {
             return nil

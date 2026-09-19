@@ -69,7 +69,8 @@ export class DailyCourseNotificationPlanner {
         }
       }
     }
-    if (lastCourseWeek < 0) {
+    const lastExamDay: DateParts | null = ScheduleLogic.latestExamDay(schedule);
+    if (lastCourseWeek < 0 && lastExamDay === null) {
       return [];
     }
 
@@ -77,7 +78,9 @@ export class DailyCourseNotificationPlanner {
     const startOfToday: DateParts = StrictDates.partsFromEpochDay(
       Math.floor((nowEpochMs + 8 * 3600 * 1000) / 86400000));
     const boundedLastWeek: number = Math.min(lastCourseWeek, DailyCourseNotificationPlanner.maximumScheduleWeek);
-    const termLastDay: DateParts = StrictDates.addDays(termStart, boundedLastWeek * 7 - 1);
+    let termLastDay: DateParts = StrictDates.addDays(termStart, boundedLastWeek * 7 - 1);
+    if (lastExamDay !== null && StrictDates.formatDateParts(lastExamDay) >
+      StrictDates.formatDateParts(termLastDay)) { termLastDay = lastExamDay; }
     const todayEpochDay: number = StrictDates.epochDay(startOfToday.year, startOfToday.month, startOfToday.day);
     const remainingTermDays: number =
       StrictDates.epochDay(termLastDay.year, termLastDay.month, termLastDay.day) - todayEpochDay + 1;
@@ -102,21 +105,27 @@ export class DailyCourseNotificationPlanner {
       if (fireEpochMs <= nowEpochMs) {
         continue;
       }
-      const courses: Course[] = ScheduleLogic.coursesOn(day, termStart, schedule.courses);
+      const courses: Course[] = ScheduleLogic.effectiveCoursesOn(day, schedule);
       if (courses.length === 0) {
         continue;
       }
       const entries: string[] = [];
       for (const course of courses) {
         const location: string = course.room.length === 0 ? '' : ' @ ' + course.room;
-        entries.push(course.timeRange + ' ' + course.name + location);
+        const kind: string = course.eventKind === 'exam' ? (english ? 'Exam · ' : '考试 · ') : '';
+        const time: string = course.eventKind === 'exam' && !ScheduleLogic.hasTime(course) ?
+          (english ? 'Time pending' : '时间待定') : course.timeRange;
+        entries.push(kind + time + ' ' + course.name + location);
       }
       const date: string = StrictDates.formatDateParts(day);
+      const includesExams: boolean = courses.some((course: Course) => course.eventKind === 'exam');
       requests.push(new DailyCourseNotificationRequest(
         DailyCourseNotificationPlanner.identifierPrefix + date,
         fireEpochMs,
-        english ? 'Today\'s Courses · ' + courses.length.toString() :
-          '今日课程 · ' + courses.length.toString() + ' 门',
+        includesExams ? (english ? 'Today\'s Schedule · ' + courses.length.toString() :
+          '今日安排 · ' + courses.length.toString() + ' 项') :
+          (english ? 'Today\'s Courses · ' + courses.length.toString() :
+          '今日课程 · ' + courses.length.toString() + ' 门'),
         entries.join(english ? '; ' : '；')
       ));
     }

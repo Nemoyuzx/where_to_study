@@ -577,11 +577,14 @@ object TeachingCalendarLogic {
     ): Int = if (selected) selectedDateColor else surfaceVariantColor
 
     fun courseDetailLines(course: Course): List<String> = buildList {
+        if (course.eventKind == "exam") add("考试")
         add("时间：${course.timeRange.ifEmpty { "未标注" }}")
-        add("节次：${course.sectionText.ifEmpty { "未标注" }}")
+        if (course.eventKind != "exam") add("节次：${course.sectionText.ifEmpty { "未标注" }}")
         add("地点：${course.room.ifEmpty { "未标注" }}")
-        add("教师：${course.teacher.ifEmpty { "未标注" }}")
-        add("周次：${course.weekText.ifEmpty { course.weekNumbers.joinToString(",") }}")
+        if (course.eventKind != "exam") {
+            add("教师：${course.teacher.ifEmpty { "未标注" }}")
+            add("周次：${course.weekText.ifEmpty { course.weekNumbers.joinToString(",") }}")
+        }
     }
 
 }
@@ -1852,7 +1855,8 @@ internal class TeachingCalendarPage(
             })
             addView(TextView(activity).apply {
                 text = listOf(
-                    course.timeRange,
+                    if (course.eventKind == "exam") activity.uiText("考试") else "",
+                    activity.uiText(course.timeRange),
                     course.room,
                     course.teacher.takeIf(String::isNotEmpty)?.let { "教师：$it" }.orEmpty(),
                 ).filter(String::isNotEmpty).joinToString(" · ")
@@ -1960,9 +1964,14 @@ internal class TeachingCalendarPage(
                                 confirmFavoriteCalendarImport()
                                 true
                             }
+                            R.id.calendar_exam_menu_item -> {
+                                showAcademicExamSchedule(activity, scheduleRepository.schedule?.examSchedule)
+                                true
+                            }
                             else -> false
                         }
                     }
+                    menu.add(0, R.id.calendar_exam_menu_item, 2, activity.uiText("考试安排"))
                 }.show()
             } else {
                 confirmImport()
@@ -2664,7 +2673,8 @@ internal class TeachingCalendarPage(
                 ))
             }
             courses.forEach { course ->
-                add(MonthCalendarEntry(course.name, MonthCalendarEntryKind.COURSE))
+                add(MonthCalendarEntry(if (course.eventKind == "exam") activity.uiText("考试") + " · " + course.name
+                    else course.name, MonthCalendarEntryKind.COURSE))
             }
             assignments.forEach { assignment ->
                 add(MonthCalendarEntry(
@@ -3891,7 +3901,8 @@ internal class TeachingCalendarPage(
                 })
                 addView(TextView(activity).apply {
                     text = listOf(
-                        course.timeRange,
+                        if (course.eventKind == "exam") activity.uiText("考试") else "",
+                        activity.uiText(course.timeRange),
                         course.room,
                         course.teacher.takeIf(String::isNotEmpty)?.let { "教师：$it" }.orEmpty(),
                     ).filter(String::isNotEmpty).joinToString(" · ")
@@ -3939,7 +3950,7 @@ internal class TeachingCalendarPage(
                     includeFontPadding = false
                 })
                 addView(TextView(activity).apply {
-                    text = "课程详情"
+                    text = if (course.eventKind == "exam") "考试安排" else "课程详情"
                     textSize = 11f
                     setThemeTextColor { Palette.muted }
                     includeFontPadding = false
@@ -3967,11 +3978,13 @@ internal class TeachingCalendarPage(
         }.format(day.time)
         buildList {
             add("日期" to date)
-            add("时间" to course.timeRange.ifEmpty { "未标注" })
-            add("节次" to course.sectionText.ifEmpty { "未标注" })
+            add("时间" to activity.uiText(course.timeRange.ifEmpty { "未标注" }))
+            if (course.eventKind != "exam") add("节次" to course.sectionText.ifEmpty { "未标注" })
             add("地点" to course.room.ifEmpty { "未标注" })
-            add("教师" to course.teacher.ifEmpty { "未标注" })
-            add("教学周" to course.weekText.ifEmpty { course.weekNumbers.joinToString("、") })
+            if (course.eventKind != "exam") {
+                add("教师" to course.teacher.ifEmpty { "未标注" })
+                add("教学周" to course.weekText.ifEmpty { course.weekNumbers.joinToString("、") })
+            }
         }.forEachIndexed { index, (label, value) ->
             card.addView(courseDetailRow(label, value), LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -3980,10 +3993,10 @@ internal class TeachingCalendarPage(
                 if (index > 0) topMargin = activity.dp(10)
             })
         }
-        listOf(
+        (if (course.eventKind == "exam") emptyList() else listOf(
             "仅删除这一次" to CourseDeletionScope.SINGLE_OCCURRENCE,
             "删除本学期整门课程" to CourseDeletionScope.WHOLE_COURSE,
-        ).forEach { (label, scope) ->
+        )).forEach { (label, scope) ->
             card.addView(TextView(activity).apply {
                 text = label
                 textSize = 13f

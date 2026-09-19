@@ -7,6 +7,7 @@ import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
 import { PageTitle } from './SharedComponents';
 import { ShuttleQueryLayout } from './ShuttleQueryLayout';
+import { GradeQueryView } from './GradeQueryView';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
 } from '../common/QueryLogic';
@@ -21,6 +22,7 @@ import {
 
 @ComponentV2
 export struct QueryView {
+  @Event onOpenSettings: () => void = () => {};
   @Consumer('appModel') model: AppModel = new AppModel();
   @Local selectedTabRawValue: string = QueryPageTab.shuttle;
   @Local eventFilterRawValue: string = ImportantEventFilter.all;
@@ -49,6 +51,7 @@ export struct QueryView {
   }
 
   private selectedTab(): QueryPageTab {
+    if (this.selectedTabRawValue === QueryPageTab.grades) { return QueryPageTab.grades; }
     return this.selectedTabRawValue === QueryPageTab.events ? QueryPageTab.events : QueryPageTab.shuttle;
   }
 
@@ -151,12 +154,16 @@ export struct QueryView {
 
   build() {
     Column({ space: 0 }) {
-      if (this.selectedTab() === QueryPageTab.shuttle) {
+      if (this.selectedTab() !== QueryPageTab.events) {
         Scroll() {
           Column({ space: 16 }) {
             this.pageHeader()
             this.tabPicker()
-            this.shuttleContent()
+            if (this.selectedTab() === QueryPageTab.shuttle) {
+              this.shuttleContent()
+            } else {
+              GradeQueryView({ onOpenSettings: this.onOpenSettings })
+            }
           }
           .width('100%')
           .constraintSize({ maxWidth: ShuttleQueryLayout.maximumPageWidthVp })
@@ -165,7 +172,7 @@ export struct QueryView {
           .alignSelf(ItemAlign.Center)
           .alignItems(HorizontalAlign.Start)
         }
-        .id('query.shuttle.scroll')
+        .id(this.selectedTab() === QueryPageTab.shuttle ? 'query.shuttle.scroll' : 'query.grades.scroll')
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
@@ -212,20 +219,43 @@ export struct QueryView {
       }
     }
     .width('100%')
-    .padding(this.selectedTab() === QueryPageTab.shuttle ? 0 : 16)
+    .padding(this.selectedTab() !== QueryPageTab.events ? 0 : 16)
     .alignItems(VerticalAlign.Center)
   }
 
   @Builder
   tabPicker() {
-    Row() {
-      ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => {
+    Column() {
+      if (QueryPageContract.verticalTabs(this.contentWidth, this.contentFontScale)) {
+        Column() {
+          ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => { this.tabLabel(tab, true) },
+            (tab: QueryPageTab) => 'query-tab.' + tab)
+        }.width('100%')
+      } else {
+        Row() {
+          ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => { this.tabLabel(tab, false) },
+            (tab: QueryPageTab) => 'query-tab.' + tab)
+        }.width('100%')
+      }
+    }
+    .width(this.selectedTab() !== QueryPageTab.events ? '100%' : 'calc(100% - 32vp)')
+    .constraintSize({ minHeight: ControlMetrics.height })
+    .padding(3)
+    .margin({ bottom: this.selectedTab() !== QueryPageTab.events ? 0 : 12 })
+    .borderRadius(11)
+    .backgroundColor(AppTheme.surfaceVariant())
+    .alignSelf(ItemAlign.Center)
+  }
+
+  @Builder
+  tabLabel(tab: QueryPageTab, vertical: boolean) {
         Text(this.model.text(QueryPageContract.tabTitle(tab)))
           .fontSize(14)
           .fontWeight(this.selectedTab() === tab ? FontWeight.Bold : FontWeight.Regular)
           .fontColor(AppTheme.text())
           .textAlign(TextAlign.Center)
-          .layoutWeight(1)
+          .layoutWeight(vertical ? 0 : 1)
+          .width(vertical ? '100%' : undefined)
           .constraintSize({ minHeight: ControlMetrics.height - 6 })
           .padding({ left: 6, right: 6 })
           .maxLines(2)
@@ -238,16 +268,8 @@ export struct QueryView {
             this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, (): void => {
               this.selectedTabRawValue = tab;
             });
+            if (tab === QueryPageTab.grades) { this.model.loadGrades(false); }
           })
-      }, (tab: QueryPageTab) => 'query-tab.' + tab)
-    }
-    .width(this.selectedTab() === QueryPageTab.shuttle ? '100%' : 'calc(100% - 32vp)')
-    .constraintSize({ minHeight: ControlMetrics.height })
-    .padding(3)
-    .margin({ bottom: this.selectedTab() === QueryPageTab.shuttle ? 0 : 12 })
-    .borderRadius(11)
-    .backgroundColor(AppTheme.surfaceVariant())
-    .alignSelf(ItemAlign.Center)
   }
 
   @Builder

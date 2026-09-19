@@ -87,6 +87,12 @@ object CalendarTimelineLogic {
     fun totalHeightDp(compact: Boolean, showDayHeader: Boolean): Int =
         (if (showDayHeader) 72 else 0) + hourHeightDp(compact) * 14 + 2
 
+    fun hourBounds(courses: List<Course>): IntRange {
+        val intervals = courses.mapNotNull(AcademicScheduleLogic::interval)
+        return minOf(8, (intervals.minOfOrNull { it.first } ?: startMinute) / 60)..
+            maxOf(22, ((intervals.maxOfOrNull { it.second } ?: endMinute) + 59) / 60)
+    }
+
     fun courseSlotBoundaryMinutes(): List<Int> = AppMetadata.slots
         .flatMap { slot -> listOfNotNull(minuteOfDay(slot.start), minuteOfDay(slot.end)) }
         .distinct()
@@ -133,7 +139,9 @@ class CalendarTimelineView(
         isBaselineAligned = false
         setThemeBackgroundColor { Palette.surface }
 
-        val totalHeight = context.dp(CalendarTimelineLogic.totalHeightDp(compact, showDayHeader))
+        val hours = CalendarTimelineLogic.hourBounds(days.flatMap(TimelineDay::courses))
+        val totalHeight = context.dp(CalendarTimelineLogic.totalHeightDp(compact, showDayHeader) +
+            (hours.last - hours.first - 14) * CalendarTimelineLogic.hourHeightDp(compact))
         val showCourseSlots = !compact || days.size == 1
         val showCourseSlotsInAxis = showCourseSlots && !compact
         addView(
@@ -239,7 +247,8 @@ private class CalendarTimelineCanvas(
     private val axisWidth = hourAxisWidth + slotAxisWidth
     private val headerHeight = dp(if (showDayHeader) 72 else 0).toFloat()
     private val hourHeight = dp(CalendarTimelineLogic.hourHeightDp(compact)).toFloat()
-    private val timelineHeight = hourHeight * 14f
+    private val hourBounds = CalendarTimelineLogic.hourBounds(days.flatMap(TimelineDay::courses))
+    private val timelineHeight = hourHeight * (hourBounds.last - hourBounds.first)
     private val totalHeight = headerHeight + timelineHeight + dp(2)
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private var touchDownX = 0f
@@ -386,7 +395,7 @@ private class CalendarTimelineCanvas(
         textPaint.color = Palette.muted
         textPaint.textAlign = Paint.Align.CENTER
         textPaint.textSize = sp(if (compact) 9f else 11f)
-        for (hour in 8..22) {
+        for (hour in hourBounds) {
             val hourMinute = hour * 60
             val y = yForMinute(hourMinute)
             canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
@@ -394,8 +403,8 @@ private class CalendarTimelineCanvas(
                 continue
             }
             val labelY = when (hour) {
-                8 -> y + dp(11)
-                22 -> y - dp(5)
+                hourBounds.first -> y + dp(11)
+                hourBounds.last -> y - dp(5)
                 else -> y - dp(4)
             }
             drawCenteredText(canvas, "%02d:00".format(hour), hourAxisWidth / 2f, labelY, textPaint)
@@ -490,7 +499,7 @@ private class CalendarTimelineCanvas(
                         canvas.drawRect(left, 0f, left + dayWidth, totalHeight, fillPaint)
                     }
                 }
-                CalendarTimelineGridLayer.HOUR_LINES -> for (hour in 8..22) {
+                CalendarTimelineGridLayer.HOUR_LINES -> for (hour in hourBounds) {
                     val y = yForMinute(hour * 60)
                     canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
                 }
@@ -578,9 +587,9 @@ private class CalendarTimelineCanvas(
                 val contentInset = dp(if (days.size == 1) 6 else 5)
                 val left = dayLeft + trackWidth * placement.track + outerInset
                 val right = left + trackWidth - outerInset * 2
-                val start = AppMetadata.slots.getOrNull(placement.course.startSlot)?.start
+                val start = AcademicScheduleLogic.start(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@forEach
-                val end = AppMetadata.slots.getOrNull(placement.course.endSlot)?.end
+                val end = AcademicScheduleLogic.end(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@forEach
                 val top = yForMinute(start) + dp(2)
                 val bottom = max(
@@ -626,7 +635,8 @@ private class CalendarTimelineCanvas(
                     )
                     if (blockHeight >= dp(42)) {
                         canvas.drawText(
-                            ellipsize(placement.course.timeRange, availableWidth, textPaint),
+                            ellipsize(listOfNotNull(if (placement.course.eventKind == "exam") context.uiText("考试") else null,
+                                placement.course.timeRange).joinToString(" · "), availableWidth, textPaint),
                             left + leadingContentInset,
                             top + dp(33),
                             textPaint,
@@ -662,7 +672,8 @@ private class CalendarTimelineCanvas(
                         }
                     }
                     drawLines(placement.course.name, boldPaint, 3)
-                    drawLines(placement.course.timeRange, textPaint, 2)
+                    drawLines(listOfNotNull(if (placement.course.eventKind == "exam") context.uiText("考试") else null,
+                        placement.course.timeRange).joinToString(" · "), textPaint, 2)
                     textPaint.textSize = sp(10f)
                     drawLines(
                         placement.course.room.ifEmpty { context.uiText("地点未标注") },
@@ -694,9 +705,9 @@ private class CalendarTimelineCanvas(
                 val outerInset = dp(if (days.size == 1) 3 else 1)
                 val left = dayLeft + trackWidth * placement.track + outerInset
                 val right = left + trackWidth - outerInset * 2
-                val start = AppMetadata.slots.getOrNull(placement.course.startSlot)?.start
+                val start = AcademicScheduleLogic.start(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@placementLoop
-                val end = AppMetadata.slots.getOrNull(placement.course.endSlot)?.end
+                val end = AcademicScheduleLogic.end(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@placementLoop
                 val top = yForMinute(start) + dp(2)
                 val bottom = max(
@@ -716,7 +727,7 @@ private class CalendarTimelineCanvas(
         val todayIndex = days.indexOfFirst { sameDay(it.date, now) }
         if (todayIndex < 0) return
         val minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        if (minute !in CalendarTimelineLogic.startMinute..CalendarTimelineLogic.endMinute) return
+        if (minute !in hourBounds.first * 60..hourBounds.last * 60) return
         val y = yForMinute(minute)
         val (left, right) = CalendarTimelineLogic.dayColumnBounds(
             dayIndex = todayIndex,
@@ -756,11 +767,12 @@ private class CalendarTimelineCanvas(
         val now = Calendar.getInstance(shanghai)
         if (days.none { sameDay(it.date, now) }) return null
         val minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        return minute.takeIf { it in CalendarTimelineLogic.startMinute..CalendarTimelineLogic.endMinute }
+        return minute.takeIf { it in hourBounds.first * 60..hourBounds.last * 60 }
     }
 
     private fun yForMinute(minute: Int): Float =
-        headerHeight + timelineHeight * CalendarTimelineLogic.position(minute)
+        headerHeight + timelineHeight * ((minute - hourBounds.first * 60).toFloat() /
+            ((hourBounds.last - hourBounds.first) * 60)).coerceIn(0f, 1f)
 
     private fun holidayBadge(items: List<HolidayItem>): String = items.joinToString(" · ") {
         "${context.uiText(if (it.type == "holiday") "休" else "班")} ${it.name}"
@@ -800,7 +812,9 @@ private class CalendarTimelineCanvas(
     private fun buildDayContentDescription(): String = days.joinToString("；") { day ->
         val date = SimpleDateFormat("yyyy年M月d日", Locale.CHINA).apply { timeZone = shanghai }.format(day.date.time)
         val holidays = holidayBadge(day.holidays)
-        val courses = day.courses.joinToString("，") { "${it.timeRange} ${it.name} ${it.room}" }
+        val courses = day.courses.joinToString("，") {
+            "${if (it.eventKind == "exam") context.uiText("考试") + " · " else ""}${context.uiText(it.timeRange)} ${it.name} ${it.room}"
+        }
         listOf(
             context.uiText(date),
             holidays,
@@ -810,9 +824,11 @@ private class CalendarTimelineCanvas(
 
     private fun placeCourses(courses: List<Course>): List<CoursePlacement> {
         val trackEnds = mutableListOf<Int>()
-        return courses.sortedWith(compareBy(Course::startSlot, Course::endSlot, Course::name)).map { course ->
-            val track = trackEnds.indexOfFirst { it < course.startSlot }.takeIf { it >= 0 } ?: trackEnds.size
-            if (track == trackEnds.size) trackEnds += course.endSlot else trackEnds[track] = course.endSlot
+        return courses.filter { AcademicScheduleLogic.interval(it) != null }
+            .sortedWith(compareBy<Course> { AcademicScheduleLogic.interval(it)!!.first }.thenBy { it.name }).map { course ->
+            val interval = AcademicScheduleLogic.interval(course)!!
+            val track = trackEnds.indexOfFirst { it <= interval.first }.takeIf { it >= 0 } ?: trackEnds.size
+            if (track == trackEnds.size) trackEnds += interval.second else trackEnds[track] = interval.second
             CoursePlacement(course, track)
         }
     }

@@ -117,6 +117,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.raw_schedule.as_ref(),
                 app.courses_on(manager.date).get(manager.cursor),
             ) {
+                if where_to_study_lib::academic::is_exam(course) {
+                    app.set_error("考试安排不可通过课程删除操作修改。".into());
+                    app.course_manager = Some(manager);
+                    return;
+                }
                 let day = manager.date.to_string();
                 let date = if key.code == KeyCode::Char('x') {
                     Some(day.as_str())

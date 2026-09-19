@@ -1,8 +1,11 @@
 use chrono::{Datelike, NaiveDate};
+use where_to_study_lib::academic::{self, GradeRequest};
 use where_to_study_lib::config::today_in_app_tz;
 use where_to_study_lib::course_deletions::{self, CourseDeletion};
 use where_to_study_lib::error::{ServiceError, ServiceResult};
-use where_to_study_lib::models::{ClassroomsRequest, Course, ScheduleRequest, ScheduleResponse};
+#[cfg(test)]
+use where_to_study_lib::models::Course;
+use where_to_study_lib::models::{ClassroomsRequest, ScheduleRequest, ScheduleResponse};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::credentials;
@@ -127,7 +130,9 @@ async fn raw_schedule(
     if let Some(password) = request.password.as_mut() {
         password.zeroize();
     }
-    result
+    let response = result?;
+    ensure_credentials_current(credentials)?;
+    Ok(response)
 }
 
 async fn effective_schedule(
@@ -141,7 +146,8 @@ async fn effective_schedule(
 }
 
 pub async fn courses(json: bool) -> ServiceResult<()> {
-    let schedule = effective_schedule(&require_credentials()?).await?;
+    let mut schedule = effective_schedule(&require_credentials()?).await?;
+    schedule.courses.retain(|course| !academic::is_exam(course));
     if json {
         print_json(&schedule)?;
     } else {
@@ -276,11 +282,114 @@ fn print_json(value: &impl serde::Serialize) -> ServiceResult<()> {
     Ok(())
 }
 
+fn ensure_credentials_current(
+    expected: &where_to_study_lib::credential_store::Credentials,
+) -> ServiceResult<()> {
+    let current = require_credentials()?;
+    if !academic_identity_matches(&current, expected) {
+        return Err(ServiceError::new("查询期间凭据已改变，请重新查询。"));
+    }
+    Ok(())
+}
+
+fn academic_identity_matches(
+    left: &where_to_study_lib::credential_store::Credentials,
+    right: &where_to_study_lib::credential_store::Credentials,
+) -> bool {
+    left.account == right.account
+        && left.password == right.password
+        && left.account_scope == right.account_scope
+}
+
+pub async fn grade_terms(json: bool) -> ServiceResult<()> {
+    let credentials = require_credentials()?;
+    let terms = academic::fetch_terms(&credentials.account, &credentials.password).await?;
+    ensure_credentials_current(&credentials)?;
+    if json {
+        return print_json(&terms);
+    }
+    println!("当前学期：{}", terms.current_term_id);
+    for term in terms.terms {
+        println!("{}  {}", term.id, term.name);
+    }
+    Ok(())
+}
+
+pub fn grade_request(
+    term: Option<String>,
+    all_terms: bool,
+    records: &str,
+) -> ServiceResult<GradeRequest> {
+    let record_type = match records {
+        "best" => "1",
+        "first" => "0",
+        "all" => "",
+        _ => return Err(ServiceError::new("成绩记录类型应为 best、first 或 all。")),
+    };
+    if !all_terms && term.as_ref().is_some_and(|value| value.trim().is_empty()) {
+        return Err(ServiceError::new(
+            "学期不能为空；查询全部学期请使用 --all-terms。",
+        ));
+    }
+    Ok(GradeRequest {
+        term_id: if all_terms { Some(String::new()) } else { term },
+        record_type: Some(record_type.into()),
+    })
+}
+
+pub async fn grades(
+    term: Option<String>,
+    all_terms: bool,
+    records: String,
+    json: bool,
+) -> ServiceResult<()> {
+    let query = grade_request(term, all_terms, &records)?;
+    let credentials = require_credentials()?;
+    let report =
+        academic::fetch_grades(&credentials.account, &credentials.password, &query).await?;
+    ensure_credentials_current(&credentials)?;
+    if json {
+        return print_json(&report);
+    }
+    println!("{}", output::grade_report_text(&report));
+    Ok(())
+}
+
+pub async fn exams(json: bool) -> ServiceResult<()> {
+    let credentials = require_credentials()?;
+    let schedule = raw_schedule(&credentials).await?;
+    ensure_credentials_current(&credentials)?;
+    if json {
+        return print_json(&schedule.exam_schedule);
+    }
+    println!("{}", output::exam_status(&schedule));
+    if let Some(exams) = schedule.exam_schedule {
+        for exam in exams.items {
+            println!(
+                "考试 · {}  {}  {}  {}",
+                exam.name,
+                if exam.date.is_empty() {
+                    "日期待定"
+                } else {
+                    &exam.date
+                },
+                if exam.start_time.is_empty() {
+                    format!("时间待定 · {}", exam.time_text)
+                } else {
+                    format!("{}-{}", exam.start_time, exam.end_time)
+                },
+                exam.room
+            );
+        }
+    }
+    Ok(())
+}
+
 pub async fn schedule(date: Option<String>, json: bool) -> ServiceResult<()> {
     let credentials = require_credentials()?;
     let target_date = parse_date(date.as_deref())?;
     let schedule = effective_schedule(&credentials).await?;
-    let week = schedule_week_number(&schedule, target_date)?;
+    let week = schedule_week_for_query(&schedule, target_date, false)?;
     if json {
         println!(
             "{}",
@@ -296,7 +405,7 @@ pub async fn week(date: Option<String>, json: bool) -> ServiceResult<()> {
     let credentials = require_credentials()?;
     let target_date = parse_date(date.as_deref())?;
     let schedule = effective_schedule(&credentials).await?;
-    let week = schedule_week_number(&schedule, target_date)?;
+    let week = schedule_week_for_query(&schedule, target_date, true)?;
     if json {
         println!(
             "{}",
@@ -598,7 +707,8 @@ fn week_schedule_json(
         .collect();
     serde_json::json!({
         "term_id": schedule.term_id,
-        "week_number": week,
+        "week_number": (week > 0).then_some(week),
+        "exam_schedule": schedule.exam_schedule,
         "days": days,
     })
 }
@@ -609,7 +719,8 @@ fn day_schedule_json(schedule: &ScheduleResponse, date: NaiveDate, week: i64) ->
         "term_start_date": schedule.term_start_date,
         "fetched_at": schedule.fetched_at,
         "date": date.format("%Y-%m-%d").to_string(),
-        "week_number": week,
+        "week_number": (week > 0).then_some(week),
+        "exam_schedule": schedule.exam_schedule,
         "courses": courses_on_day(schedule, date, week),
     })
 }
@@ -632,18 +743,38 @@ fn schedule_week_number(schedule: &ScheduleResponse, date: NaiveDate) -> Service
     Ok((date - term_start).num_days().div_euclid(7) + 1)
 }
 
+fn schedule_week_for_query(
+    schedule: &ScheduleResponse,
+    date: NaiveDate,
+    weekly: bool,
+) -> ServiceResult<i64> {
+    schedule_week_number(schedule, date).or_else(|error| {
+        let start = schedule_term_start(schedule)?;
+        let first = if weekly {
+            date - chrono::Duration::days(i64::from(date.weekday().num_days_from_monday()))
+        } else {
+            date
+        };
+        let present = (0..if weekly { 7 } else { 1 }).any(|offset| {
+            schedule.courses.iter().any(|course| {
+                academic::is_exam(course)
+                    && academic::occurs_on(course, first + chrono::Duration::days(offset), start)
+            })
+        });
+        if present {
+            Ok(0)
+        } else {
+            Err(error)
+        }
+    })
+}
+
 fn courses_on_day(
     schedule: &ScheduleResponse,
     date: NaiveDate,
-    week: i64,
+    _week: i64,
 ) -> Vec<serde_json::Value> {
-    let weekday = date.weekday().num_days_from_monday() as i64 + 1;
-    let mut courses: Vec<&Course> = schedule
-        .courses
-        .iter()
-        .filter(|course| course.weekday == weekday && course.week_numbers.contains(&week))
-        .collect();
-    courses.sort_by(|a, b| a.start_slot.cmp(&b.start_slot).then(a.name.cmp(&b.name)));
+    let courses = output::day_courses(schedule, date);
     courses
         .iter()
         .map(|course| {
@@ -653,8 +784,12 @@ fn courses_on_day(
                 "teacher": course.teacher,
                 "room": course.room,
                 "time_range": course.time_range,
-                "start_slot": course.start_slot + 1,
-                "end_slot": course.end_slot + 1,
+                "start_slot": (!academic::is_exam(course)).then_some(course.start_slot + 1),
+                "end_slot": (!academic::is_exam(course)).then_some(course.end_slot + 1),
+                "event_kind": course.event_kind,
+                "event_date": course.event_date,
+                "start_time": course.start_time,
+                "end_time": course.end_time,
             })
         })
         .collect()
@@ -703,6 +838,72 @@ mod tests {
     use super::*;
 
     #[test]
+    fn academic_password_changes_invalidate_even_with_unchanged_cloud_password() {
+        let first = where_to_study_lib::credential_store::Credentials {
+            account: "synthetic-account".into(),
+            password: "fixture-old".into(),
+            teaching_cloud_password: Some("fixture-cloud".into()),
+            account_scope: "fixture-scope".into(),
+        };
+        let mut second = first.clone();
+        second.password = "fixture-new".into();
+        assert_eq!(
+            first.teaching_cloud_password,
+            second.teaching_cloud_password
+        );
+        assert!(!academic_identity_matches(&first, &second));
+    }
+
+    #[test]
+    fn grade_requests_keep_current_and_all_semesters_distinct() {
+        assert_eq!(grade_request(None, false, "best").unwrap().term_id, None);
+        assert_eq!(
+            grade_request(None, true, "best").unwrap().term_id,
+            Some(String::new())
+        );
+        assert_eq!(
+            grade_request(None, false, "first")
+                .unwrap()
+                .record_type
+                .as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            grade_request(None, false, "all")
+                .unwrap()
+                .record_type
+                .as_deref(),
+            Some("")
+        );
+        assert!(grade_request(Some(String::new()), false, "best").is_err());
+    }
+
+    #[test]
+    fn late_exams_use_actual_date_without_fake_slots_or_teaching_week() {
+        let mut schedule = fixture_schedule();
+        schedule.courses.push(Course {
+            id: "synthetic-exam".into(),
+            name: "合成晚间考试".into(),
+            event_kind: Some("exam".into()),
+            event_date: Some("2026-09-01".into()),
+            start_time: Some("22:10".into()),
+            end_time: Some("23:00".into()),
+            ..Default::default()
+        });
+        let date = NaiveDate::from_ymd_opt(2026, 9, 1).unwrap();
+        assert_eq!(schedule_week_for_query(&schedule, date, false).unwrap(), 0);
+        let json = day_schedule_json(&schedule, date, 0);
+        assert!(json["week_number"].is_null());
+        assert_eq!(json["courses"][0]["event_date"], "2026-09-01");
+        assert_eq!(json["courses"][0]["start_time"], "22:10");
+        assert!(json["courses"][0]["start_slot"].is_null());
+        assert!(courses_on_day(&schedule, date + chrono::Duration::days(7), 0).is_empty());
+        schedule.courses[0].start_time = None;
+        schedule.courses[0].end_time = None;
+        assert_eq!(output::course_time(&schedule.courses[0]), "全天 · 时间待定");
+    }
+
+    #[test]
     fn slot_filter_parses_ranges_and_singles() {
         assert_eq!(parse_slot_filter("1-3,5").unwrap(), vec![0, 1, 2, 4]);
         assert_eq!(parse_slot_filter("1,2,3").unwrap(), vec![0, 1, 2]);
@@ -742,6 +943,7 @@ mod tests {
             term_start_date: "2026-03-02".to_string(),
             fetched_at: String::new(),
             courses: Vec::new(),
+            exam_schedule: None,
         }
     }
 
@@ -766,7 +968,9 @@ mod tests {
                 end_slot: 1,
                 section_text: "1-2节".to_string(),
                 time_range: "08:00-09:35".to_string(),
+                ..Default::default()
             }],
+            exam_schedule: None,
         };
         let courses = courses_on_day(&schedule, date, 1);
         assert_eq!(courses.len(), 1);

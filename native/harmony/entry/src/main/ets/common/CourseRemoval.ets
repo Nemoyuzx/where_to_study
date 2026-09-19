@@ -88,6 +88,7 @@ export class CourseRemovalLogic {
     }
     const courses: Course[] = [];
     for (const course of schedule.courses) {
+      if (course.eventKind === 'exam') { courses.push(course); continue; }
       const matched: CourseRemovalRecord[] = active.filter((record: CourseRemovalRecord): boolean =>
         record.matchesCourse(course));
       if (matched.some((record: CourseRemovalRecord): boolean => record.date.length === 0)) {
@@ -109,6 +110,7 @@ export class CourseRemovalLogic {
         weeks, course.examWeekNumbers, course.weekday, course.startSlot, course.endSlot,
         course.sectionText, course.timeRange, course.sourceCourseID));
     }
-    return new ScheduleSnapshot(schedule.termID, schedule.termStartDate, schedule.fetchedAt, courses);
+    return new ScheduleSnapshot(schedule.termID, schedule.termStartDate, schedule.fetchedAt, courses,
+      schedule.examSchedule);
   }
 }

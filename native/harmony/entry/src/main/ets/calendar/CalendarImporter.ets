@@ -97,7 +97,7 @@ export class HarmonyCalendarImporter implements CalendarImporting {
         event.endTime,
         '',
         event.timeZone !== undefined ? event.timeZone : null,
-        reminderMinutes
+        reminderMinutes, event.isAllDay ?? false
       );
       indexed.push(snapshot);
       eventById.set(identifier, event);
@@ -169,7 +169,8 @@ export class HarmonyCalendarImporter implements CalendarImporting {
     event.description = draft.notes;
     event.startTime = draft.startEpochMs;
     event.endTime = draft.endEpochMs;
+    event.isAllDay = draft.allDay;
     event.timeZone = CalendarImportLogic.shanghaiTimeZoneId;
-    event.reminderTime = [CalendarImportLogic.reminderOffsetMinutes];
+    event.reminderTime = draft.allDay ? [] : [CalendarImportLogic.reminderOffsetMinutes];
   }
 }

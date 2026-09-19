@@ -56,7 +56,7 @@ class InformationQueryLogicTest {
         )
         val lastTranslationPx = InformationQueryLayoutLogic.modeThumbTranslationXPx(
             thumbWidthPx = thumbWidthPx,
-            index = InformationQueryMode.IMPORTANT_EVENTS.ordinal,
+            index = InformationQueryMode.GRADES.ordinal,
             itemCount = InformationQueryMode.entries.size,
         )
 
