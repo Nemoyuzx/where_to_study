@@ -41,7 +41,9 @@ final class ColorThemeUITests: XCTestCase {
 
         for preset in ["ocean", "violet", "amber", "rose", "default"] {
             let button = app.buttons["theme.preset.\(preset)"]
-            reveal(button, app: app)
+            // The first LazyVGrid row may no longer exist in accessibility
+            // after reaching rose; returning to default must scroll upward.
+            reveal(button, app: app, towardTop: preset == "default")
             button.tap()
             XCTAssertTrue(button.isSelected)
         }
