@@ -1,5 +1,22 @@
 # Where To Study v0.3.0 — Pre-release / 预发布
 
+## 2026-09-19 桌面表头修复构建 / Pinned-header rebuild
+
+本轮构建源码为 `1833f57e10b08b92273001f9042550bf72cea137`（包含 `a1106d0` 的桌面日／周日期、课程数量与全天日程固定，以及月视图星期栏固定）。版本仍为 **0.3.0 预发布**，现有标签和稳定版 0.2.9 未移动；仅替换下述原生 APK／DMG，Windows／Linux／终端工具附件保持此前内容。
+
+- Android **(52)**：Release JVM 271 项通过，Lint 0 errors／66 warnings／1 hint，固定证书、v2／v3、16 KiB ZIP alignment、HTTPS 与许可证检查通过。Android 此次是当前源码重建，未更改手机布局。
+- Apple **(96)**：本地 Xcode 完整 macOS 376 项（跳过 1）、iOS 单测 398 项（跳过 1）、iOS UI 44 项（跳过 7），全部 0 失败。iOS 于 **21:40:09.274**、macOS 于 **21:43:35.288 +0800** 收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`；未继续检查 App Store Connect，未提交正式审核。149 项 Apple 源码／构建输入前后摘要一致。Universal DMG 的 App／Widget 均为 (96)、arm64+x86_64；公开 DMG 仍为 ad-hoc 签名、未公证。
+- HarmonyOS **(1002032)**：224 项 Hypium、release 模式、独立签名／profile／ZIP／版本校验通过。DevEco 使用主工程，重新加载磁盘并同步后确认 0.3.0，选择第二项“生成 .app 包并上传至 AppGallery Connect 进行测试”；本轮 **仅测试上传成功，云测试通过**，没有提交上架审核。最终 APP 修改时间 21:24:23，21:26:44 完成上传后字节核验。界面显示的附加 build=1 不替代真实 versionCode。无鸿蒙设备，未宣称真机通知／视觉验证。
+
+| 最终产物 | Bytes | SHA-256 |
+| --- | ---: | --- |
+| GitHub Android APK (52) | 1,148,838 | `030fd3e611385ce8d855ac3f0de868ff30273b4cbd954a1710d998cb094d55bb` |
+| GitHub macOS Universal DMG (96) | 7,831,878 | `7e21ee218c0eb7c441fb1ca4381f0af780a726fcb998df358ec8f1a2052a6ff0` |
+| DevEco 最终 HAP (1002032)，不公开 | 2,068,947 | `ac3042ccc1862d9bbb5384ce3bea84f793b35c54b720319b70971257e3e99989` |
+| DevEco 最终 APP (1002032)，不公开 | 1,354,584 | `634eaaf4fca37af64660d7dbafa8c6883be15f3a8e6276d9047fd37c4eca314c` |
+
+GitHub 两个替换附件的 API 大小与 SHA-256 均与本地一致，未回下载。无公开 AAB／HarmonyOS／iOS 包。原生安装包路径：`release-artifacts/v0.3.0-pinned-build{52,96,1002032}/`；鸿蒙最终 DevEco 字节另存于 `devecoupload/`，不覆盖 CLI 副本。Apple (96) 的归档和 xcresult 已独立保留，下一轮构建不覆盖该证据。
+
 ## 已公开 / Published
 
 [Where To Study v0.3.0](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.0) 于 **2026-09-19 20:24:19 +0800** 公开为预发布版（Release ID `392028491`，`draft=false`，`prerelease=true`）。标题符合既有命名，恰有 **11 个**安装／终端工具附件；稳定版 `releases/latest` 仍为 **v0.2.9**，旧版附件未修改。
