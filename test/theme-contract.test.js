@@ -749,11 +749,15 @@ test('Harmony tablet week view follows the macOS header, all-day, and timeline h
   const timelineContent = harmonyExpandedCalendarSource.match(
     /@Builder\s+timelineContent\(\)[\s\S]*?private timelineDayAreaWidth/,
   )?.[0] ?? ''
-  const headerContent = timelineContent.slice(timelineContent.indexOf('@Builder\n  timelineHeader()'))
-  const dayHeaderIndex = headerContent.indexOf('ExpandedCalendarTimelineDayHeaderView')
-  const allDayIndex = headerContent.indexOf('this.allDayRow()')
+  // Git may check ArkTS sources out as CRLF on Windows. Verify the same
+  // hierarchy under both line endings rather than slicing from index -1.
+  for (const content of [timelineContent.replace(/\r\n/g, '\n'), timelineContent.replace(/\r?\n/g, '\r\n')]) {
+    const headerContent = content.match(/@Builder\s+timelineHeader\(\)[\s\S]*/)?.[0] ?? ''
+    const dayHeaderIndex = headerContent.indexOf('ExpandedCalendarTimelineDayHeaderView')
+    const allDayIndex = headerContent.indexOf('this.allDayRow()')
+    assert.ok(dayHeaderIndex >= 0 && dayHeaderIndex < allDayIndex)
+  }
   const timelineBodyIndex = timelineContent.indexOf('MobileCalendarTimelineView')
-  assert.ok(dayHeaderIndex >= 0 && dayHeaderIndex < allDayIndex)
   const scrollIndex = timelineContent.indexOf('Scroll()')
   const pcHeaderIndex = timelineContent.indexOf('if (this.isPc)')
   const tabletHeaderIndex = timelineContent.indexOf('if (!this.isPc)')
