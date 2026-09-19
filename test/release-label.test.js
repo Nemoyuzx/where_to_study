@@ -120,7 +120,7 @@ test("client versions consistently release 0.3.0 with fresh distribution build c
   assert.match(nativeAndroid, /versionName = "0\.3\.0"/);
   assert.match(nativeAndroid, /versionCode = 51/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.3\.0"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "94"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "95"/);
   assert.match(nativeHarmony, /"versionName": "0\.3\.0"/);
   assert.match(nativeHarmony, /"versionCode": 1002031/);
   assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.3\.0'/);
@@ -139,10 +139,13 @@ test("client versions consistently release 0.3.0 with fresh distribution build c
 
 test("native Android CI avoids the removed legacy SDK tools package", () => {
   const workflow = readFileSync(path.join(root, ".github", "workflows", "build-native.yml"), "utf8");
-  const setupCount = (workflow.match(/uses: android-actions\/setup-android@/g) || []).length;
-  const explicitPackages = (workflow.match(/uses: android-actions\/setup-android@[^\n]+\n\s+with:\n\s+packages: platform-tools\n/g) || []).length;
-  assert.equal(setupCount, 2);
-  assert.equal(explicitPackages, setupCount);
+  for (const source of [workflow, workflow.replace(/\r?\n/g, "\r\n")]) {
+    const normalized = source.replace(/\r\n/g, "\n");
+    const setupCount = (normalized.match(/uses: android-actions\/setup-android@/g) || []).length;
+    const explicitPackages = (normalized.match(/uses: android-actions\/setup-android@[^\n]+\n\s+with:\n\s+packages: platform-tools\n/g) || []).length;
+    assert.equal(setupCount, 2);
+    assert.equal(explicitPackages, setupCount);
+  }
   assert.match(workflow, /sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36\.0\.0"/);
 });
 

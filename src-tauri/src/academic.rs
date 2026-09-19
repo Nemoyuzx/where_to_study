@@ -436,12 +436,6 @@ async fn request(path: &str, token: &str, query: &[(&str, &str)]) -> ServiceResu
         .send()
         .await
         .map_err(|_| ServiceError::new("无法连接学校教务查询服务。"))?;
-    if !response.status().is_success() {
-        return Err(ServiceError::with_status(
-            "教务查询暂不可用，请检查登录状态后重试。",
-            response.status().as_u16(),
-        ));
-    }
     read_sjd_json_response(response, MAX_BYTES, "教务查询").await
 }
 

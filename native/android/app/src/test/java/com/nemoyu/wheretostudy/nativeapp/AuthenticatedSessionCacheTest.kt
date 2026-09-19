@@ -13,6 +13,47 @@ class AuthenticatedSessionCacheTest {
     private class Expired : Exception()
     private val credentials = Credentials("student", "academic", "cloud")
 
+    @Test fun sjdHttp500UnauthorizedFixtureRefreshesOnlyOnceForStringAndNumericCode() {
+        for (code in listOf("\"401\"", "401", "401.0")) {
+            var logins = 0
+            var requests = 0
+            val fixture = "{\"code\":$code,\"message\":\"非法访问：/currentTerm\"}"
+            val api = SjdApiClient(AuthenticatedSessionCache(), { "token-${++logins}" }) { _, _, token ->
+                requests++
+                SjdApiClient.responsePayload(if (token == "token-1") 500 else 200,
+                    if (token == "token-1") fixture else "{\"code\":1}", authenticated = true)
+            }
+            api.authenticated(credentials) { api.post("/bjyddx/currentTerm", "referer", token = it) }
+            assertEquals(2, logins); assertEquals(2, requests)
+            var rejectedLogins = 0
+            val rejected = SjdApiClient(AuthenticatedSessionCache(), { "token-${++rejectedLogins}" }) { _, _, _ ->
+                SjdApiClient.responsePayload(500, fixture, authenticated = true)
+            }
+            val error = assertThrows(ScheduleClientException::class.java) {
+                rejected.authenticated(credentials) { rejected.post("/bjyddx/currentTerm", "referer", token = it) }
+            }
+            assertEquals(2, rejectedLogins)
+            assertTrue(error.sessionExpired)
+            assertFalse("Auth rejection must not be replayed by a transport retry policy", error.retryable)
+        }
+    }
+
+    @Test fun sjdNonAuthServerFailuresAndLoginResponsesDoNotTriggerSessionRefresh() {
+        for ((status, body, authenticated) in listOf(
+            Triple(500, "{\"code\":500,\"message\":\"token expired\"}", true),
+            Triple(500, "invalid response", true),
+            Triple(503, "{\"code\":401}", true),
+            Triple(403, "{\"code\":401}", true),
+            Triple(423, "{\"code\":401}", true),
+            Triple(500, "{\"code\":401}", false),
+        )) {
+            val error = assertThrows(ScheduleClientException::class.java) {
+                SjdApiClient.responsePayload(status, body, authenticated)
+            }
+            assertFalse("status=$status authenticated=$authenticated", error.sessionExpired)
+        }
+    }
+
     @Test fun onlyExplicitSessionExpiryMessagesTriggerRefresh() {
         listOf("token expired", "Invalid access token", "登录已过期", "会话失效，请重新登录").forEach {
             assertTrue(it, SessionExpiryMessage.matches(it))

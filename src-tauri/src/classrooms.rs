@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::session_cache::{check_auth_payload, token_ttl, SessionCache, SessionEpoch};
+use crate::session_cache::{token_ttl, SessionCache, SessionEpoch};
 use chrono::NaiveDate;
 use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderValue, ORIGIN, REFERER, USER_AGENT};
@@ -220,7 +220,8 @@ pub(crate) async fn read_sjd_json_response(
     max_bytes: usize,
     response_name: &str,
 ) -> ServiceResult<Value> {
-    if response.status().as_u16() == 401 {
+    let status = response.status().as_u16();
+    if status == 401 {
         return Err(ServiceError::expired());
     }
     let mut body = Vec::new();
@@ -231,8 +232,33 @@ pub(crate) async fn read_sjd_json_response(
     {
         append_limited_body_chunk(&mut body, &chunk, max_bytes, response_name)?;
     }
-    let payload = parse_limited_json_bytes(&body, max_bytes, response_name)?;
-    check_auth_payload(&payload)?;
+    parse_sjd_response_bytes(status, &body, max_bytes, response_name)
+}
+
+fn parse_sjd_response_bytes(
+    status: u16,
+    body: &[u8],
+    max_bytes: usize,
+    response_name: &str,
+) -> ServiceResult<Value> {
+    if status == 401 {
+        return Err(ServiceError::expired());
+    }
+    let payload = parse_limited_json_bytes(body, max_bytes, response_name)?;
+    let code = payload
+        .get("code")
+        .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok()));
+    // Verified SJD contract: an invalid token can return HTTP 500 with JSON
+    // {"code":"401","message":"非法访问：/currentTerm"}. This exception is
+    // specific to SJD; other HTTP failures and message-only hints never relogin.
+    if ((200..300).contains(&status) || status == 500) && code == Some(401) {
+        return Err(ServiceError::expired());
+    }
+    if !(200..300).contains(&status) {
+        return Err(ServiceError::new(format!(
+            "{response_name}获取失败，HTTP {status}。"
+        )));
+    }
     Ok(payload)
 }
 
@@ -534,15 +560,6 @@ async fn fetch_realtime_classrooms(
         .await
         .map_err(|_| ServiceError::new("实时教室数据获取失败，请稍后重试。"))?;
 
-    if response.status().as_u16() >= 400 {
-        return Err(ServiceError::with_status(
-            format!(
-                "实时教室数据获取失败，HTTP {}。",
-                response.status().as_u16()
-            ),
-            response.status().as_u16(),
-        ));
-    }
     let payload =
         read_sjd_json_response(response, MAX_SJD_DATA_RESPONSE_BYTES, "实时教室服务").await?;
     if !code_is_success(&payload) {
@@ -676,6 +693,121 @@ async fn fetch_all_classrooms_with_token(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sjd_http_500_expiry_requires_explicit_401_body_code() {
+        // Sanitized response from a request carrying a deliberately invalid
+        // token; contains no saved credentials or student information.
+        for body in [
+            r#"{"code":"401","message":"非法访问：/currentTerm"}"#,
+            r#"{"code":401,"message":"非法访问：/currentTerm"}"#,
+        ] {
+            for status in [200, 500] {
+                assert!(
+                    parse_sjd_response_bytes(status, body.as_bytes(), 4096, "教务查询")
+                        .unwrap_err()
+                        .authentication_expired
+                );
+            }
+            for status in [403, 423, 503] {
+                assert!(
+                    !parse_sjd_response_bytes(status, body.as_bytes(), 4096, "教务查询")
+                        .unwrap_err()
+                        .authentication_expired
+                );
+            }
+        }
+        for body in [
+            r#"{"code":500,"message":"token expired"}"#,
+            r#"{"code":403,"message":"请先登录"}"#,
+            r#"{"code":423,"message":"token expired"}"#,
+            r#"{"message":"token expired"}"#,
+            "<html>login required</html>",
+        ] {
+            assert!(
+                !parse_sjd_response_bytes(500, body.as_bytes(), 4096, "教务查询")
+                    .unwrap_err()
+                    .authentication_expired
+            );
+        }
+        assert!(parse_sjd_response_bytes(
+            200,
+            br#"{"code":0,"message":"token expired"}"#,
+            4096,
+            "教务查询"
+        )
+        .is_ok());
+        assert!(
+            parse_sjd_response_bytes(401, b"", 4096, "教务查询")
+                .unwrap_err()
+                .authentication_expired
+        );
+    }
+
+    #[tokio::test]
+    async fn sjd_http_500_code_401_refreshes_once_but_generic_500_does_not() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let sessions = SessionCache::new();
+        let logins = AtomicUsize::new(0);
+        let requests = AtomicUsize::new(0);
+        let result = sessions
+            .run(
+                "synthetic",
+                "fixture-only",
+                || async {
+                    logins.fetch_add(1, Ordering::SeqCst);
+                    Ok(("synthetic-token", Duration::from_secs(60)))
+                },
+                |_| async {
+                    let attempt = requests.fetch_add(1, Ordering::SeqCst);
+                    if attempt == 0 {
+                        parse_sjd_response_bytes(500, br#"{"code":"401"}"#, 4096, "教务查询")
+                    } else {
+                        parse_sjd_response_bytes(200, br#"{"code":1,"data":[]}"#, 4096, "教务查询")
+                    }
+                },
+            )
+            .await;
+        assert!(result.is_ok());
+        assert_eq!(logins.load(Ordering::SeqCst), 2);
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+        for status in [500, 503, 403, 423] {
+            let result = sessions
+                .run(
+                    "synthetic",
+                    "fixture-only",
+                    || async { panic!("ordinary failures must reuse the existing token") },
+                    |_| async {
+                        parse_sjd_response_bytes(
+                            status,
+                            br#"{"message":"token expired"}"#,
+                            4096,
+                            "教务查询",
+                        )
+                    },
+                )
+                .await;
+            assert!(!result.unwrap_err().authentication_expired);
+        }
+        let attempts = AtomicUsize::new(0);
+        let result = sessions
+            .run(
+                "synthetic",
+                "fixture-only",
+                || async {
+                    logins.fetch_add(1, Ordering::SeqCst);
+                    Ok(("replacement-token", Duration::from_secs(60)))
+                },
+                |_| async {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    parse_sjd_response_bytes(500, br#"{"code":"401"}"#, 4096, "教务查询")
+                },
+            )
+            .await;
+        assert!(result.unwrap_err().authentication_expired);
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(logins.load(Ordering::SeqCst), 3);
+    }
 
     #[test]
     fn sjd_redirects_allow_same_host_and_effective_https_port() {

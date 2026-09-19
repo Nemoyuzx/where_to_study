@@ -159,6 +159,45 @@ final class AuthenticationSessionCacheTests: XCTestCase {
         }
     }
 
+    func testSJDVerifiedHTTP500UnauthorizedFixtureRefreshesOnlyOnce() async throws {
+        for body in [#"{"code":"401","message":"非法访问：/currentTerm"}"#, #"{"code":401,"message":"非法访问：/currentTerm"}"#] {
+            let transport = SJDExpirationFixtureTransport(status: 500, body: body)
+            let api = SJDAPIClient(transport: transport)
+            do {
+                _ = try await api.authenticated(credentials: Credentials(account: "synthetic", password: "synthetic")) {
+                    try await api.academic(token: $0, endpoint: .currentTerm)
+                }
+                XCTFail("A second explicit expiration must be returned")
+            } catch AuthenticationSessionError.expired {}
+            let counts = await transport.counts()
+            XCTAssertEqual(counts.logins, 2)
+            XCTAssertEqual(counts.queries, 2)
+        }
+    }
+
+    func testSJDServerExceptionExcludesOtherStatusesMessagesAndHosts() async throws {
+        for (status, body, host) in [
+            (500, #"{"code":"500","message":"token expired"}"#, "jwglweixin.bupt.edu.cn"),
+            (500, #"{"message":"token expired"}"#, "jwglweixin.bupt.edu.cn"),
+            (503, #"{"code":"401"}"#, "jwglweixin.bupt.edu.cn"),
+            (423, #"{"code":"401"}"#, "jwglweixin.bupt.edu.cn"),
+            (403, #"{"code":"401"}"#, "jwglweixin.bupt.edu.cn"),
+            (500, #"{"code":"401"}"#, "apiucloud.bupt.edu.cn")
+        ] {
+            let transport = SJDExpirationFixtureTransport(status: status, body: body, host: host)
+            let api = SJDAPIClient(transport: transport)
+            do {
+                _ = try await api.authenticated(credentials: Credentials(account: "synthetic", password: "synthetic")) {
+                    try await api.academic(token: $0, endpoint: .currentTerm)
+                }
+                XCTFail("Expected the original service failure")
+            } catch ScheduleClientError.service {}
+            let counts = await transport.counts()
+            XCTAssertEqual(counts.logins, 1)
+            XCTAssertEqual(counts.queries, 1)
+        }
+    }
+
     func testTTLAndJWTUseEarliestExpiryWithSafetyMargin() {
         let now = Date(timeIntervalSince1970: 1_000)
         let payload = Data(#"{"exp":1100}"#.utf8).base64EncodedString()
@@ -173,6 +212,33 @@ private actor SessionProbe {
     func login(expired: Bool = false) -> AuthenticationSession<String> {
         logins += 1
         return AuthenticationSession(value: "synthetic-token-\(logins)", expiresAt: expired ? .distantPast : .distantFuture)
+    }
+}
+
+private actor SJDExpirationFixtureTransport: SJDHTTPTransport {
+    private let status: Int
+    private let body: String
+    private let host: String
+    private var logins = 0
+    private var queries = 0
+
+    init(status: Int, body: String, host: String = "jwglweixin.bupt.edu.cn") {
+        self.status = status
+        self.body = body
+        self.host = host
+    }
+
+    func counts() -> (logins: Int, queries: Int) { (logins, queries) }
+
+    func data(for request: URLRequest, maximumBytes: Int) async throws -> (Data, URLResponse) {
+        if request.url?.path == "/bjyddx/login" {
+            logins += 1
+            return (Data(#"{"code":1,"data":{"token":"synthetic-token"}}"#.utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        queries += 1
+        return (Data(body.utf8), HTTPURLResponse(url: URL(string: "https://\(host)/bjyddx/currentTerm")!,
+            statusCode: status, httpVersion: nil, headerFields: nil)!)
     }
 }
 

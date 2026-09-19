@@ -397,6 +397,16 @@ struct SJDAPIClient: Sendable {
         }
         try SJDResponseLimits.validate(result.0, endpoint: endpoint)
         if endpoint != .login {
+            // The trusted mobile academic endpoint returns HTTP 500 with
+            // {"code":"401","message":"非法访问：/currentTerm"} for an
+            // invalid token. Keep this verified exception scoped to SJD;
+            // generic server/firewall errors and UCloud never use it.
+            if let http = result.1 as? HTTPURLResponse, http.statusCode == 500,
+               SJDNetworkPolicy.allows(http.url),
+               let object = try? JSONSerialization.jsonObject(with: result.0) as? [String: Any],
+               Self.string(object["code"]) == "401" {
+                throw AuthenticationSessionError.expired
+            }
             try AuthenticationSessionPolicy.checkExpiration(data: result.0, response: result.1)
         }
         return result

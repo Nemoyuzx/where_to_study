@@ -8,7 +8,7 @@ import {
 } from './HttpUtil';
 import { ScheduleClientError } from './SjdErrors';
 import { NetworkDiagnostics } from './NetworkDiagnostics';
-import { AuthenticatedSession, AuthenticationExpiredError, AuthenticationFailure, SessionLease } from './AuthenticatedSession';
+import { AuthenticatedSession, AuthenticationExpiredError, SessionLease } from './AuthenticatedSession';
 import {
   SJDNetworkPolicy, SJDResponseEndpoint, SJDResponseLimits, SJDFormURLEncoder
 } from './SjdEncoding';
@@ -193,15 +193,20 @@ export class SJDAPIClient {
   }
 
   private checkAuthentication(result: HttpResult, endpoint: SJDResponseEndpoint): HttpResult {
-    if (endpoint !== SJDResponseEndpoint.login) {
-      const root: Record<string, Object> | null = JsonUtil.parseObject(result.body);
-      if (AuthenticationFailure.isExpired(result.statusCode,
-        root === null ? '' : SJDAPIClient.string(root['code']),
-        root === null ? '' : SJDAPIClient.message(root, ''))) {
-        throw new AuthenticationExpiredError();
-      }
+    if (endpoint !== SJDResponseEndpoint.login &&
+      SJDAPIClient.authenticationExpired(result.statusCode, result.body)) {
+      throw new AuthenticationExpiredError();
     }
     return result;
+  }
+
+  static authenticationExpired(status: number, body: string): boolean {
+    if (status === 401) { return true; }
+    if ((status < 200 || status >= 300) && status !== 500) { return false; }
+    // 已验证的 SJD 无效 token 响应为 HTTP 500 + JSON code "401"。
+    // 仅在此固定学校接口应用该契约；错误文案不触发重登，UCloud 规则不变。
+    const root: Record<string, Object> | null = JsonUtil.parseObject(body);
+    return root !== null && SJDAPIClient.string(root['code']) === '401';
   }
 
   private static headersFor(referer: string, token: string | null): Record<string, string> {

@@ -11,6 +11,8 @@
 
 Token caches are process-local, credential-scoped and independent from result caches. An explicit authentication-expired response permits one login retry; network/permission/parsing failures do not. Clear/account changes reject stale responses. Regular courses retain period-based timing; only exams use exact clock ranges.
 
+2026-09-19 使用故意无效、非真实凭据的令牌只读探测教务 `/currentTerm`，确认该服务返回 **HTTP 500 + JSON `code: "401"`**（`message: "非法访问：/currentTerm"`）。这是一项仅限 SJD 教务接口的明确认证失效兼容分支：只接受 500 中的确定业务码 401，不把一般 5xx、403、423 或仅含过期字样的错误当成重登依据。教学云不沿用这个教务专用例外。
+
 ## 已核验接口
 
 协议参考：<https://github.com/Yokumii/bupt-api-collected> 的 `src/jwgl/routes.ts`。

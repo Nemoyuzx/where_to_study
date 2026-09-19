@@ -170,7 +170,7 @@ class SjdApiClient internal constructor(
         form: Map<String, String>, token: String?): JSONObject {
         val payload = requestOverride?.invoke(method, path, token) ?: request(method, path, referer, form, token)
         if (token != null && !isSuccessful(payload) &&
-            (payload.opt("code").stringValue() == "401" || SessionExpiryMessage.matches(message(payload, "")))) {
+            (isUnauthorizedCode(payload.opt("code")) || SessionExpiryMessage.matches(message(payload, "")))) {
             throw ScheduleClientException("移动教务会话已过期，请重新登录。", sessionExpired = true)
         }
         return payload
@@ -224,18 +224,7 @@ class SjdApiClient internal constructor(
                 }
                 val stream = if (status in 200..399) connection.inputStream else connection.errorStream
                 val body = SjdResponseReader.read(stream, connection.contentLengthLong)
-                if (status !in 200..399) {
-                    throw ScheduleClientException(
-                        "移动教务请求失败，HTTP $status。",
-                        retryable = status == HTTP_REQUEST_TIMEOUT ||
-                            status == HTTP_TOO_MANY_REQUESTS ||
-                            status >= HTTP_SERVER_ERROR,
-                        sessionExpired = token != null && status == 401,
-                    )
-                }
-                return runCatching { JSONObject(body) }.getOrElse {
-                    throw ScheduleClientException("移动教务返回了无法识别的数据。")
-                }
+                return responsePayload(status, body, authenticated = token != null)
             } finally {
                 connection.disconnect()
             }
@@ -250,6 +239,27 @@ class SjdApiClient internal constructor(
     private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
     companion object {
+        internal fun isUnauthorizedCode(value: Any?): Boolean =
+            value == "401" || (value is Number && value.toDouble() == 401.0)
+
+        internal fun responsePayload(status: Int, body: String, authenticated: Boolean): JSONObject {
+            val payload = runCatching { JSONObject(body) }.getOrNull()
+            if (status !in 200..399) {
+                // SJD's currentTerm endpoint returns HTTP 500 with JSON code 401
+                // for an invalid token. This exception is specific to SJD; other
+                // server/firewall statuses and error text must not trigger login.
+                val expired = authenticated && (status == 401 ||
+                    (status == 500 && isUnauthorizedCode(payload?.opt("code"))))
+                throw ScheduleClientException(
+                    "移动教务请求失败，HTTP $status。",
+                    retryable = !expired && (status == HTTP_REQUEST_TIMEOUT ||
+                        status == HTTP_TOO_MANY_REQUESTS || status >= HTTP_SERVER_ERROR),
+                    sessionExpired = expired,
+                )
+            }
+            return payload ?: throw ScheduleClientException("移动教务返回了无法识别的数据。")
+        }
+
         private const val HTTP_REQUEST_TIMEOUT = 408
         private const val HTTP_TOO_MANY_REQUESTS = 429
         private const val HTTP_SERVER_ERROR = 500

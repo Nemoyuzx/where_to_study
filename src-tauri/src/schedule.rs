@@ -445,18 +445,6 @@ async fn fetch_sjd_schedule_with_token(
         .await
         .map_err(|error| ServiceError::new(format!("无法连接移动教务课表服务：{error}")))?;
 
-    for response in [&current_response, &all_response] {
-        if response.status().as_u16() >= 400 {
-            return Err(ServiceError::with_status(
-                format!(
-                    "移动教务课表获取失败，HTTP {}。",
-                    response.status().as_u16()
-                ),
-                response.status().as_u16(),
-            ));
-        }
-    }
-
     let current_payload = read_sjd_json_response(
         current_response,
         MAX_SJD_DATA_RESPONSE_BYTES,

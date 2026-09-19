@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { AuthenticatedSession, AuthenticationExpiredError, AuthenticationFailure, SessionLease } from '../main/ets/net/AuthenticatedSession';
+import { SJDAPIClient } from '../main/ets/net/SjdApi';
 
 class SessionGate {
   private release: () => void = () => {};
@@ -9,6 +10,57 @@ class SessionGate {
 
 export default function authenticatedSessionTest() {
   describe('AuthenticatedSessionTest', () => {
+    it('sjd_http_500_expiry_requires_explicit_401_code_not_message', 0, () => {
+      // 脱敏契约：仅故意无效 token 的公开错误响应，不含真实账号数据。
+      for (const body of ['{"code":"401","message":"非法访问：/currentTerm"}',
+        '{"code":401,"message":"非法访问：/currentTerm"}']) {
+        expect(SJDAPIClient.authenticationExpired(500, body)).assertTrue();
+        expect(SJDAPIClient.authenticationExpired(200, body)).assertTrue();
+        for (const status of [403, 423, 503]) {
+          expect(SJDAPIClient.authenticationExpired(status, body)).assertFalse();
+        }
+      }
+      for (const body of ['{"code":500,"message":"token expired"}',
+        '{"code":403,"message":"请先登录"}', '{"code":423,"message":"token expired"}',
+        '{"message":"token expired"}', '<html>login required</html>']) {
+        expect(SJDAPIClient.authenticationExpired(500, body)).assertFalse();
+        expect(SJDAPIClient.authenticationExpired(200, body)).assertFalse();
+      }
+      expect(SJDAPIClient.authenticationExpired(401, '')).assertTrue();
+      // UCloud 的通用规则不获得 SJD 专用的 500 例外。
+      expect(AuthenticationFailure.isExpired(500, '401', '')).assertFalse();
+    });
+
+    it('sjd_http_500_401_retries_once_and_keeps_retry_bounded', 0, async () => {
+      const cache: AuthenticatedSession<string> = new AuthenticatedSession<string>();
+      let logins: number = 0;
+      let requests: number = 0;
+      const login = async (): Promise<SessionLease<string>> => new SessionLease<string>(
+        (++logins).toString(), Date.now() + 60000);
+      const value = await cache.run('synthetic', 'fixture-only', login, async (token: string): Promise<string> => {
+        requests++;
+        if (requests === 1 && SJDAPIClient.authenticationExpired(500, '{"code":"401"}')) {
+          throw new AuthenticationExpiredError();
+        }
+        return token;
+      });
+      expect(value).assertEqual('2');
+      expect(logins).assertEqual(2);
+      expect(requests).assertEqual(2);
+      let retryAttempts: number = 0;
+      let rejected: boolean = false;
+      try {
+        await cache.run('synthetic', 'fixture-only', login, async (token: string): Promise<string> => {
+          retryAttempts++;
+          if (SJDAPIClient.authenticationExpired(500, '{"code":401}')) { throw new AuthenticationExpiredError(); }
+          return token;
+        });
+      } catch (e) { rejected = true; }
+      expect(rejected).assertTrue();
+      expect(retryAttempts).assertEqual(2);
+      expect(logins).assertEqual(3);
+    });
+
     it('concurrent_queries_and_later_refresh_reuse_one_login', 0, async () => {
       const cache: AuthenticatedSession<string> = new AuthenticatedSession<string>();
       const gate: SessionGate = new SessionGate();
