@@ -1565,53 +1565,58 @@ struct TeachingCalendarView: View {
             let availableGridHeight = max(proxy.size.height - weekdayHeight, 0)
             let cellHeight = max(floor(availableGridHeight / 6), 70)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ZStack(alignment: .top) {
-                            LazyVGrid(columns: columns, spacing: 0) {
-                                ForEach(Self.weekdayLabels, id: \.self) { label in
-                                    Text(model.localized("周") + model.localized(label))
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(theme.secondaryText)
-                                        .frame(maxWidth: .infinity, minHeight: weekdayHeight)
-                                        .overlay(alignment: .bottom) {
-                                            Rectangle()
-                                                .fill(theme.border)
-                                                .frame(height: 0.5)
-                                        }
-                                }
-
-                                ForEach(daySnapshots) { snapshot in
-                                    desktopMonthDay(
-                                        snapshot,
-                                        monthNumber: monthNumber,
-                                        cellHeight: cellHeight
-                                    )
-                                }
+            VStack(spacing: 0) {
+                LazyVGrid(columns: columns, spacing: 0) {
+                    ForEach(Self.weekdayLabels, id: \.self) { label in
+                        Text(model.localized("周") + model.localized(label))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(theme.secondaryText)
+                            .frame(maxWidth: .infinity, minHeight: weekdayHeight)
+                            .overlay(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(theme.border)
+                                    .frame(height: 0.5)
                             }
-                            .id(monthGridIdentity)
-                            .transition(monthPageTransition)
-                        }
-                        .animation(Self.pageAnimation, value: monthGridIdentity)
-                        .overlay {
-                            Rectangle()
-                                .stroke(theme.border, lineWidth: 0.5)
-                                .allowsHitTesting(false)
-                        }
-                    }
-                    .frame(height: max(proxy.size.height, 520), alignment: .top)
-
-                    Surface { selectedDaySummary(selectedDate) }
-                    Surface { assignmentSummary }
-                    if model.almanacEnabled {
-                        Surface { almanacSummary }
-                    }
-                    if model.hasCalendarDeadlinesToDisplay {
-                        Surface { deadlineSummary }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background(theme.background)
+                .accessibilityIdentifier("calendar.desktop.month-weekdays")
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ZStack(alignment: .top) {
+                                LazyVGrid(columns: columns, spacing: 0) {
+                                    ForEach(daySnapshots) { snapshot in
+                                        desktopMonthDay(
+                                            snapshot,
+                                            monthNumber: monthNumber,
+                                            cellHeight: cellHeight
+                                        )
+                                    }
+                                }
+                                .id(monthGridIdentity)
+                                .transition(monthPageTransition)
+                            }
+                            .animation(Self.pageAnimation, value: monthGridIdentity)
+                            .overlay {
+                                Rectangle()
+                                    .stroke(theme.border, lineWidth: 0.5)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .frame(height: max(proxy.size.height, 520) - weekdayHeight, alignment: .top)
+
+                        Surface { selectedDaySummary(selectedDate) }
+                        Surface { assignmentSummary }
+                        if model.almanacEnabled {
+                            Surface { almanacSummary }
+                        }
+                        if model.hasCalendarDeadlinesToDisplay {
+                            Surface { deadlineSummary }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

@@ -749,10 +749,16 @@ test('Harmony tablet week view follows the macOS header, all-day, and timeline h
   const timelineContent = harmonyExpandedCalendarSource.match(
     /@Builder\s+timelineContent\(\)[\s\S]*?private timelineDayAreaWidth/,
   )?.[0] ?? ''
-  const dayHeaderIndex = timelineContent.indexOf('ExpandedCalendarTimelineDayHeaderView')
-  const allDayIndex = timelineContent.indexOf('this.allDayRow()')
+  const headerContent = timelineContent.slice(timelineContent.indexOf('@Builder\n  timelineHeader()'))
+  const dayHeaderIndex = headerContent.indexOf('ExpandedCalendarTimelineDayHeaderView')
+  const allDayIndex = headerContent.indexOf('this.allDayRow()')
   const timelineBodyIndex = timelineContent.indexOf('MobileCalendarTimelineView')
-  assert.ok(dayHeaderIndex >= 0 && dayHeaderIndex < allDayIndex && allDayIndex < timelineBodyIndex)
+  assert.ok(dayHeaderIndex >= 0 && dayHeaderIndex < allDayIndex)
+  const scrollIndex = timelineContent.indexOf('Scroll()')
+  const pcHeaderIndex = timelineContent.indexOf('if (this.isPc)')
+  const tabletHeaderIndex = timelineContent.indexOf('if (!this.isPc)')
+  assert.ok(pcHeaderIndex >= 0 && pcHeaderIndex < scrollIndex)
+  assert.ok(scrollIndex < tabletHeaderIndex && tabletHeaderIndex < timelineBodyIndex)
   assert.match(timelineContent, /fixedDayAreaWidth: this\.timelineDayAreaWidth\(\)/)
   assert.match(timelineContent, /calendar\.expanded\.week-context/)
   assert.match(timelineContent, /calendar\.expanded\.timeline-body/)

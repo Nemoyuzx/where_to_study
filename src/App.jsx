@@ -1693,6 +1693,7 @@ function App() {
   }, [activePage, calendarDate, calendarView, todayDate, courseEditDialog, courseRecoveryOpen])
 
   const calendarMonthKey = calendarDate.slice(0, 7)
+  const calendarScrollSurfaceKey = calendarSurfaceKey(calendarView, calendarDate)
 
   useEffect(() => {
     document.documentElement.lang = uiLanguage === 'en' ? 'en' : 'zh-Hans'
@@ -1831,7 +1832,7 @@ function App() {
       const pageBottomPadding = Number.parseFloat(getComputedStyle(page).paddingBottom) || 0
       const availableHeight = Math.max(
         0,
-        Math.floor(pageBounds.bottom - pageBottomPadding - surfaceBounds.top - 16),
+        Math.floor(pageBounds.bottom - pageBottomPadding - surfaceBounds.top - page.scrollTop - 16),
       )
       const metrics = desktopMonthGridMetrics(availableHeight)
       surface.style.setProperty('--desktop-month-grid-height', `${metrics.height}px`)
@@ -1853,6 +1854,41 @@ function App() {
       clearDesktopMonthMetrics()
     }
   }, [activePage, calendarMonthKey, calendarMotion, calendarView, compactCalendarLayout])
+
+  useLayoutEffect(() => {
+    if (activePage !== 'calendar' || compactCalendarLayout || calendarView === 'year') return undefined
+    const page = pageContentRef.current
+    const surface = calendarAnimatedSurfaceRef.current
+    if (!page || !surface) return undefined
+    let frame = 0
+    const measure = () => {
+      const padding = Number.parseFloat(getComputedStyle(page).paddingBottom) || 0
+      // Use the content's natural position, not its animated/scrolled position.
+      // This keeps the viewport stable when the outer page is already scrolled.
+      const available = page.getBoundingClientRect().bottom - padding
+        - surface.getBoundingClientRect().top - page.scrollTop - 16
+      surface.style.setProperty('--desktop-calendar-viewport-height', `${Math.max(200, Math.floor(available))}px`)
+      const header = surface.querySelector('.time-day-head')
+      if (header) surface.style.setProperty('--time-day-header-height', `${header.getBoundingClientRect().height}px`)
+    }
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(measure)
+    }
+    measure()
+    // No per-scroll React updates. Observe geometry for wrapping, language,
+    // font scaling and notices arriving above the calendar after a refresh.
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(scheduleMeasure) : null
+    for (const element of [page, surface.closest('.teaching-calendar-main'), surface.querySelector('.time-day-head')]) {
+      if (element) observer?.observe(element)
+    }
+    window.addEventListener('resize', scheduleMeasure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', scheduleMeasure)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [activePage, calendarScrollSurfaceKey, calendarView, compactCalendarLayout, uiLanguage])
 
   useEffect(() => () => {
     window.clearTimeout(monthExpansionTimerRef.current)
@@ -4294,20 +4330,29 @@ function App() {
                     onPointerUp={compactCalendarLayout ? finishMonthPointerSwipe : undefined}
                     onPointerCancel={compactCalendarLayout ? cancelMonthPointerSwipe : undefined}
                   >
+                    {!compactCalendarLayout ? (
+                      <div className="desktop-month-weekdays">
+                        {uiWeekdayLabels.map((label) => (
+                          <span key={label} className="month-weekday">
+                            {uiLanguage === 'en' ? label : `周${label}`}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     <div
                       id="teaching-month-calendar"
                       className="calendar-swipe-surface month-calendar"
                       aria-label={t('月历')}
                       aria-expanded={compactCalendarLayout ? monthExpanded : undefined}
                     >
-                      {uiWeekdayLabels.map((label) => (
+                      {compactCalendarLayout ? uiWeekdayLabels.map((label) => (
                         <span key={label} className="month-weekday">
                           <span className="month-weekday-mobile">{label}</span>
                           <span className="month-weekday-desktop">
                             {uiLanguage === 'en' ? label : `周${label}`}
                           </span>
                         </span>
-                      ))}
+                      )) : null}
                       {visibleCalendarDays.map((dateString) => {
                         const date = dateFromString(dateString)
                         const currentMonth = date.getMonth() === dateFromString(calendarDate).getMonth()

@@ -3411,10 +3411,8 @@ button:disabled {
   }
 
   .month-view.desktop-month-view .month-calendar {
-    grid-template-rows:
-      30px
-      repeat(6, var(--desktop-month-row-height, 81px));
-    height: var(--desktop-month-grid-height, 520px);
+    grid-template-rows: repeat(6, var(--desktop-month-row-height, 81px));
+    height: calc(var(--desktop-month-grid-height, 520px) - 30px);
     transition: none;
   }
 
@@ -4419,10 +4417,8 @@ button:disabled {
 
 .month-view.desktop-month-view .month-calendar {
   gap: 0;
-  grid-template-rows:
-    30px
-    repeat(6, var(--desktop-month-row-height, 81px));
-  height: var(--desktop-month-grid-height, 520px);
+  grid-template-rows: repeat(6, var(--desktop-month-row-height, 81px));
+  height: calc(var(--desktop-month-grid-height, 520px) - 30px);
 }
 
 .desktop-month-view .month-weekday {
@@ -5951,5 +5947,54 @@ input:disabled {
 
   .calendar-month-page .calendar-data-actions {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Desktop calendars own vertical scrolling; pin the complete heading stack.
+   Keep one grid/scroll surface so date, all-day and timed columns stay aligned. */
+@media (min-width: 721px) {
+  .time-calendar {
+    max-height: var(--desktop-calendar-viewport-height, calc(100dvh - 240px));
+    overflow: auto;
+    overscroll-behavior-y: contain;
+    scroll-padding-top: calc(var(--time-day-header-height, 72px) + 72px);
+    isolation: isolate;
+  }
+
+  .time-calendar .time-corner,
+  .time-calendar .time-day-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+
+  .time-calendar .time-all-day-label,
+  .time-calendar .time-all-day-cell {
+    position: sticky;
+    top: var(--time-day-header-height, 72px);
+    z-index: 4;
+  }
+
+  .time-calendar .time-labels,
+  .time-calendar .slot-time-labels,
+  .time-calendar .time-day-lane {
+    /* Contain the current-time indicator's z-index below the opaque header. */
+    isolation: isolate;
+  }
+
+  .month-view.desktop-month-view {
+    max-height: var(--desktop-calendar-viewport-height, calc(100dvh - 240px));
+    overflow: auto;
+    scroll-padding-top: 30px;
+  }
+
+  .desktop-month-weekdays {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    min-height: 30px;
+    background: var(--surface);
   }
 }

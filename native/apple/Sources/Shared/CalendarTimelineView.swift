@@ -359,6 +359,7 @@ struct CalendarTimelineView: View {
         ScrollView(.vertical, showsIndicators: true) {
             timelineContent
         }
+        .coordinateSpace(name: "calendar.desktop.timeline-viewport")
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .accessibilityIdentifier("calendar.desktop.timeline-scroll")
         .accessibilityElement(children: .contain)
@@ -367,10 +368,18 @@ struct CalendarTimelineView: View {
 
     private var timelineContent: some View {
         GeometryReader { proxy in
+            #if os(macOS)
+            let headerOffset = max(0, -proxy.frame(in: .named("calendar.desktop.timeline-viewport")).minY)
+            #else
+            let headerOffset: CGFloat = 0
+            #endif
             HStack(alignment: .top, spacing: 0) {
-                axisContent
+                axisContent(headerOffset: headerOffset)
                 ScrollView(.horizontal, showsIndicators: days.count > 1) {
-                    dayContent(width: max(proxy.size.width - contentLeft, minimumDayAreaWidth))
+                    dayContent(
+                        width: max(proxy.size.width - contentLeft, minimumDayAreaWidth),
+                        headerOffset: headerOffset
+                    )
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityIdentifier("calendar.timeline.horizontal")
@@ -388,11 +397,13 @@ struct CalendarTimelineView: View {
     }
     #endif
 
-    private var axisContent: some View {
+    private func axisContent(headerOffset: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             theme.surface
             axisGrid
+            #if !os(macOS)
             axisHeaders
+            #endif
             slotLabels
             TimelineView(.periodic(from: .now, by: 60)) { timeline in
                 ZStack(alignment: .topLeading) {
@@ -402,31 +413,79 @@ struct CalendarTimelineView: View {
                 .frame(width: contentLeft, height: totalHeight, alignment: .topLeading)
             }
             .allowsHitTesting(false)
+            #if os(macOS)
+            ZStack(alignment: .topLeading) {
+                desktopHeaderGrid(columnWidths: [hourAxisWidth, slotAxisWidth])
+                axisHeaders
+            }
+            .frame(width: contentLeft, height: headerHeight)
+            .offset(y: headerOffset)
+            #endif
         }
         .frame(width: contentLeft, height: totalHeight)
         .clipped()
     }
 
-    private func dayContent(width: CGFloat) -> some View {
+    private func dayContent(width: CGFloat, headerOffset: CGFloat) -> some View {
         let dayWidth = width / CGFloat(max(days.count, 1))
         return ZStack(alignment: .topLeading) {
             theme.surface
             selectedColumn(dayWidth: dayWidth)
             dayGrid(width: width, dayWidth: dayWidth)
+            #if !os(macOS)
             allDayHeaderRows(dayWidth: dayWidth)
+            #endif
             courseBlocks(dayWidth: dayWidth)
             TimelineView(.periodic(from: .now, by: 60)) { timeline in
                 ZStack(alignment: .topLeading) {
+                    #if !os(macOS)
                     dayHeaders(dayWidth: dayWidth, now: timeline.date)
+                    #endif
                     currentTimeLine(width: width, dayWidth: dayWidth, now: timeline.date)
                         .allowsHitTesting(false)
                 }
                 .frame(width: width, height: totalHeight, alignment: .topLeading)
             }
+            #if os(macOS)
+            // Keep one horizontal scroll surface for headers and courses. Only
+            // compensate for vertical movement, so their columns cannot drift.
+            ZStack(alignment: .topLeading) {
+                desktopHeaderGrid(columnWidths: Array(repeating: dayWidth, count: max(days.count, 1)))
+                allDayHeaderRows(dayWidth: dayWidth)
+                TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                    ZStack(alignment: .topLeading) {
+                        dayHeaders(dayWidth: dayWidth, now: timeline.date)
+                    }
+                    .frame(width: width, height: headerHeight, alignment: .topLeading)
+                }
+            }
+            .frame(width: width, height: headerHeight)
+            .offset(y: headerOffset)
+            #endif
         }
         .frame(width: width, height: totalHeight)
         .clipped()
     }
+
+    #if os(macOS)
+    private func desktopHeaderGrid(columnWidths: [CGFloat]) -> some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(theme.background))
+            var borders = Path()
+            borders.move(to: CGPoint(x: 0, y: size.height))
+            borders.addLine(to: CGPoint(x: size.width, y: size.height))
+            var x: CGFloat = 0
+            for width in columnWidths {
+                borders.move(to: CGPoint(x: x, y: 0))
+                borders.addLine(to: CGPoint(x: x, y: size.height))
+                x += width
+            }
+            borders.move(to: CGPoint(x: size.width, y: 0))
+            borders.addLine(to: CGPoint(x: size.width, y: size.height))
+            context.stroke(borders, with: .color(theme.border), lineWidth: 1)
+        }
+    }
+    #endif
 
     @ViewBuilder
     private func selectedColumn(dayWidth: CGFloat) -> some View {

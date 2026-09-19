@@ -102,7 +102,7 @@ test('desktop month geometry and typography mirror the native macOS grid', () =>
   assert.match(appSource, /<time>\{String\(entry\.time\)\.split\('-'\)\[0\]\}<\/time>/)
   assert.match(
     appCss,
-    /\.month-view\.desktop-month-view \.month-calendar\s*\{[^}]*30px[^}]*repeat\(6, var\(--desktop-month-row-height, 81px\)\)[^}]*var\(--desktop-month-grid-height, 520px\)/s,
+    /\.month-view\.desktop-month-view \.month-calendar\s*\{[^}]*repeat\(6, var\(--desktop-month-row-height, 81px\)\)[^}]*calc\(var\(--desktop-month-grid-height, 520px\) - 30px\)/s,
   )
   assert.match(
     appCss,

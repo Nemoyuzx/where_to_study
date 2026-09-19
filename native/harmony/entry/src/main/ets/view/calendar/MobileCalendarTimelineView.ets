@@ -103,8 +103,8 @@ export class MobileCalendarTimelineLayout {
 
 }
 
-// macOS CalendarTimelineView 的无状态日期头。宽屏端把它与全天行、时间轴主体
-// 放进同一个纵向 Scroll，三段共享同一日期区宽度，不重复创建时间刷新定时器。
+// macOS CalendarTimelineView 的无状态日期头。PC 把它与全天行固定在纵向
+// Scroll 上方，三段共享同一日期区宽度，不重复创建时间刷新定时器。
 @ComponentV2
 export struct ExpandedCalendarTimelineDayHeaderView {
   @Consumer('appModel') model: AppModel = new AppModel();

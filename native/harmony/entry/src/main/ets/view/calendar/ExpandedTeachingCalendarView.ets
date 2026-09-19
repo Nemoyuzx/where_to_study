@@ -337,13 +337,18 @@ export struct ExpandedTeachingCalendarView {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week) {
+      if (this.mode() === CalendarMode.day || this.mode() === CalendarMode.week ||
+        (this.isPc && this.mode() === CalendarMode.month)) {
         Column({ space: 16 }) {
           this.titleBar()
           Column({ space: 14 }) {
             this.calendarPanelHeader()
             Column() {
-              this.timelineContent()
+              if (this.mode() === CalendarMode.month) {
+                this.desktopMonthContent()
+              } else {
+                this.timelineContent()
+              }
             }
             .layoutWeight(1)
             .width('100%')
@@ -621,38 +626,39 @@ export struct ExpandedTeachingCalendarView {
       .height(18)
       .id('calendar.expanded.week-context')
 
-      Scroll() {
-        Column({ space: 0 }) {
-          ExpandedCalendarTimelineDayHeaderView({
-            days: this.timelineDays(),
-            selectedDate: this.selectedDate(),
-            dayAreaWidth: this.timelineDayAreaWidth(),
-            onSelectDay: (day: DateParts): void => {
-              this.setSelectedDate(day);
-            }
-          })
-          this.allDayRow()
-          MobileCalendarTimelineView({
-            days: this.timelineDays(),
-            placements: this.timelinePlacements(),
-            selectedDate: this.selectedDate(),
-            showsWeekColumns: this.mode() === CalendarMode.week,
-            expanded: true,
-            fixedDayAreaWidth: this.timelineDayAreaWidth(),
-            onSelectDay: (day: DateParts): void => {
-              this.setSelectedDate(day);
-            }
-          })
-            .id('calendar.expanded.timeline-body')
+      Column({ space: 0 }) {
+        if (this.isPc) {
+          this.timelineHeader()
         }
+        Scroll() {
+          Column({ space: 0 }) {
+            if (!this.isPc) {
+              this.timelineHeader()
+            }
+            MobileCalendarTimelineView({
+              days: this.timelineDays(),
+              placements: this.timelinePlacements(),
+              selectedDate: this.selectedDate(),
+              showsWeekColumns: this.mode() === CalendarMode.week,
+              expanded: true,
+              fixedDayAreaWidth: this.timelineDayAreaWidth(),
+              onSelectDay: (day: DateParts): void => {
+                this.setSelectedDate(day);
+              }
+            })
+              .id('calendar.expanded.timeline-body')
+          }
+          .width('100%')
+        }
+        .layoutWeight(1)
+        .scrollable(ScrollDirection.Vertical)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.None)
         .width('100%')
+        .id('calendar.expanded.timeline-scroll')
       }
       .layoutWeight(1)
-      .scrollable(ScrollDirection.Vertical)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
       .width('100%')
-      .id('calendar.expanded.timeline-scroll')
       .onAreaChange((oldArea: Area, newArea: Area) => {
         this.timelineViewportWidth = Number(newArea.width);
       })
@@ -660,6 +666,23 @@ export struct ExpandedTeachingCalendarView {
     .width('100%')
     .height('100%')
     .id('calendar.expanded.timeline-container')
+  }
+
+  @Builder
+  timelineHeader() {
+    Column({ space: 0 }) {
+      ExpandedCalendarTimelineDayHeaderView({
+        days: this.timelineDays(),
+        selectedDate: this.selectedDate(),
+        dayAreaWidth: this.timelineDayAreaWidth(),
+        onSelectDay: (day: DateParts): void => {
+          this.setSelectedDate(day);
+        }
+      })
+      this.allDayRow()
+    }
+    .width('100%')
+    .id('calendar.expanded.timeline-header')
   }
 
   private timelineDayAreaWidth(): number {
@@ -877,19 +900,51 @@ export struct ExpandedTeachingCalendarView {
   @Builder
   monthContent() {
     Column({ space: 12 }) {
-      Row({ space: 4 }) {
-        ForEach(CalendarFormatters.weekdayLabels, (label: string) => {
-          Text(this.model.text(label))
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.secondaryText())
-            .textAlign(TextAlign.Center)
-            .layoutWeight(1)
-            .height(18)
-        }, (label: string) => 'month-weekday.' + label)
-      }
-      .width('100%')
+      this.monthWeekdayHeader()
+      this.monthBody()
+    }
+    .width('100%')
+  }
 
+  @Builder
+  desktopMonthContent() {
+    Column({ space: 12 }) {
+      this.monthWeekdayHeader()
+      Scroll() {
+        this.monthBody()
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .align(Alignment.Top)
+      .scrollable(ScrollDirection.Vertical)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
+      .id('calendar.expanded.month-scroll')
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  monthWeekdayHeader() {
+    Row({ space: 4 }) {
+      ForEach(CalendarFormatters.weekdayLabels, (label: string) => {
+        Text(this.model.text(label))
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.secondaryText())
+          .textAlign(TextAlign.Center)
+          .layoutWeight(1)
+          .height(18)
+      }, (label: string) => 'month-weekday.' + label)
+    }
+    .width('100%')
+    .id('calendar.expanded.month-weekday-header')
+  }
+
+  @Builder
+  monthBody() {
+    Column({ space: 12 }) {
       Grid() {
         ForEach(this.monthGridDates(new DateParts(
           this.selectedDate().year, this.selectedDate().month, 1)),
