@@ -1,5 +1,29 @@
 # Where To Study v0.3.0 — Pre-release / 预发布
 
+## 已公开 / Published
+
+[Where To Study v0.3.0](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.0) 于 **2026-09-19 20:24:19 +0800** 公开为预发布版（Release ID `392028491`，`draft=false`，`prerelease=true`）。标题符合既有命名，恰有 **11 个**安装／终端工具附件；稳定版 `releases/latest` 仍为 **v0.2.9**，旧版附件未修改。
+
+最终标签提交 **`b317917e17d63f1d2786894d0b60f6d60c7e994a`** 的七条工作流全部通过：
+
+| 工作流 | Run | 结果 |
+| --- | --- | --- |
+| Windows | [35440712204](https://github.com/Nemoyuzx/where_to_study/actions/runs/35440712204) | success |
+| Linux | [35440712186](https://github.com/Nemoyuzx/where_to_study/actions/runs/35440712186) | success |
+| macOS | [35440712176](https://github.com/Nemoyuzx/where_to_study/actions/runs/35440712176) | success |
+| Native Clients | [35440712207](https://github.com/Nemoyuzx/where_to_study/actions/runs/35440712207) | success |
+| CLI | [35440712214](https://github.com/Nemoyuzx/where_to_study/actions/runs/35440712214) | success |
+| TUI | [35440712206](https://github.com/Nemoyuzx/where_to_study/actions/runs/35440712206) | success |
+| Security Checks | [35440712199](https://github.com/Nemoyuzx/where_to_study/actions/runs/35440712199) | success |
+
+Windows 修复包（4,279,736 bytes）的 SHA-256 为 `dafe106d1ee78848293173d57892d25555429c7c704eb54fe1a541f65b42fc1c`。实际构建的 Windows 工作流 `35439539986` 在静默安装 NSIS 后验证真正的 `where_to_study.exe`，GUI 子系统检查 **8 项通过、0 跳过**；不是只检查安装器。
+
+公开前已通过 GitHub API 逐项核对 11 个资产的名称、大小和 SHA-256。九个 CI 产物的结构／架构、现有摘要侧文件和固定工作流来源证明通过，并固定到其实际构建源 `5c99ef6`；源码差异说明见下文。遵照用户最新要求，**不继续回下载核验**，也不把 API 摘要比对称为下载后的逐字节验证。
+
+热修复分支 `codex/android-029-layout-hotfix` 的最新提交 `bd20973` 已通过 [6a2df48](https://github.com/Nemoyuzx/where_to_study/commit/6a2df48bb8fbdf0c3d61540ec3834eb1f6a8e6e6) 合入 `main`；PR #64、#65 均已合并。热修复分支没有独有的未合并提交，仅保留分支名称，没有擅自删除。原工作区的 138 个功能文件核对后保留了本地备份，`source-picture/` 未提交。
+
+Apple 最终 (95) 两端已上传 TestFlight，未再检查 App Store Connect 或提交正式审核。HarmonyOS (1002031) 已签名构建／测试，但尚未获得本轮测试渠道上传确认，因此未上传 AppGallery；vivo／华为 Android 正式商店状态未改。
+
 这是用于体验和反馈的 **0.3.0 预发布版**，不是新的稳定版。稳定下载仍为 0.2.9。安装前建议保留现有配置；所有学校信息请以官方实际记录为准。
 
 ## 新增与修复
@@ -10,6 +34,7 @@
 - 令牌仅缓存于当前进程内存，重启进程后会重新登录。优先使用服务提供的有效期；没有期限信息时采用保守的短期上限，不将令牌保存到普通文件。
 - 合并 Android 教学云请求受防火墙影响的热修复分支，以及依赖 PR #64、#65。保留 Android／鸿蒙紧凑 32dp／32vp 控件，不恢复此前放大的按钮和间距。
 - 更新独立 Rust 锁文件中的 rustls 安全修复，并重新生成第三方许可证清单。
+- 修复 Windows 正式版启动时出现黑色控制台、关闭主窗口后黑框仍残留的问题。正式版改为 GUI 子系统；托盘常驻／后台提醒保持原样，“退出”仍会结束应用。CI 安装最终 NSIS 后会检查真正的主程序 PE Subsystem=2，避免只检查安装器造成误判。
 
 ## English
 
@@ -17,17 +42,35 @@
 - Integrated the previously retained grades and exam-arrangement features across clients. Timetable refresh includes exams; exams locally take precedence over overlapping course occurrences.
 - Reuse credential-scoped, in-memory sessions independently from cached results. Concurrent logins are coalesced; only explicit authentication expiry triggers a single login retry. Account changes and data clearing reject late results. Restarting the process requires a new login.
 - Merged the Android Teaching Cloud hotfix and dependency PRs #64/#65, preserving compact mobile control sizing. Updated rustls and generated license notices.
+- Windows release builds no longer create a console window. Existing tray/background behavior is preserved; the installed application is checked for the Windows GUI subsystem in CI.
 
 ## 构建与验证记录 / Build and verification
 
-版本矩阵：Android **0.3.0 (51)**，Apple **0.3.0 (95)**，HarmonyOS **0.3.0 (1002031)**；Tauri、Core、CLI、TUI **0.3.0**。最终上传回执在完成后补记，不能把本段准备信息理解为已公开。
+版本矩阵：Android **0.3.0 (51)**，Apple **0.3.0 (95)**，HarmonyOS **0.3.0 (1002031)**；Tauri、Core、CLI、TUI **0.3.0**。
+
+### 最终 Apple 上传与本地产物
+
+本次最终标签源码为 **`b317917e17d63f1d2786894d0b60f6d60c7e994a`**。Windows／Linux／CLI／TUI 九个附件的实际构建源是 **`5c99ef60aa472e58ce4236ed33b8d14cd55dce47`**；最终标签相对该提交只修改 `native/apple/UITests/ColorThemeUITests.swift` 的滚动方向，已逐项确认其余生产源码、资源和构建配置完全相同，不将测试修正后标签冒称为附件的实际构建提交。
+
+`5c99ef6` 相对 **`0e1989fc523369aa7f302993bf3cd6cd063ba74f`** 只追加 Windows GUI 子系统及其 CI／测试检查；Apple、Android、HarmonyOS 应用源码／打包输入未变，不重复上传已经成功的原生客户端。
+
+通过本地 Xcode 单次 `native-apple-app-store.sh upload all` 完成最终 Apple **0.3.0 (95)**：iOS／iPadOS 于 **2026-09-19 18:45:48.297 +0800**，macOS 于 **18:48:25.557 +0800** 收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`。四个主应用／Widget 的版本一致，99 项源码／打包输入在前后完全一致。未检查 App Store Connect processing，未提交 App Store 正式审核；上传成功不等于已完成 Apple 处理或外部测试审核。
+
+| 最终本地产物 | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Android Universal APK (51) | 1,148,838 | `d69762465c8e4e0fd91e414c1bb0589edd8b5f2b70e8a40ec6473d580bb21b91` |
+| macOS Universal DMG (95) | 7,788,233 | `9e960cef85260e9db858f0a388aed5919e399e25bc2e4087a2c27701dca77c34` |
+
+这两个文件先上传至 GitHub 预发布草稿，用户后续调整验收方式之前已完成逐字节比对；最终公开状态见文首回执。
+
+**发布验收方式更新（用户要求）**：不再执行 GitHub Release 附件回下载核验。采用上传前本地文件 SHA-256、GitHub API 返回的资产名称／大小／摘要，以及已有 CI、签名／构建来源证明结果。后续九个附件的回下载验证阶段已按用户要求停止，不把已发生的传输或服务端摘要比对称为“全部回下载逐字节通过”；现有文件不删除。此前九个资产的 API 元数据均已匹配，附件总数仍为 11。
 
 ### 已完成的本地检查
 
-- Android：269 项 Debug／Release JVM 测试、10 项 Android 16 模拟器 UI 测试通过；Release Lint 0 errors／66 warnings／1 hint。签名 APK 为原证书，v2／v3、16 KiB ZIP alignment、版本、HTTPS／许可证校验通过。
-- HarmonyOS：222 项 Hypium、正式 HAP／APP 构建、Release 模式与版本检查通过。本机无连接设备，未宣称真机布局验证；未上传 GitHub。
-- Apple：完整 macOS 371 项、iOS 395 项单测各仅跳过 1 项既有在线测试，0 失败；另有 2 项 iPhone 中英文查询 UI 流程通过。完整回归发现并修复普通课程时间从节次变成显示文本的兼容性问题，原断言保留。
-- 共享逻辑：Core 98 项、Tauri 214 项通过（另有 3 项既有在线测试忽略）；JavaScript 216 项、CLI 24 项、TUI 50 项通过；严格 Clippy、格式检查与许可证检查通过。
+- Android：最终 Release JVM 271 项通过，SJD 会话定向 13 项通过；之前 10 项 Android 16 模拟器 UI 流程通过。Release Lint 0 errors／66 warnings／1 hint。签名 APK 为原证书，v2／v3、16 KiB ZIP alignment、版本、HTTPS／许可证校验通过。
+- HarmonyOS：224 项 Hypium、正式 HAP／APP 构建、Release 模式与版本检查通过。本机无连接设备，未宣称真机布局验证；未上传 GitHub，未提交正式商店审核。
+- Apple：最终完整 macOS 374 项、iOS 398 项单测各仅跳过 1 项既有在线测试，0 失败；另有 2 项 iPhone 中英文查询 UI 流程通过。完整回归发现并修复普通课程时间从节次变成显示文本的兼容性问题，原断言保留。
+- 共享逻辑：Core 100 项、Tauri 216 项通过（另有 3 项既有在线测试忽略）；JavaScript 225 项（224 通过，实际 Windows 安装包检查在 macOS 上跳过、在 Windows CI 安装后执行）、CLI 24 项、TUI 50 项通过；严格 Clippy、格式检查与许可证检查通过。
 - npm audit 未报告漏洞；使用 2026-09-19 更新的 RustSec 库审计全部锁文件，无阻断漏洞／unsound 告警，仍存在第三方未维护提示，不宣称依赖绝对无风险。
 - Edge 中英文作业／考试界面、窄桌面布局已检查；Windows／Ubuntu 的最终原生构建和验证以本次 GitHub tag CI 结果为准。
 
@@ -40,6 +83,8 @@ iOS **0.3.0 (93)** 已于 **2026-09-19 18:22:33 +0800** 收到 `Upload succeeded
 上述过渡 **(94)** 已成功上传：iOS **18:30:26.295**、macOS **18:33:03.343 +0800**，均返回 `Upload succeeded` 与 `EXPORT SUCCEEDED`。随后无真实凭据的在线无效令牌探测确认：SJD 教务把明确业务码 401 包装在 HTTP 500 内，因此各平台补充仅限该教务契约的异常分类；一般服务端错误、权限错误及教学云规则不变。最终 Apple 改为 **(95)**，避免对已占用构建号重新上传。实际契约见[教务接入说明](academic-query-contract.md)。
 
 初轮标签构建还修正了 Android SDK 动作默认安装已撤下 `tools` 包的问题，改为显式 `platform-tools`；对应检查覆盖 LF／CRLF，保留所有原测试。仅更新本轮尚未公开的预发布标签，0.2.9 稳定标签及附件不变。
+
+云端完整 UI 回归识别出主题测试脚本方向错误：遍历到 `rose` 后返回上方 `default`，原脚本仍向下滚动，无法让 LazyVGrid 离屏按钮重新出现。仅对返回默认项指定向上滚动，全部断言及 18 次滚动预算保持不变；本地同一用例连续两次通过（57.441／48.951 秒）。生产输入摘要不变，未因此重新打包或上传 Apple (95)。
 
 目前验证包括本地 Xcode、Android 模拟器、鸿蒙构建与逻辑测试、共享 Rust／JavaScript 测试和 Edge 中英文桌面预览。所有界面测试使用明确的合成数据；未将私人分数、学号、密码或令牌写入测试产物。当前未连接鸿蒙真机，不能将编译通过称为真机视觉验证。
 
