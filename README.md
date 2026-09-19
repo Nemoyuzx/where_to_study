@@ -33,7 +33,7 @@ Silicon 兼容构建。
 - Android 与鸿蒙的班车查询采用 iOS 同类布局：状态和通知卡、方向及有效日期、班次网格、下一班标记与来源说明，整页统一滚动并保留候车地点和提醒。
 - Course details support removing one occurrence or the whole semester's course, with persistent local edits and restoration. Personal Account accepts an optional separate teaching cloud password for assignment DDLs. Neither feature modifies university-side data.
 
-完整改动见 [0.2.9 更新说明](./docs/release-v0.2.9-notes.md)，课程操作的详细规则见[课程管理和教学云账户说明](./docs/course-management-v0.2.9.md)。各渠道可安装的版本以下方下载入口为准。
+完整改动见 [0.3.0 更新说明](./docs/release-v0.3.0-notes.md)，课程操作的详细规则见[课程管理和教学云账户说明](./docs/course-management-v0.2.9.md)。各渠道可安装的版本以下方下载入口为准。
 
 贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
 [docs/platform-roadmap.md](./docs/platform-roadmap.md)。
@@ -71,7 +71,7 @@ Thanks to these open-source projects for publishing academic API information and
 
 ## 下载
 
-想提前体验成绩、考试和作业查询，请打开 [0.3.0 预发布版](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.0)。该版本用于测试反馈；下方“最新版”仍指向正式稳定版，日常使用可继续选择 0.2.9。
+GitHub 当前正式版为 [Where To Study v0.3.0](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.0)，包含成绩、考试、作业查询和自定义多次课前提醒。Windows、Linux、Mac 和 Android 安装包均已同步；手机应用商店须等待各自审核，商店可下载版本可能暂时较旧。
 
 [打开最新版本下载页](https://github.com/Nemoyuzx/where_to_study/releases/latest)，找到页面底部的 **Assets（文件列表）**，按自己的设备选择。文件名前面的版本号会随更新变化，看下面列出的结尾即可。
 
@@ -93,7 +93,7 @@ Android 也可关注 vivo 应用商店和华为应用市场中的 Where To Study
 
 Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。也可打开 [TestFlight 公测邀请](https://testflight.apple.com/join/yuzpAtDJ)；公测版本可能滞后，需等待 Apple 审核后才可安装。
 
-Windows 安装包尚无公众信任签名，系统可能提示「未知发布者」；GitHub 的 macOS 下载包尚未经过 Apple 公证，可能出现系统安全提示。签名与验证方法见[下载文件验证说明](./docs/code-signing.md)。更新内容见 [0.2.9 更新说明](./docs/release-v0.2.9-notes.md)，构建与上传记录见[工程发布记录](./docs/release-v0.2.9.md)。
+Windows 安装包尚无公众信任签名，系统可能提示「未知发布者」；GitHub 的 macOS 下载包尚未经过 Apple 公证，可能出现系统安全提示。签名与验证方法见[下载文件验证说明](./docs/code-signing.md)。更新内容见 [0.3.0 更新说明](./docs/release-v0.3.0-notes.md)，构建与上传记录见[工程发布记录](./docs/release-v0.3.0.md)。
 
 隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
 

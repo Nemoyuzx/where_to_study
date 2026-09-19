@@ -2,6 +2,8 @@
 
 ## 当前结论
 
+**0.3.0 正式版补充**：本轮更新的 Windows 与 Linux 图形安装包复用已成功的分支工作流（Windows `35449241739`、Linux `35448947866`）。这些分支运行的 attestation 作业按条件跳过，因此不能对这五个新文件声称已有标签来源证明。已验证对应 Actions archive 摘要、包内架构／版本／许可证、CI 安装检查，以及上传后的 GitHub 大小和 SHA-256；未回下载 Release 文件。下文 `v*` 来源证明说明仅适用于实际执行了证明步骤且摘要匹配的构建，不等于 Authenticode／公证。精确源码与资产摘要见 [0.3.0 发布记录](release-v0.3.0.md)。
+
 | 分发物 | 已配置的信任机制 | 仍需外部条件 |
 | --- | --- | --- |
 | Windows NSIS | `v*` 标签构建使用 GitHub OIDC 生成 Sigstore/SLSA 构建来源证明，并在 CI 内回验 | Windows“已验证发布者”仍需公众信任的 Authenticode 证书或 Microsoft Artifact Signing Public Trust 配置 |

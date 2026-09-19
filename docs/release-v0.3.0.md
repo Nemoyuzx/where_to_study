@@ -1,4 +1,24 @@
-# Where To Study v0.3.0 — Pre-release / 预发布
+# Where To Study v0.3.0 — 正式版 / Stable
+
+## 最新正式发布状态 / Current stable release
+
+2026-09-19 **23:17 +0800** 核验：GitHub [Where To Study v0.3.0](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.0) 已转为正式版，`draft=false / prerelease=false`，`releases/latest` 已指向 `v0.3.0`，共 11 个附件。原标签没有移动，0.2.9 旧版及附件未修改。以下预发布和原生单轮记录为历史，不代表当前渠道状态。
+
+正式版现已补齐最新 Windows 和两架构 Linux 图形安装包，包含课前提醒与固定表头。Windows 来自 `a420142183847638f5d1c16c2d5e210fd93d543e` / run `35449241739`；Linux 来自 `87363e620b1efc58b0ea597db7b86929fe0be585` / run `35448947866`。两者应用输入一致，Windows 仅多 CRLF 测试修正。复用已成功的 CI，不重新构建；从 Actions 取得产物后校验归档摘要、侧文件、架构、包版本／依赖、精确许可证、HTTPS 和安装检查，再逐个替换附件并核对 GitHub API 大小／摘要；**没有回下载 Release 资产**。分支 attestation 步骤被条件跳过，不声称这些新包具有标签 attestation，亦无 Authenticode。4 个 CLI/TUI、Android (53)、macOS (97) 资产 ID／大小／摘要保持不变。
+
+| 本轮补齐的正式附件 | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Windows x64 EXE | 4,310,955 | `02fb33aeecfdb1ba7310b2c1acec5d7cd74985ce748b795fab65f3e35f77bfa2` |
+| Linux x86_64 DEB | 8,201,278 | `fb3d1a46ec03d2dc8d9a719a5d030ab84893b7f6c3467667ee6f0c092b852d89` |
+| Linux x86_64 AppImage | 85,277,176 | `d10496f7080e4dc33b9430254c6162b44d948c1a4ed8814c2471eb3d62ac9cc9` |
+| Linux aarch64 DEB | 8,324,696 | `2528452f75641fe85bb51956858099e2e6db81887772582ffb51af8cf2016ad7` |
+| Linux aarch64 AppImage | 83,569,160 | `1f690e8de1f858327305ef28f7e8bcb58e5c5298d23fa6d399f6c5fb8f35d1f3` |
+
+商店进度与 GitHub 正式发布分开记录：**vivo 0.3.0 (53) 已提交，23:00:18 显示“审核中”**；华为鸿蒙 **(1002033)** 已通过 DevEco 第一项“测试和发布”上传，云测试通过，软件包管理确认“测试和正式上架／已达标”。Apple 两端 **(97)** 与华为 Android **(53)** 的正式版本草稿已准备，Apple／华为最终保存和提交等待审核测试方式确认；不能将“准备好”写成“已送审”。不重复上传已成功的 Apple 构建。
+
+DevEco 本轮最终 APP/HAP 与先前 CLI 副本不同，已另存并逐字节核验：APP **1,366,834 bytes** / `9a0338c89d8bf7d4c6d63dec51947126c91ce31f3f00f77b03fe0d48c2e2aee7`，HAP **2,097,561 bytes** / `639178a3f82b875a6dabab6d5ec1086e32419f931d697850cf0713a72b5e0f7d`；时间为 22:54:59／22:54:58。版本 `0.3.0 (1002033), build=1`，所有模块 release/debug=false，两包独立签名／profile／ZIP 验证通过。副本：`release-artifacts/v0.3.0-preclass-build1002033/deveco-formal-upload/`；未公开至 GitHub。
+
+完整桌面资产证据见本机 `release-artifacts/v0.3.0-stable-ci/final-release-verification.json`，商店回执与待办见[0.3.0 商店提交记录](store-submission-v0.3.0.md)。
 
 ## 2026-09-19 课前提醒构建 / Pre-class reminder rebuild
 
