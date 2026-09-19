@@ -137,6 +137,15 @@ test("client versions consistently release 0.3.0 with fresh distribution build c
   assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.0\}"/);
 });
 
+test("native Android CI avoids the removed legacy SDK tools package", () => {
+  const workflow = readFileSync(path.join(root, ".github", "workflows", "build-native.yml"), "utf8");
+  const setupCount = (workflow.match(/uses: android-actions\/setup-android@/g) || []).length;
+  const explicitPackages = (workflow.match(/uses: android-actions\/setup-android@[^\n]+\n\s+with:\n\s+packages: platform-tools\n/g) || []).length;
+  assert.equal(setupCount, 2);
+  assert.equal(explicitPackages, setupCount);
+  assert.match(workflow, /sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36\.0\.0"/);
+});
+
 test("GitHub workflows publish neither HarmonyOS packages nor Android AAB files", () => {
   const workflowDirectory = path.join(root, ".github", "workflows");
   const workflowSource = readdirSync(workflowDirectory)
