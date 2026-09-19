@@ -1,5 +1,26 @@
 # Where To Study v0.3.0 — Pre-release / 预发布
 
+## 2026-09-19 课前提醒构建 / Pre-class reminder rebuild
+
+在上一轮表头构建完成后，新增课前提醒并单独构建：源码提交 **`87363e620b1efc58b0ea597db7b86929fe0be585`**，后续 `a420142` 仅修正结构测试的 Windows CRLF 兼容性，应用输入未改变。现有 `v0.3.0` 标签、预发布状态、稳定版 0.2.9 和其附件均未移动。[本轮准确源码](https://github.com/Nemoyuzx/where_to_study/tree/87363e620b1efc58b0ea597db7b86929fe0be585) 与自动生成的原始标签源码不是同一个提交。
+
+新增独立、默认关闭的课前提醒，默认提前 10 分钟，支持 1–5 次、每次 1–1440 分钟；与每日摘要分开控制。使用本地有效课表和已知时间的考试，处理删除／恢复、账号清除、权限变化、有限失败恢复和过期跳过。Android 经用户确认提供可选的“闹钟和提醒”特殊访问权，并有非精确保底和持久化有界恢复；不使用 `USE_EXACT_ALARM`，不自动打开授权页，不新增课表网络请求。行为、测试及限制见[课前提醒说明](pre-class-reminders.md)。
+
+- Apple **0.3.0 (97)**：iOS 于 **22:35:41.749**、macOS 于 **22:38:36.327 +0800** 收到 `Upload succeeded` 与 `EXPORT SUCCEEDED`；上传成功后停止，没有检查 App Store Connect processing，也未提交正式审核。154 项 Apple 输入前后一致。最终 macOS 400／iOS 421 项单测均零失败，各跳过 1 项既有在线测试；新增中英两项设置 UI、相邻每日摘要／Widget 两项 UI 和窄栏渲染已通过。完整老功能 UI 复用上一轮 (96) 的 44 项结果，不重复运行未改变的整套流程。
+- Android **0.3.0 (53)**：Release JVM **286/286**，Lint 0 errors／68 warnings／1 hint；原固定证书、v2／v3、16 KiB ZIP alignment、版本、HTTPS 与许可证检查通过。包内确认只有 `SCHEDULE_EXACT_ALARM` 而无 `USE_EXACT_ALARM`，恢复服务受 `BIND_JOB_SERVICE` 保护。隔离模拟器验证精确授权撤销杀进程后非精确备份继续唤醒，以及恢复 Job 在新后台进程执行；非精确任务曾延迟，过期通知正确跳过，不宣称保证准时。
+- HarmonyOS **0.3.0 (1002033)**：247/247 Hypium、Release APP／HAP、签名、profile、版本和 ZIP 核验通过。**新包尚待完成 DevEco 测试上传**：当前上传页的注册应用列表为空，已请求刷新登录会话；未改变签名或包名。上一轮 (1002032) 的仅测试上传已成功。无连接设备，不宣称真机通知到达验证。
+
+| 最新本地产物／GitHub 替换附件 | Bytes | SHA-256 |
+| --- | ---: | --- |
+| GitHub Android APK (53) | 1,169,822 | `abd09b987dc1e29aaf8781ece616a5a050d79e5cc8e9d16764d7a2b369d3503e` |
+| GitHub macOS Universal DMG (97) | 7,932,709 | `1ca6cec266b62aaa39b1f44a64507bc446c37d1b7bcfdf4544daf91cefb3736f` |
+| Harmony CLI HAP (1002033)，未公开 | 2,097,619 | `fb7900172a54e61632db505196114c101e0330d5d97d3ccf492b278ee56cb529` |
+| Harmony CLI APP (1002033)，未公开 | 1,366,674 | `60dc077ccb5339d61373d7e1b7e5f65ec4989559142df2a9a15a6bc3819e4596` |
+
+APK／DMG 已逐个替换至 GitHub，API 名称、大小、SHA-256 与本地匹配；仍恰有 11 个附件，`draft=false / prerelease=true`，不回下载，不公开 AAB、鸿蒙包或 iOS 归档。DMG 为 Universal，App／Widget 均 (97)，已只读挂载验签；公开 DMG 仍为 ad-hoc、未公证。(52)/(96)/(1002032) 旧产物完整保留。新产物与测试日志分别位于 `release-artifacts/v0.3.0-preclass-build{53,97,1002033}/`。
+
+本地 JavaScript 230 项通过／1 项平台跳过，Tauri Rust 227 项通过／3 项既有环境测试忽略，Clippy、Vite 和许可证校验通过；Core 100、CLI 24、TUI 50 项通过。Windows 初轮 CI 因测试按 LF 字符截取 ArkTS 头部失败，修成同时覆盖 LF/CRLF 后定向 33 项通过，重跑 [Windows 35449241739](https://github.com/Nemoyuzx/where_to_study/actions/runs/35449241739) 成功。[Linux 35448947866](https://github.com/Nemoyuzx/where_to_study/actions/runs/35448947866) 两种架构及 Ubuntu 24.04 安装检查成功。Windows/Linux 生产源码已同步，但本轮只更新用户指定的原生安装包，其 GitHub 安装附件仍保留原内容，不冒称已包含新增提醒。
+
 ## 2026-09-19 桌面表头修复构建 / Pinned-header rebuild
 
 本轮构建源码为 `1833f57e10b08b92273001f9042550bf72cea137`（包含 `a1106d0` 的桌面日／周日期、课程数量与全天日程固定，以及月视图星期栏固定）。版本仍为 **0.3.0 预发布**，现有标签和稳定版 0.2.9 未移动；仅替换下述原生 APK／DMG，Windows／Linux／终端工具附件保持此前内容。
