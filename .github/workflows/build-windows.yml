@@ -19,6 +19,7 @@ on:
       - "THIRD_PARTY_LICENSES.html"
       - "THIRD_PARTY_NOTICES.md"
       - "scripts/verify-github-attestation.sh"
+      - "test/windows-executable-contract.test.js"
       - "vite.config.js"
       - ".github/workflows/build-windows.yml"
   pull_request:
@@ -32,6 +33,7 @@ on:
       - "THIRD_PARTY_LICENSES.html"
       - "THIRD_PARTY_NOTICES.md"
       - "scripts/verify-github-attestation.sh"
+      - "test/windows-executable-contract.test.js"
       - "vite.config.js"
       - ".github/workflows/build-windows.yml"
 
@@ -137,12 +139,21 @@ jobs:
                 throw "Installed Windows app is missing the exact $legalFile file."
               }
             }
-            $appExecutable = Get-ChildItem $installDirectory -Recurse -File -Filter "*.exe" |
-              Where-Object { $_.Name -notmatch "(?i)uninstall" } |
-              Sort-Object Length -Descending |
-              Select-Object -First 1
-            if (-not $appExecutable) {
-              throw "Installed Windows app is missing its main executable."
+            $appExecutables = @(Get-ChildItem $installDirectory -Recurse -File -Filter "where_to_study.exe")
+            if ($appExecutables.Count -ne 1) {
+              throw "Expected exactly one installed Windows main executable, found $($appExecutables.Count)."
+            }
+            $appExecutable = $appExecutables[0]
+            # Check the installed app, not the NSIS installer/uninstaller (which
+            # can be GUI executables even when the app accidentally uses CUI).
+            $env:WTS_WINDOWS_APP_EXECUTABLE = $appExecutable.FullName
+            try {
+              node --test test/windows-executable-contract.test.js
+              if ($LASTEXITCODE -ne 0) {
+                throw "Installed Windows main executable failed the PE GUI subsystem contract."
+              }
+            } finally {
+              Remove-Item Env:WTS_WINDOWS_APP_EXECUTABLE -ErrorAction SilentlyContinue
             }
             $binaryText = [System.Text.Encoding]::Latin1.GetString(
               [System.IO.File]::ReadAllBytes($appExecutable.FullName)
