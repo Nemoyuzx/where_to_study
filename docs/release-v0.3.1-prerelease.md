@@ -86,3 +86,36 @@
 - Apple：Mac 25项相关测试、iPhone 25项单元／渲染与3项UI、iPad 3项通过；人工检查iPhone中英×普通/AX3×深浅8张，以及iPad宽／窄布局。测试使用iOS 26.3模拟器，无实体机。
 - HarmonyOS：251/251 Hypium通过，release `PackageHap`／`CompileArkTS`和`OhosTestCompileArkTS`成功；本机无hdc设备，设备视觉待DevEco云测，不能将主机测试记为真机视觉通过。
 - 独立静态审查发现并修复了Android横屏手机使用侧栏时丢失图标回退的问题；最终三平台生产diff未发现剩余P1/P2。
+
+### 热更新源码与本地签名包
+
+- 产品源码提交：`e340c8f6a61bcf493467a2d58c0fc5e31e5a473e`。首次最终标签运行的Apple测试在第30/35项触发既有50分钟步骤上限；随后只把Native Apple job／step时限从60/50提高到90/80，并同步契约测试。最终标签解析到 `5ffdc0e4db4b718c096f30cbd4ba73ec8ecef9ce`，两次CI提交与产品提交之间的全部Android／Apple／Harmony源代码、打包脚本、许可证输入diff为空，因此签名包无需重建。
+- Android APK：**1,172,442 bytes**，SHA-256 `7603288e5a189aadd4405d1b8c647c47d2482d3b779c2b925b4a8f89f3eb53a1`，0.3.1（55）。Release 288项、Lint 0错误／68警告／1 hint、v2/v3原证书、zipalign、许可证、HTTPS策略与旧域名检查通过。对未修改的混淆签名APK另用同证书、任务内临时instrumentation离线注入纯内存合成成绩，验证五个固定图标Tab、13个浅色设置开关、浅→深→浅成绩保留／不重取／退出清空；测试包已卸载、隔离AVD已关闭。AAB只保留本地。
+- Apple：iOS与macOS主程序／小组件均为0.3.1（99）。iOS arm64于 **18:22:46 +0800**、macOS arm64+x86_64于 **18:26:09 +0800** 各唯一上传一次，均返回 `Upload succeeded` 与 `EXPORT SUCCEEDED`；随后未检查App Store Connect处理状态或提交审核。Distribution导出签名、App Group、权限、隐私和许可证通过。
+- 新的GitHub原生macOS Universal DMG：**7,960,292 bytes**，SHA-256 `9f2af2bd12c22bf5772127c41a2d7f0e88edac8827e9da61d734cb0e3ee323ca`；只读挂载确认主程序／小组件99、双架构、ad-hoc签名和许可证。仍未公证，ZIP、IPA、PKG和侧文件不公开。
+- HarmonyOS：DevEco选择第二项“生成.app包并上传至AppGallery Connect进行测试”，0.3.1（1002035）云测试于 **18:24 +0800** 通过；未选择测试并发布，未提交正式审核。DevEco实际上传后APP为 **1,368,187 bytes**／SHA-256 `3c212a400f66db1198ccebace97a04a070bd600830697b90c1daa9bfe62a3a28`，HAP为 **2,103,676 bytes**／SHA-256 `374f46136606b037ee5bb8cc88e42d754f967aa44969ef55598efc247e8e6b0f`。二者pack.info均为1002035，release build mode、verify-app和release profile通过；不上传GitHub。
+
+### 热更新最终CI与GitHub回执
+
+最终标签 `5ffdc0e` 的七条工作流全部成功：
+
+| 工作流 | 运行 |
+| --- | --- |
+| Windows | [35592732264](https://github.com/Nemoyuzx/where_to_study/actions/runs/35592732264) |
+| Linux | [35592732180](https://github.com/Nemoyuzx/where_to_study/actions/runs/35592732180) |
+| macOS | [35592732176](https://github.com/Nemoyuzx/where_to_study/actions/runs/35592732176) |
+| Native Clients | [35592732213](https://github.com/Nemoyuzx/where_to_study/actions/runs/35592732213) |
+| CLI | [35592732104](https://github.com/Nemoyuzx/where_to_study/actions/runs/35592732104) |
+| TUI | [35592732182](https://github.com/Nemoyuzx/where_to_study/actions/runs/35592732182) |
+| Security Checks | [35592732156](https://github.com/Nemoyuzx/where_to_study/actions/runs/35592732156) |
+
+Native Apple完整测试步骤用时54分58秒并最终返回 `TEST SUCCEEDED`；新增查询图标UI测试首轮通过。两个既有测试出现过首轮等待超时：Custom Feed状态文字和无节假日数据时月份动画，均由脚本的内建第二轮自动通过，没有人工重跑；记录不能表述为“所有尝试零失败”。
+
+同一 [v0.3.1-prerelease](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1-prerelease) 中只替换：
+
+| 资产 | 新字节数 | 新SHA-256 |
+| --- | ---: | --- |
+| Android Universal APK | 1,172,442 | `7603288e5a189aadd4405d1b8c647c47d2482d3b779c2b925b4a8f89f3eb53a1` |
+| 原生macOS Universal DMG | 7,960,292 | `9f2af2bd12c22bf5772127c41a2d7f0e88edac8827e9da61d734cb0e3ee323ca` |
+
+替换后Release仍为 `draft=false`／`prerelease=true`，恰好11个公开资产；另外9个Windows/Linux/CLI/TUI资产的远端ID、大小和摘要与替换前完全一致。GitHub API确认两个新资产均为uploaded且摘要匹配本地，远端注释标签解析到 `5ffdc0e`，`releases/latest` 仍为 **v0.3.0**。未回下载任何Release文件，未公开AAB、鸿蒙包、iOS归档或SHA侧文件。
