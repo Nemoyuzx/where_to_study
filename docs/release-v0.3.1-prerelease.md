@@ -2,7 +2,7 @@
 
 本轮范围：安卓查询子页切换／异步更新的内容区刷新边界、考试及作业页面间距，以及全部图形端课程成绩卡片／平均绩点的紧凑布局。无认证、网络接口、隐私权限、签名配置或课程提醒行为变更。
 
-发布标签为 `v0.3.1-prerelease`，包内版本 `0.3.1`。同一预发布标签的最新测试包为 Android build **55**、Apple build **99**、HarmonyOS versionCode **1002035**；下文同时保留首轮 build 54／98／1002034 的历史回执。0.3.0 仍为稳定版；本轮只更新 GitHub 预发布、TestFlight 与鸿蒙测试渠道，不提交正式商店审核。
+发布标签为 `v0.3.1-prerelease`，包内版本 `0.3.1`。同一预发布标签的最新测试包为 Android build **56**、Apple build **99**、HarmonyOS versionCode **1002035**；下文同时保留早期测试包回执。0.3.0 仍为稳定版。本轮班车图标热修复只替换Android APK，不重发Apple或鸿蒙，也不提交正式商店审核。
 
 ## 已完成的源代码与验证
 
@@ -119,3 +119,13 @@ Native Apple完整测试步骤用时54分58秒并最终返回 `TEST SUCCEEDED`�
 | 原生macOS Universal DMG | 7,960,292 | `9f2af2bd12c22bf5772127c41a2d7f0e88edac8827e9da61d734cb0e3ee323ca` |
 
 替换后Release仍为 `draft=false`／`prerelease=true`，恰好11个公开资产；另外9个Windows/Linux/CLI/TUI资产的远端ID、大小和摘要与替换前完全一致。GitHub API确认两个新资产均为uploaded且摘要匹配本地，远端注释标签解析到 `5ffdc0e`，`releases/latest` 仍为 **v0.3.0**。未回下载任何Release文件，未公开AAB、鸿蒙包、iOS归档或SHA侧文件。
+
+## Android班车动作图标热修复（build 56）
+
+Android全局控件高度已是32dp，但班车刷新、通知原文和来源外链仍保留四边13dp内边距，导致实际图形区域只有6dp。三个动作现使用独立44dp点击区与24dp图形区域，不再跟随文字控件高度；保留主题tint、完整中英无障碍名称和原点击逻辑。
+
+- Android：288/288 JVM通过，Debug与测试APK构建成功；6组共14项设备回归全部通过，每项覆盖中英。矩阵包含手机竖屏／横屏／平板、浅色100%与深色150%字体。测试按真实vector与ImageView matrix栅格化，要求图形区域24dp、可见墨迹至少16dp、居中且不裁剪；人工检查24张上下截图和底部导航安全区。
+- 两项测试误报被限定在测试代码：英文换行尾空格改用Android SDK定义的可视行宽 `getLineMax`；横屏大字体等待已layout的线路视图，不再要求其必须出现在首屏无障碍树。生产布局未因此改动。
+- HarmonyOS只读核对：刷新17fp、通知外链18fp、来源外链16fp，均有至少44vp点击区域，不存在Android的padding压缩路径。251/251 Hypium、12项密度／查询契约和release CompileArkTS通过；没有生产diff，本轮不重发鸿蒙包。Apple使用SF Symbols，也没有该Android专用路径，本轮不重发。
+
+最终Android签名包、现有标签／Release资产替换及远端摘要回执待完成后补记。此次采用现有预发布资产热修复流程：保留标签和其余10个公开资产，只替换同名APK；按用户要求不回下载GitHub Release文件。

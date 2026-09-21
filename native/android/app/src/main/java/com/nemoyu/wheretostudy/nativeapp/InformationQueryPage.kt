@@ -102,6 +102,8 @@ internal object InformationQueryLayoutLogic {
 }
 
 internal object ShuttleQueryLayoutLogic {
+    const val ACTION_TOUCH_SIZE_DP = 44
+    const val ACTION_ICON_SIZE_DP = 24
     const val ROUTE_MIN_WIDTH_DP = 280
     const val ROUTE_SPACING_DP = 16
     const val DEPARTURE_MIN_WIDTH_DP = 86
@@ -896,7 +898,7 @@ internal class InformationQueryPage(
                         shuttleRepository.load(force = true)
                         renderMode(animate = false)
                     }
-                }, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp)).apply { marginStart = activity.dp(8) })
+                }, shuttleActionLayoutParams().apply { marginStart = activity.dp(8) })
             })
             if (presentation.isStale) addView(TextView(activity).apply {
                 text = "当前展示最近一次成功同步的缓存"
@@ -937,7 +939,7 @@ internal class InformationQueryPage(
                         addView(shuttleIconButton(R.drawable.ic_shuttle_external, "查看班车通知原文", outlined = false).apply {
                             id = R.id.information_query_shuttle_notice_link
                             setOnClickListener { openURL(url) }
-                        }, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp)).apply { marginStart = activity.dp(8) })
+                        }, shuttleActionLayoutParams().apply { marginStart = activity.dp(8) })
                     }
                 })
             }
@@ -1004,8 +1006,9 @@ internal class InformationQueryPage(
                 ColorUtils.blendARGB(Palette.background, Palette.primaryFill, 0.08f)) }
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(shuttleIconButton(R.drawable.ic_shuttle_external, "查看数据来源", outlined = false).apply {
+            id = R.id.information_query_shuttle_source_link
             setOnClickListener { openURL(url) }
-        }, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp)).apply { marginStart = activity.dp(4) })
+        }, shuttleActionLayoutParams().apply { marginStart = activity.dp(4) })
         isClickable = true
         isFocusable = true
         setOnClickListener { openURL(url) }
@@ -1024,11 +1027,20 @@ internal class InformationQueryPage(
             contentDescription = activity.uiText(label)
             isClickable = true
             isFocusable = true
-            setPadding(activity.dp(13), activity.dp(13), activity.dp(13), activity.dp(13))
+            // Keep icon artwork independent from the app's compact text controls.
+            // A 32 dp control with the previous 13 dp inset shrank it to only 6 dp.
+            val inset = activity.dp((ShuttleQueryLayoutLogic.ACTION_TOUCH_SIZE_DP -
+                ShuttleQueryLayoutLogic.ACTION_ICON_SIZE_DP) / 2)
+            setPadding(inset, inset, inset, inset)
             if (outlined) background = themedRoundedBackground(activity, {
                 ColorUtils.blendARGB(Palette.surface, Palette.primaryFill, 0.12f)
             }, radius = 24)
         }
+
+    private fun shuttleActionLayoutParams() = LinearLayout.LayoutParams(
+        activity.dp(ShuttleQueryLayoutLogic.ACTION_TOUCH_SIZE_DP),
+        activity.dp(ShuttleQueryLayoutLogic.ACTION_TOUCH_SIZE_DP),
+    )
 
     private fun shuttleRouteCard(route: TodayShuttleRoute, currentTime: String, pickupLocations: List<String>): LinearLayout =
         shuttleSurface().apply {

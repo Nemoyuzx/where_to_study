@@ -1,12 +1,18 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
 import android.os.Environment
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.graphics.ColorUtils
@@ -91,7 +97,7 @@ class QueryCardsVisualUiTest {
         scenario.onActivity { activity ->
             assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
         }
-        awaitView(R.id.information_query_shuttle_routes)
+        awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
         scenario.onActivity { activity ->
             val page = activity.findViewById<ViewGroup>(R.id.information_query_page)
             assertFalse(descendants(page).filterIsInstance<TextView>().any {
@@ -125,7 +131,7 @@ class QueryCardsVisualUiTest {
             scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
             }
-            awaitView(R.id.information_query_shuttle_routes)
+            awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
             UiDevice.getInstance(instrumentation).waitForIdle()
             scenario.onActivity { activity ->
                 val scroll = activity.findViewById<ScrollView>(R.id.information_query_shuttle_scroll)
@@ -133,8 +139,7 @@ class QueryCardsVisualUiTest {
                 assertNotNull("The shuttle selector must scroll with the page title", selector)
                 val status = scroll.findViewById<ViewGroup>(R.id.information_query_shuttle_status)
                 val refresh = status.findViewById<View>(R.id.information_query_shuttle_refresh)
-                assertEquals(activity.dp(UiMetrics.controlHeightDp), refresh.width)
-                assertEquals(activity.dp(UiMetrics.controlHeightDp), refresh.height)
+                assertShuttleActionIcons(activity)
                 assertTrue(refresh.isClickable)
                 assertTrue(status.findViewById<View>(R.id.information_query_shuttle_notice_link).isClickable)
                 listOf("status.title", "status.summary", "notice.title", "notice.date").forEach { suffix ->
@@ -154,10 +159,11 @@ class QueryCardsVisualUiTest {
                     descendants(card).filterIsInstance<TextView>().forEach(::assertTextFits)
                 }
                 assertTrue(activity.applyColorTheme(ColorThemeSelection("ocean")))
+                assertShuttleActionIcons(activity)
                 assertSame(cards.first(), descendants(routes).first { it.tag == "information.query.shuttle.route" })
                 assertTrue(refresh.performClick())
             }
-            awaitView(R.id.information_query_shuttle_routes)
+            awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
             UiDevice.getInstance(instrumentation).waitForIdle()
             scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).performClick())
@@ -167,7 +173,7 @@ class QueryCardsVisualUiTest {
                 activity.findViewById<android.widget.EditText>(R.id.information_query_search).setText("test query")
                 assertTrue(activity.findViewById<View>(R.id.information_query_shuttle_tab).performClick())
             }
-            awaitView(R.id.information_query_shuttle_routes)
+            awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
             UiDevice.getInstance(instrumentation).waitForIdle()
             scenario.onActivity { activity ->
                 assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).performClick())
@@ -184,13 +190,14 @@ class QueryCardsVisualUiTest {
             activity.findViewById<View>(R.id.navigation_query).performClick()
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
-        awaitView(R.id.information_query_shuttle_routes)
+        awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
         val closeFixture = installShuttleVisualFixture(scenario)
         try {
-            awaitView(R.id.information_query_shuttle_routes)
+            awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
             val device = UiDevice.getInstance(instrumentation)
             device.waitForIdle()
             scenario.onActivity { activity ->
+                assertShuttleActionIcons(activity)
                 val scroll = activity.findViewById<ViewGroup>(R.id.information_query_shuttle_scroll)
                 val tiles = descendants(scroll).filterIsInstance<LinearLayout>().filter {
                     it.tag == "information.query.shuttle.departure"
@@ -221,6 +228,7 @@ class QueryCardsVisualUiTest {
                 .apply { mkdirs() }
             assertTrue(device.takeScreenshot(File(directory, "$stage-$language-top.png")))
             scrollToEndAndWaitForFrame(scenario, R.id.information_query_shuttle_scroll)
+            assertTrue(device.takeScreenshot(File(directory, "$stage-$language-bottom.png")))
             scenario.onActivity { activity ->
                 val footer = activity.findViewById<View>(R.id.information_query_shuttle_source_footer)
                 val footerLocation = IntArray(2).also(footer::getLocationOnScreen)
@@ -232,7 +240,6 @@ class QueryCardsVisualUiTest {
                 }
                 descendants(footer).filterIsInstance<TextView>().forEach(::assertTextFits)
             }
-            assertTrue(device.takeScreenshot(File(directory, "$stage-$language-bottom.png")))
         } finally { closeFixture() }
     }
 
@@ -271,6 +278,49 @@ class QueryCardsVisualUiTest {
             parent.addView(page, index, params)
         }
         return { shuttles.close(); events.close(); grades.close(); academicSchedules.close() }
+    }
+
+    private fun assertShuttleActionIcons(activity: MainActivity) {
+        listOf(
+            R.id.information_query_shuttle_refresh to "刷新班车信息",
+            R.id.information_query_shuttle_notice_link to "查看班车通知原文",
+            R.id.information_query_shuttle_source_link to "查看数据来源",
+        ).forEach { (id, label) ->
+            val action = activity.findViewById<ImageView>(id)
+            assertTrue("$label must retain a 44 dp touch target", action.width >= activity.dp(44) &&
+                action.height >= activity.dp(44))
+            assertTrue(action.isClickable && action.isFocusable)
+            assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_YES, action.importantForAccessibility)
+            assertEquals(activity.uiText(label), action.contentDescription.toString())
+            assertEquals(Palette.primaryText, action.imageTintList!!.defaultColor)
+
+            val drawableBounds = RectF(action.drawable.bounds)
+            action.imageMatrix.mapRect(drawableBounds)
+            drawableBounds.offset(action.paddingLeft.toFloat(), action.paddingTop.toFloat())
+            assertEquals("$label artwork viewport width", activity.dp(24).toFloat(), drawableBounds.width(), 1f)
+            assertEquals("$label artwork viewport height", activity.dp(24).toFloat(), drawableBounds.height(), 1f)
+            assertEquals(action.width / 2f, drawableBounds.centerX(), 1f)
+            assertEquals(action.height / 2f, drawableBounds.centerY(), 1f)
+
+            // Draw just the real vector using its actual ImageView transform: a
+            // large hit area alone must never allow tiny or clipped artwork.
+            val bitmap = Bitmap.createBitmap(action.width, action.height, Bitmap.Config.ARGB_8888)
+            try {
+                val canvas = Canvas(bitmap)
+                canvas.translate(action.paddingLeft.toFloat(), action.paddingTop.toFloat())
+                canvas.concat(action.imageMatrix)
+                action.drawable.draw(canvas)
+                val ink = Rect()
+                for (y in 0 until bitmap.height) for (x in 0 until bitmap.width) {
+                    if (Color.alpha(bitmap.getPixel(x, y)) >= 64) ink.union(x, y, x + 1, y + 1)
+                }
+                assertTrue("$label must render visible glyph strokes, not just a large button: $ink",
+                    ink.width() >= activity.dp(16) && ink.height() >= activity.dp(16))
+                assertTrue("$label must not draw outside its centered icon viewport",
+                    ink.left >= drawableBounds.left - 1 && ink.top >= drawableBounds.top - 1 &&
+                        ink.right <= drawableBounds.right + 1 && ink.bottom <= drawableBounds.bottom + 1)
+            } finally { bitmap.recycle() }
+        }
     }
 
     @Test
@@ -360,6 +410,22 @@ class QueryCardsVisualUiTest {
         }
     }
 
+    private fun awaitViewInHierarchy(scenario: ActivityScenario<MainActivity>, id: Int) {
+        // Large text in landscape can put the routes below the fold. They must
+        // be laid out, but need not appear in the visible accessibility tree.
+        val deadline = android.os.SystemClock.elapsedRealtime() + 5_000
+        var ready = false
+        while (!ready && android.os.SystemClock.elapsedRealtime() < deadline) {
+            scenario.onActivity { activity ->
+                val view = activity.findViewById<View?>(id)
+                ready = view != null && view.isLaidOut && view.width > 0 && view.height > 0
+            }
+            if (!ready) android.os.SystemClock.sleep(30)
+        }
+        assertTrue("The requested view must finish layout", ready)
+        instrumentation.waitForIdleSync()
+    }
+
     private fun awaitView(id: Int) {
         assertTrue(UiDevice.getInstance(instrumentation).wait(Until.hasObject(By.res(
             context.packageName, context.resources.getResourceEntryName(id),
@@ -420,7 +486,10 @@ class QueryCardsVisualUiTest {
         val contentHeight = label.height - label.compoundPaddingTop - label.compoundPaddingBottom
         repeat(layout.lineCount) { line ->
             assertEquals("Text must not ellipsize: ${label.text}", 0, layout.getEllipsisCount(line))
-            assertTrue("Text must fit its column: ${label.text}", layout.getLineWidth(line) <= contentWidth + 1)
+            // Android permits a wrapped line's trailing space beyond its width;
+            // getLineMax measures the visible text rather than that whitespace.
+            assertTrue("Text must fit its column: ${label.text}; line=$line width=${layout.getLineMax(line)} available=$contentWidth",
+                layout.getLineMax(line) <= contentWidth + 1)
         }
         assertTrue("Text must fit its control height: ${label.text}", layout.height <= contentHeight + 1)
     }
