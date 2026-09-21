@@ -103,15 +103,13 @@ class QueryContentStabilityUiTest {
             }
             val viewport = page.findViewWithTag<View>("information.query.mode.viewport")
             val visible = android.graphics.Rect().also(viewport::getGlobalVisibleRect)
-            if (page.width / it.resources.displayMetrics.density < 560) {
-                assertEquals(if (AppLocale.isEnglish(it)) listOf("Shuttle", "Events", "Grades", "Exams", "Tasks")
-                    else listOf("班车", "事件", "成绩", "考试安排", "作业"), labels.map { label -> label.text.toString() })
-                if (it.resources.configuration.fontScale <= 1f) {
-                    assertEquals("Normal phone typography shows all five compact labels", viewport.width, selector.width)
-                    labels.forEach { label ->
-                        val location = IntArray(2).also(label::getLocationOnScreen)
-                        assertTrue(location[0] >= visible.left && location[0] + label.width <= visible.right)
-                    }
+            assertFalse("The fixed mode selector is never horizontally scrollable", viewport is android.widget.HorizontalScrollView)
+            assertEquals("All five modes fit the viewport at every font scale", viewport.width, selector.width)
+            labels.forEach { label ->
+                val location = IntArray(2).also(label::getLocationOnScreen)
+                assertTrue(location[0] >= visible.left && location[0] + label.width <= visible.right)
+                if (it.findViewById<View?>(R.id.phone_navigation) != null) {
+                    assertNotNull("Phone modes always carry a vector icon", label.compoundDrawablesRelative[0])
                 }
             }
             val selected = it.findViewById<View>(R.id.information_query_grades_tab)

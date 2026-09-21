@@ -6,6 +6,17 @@ import org.junit.Test
 import java.util.Calendar
 
 class AcademicQueryTest {
+    @Test fun currentSemesterLabelMarksOnlyTheSchoolCurrentTermWithoutDuplicates() {
+        val current = AcademicTerm("current", "2026-2027-1")
+        assertEquals("2026-2027-1 · 当前学期", AcademicTermPresentation.label(current, "current", current.name, "当前学期"))
+        assertEquals("2026-2027-1 · Current semester", AcademicTermPresentation.label(current, "current", current.name, "Current semester"))
+        assertEquals("2026-2027-1", AcademicTermPresentation.label(current, "past", current.name, "当前学期"))
+        assertEquals("全部学期", AcademicTermPresentation.label(AcademicTerm("", "全部学期"), "", "全部学期", "当前学期"))
+        listOf("2026-2027-1（当前学期）", "2026-2027-1 · Current semester").forEach { name ->
+            assertEquals(name, AcademicTermPresentation.label(current, "current", name, "当前学期"))
+        }
+    }
+
     private val course = Course("ordinary", "Synthetic course", "Teacher", "Room", "1,2", listOf(1, 2),
         emptyList(), 1, 0, 1, "1-2", "08:00-09:35")
     private fun schedule(vararg exams: ExamArrangement) = ScheduleSnapshot("2026-2027-1", "2026-09-07", "fixture",

@@ -9,13 +9,13 @@ enum InformationQueryMode: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var compactTitleKey: String {
+    var systemImage: String {
         switch self {
-        case .shuttle: "班车"
-        case .importantEvents: "事件"
-        case .grades: "成绩"
-        case .exams: "考试安排"
-        case .assignments: "作业"
+        case .shuttle: "bus"
+        case .importantEvents: "calendar.badge.exclamationmark"
+        case .grades: "chart.bar.xaxis"
+        case .exams: "doc.text.magnifyingglass"
+        case .assignments: "checklist"
         }
     }
 
@@ -297,16 +297,11 @@ struct InformationQueriesView: View {
                         title: model.localized("信息查询"),
                         compact: proxy.size.height < 560
                     )
-                    Picker("查询类型", selection: $selectedMode) {
-                        ForEach(InformationQueryMode.allCases) { mode in
-                            Text(model.localized(proxy.size.width < 560 ? mode.compactTitleKey : mode.titleKey))
-                                .accessibilityLabel(model.localized(mode.titleKey))
-                                .tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .background(ThemeSegmentedSurface())
-                    .accessibilityIdentifier("queries.mode")
+                    InformationQueryModePicker(
+                        selection: $selectedMode,
+                        language: model.appLanguage,
+                        availableWidth: max(0, min(proxy.size.width, 1180) - 32)
+                    )
 
                     switch selectedMode {
                     case .shuttle:

@@ -60,6 +60,12 @@ class MainActivity : Activity() {
     private enum class SettingsRoute { MAIN, FAVORITES }
     private enum class CalendarImportKind { SCHEDULE, FAVORITES }
 
+    /** Configuration changes retain private query data in memory only, never in a Bundle or on disk. */
+    private data class RetainedInformationQuery(
+        val grades: AcademicGradesRepository,
+        val session: InformationQuerySessionState,
+    )
+
     private lateinit var content: FrameLayout
     private lateinit var adaptiveRoot: FrameLayout
     private val navigationViews = mutableMapOf<Destination, TextView>()
@@ -79,7 +85,10 @@ class MainActivity : Activity() {
     }
     private val weatherRepository by lazy { WeatherRepository() }
     private val shuttleBusRepository by lazy { ShuttleBusRepository() }
-    private val academicGradesRepository by lazy { AcademicGradesRepository(credentialStore::load) }
+    private val academicGradesRepository by lazy {
+        (lastNonConfigurationInstance as? RetainedInformationQuery)?.grades
+            ?: AcademicGradesRepository(SecureCredentialStore(applicationContext)::load)
+    }
     private val calendarDailyInfoRepository by lazy {
         CalendarDailyInfoRepository(
             assignmentClient = UCloudAssignmentClient(credentialStore),
@@ -195,9 +204,10 @@ class MainActivity : Activity() {
                 ?.getBoolean(TEACHING_CALENDAR_DAY_WEEK_AGENDA_EXPANDED_KEY, true)
                 ?: true,
         )
-        informationQuerySessionState = InformationQuerySessionState(
-            savedInstanceState?.getString(INFORMATION_QUERY_MODE_KEY),
-        )
+        informationQuerySessionState = (lastNonConfigurationInstance as? RetainedInformationQuery)?.session
+            ?: InformationQuerySessionState(
+                savedInstanceState?.getString(INFORMATION_QUERY_MODE_KEY),
+            )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
@@ -1242,6 +1252,11 @@ class MainActivity : Activity() {
         } else if (succeeded && refreshOtherPages) refreshCurrentPage()
     }
 
+    override fun onRetainNonConfigurationInstance(): Any? =
+        if (::informationQuerySessionState.isInitialized)
+            RetainedInformationQuery(academicGradesRepository, informationQuerySessionState)
+        else null
+
     override fun onDestroy() {
         automaticScheduleLaunchRefreshKey?.let { key ->
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
@@ -1252,7 +1267,7 @@ class MainActivity : Activity() {
         pendingCalendarImport = null
         pendingNotificationPermissionCompletion = null
         scheduleRepository.close()
-        academicGradesRepository.close()
+        if (!isChangingConfigurations) academicGradesRepository.close()
         classroomRepository.close()
         weatherRepository.close()
         shuttleBusRepository.close()

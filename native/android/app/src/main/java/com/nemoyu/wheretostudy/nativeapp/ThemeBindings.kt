@@ -111,21 +111,35 @@ internal object ThemeBindings {
     }
 }
 
-private data class SwitchTints(val thumb: ColorStateList?, val track: ColorStateList?)
-
 private fun Switch.refreshNativeSwitchTheme() {
     @Suppress("UNCHECKED_CAST")
     val bindings = getTag(R.id.color_theme_bindings) as? Map<String, () -> Unit>
     if (bindings?.containsKey("trackTintList") == true) return
-    val original = getTag(R.id.color_theme_native_tints) as? SwitchTints
-        ?: SwitchTints(thumbTintList, trackTintList).also { setTag(R.id.color_theme_native_tints, it) }
-    if (Palette.selection.preset == "default") {
-        thumbTintList = original.thumb
-        trackTintList = original.track
-    } else {
-        val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
-        thumbTintList = ColorStateList(states, intArrayOf(Palette.primaryText, Palette.muted))
-        trackTintList = ColorStateList(states, intArrayOf(Palette.primaryFill, Palette.surfaceVariant))
+    // Framework Material tracks use a translucent white solid before tinting,
+    // which otherwise washes out even an opaque app tint. Keep their geometry.
+    trackDrawable?.mutate()?.makeSwitchTrackOpaque()
+    // Match the app's explicit surfaces and Apple-style light thumb / colored
+    // track. System defaults and a same-colored thumb/track lose contrast in light mode.
+    val states = arrayOf(
+        intArrayOf(-android.R.attr.state_enabled, android.R.attr.state_checked),
+        intArrayOf(-android.R.attr.state_enabled),
+        intArrayOf(android.R.attr.state_checked),
+        intArrayOf(),
+    )
+    fun disabled(color: Int) = ColorUtils.blendARGB(Palette.surface, color, 0.38f)
+    thumbTintList = ColorStateList(states, intArrayOf(
+        disabled(Palette.onPrimary), disabled(Color.WHITE), Palette.onPrimary, Color.WHITE,
+    ))
+    trackTintList = ColorStateList(states, intArrayOf(
+        disabled(Palette.primaryFill), disabled(Palette.border), Palette.primaryFill, Palette.border,
+    ))
+}
+
+private fun Drawable.makeSwitchTrackOpaque() {
+    when (this) {
+        is GradientDrawable -> setColor(Color.WHITE)
+        is LayerDrawable -> repeat(numberOfLayers) { getDrawable(it).makeSwitchTrackOpaque() }
+        is InsetDrawable -> drawable?.makeSwitchTrackOpaque()
     }
 }
 

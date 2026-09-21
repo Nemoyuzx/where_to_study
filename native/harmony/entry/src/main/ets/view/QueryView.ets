@@ -1,4 +1,5 @@
 // 全平台“查询”入口的 HarmonyOS 原生页面：班车查询 + 重要事件。
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 import { ControlMetrics } from '../common/ControlMetrics';
@@ -33,6 +34,7 @@ export struct QueryView {
   @Local requestedVisibleEventCount: number = ImportantEventQueryLogic.initialRequestedCount();
   @Local contentWidth: number = 390;
   @Local contentFontScale: number = 1;
+  @Local tabPickerWidth: number = 358;
   @Local shuttleSnapshot: ShuttleBusSnapshot | null = null;
   @Local shuttleLoading: boolean = false;
   @Local shuttleError: string = '';
@@ -77,6 +79,28 @@ export struct QueryView {
     } catch (e) {
       this.contentFontScale = 1;
     }
+  }
+
+  private compactTabs(): boolean {
+    return this.contentWidth < 600 || deviceInfo.deviceType === 'phone';
+  }
+
+  private tabTitle(tab: QueryPageTab): string {
+    return this.model.text(this.compactTabs() ?
+      QueryPageContract.compactTabTitle(tab) : QueryPageContract.tabTitle(tab));
+  }
+
+  private iconOnlyTabs(): boolean {
+    let maximumWidth: number = 0;
+    for (const tab of QueryPageContract.tabs) {
+      const width: number = this.getUIContext().getMeasureUtils().measureText({
+        textContent: this.tabTitle(tab),
+        fontSize: (14 * this.contentFontScale).toString() + 'vp',
+        fontWeight: FontWeight.Bold
+      });
+      maximumWidth = Math.max(maximumWidth, this.getUIContext().px2vp(width));
+    }
+    return QueryPageContract.iconOnlyTabs(this.tabPickerWidth, maximumWidth, this.compactTabs());
   }
 
   private loadShuttle(): void {
@@ -232,26 +256,15 @@ export struct QueryView {
 
   @Builder
   tabPicker() {
-    Column() {
-      if (QueryPageContract.verticalTabs(this.contentWidth, this.contentFontScale)) {
-        Column() {
-          ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => { this.tabLabel(tab, true) },
-            (tab: QueryPageTab) => 'query-tab.' + tab)
-        }.width('100%')
-      } else if (this.contentWidth < 600) {
-        Scroll() {
-          Row() {
-            ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => {
-              Column() { this.tabLabel(tab, true) }.width(108)
-            }, (tab: QueryPageTab) => 'query-tab.' + tab)
-          }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
-      } else {
-        Row() {
-          ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => { this.tabLabel(tab, false) },
-            (tab: QueryPageTab) => 'query-tab.' + tab)
-        }.width('100%')
-      }
+    this.tabPickerRow(this.iconOnlyTabs())
+  }
+
+  @Builder
+  tabPickerRow(iconOnly: boolean) {
+    Row() {
+      ForEach(QueryPageContract.tabs, (tab: QueryPageTab) => {
+        this.tabLabel(tab, iconOnly)
+      }, (tab: QueryPageTab) => 'query-tab.' + tab)
     }
     .width(this.selectedTab() !== QueryPageTab.events ? '100%' : 'calc(100% - 32vp)')
     .constraintSize({ minHeight: ControlMetrics.height })
@@ -260,30 +273,43 @@ export struct QueryView {
     .borderRadius(11)
     .backgroundColor(AppTheme.surfaceVariant())
     .alignSelf(ItemAlign.Center)
+    .id('query.tab_picker')
+    .onAreaChange((oldArea: Area, newArea: Area) => {
+      this.tabPickerWidth = Number(newArea.width);
+    })
   }
 
   @Builder
-  tabLabel(tab: QueryPageTab, vertical: boolean) {
-        Text(this.model.text(QueryPageContract.tabTitle(tab)))
-          .fontSize(14)
-          .fontWeight(this.selectedTab() === tab ? FontWeight.Bold : FontWeight.Regular)
-          .fontColor(AppTheme.text())
-          .textAlign(TextAlign.Center)
-          .layoutWeight(vertical ? 0 : 1)
-          .width(vertical ? '100%' : undefined)
-          .constraintSize({ minHeight: ControlMetrics.height - 6 })
-          .padding({ left: 6, right: 6 })
-          .maxLines(2)
-          .borderRadius(8)
-          .backgroundColor(this.selectedTab() === tab ? AppTheme.surface() : Color.Transparent)
-          .accessibilitySelected(this.selectedTab() === tab)
-          .id(QueryPageContract.tabAccessibilityID(tab))
-          .animation({ duration: 160, curve: Curve.EaseOut })
-          .onClick(() => {
-            this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, (): void => {
-              this.selectedTabRawValue = tab;
-            });
-          })
+  tabLabel(tab: QueryPageTab, iconOnly: boolean) {
+    Button() {
+      Row({ space: 4 }) {
+        if (this.compactTabs() || iconOnly) {
+          SymbolGlyph(QueryPageContract.tabSymbol(tab))
+            .fontSize('20vp')
+            .fontColor([this.selectedTab() === tab ? AppTheme.primary() : AppTheme.text()])
+            .accessibilityLevel('no')
+        }
+        if (!iconOnly) {
+          Text(this.tabTitle(tab))
+            .fontSize((14 * this.contentFontScale).toString() + 'vp')
+            .fontWeight(this.selectedTab() === tab ? FontWeight.Bold : FontWeight.Regular)
+            .fontColor(AppTheme.text())
+            .maxLines(1)
+            .accessibilityLevel('no')
+        }
+      }
+      .justifyContent(FlexAlign.Center)
+    }
+    .type(ButtonType.Normal)
+    .layoutWeight(1)
+    .constraintSize({ minHeight: 44 })
+    .padding({ left: 6, right: 6, top: 4, bottom: 4 })
+    .borderRadius(8)
+    .backgroundColor(this.selectedTab() === tab ? AppTheme.surface() : Color.Transparent)
+    .accessibilityText(this.model.text(QueryPageContract.tabTitle(tab)))
+    .accessibilitySelected(this.selectedTab() === tab)
+    .id(QueryPageContract.tabAccessibilityID(tab))
+    .onClick(() => { this.selectedTabRawValue = tab; })
   }
 
   @Builder

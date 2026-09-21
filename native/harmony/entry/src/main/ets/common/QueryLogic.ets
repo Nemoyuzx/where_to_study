@@ -42,8 +42,30 @@ export class QueryPageContract {
     return tab === QueryPageTab.shuttle ? '班车查询' : tab === QueryPageTab.grades ? '成绩查询' : '重要事件';
   }
 
-  static verticalTabs(width: number, fontScale: number): boolean {
-    return fontScale > 1.2 && (width - 32) / QueryPageContract.tabs.length < 80 * fontScale;
+  static compactTabTitle(tab: QueryPageTab): string {
+    if (tab === QueryPageTab.shuttle) { return '班车'; }
+    if (tab === QueryPageTab.events) { return '事件'; }
+    if (tab === QueryPageTab.grades) { return '成绩'; }
+    return tab === QueryPageTab.exams ? '考试' : '作业';
+  }
+
+  // 原生 Symbol 与一级导航 AppSectionInfo 保持同一图标体系。
+  static tabSymbol(tab: QueryPageTab): Resource {
+    if (tab === QueryPageTab.shuttle) { return $r('sys.symbol.bus_fill'); }
+    if (tab === QueryPageTab.events) { return $r('sys.symbol.calendar'); }
+    if (tab === QueryPageTab.grades) { return $r('sys.symbol.graduationcap'); }
+    return tab === QueryPageTab.exams ? $r('sys.symbol.doc_text') : $r('sys.symbol.list_bullet');
+  }
+
+  // 使用实际文本测量宽度（包含系统字体缩放），五段始终保持等宽单行。
+  // pickerWidth 包含两侧 3vp 内边距；标签两侧各 6vp，图标为 20vp + 4vp 间距。
+  static iconOnlyTabs(pickerWidth: number, maximumLabelWidth: number, includesIcons: boolean): boolean {
+    if (!Number.isFinite(pickerWidth) || pickerWidth <= 0 ||
+      !Number.isFinite(maximumLabelWidth) || maximumLabelWidth <= 0) {
+      return true;
+    }
+    const segmentWidth: number = Math.max(0, pickerWidth - 6) / QueryPageContract.tabs.length;
+    return Math.ceil(maximumLabelWidth) + 12 + (includesIcons ? 24 : 0) > segmentWidth;
   }
 
   static filterTitle(filter: ImportantEventFilter): string {

@@ -8,6 +8,7 @@ import { display } from '@kit.ArkUI';
 import { PhoneNavigationLayout } from '../../../main/ets/common/DeviceState';
 import { DateParts, StrictDates } from '../../../main/ets/common/StrictDates';
 import { TeachingCalendarLogic } from '../../../main/ets/view/calendar/CalendarLogic';
+import { QueryPageContract, QueryPageTab } from '../../../main/ets/common/QueryLogic';
 
 const BUNDLE_NAME: string = 'com.nemoyu.wheretostudy';
 
@@ -325,6 +326,39 @@ export default function primaryNavigationSmokeTest() {
       await settingsTab.click();
       await driver.delayMs(500);
       expect(await findText(driver, '个人账户') !== null).assertTrue();
+    });
+
+    it('query_tabs_stay_in_one_fixed_row_and_expose_selected_accessibility_state', 0, async () => {
+      await launchApp(true);
+      const driver: Driver = Driver.create();
+      await (await driver.findComponent(ON.id('navigation.query'))).click();
+      await driver.delayMs(500);
+      const selector: Component = await driver.findComponent(ON.id('query.tab_picker'));
+      const selectorBounds = await selector.getBounds();
+      const first: Component = await driver.findComponent(ON.id('query.tab.shuttle'));
+      const firstBounds = await first.getBounds();
+      for (const tab of QueryPageContract.tabs) {
+        const item: Component = await driver.findComponent(ON.id(QueryPageContract.tabAccessibilityID(tab)));
+        const bounds = await item.getBounds();
+        expect(bounds.left >= selectorBounds.left && bounds.right <= selectorBounds.right).assertTrue();
+        expect(Math.abs(bounds.top - firstBounds.top) <= 1).assertTrue();
+        expect(Math.abs((bounds.right - bounds.left) -
+          (firstBounds.right - firstBounds.left)) <= 2).assertTrue();
+        expect(await item.getDescription()).assertEqual(QueryPageContract.tabTitle(tab));
+        expect(await item.isSelected()).assertEqual(tab === QueryPageTab.shuttle);
+      }
+      const middle: number = Math.round((selectorBounds.top + selectorBounds.bottom) / 2);
+      await driver.swipe(Math.round(selectorBounds.right - 8), middle,
+        Math.round(selectorBounds.left + 8), middle, 800);
+      const afterSwipe = await (await driver.findComponent(ON.id('query.tab.shuttle'))).getBounds();
+      expect(afterSwipe.left).assertEqual(firstBounds.left);
+      expect(afterSwipe.right).assertEqual(firstBounds.right);
+      for (const tab of QueryPageContract.tabs) {
+        await (await driver.findComponent(ON.id(QueryPageContract.tabAccessibilityID(tab)))).click();
+        await driver.delayMs(200);
+        expect(await (await driver.findComponent(ON.id(QueryPageContract.tabAccessibilityID(tab)))).isSelected())
+          .assertTrue();
+      }
     });
 
     it('language_setting_updates_static_ui_without_relaunch', 0, async () => {

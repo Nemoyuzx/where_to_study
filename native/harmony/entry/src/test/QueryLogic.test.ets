@@ -3,6 +3,7 @@ import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
 } from '../main/ets/common/QueryLogic';
 import { DeadlineVisual, DeadlineVisualKind } from '../main/ets/common/DeadlineVisual';
+import { AppLanguage, AppLocalization } from '../main/ets/common/AppLocalization';
 import {
   PublicDeadlineItem, PublicDeadlineKind, PublicDeadlineResponseParser,
   PublicDeadlineSource
@@ -21,6 +22,46 @@ export default function queryLogicTest() {
       expect(QueryPageContract.filters.indexOf(ImportantEventFilter.schoolNotice) >= 0).assertTrue();
       expect(QueryPageContract.tabAccessibilityID(QueryPageTab.events))
         .assertEqual('query.tab.events');
+    });
+
+    it('query_tabs_fit_equal_width_segments_with_icon_and_padding_reserved', 0, () => {
+      // 358vp selector yields five 70.4vp slots; Chinese short labels fit with the icon.
+      expect(QueryPageContract.iconOnlyTabs(358, 28, true)).assertFalse();
+      expect(QueryPageContract.iconOnlyTabs(288, 28, true)).assertTrue();
+      // 60vp English / large-text labels do not fit the same phone selector.
+      expect(QueryPageContract.iconOnlyTabs(358, 60, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(568, 60, true)).assertFalse();
+    });
+
+    it('query_tabs_change_presentation_only_at_a_complete_label_boundary', 0, () => {
+      expect(QueryPageContract.iconOnlyTabs(326, 28, true)).assertFalse();
+      expect(QueryPageContract.iconOnlyTabs(325, 28, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(326, 28.1, true)).assertTrue();
+      // Wide layouts keep text until the actual localized label no longer fits.
+      expect(QueryPageContract.iconOnlyTabs(992, 160, false)).assertFalse();
+      expect(QueryPageContract.iconOnlyTabs(568, 120, false)).assertTrue();
+    });
+
+    it('query_tabs_use_icons_when_width_or_text_measurement_is_unavailable', 0, () => {
+      expect(QueryPageContract.iconOnlyTabs(0, 28, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(Number.NaN, 28, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(358, 0, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(358, Number.NaN, true)).assertTrue();
+    });
+
+    it('query_tabs_keep_complete_accessibility_names_in_both_languages', 0, () => {
+      const chinese: string[] = ['班车查询', '重要事件', '成绩查询', '考试查询', '作业 DDL'];
+      const english: string[] = ['Shuttle Bus', 'Important Events', 'Grades', 'Exams', 'Assignments'];
+      const compactEnglish: string[] = ['Shuttle', 'Events', 'Grades', 'Exam', 'Assignment'];
+      for (let index: number = 0; index < QueryPageContract.tabs.length; index++) {
+        const tab: QueryPageTab = QueryPageContract.tabs[index];
+        expect(AppLocalization.text(QueryPageContract.tabTitle(tab), AppLanguage.simplifiedChinese, 'zh-CN'))
+          .assertEqual(chinese[index]);
+        expect(AppLocalization.text(QueryPageContract.tabTitle(tab), AppLanguage.english, 'en-US'))
+          .assertEqual(english[index]);
+        expect(AppLocalization.text(QueryPageContract.compactTabTitle(tab), AppLanguage.english, 'en-US'))
+          .assertEqual(compactEnglish[index]);
+      }
     });
 
     it('all_supported_public_types_enter_the_catalog_but_assignment_does_not', 0, () => {

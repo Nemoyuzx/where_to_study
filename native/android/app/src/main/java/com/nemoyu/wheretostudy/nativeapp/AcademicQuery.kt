@@ -33,6 +33,14 @@ data class ExamSchedule(
 
 internal data class AcademicTerm(val id: String, val name: String)
 internal data class AcademicTerms(val currentTermID: String, val terms: List<AcademicTerm>)
+
+internal object AcademicTermPresentation {
+    fun label(term: AcademicTerm, currentTermID: String?, name: String, currentLabel: String): String {
+        if (term.id.isBlank() || term.id != currentTermID) return name
+        if (listOf("当前学期", "Current semester").any { name.contains(it, ignoreCase = true) }) return name
+        return "$name · $currentLabel"
+    }
+}
 internal data class AcademicGrade(
     val id: String, val name: String, val score: String?, val credits: String?,
     val courseCode: String?, val courseAttribute: String?, val courseNature: String?, val examNature: String?,

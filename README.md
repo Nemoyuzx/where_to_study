@@ -73,7 +73,7 @@ Thanks to these open-source projects for publishing academic API information and
 
 GitHub 当前正式版为 [Where To Study v0.3.0](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.0)，包含成绩、考试、作业查询和自定义多次课前提醒。Windows、Linux、Mac 和 Android 安装包均已同步；手机应用商店须等待各自审核，商店可下载版本可能暂时较旧。
 
-想提前体验查询界面优化，可选择 [Where To Study v0.3.1-prerelease](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1-prerelease)：改善安卓查询切换、考试和作业卡片间距，并压紧各平台的成绩卡片与平均绩点区域。这是测试版，不替代上面的正式版；Apple 使用 TestFlight，鸿蒙使用 AppGallery 测试渠道。[本轮改动与测试记录](./docs/release-v0.3.1-prerelease.md)。
+想提前体验查询界面优化，可选择 [Where To Study v0.3.1-prerelease](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1-prerelease)：手机查询栏会按空间使用图标，Android 还修复了主题切换后成绩消失、当前学期标记、空成绩间距和浅色开关配色。这是测试版，不替代上面的正式版；Apple 使用 TestFlight，鸿蒙使用 AppGallery 测试渠道。[本轮改动与测试记录](./docs/release-v0.3.1-prerelease.md)。
 
 [打开最新版本下载页](https://github.com/Nemoyuzx/where_to_study/releases/latest)，找到页面底部的 **Assets（文件列表）**，按自己的设备选择。文件名前面的版本号会随更新变化，看下面列出的结尾即可。
 

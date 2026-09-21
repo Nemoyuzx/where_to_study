@@ -230,9 +230,9 @@ export default function academicQueryTest() {
     });
 
     it('five_query_tabs_fit_phone_tablet_and_large_text_policy', 0, () => {
-      expect(QueryPageContract.verticalTabs(390, 1)).assertFalse();
-      expect(QueryPageContract.verticalTabs(320, 2)).assertTrue();
-      expect(QueryPageContract.verticalTabs(1024, 2)).assertFalse();
+      expect(QueryPageContract.iconOnlyTabs(358, 28, true)).assertFalse();
+      expect(QueryPageContract.iconOnlyTabs(288, 56, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(992, 160, false)).assertFalse();
     });
 
     it('exam_queries_require_explicit_refresh_and_retain_same_term_on_failure', 0, async () => {

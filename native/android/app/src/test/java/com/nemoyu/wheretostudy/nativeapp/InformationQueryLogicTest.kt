@@ -12,6 +12,15 @@ import org.junit.Test
 
 class InformationQueryLogicTest {
     @Test
+    fun fixedPhoneSegmentsUseIconsWhenTheLabelAndIconCannotFit() {
+        assertTrue(InformationQueryLayoutLogic.usesIconOnlyTabs(70, 60f, 22, 4, 8))
+        assertFalse(InformationQueryLayoutLogic.usesIconOnlyTabs(110, 60f, 22, 4, 8))
+        assertTrue(InformationQueryLayoutLogic.usesIconOnlyTabs(110, 90f, 22, 4, 8))
+        assertFalse(InformationQueryLayoutLogic.usesIconOnlyTabs(102, 60f, 22, 4, 8))
+        assertEquals(5, InformationQueryMode.entries.map { it.iconResource }.distinct().size)
+    }
+
+    @Test
     fun shuttleGridUsesReferenceBreakpointsAndKeepsAnExactMinuteOutOfNextDeparture() {
         assertEquals(1, ShuttleQueryLayoutLogic.columns(575, 280, 16, 2))
         assertEquals(2, ShuttleQueryLayoutLogic.columns(576, 280, 16, 2))

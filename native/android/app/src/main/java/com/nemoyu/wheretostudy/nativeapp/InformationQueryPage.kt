@@ -30,12 +30,14 @@ import java.util.TimeZone
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
 
-internal enum class InformationQueryMode(val label: String, val compactLabel: String, val compactEnglishLabel: String) {
-    SHUTTLE("班车查询", "班车", "Shuttle"),
-    IMPORTANT_EVENTS("重要事件", "事件", "Events"),
-    GRADES("成绩查询", "成绩", "Grades"),
-    EXAMS("考试查询", "考试安排", "Exams"),
-    ASSIGNMENTS("课程作业", "作业", "Tasks"),
+internal enum class InformationQueryMode(
+    val label: String, val compactLabel: String, val compactEnglishLabel: String, val iconResource: Int,
+) {
+    SHUTTLE("班车查询", "班车", "Shuttle", R.drawable.ic_shuttle_bus),
+    IMPORTANT_EVENTS("重要事件", "事件", "Events", R.drawable.ic_settings_notification),
+    GRADES("成绩查询", "成绩", "Grades", R.drawable.ic_section_summary),
+    EXAMS("考试查询", "考试安排", "Exams", R.drawable.ic_nav_calendar),
+    ASSIGNMENTS("课程作业", "作业", "Tasks", R.drawable.ic_section_check),
 }
 
 internal enum class ImportantEventCategory(val label: String) {
@@ -77,6 +79,12 @@ internal data class ImportantEventFilterSelection(
 internal object InformationQueryLayoutLogic {
     const val DEFAULT_CONTENT_BOTTOM_PADDING_DP = 28
     const val MODE_SELECTOR_INSET_DP = 3
+    const val PHONE_TITLE_SIZE_SP = 26f
+    const val GRADE_RESULT_SPACING_DP = 10
+
+    fun usesIconOnlyTabs(itemWidthPx: Int, widestLabelPx: Float, iconWidthPx: Int,
+        iconSpacingPx: Int, horizontalPaddingPx: Int): Boolean =
+        widestLabelPx + iconWidthPx + iconSpacingPx + horizontalPaddingPx * 2 > itemWidthPx
 
     fun contentBottomPaddingDp(usesBottomNavigation: Boolean): Int =
         if (usesBottomNavigation) {
@@ -288,6 +296,8 @@ internal class InformationQueryPage(
     private var isAppendingImportantEventPage = false
     private val isCompact: Boolean
         get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
+    private val isPhone: Boolean
+        get() = activity.resources.configuration.smallestScreenWidthDp < 600
     private val pagePaddingDp: Int
         get() = 16
     private val sectionSpacingDp: Int
@@ -402,7 +412,7 @@ internal class InformationQueryPage(
         addView(pageTitle(
             activity,
             "信息查询",
-            titleSizeSp = 34f,
+            titleSizeSp = if (isPhone) InformationQueryLayoutLogic.PHONE_TITLE_SIZE_SP else 34f,
         ).apply {
             setPadding(0, 0, 0, 0)
             (getChildAt(0) as TextView).apply { text = text.toString().uppercase(Locale.ROOT) }
@@ -413,24 +423,16 @@ internal class InformationQueryPage(
     }
 
     private fun modeSelectorLabel(mode: InformationQueryMode): String =
-        if (availableWidthDp < 560) {
+        if (isPhone || availableWidthDp < 560) {
             if (AppLocale.isEnglish(activity)) mode.compactEnglishLabel else mode.compactLabel
         } else activity.uiText(mode.label)
 
-    private fun modeSelector(): HorizontalScrollView {
+    private fun modeSelector(): FrameLayout {
         val labels = InformationQueryMode.entries
         val control = FrameLayout(activity).apply {
             id = R.id.information_query_mode_switch
             val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
             setPadding(inset, inset, inset, inset)
-            // Like iOS, narrow screens use compact titles. Keep scrolling as a
-            // fallback when the complete labels at the user's font scale need it.
-            minimumWidth = labels.maxOf { mode ->
-                TextView(activity).apply {
-                    textSize = if (isCompact) 15f else 14f
-                    setTypeface(Typeface.DEFAULT, Typeface.BOLD)
-                }.paint.measureText(modeSelectorLabel(mode)).toInt() + activity.dp(16)
-            } * labels.size + inset * 2
             background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 24)
         }
         val thumb = View(activity).apply {
@@ -457,6 +459,9 @@ internal class InformationQueryPage(
                     isSingleLine = true
                     gravity = Gravity.CENTER
                     setThemeTextColor { Palette.text }
+                    bindTheme("queryIconTint") {
+                        compoundDrawableTintList = ColorStateList.valueOf(Palette.text)
+                    }
                     isSelected = mode == sessionState.selectedMode
                     setTypeface(Typeface.DEFAULT, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
                     isClickable = true
@@ -483,17 +488,56 @@ internal class InformationQueryPage(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
         ))
+        // Keep all five destinations inside the track. Measure bold labels at
+        // the user's real font scale; the whole phone control falls back to icons.
+        fun updateLabels() {
+            val width = InformationQueryLayoutLogic.modeThumbWidthPx(
+                control.width, control.paddingStart, labels.size)
+            val iconWidth = activity.dp(22)
+            val iconSpacing = activity.dp(4)
+            val horizontalPadding = activity.dp(8)
+            val widestLabel = labels.maxOf { mode ->
+                TextView(activity).apply {
+                    textSize = if (isCompact) 15f else 14f
+                    setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                }.paint.measureText(modeSelectorLabel(mode))
+            }
+            val iconsOnly = InformationQueryLayoutLogic.usesIconOnlyTabs(
+                width, widestLabel, if (isPhone) iconWidth else 0,
+                if (isPhone) iconSpacing else 0, horizontalPadding)
+            labels.forEachIndexed { index, mode ->
+                (row.getChildAt(index) as TextView).apply {
+                    val label = if (iconsOnly) "" else modeSelectorLabel(mode)
+                    if (text.toString() != label) text = label
+                    if (isPhone || iconsOnly) {
+                        if (compoundDrawablesRelative[0] == null) {
+                            val icon = activity.getDrawable(mode.iconResource)!!.mutate().apply {
+                                setBounds(0, 0, iconWidth, iconWidth)
+                            }
+                            setCompoundDrawablesRelative(icon, null, null, null)
+                        }
+                        compoundDrawablePadding = if (iconsOnly) 0 else iconSpacing
+                    } else if (compoundDrawablesRelative[0] != null) {
+                        setCompoundDrawablesRelative(null, null, null, null)
+                    }
+                    val padding = if (iconsOnly) ((width - iconWidth) / 2).coerceAtLeast(0) else horizontalPadding
+                    if (paddingLeft != padding || paddingRight != padding) setPadding(padding, 0, padding, 0)
+                }
+            }
+            moveModeThumb(control, thumb, sessionState.selectedMode.ordinal, animate = false)
+        }
+        control.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) updateLabels()
+        }
         // A selection can arrive before the first layout (including accessibility
         // actions). Initialize from current state, not a stale construction index.
-        control.post { moveModeThumb(control, thumb, sessionState.selectedMode.ordinal, animate = false) }
-        return HorizontalScrollView(activity).apply {
+        control.post { updateLabels() }
+        return FrameLayout(activity).apply {
             tag = "information.query.mode.viewport"
-            isFillViewport = true
-            isHorizontalScrollBarEnabled = false
             background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 24)
             clipToOutline = true
             addView(control, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
             ))
         }
     }
@@ -538,16 +582,6 @@ internal class InformationQueryPage(
             thumb.animate().translationX(target).setDuration(220L)
                 .setInterpolator(AccelerateDecelerateInterpolator()).start()
         } else thumb.translationX = target
-        (control.parent as? HorizontalScrollView)?.let { viewport ->
-            val left = control.paddingLeft + target.toInt()
-            val right = left + width
-            val scrollX = when {
-                left < viewport.scrollX -> left
-                right > viewport.scrollX + viewport.width -> right - viewport.width
-                else -> viewport.scrollX
-            }.coerceAtLeast(0)
-            if (animate) viewport.smoothScrollTo(scrollX, 0) else viewport.scrollTo(scrollX, 0)
-        }
     }
 
     private fun renderMode(animate: Boolean, direction: Int = 0) {
@@ -622,12 +656,12 @@ internal class InformationQueryPage(
             val snapshot = gradesRepository.snapshot
             addView(querySurface().apply {
                 val termID = gradesRepository.selectedTermID
-                val title = if (termID == "") "全部学期" else gradesRepository.terms?.terms
-                    ?.firstOrNull { it.id == termID }?.name ?: "当前学期"
+                val title = if (termID == "") activity.uiText("全部学期") else gradesRepository.terms?.terms
+                    ?.firstOrNull { it.id == termID }?.let(::gradeTermLabel) ?: activity.uiText("当前学期")
                 addView(gradeAction("学期：$title") {
                     val terms = listOf(AcademicTerm("", "全部学期")) + gradesRepository.terms?.terms.orEmpty()
                     AlertDialog.Builder(activity).setTitle(activity.uiText("选择学期"))
-                        .setItems(terms.map { activity.uiText(it.name) }.toTypedArray()) { _, index ->
+                        .setItems(terms.map(::gradeTermLabel).toTypedArray()) { _, index ->
                             gradesRepository.select(terms[index].id)
                         }.show().also(UiText::localizeDialog)
                 }.apply { id = R.id.information_query_grades_term; isEnabled = gradesRepository.terms != null })
@@ -660,7 +694,12 @@ internal class InformationQueryPage(
                         })
                     }
                     if (snapshot.items.isEmpty()) addView(statusCard(if (snapshot.termID.isNotBlank())
-                        "该学期暂无已公布成绩，可选择全部学期查看历史成绩。" else "暂无已公布成绩"))
+                        "该学期暂无已公布成绩，可选择全部学期查看历史成绩。" else "暂无已公布成绩").apply {
+                            tag = "academic.grade.empty"
+                        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            if (snapshot.averageGradePoint != null) topMargin = activity.dp(InformationQueryLayoutLogic.GRADE_RESULT_SPACING_DP)
+                        })
                     snapshot.items.forEach { grade ->
                         addView(compactGradeSurface().apply {
                             tag = "academic.grade.row"
@@ -688,7 +727,9 @@ internal class InformationQueryPage(
                                 setPadding(0, activity.dp(4), 0, 0)
                             })
                         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) })
+                            ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            topMargin = activity.dp(InformationQueryLayoutLogic.GRADE_RESULT_SPACING_DP)
+                        })
                     }
                 }
                 gradesRepository.isLoading -> addView(statusCard("正在获取成绩…"))
@@ -701,6 +742,9 @@ internal class InformationQueryPage(
             setPadding(0, activity.dp(16), 0, 0)
         })
     }
+
+    private fun gradeTermLabel(term: AcademicTerm): String = AcademicTermPresentation.label(
+        term, gradesRepository.terms?.currentTermID, activity.uiText(term.name), activity.uiText("当前学期"))
 
     private fun compactGradeSurface(): LinearLayout = querySurface().apply {
         setPadding(paddingLeft, activity.dp(10), paddingRight, activity.dp(10))

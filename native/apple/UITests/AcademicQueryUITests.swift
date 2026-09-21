@@ -2,6 +2,47 @@ import XCTest
 
 @MainActor
 final class AcademicQueryUITests: XCTestCase {
+    func testPhoneQueryIconsKeepAccessibleNamesAndSelectionAtAllTextSizes() {
+        continueAfterFailure = false
+        let originalAppearance = XCUIDevice.shared.appearance
+        defer { XCUIDevice.shared.appearance = originalAppearance }
+        for language in ["zh-Hans", "en"] {
+            for category in ["UICTContentSizeCategoryL", "UICTContentSizeCategoryAccessibilityXL"] {
+                let app = XCUIApplication()
+                app.launchArguments = ["--ui-testing", "--ui-testing-academic",
+                                       "-UIPreferredContentSizeCategoryName", category]
+                app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = language
+                app.launch()
+                navigate("queries", title: language == "en" ? "Search" : "查询", in: app)
+                let picker = app.segmentedControls["queries.mode"]
+                XCTAssertTrue(picker.waitForExistence(timeout: 10))
+                let names = language == "en"
+                    ? ["Shuttle Search", "Important Events", "Grades", "Exams", "Assignment Deadlines"]
+                    : ["班车查询", "重要事件", "成绩查询", "考试安排", "课程作业 DDL"]
+                for name in names {
+                    let segment = picker.buttons[name]
+                    XCTAssertTrue(segment.exists, "Missing full accessible title: \(name)")
+                    XCTAssertTrue(segment.isHittable)
+                    XCTAssertGreaterThanOrEqual(segment.frame.minX, picker.frame.minX - 1)
+                    XCTAssertLessThanOrEqual(segment.frame.maxX, picker.frame.maxX + 1)
+                    segment.tap()
+                    XCTAssertTrue(segment.isSelected)
+                }
+                XCTAssertGreaterThanOrEqual(picker.frame.minX, app.frame.minX)
+                XCTAssertLessThanOrEqual(picker.frame.maxX, app.frame.maxX)
+                for appearance in [XCUIDevice.Appearance.light, .dark] {
+                    XCUIDevice.shared.appearance = appearance
+                    // The system appearance transition can outlive XCTest's
+                    // idle check; capture the settled palette, not its first frame.
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+                    XCTAssertTrue(picker.buttons[names[4]].isSelected)
+                    capture("query-icons-\(language)-\(category)-\(appearance == .dark ? "dark" : "light")")
+                }
+                app.terminate()
+            }
+        }
+    }
+
     func testSyntheticGradeQueryEnglish() {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "--ui-testing-academic"]
