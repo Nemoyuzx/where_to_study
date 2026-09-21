@@ -118,7 +118,7 @@ test("client versions consistently release 0.3.1 with fresh distribution build c
   assert.match(cliManifest, /^version = "0\.3\.1"$/m);
   assert.match(tuiManifest, /^version = "0\.3\.1"$/m);
   assert.match(nativeAndroid, /versionName = "0\.3\.1"/);
-  assert.match(nativeAndroid, /versionCode = 56/);
+  assert.match(nativeAndroid, /versionCode = 57/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.3\.1"/);
   assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "99"/);
   assert.match(nativeHarmony, /"versionName": "0\.3\.1"/);

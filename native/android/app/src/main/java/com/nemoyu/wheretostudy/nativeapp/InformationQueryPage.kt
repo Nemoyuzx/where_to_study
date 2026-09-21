@@ -102,8 +102,10 @@ internal object InformationQueryLayoutLogic {
 }
 
 internal object ShuttleQueryLayoutLogic {
-    const val ACTION_TOUCH_SIZE_DP = 44
-    const val ACTION_ICON_SIZE_DP = 24
+    // Keep the exact v0.2.9 shuttle action geometry.
+    const val ACTION_TOUCH_SIZE_DP = 48
+    const val ACTION_ICON_SIZE_DP = 22
+    const val ACTION_MINIMUM_INK_DP = 15
     const val ROUTE_MIN_WIDTH_DP = 280
     const val ROUTE_SPACING_DP = 16
     const val DEPARTURE_MIN_WIDTH_DP = 86

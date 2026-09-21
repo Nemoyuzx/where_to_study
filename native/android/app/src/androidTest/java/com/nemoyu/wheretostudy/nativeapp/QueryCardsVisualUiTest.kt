@@ -287,8 +287,9 @@ class QueryCardsVisualUiTest {
             R.id.information_query_shuttle_source_link to "查看数据来源",
         ).forEach { (id, label) ->
             val action = activity.findViewById<ImageView>(id)
-            assertTrue("$label must retain a 44 dp touch target", action.width >= activity.dp(44) &&
-                action.height >= activity.dp(44))
+            assertTrue("$label must retain the v0.2.9 touch target", action.width >=
+                activity.dp(ShuttleQueryLayoutLogic.ACTION_TOUCH_SIZE_DP) && action.height >=
+                activity.dp(ShuttleQueryLayoutLogic.ACTION_TOUCH_SIZE_DP))
             assertTrue(action.isClickable && action.isFocusable)
             assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_YES, action.importantForAccessibility)
             assertEquals(activity.uiText(label), action.contentDescription.toString())
@@ -297,8 +298,10 @@ class QueryCardsVisualUiTest {
             val drawableBounds = RectF(action.drawable.bounds)
             action.imageMatrix.mapRect(drawableBounds)
             drawableBounds.offset(action.paddingLeft.toFloat(), action.paddingTop.toFloat())
-            assertEquals("$label artwork viewport width", activity.dp(24).toFloat(), drawableBounds.width(), 1f)
-            assertEquals("$label artwork viewport height", activity.dp(24).toFloat(), drawableBounds.height(), 1f)
+            assertEquals("$label artwork viewport width",
+                activity.dp(ShuttleQueryLayoutLogic.ACTION_ICON_SIZE_DP).toFloat(), drawableBounds.width(), 1f)
+            assertEquals("$label artwork viewport height",
+                activity.dp(ShuttleQueryLayoutLogic.ACTION_ICON_SIZE_DP).toFloat(), drawableBounds.height(), 1f)
             assertEquals(action.width / 2f, drawableBounds.centerX(), 1f)
             assertEquals(action.height / 2f, drawableBounds.centerY(), 1f)
 
@@ -315,7 +318,8 @@ class QueryCardsVisualUiTest {
                     if (Color.alpha(bitmap.getPixel(x, y)) >= 64) ink.union(x, y, x + 1, y + 1)
                 }
                 assertTrue("$label must render visible glyph strokes, not just a large button: $ink",
-                    ink.width() >= activity.dp(16) && ink.height() >= activity.dp(16))
+                    ink.width() >= activity.dp(ShuttleQueryLayoutLogic.ACTION_MINIMUM_INK_DP) &&
+                        ink.height() >= activity.dp(ShuttleQueryLayoutLogic.ACTION_MINIMUM_INK_DP))
                 assertTrue("$label must not draw outside its centered icon viewport",
                     ink.left >= drawableBounds.left - 1 && ink.top >= drawableBounds.top - 1 &&
                         ink.right <= drawableBounds.right + 1 && ink.bottom <= drawableBounds.bottom + 1)

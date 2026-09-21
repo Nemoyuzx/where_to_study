@@ -2,7 +2,7 @@
 
 本轮范围：安卓查询子页切换／异步更新的内容区刷新边界、考试及作业页面间距，以及全部图形端课程成绩卡片／平均绩点的紧凑布局。无认证、网络接口、隐私权限、签名配置或课程提醒行为变更。
 
-发布标签为 `v0.3.1-prerelease`，包内版本 `0.3.1`。同一预发布标签的最新测试包为 Android build **56**、Apple build **99**、HarmonyOS versionCode **1002035**；下文同时保留早期测试包回执。0.3.0 仍为稳定版。本轮班车图标热修复只替换Android APK，不重发Apple或鸿蒙，也不提交正式商店审核。
+发布标签为 `v0.3.1-prerelease`，包内版本 `0.3.1`。同一预发布标签的最新测试包为 Android build **57**、Apple build **99**、HarmonyOS versionCode **1002035**；下文同时保留早期测试包回执。0.3.0 仍为稳定版。本轮班车动作尺寸回调只替换Android APK，不重发Apple或鸿蒙，也不提交正式商店审核。
 
 ## 已完成的源代码与验证
 
@@ -135,3 +135,13 @@ Android全局控件高度已是32dp，但班车刷新、通知原文和来源外
 - 主分支 [Security Checks 35602155868](https://github.com/Nemoyuzx/where_to_study/actions/runs/35602155868) 成功；[Native Clients 35602155888](https://github.com/Nemoyuzx/where_to_study/actions/runs/35602155888) 中与本项相关的Android Debug测试／Lint／构建job成功。窄范围现有资产热修复不移动发布标签，注释标签对象仍为 `1086868e`，解析提交仍为 `5ffdc0e`。
 - GitHub只以 `--clobber` 替换同名Android APK；API确认新远端资产为uploaded、字节数和SHA-256与本地一致。Release仍为 `draft=false`／`prerelease=true` 且恰好11个资产，另外10个资产的ID、大小和摘要全部保持不变；`releases/latest` 仍为 **v0.3.0**。
 - 按用户要求未回下载GitHub Release文件。Apple 99、HarmonyOS 1002035及其测试渠道均未修改或重发。
+
+## 恢复v0.2.9班车动作尺寸（build 57）
+
+build56的44dp按钮／24dp图形区经用户实测偏大，本轮直接对照 `v0.2.9` 标签恢复精确参数：按钮外框48×48dp、四边内边距13dp、图形区域22×22dp。三个动作继续共用同一helper，保留主题tint、中英AX名称、加载状态和原点击行为。
+
+- 288/288 Release JVM、Debug／test APK构建及Lint通过；`QueryCardsVisualUiTest` 5项手机测试和深色1.5倍字体截图回归通过。真实vector仍按ImageView matrix栅格化，22dp图形区居中，墨迹至少15dp且不裁剪。
+- 人工检查中英上下截图：刷新、通知原文、来源外链均恢复较小尺寸，长英文来源说明完整换行，滚动到底后不被导航遮挡。隔离AVD已关闭。
+- Apple与HarmonyOS没有Android的padding压缩路径，继续保留99／1002035，不改代码、不重发测试包。现有预发布标签与另外10个公开资产继续保持不变。
+
+Android 0.3.1（57）最终签名包及同名APK远端替换回执待完成后补记；仍不回下载GitHub Release文件。
