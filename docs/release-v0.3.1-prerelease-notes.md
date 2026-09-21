@@ -10,11 +10,12 @@
 - 手机查询选项在空间不足时使用图标，不再横向拖动；宽屏仍显示文字，并保留完整中英文无障碍名称。
 - Android 修复空成绩布局、当前学期标记、主题切换后成绩消失、浅色设置开关配色和手机查询标题尺寸。
 - Android 班车查询的刷新和外链动作恢复为v0.2.9的48dp按钮、13dp内边距和22dp图形区域。
+- Android 重新加载图标更换为中心对齐的 Android Material 标准矢量路径，修复旧路径视觉偏斜。
 - 不改变成绩／考试／作业的获取、登录缓存、隐私和课程提醒规则。
 
 ## 下载与测试渠道
 
-包内版本为 **0.3.1**：Android **57**，Apple **99**，HarmonyOS **1002035**。各渠道的完成状态见[构建与上传记录](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.1-prerelease.md)。
+包内版本为 **0.3.1**：Android **58**，Apple **99**，HarmonyOS **1002035**。各渠道的完成状态见[构建与上传记录](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.1-prerelease.md)。
 
 GitHub 提供 Windows 安装器、Linux DEB/AppImage、CLI/TUI、Android Universal APK 和原生 macOS Universal DMG。鸿蒙通过 AppGallery 测试渠道，iPhone/iPad 通过 TestFlight；不公开 Android AAB、鸿蒙包或 iOS 归档。Windows 仍无公众信任 Authenticode 签名，GitHub macOS DMG 未公证。
 
@@ -26,6 +27,7 @@ GitHub 提供 Windows 安装器、Linux DEB/AppImage、CLI/TUI、Android Univers
 - Compact phone query selectors now use icons instead of becoming horizontally draggable; wide layouts keep text and all accessibility labels remain available.
 - Android fixes include empty-grade spacing, current-semester labels, grade retention across theme changes, light-theme switch colors, and a smaller phone query heading.
 - Android shuttle refresh and external-link actions restore the exact v0.2.9 geometry: a 48 dp button, 13 dp insets, and a 22 dp icon viewport.
+- Android replaces the skewed reload path with the centered standard Android Material refresh vector.
 - Academic retrieval, authentication caching, privacy and reminder behavior are unchanged.
 
 This is a pre-release. **0.3.0 remains the stable GitHub release.** Platform upload receipts are recorded separately from build completion and store availability.

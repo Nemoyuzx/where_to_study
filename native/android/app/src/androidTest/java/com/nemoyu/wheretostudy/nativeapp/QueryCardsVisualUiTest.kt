@@ -323,6 +323,10 @@ class QueryCardsVisualUiTest {
                 assertTrue("$label must not draw outside its centered icon viewport",
                     ink.left >= drawableBounds.left - 1 && ink.top >= drawableBounds.top - 1 &&
                         ink.right <= drawableBounds.right + 1 && ink.bottom <= drawableBounds.bottom + 1)
+                assertEquals("$label visible strokes must be horizontally centered",
+                    drawableBounds.centerX(), ink.exactCenterX(), activity.dp(1).toFloat())
+                assertEquals("$label visible strokes must be vertically centered",
+                    drawableBounds.centerY(), ink.exactCenterY(), activity.dp(1).toFloat())
             } finally { bitmap.recycle() }
         }
     }
