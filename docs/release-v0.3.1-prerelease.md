@@ -128,4 +128,10 @@ Android全局控件高度已是32dp，但班车刷新、通知原文和来源外
 - 两项测试误报被限定在测试代码：英文换行尾空格改用Android SDK定义的可视行宽 `getLineMax`；横屏大字体等待已layout的线路视图，不再要求其必须出现在首屏无障碍树。生产布局未因此改动。
 - HarmonyOS只读核对：刷新17fp、通知外链18fp、来源外链16fp，均有至少44vp点击区域，不存在Android的padding压缩路径。251/251 Hypium、12项密度／查询契约和release CompileArkTS通过；没有生产diff，本轮不重发鸿蒙包。Apple使用SF Symbols，也没有该Android专用路径，本轮不重发。
 
-最终Android签名包、现有标签／Release资产替换及远端摘要回执待完成后补记。此次采用现有预发布资产热修复流程：保留标签和其余10个公开资产，只替换同名APK；按用户要求不回下载GitHub Release文件。
+### 班车图标热修复发布回执
+
+- 产品提交：`b9e41461502e25137aabb5fedb081a37536f81cb`；Android 0.3.1（56）APK为 **1,172,474 bytes**，SHA-256 `815e9d3569bb94344582207866c9e534724cfb3ddc4436ba98a92f88edaa2c78`。Release 288/288、Lint 0错误／68警告／1 hint、v2/v3固定证书、zipalign、许可证、HTTPS策略和旧端点检查通过。
+- 最终混淆签名APK的任务内instrumentation smoke中英×浅深4/4通过：三处44dp点击区、24dp图形区、真实墨迹、AX／tint、离线刷新保留同一缓存，以及两个外链目标均验证；测试拦截外链，不打开浏览器。测试安装和隔离AVD已清理，AAB仅本地。
+- 主分支 [Security Checks 35602155868](https://github.com/Nemoyuzx/where_to_study/actions/runs/35602155868) 成功；[Native Clients 35602155888](https://github.com/Nemoyuzx/where_to_study/actions/runs/35602155888) 中与本项相关的Android Debug测试／Lint／构建job成功。窄范围现有资产热修复不移动发布标签，注释标签对象仍为 `1086868e`，解析提交仍为 `5ffdc0e`。
+- GitHub只以 `--clobber` 替换同名Android APK；API确认新远端资产为uploaded、字节数和SHA-256与本地一致。Release仍为 `draft=false`／`prerelease=true` 且恰好11个资产，另外10个资产的ID、大小和摘要全部保持不变；`releases/latest` 仍为 **v0.3.0**。
+- 按用户要求未回下载GitHub Release文件。Apple 99、HarmonyOS 1002035及其测试渠道均未修改或重发。
