@@ -144,4 +144,10 @@ build56的44dp按钮／24dp图形区经用户实测偏大，本轮直接对照 `
 - 人工检查中英上下截图：刷新、通知原文、来源外链均恢复较小尺寸，长英文来源说明完整换行，滚动到底后不被导航遮挡。隔离AVD已关闭。
 - Apple与HarmonyOS没有Android的padding压缩路径，继续保留99／1002035，不改代码、不重发测试包。现有预发布标签与另外10个公开资产继续保持不变。
 
-Android 0.3.1（57）最终签名包及同名APK远端替换回执待完成后补记；仍不回下载GitHub Release文件。
+### build57最终签名与发布回执
+
+- 产品提交：`b736515a24a05db789fc5af058e7e97af77f3521`；Android 0.3.1（57）APK为 **1,172,482 bytes**，SHA-256 `0b94904fc07a268d727e75af0ffc25c08e141a34f8892a911ecfa365a6251dda`。Release 288/288、Lint 0错误／68警告、v2/v3固定证书、zipalign、许可证和HTTPS策略检查通过；AAB只保留本地。
+- 最终混淆签名APK的中英×浅深4/4离线smoke通过：实测48dp点击区、22dp图形区，刷新墨迹约16.8×19.4dp、两个外链约15.6×16.8dp；三个AX／tint、离线刷新保留缓存及两个外链目标均正确。测试拦截外链未打开浏览器，测试安装和隔离AVD已清理。
+- 主分支 [Security Checks 35606541081](https://github.com/Nemoyuzx/where_to_study/actions/runs/35606541081) 成功；[Native Clients 35606541074](https://github.com/Nemoyuzx/where_to_study/actions/runs/35606541074) 中与本项相关的Android Debug测试／Lint／构建job成功。
+- GitHub只以 `--clobber` 替换同名Android APK；API确认新资产为uploaded、大小和摘要与本地一致。Release继续保持11个资产，另外10个远端资产ID、大小和摘要完全不变；标签对象仍为 `1086868e`、解析提交仍为 `5ffdc0e`，`releases/latest` 仍为 **v0.3.0**。
+- 按用户要求未回下载GitHub Release文件。Apple 99与HarmonyOS 1002035均未修改或重发。
