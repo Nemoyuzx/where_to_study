@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     private val plannerQueryState by lazy { PlannerQueryState(preferences.campusID) }
     private lateinit var teachingCalendarSessionState: TeachingCalendarSessionState
     private lateinit var informationQuerySessionState: InformationQuerySessionState
+    private var informationQueryPage: InformationQueryPage? = null
     private val scheduleRepository by lazy {
         ScheduleRepository(this, credentialStore, preferences)
     }
@@ -723,6 +724,7 @@ class MainActivity : Activity() {
         }
         phoneNavigationBar?.select(destination.ordinal, previousDestination != destination)
         updatePhoneNavigationVisibility()
+        informationQueryPage = null
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(
                 this,
@@ -758,7 +760,7 @@ class MainActivity : Activity() {
                         usesBottomNavigation = currentLayoutSpec?.usesBottomNavigation == true,
                         gradesRepository = academicGradesRepository,
                         scheduleRepository = scheduleRepository,
-                    ).build(),
+                    ).also { informationQueryPage = it }.build(),
                     FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1222,7 +1224,7 @@ class MainActivity : Activity() {
             }
             if (result.isSuccess) {
                 reconcileDailyCourseNotifications()
-                if (::content.isInitialized) refreshCurrentPage()
+                scheduleDidRefresh()
             }
         }
         if (!scheduled) {
@@ -1231,6 +1233,13 @@ class MainActivity : Activity() {
                 automaticScheduleLaunchRefreshKey = null
             }
         }
+    }
+
+    internal fun scheduleDidRefresh() {
+        if (!::content.isInitialized) return
+        if (selectedDestination == Destination.QUERY) {
+            informationQueryPage?.scheduleDidRefresh()
+        } else refreshCurrentPage()
     }
 
     override fun onDestroy() {

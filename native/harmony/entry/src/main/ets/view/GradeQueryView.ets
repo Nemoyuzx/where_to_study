@@ -69,23 +69,25 @@ export struct GradeQueryView {
         if (this.model.gradeLoading && this.model.gradeSnapshot === null) {
           LoadingProgress().width(30).height(30)
         } else if (this.model.gradeSnapshot !== null) {
-          if (this.model.gradeSnapshot?.averageGradePoint !== null) {
-            Text(this.model.text('平均学分绩点：') + (this.model.gradeSnapshot?.averageGradePoint ?? ''))
-              .fontSize(18).fontWeight(FontWeight.Bold).fontColor(AppTheme.primary())
-          }
-          if ((this.model.gradeSnapshot?.items.length ?? 0) === 0) {
-            Text(this.model.text('所选学期暂无已公布成绩。'))
-              .fontSize(15).fontColor(AppTheme.secondaryText()).id('query.grades.empty')
-            if (this.model.gradeTermID.length > 0) {
-              Button(this.model.text('查看全部学期'))
-                .height(ControlMetrics.height)
-                .onClick(() => this.model.selectGradeTerm(''))
+          Column({ space: 8 }) {
+            if (this.model.gradeSnapshot?.averageGradePoint !== null) {
+              Text(this.model.text('平均学分绩点：') + (this.model.gradeSnapshot?.averageGradePoint ?? ''))
+                .fontSize(18).fontWeight(FontWeight.Bold).fontColor(AppTheme.primary()).width('100%')
             }
-          } else {
-            ForEach(this.model.gradeSnapshot?.items ?? [], (item: GradeItem) => {
-              this.gradeCard(item)
-            }, (item: GradeItem) => item.id)
-          }
+            if ((this.model.gradeSnapshot?.items.length ?? 0) === 0) {
+              Text(this.model.text('所选学期暂无已公布成绩。'))
+                .fontSize(15).fontColor(AppTheme.secondaryText()).id('query.grades.empty')
+              if (this.model.gradeTermID.length > 0) {
+                Button(this.model.text('查看全部学期'))
+                  .height(ControlMetrics.height)
+                  .onClick(() => this.model.selectGradeTerm(''))
+              }
+            } else {
+              ForEach(this.model.gradeSnapshot?.items ?? [], (item: GradeItem) => {
+                this.gradeCard(item)
+              }, (item: GradeItem) => item.id)
+            }
+          }.width('100%').alignItems(HorizontalAlign.Start)
         } else if (this.model.gradeError.length === 0) {
           Text(this.model.text('点击刷新以查询，切换页面保留上次结果。'))
             .fontSize(14).fontColor(AppTheme.secondaryText())
@@ -96,26 +98,34 @@ export struct GradeQueryView {
 
   @Builder
   gradeCard(item: GradeItem) {
-    Column({ space: 8 }) {
-      Text(item.name).fontSize(17).fontWeight(FontWeight.Bold).fontColor(AppTheme.text())
+    Column({ space: 4 }) {
+      Text(item.name).fontSize(17).fontWeight(FontWeight.Bold).fontColor(AppTheme.text()).width('100%')
       if (item.semesterName.length > 0) {
-        Text(item.semesterName).fontSize(13).fontColor(AppTheme.secondaryText())
+        Text(item.semesterName).fontSize(13).fontColor(AppTheme.secondaryText()).width('100%')
       }
-      Text(this.model.text('成绩：') + (item.score ?? this.model.text('未公布')))
-        .fontSize(20).fontWeight(FontWeight.Bold).fontColor(AppTheme.primary())
-      Text(this.model.text('学分：') + (item.credits ?? this.model.text('未公布')))
-        .fontSize(14).fontColor(AppTheme.secondaryText())
+      // One wrapping paragraph keeps both values readable at narrow widths and large font scales.
+      Text() {
+        Span(this.model.text('成绩：') + (item.score ?? this.model.text('未公布')))
+          .fontSize(20).fontWeight(FontWeight.Bold).fontColor(AppTheme.primary())
+        Span('  ·  ').fontColor(AppTheme.secondaryText())
+        Span(this.model.text('学分：') + (item.credits ?? this.model.text('未公布')))
+          .fontColor(AppTheme.secondaryText())
+      }.fontSize(14).width('100%')
       if (item.courseCode.length > 0) {
-        Text(this.model.text('课程代码：') + item.courseCode).fontSize(13).fontColor(AppTheme.secondaryText())
+        Text(this.model.text('课程代码：') + item.courseCode)
+          .fontSize(13).fontColor(AppTheme.secondaryText()).width('100%')
       }
       if (item.gradeStatus.length > 0) {
-        Text(this.model.text('成绩标识：') + item.gradeStatus).fontSize(13).fontColor(AppTheme.secondaryText())
+        Text(this.model.text('成绩标识：') + item.gradeStatus)
+          .fontSize(13).fontColor(AppTheme.secondaryText()).width('100%')
       }
       if ([item.courseAttribute, item.courseNature, item.examNature].join('').length > 0) {
         Text([item.courseAttribute, item.courseNature, item.examNature].filter(
-          (value: string) => value.length > 0).join(' · ')).fontSize(13).fontColor(AppTheme.secondaryText())
+          (value: string) => value.length > 0).join(' · '))
+          .fontSize(13).fontColor(AppTheme.secondaryText()).width('100%')
       }
-    }.width('100%').padding(16).borderRadius(12).backgroundColor(AppTheme.surface())
+    }.width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
+      .borderRadius(12).backgroundColor(AppTheme.surface())
       .alignItems(HorizontalAlign.Start)
   }
 }

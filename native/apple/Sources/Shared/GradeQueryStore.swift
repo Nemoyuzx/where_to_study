@@ -124,27 +124,7 @@ struct GradeQueryView: View {
                 }
             }
             if let snapshot = store.snapshot {
-                if let average = snapshot.averageGradePoint {
-                    LabeledContent(model.localized("平均学分绩点"), value: average)
-                }
-                if snapshot.items.isEmpty {
-                    Text(model.localized("该学期暂无已公布成绩")).foregroundStyle(theme.secondaryText)
-                }
-                ForEach(snapshot.items) { item in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(item.name).font(.headline)
-                            Spacer()
-                            Text(item.score ?? model.localized("未公布")).font(.title3.bold())
-                        }
-                        if let credits = item.credits { Text(model.localized("学分") + "：" + credits) }
-                        let metadata = [item.semesterName, item.courseCode, item.courseAttribute, item.courseNature, item.examNature, item.gradeStatus].compactMap { $0 }
-                        if !metadata.isEmpty { Text(metadata.joined(separator: " · ")).font(.caption).foregroundStyle(theme.secondaryText) }
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 14))
-                }
+                GradeResultsView(snapshot: snapshot, language: model.appLanguage)
                 Text(model.localized("成绩仅保留在本次运行内，以学校公布结果为准。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
             }
@@ -155,5 +135,100 @@ struct GradeQueryView: View {
 
     private func load(force: Bool = false) {
         Task { await model.loadGrades(termID: store.selectedTerm, recordType: store.recordType, force: force) }
+    }
+}
+
+struct GradeResultsView: View {
+    @Environment(\.appTheme) private var theme
+    let snapshot: GradeSnapshot
+    let language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let average = snapshot.averageGradePoint {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        averageLabel.fixedSize()
+                        Spacer(minLength: 0)
+                        averageValue(average).fixedSize()
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        averageLabel
+                        averageValue(average)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("grades.average")
+            }
+            if snapshot.items.isEmpty {
+                Text(AppLocalization.string("该学期暂无已公布成绩", language: language))
+                    .foregroundStyle(theme.secondaryText)
+            }
+            ForEach(snapshot.items) { item in
+                GradeCourseRow(item: item, language: language)
+            }
+        }
+    }
+
+    private var averageLabel: some View {
+        Text(AppLocalization.string("平均学分绩点", language: language))
+            .font(.subheadline)
+            .foregroundStyle(theme.secondaryText)
+    }
+
+    private func averageValue(_ value: String) -> some View {
+        Text(value).font(.headline).monospacedDigit()
+    }
+}
+
+struct GradeCourseRow: View {
+    @Environment(\.appTheme) private var theme
+    let item: GradeItem
+    let language: AppLanguage
+
+    private var details: String {
+        let credits = item.credits.map { AppLocalization.string("学分", language: language) + "：" + $0 }
+        return [credits, item.semesterName, item.courseCode, item.courseAttribute,
+                item.courseNature, item.examNature, item.gradeStatus]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    courseName.fixedSize()
+                    Spacer(minLength: 0)
+                    score.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    courseName
+                    score
+                }
+            }
+            if !details.isEmpty {
+                Text(details)
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("grades.course.\(item.id)")
+    }
+
+    private var courseName: some View {
+        Text(item.name).font(.headline)
+    }
+
+    private var score: some View {
+        Text(item.score ?? AppLocalization.string("未公布", language: language))
+            .font(.headline).monospacedDigit()
     }
 }

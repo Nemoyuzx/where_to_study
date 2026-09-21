@@ -30,12 +30,12 @@ import java.util.TimeZone
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
 
-internal enum class InformationQueryMode(val label: String) {
-    SHUTTLE("班车查询"),
-    IMPORTANT_EVENTS("重要事件"),
-    GRADES("成绩查询"),
-    EXAMS("考试查询"),
-    ASSIGNMENTS("课程作业"),
+internal enum class InformationQueryMode(val label: String, val compactLabel: String, val compactEnglishLabel: String) {
+    SHUTTLE("班车查询", "班车", "Shuttle"),
+    IMPORTANT_EVENTS("重要事件", "事件", "Events"),
+    GRADES("成绩查询", "成绩", "Grades"),
+    EXAMS("考试查询", "考试安排", "Exams"),
+    ASSIGNMENTS("课程作业", "作业", "Tasks"),
 }
 
 internal enum class ImportantEventCategory(val label: String) {
@@ -61,6 +61,7 @@ internal class InformationQuerySessionState(
     var showsEnded: Boolean = false
     var visibleEventCount: Int = INITIAL_EVENT_COUNT
     var eventScrollY: Int = 0
+    val modeScrollY = mutableMapOf<InformationQueryMode, Int>()
 
     companion object {
         const val INITIAL_EVENT_COUNT = 20
@@ -279,7 +280,11 @@ internal class InformationQueryPage(
 ) {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
-    private var pinnedQueryHeader: LinearLayout? = null
+    private lateinit var scroll: ScrollView
+    private var renderedMode: InformationQueryMode? = null
+    private var renderRevision = 0
+    private var restoringScroll = false
+    private var renderedAssignments: Triple<List<AssignmentDeadlineItem>?, Boolean, String?>? = null
     private var isAppendingImportantEventPage = false
     private val isCompact: Boolean
         get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
@@ -315,7 +320,8 @@ internal class InformationQueryPage(
             sessionState.selectedMode == InformationQueryMode.IMPORTANT_EVENTS
         ) renderMode(animate = false)
         if (::root.isInitialized && root.isAttachedToWindow &&
-            sessionState.selectedMode == InformationQueryMode.ASSIGNMENTS
+            sessionState.selectedMode == InformationQueryMode.ASSIGNMENTS &&
+            assignmentState() != renderedAssignments
         ) renderMode(animate = false)
     }
     private val gradeObserver: () -> Unit = {
@@ -330,7 +336,34 @@ internal class InformationQueryPage(
             setThemeBackgroundColor { Palette.background }
         }
         content = FrameLayout(activity).apply { id = R.id.information_query_content }
-        root.addView(content, LinearLayout.LayoutParams(
+        scroll = ScrollView(activity).apply {
+            isFillViewport = true
+            clipToPadding = false
+            isVerticalScrollBarEnabled = false
+            addView(object : LinearLayout(activity) {
+                override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                    val width = MeasureSpec.getSize(widthMeasureSpec).coerceAtMost(activity.dp(1180))
+                    super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), heightMeasureSpec)
+                }
+            }.apply {
+                orientation = LinearLayout.VERTICAL
+                addView(queryPageHeader())
+                addView(content, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ))
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL))
+            setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                if (!restoringScroll) renderedMode?.let { mode ->
+                    sessionState.modeScrollY[mode] = scrollY.coerceAtLeast(0)
+                    if (mode == InformationQueryMode.IMPORTANT_EVENTS) sessionState.eventScrollY = scrollY.coerceAtLeast(0)
+                }
+                if (renderedMode == InformationQueryMode.IMPORTANT_EVENTS &&
+                    (getChildAt(0)?.height ?: 0) - height - scrollY <= activity.dp(240)
+                ) content.findViewById<LinearLayout?>(R.id.information_query_events_list)?.let(::appendImportantEventPage)
+            }
+        }
+        root.addView(scroll, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0,
             1f,
@@ -356,6 +389,12 @@ internal class InformationQueryPage(
         return root
     }
 
+    fun scheduleDidRefresh() {
+        if (::root.isInitialized && root.isAttachedToWindow &&
+            sessionState.selectedMode == InformationQueryMode.EXAMS
+        ) renderMode(animate = false)
+    }
+
     private fun queryHeader(): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -373,12 +412,25 @@ internal class InformationQueryPage(
         ))
     }
 
-    private fun modeSelector(): FrameLayout {
+    private fun modeSelectorLabel(mode: InformationQueryMode): String =
+        if (availableWidthDp < 560) {
+            if (AppLocale.isEnglish(activity)) mode.compactEnglishLabel else mode.compactLabel
+        } else activity.uiText(mode.label)
+
+    private fun modeSelector(): HorizontalScrollView {
         val labels = InformationQueryMode.entries
         val control = FrameLayout(activity).apply {
             id = R.id.information_query_mode_switch
             val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
             setPadding(inset, inset, inset, inset)
+            // Like iOS, narrow screens use compact titles. Keep scrolling as a
+            // fallback when the complete labels at the user's font scale need it.
+            minimumWidth = labels.maxOf { mode ->
+                TextView(activity).apply {
+                    textSize = if (isCompact) 15f else 14f
+                    setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+                }.paint.measureText(modeSelectorLabel(mode)).toInt() + activity.dp(16)
+            } * labels.size + inset * 2
             background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 24)
         }
         val thumb = View(activity).apply {
@@ -397,9 +449,12 @@ internal class InformationQueryPage(
                         InformationQueryMode.EXAMS -> R.id.information_query_exams_tab
                         InformationQueryMode.ASSIGNMENTS -> R.id.information_query_assignments_tab
                     }
-                    text = mode.label
+                    text = modeSelectorLabel(mode)
+                    UiText.preserveRawText(this)
+                    contentDescription = activity.uiText(mode.label)
                     textSize = if (isCompact) 15f else 14f
                     includeFontPadding = false
+                    isSingleLine = true
                     gravity = Gravity.CENTER
                     setThemeTextColor { Palette.text }
                     isSelected = mode == sessionState.selectedMode
@@ -431,7 +486,16 @@ internal class InformationQueryPage(
         // A selection can arrive before the first layout (including accessibility
         // actions). Initialize from current state, not a stale construction index.
         control.post { moveModeThumb(control, thumb, sessionState.selectedMode.ordinal, animate = false) }
-        return control
+        return HorizontalScrollView(activity).apply {
+            tag = "information.query.mode.viewport"
+            isFillViewport = true
+            isHorizontalScrollBarEnabled = false
+            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 24)
+            clipToOutline = true
+            addView(control, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT,
+            ))
+        }
     }
 
     private fun modeSelectorHeightPx(): Int {
@@ -440,9 +504,10 @@ internal class InformationQueryPage(
             InformationQueryMode.entries.size).coerceAtLeast(1)
         val labelHeight = InformationQueryMode.entries.maxOf { mode ->
             TextView(activity).apply {
-                text = activity.uiText(mode.label)
+                text = modeSelectorLabel(mode)
                 textSize = if (isCompact) 15f else 14f
                 includeFontPadding = false
+                isSingleLine = true
                 setTypeface(typeface, Typeface.BOLD)
                 measure(
                     View.MeasureSpec.makeMeasureSpec(labelWidth, View.MeasureSpec.EXACTLY),
@@ -473,16 +538,36 @@ internal class InformationQueryPage(
             thumb.animate().translationX(target).setDuration(220L)
                 .setInterpolator(AccelerateDecelerateInterpolator()).start()
         } else thumb.translationX = target
+        (control.parent as? HorizontalScrollView)?.let { viewport ->
+            val left = control.paddingLeft + target.toInt()
+            val right = left + width
+            val scrollX = when {
+                left < viewport.scrollX -> left
+                right > viewport.scrollX + viewport.width -> right - viewport.width
+                else -> viewport.scrollX
+            }.coerceAtLeast(0)
+            if (animate) viewport.smoothScrollTo(scrollX, 0) else viewport.scrollTo(scrollX, 0)
+        }
     }
 
     private fun renderMode(animate: Boolean, direction: Int = 0) {
         if (!::content.isInitialized) return
-        // Shuttle follows one scrolling page like iOS. Keep the established
-        // event filter/pagination viewport when users switch to important events.
-        pinnedQueryHeader?.let(root::removeView)
-        pinnedQueryHeader = if (sessionState.selectedMode == InformationQueryMode.IMPORTANT_EVENTS) {
-            queryPageHeader().also { root.addView(it, 0) }
-        } else null
+        // The page title, selector and scroll owner survive both selections and
+        // repository publications. Only the selected query's body is invalidated.
+        val mode = sessionState.selectedMode
+        renderedMode?.takeUnless { restoringScroll }?.let { sessionState.modeScrollY[it] = scroll.scrollY }
+        val targetScrollY = sessionState.modeScrollY[mode]
+            ?: if (mode == InformationQueryMode.IMPORTANT_EVENTS) sessionState.eventScrollY else 0
+        val revision = ++renderRevision
+        restoringScroll = true
+        renderedMode = mode
+        scroll.id = when (mode) {
+            InformationQueryMode.SHUTTLE -> R.id.information_query_shuttle_scroll
+            InformationQueryMode.IMPORTANT_EVENTS -> R.id.information_query_events_scroll
+            InformationQueryMode.GRADES -> R.id.information_query_grades_scroll
+            InformationQueryMode.EXAMS -> R.id.information_query_exams_scroll
+            InformationQueryMode.ASSIGNMENTS -> R.id.information_query_assignments_scroll
+        }
         val page = when (sessionState.selectedMode) {
             InformationQueryMode.SHUTTLE -> shuttleContent()
             InformationQueryMode.IMPORTANT_EVENTS -> importantEventsContent()
@@ -491,33 +576,30 @@ internal class InformationQueryPage(
             InformationQueryMode.ASSIGNMENTS -> assignmentsContent()
         }
         UiText.localizeTree(page)
-        val old = content.getChildAt(0)
-        if (!animate || old == null || direction == 0) {
-            content.removeAllViews()
-            content.addView(page, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-            return
-        }
-        val distance = content.width.takeIf { it > 0 } ?: activity.dp(availableWidthDp)
-        page.translationX = direction * distance * 0.18f
-        page.alpha = 0f
+        // Cancel and remove outgoing bodies immediately: rapid selections must
+        // never leave duplicate controls or stale end-actions in the view tree.
+        repeat(content.childCount) { content.getChildAt(it).animate().cancel() }
+        content.removeAllViews()
         content.addView(page, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
-        old.animate().cancel()
-        page.animate().cancel()
-        old.animate().translationX(-direction * distance * 0.12f).alpha(0f)
-            .setDuration(200L).withEndAction {
-                if (old.parent === content) content.removeView(old)
-            }.start()
-        page.animate().translationX(0f).alpha(1f).setDuration(220L)
-            .setInterpolator(AccelerateDecelerateInterpolator()).start()
+        if (animate && direction != 0) {
+            page.translationX = direction * activity.dp(16).toFloat()
+            page.alpha = 0f
+            page.animate().translationX(0f).alpha(1f).setDuration(220L)
+                .setInterpolator(AccelerateDecelerateInterpolator()).start()
+        }
+        scroll.post {
+            if (revision == renderRevision) {
+                scroll.scrollTo(0, targetScrollY)
+                restoringScroll = false
+            }
+        }
     }
 
     private fun queryPageHeader(): LinearLayout = LinearLayout(activity).apply {
+        tag = "information.query.header"
         orientation = LinearLayout.VERTICAL
         addView(queryHeader())
         addView(modeSelector(), LinearLayout.LayoutParams(
@@ -530,119 +612,128 @@ internal class InformationQueryPage(
         UiText.localizeTree(this)
     }
 
-    private fun gradesContent(): ScrollView = ScrollView(activity).apply {
-        id = R.id.information_query_grades_scroll
-        isFillViewport = true
-        clipToPadding = false
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(queryPageHeader())
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(activity.dp(pagePaddingDp), activity.dp(8), activity.dp(pagePaddingDp),
-                    activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation)))
-                if (!gradesRepository.hasCredentials) {
-                    addView(statusCard("请先在设置中保存教务账号和密码，再查询成绩。"))
-                    addView(gradeAction("前往账号设置") {
-                        activity.findViewById<View>(R.id.navigation_settings)?.performClick()
-                    })
-                } else {
-                    val snapshot = gradesRepository.snapshot
-                    addView(querySurface().apply {
-                        val termID = gradesRepository.selectedTermID
-                        val title = if (termID == "") "全部学期" else gradesRepository.terms?.terms
-                            ?.firstOrNull { it.id == termID }?.name ?: "当前学期"
-                        addView(gradeAction("学期：$title") {
-                            val terms = listOf(AcademicTerm("", "全部学期")) + gradesRepository.terms?.terms.orEmpty()
-                            AlertDialog.Builder(activity).setTitle(activity.uiText("选择学期"))
-                                .setItems(terms.map { activity.uiText(it.name) }.toTypedArray()) { _, index ->
-                                    gradesRepository.select(terms[index].id)
-                                }.show().also(UiText::localizeDialog)
-                        }.apply { id = R.id.information_query_grades_term; isEnabled = gradesRepository.terms != null })
-                        val types = listOf("1" to "最好成绩", "0" to "首次成绩", "" to "全部记录")
-                        addView(gradeAction(types.first { it.first == gradesRepository.recordType }.second) {
-                            AlertDialog.Builder(activity).setTitle(activity.uiText("成绩记录"))
-                                .setItems(types.map { activity.uiText(it.second) }.toTypedArray()) { _, index ->
-                                    gradesRepository.selectedTermID?.let { gradesRepository.select(it, types[index].first) }
-                                }.show().also(UiText::localizeDialog)
-                        }.apply { isEnabled = gradesRepository.selectedTermID != null })
-                        addView(gradeAction(if (gradesRepository.isLoading) "正在获取…" else "刷新成绩") {
-                            gradesRepository.load(force = true)
-                        }.apply { id = R.id.information_query_grades_refresh; isEnabled = !gradesRepository.isLoading })
-                    })
-                    addView(spacer(activity, 12))
-                    gradesRepository.error?.let { addView(statusCard(if (snapshot == null) it else
-                        "成绩刷新失败，正在显示本次使用中已获取的成绩。")) }
-                    when {
-                        snapshot != null -> {
-                            snapshot.averageGradePoint?.let { addView(statusCard("平均学分绩点：$it")) }
-                            if (snapshot.items.isEmpty()) addView(statusCard(if (snapshot.termID.isNotBlank())
-                                "该学期暂无已公布成绩，可选择全部学期查看历史成绩。" else "暂无已公布成绩"))
-                            snapshot.items.forEach { grade ->
-                                addView(querySurface().apply {
-                                    tag = "academic.grade.row"
-                                    addView(TextView(activity).apply {
-                                        text = grade.name; UiText.preserveRawText(this)
-                                        textSize = 17f; setTypeface(typeface, Typeface.BOLD)
-                                        setThemeTextColor { Palette.text }
-                                    })
-                                    addView(TextView(activity).apply {
-                                        val score = grade.score ?: activity.uiText("未公布")
-                                        val credits = grade.credits ?: activity.uiText("未公布")
-                                        text = activity.uiText("成绩") + ": $score  ·  " + activity.uiText("学分") + ": $credits"
-                                        UiText.preserveRawText(this); textSize = 15f
-                                        setThemeTextColor { Palette.primaryText }
-                                        setPadding(0, activity.dp(8), 0, 0)
-                                    })
-                                    val details = listOfNotNull(grade.semesterName, grade.courseCode, grade.courseAttribute,
-                                        grade.courseNature, grade.examNature, grade.gradeStatus)
-                                    if (details.isNotEmpty()) addView(TextView(activity).apply {
-                                        text = details.joinToString(" · "); UiText.preserveRawText(this)
-                                        textSize = 13f; setThemeTextColor { Palette.muted }
-                                        setPadding(0, activity.dp(6), 0, 0)
-                                    })
-                                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) })
-                            }
-                        }
-                        gradesRepository.isLoading -> addView(statusCard("正在获取成绩…"))
-                        gradesRepository.error == null -> addView(statusCard("点击刷新成绩获取学校已公布的成绩。"))
+    private fun gradesContent(): LinearLayout = queryBody {
+        if (!gradesRepository.hasCredentials) {
+            addView(statusCard("请先在设置中保存教务账号和密码，再查询成绩。"))
+            addView(gradeAction("前往账号设置") {
+                activity.findViewById<View>(R.id.navigation_settings)?.performClick()
+            })
+        } else {
+            val snapshot = gradesRepository.snapshot
+            addView(querySurface().apply {
+                val termID = gradesRepository.selectedTermID
+                val title = if (termID == "") "全部学期" else gradesRepository.terms?.terms
+                    ?.firstOrNull { it.id == termID }?.name ?: "当前学期"
+                addView(gradeAction("学期：$title") {
+                    val terms = listOf(AcademicTerm("", "全部学期")) + gradesRepository.terms?.terms.orEmpty()
+                    AlertDialog.Builder(activity).setTitle(activity.uiText("选择学期"))
+                        .setItems(terms.map { activity.uiText(it.name) }.toTypedArray()) { _, index ->
+                            gradesRepository.select(terms[index].id)
+                        }.show().also(UiText::localizeDialog)
+                }.apply { id = R.id.information_query_grades_term; isEnabled = gradesRepository.terms != null })
+                val types = listOf("1" to "最好成绩", "0" to "首次成绩", "" to "全部记录")
+                addView(gradeAction(types.first { it.first == gradesRepository.recordType }.second) {
+                    AlertDialog.Builder(activity).setTitle(activity.uiText("成绩记录"))
+                        .setItems(types.map { activity.uiText(it.second) }.toTypedArray()) { _, index ->
+                            gradesRepository.selectedTermID?.let { gradesRepository.select(it, types[index].first) }
+                        }.show().also(UiText::localizeDialog)
+                }.apply { isEnabled = gradesRepository.selectedTermID != null })
+                addView(gradeAction(if (gradesRepository.isLoading) "正在获取…" else "刷新成绩") {
+                    gradesRepository.load(force = true)
+                }.apply { id = R.id.information_query_grades_refresh; isEnabled = !gradesRepository.isLoading })
+            })
+            addView(spacer(activity, 12))
+            gradesRepository.error?.let { addView(statusCard(if (snapshot == null) it else
+                "成绩刷新失败，正在显示本次使用中已获取的成绩。")) }
+            when {
+                snapshot != null -> {
+                    snapshot.averageGradePoint?.let { average ->
+                        addView(compactGradeSurface().apply {
+                            tag = "academic.grade.average"
+                            addView(TextView(activity).apply {
+                                text = activity.uiText("平均学分绩点：$average")
+                                UiText.preserveRawText(this)
+                                textSize = 15f
+                                includeFontPadding = false
+                                setThemeTextColor { Palette.muted }
+                            })
+                        })
+                    }
+                    if (snapshot.items.isEmpty()) addView(statusCard(if (snapshot.termID.isNotBlank())
+                        "该学期暂无已公布成绩，可选择全部学期查看历史成绩。" else "暂无已公布成绩"))
+                    snapshot.items.forEach { grade ->
+                        addView(compactGradeSurface().apply {
+                            tag = "academic.grade.row"
+                            addView(TextView(activity).apply {
+                                text = grade.name; UiText.preserveRawText(this)
+                                textSize = 17f; setTypeface(typeface, Typeface.BOLD)
+                                includeFontPadding = false
+                                setThemeTextColor { Palette.text }
+                            })
+                            addView(TextView(activity).apply {
+                                val score = grade.score ?: activity.uiText("未公布")
+                                val credits = grade.credits ?: activity.uiText("未公布")
+                                text = activity.uiText("成绩") + ": $score  ·  " + activity.uiText("学分") + ": $credits"
+                                UiText.preserveRawText(this); textSize = 15f
+                                includeFontPadding = false
+                                setThemeTextColor { Palette.primaryText }
+                                setPadding(0, activity.dp(4), 0, 0)
+                            })
+                            val details = listOfNotNull(grade.semesterName, grade.courseCode, grade.courseAttribute,
+                                grade.courseNature, grade.examNature, grade.gradeStatus)
+                            if (details.isNotEmpty()) addView(TextView(activity).apply {
+                                text = details.joinToString(" · "); UiText.preserveRawText(this)
+                                textSize = 13f; setThemeTextColor { Palette.muted }
+                                includeFontPadding = false
+                                setPadding(0, activity.dp(4), 0, 0)
+                            })
+                        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) })
                     }
                 }
-                addView(TextView(activity).apply {
-                    text = "成绩来自学校教务系统，仅在本次使用期间保留。"
-                    textSize = 12f; setThemeTextColor { Palette.muted }
-                    setPadding(0, activity.dp(16), 0, 0)
-                })
-            })
-        }, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                gradesRepository.isLoading -> addView(statusCard("正在获取成绩…"))
+                gradesRepository.error == null -> addView(statusCard("点击刷新成绩获取学校已公布的成绩。"))
+            }
+        }
+        addView(TextView(activity).apply {
+            text = "成绩来自学校教务系统，仅在本次使用期间保留。"
+            textSize = 12f; setThemeTextColor { Palette.muted }
+            setPadding(0, activity.dp(16), 0, 0)
+        })
     }
 
-    private fun privateQueryContent(viewID: Int, build: LinearLayout.() -> Unit): ScrollView = ScrollView(activity).apply {
-        id = viewID
-        isFillViewport = true
-        clipToPadding = false
-        addView(LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(queryPageHeader())
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(activity.dp(pagePaddingDp), activity.dp(8), activity.dp(pagePaddingDp),
-                    activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation)))
-                build()
-            })
-        }, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    private fun compactGradeSurface(): LinearLayout = querySurface().apply {
+        setPadding(paddingLeft, activity.dp(10), paddingRight, activity.dp(10))
     }
 
-    private fun assignmentsContent(): ScrollView = privateQueryContent(R.id.information_query_assignments_scroll) {
-        val items = dailyInfoRepository.allAssignments()
-        val loading = dailyInfoRepository.isLoadingAllAssignments()
+    private fun queryBody(build: LinearLayout.() -> Unit): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(activity.dp(pagePaddingDp), activity.dp(8), activity.dp(pagePaddingDp),
+            activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation)))
+        build()
+    }
+
+    private fun privateQueryContent(build: LinearLayout.() -> Unit): LinearLayout = queryBody {
+        build()
+        // Match the iOS query VStack's visible rhythm for every neighboring
+        // control, source, message and result, including loading/error states.
+        repeat(childCount) { index ->
+            val child = getChildAt(index)
+            child.layoutParams = (child.layoutParams as LinearLayout.LayoutParams).apply {
+                topMargin = if (index == 0) 0 else activity.dp(16)
+                bottomMargin = 0
+            }
+        }
+    }
+
+    private fun assignmentsContent(): LinearLayout = privateQueryContent {
+        val (items, loading, error) = assignmentState().also { renderedAssignments = it }
         addView(gradeAction(if (loading) "正在获取…" else "刷新课程作业") {
             dailyInfoRepository.loadAllAssignments(force = true)
         }.apply { id = R.id.information_query_assignments_refresh; isEnabled = !loading })
         addView(querySourceFooter("教学云 · 课程作业", CalendarDailyInfoSources.assignments))
-        dailyInfoRepository.allAssignmentsError()?.let { error ->
-            addView(statusCard(if (items == null) error else "作业刷新失败，正在显示已获取的缓存。\n$error"))
+        error?.let { message ->
+            addView(statusCard(if (items == null) message else "作业刷新失败，正在显示已获取的缓存。\n$message"))
         }
         when {
             items != null && items.isEmpty() -> addView(statusCard("暂无课程作业 DDL"))
@@ -661,11 +752,14 @@ internal class InformationQueryPage(
                         ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) })
                 }
             loading -> addView(statusCard("正在获取课程作业…"))
-            dailyInfoRepository.allAssignmentsError() == null -> addView(statusCard("点击刷新课程作业获取 DDL；使用设置中已保存的教学云密码。"))
+            error == null -> addView(statusCard("点击刷新课程作业获取 DDL；使用设置中已保存的教学云密码。"))
         }
     }
 
-    private fun examsContent(): ScrollView = privateQueryContent(R.id.information_query_exams_scroll) {
+    private fun assignmentState() = Triple(dailyInfoRepository.allAssignments(),
+        dailyInfoRepository.isLoadingAllAssignments(), dailyInfoRepository.allAssignmentsError())
+
+    private fun examsContent(): LinearLayout = privateQueryContent {
         val exams = scheduleRepository.schedule?.examSchedule
         addView(gradeAction(if (scheduleRepository.isRefreshing) "正在获取…" else "刷新课表与考试") {
             scheduleRepository.refresh {
@@ -705,33 +799,15 @@ internal class InformationQueryPage(
         setOnClickListener { activity.performControlHaptic(it); action() }
     }
 
-    private fun shuttleContent(): ScrollView = ScrollView(activity).apply {
-        id = R.id.information_query_shuttle_scroll
-        isFillViewport = true
-        clipToPadding = false
-        isVerticalScrollBarEnabled = false
-        addView(object : LinearLayout(activity) {
-            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                val width = MeasureSpec.getSize(widthMeasureSpec).coerceAtMost(activity.dp(1180))
-                super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY), heightMeasureSpec)
-            }
-        }.apply {
-            orientation = LinearLayout.VERTICAL
-            addView(queryPageHeader())
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(activity.dp(pagePaddingDp), activity.dp(8), activity.dp(pagePaddingDp),
-                    activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(usesBottomNavigation)))
-                val snapshot = shuttleRepository.snapshot
-                when {
-                    snapshot != null -> renderShuttleSnapshot(snapshot)
-                    shuttleRepository.error != null -> addView(retryCard(
-                        shuttleRepository.error ?: "班车信息获取失败。",
-                    ) { shuttleRepository.load(force = true) })
-                    else -> addView(statusCard("正在获取今日班车与当前时刻表…"))
-                }
-            })
-        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL))
+    private fun shuttleContent(): LinearLayout = queryBody {
+        val snapshot = shuttleRepository.snapshot
+        when {
+            snapshot != null -> renderShuttleSnapshot(snapshot)
+            shuttleRepository.error != null -> addView(retryCard(
+                shuttleRepository.error ?: "班车信息获取失败。",
+            ) { shuttleRepository.load(force = true) })
+            else -> addView(statusCard("正在获取今日班车与当前时刻表…"))
+        }
     }
 
     private fun LinearLayout.renderShuttleSnapshot(snapshot: ShuttleBusSnapshot) {
@@ -1067,7 +1143,7 @@ internal class InformationQueryPage(
         }
     }
 
-    private fun importantEventsContent(): ScrollView {
+    private fun importantEventsContent(): LinearLayout {
         val liveItems = dailyInfoRepository.importantEvents().orEmpty()
         val favorites = preferences.favoriteDeadlines
         val nowMillis = Calendar.getInstance(shanghai).timeInMillis
@@ -1090,23 +1166,8 @@ internal class InformationQueryPage(
             nowMillis,
         )
 
-        val scrollView = ScrollView(activity).apply {
-            id = R.id.information_query_events_scroll
-            isFillViewport = true
-            clipToPadding = false
-            isVerticalScrollBarEnabled = false
-        }
         lateinit var eventList: LinearLayout
-        val body = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(
-                activity.dp(pagePaddingDp),
-                activity.dp(8),
-                activity.dp(pagePaddingDp),
-                activity.dp(InformationQueryLayoutLogic.contentBottomPaddingDp(
-                    usesBottomNavigation,
-                )),
-            )
+        return queryBody {
             val filters = if (isCompact) querySurface() else LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
             }
@@ -1155,23 +1216,6 @@ internal class InformationQueryPage(
                 CalendarDailyInfoSources.deadlinePrimaryPage,
             ))
         }
-        scrollView.addView(body)
-        scrollView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-            sessionState.eventScrollY = scrollY.coerceAtLeast(0)
-            val contentHeight = scrollView.getChildAt(0)?.height ?: return@setOnScrollChangeListener
-            val remaining = contentHeight - scrollView.height - scrollY
-            if (remaining <= activity.dp(240)) {
-                appendImportantEventPage(eventList)
-            }
-        }
-        if (sessionState.eventScrollY > 0) {
-            scrollView.post {
-                if (scrollView.isAttachedToWindow) {
-                    scrollView.scrollTo(0, sessionState.eventScrollY)
-                }
-            }
-        }
-        return scrollView
     }
 
     private fun searchField(): EditText = EditText(activity).apply {
@@ -1400,6 +1444,7 @@ internal class InformationQueryPage(
     private fun resetImportantEventPaging() {
         sessionState.visibleEventCount = InformationQuerySessionState.INITIAL_EVENT_COUNT
         sessionState.eventScrollY = 0
+        sessionState.modeScrollY[InformationQueryMode.IMPORTANT_EVENTS] = 0
         if (::root.isInitialized) {
             root.findViewById<ScrollView?>(R.id.information_query_events_scroll)?.scrollTo(0, 0)
         }

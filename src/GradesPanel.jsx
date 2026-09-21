@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { GraduationCap, RefreshCw } from 'lucide-react'
 
+export function GradeCard({ item, words }) {
+  const metadata = [item.semester_name, item.course_attribute, item.course_nature, item.exam_nature, item.grade_status]
+    .filter(value => value !== '' && value != null)
+  return <article className="query-grade-card">
+    <header><strong>{item.name}</strong><span className="query-grade-score" aria-label={`${words.score}: ${item.score === '' || item.score == null ? '—' : item.score}`}>{item.score === '' || item.score == null ? '—' : item.score}</span></header>
+    <div className="query-grade-metadata">
+      <span>{words.credits} · {item.credits === '' || item.credits == null ? '—' : item.credits}{item.course_code ? ` · ${item.course_code}` : ''}</span>
+      {metadata.length > 0 ? <span> · {metadata.join(' · ')}</span> : null}
+    </div>
+  </article>
+}
+
 // Only session state: no grade/name/student-ID persistence or console output.
 export default function GradesPanel({ command, language, enabled, hasAccount, onOpenAccount }) {
   const en = language === 'en'
@@ -93,12 +105,7 @@ export default function GradesPanel({ command, language, enabled, hasAccount, on
           <small>{words.updated} {report.fetched_at && Number.isFinite(Date.parse(report.fetched_at)) ? new Intl.DateTimeFormat(en ? 'en-GB' : 'zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(report.fetched_at)) : '—'}</small>
         </div>
         {!report.items?.length ? <div className="query-grade-status"><p>{words.empty}</p>{term ? <button type="button" onClick={() => { request.current += 1; setReport(null); setTerm('') }}>{words.all}</button> : null}</div> : <div className="query-grade-list">
-          {report.items.map(item => <article className="query-grade-card" key={item.id}>
-            <header><strong>{item.name}</strong><span className="query-grade-score" aria-label={`${words.score}: ${item.score === '' || item.score == null ? '—' : item.score}`}>{item.score === '' || item.score == null ? '—' : item.score}</span></header>
-            <p>{words.credits} · {item.credits === '' || item.credits == null ? '—' : item.credits}{item.course_code ? ` · ${item.course_code}` : ''}</p>
-            {item.semester_name ? <small>{item.semester_name}</small> : null}
-            <small>{[item.course_attribute, item.course_nature, item.exam_nature, item.grade_status].filter(Boolean).join(' · ')}</small>
-          </article>)}
+          {report.items.map(item => <GradeCard key={item.id} item={item} words={words} />)}
         </div>}
       </> : null}
     </>}

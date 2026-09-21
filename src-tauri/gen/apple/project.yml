@@ -51,8 +51,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.3.0
-        CFBundleVersion: "51"
+        CFBundleShortVersionString: 0.3.1
+        CFBundleVersion: "52"
     entitlements:
       path: where_to_study_iOS/where_to_study_iOS.entitlements
     scheme:

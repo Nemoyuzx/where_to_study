@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.nemoyu.wheretostudy",
     "vendor": "nemoyu",
-    "versionCode": 1002033,
-    "versionName": "0.3.0",
+    "versionCode": 1002034,
+    "versionName": "0.3.1",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }
