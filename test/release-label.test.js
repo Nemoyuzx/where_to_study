@@ -321,8 +321,8 @@ test("native Apple CI retries transient UI automation failures and preserves dia
   assert.match(nativeAppleBuildScript, /-test-iterations 2/);
   for (const lineEnding of ["\n", "\r\n"]) {
     const workflowText = nativeWorkflow.replaceAll("\n", lineEnding).replaceAll("\r\n", "\n");
-    assert.match(workflowText, /apple:\s*\n(?:.*\n)*?\s+timeout-minutes: 60/);
-    assert.match(workflowText, /name: Build Apple clients and run platform unit tests\s*\n\s+timeout-minutes: 50/);
+    assert.match(workflowText, /apple:\s*\n(?:.*\n)*?\s+timeout-minutes: 90/);
+    assert.match(workflowText, /name: Build Apple clients and run platform unit tests\s*\n\s+timeout-minutes: 80/);
   }
   assert.match(nativeWorkflow, /Upload Apple test diagnostics on failure/);
   assert.match(nativeWorkflow, /native\/apple\/DerivedData\/\*\*\/Logs\/Test\/\*\.xcresult/);
