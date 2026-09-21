@@ -1224,8 +1224,8 @@ class MainActivity : Activity() {
             }
             if (result.isSuccess) {
                 reconcileDailyCourseNotifications()
-                scheduleDidRefresh()
             }
+            scheduleDidRefresh(result.isSuccess)
         }
         if (!scheduled) {
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
@@ -1235,11 +1235,11 @@ class MainActivity : Activity() {
         }
     }
 
-    internal fun scheduleDidRefresh() {
+    internal fun scheduleDidRefresh(succeeded: Boolean = true, refreshOtherPages: Boolean = true) {
         if (!::content.isInitialized) return
         if (selectedDestination == Destination.QUERY) {
             informationQueryPage?.scheduleDidRefresh()
-        } else refreshCurrentPage()
+        } else if (succeeded && refreshOtherPages) refreshCurrentPage()
     }
 
     override fun onDestroy() {

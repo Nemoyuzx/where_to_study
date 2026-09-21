@@ -480,7 +480,7 @@ class PlannerPage(
                         activity.uiText("当天空教室已更新"),
                         Toast.LENGTH_SHORT,
                     ).show()
-                    activity.refreshCurrentPage()
+                    activity.refreshPlannerIfVisible()
                 }.onFailure { error ->
                     label.text = activity.uiText("获取空教室信息")
                     contentDescription = activity.uiText("获取空教室信息")

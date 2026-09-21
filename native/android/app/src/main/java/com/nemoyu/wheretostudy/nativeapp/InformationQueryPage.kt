@@ -762,9 +762,8 @@ internal class InformationQueryPage(
     private fun examsContent(): LinearLayout = privateQueryContent {
         val exams = scheduleRepository.schedule?.examSchedule
         addView(gradeAction(if (scheduleRepository.isRefreshing) "正在获取…" else "刷新课表与考试") {
-            scheduleRepository.refresh {
-                if (::root.isInitialized && root.isAttachedToWindow && sessionState.selectedMode == InformationQueryMode.EXAMS)
-                    renderMode(animate = false)
+            scheduleRepository.refresh { result ->
+                activity.scheduleDidRefresh(result.isSuccess, refreshOtherPages = false)
             }
             renderMode(animate = false)
         }.apply { id = R.id.information_query_exams_refresh; isEnabled = !scheduleRepository.isRefreshing })

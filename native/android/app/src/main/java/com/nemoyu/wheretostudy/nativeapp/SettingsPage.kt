@@ -54,8 +54,8 @@ class SettingsPage(
         scheduleRepository.refreshAutomatically { result ->
             if (result.isSuccess) {
                 activity.reconcileDailyCourseNotifications()
-                activity.refreshCurrentPage()
             }
+            activity.scheduleDidRefresh(result.isSuccess)
         }
     }
 
@@ -488,7 +488,6 @@ class SettingsPage(
                             activity.uiText("个人课表已更新，共 ${schedule.courses.size} 门课程"),
                             Toast.LENGTH_LONG,
                         ).show()
-                        activity.refreshCurrentPage()
                     }.onFailure { error ->
                         Toast.makeText(
                             activity,
@@ -496,6 +495,7 @@ class SettingsPage(
                             Toast.LENGTH_LONG,
                         ).show()
                     }
+                    activity.scheduleDidRefresh(result.isSuccess)
                 }
             }
         })
