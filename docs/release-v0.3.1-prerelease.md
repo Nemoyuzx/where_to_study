@@ -159,4 +159,8 @@ build57恢复了v0.2.9的48／13／22dp几何，但旧 `ic_refresh` path本身�
 - 288/288 Release JVM、Debug／test APK、Lint和234项跨平台契约通过；实际Android `ImageView.imageMatrix` 栅格测试新增墨迹水平／垂直中心断言，`QueryCardsVisualUiTest` 5/5通过。
 - 浏览器4倍预览与Android中英上下截图人工检查：圆弧居中，箭头位于右上，刷新按钮、通知外链与来源外链均不裁剪，底部来源卡片不被导航遮挡。
 
-Android 0.3.1（58）最终签名包与同名APK替换回执待完成后补记；标签、Apple、HarmonyOS及另外10个公开资产继续保持不变。
+- 最终签名通用APK来自提交 `f0029a71`，versionCode为58，大小 `1,172,534` 字节，SHA-256为 `c38b80734df0a82b6f75f318bd37a290f30090b1c17141adffc7dc4396bab9ba`；v2/v3签名和既有正式证书指纹通过。
+- 最终APK在断网条件下完成中英文、亮色／深色4组发布烟测：真实48dp触控区、22dp图形区、可见墨迹中心误差不超过1dp，刷新失败保留最后可用数据，两个外链目的地址和无障碍名称均通过；被测APK字节未修改。
+- 主分支 [Security Checks 35614280048](https://github.com/Nemoyuzx/where_to_study/actions/runs/35614280048) 成功；[Native Clients 35614279953](https://github.com/Nemoyuzx/where_to_study/actions/runs/35614279953) 的Android Debug测试／Lint／构建job成功。
+- GitHub只以 `--clobber` 替换同名Android APK；API确认新资产ID为 `579241523`、状态uploaded、大小和摘要与本地一致。Release仍为11个资产，另外10个资产ID、大小和摘要完全不变；标签对象仍为 `1086868e`、解析提交仍为 `5ffdc0e`，`releases/latest` 仍为 **v0.3.0**。
+- 按用户要求未回下载GitHub Release文件。AAB仅留在本地，Apple 99与HarmonyOS 1002035均未修改或重发。
