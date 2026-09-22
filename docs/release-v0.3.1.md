@@ -34,6 +34,10 @@
 
 ## GitHub 正式版回执
 
-(发布完成后补记 Release ID、资产上传状态、`releases/latest` 指向与标签 CI 运行。)
+2026-09-22 已公开 [Where To Study v0.3.1](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1)(Release ID `393396287`):`draft=false`、`prerelease=false`,`releases/latest` 已从 v0.3.0 指向 **v0.3.1**。轻量标签 `v0.3.1` 由 `gh release create` 在 `ca33070ce4901ee04d5205d6a997c307a81f5a6b` 上创建。
+
+恰好 11 个资产,上传后通过 GitHub API 逐一核对名称、字节数与 SHA-256 digest,与本地上售前核验值全部一致;未回下载 Release 安装包。
+
+标签推送触发 7 条工作流(运行 ID):Windows [35676014653](https://github.com/Nemoyuzx/where_to_study/actions/runs/35676014653)、Linux [35676014733](https://github.com/Nemoyuzx/where_to_study/actions/runs/35676014733)、macOS [35676014765](https://github.com/Nemoyuzx/where_to_study/actions/runs/35676014765)、Native Clients [35676014713](https://github.com/Nemoyuzx/where_to_study/actions/runs/35676014713)、CLI [35676014744](https://github.com/Nemoyuzx/where_to_study/actions/runs/35676014744)、TUI [35676014689](https://github.com/Nemoyuzx/where_to_study/actions/runs/35676014689)、Security Checks [35676014816](https://github.com/Nemoyuzx/where_to_study/actions/runs/35676014816)。安装包字节与预发布最终包一致,正式版不依赖本轮标签 CI 产物;运行结论以 Actions 页面为准。
 
 预发布 Release 与 `v0.3.1-prerelease` 标签按用户默认保留作测试渠道历史;预发布页不再是最新推荐下载。
