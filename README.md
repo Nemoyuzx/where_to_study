@@ -1,130 +1,65 @@
-（进来给个🌟吧） 赞助（建站和apple年费真的很昂贵）：https://ifdian.net/a/Nemoyuzx
-
 # Where To Study
 
-北邮空教室与个人课表联动查询应用。Windows 与 Linux 客户端使用 Tauri 2、React 和 Rust，
-macOS/iOS 客户端使用 SwiftUI，Android 客户端使用 Kotlin 与 Android Views，
-鸿蒙（HarmonyOS NEXT）客户端使用 ArkTS 与 ArkUI；macOS 同时保留 Tauri Apple
-Silicon 兼容构建。
+北邮空教室、个人课表与教学日历应用。公开的班车和活动信息无需登录；查询个人课表、空教室、成绩、考试与课程作业时需要学校账号。项目开源、无盈利性质，并非学校官方应用。
 
-- 只通过移动教务 HTTPS 接口获取并解析北邮个人课表；请求失败时不会静默切换数据源。
-- 0.3.0 预发布新增“查询 → 课程作业 DDL”和独立考试入口，与班车、重要事件、成绩并列。作业可搜索课程／标题并查看截止时间和提交状态，沿用已保存的教学云密码；刷新数据可复用仍有效的登录会话，不再每次重登。会话只在进程内存中保留，关闭应用进程后重新登录，详见[0.3.0 预发布说明](./docs/release-v0.3.0-notes.md)。
-- 成绩查询位于“查询 → 成绩”，支持学校提供的学期、全部学期、最好/首次/全部记录，保留文字成绩、零分与学校绩点；成绩只在内存短期保留。刷新个人课表时同步获取期末考试安排，按实际日期和分钟显示在教学日历中；与课程时间重叠时仅隐藏那一次课程，考试优先，原始课表仍保留。未公布或时间待定不会伪造数据。接口与缓存规则见[成绩与考试说明](./docs/academic-query-contract.md)。这些新增内容以源码为准，已发布安装包请查看对应更新说明。
-- 获取当天空教室信息时会一次拉取西土城与沙河两个校区，并保存到本地缓存。
-- 支持西土城与沙河校区查询；沙河教学楼按 `综合教学楼N`、`综合教学楼S`、`教学实验综合楼N`、`教学实验综合楼S`、`智慧教学楼` 识别。
-- 空教室查询支持按个人空闲节次和教学楼筛选；Tauri 桌面端另支持最少座位数筛选。
-- 各图形客户端可在设置中开启每日课程提醒并选择时间，默认时间为北京时间 07:30；关闭提醒、切换账号或清除数据会按平台规则撤销旧提醒。
-- 课前提醒与每日摘要独立开关，默认提前 10 分钟；可设置 1–5 次、每次提前 1–1440 分钟，例如 10 分钟和 5 分钟各提醒一次。默认不开启通知，详见[课前提醒与平台限制](docs/pre-class-reminders.md)。
-- iOS、macOS、Android 小组件与鸿蒙服务卡片显示今日课程，有空间时补充明日课程；Windows 与 Linux 不提供应用内课程浮窗。
-- 支持课表本地缓存、教学日历、法定节假日，以及 Apple EventKit、Android Calendar Provider 或鸿蒙 Calendar Kit 系统日历导入；ISO 8601 公历周与教学周并列显示，且不再推断或标注考试周。日、周、月可左右滑动翻页，月视图可展开或折叠，年视图可将所选日期跳转到日、周或月。
-- 联动查询顶部提供默认折叠的今日/明日校区天气卡片；月视图日期详情按“课程日程 → 云课堂作业 DDL → 黄历宜忌 → 统一活动 DDL”排列，学科竞赛、校内竞赛通知、夏令营与黑客松均可独立关闭。
-- 图形客户端的一级导航条在“教学日历”和“设置”之间提供独立“查询”页：顶部切换校区班车、重要事件和成绩。班车按当前执行时段展示西土城/沙河双向班次和下一班；重要事件可搜索名称、学校与方向，按类型/分类/来源筛选并默认按 DDL 由近到远排列；成绩使用个人教务账户，公开查询无需读取个人成绩。
-- 作业 DDL、校内竞赛、公开活动和自定义日程同时进入日/周全天区、月格和年视图日期详情；超出紧凑区域时使用可点击的 `+N` 展开完整列表。
-- Contest DDL 中的学术会议与期刊专题已进入教学日历；重要事件查询只合并公开活动和校内竞赛通知，不包含课程作业或自定义源，并可直接复用教学日历的本地收藏。
-- 终端客户端同步支持公开查询：CLI 提供 `shuttle` / `events` 与 JSON 输出；新源码另提供 `grade-terms` / `grades` / `exams` 教务查询。TUI 在“日历”和“设置”之间提供独立“查询”标签（班车、重要事件、成绩），并与 CLI 共享安全的本地活动收藏。详细用法分别见终端客户端 README。
-- 活动日程可以收藏为完整的本地快照：即使关闭对应来源、接口暂时失败或上游删除条目，收藏仍会保留在原日期；设置中提供独立收藏管理页。还可填写符合[自定义日程接口规范](./docs/custom-schedule-api.md)的 HTTPS JSON 地址，将自有日程并入同一教学日历。
-- 颜色主题：各图形客户端与 TUI 提供默认青绿、海洋蓝、鸢尾紫、暖琥珀、玫瑰五套预设和主色/强调色/选中日期色自定义。非默认主题采用协调的低饱和背景、分层卡片和控件色，自定义主色也会自动搭配背景。默认保持原配色，图形端深浅色跟随系统，TUI 沿用终端外观判断；设置只保存在本机，DDL 类别颜色不随主题改变。[主题与测试说明 / Color themes](./docs/color-themes.md)。
-- 图形客户端支持跟随系统、简体中文与 English；静态界面切换语言，第三方 API 返回的课程、天气、黄历、作业和竞赛内容保持原文。
+## 下载与安装
 
-### 0.2.9 新功能 / What's new in 0.2.9
+最新正式版是 [Where To Study v0.3.1](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1)。GitHub 提供 Windows、Linux、macOS 和 Android 安装包；iOS/macOS 的 0.3.1 (99) 已上传 TestFlight，鸿蒙 0.3.1 (1002035) 已上传 AppGallery 测试渠道。应用商店展示的版本可能与 GitHub 不同。
 
-- 课程详情支持“仅删除本次”或“删除本学期整门课程”，只编辑本地课表，刷新后仍保持，可在设置中恢复；课表、空闲节次、小组件与课程提醒同步采用有效结果。不会向学校退课或删除学校作业，也不会自动移除已导出的系统日历事件。
-- 个人账户可单独设置“教学云平台密码”用于作业 DDL，同一学号无需重复输入。未设置时回退到教务密码；同账号密码框留空保留原密码，显式选择“改用教务密码”并保存可清除独立密码。
-- Android 与鸿蒙的班车查询采用 iOS 同类布局：状态和通知卡、方向及有效日期、班次网格、下一班标记与来源说明，整页统一滚动并保留候车地点和提醒。
-- Course details support removing one occurrence or the whole semester's course, with persistent local edits and restoration. Personal Account accepts an optional separate teaching cloud password for assignment DDLs. Neither feature modifies university-side data.
-
-完整改动见 [0.3.0 更新说明](./docs/release-v0.3.0-notes.md)，课程操作的详细规则见[课程管理和教学云账户说明](./docs/course-management-v0.2.9.md)。各渠道可安装的版本以下方下载入口为准。
-
-贡献前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。平台支持范围和验收顺序见
-[docs/platform-roadmap.md](./docs/platform-roadmap.md)。
-
-Windows 与 Linux 发布制品的签名边界、GitHub/Sigstore 来源证明及下载后验证命令见
-[Windows / Linux 签名与构建来源验证](./docs/code-signing.md)。
-
-bupt校内的其它非官方学生组织可以联系我在网站上添加友链
-
-## 鸣谢 / Acknowledgements
-
-感谢以下开源项目公开接口资料与相关实现，为教务查询接入和交叉核验提供参考：
-
-- [Yokumii/bupt-api-collected](https://github.com/Yokumii/bupt-api-collected)：微教学与教学云接口资料，包括成绩和考试安排。
-- [heimaolala/open-empty-classroom](https://github.com/heimaolala/open-empty-classroom)：空教室查询相关开放实现。
-- [Jraaay/EmptyClassroom](https://github.com/Jraaay/EmptyClassroom)：空教室查询相关实现与参考。
-
-Thanks to these open-source projects for publishing academic API information and classroom-query implementations. Where To Study reuses its own direct university authentication flow; it does not send student credentials or grades to these projects or their proxy services. 各参考项目的许可证归其作者所有。
-
-## 反馈与交流群
-
-遇到问题、发现 bug 或有功能建议时，可以提交 [GitHub Issue](https://github.com/Nemoyuzx/where_to_study/issues)，也可扫码加入 QQ 交流群反馈问题、获取更新信息。
-
-<table>
-  <tr>
-    <th align="center">QQ 交流群</th>
-  </tr>
-  <tr>
-    <td align="center">群号：<code>873443704</code></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="./docs/assets/feedback-qq-group.jpg" alt="Where To Study QQ 交流群二维码" width="280"></td>
-  </tr>
-</table>
-
-## 下载
-
-GitHub 当前正式版为 [Where To Study v0.3.1](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1)，在 0.3.0 的成绩、考试、作业查询和自定义多次课前提醒之上优化查询界面：手机查询栏按空间使用图标，成绩卡片更紧凑，Android 还修复了主题切换后成绩消失、当前学期标记、空成绩间距和浅色开关配色。Windows、Linux、Mac 和 Android 安装包均已同步；Apple 使用 TestFlight，鸿蒙使用 AppGallery 测试渠道，商店可下载版本可能暂时较旧。[本轮改动与测试记录](./docs/release-v0.3.1.md)。
-
-[打开最新版本下载页](https://github.com/Nemoyuzx/where_to_study/releases/latest)，找到页面底部的 **Assets（文件列表）**，按自己的设备选择。文件名前面的版本号会随更新变化，看下面列出的结尾即可。
-
-| 你的设备 | 选择哪个文件或渠道 | 怎么安装 |
+| 设备 | 下载或测试渠道 | 安装方式 |
 | --- | --- | --- |
-| Windows x64 电脑（Intel / AMD） | `windows-x64-setup.exe` | 下载后双击，按提示安装。 |
-| Mac（macOS 13 或更新版本） | `native-macos-universal.dmg`，也可参加下方 TestFlight 测试 | 打开 DMG，将应用拖入「应用程序」。一个文件同时兼容 Apple 芯片和 Intel。 |
-| Android 手机、平板或折叠屏 | `native-android-universal.apk` | 下载到设备后打开，按系统提示允许安装。无需选择芯片类型。 |
-| Ubuntu、Debian 等 Linux | `linux-x86_64.deb` 或 `linux-aarch64.deb` | 按芯片类型选择，用系统的软件安装器打开。 |
-| 其他 Linux | `linux-x86_64.AppImage` 或 `linux-aarch64.AppImage` | 在文件属性中允许「作为程序执行」，再打开。 |
-| iPhone、iPad（iOS / iPadOS 16 或更新版本） | 下方 TestFlight 邀请 | 先安装 Apple 的 TestFlight，再打开邀请链接。 |
-| 鸿蒙（HarmonyOS NEXT）设备 | 华为应用市场 / AppGallery 测试渠道 | 在对应渠道安装，版本和可用性以审核通过后的页面为准。 |
+| Windows x64 | [安装程序](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.1/Where-To-Study-v0.3.1-windows-x64-setup.exe) | 双击安装；支持 Intel/AMD 64 位电脑。 |
+| macOS 13+ | [Universal DMG](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.1/Where-To-Study-v0.3.1-native-macos-universal.dmg) | 打开 DMG，将应用拖入「应用程序」；兼容 Apple 芯片与 Intel。 |
+| Android | [Universal APK](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.1/Where-To-Study-v0.3.1-native-android-universal.apk) | 在设备上打开 APK，按系统提示安装。 |
+| Ubuntu/Debian Linux | [x86_64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.1/Where-To-Study-v0.3.1-linux-x86_64.deb) · [aarch64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.1/Where-To-Study-v0.3.1-linux-aarch64.deb) | 按处理器架构选择，用系统软件安装器打开。 |
+| 其他 Linux | [x86_64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.1/Where-To-Study-v0.3.1-linux-x86_64.AppImage) · [aarch64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.1/Where-To-Study-v0.3.1-linux-aarch64.AppImage) | 允许文件「作为程序执行」后打开。 |
+| iPhone/iPad（iOS/iPadOS 16+） | [TestFlight 公测邀请](https://testflight.apple.com/join/yuzpAtDJ) | 先安装 TestFlight；可安装版本以 Apple 页面为准。 |
+| HarmonyOS NEXT | AppGallery 测试渠道 | 能否加入测试及安装，以华为测试邀请页面为准；当前未提交正式商店审核。 |
 
-Linux 选包时，普通 Intel/AMD 64 位电脑选 `x86_64`（也写作 `x64`），ARM 电脑选 `aarch64`（也写作 `arm64`）；可在系统「关于」或「系统信息」中查看处理器类型。Windows 当前只提供 x64 安装包，不能用 Linux 的 ARM 包代替。Mac 和 Android 的 Universal 包无需区分芯片。
+后续版本请查看[最新正式版页面](https://github.com/Nemoyuzx/where_to_study/releases/latest)。
 
-**不要下载 `Source code (zip)` 或 `Source code (tar.gz)` 来安装应用**：它们是供开发者使用的源码。名称带 `cli` 或 `tui` 的压缩包适合熟悉终端的 Linux 用户：CLI 是命令行工具，TUI 是终端里的文字界面，都不是普通窗口版应用。安装与使用见 [CLI 说明](./wts-cli/README.md)和 [TUI 说明](./wts-tui/README.md)。
+Linux 的 `x86_64` 对应普通 Intel/AMD 64 位电脑，`aarch64` 对应 ARM 64 位设备。Release 中的 `Source code` 是源码，不能用来安装应用；`cli`/`tui` 压缩包是 Linux 终端工具，见 [CLI](./wts-cli/README.md) 和 [TUI](./wts-tui/README.md) 说明。GitHub 不提供 iOS、鸿蒙安装包或 Android AAB。Android 也可关注 vivo 与华为应用商店，具体版本以商店页面为准。
 
-Android 也可关注 vivo 应用商店和华为应用市场中的 Where To Study，能否下载及具体版本以商店审核后的页面为准。鸿蒙和 Apple 测试版不在 GitHub 提供手机安装包。
+需要 Apple 内测名额的同学，可将 iCloud 邮箱发至 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加。Windows 安装包尚无公众信任的代码签名，macOS GitHub DMG 尚未经过 Apple 公证；遇到系统安全提示时请阅读[下载文件验证说明](./docs/code-signing.md)。
 
-Apple 平台内测：需要 iOS 或 macOS 内测版本的同学，请将自己的 iCloud 邮箱发送至作者邮箱 [2099905168@qq.com](mailto:2099905168@qq.com)，由作者添加至 TestFlight 内测名单。也可打开 [TestFlight 公测邀请](https://testflight.apple.com/join/yuzpAtDJ)；公测版本可能滞后，需等待 Apple 审核后才可安装。
+### v0.3.1 更新
 
-Windows 安装包尚无公众信任签名，系统可能提示「未知发布者」；GitHub 的 macOS 下载包尚未经过 Apple 公证，可能出现系统安全提示。签名与验证方法见[下载文件验证说明](./docs/code-signing.md)。更新内容见 [0.3.0 更新说明](./docs/release-v0.3.0-notes.md)，构建与上传记录见[工程发布记录](./docs/release-v0.3.0.md)。
+- Android 查询页切换时保留标题、选项栏和各页滚动位置；后台课表更新不再使整个查询页刷新。
+- Android 考试与作业查询的分组间距更统一；窄屏查询选项改用图标，并保留中英文无障碍名称。
+- 各图形平台的成绩卡片和平均绩点区域更紧凑；Android 修复空成绩间距、当前学期标记、主题切换后成绩消失，以及班车刷新图标偏斜等问题。
 
-隐私声明 / Privacy Policy：[中文与 English 完整版本](./PRIVACY.md)。应用内各平台设置页提供同一组双语核心条款；所有天气、黄历、作业及活动截止信息仅供参考，请以实际官方信息为准。
+完整改动见 [v0.3.1 Release 说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1)，安装包摘要与渠道状态见[正式版发布记录](./docs/release-v0.3.1.md)。
 
-## 许可证状态
+## 主要功能
 
-本项目按 [GNU General Public License v3.0 only](./LICENSE)（SPDX：`GPL-3.0-only`）开源发布。分发本项目或其衍生版本时，必须遵守该许可证；第三方材料仍分别遵循 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) 与锁定依赖生成的 [`THIRD_PARTY_LICENSES.html`](./THIRD_PARTY_LICENSES.html) 中记录的条款。这三份法律文件都会随安装包交付并在打包时逐字节校验。
+- **课表与空教室：** 个人课表通过移动教务 HTTPS 接口获取并缓存；空教室一次查询西土城与沙河两个校区，可按教学楼和个人空闲节次筛选。课程可仅在本地删除某次排课或本学期整门课，并在设置中恢复；不会向学校退课。[课程管理说明](./docs/course-management-v0.2.9.md)
+- **教学日历：** 日、周、月、年视图展示课程、期末考试和各类 DDL；公历周与教学周并列显示，Apple、Android 和鸿蒙客户端支持导入设备系统日历。月视图日期详情包含课程、云课堂作业、黄历宜忌与活动截止信息。日程可收藏为本地快照，也可接入符合[自定义日程接口规范](./docs/custom-schedule-api.md)的公开 HTTPS JSON 地址。
+- **信息查询：** 独立查询页提供班车、重要事件、成绩、考试和课程作业。班车与重要事件属于公开信息；个人成绩、考试和作业使用学校账号。教学云密码可与教务密码分开保存，未单独设置时使用教务密码。[成绩与考试说明](./docs/academic-query-contract.md)
+- **提醒与小组件：** 每日课程摘要默认提醒时间为北京时间 07:30；课前提醒默认提前 10 分钟，可自定义 1–5 次。两类提醒都默认关闭。iOS、macOS、Android 小组件与鸿蒙服务卡片优先显示今日课程，有空间时补充明日课程；Windows/Linux 提供运行时通知，不提供课程小组件。[课前提醒与平台限制](./docs/pre-class-reminders.md)
+- **外观与语言：** 图形客户端支持简体中文和 English，以及多套预设和自定义颜色主题；第三方接口返回的课程、天气、黄历和活动文字保持原文。[主题说明](./docs/color-themes.md)
+
+法定节假日、天气、黄历与活动日程来自下述公开数据源。页面展示的数据仅供参考，请以学校和活动主办方的实际通知为准。完整隐私声明见 [Privacy Policy / 隐私政策](./PRIVACY.md)。
 
 ## 课程提醒与桌面小组件
 
-各图形客户端另有独立的**课前提醒**，默认提前 10 分钟，支持自定义提前分钟与提醒次数；有明确开始时间的考试同样参与，时间待定的全天考试不提醒。只使用本地有效课表，删除课程、更新课表、切换账号后重排，已过期提醒不补发。Android 可由用户主动授予“闹钟和提醒”特殊访问权以尽量准时，未授权使用大致时间并明确提示可能延迟；不开启该功能不会主动申请此权限。Apple 与鸿蒙受系统待排数量限制，需适时重新打开应用补排；Windows/Linux 需应用持续运行。[功能与验证说明 / Feature and validation](docs/pre-class-reminders.md)。
+每日课程摘要和课前提醒是独立开关，默认均关闭。摘要时间可自定义，默认北京时间 07:30；课前提醒默认提前 10 分钟，可设置 1–5 次。有明确开始时间的考试也可参与课前提醒；删除课程、刷新课表或切换账号后会按新的本地日程重排，已过期提醒不补发。
 
-Windows/Linux 桌面端的课程通知默认关闭。用户在设置中开启并选择时间后，应用运行或驻留托盘时会根据本地课表发送今日课程摘要；关闭开关或清除本地数据会停止后续发送。后台调度只等待跨日、每天 7:00、所选提醒时间或有界重试等实际需要的时点；系统恢复、设置改变或窗口重新聚焦时会重新计算。跨日会更新托盘中的今日/明日课程，7:00 获取当天空教室后也会更新托盘。
+Android 可选择授权系统“闹钟和提醒”以尽量准时，未授权时可能受后台调度延迟。Apple 与鸿蒙受系统待排数量限制，需适时重新打开应用补排；Windows/Linux 只有在应用运行或驻留托盘时才能投递通知。平台规则见[课前提醒说明](./docs/pre-class-reminders.md)和[每日提醒说明](./docs/reminder-time-and-tomorrow-widget.md)。
 
-Windows 与 Linux 不注册课程小组件窗口、权限或托盘入口。原生 iOS 与 macOS 的 WidgetKit 小组件从系统小组件图库添加，通过 App Group 读取应用同步的课程；Android 桌面小组件和鸿蒙服务卡片读取应用私有课表缓存。支持小组件的平台会显示日期、星期、教学周、当前或下一节状态、课程时间、节次、教室与教师，并根据尺寸和用户条数上限最多展示 6 门课程。小组件优先展示今日课程，有剩余空间时追加明确标识的“明日课程”，不挤掉今日内容；设置中的虚构示例预览使用同一布局规则。无今日课程时仍体现今日无课状态，并可在有空间时显示明日课程；不为小组件新增网络请求。
-
-各图形客户端的每日课程提醒均支持自定义时分（北京时间，默认仍为 07:30）；保存后重排提醒，旧设置自动保留默认时间。SwiftUI 在系统待处理通知上限内合并安排最多 63 条未来摘要和课前提醒；鸿蒙使用系统提醒代理。Android 的每日摘要仍沿用持久化 `JobScheduler`，在所选时间之后的有限窗口内投递且不跨午夜补发昨日摘要，可能受系统后台调度限制；Windows/Linux 需应用在后台运行。所有平台都默认关闭，只有用户明确开启后才启用；系统拒绝权限时不投递通知，关闭开关或清除本地数据会取消应用管理的提醒并清理可管理的已送达通知。账号切换时，原生端会撤销旧账号的已安排提醒，桌面端则只会在新账号设置保存成功后继续使用当前开关。历史摘要功能的验证见[提醒与明日课程说明](docs/reminder-time-and-tomorrow-widget.md)和[平台规范修复记录](docs/platform-standards-fixes-v0.2.9.md)，新增功能见[课前提醒说明](docs/pre-class-reminders.md)。
+iOS/macOS 的 WidgetKit 小组件、Android 桌面小组件和鸿蒙服务卡片只读取本地课表缓存，不额外请求网络；优先显示今日课程，有空间时再显示明日课程。Windows/Linux 不提供课程小组件。
 
 ## 数据来源与数据安全
 
-图形与原生客户端使用北邮课表和空教室相关接口，因此需要教务系统账号和密码。账号与密码不会写入
-普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Linux Tauri 图形端
-使用 Secret Service（GNOME Keyring / KWallet 等系统密钥环），Android 使用
-Android Keystore。旧版 `settings.json` 中的凭据会在首次启动时迁移并从普通设置
-中删除。迁移先原子替换脱敏设置文件，再写入系统凭据存储。Tauri 为每个已保存账号生成不含账号信息的随机不透明缓存作用域，账号切换或清除失败时会持久化撤销标记并拒绝旧缓存。Tauri 的
-`load_saved_settings` 只向 WebView 返回 `has_saved_password`，不会返回真实密码；密码输入留空时保留已有系统凭据，只有显式输入新密码才替换。课程和空教室缓存不包含密码、token 或 cookie。完整基线见
-[docs/security.md](./docs/security.md)。
+### 个人账户与本地数据
+
+班车、活动等公开信息无需学校账号；个人课表、空教室、成绩、考试和作业查询需要学号与密码。图形客户端不会将密码写入普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Linux 图形端使用 Secret Service，Android 使用 Android Keystore，鸿蒙使用系统 Asset Store。课程和空教室缓存不包含密码、令牌或 Cookie；成绩结果只在当前进程内短期保留。旧版 Tauri `settings.json` 的凭据会迁移到系统安全存储；完整设计与限制见[安全说明](./docs/security.md)。
 
 `where-to-study-cli` 与 `where-to-study-tui` 按终端客户端的独立约定，不调用系统密码库：
 账号和密码分别保存在用户配置目录下权限受限的专用本地文件中，且不会自动读取或迁移
 图形客户端的系统凭据。具体路径与风险说明见 [wts-cli/README.md](./wts-cli/README.md)
 和 [wts-tui/README.md](./wts-tui/README.md)。
+
+### 节假日、天气与活动
 
 法定节假日运行时数据来自
 [cg-zhou/holiday-calendar](https://github.com/cg-zhou/holiday-calendar)，客户端通过其文档列出的
@@ -142,13 +77,43 @@ Android 原生客户端在用户已授权系统日历访问时，可从设备自
 
 学科竞赛、学术会议、期刊专题、夏令营、预推免与黑客松 DDL 的主数据来自 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) 的[公开 JSON](https://nemoyuzx.github.io/contest-ddl/data/competitions.json)，应用下载后仅在本地按所选日期和已开启类别筛选。主源不可用时，支持的平台会尝试固定 HTTPS 备用地址 [`https://where-to-study.cn/api/contest-events`](https://where-to-study.cn/api/contest-events)。独立的[北邮校内竞赛通知 API](https://where-to-study.cn/api/contest-notices)由服务器脚本从学校内部网站的公开通知页提取并整理截止节点，条目链接回云课堂 HTTPS 原文。两条固定接口都只发送不含账号、密码、Cookie、token、课表、教室或作业数据的 HTTPS GET，并拒绝重定向。学科竞赛、学术会议、校内竞赛通知、夏令营和黑客松各有独立的教学日历开关，卡片底部会标明全部第三方来源。
 
+### 班车、自定义日程与课程作业
+
 校区班车来自固定的[班车 API](https://where-to-study.cn/api/shuttle-bus)。服务器每小时增量检查北京邮电大学后勤部公开通知，只把通过严格校验的官方表格识别结果作为结构化班次；客户端按上海日期选择当前执行时段和当天星期，并标记已发车、下一班与计划班次。最新通知尚未安全解析时只会明确显示提示或上一份完整表作为对照，不会发布推测班次。请求不包含教务凭据、课表、校区设置或 GPS，节假日及临时调整请以后勤部原文为准。
 
 用户还可以启用[自定义日程接口](./docs/custom-schedule-api.md)。客户端只接受不含凭据、片段、回环地址或私网字面量的公开 HTTPS JSON 地址，拒绝重定向并限制响应大小、条目数与查询频率；API 返回的文字保持原文。收藏操作会把单条日程的完整快照保存在当前设备，不上传也不跨设备同步；来源关闭、失败或移除条目后仍会在教学日历中显示，取消收藏或“清除本地数据”才会删除。
 
-课程作业解析以[北邮云课堂官方作业页](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)的真实 `records` / `undoneList` 响应契约为准。启用日期详情中的作业卡时，图形客户端从系统安全存储临时读取已保存的学号和教学云平台密码；未单独设置云密码时使用教务密码。仅通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再以内存中的一次性票据换取云课堂访问令牌并读取当前课程和作业；不会读取浏览器 Cookie/token，也不会把密码发送给 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn`。票据、Cookie 和令牌不写入磁盘；用于跨日期查询的全量作业结果最多复用 10 分钟，已显示的日期结果只保留在当前进程内，并在凭据改变、切换账号或清除本地数据时失效。旧凭据发起的请求不能覆盖新凭据的数据。
+课程作业解析以[北邮云课堂官方作业页](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)的真实 `records` / `undoneList` 响应契约为准。查询作业或打开日期详情中的作业卡时，图形客户端从系统安全存储临时读取已保存的学号和教学云平台密码；未单独设置云密码时使用教务密码。仅通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再以内存中的一次性票据换取云课堂访问令牌并读取当前课程和作业；不会读取浏览器 Cookie/token，也不会把密码发送给 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn`。票据、Cookie 和令牌不写入磁盘；用于跨日期查询的全量作业结果最多复用 10 分钟，已显示的日期结果只保留在当前进程内，并在凭据改变、切换账号或清除本地数据时失效。旧凭据发起的请求不能覆盖新凭据的数据。
+
+## 反馈与交流群
+
+发现问题或有功能建议，可以提交 [GitHub Issue](https://github.com/Nemoyuzx/where_to_study/issues)，也可以加入 QQ 交流群获取更新信息。请勿在公开 Issue 或群聊中发送学号、密码、令牌或个人课表；安全问题请按 [Security Policy](./SECURITY.md) 中的流程报告。
+
+<table>
+  <tr><th align="center">QQ 交流群</th></tr>
+  <tr><td align="center">群号：<code>873443704</code></td></tr>
+  <tr><td align="center"><img src="./docs/assets/feedback-qq-group.jpg" alt="Where To Study QQ 交流群二维码" width="280"></td></tr>
+</table>
+
+北邮校内的其他非官方学生组织也可以联系作者洽谈网站友链。喜欢这个项目，欢迎给仓库点 Star；若想支持建站和 Apple 开发者账户费用，可通过[爱发电](https://ifdian.net/a/Nemoyuzx)赞助。
+
+## 鸣谢 / Acknowledgements
+
+感谢以下开源项目公开接口资料与相关实现，为教务查询接入和交叉核验提供参考：
+
+- [Yokumii/bupt-api-collected](https://github.com/Yokumii/bupt-api-collected)：微教学与教学云接口资料，包括成绩和考试安排。
+- [heimaolala/open-empty-classroom](https://github.com/heimaolala/open-empty-classroom)：空教室查询相关开放实现。
+- [Jraaay/EmptyClassroom](https://github.com/Jraaay/EmptyClassroom)：空教室查询相关实现与参考。
+
+Where To Study 不会将学生凭据或成绩发送给这些参考项目或其代理服务；各项目的许可证归其作者所有。
+
+## 许可证
+
+本项目按 [GNU General Public License v3.0 only](./LICENSE)（SPDX：`GPL-3.0-only`）开源发布。分发本项目或其衍生版本时须遵守该许可证；第三方材料分别遵循 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md) 与 [`THIRD_PARTY_LICENSES.html`](./THIRD_PARTY_LICENSES.html) 中记录的条款。
 
 ## 开发与运行
+
+Windows/Linux 图形端使用 Tauri 2、React 和 Rust；macOS/iOS 使用 SwiftUI；Android 使用 Kotlin 与 Android Views；HarmonyOS NEXT 使用 ArkTS 与 ArkUI。仓库还保留 macOS 的 Tauri Apple Silicon 兼容构建。贡献前请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md) 和[平台路线图](./docs/platform-roadmap.md)。
 
 所有平台的应用主图标以 `src-tauri/icons/icon.png`（Windows/Tauri 当前绿色日历课桌图标）为唯一源图。修改源图后运行 `npm run icons:sync`，同步生成 Windows/macOS Tauri、原生 iOS 和 Android 启动图标；macOS 菜单栏与 Android 通知图标仍使用符合系统规范的单色模板资源。
 
@@ -212,7 +177,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 ./scripts/native-harmony-build.sh
 ```
 
-`native/apple`、`native/android` 与 `native/harmony` 是当前 macOS、iOS、Android 和鸿蒙客户端源码。它们已完成个人课表与本地缓存、每日课程摘要、含法定节假日和当前时间线的日/周/月/年日历，以及仅限当天的空教室联动查询。Apple 客户端还提供不连接教务服务的内置示例模式，供首次体验与 App Review 审核。HarmonyOS 源码已合入 `main` 并纳入本地构建与单元测试；AGC 正式签名和商店发布仍需维护者的华为开发者账号配置。
+`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙 0.3.1 已通过 AppGallery 测试渠道云测试；这不代表正式商店审核或上架。
 
 Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri 或 WebView。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
@@ -231,11 +196,11 @@ Android 脚本会运行 Release 单元测试与 Lint，构建并校验签名 APK
 
 ```bash
 ./scripts/native-apple-app-store.sh preflight all
-APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX APPLE_BUILD_NUMBER=31 \
+APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX APPLE_BUILD_NUMBER=100 \
   ./scripts/native-apple-app-store.sh archive all
 ```
 
-脚本还支持 `export` 与 `upload` 动作，并可单独指定 `ios` 或 `macos`。本地正式构建使用已安装的 Apple Distribution、Mac Installer Distribution 证书及 iOS/macOS 主应用和 Widget 共四个 App Store 描述文件；团队、描述文件覆盖值和 App Store Connect API 私钥只通过环境变量传入。`Build Native Clients` 工作流也提供受保护的手动上传入口。完整账户配置、CI secrets、元数据和审核步骤见 [`native/apple/AppStore/submission-checklist.md`](./native/apple/AppStore/submission-checklist.md)。
+示例中的团队 ID 和构建号需替换为实际值，构建号应递增。脚本还支持 `export` 与 `upload` 动作，并可单独指定 `ios` 或 `macos`。本地正式构建使用已安装的 Apple Distribution、Mac Installer Distribution 证书及 iOS/macOS 主应用和 Widget 共四个 App Store 描述文件；团队、描述文件覆盖值和 App Store Connect API 私钥只通过环境变量传入。完整账户配置与审核步骤见 [`native/apple/AppStore/submission-checklist.md`](./native/apple/AppStore/submission-checklist.md)。
 
 ## GitHub Actions
 
