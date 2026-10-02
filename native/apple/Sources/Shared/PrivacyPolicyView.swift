@@ -20,7 +20,7 @@ struct PrivacyPolicyView: View {
                             .font(.largeTitle.bold())
                             .foregroundStyle(theme.text)
                             .accessibilityIdentifier("screen.privacy-policy")
-                        Text("生效日期 / Effective date: 2026-08-31")
+                        Text("生效日期 / Effective date: 2026-10-02")
                             .font(.callout)
                             .foregroundStyle(theme.secondaryText)
                     }
@@ -42,7 +42,7 @@ struct PrivacyPolicyView: View {
                     )
                     privacySection(
                         title: "天气、黄历、班车与公开活动 / Weather, almanac, shuttle, and public events",
-                        body: "UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。where-to-study.cn 从北京邮电大学后勤部公开通知解析班车状态和时刻表。Contest DDL 提供竞赛、会议、期刊专题、夏令营、黑客松与预推免等公开活动，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。用户还可选择公开 HTTPS JSON 自定义日程源；这些公开查询请求不附带个人数据。各类别均有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. where-to-study.cn parses shuttle status and timetables from public BUPT Logistics Department notices. Contest DDL provides public events such as competitions, conferences, journal special issues, summer camps, hackathons, and pre-admission programs. School notices are extracted by a server-side script from public pages on the university’s internal website. Users may also select a public HTTPS JSON custom feed. These public-data requests contain no personal data. Each category has its own switch, and displayed data is for reference only."
+                        body: "UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。where-to-study.cn 从北京邮电大学后勤部公开通知解析班车状态和时刻表。Contest DDL 提供竞赛、会议、期刊专题、夏令营、黑客松与预推免等公开活动；应用比较 GitHub Pages 主源与 https://where-to-study.cn/contest-ddl/data/competitions.json 镜像的生成时间，镜像更新时使用镜像，两者不可用时使用 https://where-to-study.cn/api/contest-events 备用接口。校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。用户还可选择公开 HTTPS JSON 自定义日程源；这些公开查询均为不附带凭据或个人数据的 HTTPS GET 请求。各类别均有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. where-to-study.cn parses shuttle status and timetables from public BUPT Logistics Department notices. Contest DDL provides public events such as competitions, conferences, journal special issues, summer camps, hackathons, and pre-admission programs. The app compares generation times of the GitHub Pages primary feed and the mirror at https://where-to-study.cn/contest-ddl/data/competitions.json, using the mirror when newer; https://where-to-study.cn/api/contest-events remains a fallback if both are unavailable. School notices are extracted by a server-side script from public pages on the university’s internal website. Users may also select a public HTTPS JSON custom feed. These public-data queries are HTTPS GET requests without credentials or personal data. Each category has its own switch, and displayed data is for reference only."
                     )
                     privacySection(
                         title: "云课堂作业 / UCloud assignments",

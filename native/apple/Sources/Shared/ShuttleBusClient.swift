@@ -28,6 +28,14 @@ struct ShuttleBusDeparture: Identifiable, Equatable, Sendable {
     var id: String { departureTime }
 }
 
+struct ShuttleBusWeekdaySchedule: Identifiable, Equatable, Sendable {
+    let key: String
+    let title: String
+    let departures: [ShuttleBusDeparture]
+
+    var id: String { key }
+}
+
 struct ShuttleBusPeriod: Hashable, Sendable {
     let label: String
     let startDate: String?
@@ -282,6 +290,11 @@ enum ShuttleBusTodayLogic {
     static let weekdayKeys = Set([
         "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
     ])
+    private static let orderedWeekdays = [
+        ("monday", "周一"), ("tuesday", "周二"), ("wednesday", "周三"),
+        ("thursday", "周四"), ("friday", "周五"), ("saturday", "周六"),
+        ("sunday", "周日"),
+    ]
 
     static func weekdayKey(for date: Date, calendar: Calendar = .shanghai) -> String {
         switch calendar.component(.weekday, from: date) {
@@ -297,7 +310,7 @@ enum ShuttleBusTodayLogic {
 
     static func scheduleNotice(in snapshot: ShuttleBusSnapshot) -> ShuttleBusNotice? {
         if let latest = snapshot.notices.first,
-           latest.schedules.contains(where: { !$0.rows.isEmpty }) {
+           latest.schedules.contains(where: { $0.parseStatus == "parsed" && !$0.rows.isEmpty }) {
             return latest
         }
         guard let id = snapshot.lastParsedNoticeID else { return nil }
@@ -311,7 +324,26 @@ enum ShuttleBusTodayLogic {
     ) -> [ShuttleBusSchedule] {
         let dateString = StrictContractDateParser.string(from: date, calendar: calendar)
         guard let notice = scheduleNotice(in: snapshot) else { return [] }
-        return notice.schedules.filter { $0.period.contains(dateString) }
+        return selectedSchedules(from: notice.schedules, for: dateString)
+    }
+
+    static func selectedSchedules(
+        from schedules: [ShuttleBusSchedule],
+        for date: String
+    ) -> [ShuttleBusSchedule] {
+        var latestByDirection = [String: (index: Int, schedule: ShuttleBusSchedule)]()
+        for (index, schedule) in schedules.enumerated() {
+            guard schedule.parseStatus == "parsed", !schedule.rows.isEmpty,
+                  schedule.period.contains(date)
+            else { continue }
+            let direction = "\(schedule.from)\u{001F}\(schedule.to)"
+            if let existing = latestByDirection[direction],
+               (schedule.period.startDate ?? "") <= (existing.schedule.period.startDate ?? "") {
+                continue
+            }
+            latestByDirection[direction] = (index, schedule)
+        }
+        return latestByDirection.values.sorted { $0.index < $1.index }.map(\.schedule)
     }
 
     static func departures(
@@ -324,6 +356,31 @@ enum ShuttleBusTodayLogic {
             guard let service = row.services[weekday] else { return nil }
             return ShuttleBusDeparture(departureTime: row.departureTime, service: service)
         }
+    }
+
+    static func fullWeek(for schedule: ShuttleBusSchedule) -> [ShuttleBusWeekdaySchedule] {
+        orderedWeekdays.map { key, title in
+            ShuttleBusWeekdaySchedule(
+                key: key,
+                title: title,
+                departures: schedule.rows.compactMap { row in
+                    guard let service = row.services[key] else { return nil }
+                    return ShuttleBusDeparture(
+                        departureTime: row.departureTime,
+                        service: service
+                    )
+                }
+            )
+        }
+    }
+
+    static func isStatutoryHoliday(
+        on date: Date,
+        holidays: [HolidayItem],
+        calendar: Calendar = .shanghai
+    ) -> Bool {
+        let today = StrictContractDateParser.string(from: date, calendar: calendar)
+        return holidays.contains { $0.date == today && $0.type == "holiday" }
     }
 }
 

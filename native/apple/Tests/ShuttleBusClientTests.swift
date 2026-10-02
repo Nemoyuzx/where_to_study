@@ -23,12 +23,79 @@ final class ShuttleBusClientTests: XCTestCase {
         )
     }
 
+    func testFullTimetableRetainsEveryPeriodDirectionAndWeekday() throws {
+        let snapshot = try ShuttleBusClient.parse(data: fixtureData)
+        let notice = try XCTUnwrap(ShuttleBusTodayLogic.scheduleNotice(in: snapshot))
+        XCTAssertEqual(notice.schedules.count, 2)
+
+        let firstPeriod = ShuttleBusTodayLogic.fullWeek(for: notice.schedules[0])
+        XCTAssertEqual(firstPeriod.map(\.key), [
+            "monday", "tuesday", "wednesday", "thursday",
+            "friday", "saturday", "sunday",
+        ])
+        XCTAssertEqual(firstPeriod[0].departures.map(\.departureTime), ["06:30", "08:30"])
+        XCTAssertTrue(firstPeriod[1].departures.isEmpty)
+
+        let secondPeriod = ShuttleBusTodayLogic.fullWeek(for: notice.schedules[1])
+        XCTAssertEqual(secondPeriod[0].departures.map(\.departureTime), ["07:00"])
+        XCTAssertNotEqual(notice.schedules[0].from, notice.schedules[1].from)
+    }
+
+    func testStatutoryHolidayWarningIgnoresOrdinaryFestivalAndWorkday() throws {
+        let holiday = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 10, day: 2)
+        ))
+        let festival = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 10, day: 3)
+        ))
+        let workday = try XCTUnwrap(Calendar.shanghai.date(
+            from: DateComponents(year: 2026, month: 10, day: 4)
+        ))
+        let entries = [
+            HolidayItem(date: "2026-10-02", name: "国庆节", type: "holiday"),
+            HolidayItem(date: "2026-10-03", name: "普通节日", type: "festival"),
+            HolidayItem(date: "2026-10-04", name: "调休", type: "workday"),
+        ]
+        XCTAssertTrue(ShuttleBusTodayLogic.isStatutoryHoliday(on: holiday, holidays: entries))
+        XCTAssertFalse(ShuttleBusTodayLogic.isStatutoryHoliday(on: festival, holidays: entries))
+        XCTAssertFalse(ShuttleBusTodayLogic.isStatutoryHoliday(on: workday, holidays: entries))
+    }
+
     func testTodayLogicDoesNotPresentExpiredScheduleAsCurrent() throws {
         let snapshot = try ShuttleBusClient.parse(data: fixtureData)
         let day = try XCTUnwrap(Calendar.shanghai.date(
             from: DateComponents(year: 2026, month: 9, day: 5)
         ))
         XCTAssertTrue(ShuttleBusTodayLogic.activeSchedules(in: snapshot, on: day).isEmpty)
+    }
+
+    func testOverlappingActivePeriodsPreferLatestStartForEachDirection() throws {
+        let snapshot = try ShuttleBusClient.parse(data: fixtureData)
+        let schedules = try XCTUnwrap(snapshot.notices.first?.schedules)
+        let old = schedules[0]
+        let reverse = schedules[1]
+        let overlappingOld = ShuttleBusSchedule(
+            period: ShuttleBusPeriod(
+                label: "较早时段", startDate: "2026-08-27", endDate: "2026-09-14"
+            ),
+            from: old.from, to: old.to, parseStatus: "parsed", rows: old.rows
+        )
+        let overlappingNew = ShuttleBusSchedule(
+            period: ShuttleBusPeriod(
+                label: "较新时段", startDate: "2026-09-07", endDate: nil
+            ),
+            from: old.from, to: old.to, parseStatus: "parsed", rows: reverse.rows
+        )
+        let unparsed = ShuttleBusSchedule(
+            period: overlappingNew.period,
+            from: old.from, to: old.to, parseStatus: "needs_review", rows: old.rows
+        )
+        let selected = ShuttleBusTodayLogic.selectedSchedules(
+            from: [overlappingOld, overlappingNew, reverse, unparsed],
+            for: "2026-09-10"
+        )
+        XCTAssertEqual(selected.map(\.period.label), ["较新时段", "第二时段"])
+        XCTAssertEqual(selected.map(\.from), [old.from, reverse.from])
     }
 
     func testParserRejectsUnsupportedSchema() {

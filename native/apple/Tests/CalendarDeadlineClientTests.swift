@@ -6,6 +6,187 @@ import XCTest
 #endif
 
 final class CalendarDeadlineClientTests: XCTestCase {
+    func testContestMirrorWinsOnlyWhenItsGenerationTimeIsNewer() async throws {
+        let primary = contestFeedData(id: "github", generatedAt: "2026-10-01T08:00:00Z")
+        let newerMirror = contestFeedData(
+            id: "mirror", generatedAt: "2026-10-01T17:00:00+08:00"
+        )
+        let selectedMirror = try await loadContestWithFixtures(
+            primary: primary,
+            mirror: newerMirror
+        )
+        XCTAssertEqual(selectedMirror.contest?.source, CalendarDeadlineSources.mirror)
+        XCTAssertEqual(selectedMirror.contest?.itemsByDate["2026-10-02"]?.map(\.id), ["mirror"])
+        XCTAssertEqual(selectedMirror.contest?.usedBackup, true)
+
+        let sameTimeMirror = contestFeedData(
+            id: "mirror", generatedAt: "2026-10-01T16:00:00+08:00"
+        )
+        let selectedPrimary = try await loadContestWithFixtures(
+            primary: primary,
+            mirror: sameTimeMirror
+        )
+        XCTAssertEqual(selectedPrimary.contest?.source, CalendarDeadlineSources.primary)
+        XCTAssertEqual(selectedPrimary.contest?.itemsByDate["2026-10-02"]?.map(\.id), ["github"])
+        XCTAssertEqual(selectedPrimary.contest?.usedBackup, false)
+
+        let olderMirror = contestFeedData(
+            id: "mirror", generatedAt: "2026-10-01T15:00:00+08:00"
+        )
+        let selectedNewerPrimary = try await loadContestWithFixtures(
+            primary: primary,
+            mirror: olderMirror
+        )
+        XCTAssertEqual(selectedNewerPrimary.contest?.source, CalendarDeadlineSources.primary)
+    }
+
+    func testContestMirrorRequiresValidVersionTimestampAndItems() async throws {
+        let primary = contestFeedData(id: "github", generatedAt: "2026-10-01T08:00:00Z")
+        let malformedMirror = Data(#"{"schema_version":"2.0","generated_at":"2026-10-02T00:00:00Z","timezone":"Asia/Shanghai","items":[]}"#.utf8)
+        let selected = try await loadContestWithFixtures(
+            primary: primary,
+            mirror: malformedMirror
+        )
+        XCTAssertEqual(selected.contest?.source, CalendarDeadlineSources.primary)
+        XCTAssertEqual(selected.contest?.itemsByDate["2026-10-02"]?.map(\.id), ["github"])
+
+        let mirror = contestFeedData(id: "mirror", generatedAt: "2026-10-01T09:00:00Z")
+        let invalidPrimary = Data(#"{"schema_version":"1.4","timezone":"Asia/Shanghai","items":[{}]}"#.utf8)
+        let selectedAfterPrimaryFailure = try await loadContestWithFixtures(
+            primary: invalidPrimary,
+            mirror: mirror
+        )
+        XCTAssertEqual(selectedAfterPrimaryFailure.contest?.source, CalendarDeadlineSources.mirror)
+        XCTAssertEqual(selectedAfterPrimaryFailure.contest?.itemsByDate["2026-10-02"]?.map(\.id), ["mirror"])
+
+        let nonArrayMirror = Data(#"{"schema_version":"1.4","generated_at":"2026-10-02T00:00:00Z","timezone":"Asia/Shanghai","items":{}}"#.utf8)
+        let selectedAfterBadItems = try await loadContestWithFixtures(
+            primary: primary,
+            mirror: nonArrayMirror
+        )
+        XCTAssertEqual(selectedAfterBadItems.contest?.source, CalendarDeadlineSources.primary)
+    }
+
+    func testNewerEmptyMirrorClearsObsoleteContestEvents() async throws {
+        let primary = contestFeedData(id: "obsolete", generatedAt: "2026-10-01T08:00:00Z")
+        let emptyMirror = Data(#"{"schema_version":"1.4","generated_at":"2026-10-01T09:00:00Z","timezone":"Asia/Shanghai","items":[]}"#.utf8)
+        let selected = try await loadContestWithFixtures(primary: primary, mirror: emptyMirror)
+        XCTAssertEqual(selected.contest?.source, CalendarDeadlineSources.mirror)
+        XCTAssertEqual(selected.contest?.usedBackup, true)
+        XCTAssertTrue(try XCTUnwrap(selected.contest).itemsByDate.isEmpty)
+    }
+
+    func testContestCandidateRejectsMoreThanFiveThousandItems() async throws {
+        let primary = contestFeedData(id: "github", generatedAt: "2026-10-01T08:00:00Z")
+        let oversizedMirror = try JSONSerialization.data(withJSONObject: [
+            "schema_version": "1.4",
+            "generated_at": "2026-10-01T09:00:00Z",
+            "timezone": "Asia/Shanghai",
+            "items": Array(repeating: ["id": "x"], count: 5_001),
+        ])
+        let selected = try await loadContestWithFixtures(
+            primary: primary,
+            mirror: oversizedMirror
+        )
+        XCTAssertEqual(selected.contest?.source, CalendarDeadlineSources.primary)
+    }
+
+    func testPublicTransferRejectsOversizedChunksWithMissingOrFalseLength() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [BoundedPublicDeadlineURLProtocol.self]
+        for path in ["missing-length", "lying-length", "declared-large"] {
+            let source = try XCTUnwrap(URL(
+                string: "https://where-to-study.cn/mock-deadline-\(path)"
+            ))
+            do {
+                _ = try await PublicDeadlineClient.fetchData(
+                    from: source,
+                    allowedScheme: "https",
+                    allowedHost: "where-to-study.cn",
+                    configuration: configuration
+                )
+                XCTFail("Oversized response must be cancelled: \(path)")
+            } catch {
+                XCTAssertTrue(error.localizedDescription.contains("响应过大"),
+                              "Unexpected \(path) error: \(error)")
+            }
+        }
+        let small = try XCTUnwrap(URL(string: "https://where-to-study.cn/mock-deadline-small"))
+        let data = try await PublicDeadlineClient.fetchData(
+            from: small,
+            allowedScheme: "https",
+            allowedHost: "where-to-study.cn",
+            configuration: configuration
+        )
+        XCTAssertEqual(data, Data("{}".utf8))
+    }
+
+    func testPublicTransferCancellationBeforeRegistrationResumesImmediately() async throws {
+        BoundedPublicDeadlineURLProtocol.slowProbe.reset()
+        let source = try XCTUnwrap(URL(
+            string: "https://where-to-study.cn/mock-deadline-slow"
+        ))
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [BoundedPublicDeadlineURLProtocol.self]
+            return try await PublicDeadlineClient.fetchData(
+                from: source,
+                allowedScheme: "https",
+                allowedHost: "where-to-study.cn",
+                configuration: configuration
+            )
+        }
+        do {
+            _ = try await task.value
+            XCTFail("An already-cancelled task must not start a request")
+        } catch is CancellationError {
+            XCTAssertFalse(BoundedPublicDeadlineURLProtocol.slowProbe.started)
+        }
+    }
+
+    func testPublicTransferCancellationDuringChunksStopsSession() async throws {
+        BoundedPublicDeadlineURLProtocol.slowProbe.reset()
+        let source = try XCTUnwrap(URL(
+            string: "https://where-to-study.cn/mock-deadline-slow"
+        ))
+        let task = Task {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [BoundedPublicDeadlineURLProtocol.self]
+            return try await PublicDeadlineClient.fetchData(
+                from: source,
+                allowedScheme: "https",
+                allowedHost: "where-to-study.cn",
+                configuration: configuration
+            )
+        }
+        for _ in 0 ..< 100 where !BoundedPublicDeadlineURLProtocol.slowProbe.started {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(BoundedPublicDeadlineURLProtocol.slowProbe.started)
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Cancellation must resume the pending transfer")
+        } catch is CancellationError { }
+        for _ in 0 ..< 100 where !BoundedPublicDeadlineURLProtocol.slowProbe.stopped {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(BoundedPublicDeadlineURLProtocol.slowProbe.stopped)
+    }
+
+    func testContestAPIBackupRemainsAvailableWhenBothStaticFeedsFail() async throws {
+        let backup = contestFeedData(id: "api", generatedAt: "2026-10-01T07:00:00Z")
+        let loaded = try await loadContestWithFixtures(
+            primary: nil,
+            mirror: Data(#"{"items":[]}"#.utf8),
+            backup: backup
+        )
+        XCTAssertEqual(loaded.contest?.source, CalendarDeadlineSources.backup)
+        XCTAssertEqual(loaded.contest?.itemsByDate["2026-10-02"]?.map(\.id), ["api"])
+        XCTAssertEqual(loaded.contest?.usedBackup, true)
+    }
+
     func testPublicDDLParserFiltersDateAndSupportedKinds() throws {
         let data = Data(#"""
         {
@@ -515,6 +696,132 @@ final class CalendarDeadlineClientTests: XCTestCase {
         let prewarmInvocationCount = await client.prewarmInvocationCount
         XCTAssertEqual(fetchInvocationCount, 0)
         XCTAssertEqual(prewarmInvocationCount, 1)
+    }
+}
+
+private func contestFeedData(id: String, generatedAt: String) -> Data {
+    Data("""
+    {
+      "schema_version":"1.4",
+      "generated_at":"\(generatedAt)",
+      "timezone":"Asia/Shanghai",
+      "items":[{
+        "id":"\(id)",
+        "name":"测试竞赛",
+        "event_type":"competition",
+        "primary_deadline":"2026-10-02T18:00:00+08:00"
+      }]
+    }
+    """.utf8)
+}
+
+private func loadContestWithFixtures(
+    primary: Data?,
+    mirror: Data?,
+    backup: Data? = nil
+) async throws -> LoadedPublicDeadlineFeed {
+    try await PublicDeadlineClient.loadFullFeed { url in
+        switch url {
+        case CalendarDeadlineSources.primary:
+            guard let primary else { throw CalendarDeadlineError.service("primary unavailable") }
+            return primary
+        case CalendarDeadlineSources.mirror:
+            guard let mirror else { throw CalendarDeadlineError.service("mirror unavailable") }
+            return mirror
+        case CalendarDeadlineSources.backup:
+            guard let backup else { throw CalendarDeadlineError.service("backup should not run") }
+            return backup
+        case CalendarDeadlineSources.schoolNotices:
+            return Data(#"{"items":[]}"#.utf8)
+        default:
+            throw CalendarDeadlineError.service("unexpected source")
+        }
+    }
+}
+
+private final class BoundedPublicDeadlineURLProtocol: URLProtocol {
+    static let slowProbe = DeadlineTransferProbe()
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.path.hasPrefix("/mock-deadline-") == true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url else { return }
+        let kind = url.lastPathComponent
+        let headers: [String: String]
+        switch kind {
+        case "mock-deadline-lying-length": headers = ["Content-Length": "2"]
+        case "mock-deadline-declared-large":
+            headers = ["Content-Length": String(CalendarDeadlineSources.maximumPayloadBytes + 1)]
+        case "mock-deadline-small": headers = ["Content-Length": "2"]
+        default: headers = [:]
+        }
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: headers
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if kind == "mock-deadline-slow" {
+            Self.slowProbe.markStarted()
+            client?.urlProtocol(self, didLoad: Data("{".utf8))
+            return
+        } else if kind == "mock-deadline-small" {
+            client?.urlProtocol(self, didLoad: Data("{}".utf8))
+        } else {
+            let chunk = Data(repeating: 0x41, count: 512 * 1024)
+            for _ in 0 ..< 9 {
+                client?.urlProtocol(self, didLoad: chunk)
+            }
+        }
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {
+        if request.url?.lastPathComponent == "mock-deadline-slow" {
+            Self.slowProbe.markStopped()
+        }
+    }
+}
+
+private final class DeadlineTransferProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didStart = false
+    private var didStop = false
+
+    var started: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didStart
+    }
+
+    var stopped: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didStop
+    }
+
+    func reset() {
+        lock.lock()
+        didStart = false
+        didStop = false
+        lock.unlock()
+    }
+
+    func markStarted() {
+        lock.lock()
+        didStart = true
+        lock.unlock()
+    }
+
+    func markStopped() {
+        lock.lock()
+        didStop = true
+        lock.unlock()
     }
 }
 

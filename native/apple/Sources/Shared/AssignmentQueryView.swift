@@ -11,6 +11,25 @@ enum AssignmentQueryLogic {
     }
 }
 
+struct PersonalAccountQueryButton: View {
+    @EnvironmentObject private var model: AppModel
+
+    let identifier: String
+
+    var body: some View {
+        Button {
+            model.navigation.selectedSection = .settings
+        } label: {
+            Label(model.localized("前往个人账户"), systemImage: "person.crop.circle")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .accessibilityLabel(model.localized("前往个人账户"))
+        .accessibilityHint(model.localized("打开设置中的个人账户"))
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 struct AssignmentQueryView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
@@ -44,8 +63,7 @@ struct AssignmentQueryView: View {
                     Text(model.localized("当前展示上次成功获取的作业，请留意更新时间。"))
                         .font(.caption).foregroundStyle(theme.secondaryText)
                 }
-                Button(model.localized("前往个人账户")) { model.navigation.selectedSection = .settings }
-                    .accessibilityIdentifier("assignments.account")
+                PersonalAccountQueryButton(identifier: "assignments.account")
             }
             if let items = store.assignmentQueryItems {
                 let filtered = AssignmentQueryLogic.filtered(items, query: query, showsEnded: showsEnded,
@@ -70,7 +88,14 @@ struct AssignmentQueryView: View {
             }
             Text(model.localized("作业来自教学云，与日历共享缓存；提交状态和截止时间以教学云为准。"))
                 .font(.caption).foregroundStyle(theme.secondaryText)
-            Link(model.localized("打开教学云"), destination: CalendarDeadlineSources.assignments)
+            Link(destination: CalendarDeadlineSources.assignments) {
+                Label(model.localized("打开教学云"), systemImage: "arrow.up.right.square")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(model.localized("打开教学云"))
+            .accessibilityHint(model.localized("在浏览器中打开教学云作业列表"))
+            .accessibilityIdentifier("assignments.open-teaching-cloud")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("queries.assignments")
@@ -120,7 +145,7 @@ struct ExamQueryView: View {
             }
             if !model.statusMessage.isEmpty { Text(model.statusMessage).font(.caption).foregroundStyle(theme.secondaryText) }
             if !model.hasSavedPassword, !model.isSampleMode {
-                Button(model.localized("前往个人账户")) { model.navigation.selectedSection = .settings }
+                PersonalAccountQueryButton(identifier: "exams.account")
             }
             Text(model.localized("考试与个人课表共享缓存，以学校公布的安排为准。"))
                 .font(.caption).foregroundStyle(theme.secondaryText)

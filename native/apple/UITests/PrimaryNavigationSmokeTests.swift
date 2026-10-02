@@ -163,6 +163,73 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["settings.open-information-queries"].exists)
     }
 
+    func testSampleShuttleShowsFullTimetableAndHolidayNoticeWhenApplicable() {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "查询", in: app)
+        XCTAssertTrue(app.descendants(matching: .any)["queries.shuttle.snapshot"]
+            .waitForExistence(timeout: 10))
+        if ("2026-10-01" ... "2026-10-07").contains(currentShanghaiDateString()) {
+            let warning = app.descendants(matching: .any)["queries.shuttle.holiday-warning"]
+            XCTAssertTrue(warning.waitForExistence(timeout: 10))
+            attachScreenshot(named: "shuttle-statutory-holiday-warning")
+        }
+
+        let fullTimetable = app.staticTexts["完整班车时刻表"].firstMatch
+        revealByScrolling(visibleElement: fullTimetable, in: app)
+        XCTAssertTrue(app.staticTexts["示例运行时段"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["当前时段"].firstMatch.exists)
+        attachScreenshot(named: "shuttle-full-timetable")
+    }
+
+    func testAccountPasswordHelpAndQueryActionButtonsRender() {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--ui-testing-live"]
+        app.launch()
+        defer { app.terminate() }
+
+        navigate(to: "设置", in: app)
+        let academicHelp = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "用于移动教务登录和查询课表")
+        ).firstMatch
+        revealByScrolling(visibleElement: academicHelp, in: app)
+        let cloudHelp = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "用于课程作业 DDL 查询")
+        ).firstMatch
+        revealByScrolling(visibleElement: cloudHelp, in: app)
+        attachScreenshot(named: "account-password-help")
+
+        let cloudPassword = app.secureTextFields["field.teaching-cloud-password"].firstMatch
+        revealByScrolling(visibleElement: cloudPassword, in: app)
+        cloudPassword.tap()
+        cloudPassword.typeText("fixture-only")
+        let dismissKeyboard = app.buttons["action.dismiss-keyboard"].firstMatch
+        XCTAssertTrue(dismissKeyboard.waitForExistence(timeout: 5))
+        dismissKeyboard.tap()
+        let useAcademic = app.buttons["action.teaching-cloud-use-academic-password"].firstMatch
+        revealByScrolling(visibleElement: useAcademic, in: app)
+        XCTAssertEqual(useAcademic.label, "改用教务密码")
+        attachScreenshot(named: "account-password-action")
+
+        navigate(to: "查询", in: app)
+        let assignments = app.segmentedControls.buttons["课程作业 DDL"].firstMatch
+        XCTAssertTrue(assignments.waitForExistence(timeout: 5))
+        assignments.tap()
+        let accountAction = app.buttons["assignments.account"].firstMatch
+        XCTAssertTrue(accountAction.waitForExistence(timeout: 10))
+        XCTAssertEqual(accountAction.label, "前往个人账户")
+        let cloudAction = app.descendants(matching: .any)["assignments.open-teaching-cloud"]
+            .firstMatch
+        revealByScrolling(visibleElement: cloudAction, in: app)
+        XCTAssertEqual(cloudAction.label, "打开教学云")
+        attachScreenshot(named: "assignment-icon-actions")
+    }
+
     func testLiveShuttleDataRendersOnIPhone() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only live query check")
         try XCTSkipUnless(
@@ -462,11 +529,19 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             app.descendants(matching: .any)["calendar.mobile.almanac"].exists,
             "The expanded month must not build the hidden almanac card"
         )
-        let monthEventID = "calendar.mobile.month-event.\(currentShanghaiDateString())-assignment-sample-assignment"
-        let monthEvent = app.staticTexts[monthEventID].firstMatch
+        // Holidays and public deadlines can fill the limited month-cell rows
+        // before the sample assignment; exercise whichever event is visibly rendered.
+        let monthEventPrefix = "calendar.mobile.month-event."
+        let monthEvent = app.staticTexts.matching(
+            NSPredicate(
+                format: "identifier BEGINSWITH %@ AND identifier CONTAINS %@",
+                monthEventPrefix,
+                currentShanghaiDateString()
+            )
+        ).firstMatch
         XCTAssertTrue(monthEvent.waitForExistence(timeout: 5))
         XCTAssertFalse(monthEvent.label.isEmpty)
-        XCTAssertFalse(app.buttons[monthEventID].exists)
+        XCTAssertFalse(app.buttons[monthEvent.identifier].exists)
         monthEvent.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(
             waitForValue("已收起", of: month),

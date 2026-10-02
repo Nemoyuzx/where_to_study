@@ -119,8 +119,7 @@ struct GradeQueryView: View {
             if !store.errorMessage.isEmpty {
                 Text(model.localized(store.errorMessage)).foregroundStyle(theme.secondaryText)
                 if !model.hasSavedPassword, !model.isSampleMode {
-                    Button(model.localized("前往个人账户")) { model.navigation.selectedSection = .settings }
-                        .accessibilityIdentifier("grades.account")
+                    PersonalAccountQueryButton(identifier: "grades.account")
                 }
             }
             if let snapshot = store.snapshot {

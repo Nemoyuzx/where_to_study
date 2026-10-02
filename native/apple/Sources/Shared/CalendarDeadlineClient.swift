@@ -333,17 +333,32 @@ enum CalendarDeadlineSources {
     static let primary = URL(
         string: "https://nemoyuzx.github.io/contest-ddl/data/competitions.json"
     )!
+    static let mirror = URL(
+        string: "https://where-to-study.cn/contest-ddl/data/competitions.json"
+    )!
     static let primaryPage = URL(string: "https://nemoyuzx.github.io/contest-ddl/")!
     static let backup = URL(string: "https://where-to-study.cn/api/contest-events")!
     static let schoolNotices = URL(string: "https://where-to-study.cn/api/contest-notices")!
     static let assignments = URL(
         string: "https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3"
     )!
-    static let maximumPayloadBytes = 2 * 1024 * 1024
+    static let maximumPayloadBytes = 4 * 1024 * 1024
     static let maximumItemsPerDay = 100
 }
 
 struct PublicDeadlineClient: PublicDeadlineFetching {
+    private struct ContestCandidate: Sendable {
+        let feed: LoadedPublicDeadlineFeed.ContestFeed
+        let generatedAt: Date
+    }
+
+    private struct ContestFetchAttempt: Sendable {
+        let candidate: ContestCandidate?
+        let errorDescription: String?
+    }
+
+    typealias DataLoader = @Sendable (URL) async throws -> Data
+
     private let fullFeedCache: PublicDeadlineFullFeedCache
 
     init() {
@@ -386,35 +401,62 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
     }
 
     private static func loadFullFeed() async throws -> LoadedPublicDeadlineFeed {
+        try await loadFullFeed { url in
+            let allowedHost: String
+            switch url {
+            case CalendarDeadlineSources.primary:
+                allowedHost = "nemoyuzx.github.io"
+            case CalendarDeadlineSources.mirror,
+                 CalendarDeadlineSources.backup,
+                 CalendarDeadlineSources.schoolNotices:
+                allowedHost = "where-to-study.cn"
+            default:
+                throw CalendarDeadlineError.service("DDL 数据源地址不受信任。")
+            }
+            return try await fetchData(
+                from: url,
+                allowedScheme: "https",
+                allowedHost: allowedHost
+            )
+        }
+    }
+
+    static func loadFullFeed(
+        fetchData: @escaping DataLoader
+    ) async throws -> LoadedPublicDeadlineFeed {
         var contest: LoadedPublicDeadlineFeed.ContestFeed?
         var contestError: Error?
-        do {
-            let data = try await Self.fetchData(
-                from: CalendarDeadlineSources.primary,
-                allowedScheme: "https",
-                allowedHost: "nemoyuzx.github.io"
-            )
-            contest = LoadedPublicDeadlineFeed.ContestFeed(
-                itemsByDate: try Self.parseAll(data: data),
-                source: CalendarDeadlineSources.primary,
-                usedBackup: false
-            )
-        } catch let primaryError {
+        async let primaryAttempt = Self.fetchContestCandidate(
+            from: CalendarDeadlineSources.primary,
+            usedBackup: false,
+            fetchData: fetchData
+        )
+        async let mirrorAttempt = Self.fetchContestCandidate(
+            from: CalendarDeadlineSources.mirror,
+            usedBackup: true,
+            fetchData: fetchData
+        )
+        let (primary, mirror) = await (primaryAttempt, mirrorAttempt)
+        if let primaryCandidate = primary.candidate,
+           let mirrorCandidate = mirror.candidate {
+            contest = mirrorCandidate.generatedAt > primaryCandidate.generatedAt
+                ? mirrorCandidate.feed : primaryCandidate.feed
+        } else {
+            contest = primary.candidate?.feed ?? mirror.candidate?.feed
+        }
+        if contest == nil {
             do {
-                let data = try await Self.fetchData(
-                    from: CalendarDeadlineSources.backup,
-                    allowedScheme: "https",
-                    allowedHost: "where-to-study.cn"
-                )
-                contest = LoadedPublicDeadlineFeed.ContestFeed(
-                    itemsByDate: try Self.parseAll(data: data),
+                let data = try await fetchData(CalendarDeadlineSources.backup)
+                contest = try Self.parseContestCandidate(
+                    data: data,
                     source: CalendarDeadlineSources.backup,
                     usedBackup: true
-                )
-            } catch let backupError {
+                ).feed
+            } catch {
                 contestError = CalendarDeadlineError.service(
-                    "主 DDL 数据源不可用（\(primaryError.localizedDescription)）；"
-                        + "备用数据源也不可用（\(backupError.localizedDescription)）。"
+                    "主 DDL 数据源不可用（\(primary.errorDescription ?? "未知错误")）；"
+                        + "镜像数据源不可用（\(mirror.errorDescription ?? "未知错误")）；"
+                        + "备用接口也不可用（\(error.localizedDescription)）。"
                 )
             }
         }
@@ -422,11 +464,7 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         var schoolItemsByDate: [String: [PublicDeadlineItem]]?
         var schoolError: Error?
         do {
-            let data = try await Self.fetchData(
-                from: CalendarDeadlineSources.schoolNotices,
-                allowedScheme: "https",
-                allowedHost: "where-to-study.cn"
-            )
+            let data = try await fetchData(CalendarDeadlineSources.schoolNotices)
             schoolItemsByDate = try Self.parseAllSchoolNotices(data: data)
         } catch {
             schoolError = error
@@ -444,6 +482,53 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         )
     }
 
+    private static func fetchContestCandidate(
+        from source: URL,
+        usedBackup: Bool,
+        fetchData: @escaping DataLoader
+    ) async -> ContestFetchAttempt {
+        do {
+            let data = try await fetchData(source)
+            return ContestFetchAttempt(
+                candidate: try parseContestCandidate(
+                    data: data,
+                    source: source,
+                    usedBackup: usedBackup
+                ),
+                errorDescription: nil
+            )
+        } catch {
+            return ContestFetchAttempt(candidate: nil, errorDescription: error.localizedDescription)
+        }
+    }
+
+    private static func parseContestCandidate(
+        data: Data,
+        source: URL,
+        usedBackup: Bool
+    ) throws -> ContestCandidate {
+        guard data.count <= CalendarDeadlineSources.maximumPayloadBytes,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let schemaVersion = root["schema_version"] as? String,
+              schemaVersion == "1.4",
+              root["timezone"] as? String == "Asia/Shanghai",
+              let timestamp = root["generated_at"] as? String,
+              let generatedAt = parseISO8601(timestamp),
+              let records = root["items"] as? [[String: Any]],
+              records.count <= 5_000
+        else {
+            throw CalendarDeadlineError.service("DDL 数据结构或生成时间不正确。")
+        }
+        return ContestCandidate(
+            feed: LoadedPublicDeadlineFeed.ContestFeed(
+                itemsByDate: parseAll(root: root),
+                source: source,
+                usedBackup: usedBackup
+            ),
+            generatedAt: generatedAt
+        )
+    }
+
     static func parse(data: Data, requestedDate: String) throws -> [PublicDeadlineItem] {
         guard StrictContractDateParser.date(from: requestedDate) != nil else {
             throw CalendarDeadlineError.service("DDL 日期格式不正确。")
@@ -458,6 +543,10 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         } catch {
             throw CalendarDeadlineError.service("DDL 数据格式不正确。")
         }
+        return parseAll(root: root)
+    }
+
+    private static func parseAll(root: Any) -> [String: [PublicDeadlineItem]] {
         let records = extractRecords(root)
         var itemsByDate = [String: [PublicDeadlineItem]]()
         for record in records {
@@ -639,10 +728,11 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         }.prefix(CalendarDeadlineSources.maximumItemsPerDay))
     }
 
-    private static func fetchData(
+    static func fetchData(
         from url: URL,
         allowedScheme: String,
-        allowedHost: String
+        allowedHost: String,
+        configuration suppliedConfiguration: URLSessionConfiguration? = nil
     ) async throws -> Data {
         guard
             url.scheme == allowedScheme,
@@ -652,36 +742,19 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
         else {
             throw CalendarDeadlineError.service("DDL 数据源地址不受信任。")
         }
-        let configuration = URLSessionConfiguration.ephemeral
+        let configuration = suppliedConfiguration ?? .ephemeral
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 20
-        let session = URLSession(
-            configuration: configuration,
-            delegate: FixedDeadlineRedirectDelegate(),
-            delegateQueue: nil
-        )
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(HolidayUserAgent.value(), forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await session.data(for: request)
-        guard
-            let http = response as? HTTPURLResponse,
-            (200 ... 299).contains(http.statusCode),
-            response.url?.scheme == allowedScheme,
-            response.url?.host == allowedHost
-        else {
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw CalendarDeadlineError.service("DDL 数据源返回错误，HTTP \(status)。")
-        }
-        guard
-            response.expectedContentLength <= 0
-                || response.expectedContentLength <= Int64(CalendarDeadlineSources.maximumPayloadBytes),
-            data.count <= CalendarDeadlineSources.maximumPayloadBytes
-        else {
-            throw CalendarDeadlineError.service("DDL 数据响应过大。")
-        }
-        return data
+        let receiver = BoundedPublicDeadlineReceiver(
+            maximumBytes: CalendarDeadlineSources.maximumPayloadBytes,
+            allowedScheme: allowedScheme,
+            allowedHost: allowedHost
+        )
+        return try await receiver.load(request: request, configuration: configuration)
     }
 
     private static func extractRecords(_ root: Any) -> [[String: Any]] {
@@ -1480,6 +1553,136 @@ private final class FixedDeadlineRedirectDelegate: NSObject, URLSessionTaskDeleg
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
         completionHandler(nil)
+    }
+}
+
+private final class BoundedPublicDeadlineReceiver: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let maximumBytes: Int
+    private let allowedScheme: String
+    private let allowedHost: String
+    private let lock = NSLock()
+    private var received = Data()
+    private var response: HTTPURLResponse?
+    private var continuation: CheckedContinuation<Data, Error>?
+    private var session: URLSession?
+    private var finished = false
+    private var cancelled = false
+
+    init(maximumBytes: Int, allowedScheme: String, allowedHost: String) {
+        self.maximumBytes = maximumBytes
+        self.allowedScheme = allowedScheme
+        self.allowedHost = allowedHost
+    }
+
+    func load(request: URLRequest, configuration: URLSessionConfiguration) async throws -> Data {
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                lock.lock()
+                guard !cancelled else {
+                    lock.unlock()
+                    session.invalidateAndCancel()
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                self.session = session
+                self.continuation = continuation
+                let task = session.dataTask(with: request)
+                lock.unlock()
+                task.resume()
+            }
+        } onCancel: {
+            self.cancel()
+        }
+    }
+
+    private func cancel() {
+        lock.lock()
+        cancelled = true
+        let hasPendingContinuation = continuation != nil && !finished
+        lock.unlock()
+        if hasPendingContinuation { finish(.failure(CancellationError())) }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse,
+              (200 ... 299).contains(http.statusCode),
+              http.url?.scheme == allowedScheme,
+              http.url?.host == allowedHost
+        else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            finish(.failure(CalendarDeadlineError.service("DDL 数据源返回错误，HTTP \(status)。")))
+            completionHandler(.cancel)
+            return
+        }
+        guard http.expectedContentLength <= 0
+            || http.expectedContentLength <= Int64(maximumBytes)
+        else {
+            finish(.failure(CalendarDeadlineError.service("DDL 数据响应过大。")))
+            completionHandler(.cancel)
+            return
+        }
+        lock.lock()
+        self.response = http
+        lock.unlock()
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        let isTooLarge = data.count > maximumBytes - received.count
+        if !finished && !isTooLarge { received.append(data) }
+        lock.unlock()
+        if isTooLarge {
+            finish(.failure(CalendarDeadlineError.service("DDL 数据响应过大。")))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(.failure(error))
+            return
+        }
+        lock.lock()
+        let validResponse = response != nil
+        let data = received
+        lock.unlock()
+        if validResponse {
+            finish(.success(data))
+        } else {
+            finish(.failure(CalendarDeadlineError.service("DDL 数据源响应不正确。")))
+        }
+    }
+
+    private func finish(_ result: Result<Data, Error>) {
+        lock.lock()
+        guard !finished else {
+            lock.unlock()
+            return
+        }
+        finished = true
+        let continuation = self.continuation
+        let session = self.session
+        self.continuation = nil
+        self.session = nil
+        lock.unlock()
+        session?.invalidateAndCancel()
+        continuation?.resume(with: result)
     }
 }
 

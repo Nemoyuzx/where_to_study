@@ -54,6 +54,10 @@ final class PreClassReminderUITests: XCTestCase {
             field.typeText(String((index + 1) * 10))
             XCTAssertEqual(field.value as? String, String((index + 1) * 10))
         }
+        let dismissNumberPad = app.buttons["settings.pre-class.dismiss-keyboard"]
+        XCTAssertTrue(dismissNumberPad.waitForExistence(timeout: 5))
+        dismissNumberPad.tap()
+        XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
         reveal(save, in: app)
         save.tap()
         capture("pre-class-save-attempt-\(language)")

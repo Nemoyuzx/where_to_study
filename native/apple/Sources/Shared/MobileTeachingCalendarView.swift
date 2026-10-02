@@ -1505,11 +1505,13 @@ struct MobileTeachingCalendarView: View {
                 ViewThatFits(in: .horizontal) {
                     HStack {
                         Link("Contest DDL", destination: CalendarDeadlineSources.primaryPage)
+                        Link("站点镜像", destination: CalendarDeadlineSources.mirror)
                         Link("备用 API", destination: CalendarDeadlineSources.backup)
                         Link("校内竞赛通知", destination: CalendarDeadlineSources.schoolNotices)
                     }
                     VStack(alignment: .leading, spacing: 3) {
                         Link("Contest DDL", destination: CalendarDeadlineSources.primaryPage)
+                        Link("站点镜像", destination: CalendarDeadlineSources.mirror)
                         Link("备用 API", destination: CalendarDeadlineSources.backup)
                         Link("校内竞赛通知", destination: CalendarDeadlineSources.schoolNotices)
                     }

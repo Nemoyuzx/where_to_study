@@ -334,6 +334,9 @@ struct InformationQueriesView: View {
                 sampleMode: model.isSampleMode
             )
         }
+        .task(id: Calendar.shanghai.component(.year, from: .now)) {
+            model.ensureHolidays(for: Calendar.shanghai.component(.year, from: .now))
+        }
         .task(id: eventQueryKey) {
             await eventQueryStore.update(key: eventQueryKey, snapshots: calendarDeadlines.publicByDate)
         }
@@ -367,15 +370,23 @@ struct InformationQueriesView: View {
 
     private func shuttleSnapshot(_ snapshot: ShuttleBusSnapshot) -> some View {
         let now = Date()
+        let todayYear = Calendar.shanghai.component(.year, from: now)
+        let isStatutoryHoliday = model.holidaysByYear[todayYear].map { holidays in
+            HolidayDisplayLogic.isAuthoritativeRestDaySource(holidays)
+                && ShuttleBusTodayLogic.isStatutoryHoliday(on: now, holidays: holidays.items)
+        } ?? false
         let schedules = ShuttleBusTodayLogic.activeSchedules(in: snapshot, on: now)
         let routes = schedules.map { schedule in
             (schedule, ShuttleBusTodayLogic.departures(for: schedule, on: now))
         }
         let departureCount = routes.reduce(0) { $0 + $1.1.count }
-        let statusTitle = schedules.isEmpty
-            ? "今日暂无生效班车时刻表"
-            : departureCount == 0 ? "今日没有计划班次" : "今日班车按时刻表运行"
-        let statusIcon = departureCount == 0 ? "calendar.badge.exclamationmark" : "bus.fill"
+        let statusTitle = isStatutoryHoliday
+            ? "今日为法定节假日，请核实班车安排"
+            : schedules.isEmpty
+                ? "今日暂无生效班车时刻表"
+                : departureCount == 0 ? "今日没有计划班次" : "今日班车按时刻表运行"
+        let statusIcon = isStatutoryHoliday || departureCount == 0
+            ? "calendar.badge.exclamationmark" : "bus.fill"
 
         return VStack(alignment: .leading, spacing: 16) {
             Surface {
@@ -383,7 +394,10 @@ struct InformationQueriesView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: statusIcon)
                             .font(.title2)
-                            .foregroundStyle(departureCount == 0 ? theme.accentText : theme.primary)
+                            .foregroundStyle(
+                                isStatutoryHoliday || departureCount == 0
+                                    ? theme.accentText : theme.primary
+                            )
                         VStack(alignment: .leading, spacing: 4) {
                             Text(model.localized(statusTitle))
                                 .font(.headline)
@@ -407,6 +421,17 @@ struct InformationQueriesView: View {
                         Label("当前展示最近一次成功同步的缓存", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                             .font(.caption)
                             .foregroundStyle(theme.accentText)
+                    }
+                    if isStatutoryHoliday {
+                        Divider()
+                        Label(
+                            "今日为法定节假日，不一定有班车；请以学校放假安排为准。放假期间无班车。",
+                            systemImage: "calendar.badge.exclamationmark"
+                        )
+                        .font(.callout)
+                        .foregroundStyle(theme.accentText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("queries.shuttle.holiday-warning")
                     }
                     if let notice = ShuttleBusTodayLogic.scheduleNotice(in: snapshot) {
                         Divider()
@@ -443,10 +468,17 @@ struct InformationQueriesView: View {
                     spacing: 16
                 ) {
                     ForEach(routes, id: \.0.id) { schedule, departures in
-                        shuttleRouteCard(schedule: schedule, departures: departures, now: now)
+                        shuttleRouteCard(
+                            schedule: schedule,
+                            departures: departures,
+                            now: now,
+                            isStatutoryHoliday: isStatutoryHoliday
+                        )
                     }
                 }
             }
+
+            shuttleFullTimetable(snapshot)
 
             sourceNotice(
                 text: "第三方来源：北京邮电大学后勤部公开通知，由 Where To Study 服务解析整理，仅供参考，请以官方原文为准。",
@@ -458,14 +490,105 @@ struct InformationQueriesView: View {
         .accessibilityValue(snapshot.sourceName)
     }
 
+    @ViewBuilder
+    private func shuttleFullTimetable(_ snapshot: ShuttleBusSnapshot) -> some View {
+        if let notice = ShuttleBusTodayLogic.scheduleNotice(in: snapshot),
+           !notice.schedules.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("完整班车时刻表", systemImage: "calendar")
+                    .font(.headline)
+                Text("按运行时段、方向和星期展示学校公布的计划班次；实际运行以官方通知为准。")
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 280, maximum: 560), spacing: 16)],
+                    alignment: .leading,
+                    spacing: 16
+                ) {
+                    ForEach(notice.schedules) { schedule in
+                        shuttleFullScheduleCard(schedule)
+                    }
+                }
+            }
+            .accessibilityIdentifier("queries.shuttle.full-timetable")
+        }
+    }
+
+    private func shuttleFullScheduleCard(_ schedule: ShuttleBusSchedule) -> some View {
+        let today = StrictContractDateParser.string(from: .now)
+        return Surface {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(schedule.period.label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(theme.secondaryText)
+                    Spacer(minLength: 4)
+                    if let periodState = shuttlePeriodState(schedule.period, today: today) {
+                        Text(model.localized(periodState))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(theme.accentText)
+                    }
+                }
+                if let start = schedule.period.startDate {
+                    Text(schedule.period.endDate.map { "\(start) – \($0)" } ?? "\(start) 起")
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                }
+                Text("\(schedule.from) → \(schedule.to)")
+                    .font(.headline)
+                ForEach(ShuttleBusTodayLogic.fullWeek(for: schedule)) { weekday in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(model.localized(weekday.title))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(theme.secondaryText)
+                            .frame(width: 36, alignment: .leading)
+                        if weekday.departures.isEmpty {
+                            Text(model.localized("无班次"))
+                                .font(.caption)
+                                .foregroundStyle(theme.secondaryText)
+                        } else {
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 104), spacing: 6)],
+                                alignment: .leading,
+                                spacing: 6
+                            ) {
+                                ForEach(weekday.departures) { departure in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(departure.departureTime)
+                                            .font(.caption.weight(.semibold).monospacedDigit())
+                                        Text("\(departure.service.vehicle) × \(departure.service.count)")
+                                            .font(.caption2)
+                                            .foregroundStyle(theme.secondaryText)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(6)
+                                    .background(theme.background, in: RoundedRectangle(cornerRadius: 7))
+                                }
+                            }
+                        }
+                    }
+                    if weekday.key != "sunday" { Divider() }
+                }
+            }
+        }
+    }
+
+    private func shuttlePeriodState(_ period: ShuttleBusPeriod, today: String) -> String? {
+        if let start = period.startDate, today < start { return "未来时段" }
+        if let end = period.endDate, today > end { return "已过时段" }
+        return period.contains(today) ? "当前时段" : nil
+    }
+
     private func shuttleRouteCard(
         schedule: ShuttleBusSchedule,
         departures: [ShuttleBusDeparture],
-        now: Date
+        now: Date,
+        isStatutoryHoliday: Bool
     ) -> some View {
         let nowMinutes = Calendar.shanghai.component(.hour, from: now) * 60
             + Calendar.shanghai.component(.minute, from: now)
-        let nextDeparture = departures.first { departure in
+        let nextDeparture: String? = isStatutoryHoliday ? nil : departures.first { departure in
             timeMinutes(departure.departureTime).map { $0 > nowMinutes } ?? false
         }?.departureTime
         let periodText = schedule.period.startDate.map { start in
@@ -679,10 +802,7 @@ struct InformationQueriesView: View {
                 }
             }
 
-            sourceNotice(
-                text: "第三方来源：公开活动来自 Contest DDL（服务器提供备用接口）；校内竞赛通知由脚本从学校内部网站公开通知页提取整理。查询页不包含课程作业 DDL。",
-                url: CalendarDeadlineSources.primaryPage
-            )
+            publicEventSourceNotice
         }
         .onChange(of: availableCategories) { categories in
             let normalized = ImportantEventQueryLogic.normalizedCategory(
@@ -844,6 +964,33 @@ struct InformationQueriesView: View {
         }
         .padding(12)
         .background(theme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var publicEventSourceNotice: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(
+                model.localized("第三方来源：公开活动来自 Contest DDL；当站点镜像更新时优先使用镜像，服务器接口作为备用。校内竞赛通知由脚本从学校内部网站公开通知页提取整理。查询页不包含课程作业 DDL。"),
+                systemImage: "info.circle"
+            )
+            .font(.caption)
+            .foregroundStyle(theme.secondaryOnSoftSurface)
+            .fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { publicEventSourceLinks }
+                VStack(alignment: .leading, spacing: 5) { publicEventSourceLinks }
+            }
+            .font(.caption)
+        }
+        .padding(12)
+        .background(theme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("queries.events.sources")
+    }
+
+    @ViewBuilder
+    private var publicEventSourceLinks: some View {
+        Link(model.localized("GitHub 主源"), destination: CalendarDeadlineSources.primary)
+        Link(model.localized("站点镜像"), destination: CalendarDeadlineSources.mirror)
+        Link(model.localized("备用 API"), destination: CalendarDeadlineSources.backup)
     }
 
     private func metadataCategoryButton(title: String, value: String) -> some View {

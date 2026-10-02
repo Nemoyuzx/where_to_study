@@ -3014,16 +3014,16 @@ struct TeachingCalendarView: View {
                     Text("第三方来源")
                     Spacer()
                     Link("主数据：Contest DDL", destination: CalendarDeadlineSources.primaryPage)
+                    Link("站点镜像", destination: CalendarDeadlineSources.mirror)
                     Link("备用 API", destination: CalendarDeadlineSources.backup)
                     Link("校内竞赛通知", destination: CalendarDeadlineSources.schoolNotices)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("第三方来源")
-                    HStack {
-                        Link("主数据：Contest DDL", destination: CalendarDeadlineSources.primaryPage)
-                        Link("备用 API", destination: CalendarDeadlineSources.backup)
-                        Link("校内竞赛通知", destination: CalendarDeadlineSources.schoolNotices)
-                    }
+                    Link("主数据：Contest DDL", destination: CalendarDeadlineSources.primaryPage)
+                    Link("站点镜像", destination: CalendarDeadlineSources.mirror)
+                    Link("备用 API", destination: CalendarDeadlineSources.backup)
+                    Link("校内竞赛通知", destination: CalendarDeadlineSources.schoolNotices)
                 }
             }
             .font(.caption2)

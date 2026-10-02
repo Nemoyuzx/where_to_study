@@ -448,22 +448,31 @@ struct SettingsView: View {
                         focusedAccountField = .password
                     }
                     .accessibilityIdentifier("field.account")
-                SecureField(
-                    model.localized(
-                        model.canPreserveSavedPassword
-                            ? "已安全保存，留空保持不变"
-                            : "教务密码"
-                    ),
-                    text: $model.password
-                )
-                    .textFieldStyle(ThemeTextFieldStyle())
-                    .disabled(model.isSampleMode)
-                    .focused($focusedAccountField, equals: .password)
-                    .submitLabel(.next)
-                    .onSubmit {
-                        focusedAccountField = .teachingCloudPassword
-                    }
-                    .accessibilityIdentifier("field.password")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("教务密码")
+                        .font(.subheadline.weight(.medium))
+                    SecureField(
+                        model.localized(
+                            model.canPreserveSavedPassword
+                                ? "已安全保存，留空保持不变"
+                                : "教务密码"
+                        ),
+                        text: $model.password
+                    )
+                        .textFieldStyle(ThemeTextFieldStyle())
+                        .disabled(model.isSampleMode)
+                        .focused($focusedAccountField, equals: .password)
+                        .submitLabel(.next)
+                        .onSubmit {
+                            focusedAccountField = .teachingCloudPassword
+                        }
+                        .accessibilityLabel("教务密码")
+                        .accessibilityIdentifier("field.password")
+                    Text("用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。")
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("教学云平台密码（选填）")
                         .font(.subheadline.weight(.medium))
@@ -477,21 +486,29 @@ struct SettingsView: View {
                     .focused($focusedAccountField, equals: .teachingCloudPassword)
                     .submitLabel(.done)
                     .onSubmit { dismissKeyboard() }
+                    .accessibilityLabel("教学云平台密码（选填）")
                     .accessibilityIdentifier("field.teaching-cloud-password")
                     Text(model.localized(model.canPreserveSavedTeachingCloudPassword
                         ? "已设置独立的教学云平台密码"
                         : "教学云平台当前使用教务密码"))
                         .font(.caption)
                         .foregroundStyle(theme.secondaryText)
-                    Text("使用相同学号，仅用于获取课程作业 DDL。已保存的独立密码留空不变；修改后请保存设置。")
+                    Text("用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。")
                         .font(.caption)
                         .foregroundStyle(theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                     if model.canPreserveSavedTeachingCloudPassword || !model.teachingCloudPassword.isEmpty {
-                        Button("改用教务密码") { model.useAcademicPasswordForAssignments() }
-                            .buttonStyle(.borderless)
-                            .disabled(model.isSampleMode)
-                            .accessibilityIdentifier("action.teaching-cloud-use-academic-password")
+                        Button {
+                            model.useAcademicPasswordForAssignments()
+                        } label: {
+                            Label("改用教务密码", systemImage: "arrow.uturn.backward")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(model.isSampleMode)
+                        .accessibilityLabel("改用教务密码")
+                        .accessibilityHint("清除单独保存的教学云密码，之后使用教务密码获取作业")
+                        .accessibilityIdentifier("action.teaching-cloud-use-academic-password")
                     }
                 }
                 VStack(alignment: .leading, spacing: 6) {

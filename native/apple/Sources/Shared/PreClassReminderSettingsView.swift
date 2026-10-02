@@ -96,6 +96,17 @@ struct PreClassReminderSettingsView: View {
         .onChange(of: model.preClassNotificationOffsets) { offsets in
             minuteFields = offsets.map(String.init)
         }
+        #if os(iOS)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                if focusedRow != nil {
+                    Spacer()
+                    Button("完成") { focusedRow = nil }
+                        .accessibilityIdentifier("settings.pre-class.dismiss-keyboard")
+                }
+            }
+        }
+        #endif
     }
 
     private func minuteField(_ index: Int) -> some View {
