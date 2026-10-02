@@ -44,6 +44,14 @@ GitHub 用原生 macOS Universal DMG 已生成：`Where-To-Study-v0.3.2-prerelea
 
 DevEco 当前需要重新登录，已在 Edge 打开官方登录页，未绕过 IDE 改用其他上传方式。签名 HAP/APP 已准备，但 **0.3.2 尚未上传 AppGallery**；收到用户登录完成消息后，沿用第二项“生成.app包并上传至AppGallery Connect进行测试”，不提交正式审核。当前渠道版本仍是已有的 0.3.1（1002035）。
 
-已推送的 `main` 为 `980400892897b42d278c1e6ea567acec21d38d81`。该提交 GitHub Actions 作业仍未启动，检查注释为：`The job was not started because your account is locked due to a billing issue.` [对应 Windows 运行](https://github.com/Nemoyuzx/where_to_study/actions/runs/36969029201)。Windows/Linux/标签构建仍等待账户解除锁定；该状态不能作为编译或测试失败，也不能据此复用旧版安装包发布新版本。
+本轮功能源码 `980400892897b42d278c1e6ea567acec21d38d81` 已推送至 `main`。该提交 GitHub Actions 作业仍未启动，检查注释为：`The job was not started because your account is locked due to a billing issue.` [对应 Windows 运行](https://github.com/Nemoyuzx/where_to_study/actions/runs/36969029201)。Windows/Linux/标签构建仍等待账户解除锁定；该状态不能作为编译或测试失败，也不能据此复用旧版安装包发布新版本。
+
+## 已保存的 GitHub 预发布草稿
+
+- 已推送注释标签 `v0.3.2-prerelease`，指向 `5c951520118927600bc880afa87fc0e0124ef5e0`；与已验证安装包对应的功能源码相比，仅增加构建与上传记录，不移动已有标签。
+- 已创建 **Where To Study v0.3.2-prerelease** 草稿，Release ID **401567537**：[维护者可访问的草稿](https://github.com/Nemoyuzx/where_to_study/releases/tag/untagged-a241ced12a66cd275b78)。API 确认为 `draft=true`、`prerelease=true`，**尚未公开发布**。
+- 已上传上述 Android APK 与 macOS DMG，共 **2 个**资产。GitHub API 的名称、大小和 `sha256` digest 均与本地签名文件一致；没有回下载 Release 文件。
+- 待补 Windows 安装器 1 个、Linux DEB/AppImage 4 个、CLI 2 个、TUI 2 个，以及标签 CI／安全门禁，共形成预定的 11 个公开安装文件。解除 GitHub 账户锁定后重跑该标签工作流，保留已验证的 APK/DMG，不重复 Apple 上传，不使用旧包冒充新版。
+- 已核对 `releases/latest` 仍为 **v0.3.1**。文档收尾提交只更新回执，不更改应用代码或发布标签。
 
 预发布不会替换 v0.3.1 的稳定版入口。公开资产遵循当前 11 个安装文件的结构，不上传 AAB、鸿蒙 APP/HAP、iOS 归档或校验侧文件。上传后用 GitHub API 的名称、大小和摘要与本地核对，按用户要求不回下载 Release 文件。
