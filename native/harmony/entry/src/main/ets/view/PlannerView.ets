@@ -30,6 +30,8 @@ export struct PlannerView {
   @Local busySlotsValue: Set<number> = new Set<number>();
   @Local pageVisible: boolean = false;
   @Local weatherExpanded: boolean = WeatherCardPolicy.startsExpanded;
+  @Local weatherBodyMeasuredHeight: number = 0;
+  @Local weatherBodyRevealHeight: number = 0;
   private dayRefreshTimer: number = -1;
 
   @Monitor('model.schedule', 'model.usePersonalSchedule')
@@ -116,6 +118,28 @@ export struct PlannerView {
 
   private sectionTitleSize(): number {
     return this.isCompact() ? 15 : 17;
+  }
+
+  private toggleWeather(): void {
+    const expanded: boolean = WeatherCardPolicy.toggled(this.weatherExpanded);
+    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, (): void => {
+      this.weatherExpanded = expanded;
+      this.weatherBodyRevealHeight = expanded ? this.weatherBodyMeasuredHeight : 0;
+    });
+  }
+
+  private measureWeatherBody(height: number): void {
+    if (!Number.isFinite(height) || height <= 0 ||
+      Math.abs(height - this.weatherBodyMeasuredHeight) < 0.5) {
+      return;
+    }
+    this.weatherBodyMeasuredHeight = height;
+    if (this.weatherExpanded) {
+      // 仅测量不受视口高度约束的隐藏副本；网络更新和字体变化都可平滑适配。
+      this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, (): void => {
+        this.weatherBodyRevealHeight = height;
+      });
+    }
   }
 
   build() {
@@ -239,46 +263,44 @@ export struct PlannerView {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        Text(this.weatherExpanded ? '⌃' : '⌄')
+        Text('⌄')
           .fontSize(18)
           .fontColor(AppTheme.secondaryText())
           .width(24)
           .textAlign(TextAlign.Center)
+          .rotate({ angle: this.weatherExpanded ? 180 : 0 })
       }
       .width('100%')
       .height(38)
       .alignItems(VerticalAlign.Center)
       .onClick(() => {
-        this.weatherExpanded = WeatherCardPolicy.toggled(this.weatherExpanded);
+        this.toggleWeather();
       })
 
-      if (this.weatherExpanded) {
-        Divider()
-          .color(AppTheme.border())
-          .margin({ top: 10, bottom: 10 })
-        if (this.model.loadingWeatherCampuses.has(this.model.queryCampusID) &&
-          !this.model.weatherByCampus.has(this.model.queryCampusID)) {
-          this.emptyMessage('正在更新今日与明日天气…')
-        } else if (this.model.weatherErrors.has(this.model.queryCampusID) &&
-          !this.model.weatherByCampus.has(this.model.queryCampusID)) {
-          Button(this.model.text(this.model.weatherErrors.get(this.model.queryCampusID) ??
-            '天气获取失败') + '，' + this.model.text('点击重试'))
-            .fontSize(this.isCompact() ? 12.5 : 14)
-            .fontColor(AppTheme.danger())
-            .height(this.isCompact() ? 48 : 56)
-            .width('100%')
-            .borderRadius(7)
-            .border({ width: 1, color: AppTheme.border() })
-            .backgroundColor(AppTheme.surfaceVariant())
-            .onClick(() => {
-              this.model.loadWeather(this.model.queryCampusID, true);
-            })
-        } else if (this.model.weatherByCampus.has(this.model.queryCampusID)) {
-          this.weatherContent(this.model.weatherByCampus.get(this.model.queryCampusID) as CampusWeather)
-        } else {
-          this.emptyMessage('暂无天气数据')
-        }
+      Column() {
+        this.weatherDetailsBody()
       }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .visibility(Visibility.Hidden)
+      .position({ x: 0, y: 0 })
+      .onAreaChange((oldArea: Area, newArea: Area) => {
+        this.measureWeatherBody(Number(newArea.height));
+      })
+
+      Stack({ alignContent: Alignment.TopStart }) {
+        Column() {
+          this.weatherDetailsBody()
+        }
+        .height(Math.max(this.weatherBodyMeasuredHeight, 1))
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .position({ x: 0, y: 0 })
+      }
+      .width('100%')
+      .height(this.weatherBodyRevealHeight)
+      .clip(true)
+      .enabled(this.weatherExpanded)
     }
     .padding({
       left: this.surfacePadding(), right: this.surfacePadding(),
@@ -292,31 +314,69 @@ export struct PlannerView {
   }
 
   @Builder
-  weatherContent(weather: CampusWeather) {
-    Grid() {
-      ForEach(weather.days, (day: CampusWeatherDay, index: number) => {
-        GridItem() {
-          this.weatherDayCard(day, index === 0 ? '今日' : '明日')
-        }
-      }, (day: CampusWeatherDay) => 'weather.' + day.date)
+  weatherDetailsBody() {
+    Divider()
+      .color(AppTheme.border())
+      .margin({ top: 10, bottom: 10 })
+    if (this.model.loadingWeatherCampuses.has(this.model.queryCampusID) &&
+      !this.model.weatherByCampus.has(this.model.queryCampusID)) {
+      this.emptyMessage('正在更新今日与明日天气…')
+    } else if (this.model.weatherErrors.has(this.model.queryCampusID) &&
+      !this.model.weatherByCampus.has(this.model.queryCampusID)) {
+      Button(this.model.text(this.model.weatherErrors.get(this.model.queryCampusID) ??
+        '天气获取失败') + '，' + this.model.text('点击重试'))
+        .fontSize(this.isCompact() ? 12.5 : 14)
+        .fontColor(AppTheme.danger())
+        .height(this.isCompact() ? 48 : 56)
+        .width('100%')
+        .borderRadius(7)
+        .border({ width: 1, color: AppTheme.border() })
+        .backgroundColor(AppTheme.surfaceVariant())
+        .onClick(() => {
+          this.model.loadWeather(this.model.queryCampusID, true);
+        })
+    } else if (this.model.weatherByCampus.has(this.model.queryCampusID)) {
+      this.weatherContent(this.model.weatherByCampus.get(this.model.queryCampusID) as CampusWeather)
+    } else {
+      this.emptyMessage('暂无天气数据')
     }
-    .columnsTemplate(this.contentWidth >= 600 ? '1fr 1fr' : '1fr')
-    .columnsGap(8)
-    .rowsGap(8)
-    .width('100%')
+  }
 
-    Row() {
-      Text(weather.reportTime)
-        .fontSize(11)
-        .fontColor(AppTheme.secondaryText())
-        .layoutWeight(1)
-      Text(this.model.text('数据：UAPI'))
-        .fontSize(11)
-        .fontColor(AppTheme.secondaryText())
+  @Builder
+  weatherContent(weather: CampusWeather) {
+    Column({ space: 8 }) {
+      if (this.contentWidth >= 600) {
+        Row({ space: 8 }) {
+          ForEach(weather.days, (day: CampusWeatherDay, index: number) => {
+            Column() {
+              this.weatherDayCard(day, index === 0 ? '今日' : '明日')
+            }
+            .layoutWeight(1)
+          }, (day: CampusWeatherDay) => 'weather.' + day.date)
+        }
+        .width('100%')
+      } else {
+        Column({ space: 8 }) {
+          ForEach(weather.days, (day: CampusWeatherDay, index: number) => {
+            this.weatherDayCard(day, index === 0 ? '今日' : '明日')
+          }, (day: CampusWeatherDay) => 'weather.' + day.date)
+        }
+        .width('100%')
+      }
+      Row() {
+        Text(weather.reportTime)
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+          .layoutWeight(1)
+        Text(this.model.text('数据：UAPI'))
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .margin({ top: 8 })
-    .alignItems(VerticalAlign.Center)
+    .alignItems(HorizontalAlign.Start)
   }
 
   @Builder

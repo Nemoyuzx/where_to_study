@@ -19,6 +19,7 @@ import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.TransitionDrawable
 import android.os.Build
 import android.os.Bundle
+import android.transition.Fade
 import android.net.Uri
 import android.text.TextUtils
 import android.view.Gravity
@@ -911,7 +912,8 @@ internal class TeachingCalendarPage(
     private var renderedMonthSheetPosition = monthSheetPosition
     private var expandedMonthCellHeightDp = TeachingCalendarLogic.monthCellHeightDp(true)
     private var monthExpansionAnimator: ValueAnimator? = null
-    private var agendaExpansionAnimator: ValueAnimator? = null
+    private var monthAnimationView: ViewGroup? = null
+    private var agendaExpansionMotion: DisclosureMotionController? = null
     private var agendaAnimationSection: View? = null
     private var pendingAgendaRefreshDateKey: String? = null
     private var pendingPageDirection = 0
@@ -1080,7 +1082,7 @@ internal class TeachingCalendarPage(
                 ?: return@post
             // Keep the mounted course viewport intact until its height animation
             // settles. This refresh is UI-only; data fetching stays in repositories.
-            if (agendaAnimationSection === oldSection && agendaExpansionAnimator?.isRunning == true) {
+            if (agendaAnimationSection === oldSection && agendaExpansionMotion?.isRunning == true) {
                 pendingAgendaRefreshDateKey = expectedDateKey
                 return@post
             }
@@ -1139,7 +1141,7 @@ internal class TeachingCalendarPage(
         val tabs = mutableMapOf<Mode, TextView>()
 
         fun updateMonthSheetProgress(position: Float) {
-            monthExpansionAnimator?.cancel()
+            cancelMonthExpansion()
             renderedMonthSheetPosition = position.coerceIn(0f, 2f)
             content.findViewById<ViewGroup?>(R.id.calendar_month_view)?.let { monthView ->
                 applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
@@ -1168,6 +1170,7 @@ internal class TeachingCalendarPage(
         }
 
         fun render() {
+            cancelMonthExpansion()
             calendarRenderAction = ::render
             dismissYearPopover()
             tabs.forEach { (mode, view) -> view.setSelectedStyle(activity, mode == selectedMode) }
@@ -1229,6 +1232,7 @@ internal class TeachingCalendarPage(
             }
 
             override fun onViewDetachedFromWindow(view: View) {
+                cancelMonthExpansion()
                 scrollView.requestDisallowInterceptTouchEvent(false)
                 holidayRepository.removeObserver(scrollView)
                 dailyInfoRepository.removeObserver(scrollView)
@@ -1301,7 +1305,7 @@ internal class TeachingCalendarPage(
             isFocusable = true
         }
         fun updateMonthSheetProgress(position: Float) {
-            monthExpansionAnimator?.cancel()
+            cancelMonthExpansion()
             renderedMonthSheetPosition = position.coerceIn(0f, 2f)
             pageSurface.findViewById<ViewGroup?>(R.id.calendar_month_view)?.let { monthView ->
                 applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
@@ -1328,6 +1332,7 @@ internal class TeachingCalendarPage(
         }
 
         fun render() {
+            cancelMonthExpansion()
             calendarRenderAction = ::render
             dismissYearPopover()
             pageSurface.swipeEnabled = true
@@ -1518,7 +1523,7 @@ internal class TeachingCalendarPage(
             }
 
             override fun onViewDetachedFromWindow(view: View) {
-                monthExpansionAnimator?.cancel()
+                cancelMonthExpansion()
                 holidayRepository.removeObserver(root)
                 dailyInfoRepository.removeObserver(root)
                 if (calendarHostRoot === root) calendarHostRoot = null
@@ -1629,7 +1634,7 @@ internal class TeachingCalendarPage(
         renderedMonthSheetPosition = startPosition.coerceIn(0f, 2f)
         applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
         monthView.post {
-            if (!monthView.isAttachedToWindow) return@post
+            if (!monthView.isAttachedToWindow || activeMonthView() !== monthView) return@post
             animateMonthSheetPosition(monthView, targetPosition) {
                 monthSheetPosition = targetPosition
             }
@@ -1745,6 +1750,7 @@ internal class TeachingCalendarPage(
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             scaleType = ImageView.ScaleType.CENTER
         }
+        lateinit var motion: DisclosureMotionController
         val toggle = LinearLayout(activity).apply {
             id = R.id.calendar_day_week_agenda_toggle
             orientation = LinearLayout.HORIZONTAL
@@ -1787,11 +1793,10 @@ internal class TeachingCalendarPage(
                 } else {
                     "展开当前日期课程"
                 })
-                animateDayWeekCourseContent(
-                    section, content, indicator,
-                    expanded = sessionState.dayWeekAgendaExpanded,
-                    hasCourses = courses.isNotEmpty(),
-                )
+                if (agendaExpansionMotion !== motion) agendaExpansionMotion?.cancel()
+                agendaExpansionMotion = motion
+                agendaAnimationSection = section
+                motion.animateTo(sessionState.dayWeekAgendaExpanded, courses.isNotEmpty())
             }
         }
         section.addView(toggle, LinearLayout.LayoutParams(
@@ -1805,110 +1810,31 @@ internal class TeachingCalendarPage(
             ),
         ))
         section.addView(content)
-        section.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(view: View) = Unit
-
-            override fun onViewDetachedFromWindow(view: View) {
-                if (agendaAnimationSection !== section) return
-                val animator = agendaExpansionAnimator
-                agendaExpansionAnimator = null
-                agendaAnimationSection = null
-                pendingAgendaRefreshDateKey = null
-                animator?.cancel()
-            }
-        })
+        motion = DisclosureMotionController(
+            section, content, indicator,
+            durationMillis = TeachingCalendarLogic.agendaAnimationDurationMillis,
+            onSettled = {
+                if (agendaExpansionMotion === motion) {
+                    agendaExpansionMotion = null
+                    agendaAnimationSection = null
+                    val pendingKey = pendingAgendaRefreshDateKey
+                    pendingAgendaRefreshDateKey = null
+                    if (pendingKey != null) refreshDayWeekAgendaInPlace(pendingKey)
+                }
+            },
+            onDetached = {
+                if (agendaExpansionMotion === motion) {
+                    agendaExpansionMotion = null
+                    agendaAnimationSection = null
+                    pendingAgendaRefreshDateKey = null
+                }
+            },
+        )
         val hasSupplementaryItems = days.any { supplementaryItemsOn(it.date).isNotEmpty() }
         if (hasSupplementaryItems) {
             section.addView(allDayStrip(days, compact))
         }
         return section
-    }
-
-    private fun animateDayWeekCourseContent(
-        section: LinearLayout,
-        content: LinearLayout,
-        indicator: ImageView,
-        expanded: Boolean,
-        hasCourses: Boolean,
-    ) {
-        // Clear ownership before cancellation so a previous onEnd cannot settle
-        // the new target. Reversals start at the last rendered/requested height.
-        val previous = agendaExpansionAnimator
-        agendaExpansionAnimator = null
-        agendaAnimationSection = null
-        previous?.cancel()
-        indicator.animate().cancel()
-        val startHeight = if (content.visibility == View.VISIBLE) {
-            content.layoutParams.height.takeIf { it >= 0 } ?: content.height
-        } else 0
-        val startAlpha = if (content.visibility == View.VISIBLE) content.alpha else 0f
-        val startRotation = indicator.rotation
-        val showContent = hasCourses && expanded
-        val targetRotation = if (expanded) 180f else 0f
-        val width = section.width - section.paddingLeft - section.paddingRight
-        if (hasCourses && width > 0) {
-            content.measure(
-                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            )
-        }
-        val targetHeight = if (showContent) content.measuredHeight else 0
-
-        fun settle() {
-            content.visibility = if (showContent) View.VISIBLE else View.GONE
-            content.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-            content.alpha = 1f
-            content.requestLayout()
-            indicator.rotation = targetRotation
-        }
-
-        fun refreshPending() {
-            val pendingKey = pendingAgendaRefreshDateKey
-            pendingAgendaRefreshDateKey = null
-            if (section.isAttachedToWindow && pendingKey != null) {
-                refreshDayWeekAgendaInPlace(pendingKey)
-            }
-        }
-
-        if (!section.isAttachedToWindow || width <= 0 ||
-            (Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled())
-        ) {
-            settle()
-            refreshPending()
-            return
-        }
-        if (hasCourses) {
-            content.layoutParams.height = startHeight
-            content.alpha = startAlpha
-            content.visibility = View.VISIBLE
-            content.requestLayout()
-        }
-        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = TeachingCalendarLogic.agendaAnimationDurationMillis
-            interpolator = AccelerateDecelerateInterpolator()
-            addUpdateListener { animation ->
-                val progress = animation.animatedValue as Float
-                if (hasCourses) {
-                    content.layoutParams.height =
-                        (startHeight + (targetHeight - startHeight) * progress).roundToInt()
-                    content.alpha = startAlpha + ((if (showContent) 1f else 0f) - startAlpha) * progress
-                    content.requestLayout()
-                }
-                indicator.rotation = startRotation + (targetRotation - startRotation) * progress
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    if (agendaExpansionAnimator !== animation) return
-                    agendaExpansionAnimator = null
-                    agendaAnimationSection = null
-                    settle()
-                    refreshPending()
-                }
-            })
-        }
-        agendaExpansionAnimator = animator
-        agendaAnimationSection = section
-        animator.start()
     }
 
     private fun compactCourseArea(day: Calendar, compact: Boolean): LinearLayout =
@@ -2661,7 +2587,7 @@ internal class TeachingCalendarPage(
                     toMonth = day.get(Calendar.MONTH),
                 )
                 val targetPosition = TeachingCalendarLogic.monthDaySelectionTargetPosition()
-                monthExpansionAnimator?.cancel()
+                cancelMonthExpansion()
                 selectDate(day)
                 monthSheetPosition = targetPosition
                 renderedMonthSheetPosition = previousPosition
@@ -2970,48 +2896,57 @@ internal class TeachingCalendarPage(
         monthView.requestLayout()
     }
 
+    private fun cancelMonthExpansion() {
+        val previous = monthExpansionAnimator
+        monthExpansionAnimator = null
+        monthAnimationView = null
+        previous?.cancel()
+    }
+
     private fun animateMonthSheetPosition(
         monthView: ViewGroup,
         targetPosition: Float,
         onSettled: () -> Unit,
     ) {
-        monthExpansionAnimator?.cancel()
+        cancelMonthExpansion()
+        if (!monthView.isAttachedToWindow || activeMonthView() !== monthView) return
         val target = targetPosition.coerceIn(0f, 2f)
         val start = renderedMonthSheetPosition.coerceIn(0f, 2f)
-        if (abs(target - start) <= 0.001f) {
+        if (abs(target - start) <= 0.001f ||
+            (Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled())
+        ) {
             renderedMonthSheetPosition = target
             applyMonthSheetPosition(monthView, target)
             onSettled()
             return
         }
-        monthExpansionAnimator = ValueAnimator.ofFloat(start, target).apply {
+        val next = ValueAnimator.ofFloat(start, target).apply {
             duration = (120L + 160L * abs(target - start)).roundToInt().toLong()
             interpolator = AccelerateDecelerateInterpolator()
             addUpdateListener { animator ->
-                renderedMonthSheetPosition = animator.animatedValue as Float
-                if (monthView.isAttachedToWindow) {
-                    applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
+                if (monthExpansionAnimator !== animator) return@addUpdateListener
+                if (!monthView.isAttachedToWindow || activeMonthView() !== monthView) {
+                    cancelMonthExpansion()
+                    return@addUpdateListener
                 }
+                renderedMonthSheetPosition = animator.animatedValue as Float
+                applyMonthSheetPosition(monthView, renderedMonthSheetPosition)
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {
-                private var cancelled = false
-
-                override fun onAnimationCancel(animation: android.animation.Animator) {
-                    cancelled = true
-                }
-
                 override fun onAnimationEnd(animation: android.animation.Animator) {
-                    if (cancelled) return
-                    renderedMonthSheetPosition = target
-                    if (monthView.isAttachedToWindow) {
-                        applyMonthSheetPosition(monthView, target)
-                    }
-                    onSettled()
+                    if (monthExpansionAnimator !== animation || monthAnimationView !== monthView) return
                     monthExpansionAnimator = null
+                    monthAnimationView = null
+                    if (!monthView.isAttachedToWindow || activeMonthView() !== monthView) return
+                    renderedMonthSheetPosition = target
+                    applyMonthSheetPosition(monthView, target)
+                    onSettled()
                 }
             })
-            start()
         }
+        monthExpansionAnimator = next
+        monthAnimationView = monthView
+        next.start()
     }
 
     private fun monthSheetContentDescription(position: Float): String =
@@ -3452,9 +3387,11 @@ internal class TeachingCalendarPage(
             isOutsideTouchable = true
             elevation = activity.dp(10).toFloat()
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            enterTransition = Fade().apply { duration = 160L }
+            exitTransition = Fade().apply { duration = 120L }
             setOnDismissListener {
-                anchor.selectDate(selectedDate)
                 if (activePopup === popup) {
+                    anchor.selectDate(selectedDate)
                     activePopup = null
                     activePopupAnchor = null
                     activePopupDetailsHost = null

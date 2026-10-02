@@ -124,6 +124,7 @@ class MainActivity : Activity() {
     private var foldingFeatureSpacer: View? = null
     private var favoriteDeadlinesOverlay: View? = null
     private var navigationRailAnimator: ValueAnimator? = null
+    private var plannerPage: PlannerPage? = null
     internal var controlHapticEventCount = 0
         private set
     private var currentFoldingFeature: FoldingFeature? = null
@@ -630,7 +631,10 @@ class MainActivity : Activity() {
     private fun toggleNavigationRail(source: View) {
         val oldSpec = currentLayoutSpec ?: return
         val rail = navigationRail ?: return
-        if (oldSpec.usesBottomNavigation || navigationRailAnimator?.isRunning == true) return
+        if (oldSpec.usesBottomNavigation) return
+        val previousAnimator = navigationRailAnimator
+        navigationRailAnimator = null
+        previousAnimator?.cancel()
 
         performControlHaptic(source)
         val targetCollapsed = !navigationRailCollapsed
@@ -646,7 +650,7 @@ class MainActivity : Activity() {
         var presentationUpdated = false
         var cancelled = false
 
-        navigationRailAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+        val nextAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = NAVIGATION_RAIL_ANIMATION_MILLIS
             interpolator = AccelerateDecelerateInterpolator()
             addUpdateListener { animation ->
@@ -671,6 +675,7 @@ class MainActivity : Activity() {
                 }
 
                 override fun onAnimationEnd(animation: Animator) {
+                    if (navigationRailAnimator !== animation) return
                     navigationRailAnimator = null
                     if (cancelled) return
                     currentLayoutSpec = targetSpec
@@ -683,8 +688,9 @@ class MainActivity : Activity() {
                     )
                 }
             })
-            start()
         }
+        navigationRailAnimator = nextAnimator
+        nextAnimator.start()
     }
 
     private fun lerp(start: Int, end: Int, fraction: Float): Int =
@@ -734,6 +740,7 @@ class MainActivity : Activity() {
         }
         phoneNavigationBar?.select(destination.ordinal, previousDestination != destination)
         updatePhoneNavigationVisibility()
+        plannerPage = null
         informationQueryPage = null
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(
@@ -745,7 +752,7 @@ class MainActivity : Activity() {
                 preferences,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
                 currentLayoutSpec?.usesBottomNavigation == true,
-            ).build()
+            ).also { plannerPage = it }.build()
             Destination.CALENDAR -> TeachingCalendarPage(
                 this,
                 scheduleRepository,
@@ -875,7 +882,11 @@ class MainActivity : Activity() {
     }
 
     fun refreshPlannerIfVisible() {
-        if (selectedDestination == Destination.PLANNER) refreshCurrentPage()
+        if (selectedDestination == Destination.PLANNER) plannerPage?.refreshClassroomsInPlace()
+    }
+
+    fun refreshPlannerWeatherIfVisible() {
+        if (selectedDestination == Destination.PLANNER) plannerPage?.refreshWeatherInPlace()
     }
 
     fun refreshCalendarIfVisible() {

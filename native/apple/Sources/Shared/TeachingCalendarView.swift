@@ -2458,14 +2458,12 @@ struct TeachingCalendarView: View {
             #else
             cell
             .accessibilityAction {
-                yearPopoverDate = day
-                yearPopoverLocation = nil
+                presentYearPopover(day, at: nil)
             }
             .gesture(
                 SpatialTapGesture(coordinateSpace: .named(Self.calendarCoordinateSpace))
                     .onEnded { value in
-                        yearPopoverDate = day
-                        yearPopoverLocation = value.location
+                        presentYearPopover(day, at: value.location)
                     }
             )
             #endif
@@ -2522,6 +2520,7 @@ struct TeachingCalendarView: View {
                 }
             }
             .zIndex(20)
+            .transition(.opacity)
         }
     }
 
@@ -3762,10 +3761,26 @@ struct TeachingCalendarView: View {
     }
 
     private func dismissYearPopover() {
+        #if os(macOS)
         yearPopoverDate = nil
         yearPopoverLocation = nil
+        #else
+        withAnimation(.easeOut(duration: 0.18)) {
+            yearPopoverDate = nil
+            yearPopoverLocation = nil
+        }
+        #endif
         yearPopoverScrollTarget = Self.yearPopoverTopID
     }
+
+    #if !os(macOS)
+    private func presentYearPopover(_ day: Date, at location: CGPoint?) {
+        withAnimation(.easeOut(duration: 0.18)) {
+            yearPopoverDate = day
+            yearPopoverLocation = location
+        }
+    }
+    #endif
 
     #if os(macOS)
     private func yearPopoverBinding(for day: Date) -> Binding<Bool> {

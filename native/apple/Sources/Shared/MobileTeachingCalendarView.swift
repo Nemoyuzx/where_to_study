@@ -724,12 +724,14 @@ struct MobileTeachingCalendarView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(theme.surface)
+        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder

@@ -1,11 +1,13 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.app.AlertDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.text.Editable
 import android.text.InputType
 import android.text.TextUtils
@@ -326,6 +328,8 @@ internal class InformationQueryPage(
     }
 
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
+    private var modeTransitionBody: View? = null
+    private var pendingModeContentRefresh = false
     private val shuttleObserver: () -> Unit = {
         if (::root.isInitialized && root.isAttachedToWindow &&
             sessionState.selectedMode == InformationQueryMode.SHUTTLE
@@ -404,6 +408,11 @@ internal class InformationQueryPage(
             }
 
             override fun onViewDetachedFromWindow(view: View) {
+                val outgoing = modeTransitionBody
+                modeTransitionBody = null
+                pendingModeContentRefresh = false
+                renderRevision++
+                outgoing?.animate()?.cancel()
                 shuttleRepository.removeObserver(shuttleObserver)
                 holidayRepository?.removeObserver(root)
                 dailyInfoRepository.removeObserver(root)
@@ -602,6 +611,12 @@ internal class InformationQueryPage(
 
     private fun renderMode(animate: Boolean, direction: Int = 0) {
         if (!::content.isInitialized) return
+        if (!animate && modeTransitionBody != null) {
+            // Repository state has already updated. Delay only the body rebuild
+            // so publications cannot cut an incoming page's animation short.
+            pendingModeContentRefresh = true
+            return
+        }
         // The page title, selector and scroll owner survive both selections and
         // repository publications. Only the selected query's body is invalidated.
         val mode = sessionState.selectedMode
@@ -628,17 +643,30 @@ internal class InformationQueryPage(
         UiText.localizeTree(page)
         // Cancel and remove outgoing bodies immediately: rapid selections must
         // never leave duplicate controls or stale end-actions in the view tree.
+        modeTransitionBody = null
+        pendingModeContentRefresh = false
         repeat(content.childCount) { content.getChildAt(it).animate().cancel() }
         content.removeAllViews()
         content.addView(page, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
-        if (animate && direction != 0) {
+        if (animate && direction != 0 &&
+            (Build.VERSION.SDK_INT < 26 || ValueAnimator.areAnimatorsEnabled())
+        ) {
+            modeTransitionBody = page
             page.translationX = direction * activity.dp(16).toFloat()
             page.alpha = 0f
             page.animate().translationX(0f).alpha(1f).setDuration(220L)
-                .setInterpolator(AccelerateDecelerateInterpolator()).start()
+                .setInterpolator(AccelerateDecelerateInterpolator())
+                .withEndAction {
+                    if (modeTransitionBody !== page) return@withEndAction
+                    modeTransitionBody = null
+                    if (root.isAttachedToWindow && pendingModeContentRefresh) {
+                        pendingModeContentRefresh = false
+                        renderMode(animate = false)
+                    }
+                }.start()
         }
         scroll.post {
             if (revision == renderRevision) {

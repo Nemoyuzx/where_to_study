@@ -438,6 +438,90 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         attachScreenshot(named: "planner-weather-expanded")
     }
 
+    func testCourseSummaryTransitionHandlesRapidReverseAndEmptyDay() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone-only course summary check")
+        continueAfterFailure = false
+
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo", "--ui-test-slow-calendar-animation"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-10-02"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "周"
+        app.launch()
+        navigate(to: "教学日历", in: app)
+        let toggle = app.buttons["calendar.mobile.course-summary-toggle"]
+        let allDay = app.staticTexts["全天"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(allDay.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "已展开")
+        let expandedY = allDay.frame.minY
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "已折叠")
+        let collapsedY = allDay.frame.minY
+        XCTAssertLessThan(collapsedY + 12, expandedY)
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "已展开")
+        XCTAssertEqual(allDay.frame.minY, expandedY, accuracy: 2)
+        toggle.doubleTap()
+        XCTAssertEqual(toggle.value as? String, "已展开")
+        XCTAssertEqual(allDay.frame.minY, expandedY, accuracy: 2)
+        attachScreenshot(named: "course-summary-after-rapid-reverse")
+        app.terminate()
+
+        let emptyApp = configuredApplication()
+        emptyApp.launchArguments = ["--review-demo"]
+        emptyApp.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-10-04"
+        emptyApp.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "周"
+        emptyApp.launch()
+        defer { emptyApp.terminate() }
+        navigate(to: "教学日历", in: emptyApp)
+        let emptyToggle = emptyApp.buttons["calendar.mobile.course-summary-toggle"]
+        let emptyAllDay = emptyApp.staticTexts["全天"].firstMatch
+        XCTAssertTrue(emptyToggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(emptyAllDay.waitForExistence(timeout: 5))
+        XCTAssertTrue(emptyToggle.label.contains("暂无课程"))
+        let emptyY = emptyAllDay.frame.minY
+        emptyToggle.tap()
+        XCTAssertEqual(emptyAllDay.frame.minY, emptyY, accuracy: 1)
+        emptyToggle.tap()
+        XCTAssertEqual(emptyAllDay.frame.minY, emptyY, accuracy: 1)
+        attachScreenshot(named: "course-summary-empty-height-stable")
+    }
+
+    func testQuerySwitchPreservesFilterWithNormalAndReducedMotion() {
+        continueAfterFailure = false
+        for reducedMotion in [false, true] {
+            let app = configuredApplication()
+            app.launchArguments = reducedMotion
+                ? ["--review-demo", "--ui-test-reduce-motion"] : ["--review-demo"]
+            app.launch()
+            navigate(to: "空教室", in: app)
+            let weather = app.buttons["weather.toggle"]
+            XCTAssertTrue(weather.waitForExistence(timeout: 5))
+            XCTAssertEqual(weather.value as? String, "已折叠")
+            weather.tap()
+            XCTAssertTrue(app.descendants(matching: .any)["weather.details"]
+                .waitForExistence(timeout: 5))
+
+            navigate(to: "查询", in: app)
+            let modes = app.segmentedControls["queries.mode"]
+            let events = modes.buttons["重要事件"]
+            XCTAssertTrue(events.waitForExistence(timeout: 5))
+            events.tap()
+            let search = app.textFields["搜索名称、主办方或来源"]
+            XCTAssertTrue(search.waitForExistence(timeout: 5))
+            search.tap()
+            search.typeText("2026")
+            modes.buttons["成绩查询"].tap()
+            events.tap()
+            XCTAssertEqual(search.value as? String, "2026")
+            XCTAssertTrue(app.staticTexts["示例学术会议"].waitForExistence(timeout: 5))
+            attachScreenshot(named: reducedMotion
+                ? "query-mode-reduced-motion-filter-retained"
+                : "query-mode-normal-filter-retained")
+            app.terminate()
+        }
+    }
+
     func testMobileCalendarPagingMonthExpansionAndYearJump() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "仅在 iPhone 模拟器验证")
         continueAfterFailure = false
@@ -1118,6 +1202,38 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertTrue(yearGrid.exists)
         yearGrid.swipeRight()
         XCTAssertTrue(app.staticTexts["2026年"].waitForExistence(timeout: 5))
+    }
+
+    func testExpandedIPadYearShowsDatePopoverOnFirstTap() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad-only year popover check")
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--review-demo"]
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_DATE"] = "2026-09-05"
+        app.launchEnvironment["WHERE_TO_STUDY_UI_CALENDAR_MODE"] = "年"
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate(); XCUIDevice.shared.orientation = .portrait }
+
+        navigateFromSidebar(to: "教学日历", in: app)
+        let yearGrid = app.descendants(matching: .any)["calendar.regular.year-grid"].firstMatch
+        XCTAssertTrue(yearGrid.waitForExistence(timeout: 5))
+        let day = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "2026年9月5日")
+        ).firstMatch
+        revealByScrolling(visibleElement: day, in: app)
+        day.tap()
+        let popover = app.scrollViews.matching(
+            NSPredicate(format: "label == %@", "年视图日期详情")
+        ).firstMatch
+        XCTAssertTrue(popover.waitForExistence(timeout: 5))
+        XCTAssertTrue(popover.isHittable)
+        attachScreenshot(named: "ipad-year-popover-first-tap")
+        yearGrid.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.04)).tap()
+        XCTAssertFalse(popover.waitForExistence(timeout: 1))
+        day.tap()
+        XCTAssertTrue(popover.waitForExistence(timeout: 5))
+        attachScreenshot(named: "ipad-year-popover-reopened")
     }
 
     func testExpandedIPadWeekKeepsAllDayEventsInTheirDateColumnAndSelectsWholeHeader() throws {

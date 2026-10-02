@@ -3,7 +3,8 @@ import { describe, it, expect } from '@ohos/hypium';
 import { DateParts, StrictDates } from '../main/ets/common/StrictDates';
 import { Course } from '../main/ets/common/Models';
 import {
-  CalendarGestureAxis, CalendarMode, CalendarModeInfo, CalendarPageTransitionOffsets,
+  CalendarGestureAxis, CalendarMode, CalendarModeInfo, CalendarPageRequest,
+  CalendarPageTransitionOffsets, CalendarPageTransitionQueue,
   CalendarPopoverPosition, CalendarTimelineLogic,
   CalendarYearDeadlinePriority, TeachingCalendarLogic
 } from '../main/ets/view/calendar/CalendarLogic';
@@ -36,6 +37,51 @@ class CalendarPreloadProbe implements CalendarViewportPreloadTarget {
 
 export default function teachingCalendarLogicTest() {
   describe('TeachingCalendarLogicTest', () => {
+    it('mobile_page_queue_accumulates_fast_navigation_and_bounds_pending_state', 0, () => {
+      const queue: CalendarPageTransitionQueue = new CalendarPageTransitionQueue();
+      const start: DateParts = new DateParts(2026, 1, 31);
+      const session: TeachingCalendarSession = new TeachingCalendarSession();
+      session.selectDate(start);
+      const february: DateParts = session.monthNavigationDestination(1);
+      const first: CalendarPageRequest = new CalendarPageRequest(1, february, CalendarMode.month,
+        true, TeachingCalendarLogic.monthSheetDetailsPosition);
+      expect(queue.submit(first)).assertTrue();
+      expect(queue.effectiveDate(start).month).assertEqual(2);
+
+      const march: DateParts = session.monthNavigationDestination(1, queue.effectiveDate(start));
+      const latest: CalendarPageRequest = new CalendarPageRequest(1, march, CalendarMode.month,
+        true, TeachingCalendarLogic.monthSheetDetailsPosition);
+      expect(queue.submit(latest)).assertFalse();
+      expect(queue.effectiveDate(start).month).assertEqual(3);
+      expect(queue.completeActive()?.date.day).assertEqual(31);
+      expect(queue.completeActive()).assertNull();
+
+      const april: CalendarPageRequest = new CalendarPageRequest(1,
+        new DateParts(2026, 4, 30), CalendarMode.month, true);
+      expect(queue.submit(april)).assertTrue();
+      const reverse: CalendarPageRequest = new CalendarPageRequest(-1, march, CalendarMode.month,
+        true);
+      expect(queue.submit(reverse)).assertFalse();
+      expect(queue.submit(april)).assertFalse();
+      expect(queue.effectiveDate(start).month).assertEqual(4);
+      expect(queue.submit(reverse)).assertFalse();
+      expect(queue.interrupt()?.date.month).assertEqual(3);
+      expect(queue.effectiveDate(start).month).assertEqual(1);
+      expect(queue.completeActive()).assertNull();
+    });
+
+    it('course_summary_viewport_preserves_full_row_height_at_every_terminal_state', 0, () => {
+      // 外层视口收放，内部课程行不能因父视口高度变窄而压缩。
+      expect(TeachingCalendarLogic.courseSummaryViewportHeight(0)).assertEqual(0);
+      expect(TeachingCalendarLogic.courseSummaryViewportHeight(1)).assertEqual(48);
+      expect(TeachingCalendarLogic.courseSummaryViewportHeight(2)).assertEqual(88);
+      expect(TeachingCalendarLogic.courseSummaryViewportHeight(4)).assertEqual(168);
+      for (let count: number = 1; count < 12; count++) {
+        expect(TeachingCalendarLogic.courseSummaryViewportHeight(count + 1) -
+          TeachingCalendarLogic.courseSummaryViewportHeight(count)).assertEqual(40);
+      }
+    });
+
     it('year_page_identity_preserves_the_grid_when_selecting_another_day', 0, () => {
       const first: DateParts = new DateParts(2026, 1, 1);
       const selected: DateParts = new DateParts(2026, 9, 5);
@@ -121,6 +167,19 @@ export default function teachingCalendarLogicTest() {
       session.commitMonthNavigation(session.monthNavigationDestination(-1));
       expect(session.selectedDate.month).assertEqual(2);
       expect(session.selectedDate.day).assertEqual(15);
+    });
+
+    it('rapid_month_navigation_uses_pending_page_without_losing_preferred_day', 0, () => {
+      const session: TeachingCalendarSession = new TeachingCalendarSession();
+      session.selectDate(new DateParts(2026, 1, 31));
+      const pendingFebruary: DateParts = session.monthNavigationDestination(1);
+      const pendingMarch: DateParts = session.monthNavigationDestination(1, pendingFebruary);
+      expect(pendingFebruary.day).assertEqual(28);
+      expect(pendingMarch.month).assertEqual(3);
+      expect(pendingMarch.day).assertEqual(31);
+      expect(session.selectedDate.month).assertEqual(1);
+      session.commitMonthNavigation(pendingMarch);
+      expect(session.monthNavigationDestination(-1).day).assertEqual(28);
     });
 
     it('year_mode_movement_clamps_leap_day', 0, () => {

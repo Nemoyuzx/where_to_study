@@ -15,9 +15,9 @@ export class TeachingCalendarSession {
     this.preferredDayOfMonth = date.day;
   }
 
-  monthNavigationDestination(direction: number): DateParts {
+  monthNavigationDestination(direction: number, fromDate: DateParts = this.selectedDate): DateParts {
     return TeachingCalendarLogic.addMonths(
-      this.selectedDate, direction, this.preferredDayOfMonth);
+      fromDate, direction, this.preferredDayOfMonth);
   }
 
   commitMonthNavigation(date: DateParts): void {

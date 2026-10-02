@@ -24,6 +24,15 @@ enum AppLaunchConfiguration {
         ProcessInfo.processInfo.arguments.contains(slowCalendarAnimationArgument)
     }
 
+    static var forcesReducedMotionForUITests: Bool {
+        #if DEBUG
+        (isUITesting || isReviewDemo)
+            && ProcessInfo.processInfo.arguments.contains("--ui-test-reduce-motion")
+        #else
+        false
+        #endif
+    }
+
     static var forcesPrivacyConsent: Bool {
         ProcessInfo.processInfo.arguments.contains(privacyConsentTestingArgument)
     }

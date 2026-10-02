@@ -71,6 +71,11 @@ class PlannerPage(
         }
     private lateinit var resultsContainer: LinearLayout
     private lateinit var summaryContainer: LinearLayout
+    private var pageRoot: ScrollView? = null
+    private var weatherViewport: LinearLayout? = null
+    private var weatherHeadline: TextView? = null
+    private var weatherMotion: DisclosureMotionController? = null
+    private var pendingWeatherRefresh = false
 
     fun build(): ScrollView {
         queryState.ensureSlotSelection(
@@ -79,7 +84,7 @@ class PlannerPage(
         )
         if (preferences.weatherEnabled) {
             weatherRepository.load(queryState.campusID) {
-                activity.refreshPlannerIfVisible()
+                activity.refreshPlannerWeatherIfVisible()
             }
         }
         return ScrollView(activity).apply {
@@ -121,6 +126,44 @@ class PlannerPage(
                 addView(summaryContainer)
             })
             renderResultsAndSummary()
+        }.also { pageRoot = it }
+    }
+
+    fun refreshWeatherInPlace() {
+        val root = pageRoot ?: return
+        root.post {
+            if (pageRoot !== root || !root.isAttachedToWindow) return@post
+            if (weatherMotion?.isRunning == true) {
+                pendingWeatherRefresh = true
+                return@post
+            }
+            val weather = weatherRepository.weather(queryState.campusID)
+            weatherHeadline?.text = weatherHeadline(weather)
+            weatherViewport?.let { viewport ->
+                if (queryState.weatherExpanded || viewport.childCount > 0) {
+                    populateWeatherViewport(viewport, queryState.campusID, weather)
+                }
+            }
+            root.findViewById<View?>(R.id.planner_weather_surface)?.let(UiText::localizeTree)
+        }
+    }
+
+    fun refreshClassroomsInPlace() {
+        val root = pageRoot ?: return
+        root.post {
+            if (pageRoot !== root || !root.isAttachedToWindow) return@post
+            // Classroom publications must not replace the weather animation,
+            // the scroll owner, or the user's selected slots/buildings.
+            listOf(R.id.planner_query_surface, R.id.planner_buildings_surface).forEach { id ->
+                val previous = root.findViewById<View>(id) ?: return@forEach
+                val parent = previous.parent as? ViewGroup ?: return@forEach
+                val index = parent.indexOfChild(previous)
+                val replacement = if (id == R.id.planner_query_surface) querySurface() else buildingsSurface()
+                UiText.localizeTree(replacement)
+                parent.removeViewAt(index)
+                parent.addView(replacement, index, previous.layoutParams)
+            }
+            renderResultsAndSummary()
         }
     }
 
@@ -158,6 +201,14 @@ class PlannerPage(
         )
         val campusID = queryState.campusID
         val weather = weatherRepository.weather(campusID)
+        val viewport = LinearLayout(activity).apply {
+            id = R.id.planner_weather_content
+            orientation = LinearLayout.VERTICAL
+            visibility = if (queryState.weatherExpanded) View.VISIBLE else View.GONE
+        }
+        weatherViewport = viewport
+        lateinit var indicator: ImageView
+        lateinit var motion: DisclosureMotionController
         val header = LinearLayout(activity).apply {
             id = R.id.planner_weather_toggle
             orientation = LinearLayout.HORIZONTAL
@@ -187,9 +238,8 @@ class PlannerPage(
                     includeFontPadding = false
                 })
                 addView(TextView(activity).apply {
-                    text = weather?.let {
-                        "${it.campusName} · ${it.district} · ${it.currentWeather} ${it.currentTemperature}°"
-                    } ?: "今日与明日"
+                    weatherHeadline = this
+                    text = weatherHeadline(weather)
                     textSize = 12f
                     setThemeTextColor { Palette.muted }
                     maxLines = 1
@@ -199,6 +249,8 @@ class PlannerPage(
                 })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(ImageView(activity).apply {
+                indicator = this
+                id = R.id.planner_weather_indicator
                 setImageResource(R.drawable.ic_chevron_down)
                 bindTheme("imageTintList") { imageTintList = ColorStateList.valueOf(Palette.muted) }
                 rotation = if (queryState.weatherExpanded) 180f else 0f
@@ -209,7 +261,15 @@ class PlannerPage(
             setOnClickListener {
                 activity.performControlHaptic(it)
                 queryState.toggleWeather()
-                activity.refreshCurrentPage()
+                contentDescription = activity.uiText(if (queryState.weatherExpanded) {
+                    "校区天气，已展开，点击折叠"
+                } else {
+                    "校区天气，已折叠，点击展开"
+                })
+                if (viewport.childCount == 0 && queryState.weatherExpanded) {
+                    populateWeatherViewport(viewport, campusID, weatherRepository.weather(campusID))
+                }
+                motion.animateTo(queryState.weatherExpanded)
             }
         }
         addView(header, LinearLayout.LayoutParams(
@@ -217,8 +277,29 @@ class PlannerPage(
             ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        if (queryState.weatherExpanded) {
-            addView(View(activity).apply {
+        addView(viewport, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+        if (queryState.weatherExpanded) populateWeatherViewport(viewport, campusID, weather)
+        motion = DisclosureMotionController(this, viewport, indicator,
+            onSettled = {
+                if (pendingWeatherRefresh) {
+                    pendingWeatherRefresh = false
+                    refreshWeatherInPlace()
+                }
+            },
+            onDetached = { pendingWeatherRefresh = false },
+        )
+        weatherMotion = motion
+    }
+
+    private fun weatherHeadline(weather: CampusWeather?): String = weather?.let {
+        "${it.campusName} · ${it.district} · ${it.currentWeather} ${it.currentTemperature}°"
+    } ?: "今日与明日"
+
+    private fun populateWeatherViewport(viewport: LinearLayout, campusID: String, weather: CampusWeather?) {
+        viewport.removeAllViews()
+        viewport.addView(View(activity).apply {
                 setThemeBackgroundColor { Palette.border }
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -227,9 +308,9 @@ class PlannerPage(
                     topMargin = activity.dp(10)
                     bottomMargin = activity.dp(10)
                 }
-            })
-            addView(weatherDetails(campusID, weather))
-        }
+        })
+        viewport.addView(weatherDetails(campusID, weather))
+        UiText.localizeTree(viewport)
     }
 
     private fun weatherDetails(campusID: String, weather: CampusWeather?): LinearLayout =
@@ -255,9 +336,9 @@ class PlannerPage(
                         setOnClickListener {
                             activity.performControlHaptic(it)
                             weatherRepository.load(campusID, force = true) {
-                                activity.refreshPlannerIfVisible()
+                                activity.refreshPlannerWeatherIfVisible()
                             }
-                            activity.refreshCurrentPage()
+                            refreshWeatherInPlace()
                         }
                     })
                 }

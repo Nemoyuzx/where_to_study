@@ -24,6 +24,8 @@
     <item name="planner_weather_surface" type="id" />
     <item name="planner_weather_toggle" type="id" />
     <item name="planner_weather_details" type="id" />
+    <item name="planner_weather_content" type="id" />
+    <item name="planner_weather_indicator" type="id" />
     <item name="privacy_policy_button" type="id" />
     <item name="account_privacy_policy_button" type="id" />
     <item name="privacy_consent_dialog_content" type="id" />

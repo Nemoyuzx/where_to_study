@@ -69,6 +69,65 @@ export class CalendarModeInfo {
   }
 }
 
+export class CalendarPageRequest {
+  readonly direction: number;
+  readonly date: DateParts;
+  readonly mode: CalendarMode;
+  readonly preservesMonthAnchor: boolean;
+  readonly monthSheetPosition: number | null;
+
+  constructor(direction: number, date: DateParts, mode: CalendarMode,
+    preservesMonthAnchor: boolean = false, monthSheetPosition: number | null = null) {
+    this.direction = direction;
+    this.date = date;
+    this.mode = mode;
+    this.preservesMonthAnchor = preservesMonthAnchor;
+    this.monthSheetPosition = monthSheetPosition;
+  }
+
+  sameDestination(other: CalendarPageRequest): boolean {
+    return this.date.equals(other.date) && this.mode === other.mode &&
+      this.monthSheetPosition === other.monthSheetPosition;
+  }
+}
+
+// 动画期间只保留最后一次目标，重复前进从待提交目标继续计算；
+// 不让旧页面完成回调覆盖新选择，也不无限堆积待执行页面。
+export class CalendarPageTransitionQueue {
+  private active: CalendarPageRequest | null = null;
+  private queued: CalendarPageRequest | null = null;
+
+  effectiveDate(selected: DateParts): DateParts {
+    return this.queued?.date ?? this.active?.date ?? selected;
+  }
+
+  effectiveMode(selected: CalendarMode): CalendarMode {
+    return this.queued?.mode ?? this.active?.mode ?? selected;
+  }
+
+  submit(request: CalendarPageRequest): boolean {
+    if (this.active === null) {
+      this.active = request;
+      return true;
+    }
+    this.queued = request.sameDestination(this.active) ? null : request;
+    return false;
+  }
+
+  completeActive(): CalendarPageRequest | null {
+    this.active = this.queued;
+    this.queued = null;
+    return this.active;
+  }
+
+  interrupt(): CalendarPageRequest | null {
+    const pending: CalendarPageRequest | null = this.queued ?? this.active;
+    this.active = null;
+    this.queued = null;
+    return pending;
+  }
+}
+
 export class CalendarTimelineDay {
   readonly date: DateParts;
   readonly courses: Course[];
@@ -169,6 +228,18 @@ export class TeachingCalendarLogic {
   static readonly monthSheetWeekPosition: number = 2;
   static readonly monthExpandedCellHeight: number = 82;
   static readonly monthCollapsedCellHeight: number = 46;
+  static readonly courseSummaryRowHeight: number = 34;
+  static readonly courseSummaryRowSpacing: number = 6;
+  static readonly courseSummaryVerticalPadding: number = 14;
+
+  static courseSummaryViewportHeight(courseCount: number): number {
+    if (courseCount <= 0) {
+      return 0;
+    }
+    return TeachingCalendarLogic.courseSummaryVerticalPadding +
+      courseCount * TeachingCalendarLogic.courseSummaryRowHeight +
+      (courseCount - 1) * TeachingCalendarLogic.courseSummaryRowSpacing;
+  }
 
   static modeTransitionDirection(fromMode: CalendarMode, toMode: CalendarMode): number {
     const fromIndex: number = CalendarModeInfo.all.indexOf(fromMode);

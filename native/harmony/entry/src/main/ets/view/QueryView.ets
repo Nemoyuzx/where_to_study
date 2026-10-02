@@ -28,6 +28,7 @@ export struct QueryView {
   @Event onOpenSettings: () => void = () => {};
   @Consumer('appModel') model: AppModel = new AppModel();
   @Local selectedTabRawValue: string = QueryPageTab.shuttle;
+  @Local tabContentOpacity: number = 1;
   @Local eventFilterRawValue: string = ImportantEventFilter.all;
   @Local eventCategory: string = '';
   @Local showEndedEvents: boolean = false;
@@ -41,6 +42,11 @@ export struct QueryView {
   @Local shuttleError: string = '';
   private readonly shuttleClient: ShuttleBusFetching = new ShuttleBusClient();
   private readonly eventScroller: Scroller = new Scroller();
+  private readonly regularScroller: Scroller = new Scroller();
+  private readonly regularScrollOffsets: Map<string, number> = new Map<string, number>();
+  private eventFirstVisibleIndex: number = 0;
+  private tabMotionGeneration: number = 0;
+  private tabRestoreTimer: number = -1;
 
   @Monitor('searchText', 'eventFilterRawValue', 'eventCategory', 'showEndedEvents',
     'model.importantEventsCatalog', 'model.favoriteDeadlines')
@@ -53,6 +59,78 @@ export struct QueryView {
     this.loadShuttle();
     this.model.ensureHolidays(StrictDates.todayParts().year, false);
     this.model.loadImportantEvents(false);
+  }
+
+  aboutToDisappear(): void {
+    this.tabMotionGeneration++;
+    if (this.tabRestoreTimer >= 0) {
+      clearTimeout(this.tabRestoreTimer);
+      this.tabRestoreTimer = -1;
+    }
+    this.tabContentOpacity = 1;
+  }
+
+  private saveCurrentTabScroll(): void {
+    if (this.selectedTab() === QueryPageTab.events) {
+      return;
+    }
+    try {
+      const offset: number = this.regularScroller.currentOffset().yOffset;
+      if (Number.isFinite(offset)) {
+        this.regularScrollOffsets.set(this.selectedTab(), Math.max(0, offset));
+      }
+    } catch (e) {
+      // 首帧或空页面尚未绑定 Scroller；保留此前记录的偏移量。
+    }
+  }
+
+  private restoreSelectedTabScroll(): void {
+    if (this.selectedTab() === QueryPageTab.events) {
+      try {
+        this.eventScroller.scrollToIndex(this.eventFirstVisibleIndex, false, ScrollAlign.START);
+      } catch (e) {
+        // 事件列表为空或尚未挂载，不覆盖筛选条件与分页状态。
+      }
+      return;
+    }
+    try {
+      this.regularScroller.scrollTo({ xOffset: 0,
+        yOffset: this.regularScrollOffsets.get(this.selectedTab()) ?? 0, animation: false });
+    } catch (e) {
+      // 刚切换到尚未挂载的查询页时，从顶部开始，不改变已有偏移记录。
+    }
+  }
+
+  private selectTab(tab: QueryPageTab): void {
+    if (tab === this.selectedTab() && this.tabContentOpacity === 1) {
+      return;
+    }
+    const generation: number = ++this.tabMotionGeneration;
+    if (this.tabRestoreTimer >= 0) {
+      clearTimeout(this.tabRestoreTimer);
+      this.tabRestoreTimer = -1;
+    }
+    this.saveCurrentTabScroll();
+    this.getUIContext().animateTo({ duration: 90, curve: Curve.EaseOut,
+      onFinish: (): void => {
+        if (generation !== this.tabMotionGeneration) {
+          return;
+        }
+        this.selectedTabRawValue = tab;
+        this.tabRestoreTimer = setTimeout(() => {
+          this.tabRestoreTimer = -1;
+          if (generation !== this.tabMotionGeneration) {
+            return;
+          }
+          this.restoreSelectedTabScroll();
+          this.getUIContext().animateTo({ duration: 130, curve: Curve.EaseOut }, (): void => {
+            this.tabContentOpacity = 1;
+          });
+        }, 16);
+      }
+    }, (): void => {
+      this.tabContentOpacity = 0;
+    });
   }
 
   private todayIsPublicHoliday(): boolean {
@@ -181,6 +259,7 @@ export struct QueryView {
 
   private resetEventRendering(): void {
     this.requestedVisibleEventCount = ImportantEventQueryLogic.initialRequestedCount();
+    this.eventFirstVisibleIndex = 0;
     try {
       this.eventScroller.scrollToIndex(0, false, ScrollAlign.START);
     } catch (e) {
@@ -232,11 +311,18 @@ export struct QueryView {
 
   build() {
     Column({ space: 0 }) {
+      Column({ space: 16 }) {
+        this.pageHeader()
+        this.tabPicker()
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: ShuttleQueryLayout.maximumPageWidthVp })
+      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+      .alignSelf(ItemAlign.Center)
+      .alignItems(HorizontalAlign.Start)
       if (this.selectedTab() !== QueryPageTab.events) {
-        Scroll() {
+        Scroll(this.regularScroller) {
           Column({ space: 16 }) {
-            this.pageHeader()
-            this.tabPicker()
             if (this.selectedTab() === QueryPageTab.shuttle) {
               this.shuttleContent()
             } else if (this.selectedTab() === QueryPageTab.assignments) {
@@ -249,7 +335,7 @@ export struct QueryView {
           }
           .width('100%')
           .constraintSize({ maxWidth: ShuttleQueryLayout.maximumPageWidthVp })
-          .padding({ left: 16, right: 16, top: 16,
+          .padding({ left: 16, right: 16, top: 0,
             bottom: this.isWide() ? 28 : PhoneNavigationLayout.minimumContentBottomInsetVp })
           .alignSelf(ItemAlign.Center)
           .alignItems(HorizontalAlign.Start)
@@ -259,10 +345,14 @@ export struct QueryView {
         .layoutWeight(1)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+        .opacity(this.tabContentOpacity)
       } else {
-        this.pageHeader()
-        this.tabPicker()
-        this.eventsContent()
+        Column() {
+          this.eventsContent()
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .opacity(this.tabContentOpacity)
       }
     }
     .width('100%')
@@ -301,7 +391,6 @@ export struct QueryView {
       }
     }
     .width('100%')
-    .padding(this.selectedTab() !== QueryPageTab.events ? 0 : 16)
     .alignItems(VerticalAlign.Center)
   }
 
@@ -317,10 +406,9 @@ export struct QueryView {
         this.tabLabel(tab, iconOnly)
       }, (tab: QueryPageTab) => 'query-tab.' + tab)
     }
-    .width(this.selectedTab() !== QueryPageTab.events ? '100%' : 'calc(100% - 32vp)')
+    .width('100%')
     .constraintSize({ minHeight: ControlMetrics.height })
     .padding(3)
-    .margin({ bottom: this.selectedTab() !== QueryPageTab.events ? 0 : 12 })
     .borderRadius(11)
     .backgroundColor(AppTheme.surfaceVariant())
     .alignSelf(ItemAlign.Center)
@@ -360,7 +448,7 @@ export struct QueryView {
     .accessibilityText(this.model.text(QueryPageContract.tabTitle(tab)))
     .accessibilitySelected(this.selectedTab() === tab)
     .id(QueryPageContract.tabAccessibilityID(tab))
-    .onClick(() => { this.selectedTabRawValue = tab; })
+    .onClick(() => { this.selectTab(tab); })
   }
 
   @Builder
@@ -909,6 +997,9 @@ export struct QueryView {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .onScrollIndex((start: number, end: number, center: number) => {
+          if (this.tabContentOpacity >= 0.99) {
+            this.eventFirstVisibleIndex = start;
+          }
           this.appendEventPage(end);
         })
       }

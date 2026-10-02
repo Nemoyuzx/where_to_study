@@ -5,6 +5,7 @@ struct PlannerView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isWeatherExpanded = false
 
     private var slotColumns: [GridItem] {
@@ -137,8 +138,12 @@ struct PlannerView: View {
         return Surface {
             VStack(alignment: .leading, spacing: 12) {
                 Button {
-                    withAnimation(.easeOut(duration: 0.16)) {
+                    if reduceMotion || AppLaunchConfiguration.forcesReducedMotionForUITests {
                         isWeatherExpanded.toggle()
+                    } else {
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            isWeatherExpanded.toggle()
+                        }
                     }
                 } label: {
                     HStack(spacing: 10) {

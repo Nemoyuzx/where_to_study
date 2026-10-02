@@ -252,6 +252,12 @@ export function shiftDate(dateString, view, direction) {
   return localDateString(date)
 }
 
+export function queuedCalendarPage(currentDate, currentView, pending, direction) {
+  const view = pending?.view || currentView
+  const date = pending?.date || currentDate
+  return { date: shiftDate(date, view, direction), view }
+}
+
 export function calendarSurfaceKey(view, dateString) {
   if (view === 'day') return `day:${dateString}`
   if (view === 'week') return `week:${startOfWeekMonday(dateString)}`

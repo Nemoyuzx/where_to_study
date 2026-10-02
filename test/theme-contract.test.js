@@ -93,6 +93,10 @@ const androidCalendarSource = readFileSync(
   ),
   'utf8',
 )
+const androidDisclosureMotionSource = readFileSync(
+  new URL('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/DisclosureMotionController.kt', import.meta.url),
+  'utf8',
+)
 const androidCalendarDailyInfoSource = readFileSync(
   new URL(
     '../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/CalendarDailyInfoClient.kt',
@@ -596,11 +600,12 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   )
   assert.match(androidAgendaSection, /val indicator = ImageView\(activity\)/)
   assert.match(androidAgendaSection, /setImageResource\(R\.drawable\.ic_chevron_down\)/)
-  assert.match(androidAgendaSection, /animateDayWeekCourseContent\(/)
-  assert.match(androidAgendaSection, /ValueAnimator\.ofFloat\(0f, 1f\)/)
-  assert.match(androidAgendaSection, /content\.layoutParams\.height =/)
-  assert.match(androidAgendaSection, /agendaExpansionAnimator !== animation/)
-  assert.match(androidAgendaSection, /onViewDetachedFromWindow/)
+  assert.match(androidAgendaSection, /DisclosureMotionController\(/)
+  assert.match(androidAgendaSection, /motion\.animateTo\(sessionState\.dayWeekAgendaExpanded/)
+  assert.match(androidDisclosureMotionSource, /ValueAnimator\.ofFloat\(0f, 1f\)/)
+  assert.match(androidDisclosureMotionSource, /content\.layoutParams\.height =/)
+  assert.match(androidDisclosureMotionSource, /animator !== animation/)
+  assert.match(androidDisclosureMotionSource, /onViewDetachedFromWindow/)
   assert.doesNotMatch(androidAgendaSection, /TransitionManager\.beginDelayedTransition/)
   assert.match(androidAgendaSection, /addView\(compactCourseArea\(selectedDay\.date, compact\)\)/)
   assert.ok(
@@ -636,11 +641,15 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   assert.match(harmonyTimelineSection, /timelineCourseSummaryDate\(renderMode, renderDate\)/)
   assert.match(
     harmonyTimelineSection,
-    /if \(this\.courseSectionExpanded && this\.coursesOn\([\s\S]*this\.selectedDateCourses/,
+    /if \(this\.coursesOn\([\s\S]*this\.selectedDateCourses/,
   )
+  assert.match(harmonyTimelineSection, /\.height\(this\.courseSectionExpanded \?/)
+  assert.match(harmonyTimelineSection, /\.opacity\(this\.courseSectionExpanded \? 1 : 0\)/)
+  assert.match(harmonyTimelineSection, /\.clip\(true\)/)
+  assert.match(harmonyMobileCalendarSource, /courseSummaryViewportHeight/)
   assert.ok(
     harmonyTimelineSection.indexOf('this.allDayItems(renderMode, renderDate, interactive)') >
-      harmonyTimelineSection.indexOf('if (this.courseSectionExpanded)'),
+      harmonyTimelineSection.indexOf('.enabled(this.courseSectionExpanded)'),
     'Harmony all-day events must remain visible when only the course list is collapsed',
   )
   assert.match(harmonyMobileCalendarSource, /dayAllDayItems\(renderDate:/)
@@ -983,10 +992,13 @@ test('calendar paging keeps an outgoing page while the new page slides in', () =
     harmonyMobileCalendarSource,
     /yOffset: restoreOffsetY === null \?/,
   )
-  const commitIndex = harmonyMobileCalendarSource.indexOf('this.session.commitMonthNavigation(targetDate)')
+  const commitIndex = harmonyMobileCalendarSource.indexOf('this.commitPageRequest(request);',
+    harmonyMobileCalendarSource.indexOf('private runPageTransition'))
   const nextFrameIndex = harmonyMobileCalendarSource.indexOf('setTimeout(() => {', commitIndex)
   const unmountIndex = harmonyMobileCalendarSource.indexOf('this.pageTransitionActive = false', commitIndex)
   assert.ok(commitIndex >= 0 && commitIndex < nextFrameIndex && nextFrameIndex < unmountIndex)
+  assert.match(harmonyMobileCalendarSource, /this\.session\.commitMonthNavigation\(request\.date\)/)
+  assert.match(harmonyMobileCalendarSource, /revision !== this\.pageTransitionRevision/)
 })
 
 test('Harmony secure credential queries explicitly request secret data', () => {

@@ -13,7 +13,7 @@ import { DeadlineVisual, DeadlineVisualKind } from '../../common/DeadlineVisual'
 import { PageTitle, SurfaceCard } from '../SharedComponents';
 import {
   CalendarFormatters, CalendarGestureAxis, CalendarMode, CalendarModeInfo,
-  CalendarPageTransitionOffsets, CalendarTimelineDay,
+  CalendarPageRequest, CalendarPageTransitionOffsets, CalendarPageTransitionQueue, CalendarTimelineDay,
   CalendarTimelineLogic, DarkModeProbe, TeachingCalendarLogic
 } from './CalendarLogic';
 import { TeachingCalendarSession } from './TeachingCalendarSession';
@@ -66,6 +66,7 @@ export struct MobileTeachingCalendarView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
   @Local presentedDay: DateParts | null = null;
+  @Local presentedDayOpacity: number = 0;
   @Local allDayDialogDay: DateParts | null = null;
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local showingActions: boolean = false;
@@ -93,9 +94,13 @@ export struct MobileTeachingCalendarView {
   @Local monthDetailsScrollEnabled: boolean = false;
   @Local courseSectionExpanded: boolean = true;
   @Local calendarDataRevision: number = 0;
+  private courseMotionGeneration: number = 0;
+  private courseMotionInFlight: boolean = false;
+  private pendingCalendarDataRevision: boolean = false;
   private cachedCalendarDataRevision: number = -1;
   private cachedCalendarDays: Map<string, CalendarDayData> = new Map<string, CalendarDayData>();
   private pageAnimating: boolean = false;
+  private pageQueue: CalendarPageTransitionQueue = new CalendarPageTransitionQueue();
   private timelineScroller: Scroller = new Scroller();
   private incomingTimelineScroller: Scroller = new Scroller();
   private monthDetailsScroller: Scroller = new Scroller();
@@ -104,8 +109,18 @@ export struct MobileTeachingCalendarView {
   private monthGestureRoutedToDetails: boolean = false;
   private monthDetailsAtTopAtGestureStart: boolean = true;
   private monthScrollEnableRevision: number = 0;
+  private monthScrollEnableTimer: number = -1;
+  private monthResetTimer: number = -1;
   private timelineScrollTimer: number = -1;
   private pendingTimelineRestoreOffsetY: number | null = null;
+  private pageTransitionRevision: number = 0;
+  private pageMountTimer: number = -1;
+  private pageCommitTimer: number = -1;
+  private pageCleanupTimer: number = -1;
+  private presentedDayLoadRevision: number = 0;
+  private presentedDayLoadTimer: number = -1;
+  private presentedDayMountTimer: number = -1;
+  private presentedDayMotionGeneration: number = 0;
 
   @Monitor('model.schedule', 'model.holidaysByYear', 'model.assignmentDeadlinesByDate',
     'model.publicDeadlinesByDate', 'model.favoriteDeadlines', 'model.runtimeMode',
@@ -115,6 +130,10 @@ export struct MobileTeachingCalendarView {
     'model.languageSettingRawValue', 'model.systemLanguageID',
     'model.colorTheme.selection', 'model.colorTheme.dark')
   onCalendarDataChange(monitor: IMonitor): void {
+    if (this.courseMotionInFlight) {
+      this.pendingCalendarDataRevision = true;
+      return;
+    }
     this.calendarDataRevision++;
   }
 
@@ -131,7 +150,40 @@ export struct MobileTeachingCalendarView {
   }
 
   aboutToDisappear(): void {
+    this.finishCourseMotionForNavigation();
     this.darkModeProbe.unregister();
+    const pendingPage: CalendarPageRequest | null = this.pageQueue.interrupt();
+    if (pendingPage !== null) {
+      this.commitPageRequest(pendingPage);
+    }
+    this.pageTransitionRevision++;
+    this.clearPageTransitionTimers();
+    this.pageAnimating = false;
+    this.pageTransitionActive = false;
+    this.pageOffsetX = 0;
+    this.incomingPageOffsetX = 0;
+    this.modeIndicatorRawValue = this.session.modeRawValue;
+    this.monthScrollEnableRevision++;
+    this.presentedDayLoadRevision++;
+    this.presentedDayMotionGeneration++;
+    if (this.presentedDayLoadTimer >= 0) {
+      clearTimeout(this.presentedDayLoadTimer);
+      this.presentedDayLoadTimer = -1;
+    }
+    if (this.presentedDayMountTimer >= 0) {
+      clearTimeout(this.presentedDayMountTimer);
+      this.presentedDayMountTimer = -1;
+    }
+    this.presentedDay = null;
+    this.presentedDayOpacity = 0;
+    if (this.monthScrollEnableTimer >= 0) {
+      clearTimeout(this.monthScrollEnableTimer);
+      this.monthScrollEnableTimer = -1;
+    }
+    if (this.monthResetTimer >= 0) {
+      clearTimeout(this.monthResetTimer);
+      this.monthResetTimer = -1;
+    }
     // 清理延迟滚动定时器，避免对已销毁 Scroller 操作（BUG-012 修复）。
     if (this.timelineScrollTimer >= 0) {
       clearTimeout(this.timelineScrollTimer);
@@ -163,19 +215,73 @@ export struct MobileTeachingCalendarView {
   }
 
   private setSelectedDate(date: DateParts): void {
+    this.cancelPageTransitionForDirectSelection();
+    if (!date.equals(this.selectedDate())) {
+      this.finishCourseMotionForNavigation();
+    }
     this.session.selectDate(date);
   }
 
   private setMode(mode: CalendarMode): void {
+    this.cancelPageTransitionForDirectSelection();
+    if (mode !== this.mode()) {
+      this.finishCourseMotionForNavigation();
+    }
     this.session.modeRawValue = mode;
   }
 
-  private animateMode(mode: CalendarMode): void {
-    if (mode === this.mode()) {
+  private finishCourseMotionForNavigation(): void {
+    this.courseMotionGeneration++;
+    this.courseMotionInFlight = false;
+    if (this.pendingCalendarDataRevision) {
+      this.pendingCalendarDataRevision = false;
+      this.calendarDataRevision++;
+    }
+  }
+
+  private cancelPageTransitionForDirectSelection(): void {
+    if (!this.pageAnimating) {
       return;
     }
-    const direction: number = TeachingCalendarLogic.modeTransitionDirection(this.mode(), mode);
-    this.animatePageChange(direction, this.selectedDate(), mode);
+    this.pageQueue.interrupt();
+    this.pageTransitionRevision++;
+    this.clearPageTransitionTimers();
+    this.pageAnimating = false;
+    this.pageTransitionActive = false;
+    this.pageOffsetX = 0;
+    this.incomingPageOffsetX = 0;
+    this.modeIndicatorRawValue = this.session.modeRawValue;
+  }
+
+  private toggleCourseSection(): void {
+    const expanded: boolean = !this.courseSectionExpanded;
+    const generation: number = ++this.courseMotionGeneration;
+    this.courseMotionInFlight = true;
+    this.getUIContext().animateTo({
+      duration: 160,
+      curve: Curve.EaseOut,
+      onFinish: (): void => {
+        if (generation !== this.courseMotionGeneration) {
+          return;
+        }
+        this.courseMotionInFlight = false;
+        if (this.pendingCalendarDataRevision) {
+          this.pendingCalendarDataRevision = false;
+          this.calendarDataRevision++;
+        }
+      }
+    }, (): void => {
+      this.courseSectionExpanded = expanded;
+    });
+  }
+
+  private animateMode(mode: CalendarMode): void {
+    const effectiveMode: CalendarMode = this.pageQueue.effectiveMode(this.mode());
+    if (mode === effectiveMode) {
+      return;
+    }
+    const direction: number = TeachingCalendarLogic.modeTransitionDirection(effectiveMode, mode);
+    this.animatePageChange(direction, this.pageQueue.effectiveDate(this.selectedDate()), mode);
   }
 
   private coursesOn(date: DateParts): Course[] {
@@ -280,69 +386,128 @@ export struct MobileTeachingCalendarView {
   }
 
   private animateDate(direction: number): void {
-    const mode: CalendarMode = this.mode();
+    const mode: CalendarMode = this.pageQueue.effectiveMode(this.mode());
+    const baseDate: DateParts = this.pageQueue.effectiveDate(this.selectedDate());
     const anchoredMonthNavigation: boolean = mode === CalendarMode.month;
     const target: DateParts = anchoredMonthNavigation ?
-      this.session.monthNavigationDestination(direction) :
-      TeachingCalendarLogic.movedDate(this.selectedDate(), mode, direction);
+      this.session.monthNavigationDestination(direction, baseDate) :
+      TeachingCalendarLogic.movedDate(baseDate, mode, direction);
     this.animatePageChange(direction, target, mode, anchoredMonthNavigation);
   }
 
   private animatePageChange(direction: number, targetDate: DateParts, targetMode: CalendarMode,
     preservesMonthNavigationAnchor: boolean = false,
     targetMonthSheetPosition: number | null = null): void {
-    if (direction === 0 || this.pageAnimating) {
+    if (direction === 0) {
       return;
     }
+    const request: CalendarPageRequest = new CalendarPageRequest(direction, targetDate, targetMode,
+      preservesMonthNavigationAnchor, targetMode === CalendarMode.month ?
+        (targetMonthSheetPosition ?? this.monthSheetPosition) : targetMonthSheetPosition);
+    if (!this.pageQueue.submit(request)) {
+      return;
+    }
+    this.runPageTransition(request);
+  }
+
+  private runPageTransition(request: CalendarPageRequest): void {
+    this.finishCourseMotionForNavigation();
+    this.monthScrollEnableRevision++;
+    if (this.monthScrollEnableTimer >= 0) {
+      clearTimeout(this.monthScrollEnableTimer);
+      this.monthScrollEnableTimer = -1;
+    }
+    if (this.monthResetTimer >= 0) {
+      clearTimeout(this.monthResetTimer);
+      this.monthResetTimer = -1;
+    }
+    this.clearPageTransitionTimers();
+    const revision: number = ++this.pageTransitionRevision;
     this.performCalendarHaptic();
     this.pageAnimating = true;
     const distance: number = Math.max(this.contentWidth, 320);
-    this.incomingDate = targetDate;
-    this.incomingModeRawValue = targetMode;
-    this.incomingMonthSheetPosition = targetMonthSheetPosition === null ?
+    this.incomingDate = request.date;
+    this.incomingModeRawValue = request.mode;
+    this.incomingMonthSheetPosition = request.monthSheetPosition === null ?
       TeachingCalendarLogic.clampMonthSheetPosition(this.monthSheetPosition) :
-      TeachingCalendarLogic.clampMonthSheetPosition(targetMonthSheetPosition as number);
+      TeachingCalendarLogic.clampMonthSheetPosition(request.monthSheetPosition as number);
     const offsets: CalendarPageTransitionOffsets =
-      TeachingCalendarLogic.pageTransitionOffsets(direction, distance);
+      TeachingCalendarLogic.pageTransitionOffsets(request.direction, distance);
     this.incomingPageOffsetX = offsets.incomingStartX;
     this.pageTransitionActive = true;
 
     // 先挂载相邻页面，下一帧再让两页同时移动，避免旧实现中间出现空白帧。
-    setTimeout(() => {
+    this.pageMountTimer = setTimeout(() => {
+      this.pageMountTimer = -1;
+      if (revision !== this.pageTransitionRevision) {
+        return;
+      }
       animateTo({ duration: TeachingCalendarLogic.pageTransitionDuration,
         curve: Curve.EaseInOut }, (): void => {
-        this.modeIndicatorRawValue = targetMode;
+        this.modeIndicatorRawValue = request.mode;
         this.pageOffsetX = offsets.outgoingEndX;
         this.incomingPageOffsetX = 0;
       });
-      setTimeout(() => {
-        if (!targetDate.equals(this.selectedDate())) {
-          if (preservesMonthNavigationAnchor) {
-            this.session.commitMonthNavigation(targetDate);
-          } else {
-            this.setSelectedDate(targetDate);
-          }
+      this.pageCommitTimer = setTimeout(() => {
+        this.pageCommitTimer = -1;
+        if (revision !== this.pageTransitionRevision) {
+          return;
         }
-        this.setMode(targetMode);
-        if (targetMode === CalendarMode.month) {
-          this.monthSheetPosition = this.incomingMonthSheetPosition;
-          this.session.setMonthSheetPosition(this.monthSheetPosition);
-          this.monthDetailsScrollEnabled = TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(
-            this.monthSheetPosition);
-        }
+        this.commitPageRequest(request);
         // 先让带新 identity 的 current page 在已经居中的 incoming page 后方挂载。
         // 下一帧再卸载 incoming，避免同一批状态提交使旧 Builder 子树重新出现。
         this.pageOffsetX = 0;
-        setTimeout(() => {
+        this.pageCleanupTimer = setTimeout(() => {
+          this.pageCleanupTimer = -1;
+          if (revision !== this.pageTransitionRevision) {
+            return;
+          }
           this.incomingPageOffsetX = 0;
           this.pageTransitionActive = false;
           this.pageAnimating = false;
-          if (targetMode === CalendarMode.month) {
+          const next: CalendarPageRequest | null = this.pageQueue.completeActive();
+          if (next !== null) {
+            this.runPageTransition(next);
+          } else if (request.mode === CalendarMode.month) {
             this.resetMonthDetailsScroll();
           }
         }, 16);
       }, 310);
     }, 16);
+  }
+
+  private commitPageRequest(request: CalendarPageRequest): void {
+    if (!request.date.equals(this.selectedDate())) {
+      if (request.preservesMonthAnchor) {
+        this.session.commitMonthNavigation(request.date);
+      } else {
+        this.session.selectDate(request.date);
+      }
+    }
+    this.session.modeRawValue = request.mode;
+    if (request.mode === CalendarMode.month) {
+      this.monthSheetPosition = request.monthSheetPosition === null ?
+        TeachingCalendarLogic.clampMonthSheetPosition(this.monthSheetPosition) :
+        TeachingCalendarLogic.clampMonthSheetPosition(request.monthSheetPosition as number);
+      this.session.setMonthSheetPosition(this.monthSheetPosition);
+      this.monthDetailsScrollEnabled = TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(
+        this.monthSheetPosition);
+    }
+  }
+
+  private clearPageTransitionTimers(): void {
+    if (this.pageMountTimer >= 0) {
+      clearTimeout(this.pageMountTimer);
+      this.pageMountTimer = -1;
+    }
+    if (this.pageCommitTimer >= 0) {
+      clearTimeout(this.pageCommitTimer);
+      this.pageCommitTimer = -1;
+    }
+    if (this.pageCleanupTimer >= 0) {
+      clearTimeout(this.pageCleanupTimer);
+      this.pageCleanupTimer = -1;
+    }
   }
 
   private navigateTo(date: DateParts): void {
@@ -476,10 +641,15 @@ export struct MobileTeachingCalendarView {
     });
     this.session.setMonthSheetPosition(target);
     const scrollRevision: number = ++this.monthScrollEnableRevision;
+    if (this.monthScrollEnableTimer >= 0) {
+      clearTimeout(this.monthScrollEnableTimer);
+      this.monthScrollEnableTimer = -1;
+    }
     if (target < TeachingCalendarLogic.monthSheetWeekPosition) {
       this.monthDetailsScrollEnabled = false;
     } else {
-      setTimeout(() => {
+      this.monthScrollEnableTimer = setTimeout(() => {
+        this.monthScrollEnableTimer = -1;
         if (scrollRevision === this.monthScrollEnableRevision &&
           this.session.monthSheetPosition >= TeachingCalendarLogic.monthSheetWeekPosition - 0.01) {
           this.monthDetailsScrollEnabled = true;
@@ -492,7 +662,11 @@ export struct MobileTeachingCalendarView {
   }
 
   private resetMonthDetailsScroll(): void {
-    setTimeout(() => {
+    if (this.monthResetTimer >= 0) {
+      clearTimeout(this.monthResetTimer);
+    }
+    this.monthResetTimer = setTimeout(() => {
+      this.monthResetTimer = -1;
       this.monthDetailsScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false });
     }, 0);
   }
@@ -841,10 +1015,25 @@ export struct MobileTeachingCalendarView {
     Column({ space: 0 }) {
       this.selectedDateSummary(
         TeachingCalendarLogic.timelineCourseSummaryDate(renderMode, renderDate), interactive)
-      if (this.courseSectionExpanded && this.coursesOn(
+      if (this.coursesOn(
         TeachingCalendarLogic.timelineCourseSummaryDate(renderMode, renderDate)).length > 0) {
-        this.selectedDateCourses(
-          TeachingCalendarLogic.timelineCourseSummaryDate(renderMode, renderDate))
+        Stack({ alignContent: Alignment.TopStart }) {
+          Column() {
+            this.selectedDateCourses(
+              TeachingCalendarLogic.timelineCourseSummaryDate(renderMode, renderDate))
+          }
+          .width('100%')
+          .height(TeachingCalendarLogic.courseSummaryViewportHeight(this.coursesOn(
+            TeachingCalendarLogic.timelineCourseSummaryDate(renderMode, renderDate)).length))
+          .position({ x: 0, y: 0 })
+        }
+        .width('100%')
+        .height(this.courseSectionExpanded ?
+          TeachingCalendarLogic.courseSummaryViewportHeight(this.coursesOn(
+            TeachingCalendarLogic.timelineCourseSummaryDate(renderMode, renderDate)).length) : 0)
+        .opacity(this.courseSectionExpanded ? 1 : 0)
+        .clip(true)
+        .enabled(this.courseSectionExpanded)
       }
       this.statusArea(true, renderMode, renderDate)
       this.allDayItems(renderMode, renderDate, interactive)
@@ -927,9 +1116,7 @@ export struct MobileTeachingCalendarView {
     .backgroundColor(AppTheme.surface())
     .onClick(() => {
       if (interactive) {
-        animateTo({ duration: 160, curve: Curve.EaseOut }, (): void => {
-          this.courseSectionExpanded = !this.courseSectionExpanded;
-        });
+        this.toggleCourseSection();
       }
     })
     .gesture(
@@ -944,7 +1131,7 @@ export struct MobileTeachingCalendarView {
 
   @Builder
   selectedDateCourses(renderDate: DateParts) {
-    Column({ space: 6 }) {
+    Column({ space: TeachingCalendarLogic.courseSummaryRowSpacing }) {
       if (this.coursesOn(renderDate).length === 0) {
         Text(this.model.text('暂无课程'))
           .fontSize(12)
@@ -974,7 +1161,7 @@ export struct MobileTeachingCalendarView {
             CourseRemovalButton({ course: course, date: renderDate })
           }
           .width('100%')
-          .height(34)
+          .height(TeachingCalendarLogic.courseSummaryRowHeight)
         }, (course: Course, index: number) => 'selected-course.' + course.id + '.' + index.toString())
       }
     }
@@ -982,7 +1169,6 @@ export struct MobileTeachingCalendarView {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(AppTheme.surface())
-    .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut }))
   }
 
   private courseSubtitle(course: Course): string {
@@ -1749,19 +1935,73 @@ export struct MobileTeachingCalendarView {
           return;
         }
         this.performCalendarHaptic();
-        this.setSelectedDate(day);
-        this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(day));
-        this.presentedDayAnchorX = Number(event.target.area.globalPosition.x) - this.rootGlobalX +
-          Number(event.target.area.width) / 2;
-        this.presentedDayAnchorY = Number(event.target.area.globalPosition.y) - this.rootGlobalY +
-          Number(event.target.area.height) / 2;
-        this.presentedDay = day;
+        this.showYearDay(day, event);
       })
     } else {
       Column()
         .width('100%')
         .height(26)
     }
+  }
+
+  private showYearDay(day: DateParts, event: ClickEvent): void {
+    const revision: number = ++this.presentedDayLoadRevision;
+    const motionGeneration: number = ++this.presentedDayMotionGeneration;
+    if (this.presentedDayLoadTimer >= 0) {
+      clearTimeout(this.presentedDayLoadTimer);
+    }
+    if (this.presentedDayMountTimer >= 0) {
+      clearTimeout(this.presentedDayMountTimer);
+    }
+    this.presentedDayAnchorX = Number(event.target.area.globalPosition.x) - this.rootGlobalX +
+      Number(event.target.area.width) / 2;
+    this.presentedDayAnchorY = Number(event.target.area.globalPosition.y) - this.rootGlobalY +
+      Number(event.target.area.height) / 2;
+    this.setSelectedDate(day);
+    this.presentedDayOpacity = 0;
+    this.presentedDay = day;
+    // 新节点先挂载一帧再启动数值动画，确保首次点击也有进入帧。
+    this.presentedDayMountTimer = setTimeout(() => {
+      this.presentedDayMountTimer = -1;
+      if (motionGeneration !== this.presentedDayMotionGeneration) {
+        return;
+      }
+      this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, (): void => {
+        this.presentedDayOpacity = 1;
+      });
+    }, 16);
+    // 首帧和开窗过渡先完成；远端请求不参与开窗动画。
+    this.presentedDayLoadTimer = setTimeout(() => {
+      this.presentedDayLoadTimer = -1;
+      if (revision === this.presentedDayLoadRevision && this.presentedDay?.equals(day)) {
+        this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(day));
+      }
+    }, 180);
+  }
+
+  private dismissYearDay(): void {
+    if (this.presentedDay === null) {
+      return;
+    }
+    const motionGeneration: number = ++this.presentedDayMotionGeneration;
+    this.presentedDayLoadRevision++;
+    if (this.presentedDayLoadTimer >= 0) {
+      clearTimeout(this.presentedDayLoadTimer);
+      this.presentedDayLoadTimer = -1;
+    }
+    if (this.presentedDayMountTimer >= 0) {
+      clearTimeout(this.presentedDayMountTimer);
+      this.presentedDayMountTimer = -1;
+    }
+    this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut,
+      onFinish: (): void => {
+        if (motionGeneration === this.presentedDayMotionGeneration) {
+          this.presentedDay = null;
+        }
+      }
+    }, (): void => {
+      this.presentedDayOpacity = 0;
+    });
   }
 
   private yearDeadlineKinds(day: DateParts): DeadlineVisualKind[] {
@@ -1924,7 +2164,7 @@ export struct MobileTeachingCalendarView {
         .height('100%')
         .backgroundColor(Color.Transparent)
         .onClick(() => {
-          this.presentedDay = null;
+          this.dismissYearDay();
         })
       Column({ space: 10 }) {
         Row({ space: 8 }) {
@@ -1937,7 +2177,7 @@ export struct MobileTeachingCalendarView {
             .fontSize(14)
             .fontColor(AppTheme.primary())
             .onClick(() => {
-              this.presentedDay = null;
+              this.dismissYearDay();
             })
         }
         .width('100%')
@@ -1975,6 +2215,7 @@ export struct MobileTeachingCalendarView {
     }
     .width('100%')
     .height('100%')
+    .opacity(this.presentedDayOpacity)
   }
 
   private dayDetailWidth(): number {
@@ -2019,7 +2260,7 @@ export struct MobileTeachingCalendarView {
             this.performCalendarHaptic();
             this.setSelectedDate(day);
             this.setMode(item);
-            this.presentedDay = null;
+            this.dismissYearDay();
           })
       }, (item: CalendarMode) => 'year-jump.' + item)
     }

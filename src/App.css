@@ -2553,7 +2553,7 @@ button:disabled {
     var(--month-weekday-height)
     repeat(6, minmax(0, var(--month-expanded-row-height, 118px)));
   height: 100%;
-  transition: grid-template-rows 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: height 280ms cubic-bezier(0.22, 0.61, 0.36, 1), grid-template-rows 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .month-view.compact .month-calendar {
@@ -4319,12 +4319,36 @@ button:disabled {
   font-size: 15px;
 }
 
+.weather-strip-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 220ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 180ms ease;
+}
+
+.weather-strip-reveal.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.weather-strip-reveal-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .weather-strip-details {
   border-top: 1px solid var(--border-subtle);
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
   padding: 12px 16px 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-strip-reveal,
+  .weather-strip-chevron {
+    transition: none;
+  }
 }
 
 .weather-days {
@@ -6104,4 +6128,26 @@ input:disabled {
   gap: 6px; flex-shrink: 0; min-height: 32px; padding: 5px 9px;
   border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface-cool); color: var(--text-control);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-motion-next,
+  .calendar-motion-previous,
+  .calendar-motion-exit-next,
+  .calendar-motion-exit-previous {
+    animation: none;
+  }
+
+  .month-view,
+  .month-view .month-calendar,
+  .month-cell,
+  .month-cell-details,
+  .month-expansion-handle > span::before,
+  .month-expansion-handle > span::after {
+    transition: none;
+  }
+
+  .page-content {
+    scroll-behavior: auto;
+  }
 }

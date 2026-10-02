@@ -102,6 +102,7 @@ import {
   normalizeFavoriteDeadlines,
   nonHourlyCourseBoundaryMinutes,
   parseTimeMinutes,
+  queuedCalendarPage,
   requestBody,
   resolvedUiLanguage,
   scheduleRequestTerm,
@@ -111,7 +112,6 @@ import {
   settingsWithCredentialDraft,
   settingsToPayload,
   shanghaiDateString,
-  shiftDate,
   slotsToRanges,
   startOfWeekMonday,
   startupSettingsToState,
@@ -1041,8 +1041,9 @@ function WeatherStrip({ weather, loading, error, onRetry, language, t }) {
         {weather ? <small>{weather.current_weather} {weather.current_temperature}° · {weather.report_time}</small> : null}
         <ChevronDown className="weather-strip-chevron" size={18} aria-hidden="true" />
       </button>
-      {expanded ? (
-        <div className="weather-strip-details" id="weather-strip-details">
+      <div className={`weather-strip-reveal ${expanded ? 'expanded' : ''}`} aria-hidden={!expanded} inert={!expanded}>
+        <div className="weather-strip-reveal-clip">
+          <div className="weather-strip-details" id="weather-strip-details">
           {loading ? (
             <div className="weather-strip-state"><Loader2 className="spin" size={18} /> {t('正在更新天气…')}</div>
           ) : error ? (
@@ -1065,8 +1066,9 @@ function WeatherStrip({ weather, loading, error, onRetry, language, t }) {
             </div>
           )}
           <a href="https://uapis.cn/docs/api-reference/get-misc-weather" target="_blank" rel="noreferrer">{t('数据：UAPI')}</a>
+          </div>
         </div>
-      ) : null}
+      </div>
     </section>
   )
 }
@@ -1635,7 +1637,11 @@ function App() {
   const calendarAnimatedSurfaceRef = useRef(null)
   const calendarOutgoingSurfaceRef = useRef(null)
   const calendarMotionTimerRef = useRef(null)
+  const calendarMotionEpochRef = useRef(0)
+  const calendarPendingTransitionRef = useRef(null)
   const monthExpansionTimerRef = useRef(null)
+  const monthExpansionFrameRef = useRef(0)
+  const monthExpansionEpochRef = useRef(0)
   const suppressCalendarClickUntilRef = useRef(0)
   const pageContentRef = useRef(null)
   const requestedHolidayYears = useRef(new Set())
@@ -1656,12 +1662,16 @@ function App() {
   const deadlinePreheatTimerRef = useRef(null)
   const deadlinePreheatEnabledRef = useRef(false)
   const calendarDateRef = useRef(calendarDate)
+  const calendarViewRef = useRef(calendarView)
+  const activePageRef = useRef(activePage)
   const almanacByDateRef = useRef(almanacByDate)
   const todayDate = shanghaiDateString(now)
   const todayYear = todayDate.slice(0, 4)
   const builtInDeadlineSourcesActive = builtInDeadlineSourcesEnabled(settings)
   const loading = loadingTasks[loadingTasks.length - 1] || ''
   calendarDateRef.current = calendarDate
+  calendarViewRef.current = calendarView
+  activePageRef.current = activePage
   almanacByDateRef.current = almanacByDate
 
   useEffect(() => {
@@ -2008,9 +2018,34 @@ function App() {
 
   useEffect(() => {
     return () => {
+      calendarMotionEpochRef.current += 1
       window.clearTimeout(calendarMotionTimerRef.current)
+      calendarPendingTransitionRef.current = null
       calendarOutgoingSurfaceRef.current?.remove()
+      window.cancelAnimationFrame(monthExpansionFrameRef.current)
+      monthExpansionEpochRef.current += 1
     }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (activePage !== 'calendar') {
+      commitPendingCalendarIntent()
+      cancelMonthSettle()
+    } else if (calendarView !== 'month') {
+      cancelMonthSettle()
+    }
+  }, [activePage, calendarView])
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const handleChange = () => {
+      if (!reducedMotion.matches) return
+      commitPendingCalendarIntent()
+      cancelMonthSettle()
+      clearMonthDragVisual(calendarAnimatedSurfaceRef.current)
+    }
+    reducedMotion.addEventListener('change', handleChange)
+    return () => reducedMotion.removeEventListener('change', handleChange)
   }, [])
 
   useEffect(() => {
@@ -2693,7 +2728,7 @@ function App() {
 
   function chooseCalendarDate(dateString) {
     if (Date.now() < suppressCalendarClickUntilRef.current) return
-    transitionCalendar(dateString, calendarView)
+    transitionCalendar(dateString, calendarViewRef.current)
   }
 
   function chooseCalendarDateFromInput(event) {
@@ -2729,36 +2764,88 @@ function App() {
     calendarOutgoingSurfaceRef.current = outgoing
   }
 
+  function cancelCalendarMotion() {
+    calendarMotionEpochRef.current += 1
+    window.clearTimeout(calendarMotionTimerRef.current)
+    calendarMotionTimerRef.current = null
+    calendarPendingTransitionRef.current = null
+    calendarOutgoingSurfaceRef.current?.remove()
+    calendarOutgoingSurfaceRef.current = null
+    setCalendarMotion('')
+  }
+
+  function commitCalendarTarget(date, view) {
+    if (date !== calendarDateRef.current) {
+      calendarDateRef.current = date
+      setCalendarDate(date)
+    }
+    if (view !== calendarViewRef.current) {
+      calendarViewRef.current = view
+      setCalendarView(view)
+    }
+  }
+
+  function commitPendingCalendarIntent() {
+    const pending = calendarPendingTransitionRef.current
+    cancelCalendarMotion()
+    if (pending) commitCalendarTarget(pending.date, pending.view)
+  }
+
   function startCalendarMotion(motion) {
-    if (!motion) return
+    if (!motion || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      cancelCalendarMotion()
+      return
+    }
+    const epoch = ++calendarMotionEpochRef.current
     stageCalendarTransition(motion)
     setCalendarMotion(motion)
     window.clearTimeout(calendarMotionTimerRef.current)
     calendarMotionTimerRef.current = window.setTimeout(() => {
+      if (epoch !== calendarMotionEpochRef.current) return
+      if (activePageRef.current !== 'calendar') {
+        commitPendingCalendarIntent()
+        return
+      }
+      calendarMotionTimerRef.current = null
       setCalendarMotion('')
       calendarOutgoingSurfaceRef.current?.remove()
       calendarOutgoingSurfaceRef.current = null
+      const pending = calendarPendingTransitionRef.current
+      calendarPendingTransitionRef.current = null
+      if (pending) transitionCalendar(pending.date, pending.view)
     }, compactCalendarLayout ? 300 : 220)
   }
 
-  function transitionCalendar(targetDate, targetView = calendarView) {
+  function transitionCalendar(targetDate, targetView = calendarViewRef.current) {
+    const currentView = calendarViewRef.current
     const transition = calendarTransition(
       calendarDateRef.current,
-      calendarView,
+      currentView,
       targetDate,
       targetView,
     )
     setCalendarPopover(null)
-    if (transition.motion) startCalendarMotion(transition.motion)
-    if (transition.date !== calendarDateRef.current) {
-      calendarDateRef.current = transition.date
-      setCalendarDate(transition.date)
+    if (calendarMotionTimerRef.current !== null
+      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      calendarPendingTransitionRef.current = transition.date !== calendarDateRef.current
+        || transition.view !== currentView
+        ? { date: transition.date, view: transition.view }
+        : null
+      return
     }
-    if (transition.view !== calendarView) setCalendarView(transition.view)
+    calendarPendingTransitionRef.current = null
+    if (transition.motion) startCalendarMotion(transition.motion)
+    commitCalendarTarget(transition.date, transition.view)
   }
 
   function moveCalendar(direction) {
-    transitionCalendar(shiftDate(calendarDateRef.current, calendarView, direction), calendarView)
+    const target = queuedCalendarPage(
+      calendarDateRef.current,
+      calendarViewRef.current,
+      calendarPendingTransitionRef.current,
+      direction,
+    )
+    transitionCalendar(target.date, target.view)
   }
 
   function beginCalendarSwipe(event) {
@@ -2871,11 +2958,13 @@ function App() {
   }
 
   function monthDragGeometry(surface) {
+    const calendar = surface.querySelector('.month-calendar')
+    if (!calendar) return null
     const styles = window.getComputedStyle(surface)
     const collapsedHeight = monthLength(styles, '--month-collapsed-height', 440)
     const expandedHeight = Math.max(
       collapsedHeight,
-      monthLength(styles, '--month-expanded-height', 776),
+      monthLength(styles, '--month-expanded-height', 776) - 28,
     )
     const collapsedRowHeight = monthLength(styles, '--month-collapsed-row-height', 62)
     const expandedRowHeight = Math.max(
@@ -2883,13 +2972,14 @@ function App() {
       monthLength(styles, '--month-expanded-row-height', 118),
     )
     const travelDistance = Math.max(1, expandedHeight - collapsedHeight)
-    const currentHeight = surface.getBoundingClientRect().height
+    const currentHeight = calendar.getBoundingClientRect().height
     const currentProgress = Math.max(
       0,
       Math.min(1, (currentHeight - collapsedHeight) / travelDistance),
     )
     return {
       surface,
+      calendar,
       collapsedHeight,
       expandedHeight,
       collapsedRowHeight,
@@ -2905,11 +2995,10 @@ function App() {
       + (geometry.expandedHeight - geometry.collapsedHeight) * normalized
     const rowHeight = geometry.collapsedRowHeight
       + (geometry.expandedRowHeight - geometry.collapsedRowHeight) * normalized
-    const { surface } = geometry
+    const { surface, calendar } = geometry
     surface.classList.remove('month-settling')
     surface.classList.add('month-dragging')
-    surface.style.height = `${height}px`
-    surface.style.maxHeight = `${height}px`
+    calendar.style.height = `${height}px`
     surface.style.setProperty('--month-live-row-height', `${rowHeight}px`)
     surface.style.setProperty('--month-drag-progress', String(normalized))
     surface.style.setProperty('--month-handle-left-angle', `${-24 * normalized}deg`)
@@ -2920,13 +3009,21 @@ function App() {
   function clearMonthDragVisual(surface) {
     if (!surface) return
     surface.classList.remove('month-dragging', 'month-settling')
-    surface.style.removeProperty('height')
-    surface.style.removeProperty('max-height')
+    const calendar = surface.querySelector('.month-calendar')
+    calendar?.style.removeProperty('height')
     surface.style.removeProperty('--month-live-row-height')
     surface.style.removeProperty('--month-drag-progress')
     surface.style.removeProperty('--month-handle-left-angle')
     surface.style.removeProperty('--month-handle-right-angle')
     surface.style.removeProperty('--month-handle-offset-y')
+  }
+
+  function cancelMonthSettle() {
+    window.clearTimeout(monthExpansionTimerRef.current)
+    monthExpansionTimerRef.current = null
+    window.cancelAnimationFrame(monthExpansionFrameRef.current)
+    monthExpansionFrameRef.current = 0
+    monthExpansionEpochRef.current += 1
   }
 
   function settleMonthDrag(geometry, progress, expanded) {
@@ -2940,34 +3037,54 @@ function App() {
     const targetRowHeight = expanded
       ? geometry.expandedRowHeight
       : geometry.collapsedRowHeight
-    const { surface } = geometry
+    const { surface, calendar } = geometry
 
-    window.clearTimeout(monthExpansionTimerRef.current)
+    cancelMonthSettle()
+    const epoch = monthExpansionEpochRef.current
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setMonthExpanded(expanded)
+      clearMonthDragVisual(surface)
+      return
+    }
     surface.classList.remove('month-dragging')
     surface.classList.add('month-settling')
-    surface.style.height = `${currentHeight}px`
-    surface.style.maxHeight = `${currentHeight}px`
+    calendar.style.height = `${currentHeight}px`
     surface.style.setProperty('--month-live-row-height', `${currentRowHeight}px`)
     surface.style.setProperty('--month-drag-progress', String(normalized))
     surface.style.setProperty('--month-handle-left-angle', `${-24 * normalized}deg`)
     surface.style.setProperty('--month-handle-right-angle', `${24 * normalized}deg`)
     surface.style.setProperty('--month-handle-offset-y', `${2 * normalized}px`)
-    void surface.offsetHeight
+    void calendar.offsetHeight
     setMonthExpanded(expanded)
 
-    window.requestAnimationFrame(() => {
-      if (!surface.isConnected) return
-      surface.style.height = `${targetHeight}px`
-      surface.style.maxHeight = `${targetHeight}px`
+    monthExpansionFrameRef.current = window.requestAnimationFrame(() => {
+      monthExpansionFrameRef.current = 0
+      if (!surface.isConnected || epoch !== monthExpansionEpochRef.current) return
+      calendar.style.height = `${targetHeight}px`
       surface.style.setProperty('--month-live-row-height', `${targetRowHeight}px`)
       surface.style.setProperty('--month-drag-progress', String(targetProgress))
       surface.style.setProperty('--month-handle-left-angle', `${-24 * targetProgress}deg`)
       surface.style.setProperty('--month-handle-right-angle', `${24 * targetProgress}deg`)
       surface.style.setProperty('--month-handle-offset-y', `${2 * targetProgress}px`)
       monthExpansionTimerRef.current = window.setTimeout(() => {
-        clearMonthDragVisual(surface)
+        monthExpansionTimerRef.current = null
+        if (epoch === monthExpansionEpochRef.current) clearMonthDragVisual(surface)
       }, 300)
     })
+  }
+
+  function changeMonthExpansion(expanded) {
+    const surface = calendarAnimatedSurfaceRef.current
+    if (!surface) {
+      setMonthExpanded(expanded)
+      return
+    }
+    const geometry = monthDragGeometry(surface)
+    if (!geometry) {
+      setMonthExpanded(expanded)
+      return
+    }
+    settleMonthDrag(geometry, geometry.currentProgress, expanded)
   }
 
   function beginMonthPointerSwipe(event) {
@@ -2978,8 +3095,9 @@ function App() {
     if (target?.closest('.month-expansion-handle, .month-expansion-accessibility-action')) return
 
     const surface = event.currentTarget
-    window.clearTimeout(monthExpansionTimerRef.current)
+    cancelMonthSettle()
     const geometry = monthDragGeometry(surface)
+    if (!geometry) return
     applyMonthDragVisual(geometry, geometry.currentProgress)
     calendarGestureRef.current = {
       x: event.clientX,
@@ -3152,7 +3270,7 @@ function App() {
       transitionCalendar(addDays(calendarDateRef.current, weekOffset), calendarView)
       return
     }
-    setMonthExpanded(wantsExpanded)
+    changeMonthExpansion(wantsExpanded)
   }
 
   function jumpFromYearPopover(view) {
@@ -3162,7 +3280,7 @@ function App() {
   }
 
   function chooseCalendarView(view) {
-    if (view === calendarView) return
+    if (view === calendarViewRef.current) return
     transitionCalendar(calendarDateRef.current, view)
   }
 
@@ -4093,7 +4211,7 @@ function App() {
                 aria-expanded={monthExpanded}
                 onClick={() => {
                   if (Date.now() < suppressCalendarClickUntilRef.current) return
-                  setMonthExpanded((current) => !current)
+                  changeMonthExpansion(!monthExpanded)
                 }}
               >
                 {monthExpanded ? t('收起月历') : t('展开月历')}
@@ -4529,7 +4647,7 @@ function App() {
                         aria-expanded={monthExpanded}
                         onClick={() => {
                           if (Date.now() < suppressCalendarClickUntilRef.current) return
-                          setMonthExpanded((current) => !current)
+                          changeMonthExpansion(!monthExpanded)
                         }}
                       >
                         <span aria-hidden="true" />

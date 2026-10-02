@@ -45,6 +45,7 @@ export struct ExpandedTeachingCalendarView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
   @Local presentedDay: DateParts | null = null;
+  @Local presentedDayOpacity: number = 0;
   @Local allDayDialogDay: DateParts | null = null;
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local contentWidth: number = 900;
@@ -72,6 +73,14 @@ export struct ExpandedTeachingCalendarView {
   private cachedTimelineAllDayRowCount: number = 0;
   private cachedTimelinePlacements: Map<string, CoursePlacement[]> =
     new Map<string, CoursePlacement[]>();
+  private contentMotionRevision: number = 0;
+  private contentSwitchTimer: number = -1;
+  private contentSettleTimer: number = -1;
+  private pendingContentDate: DateParts | null = null;
+  private pendingContentMode: CalendarMode | null = null;
+  private pendingMonthAnchor: boolean = false;
+  private yearPopupMotionRevision: number = 0;
+  private yearPopupMountTimer: number = -1;
 
   @Monitor('session.selectedDate', 'session.modeRawValue', 'model.schedule',
     'model.holidaysByYear', 'model.assignmentDeadlinesByDate', 'model.publicDeadlinesByDate',
@@ -91,6 +100,15 @@ export struct ExpandedTeachingCalendarView {
   }
 
   aboutToDisappear(): void {
+    this.commitPendingContentMotion();
+    this.cancelContentMotion();
+    this.yearPopupMotionRevision++;
+    if (this.yearPopupMountTimer >= 0) {
+      clearTimeout(this.yearPopupMountTimer);
+      this.yearPopupMountTimer = -1;
+    }
+    this.presentedDay = null;
+    this.presentedDayOpacity = 0;
     this.darkModeProbe.unregister();
   }
 
@@ -107,10 +125,12 @@ export struct ExpandedTeachingCalendarView {
   }
 
   private setSelectedDate(date: DateParts): void {
+    this.cancelContentMotion();
     this.session.selectDate(date);
   }
 
   private setMode(mode: CalendarMode): void {
+    this.cancelContentMotion();
     this.session.modeRawValue = mode;
   }
 
@@ -181,66 +201,94 @@ export struct ExpandedTeachingCalendarView {
   }
 
   private moveDate(direction: number): void {
-    const anchoredMonthNavigation: boolean = this.mode() === CalendarMode.month;
+    const mode: CalendarMode = this.pendingContentMode ?? this.mode();
+    const baseDate: DateParts = this.pendingContentDate ?? this.selectedDate();
+    const anchoredMonthNavigation: boolean = mode === CalendarMode.month;
     const target: DateParts = anchoredMonthNavigation ?
-      this.session.monthNavigationDestination(direction) :
-      TeachingCalendarLogic.movedDate(this.selectedDate(), this.mode(), direction);
+      this.session.monthNavigationDestination(direction, baseDate) :
+      TeachingCalendarLogic.movedDate(baseDate, mode, direction);
     this.animateSelectedDate(target, anchoredMonthNavigation);
   }
 
   private animateSelectedDate(target: DateParts,
     preservesMonthNavigationAnchor: boolean = false): void {
-    if (target.equals(this.selectedDate())) {
+    if (target.equals(this.pendingContentDate ?? this.selectedDate())) {
       return;
     }
-    if (this.calendarContentAnimating) {
-      if (preservesMonthNavigationAnchor) {
-        this.session.commitMonthNavigation(target);
-      } else {
-        this.setSelectedDate(target);
-      }
+    this.pendingContentDate = target;
+    this.pendingMonthAnchor = preservesMonthNavigationAnchor;
+    this.animatePendingContentMotion();
+  }
+
+  private animateMode(target: CalendarMode): void {
+    if (target === (this.pendingContentMode ?? this.mode())) {
       return;
     }
+    this.pendingContentMode = target;
+    this.animatePendingContentMotion();
+  }
+
+  private animatePendingContentMotion(): void {
+    this.clearContentMotionTimers();
+    const revision: number = ++this.contentMotionRevision;
     this.calendarContentAnimating = true;
     this.getUIContext().animateTo({ duration: 90, curve: Curve.EaseOut }, () => {
       this.calendarContentOpacity = 0.72;
     });
-    setTimeout(() => {
-      if (preservesMonthNavigationAnchor) {
-        this.session.commitMonthNavigation(target);
-      } else {
-        this.setSelectedDate(target);
+    this.contentSwitchTimer = setTimeout(() => {
+      this.contentSwitchTimer = -1;
+      if (revision !== this.contentMotionRevision) {
+        return;
       }
+      this.commitPendingContentMotion();
       this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut }, () => {
         this.calendarContentOpacity = 1;
       });
-      setTimeout(() => {
+      this.contentSettleTimer = setTimeout(() => {
+        this.contentSettleTimer = -1;
+        if (revision !== this.contentMotionRevision) {
+          return;
+        }
         this.calendarContentAnimating = false;
       }, 150);
     }, 96);
   }
 
-  private animateMode(target: CalendarMode): void {
-    if (target === this.mode()) {
-      return;
+  private commitPendingContentMotion(): void {
+    if (this.pendingContentDate !== null) {
+      if (this.pendingMonthAnchor) {
+        this.session.commitMonthNavigation(this.pendingContentDate);
+      } else {
+        this.session.selectDate(this.pendingContentDate);
+      }
+      this.pendingContentDate = null;
+      this.pendingMonthAnchor = false;
     }
-    if (this.calendarContentAnimating) {
-      this.setMode(target);
-      return;
+    if (this.pendingContentMode !== null) {
+      this.session.modeRawValue = this.pendingContentMode;
+      this.pendingContentMode = null;
     }
-    this.calendarContentAnimating = true;
-    this.getUIContext().animateTo({ duration: 90, curve: Curve.EaseOut }, () => {
-      this.calendarContentOpacity = 0.72;
-    });
-    setTimeout(() => {
-      this.setMode(target);
-      this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut }, () => {
-        this.calendarContentOpacity = 1;
-      });
-      setTimeout(() => {
-        this.calendarContentAnimating = false;
-      }, 150);
-    }, 96);
+  }
+
+  private clearContentMotionTimers(): void {
+    if (this.contentSwitchTimer >= 0) {
+      clearTimeout(this.contentSwitchTimer);
+      this.contentSwitchTimer = -1;
+    }
+    if (this.contentSettleTimer >= 0) {
+      clearTimeout(this.contentSettleTimer);
+      this.contentSettleTimer = -1;
+    }
+  }
+
+  private cancelContentMotion(): void {
+    this.contentMotionRevision++;
+    this.clearContentMotionTimers();
+    this.pendingContentDate = null;
+    this.pendingContentMode = null;
+    this.pendingMonthAnchor = false;
+    this.calendarContentAnimating = false;
+    this.calendarContentOpacity = 1;
   }
 
   private periodTitle(): string {
@@ -328,7 +376,7 @@ export struct ExpandedTeachingCalendarView {
       return true;
     }
     if (event.keyCode === 2070) {
-      this.presentedDay = null;
+      this.dismissYearDay();
       this.allDayDialogDay = null;
       return true;
     }
@@ -889,9 +937,7 @@ export struct ExpandedTeachingCalendarView {
     this.setSelectedDate(day);
     if (fromDialog) {
       this.allDayDialogDay = null;
-      this.presentedDayAnchorX = this.rootWidth / 2;
-      this.presentedDayAnchorY = this.rootHeight / 2;
-      this.presentedDay = day;
+      this.showYearDay(day, this.rootWidth / 2, this.rootHeight / 2);
       return;
     }
     this.presentAllDayDialog(day, this.mode());
@@ -1247,17 +1293,58 @@ export struct ExpandedTeachingCalendarView {
       .clip(true)
       .onClick((event: ClickEvent) => {
         this.setSelectedDate(day);
-        this.presentedDayAnchorX = Number(event.target.area.globalPosition.x) - this.rootGlobalX +
+        const anchorX: number = Number(event.target.area.globalPosition.x) - this.rootGlobalX +
           Number(event.target.area.width) / 2;
-        this.presentedDayAnchorY = Number(event.target.area.globalPosition.y) - this.rootGlobalY +
+        const anchorY: number = Number(event.target.area.globalPosition.y) - this.rootGlobalY +
           Number(event.target.area.height) / 2;
-        this.presentedDay = day;
+        this.showYearDay(day, anchorX, anchorY);
       })
     } else {
       Column()
         .width('100%')
         .height(24)
     }
+  }
+
+  private showYearDay(day: DateParts, anchorX: number, anchorY: number): void {
+    const revision: number = ++this.yearPopupMotionRevision;
+    if (this.yearPopupMountTimer >= 0) {
+      clearTimeout(this.yearPopupMountTimer);
+      this.yearPopupMountTimer = -1;
+    }
+    this.presentedDayAnchorX = anchorX;
+    this.presentedDayAnchorY = anchorY;
+    this.presentedDayOpacity = 0;
+    this.presentedDay = day;
+    this.yearPopupMountTimer = setTimeout(() => {
+      this.yearPopupMountTimer = -1;
+      if (revision !== this.yearPopupMotionRevision) {
+        return;
+      }
+      this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, (): void => {
+        this.presentedDayOpacity = 1;
+      });
+    }, 16);
+  }
+
+  private dismissYearDay(): void {
+    if (this.presentedDay === null) {
+      return;
+    }
+    const revision: number = ++this.yearPopupMotionRevision;
+    if (this.yearPopupMountTimer >= 0) {
+      clearTimeout(this.yearPopupMountTimer);
+      this.yearPopupMountTimer = -1;
+    }
+    this.getUIContext().animateTo({ duration: 140, curve: Curve.EaseOut,
+      onFinish: (): void => {
+        if (revision === this.yearPopupMotionRevision) {
+          this.presentedDay = null;
+        }
+      }
+    }, (): void => {
+      this.presentedDayOpacity = 0;
+    });
   }
 
   private yearDeadlineKinds(day: DateParts): DeadlineVisualKind[] {
@@ -1422,7 +1509,7 @@ export struct ExpandedTeachingCalendarView {
         .height('100%')
         .backgroundColor('#33000000')
         .onClick(() => {
-          this.presentedDay = null;
+          this.dismissYearDay();
         })
       Column({ space: 12 }) {
         Text(CalendarFormatters.fullDate(this.presentedDay as DateParts, this.isEnglish()))
@@ -1455,7 +1542,7 @@ export struct ExpandedTeachingCalendarView {
               .onClick(() => {
                 this.setSelectedDate(this.presentedDay as DateParts);
                 this.setMode(item);
-                this.presentedDay = null;
+                this.dismissYearDay();
               })
           }, (item: CalendarMode) => 'year-jump.' + item)
         }
@@ -1471,6 +1558,7 @@ export struct ExpandedTeachingCalendarView {
     }
     .width('100%')
     .height('100%')
+    .opacity(this.presentedDayOpacity)
   }
 
   private yearDetailPanelHeight(): number {

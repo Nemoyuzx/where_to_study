@@ -262,6 +262,7 @@ enum InformationQueryErrorLocalization {
 
 struct InformationQueriesView: View {
     @Environment(\.appTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @ObservedObject private var shuttleStore: ShuttleBusStore
@@ -298,23 +299,13 @@ struct InformationQueriesView: View {
                         compact: proxy.size.height < 560
                     )
                     InformationQueryModePicker(
-                        selection: $selectedMode,
+                        selection: animatedModeSelection,
                         language: model.appLanguage,
                         availableWidth: max(0, min(proxy.size.width, 1180) - 32)
                     )
-
-                    switch selectedMode {
-                    case .shuttle:
-                        shuttleContent
-                    case .importantEvents:
-                        importantEventsContent
-                    case .grades:
-                        GradeQueryView(store: model.gradeStore)
-                    case .exams:
-                        ExamQueryView()
-                    case .assignments:
-                        AssignmentQueryView(store: calendarDeadlines)
-                    }
+                    selectedQueryContent
+                        .id(selectedMode)
+                        .transition(.opacity)
                 }
                 .padding(16)
                 .frame(maxWidth: 1180)
@@ -344,6 +335,38 @@ struct InformationQueriesView: View {
             async let grades: Void = model.loadGrades(termID: model.gradeStore.selectedTerm, recordType: model.gradeStore.recordType)
             async let assignments: Void = calendarDeadlines.loadAssignmentQuery(sampleMode: model.isSampleMode)
             _ = await (grades, assignments)
+        }
+    }
+
+    private var animatedModeSelection: Binding<InformationQueryMode> {
+        Binding(
+            get: { selectedMode },
+            set: { newMode in
+                guard newMode != selectedMode else { return }
+                if reduceMotion || AppLaunchConfiguration.forcesReducedMotionForUITests {
+                    selectedMode = newMode
+                } else {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        selectedMode = newMode
+                    }
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var selectedQueryContent: some View {
+        switch selectedMode {
+        case .shuttle:
+            shuttleContent
+        case .importantEvents:
+            importantEventsContent
+        case .grades:
+            GradeQueryView(store: model.gradeStore)
+        case .exams:
+            ExamQueryView()
+        case .assignments:
+            AssignmentQueryView(store: calendarDeadlines)
         }
     }
 
