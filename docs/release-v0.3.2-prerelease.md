@@ -16,6 +16,34 @@
 
 ## 测试与渠道状态
 
-代码、最终签名包与上传结果将在完成后补记。当前 GitHub Actions 作业未启动，检查注释为：`The job was not started because your account is locked due to a billing issue.` 本地验证继续进行；该状态不能作为编译或测试失败。
+已完成的本地验证：
+
+- Rust：Tauri 229 项通过、3 项线上用例默认跳过；公开重要事件线上用例另行运行通过。Core 101、CLI 24、TUI 50 项通过。
+- 前端最终 **238 项通过 / 1 项 Windows 已安装 PE 用例按环境跳过**；完整班车表、法定休息日、跨上海午夜、通知变更、重叠时段和无序班次均有回归覆盖。Edge 中英布局、窄宽度与完整时刻表目视核对通过。
+- 前端构建、npm 依赖审计、五份 Cargo 锁文件审计、glib 补丁校验、许可证清单与已暂存代码的 Gitleaks 扫描通过。Cargo 中已有 unmaintained 提示未当成漏洞或忽略新增 unsound 问题。
+- Android 0.3.2（59）：最终 release JVM **294/294**、Lint **0 errors / 73 warnings / 1 hint**；APK/AAB 构建、原证书 v2/v3 验签、ZIP 对齐、许可证、HTTPS 策略及各公开端点检查通过。未宣称 Lint 零警告。
+- Android 手机中英／明暗、平板中英布局仪器测试通过，官方节假日缓存仪器测试通过。最新时段日期与状态画面已串行重拍核对；曾出现一次模拟器 System UI ANR 弹窗，未将其遮挡截图当作有效证据。视觉测试使用明确标记的示例，不冒称真实课表或实时班次。
+- HarmonyOS：最终 **258/258** Hypium 通过，release ArkTS/HAP/APP 构建通过；独立 `verify-app`、release profile 与 `pack.info` **0.3.2（1002036）**验证通过。本机没有连接鸿蒙设备，不能将主机测试写成真机视觉通过。
+
+本地已签名 Android APK 为 `Where-To-Study-v0.3.2-prerelease-native-android-universal.apk`，**1,178,886 bytes**，SHA-256 `8ebf60a716881c9cd769fe472652fc3e3b6fd5deacce710749e910a5a25fd96b`，构建源码提交 `81b03f9`。本地 AAB 仅保留，不上传 GitHub。
+
+Apple 首轮完整脚本完成 macOS 构建／测试和 iOS 434 项逻辑测试，但 iOS UI 有两项用例失败：数字键盘遮挡提醒保存按钮；国庆日月格折叠了旧测试硬找的作业行。已增加数字输入“完成”键，并让月格回归点击实际可见事件，不通过增加无效滑动次数绕过问题。最终本地 Xcode 定向门禁：iOS **51 项通过 / 1 项线上测试按条件跳过 / 0 失败**，macOS **46 项通过 / 1 项跳过 / 0 失败**。覆盖镜像择新、缺失／谎报长度的 4 MiB 按块上限、传输取消、完整时刻表、重叠时段、法定假日、账户按钮与原两项失败。iPhone16e 模拟器示例画面已核对；未将它宣称为真机或 Mac/iPad 视觉检查。中英 `.strings` lint 通过。最终 Apple 源码提交 `9804008`。
+
+GitHub 用原生 macOS Universal DMG 已生成：`Where-To-Study-v0.3.2-prerelease-native-macos-universal.dmg`，**8,068,113 bytes**，SHA-256 `b905715e76da17d54538ad24997ee778ca87c54572df2f14184ee14c9b30a754`。严格并发／警告编译、主程序和 WidgetKit 扩展签名、许可证、隐私清单、公共 HTTPS 端点和 DMG 校验通过。GitHub DMG 是 ad-hoc 签名、未公证，与 Apple Distribution/TestFlight 渠道不同。
+
+## Apple TestFlight 上传
+
+本地 Xcode 使用现有 Apple Distribution 证书与配置：iOS Automatic、macOS Manual，没有改写仓库中的签名字段。
+
+- **2026-10-02 13:37:05 +0800**：iOS **0.3.2（100）**返回 `Upload succeeded` 和 `EXPORT SUCCEEDED`。自动签名导出的 IPA 已验证 Distribution 签名、主程序／Widget 版本与隐私清单。
+- **2026-10-02 13:38:38 +0800**：macOS **0.3.2（100）**返回 `Upload succeeded` 和 `EXPORT SUCCEEDED`，主程序和 Widget 均包含 arm64+x86_64。
+- 遵照用户要求，上传成功后未检查 App Store Connect 处理状态，未提交正式商店审核，也不宣称已经对所有测试者可安装。
+- 上传日志和导出仅保留在忽略目录 `release-artifacts/v0.3.2-prerelease-apple/`，未上传 GitHub。
+
+## HarmonyOS 与 GitHub 待完成项
+
+DevEco 当前需要重新登录，已在 Edge 打开官方登录页，未绕过 IDE 改用其他上传方式。签名 HAP/APP 已准备，但 **0.3.2 尚未上传 AppGallery**；收到用户登录完成消息后，沿用第二项“生成.app包并上传至AppGallery Connect进行测试”，不提交正式审核。当前渠道版本仍是已有的 0.3.1（1002035）。
+
+已推送的 `main` 为 `980400892897b42d278c1e6ea567acec21d38d81`。该提交 GitHub Actions 作业仍未启动，检查注释为：`The job was not started because your account is locked due to a billing issue.` [对应 Windows 运行](https://github.com/Nemoyuzx/where_to_study/actions/runs/36969029201)。Windows/Linux/标签构建仍等待账户解除锁定；该状态不能作为编译或测试失败，也不能据此复用旧版安装包发布新版本。
 
 预发布不会替换 v0.3.1 的稳定版入口。公开资产遵循当前 11 个安装文件的结构，不上传 AAB、鸿蒙 APP/HAP、iOS 归档或校验侧文件。上传后用 GitHub API 的名称、大小和摘要与本地核对，按用户要求不回下载 Release 文件。

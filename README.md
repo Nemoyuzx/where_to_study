@@ -4,7 +4,9 @@
 
 ## 下载与安装
 
-最新正式版是 [Where To Study v0.3.1](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1)。GitHub 提供 Windows、Linux、macOS 和 Android 安装包；iOS/macOS 的 0.3.1 (99) 已上传 TestFlight，鸿蒙 0.3.1 (1002035) 已上传 AppGallery 测试渠道。应用商店展示的版本可能与 GitHub 不同。
+最新正式版是 [Where To Study v0.3.1](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.1)。下表为这个正式版的 Windows、Linux、macOS 和 Android 安装包。Apple 已上传 0.3.2 (100) 用于 TestFlight 测试；鸿蒙已上传的测试包仍为 0.3.1 (1002035)。可安装版本以对应渠道为准，可能与 GitHub 不同。
+
+0.3.2 的竞赛镜像、账户说明和班车完整时刻表已合入源码；GitHub 预发布正在准备，尚未公开，详见[构建与渠道记录](./docs/release-v0.3.2-prerelease.md)。暂时不要把下表的 0.3.1 包当作 0.3.2 下载。
 
 | 设备 | 下载或测试渠道 | 安装方式 |
 | --- | --- | --- |
