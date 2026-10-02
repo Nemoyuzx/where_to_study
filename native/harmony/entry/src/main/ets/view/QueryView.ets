@@ -477,7 +477,7 @@ export struct QueryView {
   @Builder
   shuttleMessage(title: string, detail: string, retry: boolean) {
     Column({ space: 10 }) {
-      SymbolGlyph($r('sys.symbol.calendar'))
+      SymbolGlyph($r('sys.symbol.bus_fill'))
         .fontSize(24)
         .fontColor([AppTheme.primary()])
       Text(this.model.text(title))
@@ -511,8 +511,7 @@ export struct QueryView {
   shuttleStatusCard(daily: ShuttleBusDailyView) {
     Column({ space: 10 }) {
       Row({ space: 10 }) {
-        SymbolGlyph(ShuttleQueryLayout.departureCount(daily) === 0 ?
-          $r('sys.symbol.calendar') : $r('sys.symbol.bus_fill'))
+        SymbolGlyph($r('sys.symbol.bus_fill'))
           .fontSize(24)
           .fontColor([AppTheme.primary()])
         Column({ space: 4 }) {
@@ -610,7 +609,7 @@ export struct QueryView {
       if (this.todayIsPublicHoliday()) {
         Text(this.model.text('今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。'))
           .fontSize(12)
-          .fontColor(AppTheme.danger())
+          .fontColor(AppTheme.secondaryText())
           .lineHeight(17)
           .width('100%')
           .id('query.shuttle.holiday.warning')

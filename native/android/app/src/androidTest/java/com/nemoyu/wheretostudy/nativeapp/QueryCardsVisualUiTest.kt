@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Environment
 import android.view.View
@@ -273,6 +274,62 @@ class QueryCardsVisualUiTest {
     }
 
     @Test
+    fun shuttleContentIconsAndInformationalHintsFollowThemesWithAndWithoutDepartures() =
+        inBothLanguages(phonesOnly = false) { scenario ->
+            scenario.onActivity { activity ->
+                assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
+            }
+            awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
+            listOf(true, false).forEach { hasDepartures ->
+                val closeFixture = installShuttleVisualFixture(scenario, stale = true, hasDepartures = hasDepartures)
+                try {
+                    awaitViewInHierarchy(scenario, R.id.information_query_shuttle_routes)
+                    scenario.onActivity { activity ->
+                        val scroll = activity.findViewById<ViewGroup>(R.id.information_query_shuttle_scroll)
+                        val status = scroll.findViewById<ViewGroup>(R.id.information_query_shuttle_status)
+                        val statusIcon = descendants(status).filterIsInstance<ImageView>().first()
+                        val footer = scroll.findViewById<ViewGroup>(R.id.information_query_shuttle_source_footer)
+                        val footerIcon = descendants(footer).filterIsInstance<ImageView>().first()
+                        val routeIcon = descendants(scroll).first { it.tag == "information.query.shuttle.route" }
+                            .let { descendants(it).filterIsInstance<ImageView>().first() }
+                        assertTrue("Every service state must retain its bus silhouette",
+                            sameIconSilhouette(checkNotNull(activity.getDrawable(R.drawable.ic_shuttle_bus)), statusIcon.drawable))
+                        val unrelatedIcons = InformationQueryMode.entries.filter { it != InformationQueryMode.SHUTTLE }
+                            .map { it.iconResource } + R.drawable.ic_settings_info
+                        listOf(statusIcon, routeIcon, footerIcon).forEach { contentIcon ->
+                            unrelatedIcons.forEach { resource ->
+                                assertFalse("Shuttle content must not reuse another query's content glyph",
+                                    sameIconSilhouette(contentIcon.drawable, checkNotNull(activity.getDrawable(resource))))
+                            }
+                        }
+                        val departureTiles = descendants(scroll).count { it.tag == "information.query.shuttle.departure" }
+                        assertEquals(if (hasDepartures) 10 else 0, departureTiles)
+                        val cached = descendants(status).filterIsInstance<TextView>().single {
+                            it.text.toString() == activity.uiText("当前展示最近一次成功同步的缓存")
+                        }
+                        val holiday = scroll.findViewWithTag<ViewGroup>("information.query.shuttle.holiday.warning")
+                        val holidayNote = descendants(holiday).filterIsInstance<TextView>().single()
+                        listOf(ColorThemeSelection(), ColorThemeSelection("ocean"), ColorThemeSelection("rose"),
+                            ColorThemeSelection("custom", ThemeSeeds("#FFFFFF", "#000000", "#000000"))).forEach { selection ->
+                            assertTrue(activity.applyColorTheme(selection))
+                            listOf(cached, holidayNote).forEach { note ->
+                                val expected = if (selection.preset == "default") Palette.muted else
+                                    ColorThemeLogic.readableText(Palette.muted, note.themeSurfaceColor())
+                                assertEquals("Informational shuttle hints must follow secondary theme text", expected, note.currentTextColor)
+                                assertTrue("Shuttle hints must remain readable on their actual surface",
+                                    ColorThemeLogic.contrast(note.currentTextColor, note.themeSurfaceColor()) >= 4.5)
+                            }
+                            listOf(statusIcon, routeIcon, footerIcon).forEach { icon ->
+                                assertEquals(Palette.primaryText, icon.imageTintList!!.defaultColor)
+                            }
+                            assertSame(status, activity.findViewById<ViewGroup>(R.id.information_query_shuttle_status))
+                        }
+                    }
+                } finally { closeFixture() }
+            }
+        }
+
+    @Test
     fun captureAccountPasswordHintsAndIconButton() = inBothLanguages(phonesOnly = false) { scenario ->
         scenario.onActivity { activity ->
             assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
@@ -319,14 +376,18 @@ class QueryCardsVisualUiTest {
         assertTrue(device.takeScreenshot(File(directory, "$stage-$language-account-cloud.png")))
     }
 
-    private fun installShuttleVisualFixture(scenario: ActivityScenario<MainActivity>): () -> Unit {
+    private fun installShuttleVisualFixture(
+        scenario: ActivityScenario<MainActivity>,
+        stale: Boolean = false,
+        hasDepartures: Boolean = true,
+    ): () -> Unit {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
             timeZone = TimeZone.getTimeZone("Asia/Shanghai")
         }.format(Date())
         val services = listOf("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
             .joinToString(",") { "\"$it\":{\"vehicle\":\"大巴\",\"count\":1}" }
         val rows = listOf("07:00", "08:30", "13:30", "17:30", "23:59").joinToString(",") {
-            """{"departure_time":"$it","services":{$services}}"""
+            """{"departure_time":"$it","services":{${if (hasDepartures) services else ""}}}"""
         }
         val schedules = listOf("视觉回归现行时段" to today, "视觉回归后续时段" to "2099-01-01")
             .flatMap { (period, starts) ->
@@ -336,7 +397,7 @@ class QueryCardsVisualUiTest {
                     }
             }
             .joinToString(",")
-        val payload = """{"schema_version":"1.0","generated_at":"${today}T00:00:00+08:00","status":"healthy",
+        val payload = """{"schema_version":"1.0","generated_at":"${today}T00:00:00+08:00","status":"${if (stale) "stale" else "healthy"}",
             "source":{"name":"示例数据","page_url":"https://hq.bupt.edu.cn/tzgg.htm"},"items":[{
             "id":"visual-only","title":"班车布局视觉回归示例（非真实时刻表）","published_at":"$today",
             "source_url":"https://hq.bupt.edu.cn/tzgg.htm","kind":"regular_schedule","parse_status":"parsed",
@@ -368,6 +429,32 @@ class QueryCardsVisualUiTest {
         SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
             timeZone = TimeZone.getTimeZone("Asia/Shanghai")
         }.format(Date())
+
+    private fun iconMask(drawable: Drawable): List<Boolean> {
+        val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
+        return try {
+            checkNotNull(drawable.constantState).newDrawable().mutate().apply {
+                setBounds(0, 0, bitmap.width, bitmap.height)
+                draw(Canvas(bitmap))
+            }
+            List(bitmap.width * bitmap.height) { index ->
+                Color.alpha(bitmap.getPixel(index % bitmap.width, index / bitmap.width)) >= 64
+            }
+        } finally { bitmap.recycle() }
+    }
+
+    private fun sameIconSilhouette(first: Drawable, second: Drawable): Boolean {
+        val a = iconMask(first)
+        val b = iconMask(second)
+        val union = a.indices.count { a[it] || b[it] }
+        assertTrue("A content glyph must have a visible silhouette", union > 0)
+        val intersection = a.indices.count { a[it] && b[it] }
+        // A displayed vector can retain a raster cache at a different density.
+        // Four boundary pixels differed for the same bus at 48x48; compare its
+        // silhouette, not exact anti-alias edges. The same tolerance also makes
+        // the unrelated-glyph rejection robust to density/tint differences.
+        return intersection.toDouble() / union >= 0.99
+    }
 
     private fun assertShuttleActionIcons(activity: MainActivity) {
         listOf(

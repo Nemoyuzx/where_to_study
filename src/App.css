@@ -5448,8 +5448,8 @@ input:disabled {
 }
 
 .shuttle-status-card.stale {
-  background: var(--busy-surface);
-  border-color: var(--busy-border);
+  background: var(--surface-muted);
+  border-color: var(--border-subtle);
 }
 
 .shuttle-status-card > div {
@@ -5561,8 +5561,8 @@ input:disabled {
 
 .shuttle-holiday-notice {
   align-items: flex-start;
-  background: var(--busy-surface);
-  border: 1px solid var(--busy-border);
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   color: var(--text-primary);
   display: flex;
@@ -5570,8 +5570,8 @@ input:disabled {
   padding: 12px 14px;
 }
 
-.shuttle-holiday-notice > svg { color: var(--gold-text); flex: 0 0 auto; margin-top: 2px; }
-.shuttle-holiday-notice p { font-size: 13px; line-height: 1.6; margin: 5px 0; }
+.shuttle-holiday-notice > svg { color: var(--primary-text); flex: 0 0 auto; margin-top: 2px; }
+.shuttle-holiday-notice p { color: var(--text-secondary); font-size: 13px; line-height: 1.6; margin: 5px 0; }
 .shuttle-holiday-notice a,
 .shuttle-full-heading a { align-items: center; color: var(--primary-text); display: inline-flex; font-size: 12px; gap: 5px; }
 
@@ -5589,7 +5589,7 @@ input:disabled {
 .shuttle-full-period h4 { margin: 0; }
 .shuttle-full-heading p,
 .shuttle-full-period > header span { color: var(--text-secondary); font-size: 12px; line-height: 1.5; margin: 5px 0 0; }
-.shuttle-full-fallback { background: var(--busy-surface); border-radius: 8px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; margin: 0; padding: 10px 12px; }
+.shuttle-full-fallback { background: var(--surface-muted); border-radius: 8px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; margin: 0; padding: 10px 12px; }
 .shuttle-full-period { border: 1px solid var(--border-subtle); border-radius: 10px; display: grid; gap: 12px; min-width: 0; padding: 14px; }
 .shuttle-full-period.active { border-color: var(--primary-border); }
 .shuttle-full-period > header small { background: var(--surface-muted); border-radius: 5px; color: var(--text-secondary); padding: 3px 6px; }

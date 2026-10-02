@@ -164,6 +164,25 @@ test('secondary ink remains readable on actual selected and accent-tinted contai
   }
 })
 
+test('shuttle informational ink remains readable on themed notice and status backgrounds', () => {
+  const settings = COLOR_THEME_PRESETS.filter(item => item.id !== 'default')
+    .map(item => ({ ...DEFAULT_COLOR_THEME, preset: item.id }))
+  for (const customPrimary of ['#FFFFFF', '#000000', '#FFFF00', '#FF00FF', '#00FF00']) {
+    settings.push({ ...DEFAULT_COLOR_THEME, preset: 'custom', customPrimary })
+  }
+  for (const setting of settings) {
+    for (const dark of [false, true]) {
+      const variables = colorThemeVariables(setting, dark)
+      for (const background of ['--surface-muted', '--primary-surface-soft']) {
+        assert.ok(colorContrast(variables['--text-secondary'], variables[background]) >= 4.5,
+          `${setting.preset} ${dark} shuttle hint ${background}`)
+        assert.ok(colorContrast(variables['--primary-text'], variables[background]) >= 4.5,
+          `${setting.preset} ${dark} shuttle link ${background}`)
+      }
+    }
+  }
+})
+
 test('year heatmap ink follows the actual composite at every course density', () => {
   for (const seed of ['#FFFFFF', '#000000', '#808080', '#FFFF00', '#00FF00', '#0000FF']) {
     for (const dark of [false, true]) {

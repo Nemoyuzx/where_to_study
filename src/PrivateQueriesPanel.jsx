@@ -64,6 +64,6 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
       {updated && <small>{en ? 'Updated' : '更新于'} {updated}</small>}
     </>}
     <p className="query-source">{assignments ? (en ? 'Source: university Teaching Cloud. Assignments are queried directly using your saved account and are not uploaded to this app’s server.' : '第三方来源：学校教学云平台。使用已保存账户直接查询，不上传至本应用服务端。') : (en ? 'Source: university academic service. Exam arrangements are also synchronized when refreshing the timetable.' : '第三方来源：学校教务服务。考试安排也会随个人课表一起同步。')} {en ? 'For reference only; confirm against the official platform.' : '显示数据仅供参考，请以学校实际安排为准。'}</p>
-    {assignments ? <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />{en ? 'Open Teaching Cloud' : '打开教学云'}</a> : null}
+    {assignments ? <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />{en ? 'Open Teaching Cloud Platform' : '打开教学云平台'}</a> : null}
   </div>
 }

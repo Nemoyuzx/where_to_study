@@ -418,7 +418,7 @@
 "第三方来源：公开活动来自 Contest DDL；当站点镜像更新时优先使用镜像，服务器接口作为备用。校内竞赛通知由脚本从学校内部网站公开通知页提取整理。查询页不包含课程作业 DDL。" = "Third-party sources: public events come from Contest DDL. A newer site mirror is preferred, with the server API as another fallback. On-campus notices are extracted from public pages on the university's internal website. Assignment deadlines are excluded here.";
 "清除单独保存的教学云密码，之后使用教务密码获取作业" = "Remove the separate teaching cloud password and use the academic password for assignments.";
 "打开设置中的个人账户" = "Open Personal Account in Settings.";
-"在浏览器中打开教学云作业列表" = "Open the teaching cloud assignment list in your browser.";
+"在浏览器中打开教学云平台作业列表" = "Open the Teaching Cloud Platform assignment list in your browser.";
 "课程删除失败，请重新获取课表后重试" = "Could not delete the course. Refresh your schedule and try again.";
 "课程已从本地课表删除，可在个人账户中恢复" = "Course removed from the local schedule. Restore it in Personal Account.";
 "课程删除未保存，请重试" = "Course deletion was not saved. Please try again.";
@@ -478,7 +478,7 @@
 "暂无符合条件的课程作业" = "No matching assignments";
 "更新时间" = "Updated";
 "作业来自教学云，与日历共享缓存；提交状态和截止时间以教学云为准。" = "Assignments share the calendar cache. Confirm submission status and deadlines in the teaching cloud.";
-"打开教学云" = "Open teaching cloud";
+"打开教学云平台" = "Open Teaching Cloud Platform";
 "示例考试，未连接学校服务" = "Sample exams; no school connection";
 "该学期暂无已公布考试安排" = "No exams have been published for this semester";
 "考试时间待定" = "Exam time pending";

@@ -113,7 +113,7 @@ class AcademicQueryUiTest {
                 activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
                 val page = activity.findViewById<View>(R.id.information_query_assignments_scroll)
                 assertTrue(descendants(page).filterIsInstance<TextView>().any {
-                    it.text == activity.uiText("点击刷新课程作业获取 DDL；使用设置中已保存的教学云密码。")
+                    it.text == activity.uiText("点击刷新课程作业获取 DDL；使用设置中已保存的教学云平台密码。")
                 })
                 activity.findViewById<View>(R.id.information_query_assignments_refresh).performClick()
             }
@@ -128,6 +128,36 @@ class AcademicQueryUiTest {
                 assertTrue(activity.findViewById<View>(R.id.information_query_assignments_refresh).isEnabled)
             }
         }
+    }
+
+    @Test fun assignmentCloudActionUsesFullPlatformNameInBothLanguages() {
+        val preferences = AppPreferences(context)
+        val previousLanguage = preferences.languageCode
+        try {
+            listOf("zh-Hans", "en").forEach { language ->
+                preferences.languageCode = language
+                ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
+                    .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
+                    scenario.onActivity { activity ->
+                        activity.findViewById<View>(R.id.navigation_query).performClick()
+                        activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
+                        val labels = descendants(activity.findViewById(R.id.information_query_assignments_scroll))
+                            .filterIsInstance<TextView>()
+                        val actionLabel = if (language == "en") "Open Teaching Cloud Platform" else "打开教学云平台"
+                        val sourceLabel = if (language == "en") "Teaching Cloud Platform · Assignments ↗" else
+                            "教学云平台 · 课程作业 ↗"
+                        val action = labels.single { it.text.toString() == actionLabel }
+                        assertEquals(actionLabel, action.contentDescription.toString())
+                        assertTrue(action.isClickable && action.isFocusable)
+                        assertNotNull(action.compoundDrawablesRelative[0])
+                        assertTrue(labels.any { it.text.toString() == sourceLabel })
+                        assertFalse(labels.any {
+                            it.text.toString() in setOf("打开教学云", "Open Teaching Cloud")
+                        })
+                    }
+                }
+            }
+        } finally { preferences.languageCode = previousLanguage }
     }
 
     @Test fun changedPasswordRejectsLatePrivateGradesAndClearsMemory() {

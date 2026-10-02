@@ -226,7 +226,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         let cloudAction = app.descendants(matching: .any)["assignments.open-teaching-cloud"]
             .firstMatch
         revealByScrolling(visibleElement: cloudAction, in: app)
-        XCTAssertEqual(cloudAction.label, "打开教学云")
+        XCTAssertEqual(cloudAction.label, "打开教学云平台")
         attachScreenshot(named: "assignment-icon-actions")
     }
 

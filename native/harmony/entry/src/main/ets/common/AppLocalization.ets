@@ -67,7 +67,7 @@ export class AppLocalization {
     '直接查询教学云课程作业，按截止时间排序。': 'Assignments from UCloud, sorted by deadline.',
     '点击刷新以查询，切换页面保留上次结果。': 'Tap Refresh to query. Switching pages keeps your results.',
     '刷新作业': 'Refresh Assignments',
-    '打开教学云': 'Open UCloud',
+    '打开教学云平台': 'Open Teaching Cloud Platform',
     '前往个人账户': 'Open Personal Account',
     '较新镜像数据': 'Newer mirror data',
     'Contest DDL 较新镜像数据': 'Newer Contest DDL mirror data',

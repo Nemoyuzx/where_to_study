@@ -235,7 +235,7 @@ internal class UCloudAssignmentClient internal constructor(
         }
         if (courses.isNotEmpty() && successfulCourseRequests == 0) {
             throw firstCourseError
-                ?: DailyInfoClientException("教学云课程作业接口暂时不可用。")
+                ?: DailyInfoClientException("教学云平台课程作业接口暂时不可用。")
         }
 
         try {
@@ -313,11 +313,11 @@ internal class UCloudAssignmentClient internal constructor(
             acceptedStatus = 200..299,
         )
         val tokenRoot = runCatching { JSONObject(tokenResult.body) }
-            .getOrElse { throw DailyInfoClientException("教学云令牌接口数据格式不正确。", it) }
+            .getOrElse { throw DailyInfoClientException("教学云平台令牌接口数据格式不正确。", it) }
         val accessToken = stringValue(tokenRoot.opt("access_token"))
-            ?: throw DailyInfoClientException("教学云令牌接口未返回访问令牌。")
+            ?: throw DailyInfoClientException("教学云平台令牌接口未返回访问令牌。")
         val userID = stringValue(tokenRoot.opt("user_id") ?: tokenRoot.opt("userId"))
-            ?: throw DailyInfoClientException("教学云令牌接口未返回用户标识。")
+            ?: throw DailyInfoClientException("教学云平台令牌接口未返回用户标识。")
         val lifetime = SessionExpiryMessage.expirationMillis(tokenRoot.opt("expires_in"))
         return AuthenticatedSession(accessToken, userID,
             lifetime?.let { elapsedRealtime() + it })
@@ -367,10 +367,10 @@ internal class UCloudAssignmentClient internal constructor(
 
     private fun apiRoot(result: HTTPResult): JSONObject {
         val root = runCatching { JSONObject(result.body) }
-            .getOrElse { throw DailyInfoClientException("教学云数据接口没有返回有效 JSON。", it) }
+            .getOrElse { throw DailyInfoClientException("教学云平台数据接口没有返回有效 JSON。", it) }
         if (root.has("code") && stringValue(root.opt("code")) != "200") {
             throw DailyInfoClientException(
-                "教学云数据接口返回业务状态 ${stringValue(root.opt("code")) ?: "unknown"}。",
+                "教学云平台数据接口返回业务状态 ${stringValue(root.opt("code")) ?: "unknown"}。",
                 sessionExpired = stringValue(root.opt("code")) == "401" ||
                     listOf("msg", "message", "error_description").any { SessionExpiryMessage.matches(root.optString(it)) },
             )
@@ -411,16 +411,16 @@ internal class UCloudAssignmentClient internal constructor(
             }
             val status = connection.responseCode
             if (status in 300..399 && status !in acceptedStatus) {
-                throw DailyInfoClientException("教学云接口返回了不受信任的重定向。")
+                throw DailyInfoClientException("教学云平台接口返回了不受信任的重定向。")
             }
             if (status !in acceptedStatus) {
                 throw DailyInfoClientException(
-                    "教学云接口返回 HTTP $status。",
+                    "教学云平台接口返回 HTTP $status。",
                     httpStatus = status,
                 )
             }
             if (connection.contentLengthLong > maximumBytes) {
-                throw DailyInfoClientException("教学云接口响应过大。")
+                throw DailyInfoClientException("教学云平台接口响应过大。")
             }
             val source = when {
                 status in 300..399 -> null
@@ -436,7 +436,7 @@ internal class UCloudAssignmentClient internal constructor(
                         if (count < 0) break
                         if (count == 0) continue
                         if (output.size() + count > maximumBytes) {
-                            throw DailyInfoClientException("教学云接口响应过大。")
+                            throw DailyInfoClientException("教学云平台接口响应过大。")
                         }
                         output.write(buffer, 0, count)
                     }
@@ -475,7 +475,7 @@ internal class UCloudAssignmentClient internal constructor(
             !uri.host.equals(expectedHost, ignoreCase = true) ||
             effectivePort != 443 || uri.userInfo != null
         ) {
-            throw DailyInfoClientException("教学云接口地址不受信任。")
+            throw DailyInfoClientException("教学云平台接口地址不受信任。")
         }
     }
 
@@ -553,7 +553,7 @@ internal class UCloudAssignmentClient internal constructor(
                 }
             }
             throw finalFetchError(
-                lastError ?: DailyInfoClientException("教学云课程作业接口暂时不可用。"),
+                lastError ?: DailyInfoClientException("教学云平台课程作业接口暂时不可用。"),
             )
         }
 
@@ -570,12 +570,12 @@ internal class UCloudAssignmentClient internal constructor(
             val status = (error as? DailyInfoClientException)?.httpStatus
             return when (status) {
                 423 -> DailyInfoClientException(
-                    "教学云接口连续返回 HTTP 423（学校防火墙限流拦截）。请过几分钟再刷新，或切换网络（如移动数据与 Wi-Fi 互换）后重试。",
+                    "教学云平台接口连续返回 HTTP 423（学校防火墙限流拦截）。请过几分钟再刷新，或切换网络（如移动数据与 Wi-Fi 互换）后重试。",
                     error,
                     status,
                 )
                 401 -> DailyInfoClientException(
-                    "教学云接口连续返回 HTTP 401（登录状态未被接受）。请在设置中核对教务账号与教学云密码；若统一认证要求验证码，请先在浏览器登录一次后再试。",
+                    "教学云平台接口连续返回 HTTP 401（登录状态未被接受）。请在设置中核对教务账号与教学云平台密码；若统一认证要求验证码，请先在浏览器登录一次后再试。",
                     error,
                     status,
                 )

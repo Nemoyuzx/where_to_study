@@ -11,6 +11,7 @@ import {
   Loader2,
   MapPin,
   RefreshCw,
+  Route,
   Search,
   Star,
 } from 'lucide-react'
@@ -301,7 +302,7 @@ export default function QueryHub({
               </section>
 
               {isPublicHoliday ? <aside className="shuttle-holiday-notice" role="note">
-                <AlertTriangle size={18} aria-hidden="true" />
+                <BusFront size={18} aria-hidden="true" />
                 <div>
                   <strong>{language === 'en' ? 'Public holiday shuttle notice' : '节假日班车提示'}</strong>
                   <p>{language === 'en'
@@ -342,7 +343,7 @@ export default function QueryHub({
                       <li className={`${departure.departed ? 'departed' : ''}${departure.next ? ' next' : ''}`} key={departure.departureTime}>
                         <time>{departure.departureTime}</time>
                         <div><strong>{departure.departed ? t('已过发车时间') : departure.next ? t('下一班') : t('计划班次')}</strong><span>{departure.service.vehicle} × {departure.service.count}</span></div>
-                        {departure.next ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}
+                        {departure.next ? <BusFront size={18} aria-hidden="true" /> : <Route size={18} aria-hidden="true" />}
                       </li>
                     ))}</ol> : <p className="query-empty">{t('当天暂无班车')}</p>}
                   </article>

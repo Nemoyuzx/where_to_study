@@ -2,6 +2,32 @@ import XCTest
 
 @MainActor
 final class AcademicQueryUITests: XCTestCase {
+    func testTeachingCloudPlatformActionFitsBothLanguages() {
+        continueAfterFailure = false
+        for language in ["zh-Hans", "en"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--ui-testing", "--ui-testing-academic"]
+            app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = language
+            app.launch()
+            defer { app.terminate() }
+            navigate("queries", title: language == "en" ? "Search" : "查询", in: app)
+            let assignments = app.segmentedControls["queries.mode"].buttons[
+                language == "en" ? "Assignment Deadlines" : "课程作业 DDL"
+            ]
+            XCTAssertTrue(assignments.waitForExistence(timeout: 5))
+            assignments.tap()
+            let action = app.descendants(matching: .any)["assignments.open-teaching-cloud"].firstMatch
+            XCTAssertTrue(action.waitForExistence(timeout: 5))
+            XCTAssertEqual(action.label, language == "en" ? "Open Teaching Cloud Platform" : "打开教学云平台")
+            for _ in 0..<3 where !action.isHittable { app.scrollViews.firstMatch.swipeUp() }
+            XCTAssertTrue(action.isHittable)
+            XCTAssertGreaterThanOrEqual(action.frame.minX, app.frame.minX)
+            XCTAssertLessThanOrEqual(action.frame.maxX, app.frame.maxX)
+            capture("teaching-cloud-platform-action-\(language)")
+            app.terminate()
+        }
+    }
+
     func testPhoneQueryIconsKeepAccessibleNamesAndSelectionAtAllTextSizes() {
         continueAfterFailure = false
         let originalAppearance = XCUIDevice.shared.appearance
@@ -54,6 +80,9 @@ final class AcademicQueryUITests: XCTestCase {
         XCTAssertTrue(assignments.waitForExistence(timeout: 10))
         assignments.tap()
         XCTAssertTrue(app.staticTexts["Sample assignments; no teaching cloud connection"].waitForExistence(timeout: 10))
+        let cloudAction = app.descendants(matching: .any)["assignments.open-teaching-cloud"].firstMatch
+        XCTAssertTrue(cloudAction.waitForExistence(timeout: 5))
+        XCTAssertEqual(cloudAction.label, "Open Teaching Cloud Platform")
         capture("synthetic-assignment-query-english")
         app.segmentedControls.buttons["Exams"].tap()
         XCTAssertTrue(app.staticTexts["Sample exams; no school connection"].waitForExistence(timeout: 10))

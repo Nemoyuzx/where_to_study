@@ -825,8 +825,8 @@ internal class InformationQueryPage(
         addView(gradeAction(if (loading) "正在获取…" else "刷新课程作业") {
             dailyInfoRepository.loadAllAssignments(force = true)
         }.apply { id = R.id.information_query_assignments_refresh; isEnabled = !loading })
-        addView(querySourceFooter("教学云 · 课程作业", CalendarDailyInfoSources.assignments))
-        addView(gradeAction("打开教学云", R.drawable.ic_shuttle_external) {
+        addView(querySourceFooter("教学云平台 · 课程作业", CalendarDailyInfoSources.assignments))
+        addView(gradeAction("打开教学云平台", R.drawable.ic_shuttle_external) {
             openURL(CalendarDailyInfoSources.assignments)
         })
         error?.let { message ->
@@ -849,7 +849,7 @@ internal class InformationQueryPage(
                         ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(10) })
                 }
             loading -> addView(statusCard("正在获取课程作业…"))
-            error == null -> addView(statusCard("点击刷新课程作业获取 DDL；使用设置中已保存的教学云密码。"))
+            error == null -> addView(statusCard("点击刷新课程作业获取 DDL；使用设置中已保存的教学云平台密码。"))
         }
     }
 
@@ -940,7 +940,7 @@ internal class InformationQueryPage(
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.TOP
-                addView(shuttleIcon(if (departureCount == 0) R.drawable.ic_nav_calendar else R.drawable.ic_shuttle_bus),
+                addView(shuttleIcon(R.drawable.ic_shuttle_bus),
                     LinearLayout.LayoutParams(activity.dp(24), activity.dp(26)).apply { marginEnd = activity.dp(10) })
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -973,7 +973,7 @@ internal class InformationQueryPage(
             if (presentation.isStale) addView(TextView(activity).apply {
                 text = "当前展示最近一次成功同步的缓存"
                 textSize = 12f
-                setThemeTextColor { Palette.accent }
+                setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(10), 0, 0)
             })
             presentation.noticeTitle?.let { title ->
@@ -1033,7 +1033,7 @@ internal class InformationQueryPage(
                 addView(TextView(activity).apply {
                     text = "今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。"
                     textSize = 13f
-                    setThemeTextColor { Palette.danger }
+                    setThemeTextColor { Palette.muted }
                 })
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(12) })
@@ -1184,7 +1184,7 @@ internal class InformationQueryPage(
         }, radius = 10)
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             .apply { topMargin = activity.dp(16) }
-        addView(shuttleIcon(R.drawable.ic_settings_info), LinearLayout.LayoutParams(activity.dp(18), activity.dp(20))
+        addView(shuttleIcon(R.drawable.ic_shuttle_notice), LinearLayout.LayoutParams(activity.dp(18), activity.dp(20))
             .apply { marginEnd = activity.dp(9) })
         addView(TextView(activity).apply {
             text = "第三方来源：北京邮电大学后勤部公开通知，由 Where To Study 服务解析整理，仅供参考，请以官方原文为准。"
@@ -1866,7 +1866,7 @@ internal class InformationQueryPage(
     ): TextView = TextView(activity).apply {
         id = viewID
         tag = "information.query.source.footer"
-        text = "$label ↗"
+        text = "${activity.uiText(label)} ↗"
         textSize = if (isCompact) 12f else 11f
         setThemeTextColor { Palette.primaryText }
         if (isCompact) {

@@ -15,7 +15,7 @@ class UCloudAssignmentRetryTest {
         val result = UCloudAssignmentClient.withFetchRetry(noSleep) {
             attempts += 1
             if (attempts < 3) {
-                throw DailyInfoClientException("教学云接口返回 HTTP 423。", httpStatus = 423)
+                throw DailyInfoClientException("教学云平台接口返回 HTTP 423。", httpStatus = 423)
             }
             "ok"
         }
@@ -26,9 +26,9 @@ class UCloudAssignmentRetryTest {
     @Test
     fun transientHttp401AndNetworkErrorsAreRetried() {
         for (failure in listOf(
-            DailyInfoClientException("教学云接口返回 HTTP 401。", httpStatus = 401),
-            DailyInfoClientException("教学云接口返回 HTTP 500。", httpStatus = 500),
-            DailyInfoClientException("教学云接口返回 HTTP 429。", httpStatus = 429),
+            DailyInfoClientException("教学云平台接口返回 HTTP 401。", httpStatus = 401),
+            DailyInfoClientException("教学云平台接口返回 HTTP 500。", httpStatus = 500),
+            DailyInfoClientException("教学云平台接口返回 HTTP 429。", httpStatus = 429),
             IOException("connection reset"),
         )) {
             var attempts = 0
@@ -60,7 +60,7 @@ class UCloudAssignmentRetryTest {
         val error = assertThrows(DailyInfoClientException::class.java) {
             UCloudAssignmentClient.withFetchRetry(noSleep) {
                 attempts += 1
-                throw DailyInfoClientException("教学云接口返回 HTTP 423。", httpStatus = 423)
+                throw DailyInfoClientException("教学云平台接口返回 HTTP 423。", httpStatus = 423)
             }
         }
         assertEquals(3, attempts)
@@ -73,7 +73,7 @@ class UCloudAssignmentRetryTest {
     fun exhausted401RetriesProduceCredentialGuidance() {
         val error = assertThrows(DailyInfoClientException::class.java) {
             UCloudAssignmentClient.withFetchRetry(noSleep) {
-                throw DailyInfoClientException("教学云接口返回 HTTP 401。", httpStatus = 401)
+                throw DailyInfoClientException("教学云平台接口返回 HTTP 401。", httpStatus = 401)
             }
         }
         assertTrue(error.message.orEmpty().contains("401"))

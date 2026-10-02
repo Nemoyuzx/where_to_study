@@ -83,11 +83,11 @@ object UiText {
         "课程作业" to "Assignments",
         "刷新课程作业" to "Refresh Assignments",
         "刷新课表与考试" to "Refresh Schedule and Exams",
-        "教学云 · 课程作业" to "Teaching Cloud · Assignments",
+        "教学云平台 · 课程作业" to "Teaching Cloud Platform · Assignments",
         "暂无课程作业 DDL" to "No assignment deadlines",
         "课程未标注" to "Course not specified",
         "正在获取课程作业…" to "Loading assignments…",
-        "点击刷新课程作业获取 DDL；使用设置中已保存的教学云密码。" to "Refresh assignments to load deadlines using the teaching cloud password saved in Settings.",
+        "点击刷新课程作业获取 DDL；使用设置中已保存的教学云平台密码。" to "Refresh assignments to load deadlines using the Teaching Cloud Platform password saved in Settings.",
         "点击刷新成绩获取学校已公布的成绩。" to "Refresh grades to load results published by the university.",
         "成绩" to "Grade",
         "学分" to "Credits",
@@ -109,7 +109,7 @@ object UiText {
         "前往账号设置" to "Open Account Settings",
         "前往个人账户" to "Open Personal Account",
         "请先在个人账户中保存教务账号和密码。" to "Save your academic account and password in Personal Account first.",
-        "打开教学云" to "Open Teaching Cloud",
+        "打开教学云平台" to "Open Teaching Cloud Platform",
         "Contest DDL 较新镜像数据" to "Newer Contest DDL mirror data",
         "Contest DDL 备用 API" to "Contest DDL backup API",
         "第三方来源：Contest DDL 主源、较新镜像及备用 API；校内竞赛通知另行获取，不包含课程作业" to "Third-party sources: Contest DDL primary, newer mirror, and backup API. Campus contest notices are fetched separately; assignments are excluded.",
@@ -293,14 +293,14 @@ object UiText {
         "课程删除记录格式不受支持。" to "Unsupported course deletion record format.",
         "无法清除课程删除记录。" to "Unable to clear course deletions.",
         "教务密码" to "Academic Password",
-        "教学云平台密码（可选）" to "Teaching Cloud Password (Optional)",
+        "教学云平台密码（可选）" to "Teaching Cloud Platform Password (Optional)",
         "使用教务密码" to "Use Academic Password",
         "改用教务密码" to "Use Academic Password Instead",
         "用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。" to "Used to sign in to mobile academic services for timetables, grades and exams. It may differ from your unified identity password. For some accounts, the initial password may be the eight-digit birth date (YYYYMMDD); use your actual account settings.",
         "用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。" to "Used for assignment deadlines and usually matches the unified identity password. If unset, the academic password is used. Leave a saved separate password blank to keep it; save settings after making changes.",
-        "保存后使用独立教学云平台密码获取作业 DDL" to "After saving, assignments use the separate teaching cloud password",
+        "保存后使用独立教学云平台密码获取作业 DDL" to "After saving, assignments use the separate Teaching Cloud Platform password",
         "保存后使用教务密码获取作业 DDL" to "After saving, assignments use the academic password",
-        "教学云平台密码已安全保存，留空保持不变" to "Teaching cloud password saved securely; leave blank to keep it",
+        "教学云平台密码已安全保存，留空保持不变" to "Teaching Cloud Platform password saved securely; leave blank to keep it",
         "仅用于课程作业 DDL；未设置时使用教务密码" to "Used only for assignment deadlines; defaults to the academic password",
         "密码" to "Password",
         "默认校区" to "Default Campus",
@@ -615,7 +615,7 @@ object UiText {
         source.startsWith("学号和密码保存在") ->
             "Your student ID and password remain in protected operating-system storage. They are used over HTTPS only when you request schedules, classrooms, or assignments. The maintainer cannot read them, and Settings never returns the saved password."
         source.startsWith("密码仅通过 HTTPS 提交") ->
-            "The password is sent only to auth.bupt.edu.cn over HTTPS. An optional separate teaching cloud password uses the same protected credential storage; otherwise the academic password is used. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. Browser cookies are not read, and tickets, cookies, tokens, and assignments are not written to disk; results may be reused in memory for up to 10 minutes."
+            "The password is sent only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. Browser cookies are not read, and tickets, cookies, tokens, and assignments are not written to disk; results may be reused in memory for up to 10 minutes."
         source.startsWith("课表、空教室、校区") ->
             "Schedules, classroom data, campus, semester settings, switches, the custom feed URL, and up to 500 favorite snapshots remain on the device. Course widgets read only the local schedule. Course deletions are isolated by account and term, affect only this device, and can be restored in Settings. Clearing local data removes all of these items."
         source.startsWith("应用可能通过 unpkg") ->

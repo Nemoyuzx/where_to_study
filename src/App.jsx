@@ -169,7 +169,7 @@ const EN_TEXT = Object.freeze({
     'Only for assignment deadlines. Enter it if different from your academic password, then save.',
   '使用教务密码': 'Use academic password',
   '改用教务密码': 'Use academic password instead',
-  '打开教学云': 'Open Teaching Cloud',
+  '打开教学云平台': 'Open Teaching Cloud Platform',
   '保存后将清除独立密码并使用教务密码': 'Saving will remove the separate password and use the academic password',
   '空教室': 'Empty Classrooms',
   '教学日历': 'Teaching Calendar',
@@ -1261,7 +1261,7 @@ function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) 
         <div className="deadline-empty">{response?.unavailable_reason || t('当天没有课程作业截止')}</div>
       )}
       <p>{t('第三方来源')}：{t('北京邮电大学云邮教学空间')}</p>
-      <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" />{t('打开教学云')}</a>
+      <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" />{t('打开教学云平台')}</a>
     </section>
   )
 }

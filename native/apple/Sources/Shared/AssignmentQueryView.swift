@@ -89,12 +89,12 @@ struct AssignmentQueryView: View {
             Text(model.localized("作业来自教学云，与日历共享缓存；提交状态和截止时间以教学云为准。"))
                 .font(.caption).foregroundStyle(theme.secondaryText)
             Link(destination: CalendarDeadlineSources.assignments) {
-                Label(model.localized("打开教学云"), systemImage: "arrow.up.right.square")
+                Label(model.localized("打开教学云平台"), systemImage: "arrow.up.right.square")
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityLabel(model.localized("打开教学云"))
-            .accessibilityHint(model.localized("在浏览器中打开教学云作业列表"))
+            .accessibilityLabel(model.localized("打开教学云平台"))
+            .accessibilityHint(model.localized("在浏览器中打开教学云平台作业列表"))
             .accessibilityIdentifier("assignments.open-teaching-cloud")
         }
         .accessibilityElement(children: .contain)

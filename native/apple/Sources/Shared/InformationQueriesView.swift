@@ -383,7 +383,7 @@ struct InformationQueriesView: View {
             shuttleSnapshot(snapshot)
         } else {
             queryMessage(
-                systemImage: "exclamationmark.triangle",
+                systemImage: "bus",
                 title: "班车信息暂不可用",
                 detail: shuttleStore.errorMessage,
                 retry: { Task { await shuttleStore.load(force: true, sampleMode: model.isSampleMode) } }
@@ -409,7 +409,7 @@ struct InformationQueriesView: View {
                 ? "今日暂无生效班车时刻表"
                 : departureCount == 0 ? "今日没有计划班次" : "今日班车按时刻表运行"
         let statusIcon = isStatutoryHoliday || departureCount == 0
-            ? "calendar.badge.exclamationmark" : "bus.fill"
+            ? "bus" : "bus.fill"
 
         return VStack(alignment: .leading, spacing: 16) {
             Surface {
@@ -417,10 +417,7 @@ struct InformationQueriesView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: statusIcon)
                             .font(.title2)
-                            .foregroundStyle(
-                                isStatutoryHoliday || departureCount == 0
-                                    ? theme.accentText : theme.primary
-                            )
+                            .foregroundStyle(theme.primary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(model.localized(statusTitle))
                                 .font(.headline)
@@ -443,16 +440,16 @@ struct InformationQueriesView: View {
                     if snapshot.status == "stale" {
                         Label("当前展示最近一次成功同步的缓存", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
                             .font(.caption)
-                            .foregroundStyle(theme.accentText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                     if isStatutoryHoliday {
                         Divider()
                         Label(
                             "今日为法定节假日，不一定有班车；请以学校放假安排为准。放假期间无班车。",
-                            systemImage: "calendar.badge.exclamationmark"
+                            systemImage: "bus"
                         )
                         .font(.callout)
-                        .foregroundStyle(theme.accentText)
+                        .foregroundStyle(theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("queries.shuttle.holiday-warning")
                     }
@@ -480,7 +477,7 @@ struct InformationQueriesView: View {
 
             if routes.isEmpty {
                 queryMessage(
-                    systemImage: "calendar.badge.exclamationmark",
+                    systemImage: "bus",
                     title: "今天没有处于有效期内的结构化班车表",
                     detail: "请查看后勤部最新通知，节假日及临时调整以后勤部原文为准。"
                 )
@@ -518,7 +515,7 @@ struct InformationQueriesView: View {
         if let notice = ShuttleBusTodayLogic.scheduleNotice(in: snapshot),
            !notice.schedules.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Label("完整班车时刻表", systemImage: "calendar")
+                Label("完整班车时刻表", systemImage: "bus.doubledecker")
                     .font(.headline)
                 Text("按运行时段、方向和星期展示学校公布的计划班次；实际运行以官方通知为准。")
                     .font(.caption)
@@ -550,7 +547,7 @@ struct InformationQueriesView: View {
                     if let periodState = shuttlePeriodState(schedule.period, today: today) {
                         Text(model.localized(periodState))
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(theme.accentText)
+                            .foregroundStyle(theme.secondaryText)
                     }
                 }
                 if let start = schedule.period.startDate {
@@ -620,7 +617,7 @@ struct InformationQueriesView: View {
         return Surface {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "arrow.left.arrow.right")
+                    Image(systemName: "bus.fill")
                         .foregroundStyle(theme.primary)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("\(schedule.from) → \(schedule.to)")

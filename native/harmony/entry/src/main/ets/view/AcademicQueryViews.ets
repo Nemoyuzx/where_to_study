@@ -4,6 +4,7 @@ import { ControlMetrics } from '../common/ControlMetrics';
 import { AcademicTerm, ExamArrangement } from '../common/AcademicModels';
 import { AssignmentDeadlineItem, CalendarDailyInfoSources } from '../net/CalendarDailyInfoClient';
 import { AppContext } from '../store/AppContext';
+import { LengthMetrics } from '@kit.ArkUI';
 
 @ComponentV2
 export struct AssignmentQueryView {
@@ -36,20 +37,20 @@ export struct AssignmentQueryView {
         .accessibilityText(this.model.text('前往个人账户'))
         .id('query.assignments.settings').onClick(() => this.onOpenSettings())
       } else {
-        Row({ space: 8 }) {
+        Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
           Button(this.model.text(this.model.assignmentCatalogLoading ? '正在同步云课堂作业…' : '刷新作业'))
             .height(ControlMetrics.height).enabled(!this.model.assignmentCatalogLoading)
             .id('query.assignments.refresh').onClick(() => this.model.loadAssignmentCatalog(true))
           Button() {
             Row({ space: 6 }) {
               SymbolGlyph($r('sys.symbol.arrow_up_right')).fontSize(15).fontColor([AppTheme.primary()])
-              Text(this.model.text('打开教学云')).fontSize(13).fontColor(AppTheme.primary())
+              Text(this.model.text('打开教学云平台')).fontSize(13).fontColor(AppTheme.primary())
             }
           }
             .type(ButtonType.Normal).height(ControlMetrics.height)
             .padding({ left: 12, right: 12 }).borderRadius(8)
             .backgroundColor(AppTheme.surfaceVariant())
-            .accessibilityText(this.model.text('打开教学云'))
+            .accessibilityText(this.model.text('打开教学云平台'))
             .id('query.assignments.open-cloud')
             .onClick(() => {
               try { AppContext.get().openLink(CalendarDailyInfoSources.assignments); } catch (e) {}
